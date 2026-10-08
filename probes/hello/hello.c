@@ -5,7 +5,7 @@
  * and reads QPC again (hb 2:2). Lines are buffered and written after the join, so the file is
  * one writer's output; per-thread order is carried by thread_seq, not file position.
  *
- * Usage: hello.exe <execution_id> <trace_path>
+ * Usage: hello.exe <execution_id> <trace_path> [roles_path, ignored: hello has no roles]
  */
 #define _CRT_SECURE_NO_WARNINGS /* fopen/snprintf: MSVC CRT deprecation, run 37718622857 */
 #include <windows.h>
@@ -58,8 +58,8 @@ static DWORD WINAPI worker(LPVOID arg) {
 typedef LONG (WINAPI *RtlGetVersionFn)(PRTL_OSVERSIONINFOW);
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: hello.exe <execution_id> <trace_path>\n");
+    if (argc != 3 && argc != 4) {
+        fprintf(stderr, "usage: hello.exe <execution_id> <trace_path> [roles_path]\n");
         return 2;
     }
     RTL_OSVERSIONINFOW ver = {sizeof(ver)};

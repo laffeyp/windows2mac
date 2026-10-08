@@ -1,6 +1,7 @@
-# Tiebreak probe runner (Sprint 006). Builds probes/<probe>/<probe>.c with clang on real x64
-# Windows, runs it, and uploads the guest trace for ingest on the Mac.
-# Dispatch: gh workflow run windows-probe.yml -f probe=hello -f execution_id=<id>
+# Tiebreak probe runner (Sprints 006-007). Builds probes/<probe>/<probe>.c with clang on real x64
+# Windows, runs it `repeat` times, and uploads the guest traces and role maps for ingest on the Mac.
+# Dispatch: gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id> [-f repeat=N]
+# Probe CLI: <probe>.exe <execution_id> <trace_path> <roles_path>
 name: windows-probe
 
 on:
@@ -10,8 +11,12 @@ on:
         description: probe directory under probes/
         required: true
       execution_id:
-        description: execution_id written into the trace
+        description: execution_id prefix written into each trace (suffixed -1, -2, ...)
         required: true
+      repeat:
+        description: number of executions
+        required: false
+        default: "1"
 
 permissions:
   contents: read
@@ -26,15 +31,19 @@ jobs:
         shell: pwsh
         run: |
           clang --version
-          clang -O1 -Wall -Werror -o probe.exe "probes/${{ inputs.probe }}/${{ inputs.probe }}.c"
+          clang -O1 -Wall -Werror -o probe.exe "probes/${{ inputs.probe }}/${{ inputs.probe }}.c" -ladvapi32 -lbcrypt
       - name: run
         shell: pwsh
         run: |
-          ./probe.exe "${{ inputs.execution_id }}" "trace.jsonl"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Get-FileHash -Algorithm SHA256 trace.jsonl
+          New-Item -ItemType Directory -Force out | Out-Null
+          (Get-FileHash -Algorithm SHA256 probe.exe).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out/probe.sha256
+          for ($i = 1; $i -le [int]"${{ inputs.repeat }}"; $i++) {
+            ./probe.exe "${{ inputs.execution_id }}-$i" "out/trace-$i.jsonl" "out/roles-$i.json"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Get-ChildItem out | Get-FileHash -Algorithm SHA256
       - uses: actions/upload-artifact@v4
         with:
-          name: trace-${{ inputs.execution_id }}
-          path: trace.jsonl
+          name: traces-${{ inputs.execution_id }}
+          path: out/
           if-no-files-found: error
