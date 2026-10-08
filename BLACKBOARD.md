@@ -53,6 +53,7 @@
 - **2026-10-05** — Sprint 000 (Vocabulary Session) closed. `signals/0.1.json` (60 tags, 12 categories, 34 enums, 22 entities, 7 temporal invariants, 14 transition rules, 16 operators, 13 evidence constraints), `signals/0.1-rationale.md` (signed), `signals/proposals.json` (6 open, 1 rejected), plus `scripts/check_vocab.py` (structure gate, outside the card's file list; recorded in Sprint tail). v0.1 locked. 10 agent-resolved decisions recorded. Dual contract: signal vacuous (content sprint); artifact pass (all commands exit 0, four content assertions hold). Ready for Sprint 001.
 - **2026-10-05** — Sprint 001 (harness package scaffold) closed. `pyproject.toml`, `src/w2m/__init__.py`. Dual contract: signal vacuous; artifact pass (`uv sync --extra dev` 0, import prints 0.1, ruff 0, mypy 0).
 - **2026-10-05** — Sprint 002 (event Structs from the vocabulary) closed. `scripts/gen_events.py`, `src/w2m/events.py` (generated: 51 harness + 9 guest Structs, `validate`, `decode_guest_line`), `tests/test_events.py`. Dual contract: signal pass (SESSION_INIT, SESSION_COMPLETED on a real substrate record); artifact pass (7 tests, `--check` 0, ruff 0, mypy 0). Observation: pass.
+- **2026-10-07** — Sprint 008 (Mac Hypervisor capability probe) closed. `probes/mac_hv_capability/hv_capability.c`, `probes/mac_hv_capability/entitlements.plist`, `scripts/probe_capabilities.py`. Dual contract: signal pass (SESSION_INIT, 5 CAPABILITY_PROBED, SESSION_COMPLETED); artifact pass (driver exit 0; suite 39 passed; ruff, mypy 0). Observation: pass — on mac-Mac17,7-macos-25F80: ipa_granule_4k present (guest X0=42 from a 4 KB page at 0x10001000; 16 KB control refused with HV_BAD_ARGUMENT 0xfae94003); guest_tsoen present (ACTLR_EL1 0x2); guest_tsoen_context_switch present (one exit); host_page_16k present; native_process_tso absent from the SDK's public headers.
 - **2026-10-05** — Sprint 003 (guest-trace ingester) closed. `src/w2m/trace.py`, `tests/test_trace.py`. Dual contract: signal pass (EXECUTION_STARTED, EXECUTION_COMPLETED, TRACE_INGESTED; TRACE_REJECTED in the gap run); artifact pass (suite 18 passed, ruff 0, mypy 0, generator `--check` 0, vocab gate 0). Observation: pass — record narrated, payloads round-trip into their Structs.
 - **2026-10-05** — Sprint 004 (contract format and first contract) closed. `src/w2m/contract.py`, `contracts/windows.event.auto_reset.single_signal/0.1.0.json` (status proposed; two documented evidence entries quoted from Microsoft Learn, one hypothesis), `tests/test_contract.py`. Dual contract: signal vacuous; artifact pass (suite 27 passed, ruff 0, mypy 0).
 - **2026-10-05** — Sprint 005 (allowed_outcome_set comparator) closed. `src/w2m/compare.py`, `tests/test_compare.py`. Dual contract: signal pass (COMPARISON_COMPLETED conforms and discrepancy); artifact pass (suite 37 passed, ruff 0, mypy 0). Observation: pass — record chain EXECUTION_COMPLETED → TRACE_INGESTED → COMPARISON_COMPLETED.
@@ -70,8 +71,8 @@
 
 ## Open questions
 
-- **OQ-1.** Is `ACTLR_EL1.TSOEN` settable for a guest vCPU through public Hypervisor.framework on macOS 26, or only through a private path? Settled by a probe sprint, not by reading.
-- **OQ-3.** v0.2 §8.1 cites Apple's "Accelerating the performance of Rosetta" for guest `ACTLR.TSOEN` control. That page describes Rosetta inside a Linux guest under Virtualization.framework; whether a custom compact guest under Hypervisor.framework gets the same control is OQ-1, settled by the capability probe v0.2 §8.1 calls for.
+- **OQ-1.** Is `ACTLR_EL1.TSOEN` settable for a guest vCPU through public Hypervisor.framework on macOS 26, or only through a private path? Settled by a probe sprint, not by reading. — **Answered 2026-10-07 (Sprint 008):** public. `HV_SYS_REG_ACTLR_EL1` (macOS 15.0+, SDK header `hv_vcpu_types.h`: "only allows getting / setting of the ACTLR_EL1.EnTSO bit (index 1)"); on Mac17,7 / macOS 25F80 the bit sets, reads back 0x2, and survives an `hv_vcpu_run` exit. Still open: the ordering *effect* (a two-vCPU litmus test).
+- **OQ-3.** (Answered with OQ-1: the custom-guest path is public Hypervisor.framework, not a Virtualization.framework/Rosetta-only facility.) v0.2 §8.1 cites Apple's "Accelerating the performance of Rosetta" for guest `ACTLR.TSOEN` control. That page describes Rosetta inside a Linux guest under Virtualization.framework; whether a custom compact guest under Hypervisor.framework gets the same control is OQ-1, settled by the capability probe v0.2 §8.1 calls for.
 - **OQ-2.** Which Metal Shader Converter version and license terms apply to redistributing its output inside a generated app bundle?
 
 ---
@@ -85,6 +86,18 @@
 ---
 
 ## Sprint tail
+
+### Sprint 008 (2026-10-07, closed)
+- **Scope:** Hypervisor.framework capability probe on this Mac; CAPABILITY_PROBED on a substrate record.
+- **Dual contract:** signal pass; artifact pass (see Built).
+- **Observation contract:** pass.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* SESSION_INIT (profile mac-Mac17,7-macos-25F80, purpose capability). CAPABILITY_PROBED ipa_granule_4k present; guest_tsoen present; guest_tsoen_context_switch present; host_page_16k present; native_process_tso absent. SESSION_COMPLETED (completed).
+  - *Observation 1 (tone trace):* a detail string began with "ACTLR_EL1", against E12 (lowercase first word). Disposition: resolved-here.
+  - *Observation 2 (vocabulary gap):* `guest_tsoen_context_switch` was observed across one vCPU exit, not across host thread migration or many exits; the capability name claims more than one exit shows. Disposition: deferred — the litmus sprint runs thousands of exits on two vCPUs and re-records it.
+  - *Observation 3 (timing):* the probe and the driver ran first time; Hypervisor headers in the installed SDK were the bridge mapping (TECHNIQUES.md #46), no symbol was guessed.
+- **Files:** probes/mac_hv_capability/hv_capability.c, probes/mac_hv_capability/entitlements.plist, scripts/probe_capabilities.py
+- **Closed:** clean.
 
 ### Sprint 007 (2026-10-07, closed)
 - **Scope:** the event contract's probe on real x64 Windows, 10 executions, judged on one substrate record.
