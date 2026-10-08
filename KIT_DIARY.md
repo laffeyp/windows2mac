@@ -11,6 +11,7 @@
 | H1 | The research direction's discrepancy report (§11) and the kit's Signal Report are the same artifact; one vocabulary serves both the w2m runtime trace and the sprint loop. | _pending_ | — |
 | H2 | Resolve-and-record holds up on a project whose key facts (TSO access, oracle behavior) can only be settled by probes: the agent records the decision provisionally and a probe sprint confirms or supersedes it, with no wait state. | partially | 2026-10-03: four same-day agent decisions superseded cleanly by the v0.2 user decision; but two of them were scope (intent), not probe-settleable facts. OQ-1 is still the first probe test. |
 | H3 | The ≤2-files sprint rule fits a compiler/runtime project if contracts are one file each. | _pending_ | — |
+| H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
 
 ---
 
@@ -107,5 +108,3 @@
 
 6. The observation contract template could carry a "power" line for any check that passes on absence (zero violations, no errors): name the control that must fail in the same run.
 7. Measurement sprints could require symmetric setup (warm passes, same allocation path) as a self-review checklist item.
-
-| H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
