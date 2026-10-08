@@ -17,7 +17,7 @@ PE32_PLUS = 0x20B
 SCN_MEM_EXECUTE = 0x20000000
 SCN_MEM_READ = 0x40000000
 SCN_MEM_WRITE = 0x80000000
-DIR_EXPORT, DIR_IMPORT, DIR_BASERELOC, DIR_TLS = 0, 1, 5, 9
+DIR_EXPORT, DIR_IMPORT, DIR_EXCEPTION, DIR_BASERELOC, DIR_TLS = 0, 1, 3, 5, 9
 REL_ABSOLUTE, REL_DIR64 = 0, 10
 
 
@@ -57,12 +57,24 @@ class PeImage:
     relocations: dict[int, int] = field(default_factory=dict)  # type -> count
     exports: tuple[tuple[str, int], ...] = ()                  # (name, rva)
     tls_callbacks: tuple[int, ...] = ()                         # RVAs
+    iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name"
+    function_starts: tuple[int, ...] = ()                       # .pdata RUNTIME_FUNCTION.BeginAddress
+
+    def read_rva(self, data: bytes, rva: int, size: int) -> bytes:
+        """Bytes of the image at `rva` (zero past a section's raw data), from file `data`."""
+        for s in self.sections:
+            if s.virtual_address <= rva < s.virtual_address + max(s.virtual_size, s.raw_size):
+                delta = rva - s.virtual_address
+                raw = data[s.raw_offset + delta: s.raw_offset + min(s.raw_size, delta + size)]
+                return raw + b"\0" * (size - len(raw))
+        raise PeError(f"RVA 0x{rva:x} is in no section")
 
     def code_targets(self) -> list[tuple[str, int]]:
         """Statically known entries into guest code: (discovery kind, RVA)."""
         out = [("static", self.entry_rva)] if self.entry_rva else []
         out += [("export", rva) for _, rva in self.exports]
         out += [("callback", rva) for rva in self.tls_callbacks]
+        out += [("pdata", rva) for rva in self.function_starts]
         return out
 
 
@@ -135,6 +147,7 @@ def parse(data: bytes) -> PeImage:
         return dirs[i] if i < len(dirs) else (0, 0)
 
     imports: dict[str, tuple[str, ...]] = {}
+    iat: dict[int, str] = {}
     rva, size = d(DIR_IMPORT)
     if rva:
         off = _rva_to_offset(sections, rva)
@@ -145,6 +158,7 @@ def parse(data: bytes) -> PeImage:
             dll = r.cstr(_rva_to_offset(sections, name_rva))
             thunk = _rva_to_offset(sections, oft or ft)
             names: list[str] = []
+            slot = ft
             while True:
                 (t,) = r.u("<Q", thunk)
                 if t == 0:
@@ -153,7 +167,9 @@ def parse(data: bytes) -> PeImage:
                     names.append(f"#{t & 0xFFFF}")
                 else:
                     names.append(r.cstr(_rva_to_offset(sections, t & 0x7FFFFFFF) + 2))
+                iat[slot] = f"{dll}!{names[-1]}"
                 thunk += 8
+                slot += 8
             imports[dll] = tuple(names)
             off += 20
 
@@ -194,10 +210,19 @@ def parse(data: bytes) -> PeImage:
                 callbacks.append(va - image_base)
                 off += 8
 
+    starts: list[int] = []
+    rva, size = d(DIR_EXCEPTION)
+    if rva:
+        off = _rva_to_offset(sections, rva)
+        for i in range(size // 12):
+            begin, _, _ = r.u("<III", off + 12 * i)
+            starts.append(begin)
+
     if not 0 <= entry < size_of_image:
         raise PeError(f"entry RVA 0x{entry:x} outside image size 0x{size_of_image:x}")
     return PeImage(machine=machine, timestamp=timestamp, characteristics=chars,
                    image_base=image_base, entry_rva=entry, section_alignment=sect_align,
                    size_of_image=size_of_image, subsystem=subsystem, dll_characteristics=dllchars,
                    sections=sections, imports=imports, relocations=relocs,
-                   exports=tuple(exports), tls_callbacks=tuple(callbacks))
+                   exports=tuple(exports), tls_callbacks=tuple(callbacks), iat=iat,
+                   function_starts=tuple(starts))

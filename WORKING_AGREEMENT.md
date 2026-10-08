@@ -35,6 +35,8 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | Guest-trace ingest (`ingest`, `trace_ingester`, `trace_path`) | `src/w2m/trace.py` |
 | Guest-trace content store layout | `<store>/traces/<hex>.jsonl` (`src/w2m/trace.py`) |
 | Contract file schema and loader (`Contract`, `Evidence`, `AllowedOutcomeSet`, `load_contract`) | `src/w2m/contract.py` |
+| PE reader (`parse`, `PeImage`, `Section`, IAT slots, `.pdata` starts) | `src/w2m/pe.py` |
+| Reference decoder traversal (`walk`, `Reachable`, `Insn`) | `src/w2m/x86ref.py` |
 | Contract files | `contracts/<contract_id>/<version>.json` |
 | Comparator (`compare_allowed_outcome_set`, `comparator`) | `src/w2m/compare.py` |
 | Vocabulary version constant | `src/w2m/__init__.py` (`VOCAB_VERSION`); `events.VOCAB_VERSION` must equal it (tested) |
@@ -76,7 +78,7 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Pend
 
 - Windows tiebreak probe: `gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id>`, then `gh run watch <run-id> --exit-status`, `gh run download <run-id> -n trace-<id>`; ingest from `store/traces/<sha256>.jsonl`. Runner: `windows-2025` (Windows Server 2025 x64, LLVM 20.1.8). Private repo: uses the account's included Actions minutes.
 
-Permitted dependencies: runtime `substrate-kernel==1.1.1`; dev `ruff==0.15.17`, `mypy`, `pytest`, `pytest-asyncio`, `pytest-timeout`. Anything else is an agent-resolved decision recorded first.
+Permitted dependencies: runtime `substrate-kernel==1.1.1`; dev `ruff==0.15.17`, `mypy`, `pytest`, `pytest-asyncio`, `pytest-timeout`; extra `reference`: `capstone==5.0.9` (reference decoder). Environment sync: `uv sync --all-extras`. Anything else is an agent-resolved decision recorded first.
 
 ---
 

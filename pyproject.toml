@@ -15,6 +15,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff==0.15.17", "mypy", "pytest", "pytest-asyncio", "pytest-timeout"]  # ruff pinned to substrate's pin
+reference = [
+    "capstone==5.0.9",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/w2m"]
@@ -33,3 +36,8 @@ extend-exclude = ["sdd-kit-3", "substrate"]
 python_version = "3.12"
 strict = true
 files = ["src/w2m"]
+
+# Capstone ships no type stubs (reference decoder, optional extra `reference`).
+[[tool.mypy.overrides]]
+module = "capstone.*"
+ignore_missing_imports = true
