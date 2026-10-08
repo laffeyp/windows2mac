@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 029
-status: active
+status: closed
 phase: 3
 pass_kind: functional
 ---
@@ -66,3 +66,15 @@ The runner-built `.exe` runs on the Mac through w2m's own decoder, lifter, runti
 ## self-review checklist
 
 - [x] Scope concrete. [x] Sources named. [x] Emits only 0.5 tags. [x] Observation declared before running. [ ] ≤2 files: exception recorded.
+
+## observed
+
+- Runner run 37856786040: the no-CRT probe built (3,584 bytes; 6 kernel32 imports; no relocations), ran 3 times, exit 0, 46 ms; GetLastError returned 1234.
+- The same bytes (`store/binaries/18f721e66de4…exe`) on the Mac: loader at preferred base 0x140000000, 217 distinct instructions in 23 instruction classes reached, 5,153 executed per run, every one decoded by `x86dec`, lifted by `lift.py`, executed by `runtime.py`; six kernel32 calls serviced in the host; exit 0; 6 ms per run.
+- Judge, read from the records:
+  - runs/judge-1791500576975719000: SESSION_INIT 1, EXECUTION_STARTED 3, EXECUTION_COMPLETED 3, TRACE_INGESTED 3, COMPARISON_COMPLETED 3, SESSION_COMPLETED 1 | verdicts {'conforms': 3} | profile_kind {'windows_reference'}
+  - runs/judge-1791500577024299000: SESSION_INIT 1, EXECUTION_STARTED 3, EXECUTION_COMPLETED 3, TRACE_INGESTED 3, COMPARISON_COMPLETED 3, SESSION_COMPLETED 1 | verdicts {'conforms': 3} | profile_kind {'model'}
+- The Windows and Mac traces differ only in thread_id (980 vs 4) and start_address (ASLR on Windows; preferred base on the Mac).
+- Planted faults: SetLastError that forgets → exit 1 and verdict discrepancy; `mul_hi` computed as `mul_lo` → the digit loop runs off the stack and the run stops with GuestFault, no trace; an unliftable instruction (CPUID) at the entry → LiftError, no exit code.
+- Not yet: execution inside the Hypervisor.framework VM. The lifted operations are the input to that back end (next sprint).
+- Adding the no-CRT binary to `store/binaries` broke four fixture tests written for CRT-linked probes. One was a real oracle defect: `tests/test_x86ref.py::llvm_insns` took each length from the next row and so dropped the last instruction of `.text`, which CRT probes always follow with padding. Fixed (the last row ends at the section end). Three assertions (≥ 20,000 instructions, DIR64 relocations present, > 400 `.pdata` starts, WaitForSingleObject imported) were CRT facts stated as universal; now scoped to CRT-linked probes, with the skeleton's own facts asserted (KERNEL32 only, no relocations).

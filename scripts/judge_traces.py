@@ -68,7 +68,8 @@ def _item(raw: bytes, digest: str, meta: dict[str, Any]) -> dict[str, Any]:
     opened = json.loads(raw.splitlines()[0])
     return {"execution_id": opened["execution_id"], "profile_id": opened["profile_id"],
             "trace_sha256": digest, "lines": raw.count(b"\n"), "roles": meta["roles"],
-            "exit_code": meta.get("exit_code"), "elapsed_seconds": meta.get("elapsed_seconds")}
+            "exit_code": meta.get("exit_code"), "elapsed_seconds": meta.get("elapsed_seconds"),
+            "profile_kind": meta.get("profile_kind", "windows_reference")}
 
 
 def load_store(store: Path, run_id: str) -> tuple[str, list[dict[str, Any]]]:
@@ -102,10 +103,10 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
         for it in items:
             yield events.validate(events.EXECUTION_STARTED(
                 execution_id=it["execution_id"], subject_kind="probe", subject_sha256=probe_sha,
-                profile_kind="windows_reference", profile_id=it["profile_id"],
+                profile_kind=it["profile_kind"], profile_id=it["profile_id"],
                 initial_state_sha256=EMPTY, injected_inputs_sha256=EMPTY,
-                unobserved="timeout_seconds, kill_grace_seconds: imported runner execution; the "
-                           "harness set no timeout (the workflow job limit is 10 minutes)"))
+                unobserved="timeout_seconds, kill_grace_seconds: imported execution; the "
+                           "harness set no timeout"))
             missing = [f for f in ("exit_code", "elapsed_seconds") if it[f] is None]
             yield events.validate(events.EXECUTION_COMPLETED(
                 execution_id=it["execution_id"], exit_status="exited",

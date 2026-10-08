@@ -1,0 +1,65 @@
+{
+ "contract_id": "windows.thread.last_error.set_get",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetLastError on a thread returns the value SetLastError stored on that thread, when no call between them sets the last-error code.",
+ "applicability": "Windows desktop, kernel32 (Windows XP and later per the pages cited)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "thread": "main, the process's first thread"
+  },
+  "execution": {
+   "main": "SetLastError(1234); then, with no intervening call that sets the last-error code, GetLastError()"
+  },
+  "observation": {
+   "phase": "after GetLastError returns"
+  }
+ },
+ "acceptance": {
+  "relation": "allowed_outcome_set",
+  "outcome": {
+   "api": "kernel32!GetLastError",
+   "return_value": 1234,
+   "over_roles": [
+    "main"
+   ]
+  },
+  "allowed": [
+   [
+    "main"
+   ]
+  ],
+  "forbidden": [
+   {
+    "label": "value lost",
+    "outcome": []
+   }
+  ],
+  "postconditions": []
+ },
+ "evidence": [
+  {
+   "evidence_id": "ms-setlasterror",
+   "category": "documented",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setlasterror (page updated 2025-08-27; retrieved 2026-10-08)",
+   "applicability": "Windows XP and later",
+   "quote": "Sets the last-error code for the calling thread. ... The last-error code is kept in thread local storage so that multiple threads do not overwrite each other's values."
+  },
+  {
+   "evidence_id": "ms-getlasterror",
+   "category": "documented",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror (page updated 2024-02-22; retrieved 2026-10-08)",
+   "applicability": "Windows XP and later",
+   "quote": "The return value is the calling thread's last-error code. ... If the function is not documented to set the last-error code, the value returned by this function is simply the most recent last-error code to have been set"
+  }
+ ],
+ "open_questions": [
+  "The probe calls only string-building code between the two calls; a call to any function documented to set the last-error code on success would make 1234 a forbidden expectation, not a contract violation."
+ ],
+ "sections": {
+  "skeleton": "Sprint 029 walking skeleton: the same runner-built .exe is judged on the Windows reference and on w2m's model runtime."
+ }
+}

@@ -2,6 +2,13 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027), verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 019 (2026-10-08, closed)
+- **Scope:** EVEX and XOP prefix decoding; last corpus gaps.
+- **Rubber Duck Pass:**
+  - *Observation 1:* EVEX and XOP decoded correctly on the first run; one missing row (EVEX vpmaddwd) found by the differential and added. Disposition: resolved-here.
+  - *Observation 2 (what this does not show):* full agreement on 2.44 M compiler-produced instructions. The literature (Paleari 2010; Woodruff et al. 2021) places decoder bugs in unusual encodings this corpus does not contain. Disposition: deferred to Sprint 020, generated encodings per spec row.
+- **Files:** specs/x86_decode.json, scripts/gen_decoder.py, src/w2m/x86dec.py, src/w2m/x86dec_tables.py, tests/test_x86dec.py
+- **Closed:** clean.
 ### Sprint 018 (2026-10-08, closed)
 - **Scope:** XED-style iclass identity, corpus gaps closed except EVEX/XOP, CPU-feature dependence.
 - **Rubber Duck Pass:**

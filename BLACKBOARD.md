@@ -64,6 +64,7 @@
 - **2026-10-08 agent-resolved** — Supersedes the 2026-10-07 claim that run records regenerate from the content store. That held for judge records only if the runner role maps survived; they were not committed and were recovered from GitHub artifacts (run 37738035459, before the 90-day expiry) into `store/executions/`. Mac hardware run records (capability, litmus, ordering, page geometry) cannot be regenerated and are now committed under `store/runs/`. Grounds: project — v0.2 §14 (provenance back to evidence), review §4.8; SDD — AGENTS.md hard rule 4; practice — n/a. Revisit if: a run record exceeds a few MB (then archive by hash outside git).
 - **2026-10-08 user** — Do not defer the event probe's unwitnessed precondition ("dont defer! lets do it", chat 2026-10-08). Done in Sprint 028; the sequence Decision above shifts by one: walking skeleton 029, generated implementation 030, BioShock 2 Remastered depot 031.
 - **2026-10-08 agent-resolved** — Witness source for "thread is waiting": `NtQuerySystemInformation(SystemProcessInformation)` `SYSTEM_THREAD_INFORMATION.ThreadState`/`WaitReason`, values per .NET `ThreadState` (Wait = 5) and `ThreadWaitReason` (UserRequest = 6). Wait Chain Traversal was rejected: its documented primitives exclude event objects. The function is documented as subject to change, so the probe links it at run time and the precondition's evidence cites the page's warning; a future Windows build that changes the layout shows up as a missing witness (inconclusive), not as a false conforms. Grounds: project — v0.2 §3, §11.1; SDD — AGENTS.md hard rule 4; practice — Microsoft Learn pages retrieved 2026-10-08. Revisit if: a witness ever reads a state other than 5/6 on poll 500, or the runner image changes Windows build.
+- **2026-10-08 agent-resolved** — The walking skeleton's first execution backend is a host executor of the lifted operations (profile_kind `model`), not the Hypervisor.framework VM. Every v0.2 §2 stage now exists once: Windows reference run, contract, PE load, decode, lift to explicit operations, execution, kernel32 in the host, guest trace, ingest, comparison. The VM back end compiles the same operations to AArch64 and is Sprint 030; the generated implementation moves to 031 and the BioShock 2 Remastered depot to 032. Grounds: project — v0.2 §2, §5 (an explicit semantics layer between decode and execution), §8.2 (backends are evaluated, not assumed); SDD — AGENTS.md hard rule 6 (thinnest slice first); practice — walking skeleton (Cockburn 2004). Revisit if: the VM back end needs operations the IR cannot express.
 
 ---
 
@@ -98,6 +99,7 @@
 - **2026-10-08** — Sprint 026 (PE, traversal, evidence ids) closed. `pe.py` delay-load imports and relocation sites; `x86ref.py` NORETURN imports and `int 0x29`; `contract.py` `execution_ids` checked against store traces; `contracts/windows.event.auto_reset.single_signal/0.2.1.json` (12 observed executions; precondition caveat as an open question). Dual contract: signal pass (judge runs unchanged in shape); artifact pass (147 passed; ruff, mypy 0). Observation: corpus traversal −120 instructions, nearly all int3 padding after abort/exit; libcrypto strings not caused by non-returning calls.
 - **2026-10-08** — Sprint 027 (records, CI, fuzzing) closed. `.github/workflows/ci.yml` (all gates; XED, llvm-objdump, corpus present; skips fail), `tests/conftest.py`, `tests/test_fuzz.py` (Hypothesis 6.168.5), `pe.py` non-ASCII strings → PeError, `WORKING_AGREEMENT.md` (bridge mappings, phase acceptance, hand-author log, amended technique), `docs/sprint-tail-archive.md`. Dual contract: signal vacuous by declaration; artifact pass (CI run 37851288883 success, 150 passed, 0 skipped). Reports: `signal-reports/sprint-026-report.md`, `sprint-027-report.md`.
 - **2026-10-08** — Sprint 028 (witnessed pending waiters) closed. `signals/0.5.json` (P14, `GUEST_THREAD_STATE_OBSERVED`), probe witness via NtQuerySystemInformation, contract `preconditions` + comparator `inconclusive` when unwitnessed, contracts 0.3.0 (proposed) and 0.3.1 (accepted), `scripts/gates.sh`. Dual contract: signal pass (2 witness lines per trace ×20; judge tags as declared); artifact pass (gates.sh 0, 155 passed). Observation: precondition witnessed 20/20 on poll 1; outcome {a} 20/20; the 12 earlier executions inconclusive under 0.3.x. Report: `signal-reports/sprint-028-report.md`.
+- **2026-10-08** — Sprint 029 (walking skeleton) closed. `probes/skeleton/` (no-CRT, 6 kernel32 imports), workflow per-probe build flags and stdout mode, `contracts/windows.thread.last_error.set_get/0.1.0.json`, `src/w2m/loader.py`, `src/w2m/lift.py`, `src/w2m/runtime.py`, `scripts/run_skeleton.py`, `tests/test_runtime.py`. Dual contract: signal pass (judge records: 3 windows_reference + 3 model, conforms 6/6); artifact pass (gates.sh 0). Observation: the runner-built .exe runs on the Mac through w2m's decoder, lifter and runtime: 217 distinct instructions, 5,153 executed, 6 kernel32 calls, exit 0. Report: `signal-reports/sprint-029-report.md`.
 
 ---
 
@@ -136,6 +138,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 029 (2026-10-08, closed)
+- **Scope:** walking skeleton through every v0.2 §2 stage.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the runner compiled skeleton.c without a C runtime and ran it; the program wrote four trace lines to stdout and exited 0. On the Mac the loader mapped the same bytes at 0x140000000 and pointed six import slots at host thunks; the runtime decoded, lifted and executed 5,153 instructions, answered GetCurrentThreadId, SetLastError, GetLastError, GetStdHandle and WriteFile in the host, and stopped at ExitProcess(0). Both traces were wrapped, ingested, and judged conforms against the last-error contract.
+  - *Observation 1 (worked first time; checked anyway):* the first Mac run succeeded. Three planted faults (kernel32, lifter, unliftable instruction) each changed the outcome, so the pass is not vacuous.
+  - *Observation 2 (what the skeleton does not prove):* one thread, one image at its preferred base, 23 instruction classes, no VM. Each is the next widening, not a gap in the path.
+  - *Observation 3 (a new fixture exposed an old oracle bug):* the LLVM reference parser in `test_x86ref.py` dropped the last instruction of `.text`; CRT probes hid it with trailing padding. Disposition: resolved-here; four CRT-only assertions scoped.
+- **Closed:** clean.
 
 ### Sprint 028 (2026-10-08, closed)
 - **Scope:** witness the pending-waiters precondition instead of assuming it.
@@ -214,12 +225,4 @@
   - *Observation 3 (structure held):* length_differs 0 across all generated cases.
 - **Closed:** clean.
 
-### Sprint 019 (2026-10-08, closed)
-- **Scope:** EVEX and XOP prefix decoding; last corpus gaps.
-- **Rubber Duck Pass:**
-  - *Observation 1:* EVEX and XOP decoded correctly on the first run; one missing row (EVEX vpmaddwd) found by the differential and added. Disposition: resolved-here.
-  - *Observation 2 (what this does not show):* full agreement on 2.44 M compiler-produced instructions. The literature (Paleari 2010; Woodruff et al. 2021) places decoder bugs in unusual encodings this corpus does not contain. Disposition: deferred to Sprint 020, generated encodings per spec row.
-- **Files:** specs/x86_decode.json, scripts/gen_decoder.py, src/w2m/x86dec.py, src/w2m/x86dec_tables.py, tests/test_x86dec.py
-- **Closed:** clean.
-
-Older entries (Sprints 000-018): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-019): `docs/sprint-tail-archive.md`.

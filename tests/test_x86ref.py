@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from w2m.pe import parse
+from w2m.pe import PeImage, parse
 from w2m.x86ref import text_coverage, walk
 
 BINARIES = sorted((Path(__file__).resolve().parent.parent / "store" / "binaries").glob("*.exe"))
@@ -19,7 +19,7 @@ OBJDUMP = shutil.which("llvm-objdump") or (
 REP = {"rep", "repe", "repne", "repz", "repnz"}
 
 
-def llvm_insns(path: Path, image_base: int) -> dict[int, tuple[str, int]]:
+def llvm_insns(path: Path, image_base: int, end_rva: int) -> dict[int, tuple[str, int]]:
     """rva -> (mnemonic, length). llvm-objdump prints `lock` on its own line (folded here) and
     `rep` with its string instruction as the next token on the same line."""
     out = subprocess.run([OBJDUMP, "-d", "--no-show-raw-insn", "--x86-asm-syntax=intel", str(path)],
@@ -38,7 +38,13 @@ def llvm_insns(path: Path, image_base: int) -> dict[int, tuple[str, int]]:
             rows[-1] = (rows[-1][0], f"lock {mn}")
         else:
             rows.append((addr, mn))
+    rows.append((end_rva, ""))      # the last instruction ends at the section end (Sprint 029)
     return {a: (mn, b - a) for (a, mn), (b, _) in zip(rows, rows[1:])}
+
+
+def floor(img: PeImage) -> int:
+    """CRT-linked probes reach > 20,000 instructions; the no-CRT skeleton (6 imports) 217."""
+    return 20_000 if sum(map(len, img.imports.values())) > 20 else 200
 
 
 @pytest.mark.parametrize("path", BINARIES, ids=lambda p: p.name[:12])
@@ -47,8 +53,9 @@ def test_reachable_code(path: Path) -> None:
     img = parse(data)
     r = walk(img, data)
     assert not r.undecodable
-    assert len(r.insns) > 20_000
-    assert r.roots["pdata"] == len(img.function_starts) > 400
+    assert len(r.insns) > floor(img)
+    assert r.roots["pdata"] == len(img.function_starts)
+    assert len(img.function_starts) > (400 if floor(img) > 200 else -1)   # no-CRT: no .pdata
     # every import is referenced; some are loaded into a register, not called through the slot
     assert set(r.imports_referenced) == set(img.iat.values())
     assert set(r.imports_called) <= set(r.imports_referenced)
@@ -61,7 +68,8 @@ def test_capstone_agrees_with_llvm(path: Path) -> None:
     data = path.read_bytes()
     img = parse(data)
     r = walk(img, data)
-    llvm = llvm_insns(path, img.image_base)
+    text = next(s for s in img.sections if s.name == ".text")
+    llvm = llvm_insns(path, img.image_base, text.virtual_address + text.virtual_size)
     missing = [hex(i.rva) for i in r.insns.values() if i.rva not in llvm]
     assert not missing, missing[:10]
     length = [(hex(i.rva), i.size, llvm[i.rva]) for i in r.insns.values() if llvm[i.rva][1] != i.size]
