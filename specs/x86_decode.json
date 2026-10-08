@@ -1,0 +1,3872 @@
+{
+ "spec_id": "x86_64.decode",
+ "version": "0.1.0",
+ "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
+ "prefixes": {
+  "legacy": [
+   "f0",
+   "f2",
+   "f3",
+   "2e",
+   "36",
+   "3e",
+   "26",
+   "64",
+   "65",
+   "66",
+   "67"
+  ],
+  "rex": "40-4f",
+  "vex2": "c5",
+  "vex3": "c4",
+  "lockable": [
+   "add",
+   "or",
+   "adc",
+   "sbb",
+   "and",
+   "sub",
+   "xor",
+   "inc",
+   "dec",
+   "not",
+   "neg",
+   "xchg",
+   "xadd",
+   "cmpxchg",
+   "bts",
+   "btr",
+   "btc"
+  ],
+  "rep_string": [
+   "movsb",
+   "movsw",
+   "movsd",
+   "movsq",
+   "stosb",
+   "stosw",
+   "stosd",
+   "stosq"
+  ]
+ },
+ "immediates": {
+  "b": "1 byte",
+  "w": "2 bytes",
+  "d": "4 bytes",
+  "z": "2 bytes with 66 operand-size, else 4",
+  "v": "8 with REX.W, 2 with 66, else 4"
+ },
+ "sources": [
+  "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
+  "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
+  "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
+  "Intel SDM Vol 2D Appendix A, Table A-5 (three-byte 0F3A map)",
+  "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
+  "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
+  "Intel SDM Vol 2A section 2.1-2.2 (prefixes, REX, ModRM/SIB/displacement)"
+ ],
+ "entries": [
+  {
+   "map": "1",
+   "op": 0,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 1,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 2,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 3,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 4,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 5,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 8,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 9,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 10,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 11,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 12,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 13,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 16,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 17,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 18,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 19,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 20,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 21,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 24,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 25,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 26,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 27,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 28,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 29,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 32,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 33,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 34,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 35,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 36,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 37,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 40,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 41,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 42,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 43,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 44,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 45,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 48,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 49,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 50,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 51,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 52,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 53,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 56,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 57,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 58,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 59,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 60,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 61,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 80,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 88,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 81,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 89,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 82,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 90,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 83,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 91,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 84,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 92,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 85,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 93,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 86,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 94,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 87,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 95,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 99,
+   "mn": "movsxd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 104,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 106,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 105,
+   "mn": "imul",
+   "pfx": "none",
+   "modrm": true,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 107,
+   "mn": "imul",
+   "pfx": "none",
+   "modrm": true,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 112,
+   "mn": "jo",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 128,
+   "mn": "jo",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 113,
+   "mn": "jno",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 129,
+   "mn": "jno",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 114,
+   "mn": "jb",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 130,
+   "mn": "jb",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 115,
+   "mn": "jae",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 131,
+   "mn": "jae",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 116,
+   "mn": "je",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 132,
+   "mn": "je",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 117,
+   "mn": "jne",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 133,
+   "mn": "jne",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 118,
+   "mn": "jbe",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 134,
+   "mn": "jbe",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 119,
+   "mn": "ja",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 135,
+   "mn": "ja",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 120,
+   "mn": "js",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 136,
+   "mn": "js",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 121,
+   "mn": "jns",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 137,
+   "mn": "jns",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 122,
+   "mn": "jp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 138,
+   "mn": "jp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 123,
+   "mn": "jnp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 139,
+   "mn": "jnp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 124,
+   "mn": "jl",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 140,
+   "mn": "jl",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 125,
+   "mn": "jge",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 141,
+   "mn": "jge",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 126,
+   "mn": "jle",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 142,
+   "mn": "jle",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 127,
+   "mn": "jg",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 143,
+   "mn": "jg",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "add",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "or",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "adc",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "sbb",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "and",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "sub",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "xor",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 128,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 129,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 131,
+   "mn": "cmp",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 132,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 133,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 134,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 135,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 136,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 137,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 138,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 139,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 140,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 141,
+   "mn": "lea",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 142,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 143,
+   "mn": "pop",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 144,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 144,
+   "mn": "pause",
+   "pfx": "f3",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 145,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 146,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 147,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 148,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 149,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 150,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 151,
+   "mn": "xchg",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 152,
+   "mn": "cwde",
+   "pfx": "none",
+   "modrm": false,
+   "sizes": {
+    "16": "cbw",
+    "32": "cwde",
+    "64": "cdqe"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 153,
+   "mn": "cdq",
+   "pfx": "none",
+   "modrm": false,
+   "sizes": {
+    "16": "cwd",
+    "32": "cdq",
+    "64": "cqo"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 168,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 169,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 164,
+   "mn": "movsb",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 165,
+   "mn": "movsd",
+   "pfx": "none",
+   "modrm": false,
+   "sizes": {
+    "16": "movsw",
+    "32": "movsd",
+    "64": "movsq"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 170,
+   "mn": "stosb",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 171,
+   "mn": "stosd",
+   "pfx": "none",
+   "modrm": false,
+   "sizes": {
+    "16": "stosw",
+    "32": "stosd",
+    "64": "stosq"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 176,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 184,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 177,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 185,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 178,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 186,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 179,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 187,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 180,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 188,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 181,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 189,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 182,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 190,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 183,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 191,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "v",
+   "sizes": {
+    "16": "mov",
+    "32": "mov",
+    "64": "movabs"
+   },
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "rol",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "rol",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "rol",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "rol",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "rol",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "rol",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "ror",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "ror",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "ror",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "ror",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "ror",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "ror",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "rcl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "rcl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "rcl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "rcl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "rcl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "rcl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "rcr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "rcr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "rcr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "rcr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "rcr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "rcr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "shl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "shl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "shl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "shl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "shl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "shl",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "shr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "shr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "shr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "shr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "shr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "shr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "sal",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "sal",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "sal",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "sal",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "sal",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "sal",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 192,
+   "mn": "sar",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 193,
+   "mn": "sar",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 208,
+   "mn": "sar",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 209,
+   "mn": "sar",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 210,
+   "mn": "sar",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 211,
+   "mn": "sar",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 194,
+   "mn": "ret",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "w",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 195,
+   "mn": "ret",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 198,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 199,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 204,
+   "mn": "int3",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 205,
+   "mn": "int",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 232,
+   "mn": "call",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 233,
+   "mn": "jmp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "d",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 235,
+   "mn": "jmp",
+   "pfx": "none",
+   "modrm": false,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 244,
+   "mn": "hlt",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "test",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "imm": "z",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "not",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "not",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "neg",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "neg",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "mul",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "mul",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "imul",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "imul",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "div",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "div",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 246,
+   "mn": "idiv",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 247,
+   "mn": "idiv",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 254,
+   "mn": "inc",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 254,
+   "mn": "dec",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "inc",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "dec",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "call",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "jmp",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "push",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 5,
+   "mn": "syscall",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 11,
+   "mn": "ud2",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 49,
+   "mn": "rdtsc",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 162,
+   "mn": "cpuid",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 13,
+   "mn": "prefetchw",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "prefetchnta",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "prefetcht0",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "prefetcht1",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "prefetcht2",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 31,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 1,
+   "mn": "xgetbv",
+   "pfx": "none",
+   "modrm": true,
+   "mod": "D0",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "movups",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "movupd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "movss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "movsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "movups",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "movupd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "movss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "movsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 40,
+   "mn": "movaps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 40,
+   "mn": "movapd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 41,
+   "mn": "movaps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 41,
+   "mn": "movapd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 44,
+   "mn": "cvttss2si",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 44,
+   "mn": "cvttsd2si",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 46,
+   "mn": "ucomiss",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 46,
+   "mn": "ucomisd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 47,
+   "mn": "comiss",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 47,
+   "mn": "comisd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 64,
+   "mn": "cmovo",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 144,
+   "mn": "seto",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 65,
+   "mn": "cmovno",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 145,
+   "mn": "setno",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 66,
+   "mn": "cmovb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 146,
+   "mn": "setb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 67,
+   "mn": "cmovae",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 147,
+   "mn": "setae",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 68,
+   "mn": "cmove",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 148,
+   "mn": "sete",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 69,
+   "mn": "cmovne",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 149,
+   "mn": "setne",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 70,
+   "mn": "cmovbe",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 150,
+   "mn": "setbe",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 71,
+   "mn": "cmova",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 151,
+   "mn": "seta",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 72,
+   "mn": "cmovs",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 152,
+   "mn": "sets",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 73,
+   "mn": "cmovns",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 153,
+   "mn": "setns",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 74,
+   "mn": "cmovp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 154,
+   "mn": "setp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 75,
+   "mn": "cmovnp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 155,
+   "mn": "setnp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 76,
+   "mn": "cmovl",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 156,
+   "mn": "setl",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 77,
+   "mn": "cmovge",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 157,
+   "mn": "setge",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 78,
+   "mn": "cmovle",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 158,
+   "mn": "setle",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 79,
+   "mn": "cmovg",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 159,
+   "mn": "setg",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 84,
+   "mn": "andps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 84,
+   "mn": "andpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 86,
+   "mn": "orps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 86,
+   "mn": "orpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 87,
+   "mn": "xorps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 87,
+   "mn": "xorpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "addps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "addpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "addss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "addsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "mulps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "mulpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "mulss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "mulsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "subps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "subpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "subss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "subsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 94,
+   "mn": "divps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 94,
+   "mn": "divpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 94,
+   "mn": "divss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 94,
+   "mn": "divsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 81,
+   "mn": "sqrtps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 81,
+   "mn": "sqrtpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 81,
+   "mn": "sqrtss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 81,
+   "mn": "sqrtsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "cvtdq2pd",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 96,
+   "mn": "punpcklbw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 108,
+   "mn": "punpcklqdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 116,
+   "mn": "pcmpeqb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 117,
+   "mn": "pcmpeqw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 215,
+   "mn": "pmovmskb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 219,
+   "mn": "pand",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 235,
+   "mn": "por",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 239,
+   "mn": "pxor",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 251,
+   "mn": "psubq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 250,
+   "mn": "psubd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 212,
+   "mn": "paddq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 231,
+   "mn": "movntdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 214,
+   "mn": "movq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "movd",
+   "pfx": "66",
+   "modrm": true,
+   "w": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "movq",
+   "pfx": "66",
+   "modrm": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movd",
+   "pfx": "66",
+   "modrm": true,
+   "w": 0,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movq",
+   "pfx": "66",
+   "modrm": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movq",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 111,
+   "mn": "movdqa",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 111,
+   "mn": "movdqu",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 127,
+   "mn": "movdqa",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 127,
+   "mn": "movdqu",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 112,
+   "mn": "pshufd",
+   "pfx": "66",
+   "modrm": true,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 112,
+   "mn": "pshuflw",
+   "pfx": "f2",
+   "modrm": true,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "psrlq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 2,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "psrldq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 3,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "psllq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "pslldq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 7,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 163,
+   "mn": "bt",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 171,
+   "mn": "bts",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 179,
+   "mn": "btr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 187,
+   "mn": "btc",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 175,
+   "mn": "imul",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 176,
+   "mn": "cmpxchg",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 177,
+   "mn": "cmpxchg",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 182,
+   "mn": "movzx",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 183,
+   "mn": "movzx",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 190,
+   "mn": "movsx",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 191,
+   "mn": "movsx",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 192,
+   "mn": "xadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 193,
+   "mn": "xadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 188,
+   "mn": "bsf",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 189,
+   "mn": "bsr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 188,
+   "mn": "tzcnt",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 189,
+   "mn": "lzcnt",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)"
+  },
+  {
+   "map": "0f",
+   "op": 186,
+   "mn": "bt",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 186,
+   "mn": "bts",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 186,
+   "mn": "btr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 186,
+   "mn": "btc",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "ldmxcsr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 2,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "stmxcsr",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 3,
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)"
+  },
+  {
+   "map": "0f3a",
+   "op": 99,
+   "mn": "pcmpistri",
+   "pfx": "66",
+   "modrm": true,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-5 (three-byte 0F3A map)"
+  },
+  {
+   "map": "0f3a",
+   "op": 11,
+   "mn": "roundsd",
+   "pfx": "66",
+   "modrm": true,
+   "imm": "b",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-5 (three-byte 0F3A map)"
+  },
+  {
+   "map": "0f",
+   "op": 111,
+   "mn": "vmovdqa",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 127,
+   "mn": "vmovdqa",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 111,
+   "mn": "vmovdqu",
+   "pfx": "f3",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 127,
+   "mn": "vmovdqu",
+   "pfx": "f3",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 231,
+   "mn": "vmovntdq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "vmovsd",
+   "pfx": "f2",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "vmovsd",
+   "pfx": "f2",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 40,
+   "mn": "vmovapd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 41,
+   "mn": "vmovapd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "vaddsd",
+   "pfx": "f2",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "vmulsd",
+   "pfx": "f2",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "vsubsd",
+   "pfx": "f2",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 94,
+   "mn": "vdivsd",
+   "pfx": "f2",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 47,
+   "mn": "vcomisd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "vcvtdq2pd",
+   "pfx": "f3",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "vmovq",
+   "pfx": "f3",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 214,
+   "mn": "vmovq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 219,
+   "mn": "vpand",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 235,
+   "mn": "vpor",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 239,
+   "mn": "vpxor",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 251,
+   "mn": "vpsubq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 250,
+   "mn": "vpsubd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 212,
+   "mn": "vpaddq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 116,
+   "mn": "vpcmpeqb",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 117,
+   "mn": "vpcmpeqw",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 215,
+   "mn": "vpmovmskb",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 211,
+   "mn": "vpsrlq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "vmovd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 0,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "vmovq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "vmovd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 0,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "vmovq",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "vpsrlq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 2,
+   "imm": "b",
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "vpsllq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 6,
+   "imm": "b",
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f",
+   "op": 119,
+   "mn": "vzeroupper",
+   "pfx": "none",
+   "modrm": false,
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f3a",
+   "op": 24,
+   "mn": "vinsertf128",
+   "pfx": "66",
+   "modrm": true,
+   "imm": "b",
+   "vex": true,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f38",
+   "op": 169,
+   "mn": "vfmadd213sd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f38",
+   "op": 185,
+   "mn": "vfmadd231sd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  },
+  {
+   "map": "0f38",
+   "op": 171,
+   "mn": "vfmsub213sd",
+   "pfx": "66",
+   "modrm": true,
+   "vex": true,
+   "w": 1,
+   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row"
+  }
+ ]
+}
