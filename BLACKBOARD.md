@@ -61,6 +61,7 @@
 - **2026-10-07** — Sprint 006 (Windows runner probe loop) closed. `probes/hello/hello.c`, `.github/workflows/windows-probe.yml`, `.gitignore`; repo `laffeyp/w2m` (private). Dual contract: signal pass (8 guest lines on the trace; TRACE_INGESTED on the Mac); artifact pass (`gh repo create` 0; run 37718681787 success; ingest TRACE_INGESTED; suite 38 passed). Observation: pass — Windows 10.0.26100 (`windows-2025`), trace sha256:fd933867ff19a7ea5c17a740fbed0d7f319d24f7bbbe7bafbc8921846023555a identical on runner and Mac.
 - **2026-10-07** — Sprint 009 (EnTSO message-passing litmus) closed. `probes/mac_hv_litmus/mp_litmus.c`, `scripts/litmus_mp.py`. Dual contract: signal pass (SESSION_INIT, CAPABILITY_PROBED guest_tsoen and guest_tsoen_context_switch, SESSION_COMPLETED); artifact pass (driver exit 0; suite 39 passed; ruff, mypy 0). Observation: pass — record runs/litmus-1791441621: entso off 2245/50M forbidden MP outcomes, entso on 0/50M; ACTLR_EL1 correct after all 200 exits.
 - **2026-10-07** — Sprint 010 (vocabulary 0.2) closed. `signals/0.2.json`, `signals/0.2-rationale.md`, `signals/current.json`, `signals/proposals.json` (P8, P9 ratified); generator, gate, package constant, and ingest read the current version. Dual contract: signal vacuous; artifact pass (gate 0 on 0.2; `--check` 0; suite 41 passed; ruff, mypy 0; 11 of 11 committed traces ingest).
+- **2026-10-07** — Sprint 011 (TSO ordering cost, native vs VM) closed. `probes/ordering_cost/ordering_cost.c`, `scripts/ordering_cost.py`. Dual contract: signal pass (SESSION_INIT, 14 MEASUREMENT_RECORDED ns_per_access, SESSION_COMPLETED); artifact pass (driver exit 0; suite 41 passed; ruff, mypy 0). Observation: pass — record runs/ordering-1791442786. Medians, ratio to native plain in the same run: L1 — ldapr_stlr 2.64x, ldar_stlr 2.64x, dmb_fences 7.45x, VM entso_off 0.99x, VM entso_on 0.99x, VM entso_on 16 KB granule 1.00x; DRAM-sized — ldapr_stlr 2.71x, ldar_stlr 2.71x, dmb_fences 7.42x, VM entso_off 1.03x, VM entso_on 1.10x, VM entso_on 16 KB 1.06x. Native lowering precondition: plain 9/10,000,000 forbidden MP outcomes (attempt 7), ldapr_stlr 0 in all 7 attempts.
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
@@ -87,12 +88,25 @@
 ## Drift watchlist
 
 - ~~Reference profile_id too coarse~~ — closed 2026-10-07 by Sprint 007 (UBR and installation type recorded).
+- **Absolute timings drift between runs** (Sprint 011 observation 3). Compare MEASUREMENT_RECORDED values only within one record (same run, interleaved). Re-visit when a measurement must be compared across runs: pin QoS class / P-cores and record CPU frequency state in the baseline.
 - **Unresolvable reference_ref in comparisons** (Sprint 005 observation 1). Every COMPARISON_COMPLETED so far cites a placeholder reference. Re-visit at the first reference run on the rented x86-64 Windows instance; from then on reference_ref must name an EXECUTION_STARTED on a windows_reference profile (E4, E13).
 - **APPLICATION_LAUNCHED without a view pairing** (Sprint 000 observation 3). Re-visit at the first sprint that presents a Metal frame; ratify P2 then.
 
 ---
 
 ## Sprint tail
+
+### Sprint 011 (2026-10-07, closed)
+- **Scope:** per-access cost of x86-TSO ordering: native lowerings vs VM hardware TSO, L1 and DRAM-sized working sets.
+- **Dual contract:** signal pass; artifact pass (see Built).
+- **Observation contract:** pass, after two corrections the observation itself forced.
+- **Rubber Duck Pass:**
+  - *Observation 1 (payload anomaly, resolved-here):* first full run showed the VM 6.2x slower than native on the DRAM-sized set. The VM path had no warm pass while the native path did; the number included first-touch stage-2 faults on 128 MiB. With a warm pass the VM is 1.03-1.10x. Disposition: resolved-here; the 6.2x figure was never recorded as a measurement.
+  - *Observation 2 (missing pair, resolved-here):* the native MP precondition passed with plain 0/10,000,000 — a check with no power. The driver now requires plain > 0 in the same attempt (attempt 7 had 9).
+  - *Observation 3 (timing surprise):* absolute ns/access moved up to 50% between runs (L1 plain 0.087 then 0.131), ratios held within 0.01. Cause not established; likely core placement or clock state of an unpinned thread. Disposition: deferred — MEASUREMENT_RECORDED values are only comparable within one record; Drift watchlist entry.
+  - *Observation 4 (vocabulary gap):* VM entso_on vs entso_off on the DRAM set differs by 7% at the median but only 1.4% at the minimum; not separable from noise with 5 repeats. Disposition: recorded — TSO hardware cost reported as "under 10% on this kernel", not as a number.
+- **Files:** probes/ordering_cost/ordering_cost.c, scripts/ordering_cost.py
+- **Closed:** clean.
 
 ### Sprint 010 (2026-10-07, closed)
 - **Scope:** vocabulary 0.1 → 0.2 by proposal (P8, P9); version wiring through generator, gate, ingest.

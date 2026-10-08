@@ -87,3 +87,25 @@
 **What this says about the next kit version:**
 
 5. Hard rule 6 could exempt generated files whose generator is in the same sprint and whose `--check` is a graded command.
+
+### 2026-10-07 — Sprints 004-011 (contracts, Windows reference loop, Mac capability and cost probes)
+
+**What happened:** Eight sprints took the project from a vocabulary to evidence on both sides: an accepted Windows contract backed by 10 runs on a hosted `windows-2025` runner, public Hypervisor.framework controls for 4 KB guest pages and guest TSO, a litmus test showing EnTSO's effect (2245 vs 0 forbidden outcomes in 50M), and per-access costs of TSO on both backends. One vocabulary evolution (0.1 → 0.2) went through the proposal taxonomy.
+
+**What worked:**
+
+- The observation contract caught two false results in Sprint 011 that every content assertion passed: a 6.2x VM penalty that was a warm-up asymmetry, and a correctness precondition with no statistical power. Both would have shaped the backend decision.
+- Reading the installed SDK headers before writing code (TECHNIQUES.md #46) made the Hypervisor probes work on the first run, and answered OQ-1 before any probe ran.
+- Resolve-and-record absorbed four user redirections in one day (v0.2 plan, no physical machine, optional reference runs, private repo) as appended decisions with no edits to earlier ones.
+
+**What got in the way:**
+
+- The agent framed the Windows reference as a blocker and as a hardware purchase; the user had to ask twice. The kit's user-only list ("money, accounts") pulled a development aid into a purchasing question. The kit has no prompt to ask "is this on the product's critical path, or only on the evidence path?"
+- Twice the agent's own diary edits landed in the wrong entry (text-anchor inserts). Mechanical: anchor on headings, verify order after each insert.
+
+**What this says about the next kit version:**
+
+6. The observation contract template could carry a "power" line for any check that passes on absence (zero violations, no errors): name the control that must fail in the same run.
+7. Measurement sprints could require symmetric setup (warm passes, same allocation path) as a self-review checklist item.
+
+| H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
