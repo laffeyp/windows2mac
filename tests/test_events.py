@@ -25,7 +25,7 @@ H = "sha256:" + "ab" * 32
 def test_one_class_per_tag_named_as_the_tag() -> None:
     names = {cls.__name__ for cls in events.HARNESS_EVENTS + events.GUEST_EVENTS}
     assert names == {t["name"] for t in VOCAB["tags"]}
-    assert len(events.HARNESS_EVENTS) == 51 and len(events.GUEST_EVENTS) == 9
+    assert len(events.HARNESS_EVENTS) == 51 and len(events.GUEST_EVENTS) == 10  # 0.5 adds GUEST_THREAD_STATE_OBSERVED
     assert events.VOCAB_VERSION == VOCAB_VERSION == VOCAB["version"]
 
 
