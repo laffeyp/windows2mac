@@ -43,6 +43,7 @@
 - **2026-10-07 user** — Windows reference runs are optional, not a gate ("there you go. that makes sense", chat 2026-10-07, answering the recommendation to accept contracts on documented evidence and run reference probes only as tiebreakers). Supersedes the 2026-10-05 agent-resolved "how §11.1's reference is met" entry's framing of a rented instance as the reference. `src/w2m/contract.py` now accepts a contract on documented or observed evidence; a hypothesis alone still cannot carry acceptance. The Sprint 005 drift item (placeholder reference_ref) stands: a comparison against documentation cites the contract version as its reference.
 - **2026-10-07 agent-resolved** — Concrete Windows-evidence sources, by question type: (1) OS behavior — Microsoft Learn via the MicrosoftDocs git repos (commit-pinned quotes); Wine's per-DLL conformance tests (`dlls/*/tests/*.c`, results on real Win10/Win11 at test.winehq.org); Microsoft public symbols for structure layouts; (2) CPU behavior — Intel SDM and AMD APM text, herdtools7 x86-TSO model for ordering; (3) tiebreak runs — GitHub-hosted `windows-2025` runner (Windows Server 2025, x64) driven by `gh workflow run` from this Mac; (4) the games' own traces on w2m. A Windows-on-Arm VM is valid for OS-behavior contracts only (E4). Grounds: project — user decision above, v0.2 §11.1; SDD — AGENTS.md resolve-and-record; practice — github.com/actions/runner-images (read 2026-10-07), test.winehq.org/data (read 2026-10-07). Revisit if: a source above disappears or a contract needs an observation none of them supplies.
 - **2026-10-07 user** — Sources 6 (GitHub-hosted `windows-2025` runner) and 7 (Windows-on-Arm VM on this Mac) are approved for tiebreak and OS-behavior probes ("6 and seven both seem appropriate", chat 2026-10-07). Open: whether the w2m GitHub repo is public or private; repo creation waits on that answer.
+- **2026-10-07 agent-resolved** — Reference evidence is committed: `store/traces/` (content-addressed guest traces) is in git; `runs/` (substrate records) is not, because `scripts/judge_traces.py` regenerates a record from the traces. A contract version whose evidence or status changes but whose behavior does not gets a minor bump (0.1.0 → 0.2.0) and the old file stays. Grounds: project — contract evidence cites traces by sha256 (v0.2 §14 provenance); SDD — hard rule 12 (no deletions; new versions as new files); practice — content-addressed storage. Revisit if: trace volume makes the repo heavy (then Git LFS, a recorded dependency).
 - **2026-10-07 user** — Create the w2m repo private ("go", chat 2026-10-07, answering the recommendation `laffeyp/w2m`, private). Done: https://github.com/laffeyp/w2m, visibility PRIVATE, first commit 052383a.
 
 ---
@@ -56,6 +57,7 @@
 - **2026-10-05** — Sprint 004 (contract format and first contract) closed. `src/w2m/contract.py`, `contracts/windows.event.auto_reset.single_signal/0.1.0.json` (status proposed; two documented evidence entries quoted from Microsoft Learn, one hypothesis), `tests/test_contract.py`. Dual contract: signal vacuous; artifact pass (suite 27 passed, ruff 0, mypy 0).
 - **2026-10-05** — Sprint 005 (allowed_outcome_set comparator) closed. `src/w2m/compare.py`, `tests/test_compare.py`. Dual contract: signal pass (COMPARISON_COMPLETED conforms and discrepancy); artifact pass (suite 37 passed, ruff 0, mypy 0). Observation: pass — record chain EXECUTION_COMPLETED → TRACE_INGESTED → COMPARISON_COMPLETED.
 - **2026-10-07** — Sprint 006 (Windows runner probe loop) closed. `probes/hello/hello.c`, `.github/workflows/windows-probe.yml`, `.gitignore`; repo `laffeyp/w2m` (private). Dual contract: signal pass (8 guest lines on the trace; TRACE_INGESTED on the Mac); artifact pass (`gh repo create` 0; run 37718681787 success; ingest TRACE_INGESTED; suite 38 passed). Observation: pass — Windows 10.0.26100 (`windows-2025`), trace sha256:fd933867ff19a7ea5c17a740fbed0d7f319d24f7bbbe7bafbc8921846023555a identical on runner and Mac.
+- **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
 
@@ -76,13 +78,25 @@
 
 ## Drift watchlist
 
-- **Reference profile_id too coarse** (Sprint 006 observation 2). Needs UBR and product type (Server vs client). Re-visit at the next Windows probe.
+- ~~Reference profile_id too coarse~~ — closed 2026-10-07 by Sprint 007 (UBR and installation type recorded).
 - **Unresolvable reference_ref in comparisons** (Sprint 005 observation 1). Every COMPARISON_COMPLETED so far cites a placeholder reference. Re-visit at the first reference run on the rented x86-64 Windows instance; from then on reference_ref must name an EXECUTION_STARTED on a windows_reference profile (E4, E13).
 - **APPLICATION_LAUNCHED without a view pairing** (Sprint 000 observation 3). Re-visit at the first sprint that presents a Metal frame; ratify P2 then.
 
 ---
 
 ## Sprint tail
+
+### Sprint 007 (2026-10-07, closed)
+- **Scope:** the event contract's probe on real x64 Windows, 10 executions, judged on one substrate record.
+- **Dual contract:** signal pass; artifact pass (see Built).
+- **Observation contract:** pass. Judge record: 106 events, 21 producers started, 0 failed; 10 of 10 conforms. profile_id `gha-windows-2025-x64-10.0.26100.33438-Server`.
+- **Rubber Duck Pass:**
+  - *Sequence narration (evt-1):* main 6680 started; SetEvent returned 1; join of waiter 5880 returned 0 after 5880:2; join of 4328 returned 0 after 4328:2; WaitForSingleObject(event,0) returned 258. Waiter a's wait returned 0 citing main's SetEvent line; waiter b's returned 258.
+  - *Observation 1 (timing surprise):* waiter a released in 10 of 10 executions; the profile looks FIFO. Disposition: recorded — documented evidence keeps {b} allowed (v0.2 §11.1: repeated observations are witnesses, not rules); open question added to 0.2.0 for a wait-order variant.
+  - *Observation 2 (payload anomaly, resolved):* the Sprint 006 watchlist item: profile_id now carries UBR 33438 and `Server`. Disposition: resolved-here; watchlist item closed.
+  - *Observation 3 (missing pair):* the imported executions' EXECUTION_STARTED carries `elapsed_seconds=0.0` and timeout 600 s (job limit), not measured values, because the probe ran on the runner, not under the harness clock. Disposition: deferred — the probe writes its own elapsed time in a later probe-format revision.
+- **Files:** probes/event_auto_reset/event_auto_reset.c, scripts/judge_traces.py, .github/workflows/windows-probe.yml, contracts/.../0.2.0.json
+- **Closed:** clean.
 
 ### Sprint 006 (2026-10-07, closed)
 - **Scope:** private repo; hello probe built and run on the `windows-2025` hosted runner; trace ingested on the Mac.

@@ -63,3 +63,9 @@ def test_location_must_match_id_and_version(tmp_path: Path) -> None:
     p.write_text(json.dumps(doc))
     with pytest.raises(ContractError, match="must be contracts/"):
         load_contract(p)
+
+
+def test_accepted_version_with_observed_evidence() -> None:
+    c = load_contract(EVENT.parent / "0.2.0.json")
+    assert c.status == "accepted"
+    assert sum(e.category == "observed" for e in c.evidence) == 2

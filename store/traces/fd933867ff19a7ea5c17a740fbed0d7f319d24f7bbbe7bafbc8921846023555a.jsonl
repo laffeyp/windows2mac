@@ -1,0 +1,8 @@
+{"tag":"GUEST_TRACE_OPENED","execution_id":"hello-001","vocab_version":"0.1","profile_id":"gha-windows-2025-x64-10.0.26100","trace_format_version":"0.1"}
+{"tag":"GUEST_THREAD_STARTED","thread_id":6588,"thread_seq":0,"hb_refs":[],"parent_thread_id":0,"start_address":140695478538240,"suspended":false}
+{"tag":"GUEST_CLOCK_READ","thread_id":6588,"thread_seq":1,"hb_refs":[],"clock":"qpc","value":2267788232}
+{"tag":"GUEST_THREAD_STARTED","thread_id":8820,"thread_seq":0,"hb_refs":["6588:1"],"parent_thread_id":6588,"start_address":140695478539088,"suspended":false}
+{"tag":"GUEST_CLOCK_READ","thread_id":8820,"thread_seq":1,"hb_refs":[],"clock":"qpc","value":2267788974}
+{"tag":"GUEST_THREAD_EXITED","thread_id":8820,"thread_seq":2,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_CLOCK_READ","thread_id":6588,"thread_seq":2,"hb_refs":["8820:2"],"clock":"qpc","value":2267789575}
+{"tag":"GUEST_TRACE_CLOSED","line_count":8,"thread_count":2,"dropped_count":0}

@@ -1,0 +1,13 @@
+{"tag":"GUEST_TRACE_OPENED","execution_id":"evt-4","vocab_version":"0.1","profile_id":"gha-windows-2025-x64-10.0.26100.33438-Server","trace_format_version":"0.1"}
+{"tag":"GUEST_THREAD_STARTED","thread_id":5248,"thread_seq":0,"hb_refs":[],"parent_thread_id":0,"start_address":140696778641408,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":5248,"thread_seq":1,"hb_refs":[],"api":"kernel32!SetEvent","args_sha256":"sha256:e2594bfce7ce638b5286fac085db7c4b437fdc568173ef1595903c55b800c8fa","return_value":1,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":5248,"thread_seq":2,"hb_refs":["6512:2"],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:695e0f830b4a26bdeaafac2f2d909d1b0f2f061054171793d58448ad42e7257d","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":5248,"thread_seq":3,"hb_refs":["8748:2"],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:807086e2235fd6be2e39b5c15f732dce8b2abc0a24feb075106deb296ab0b2aa","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":5248,"thread_seq":4,"hb_refs":[],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:70a14e5bea789f9a3d214198e7220ba56bdb854f4aae0f638fb34b56ad4c0b23","return_value":258,"last_error":0}
+{"tag":"GUEST_THREAD_STARTED","thread_id":6512,"thread_seq":0,"hb_refs":["5248:0"],"parent_thread_id":5248,"start_address":140696778643776,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":6512,"thread_seq":1,"hb_refs":["5248:1"],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:c48db4c6077e24bc1ff2108ee25157ca5d286b543a5d5896055b3b1aad14fb61","return_value":0,"last_error":0}
+{"tag":"GUEST_THREAD_EXITED","thread_id":6512,"thread_seq":2,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_THREAD_STARTED","thread_id":8748,"thread_seq":0,"hb_refs":["5248:0"],"parent_thread_id":5248,"start_address":140696778643776,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":8748,"thread_seq":1,"hb_refs":[],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:c48db4c6077e24bc1ff2108ee25157ca5d286b543a5d5896055b3b1aad14fb61","return_value":258,"last_error":0}
+{"tag":"GUEST_THREAD_EXITED","thread_id":8748,"thread_seq":2,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_TRACE_CLOSED","line_count":13,"thread_count":3,"dropped_count":0}

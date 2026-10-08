@@ -1,0 +1,122 @@
+{
+  "contract_id": "windows.event.auto_reset.single_signal",
+  "version": "0.2.0",
+  "status": "accepted",
+  "summary": "One SetEvent on a non-signaled auto-reset event with two pending timed waiters releases exactly one of them; which one is not fixed; the event is non-signaled afterwards.",
+  "applicability": "windows_reference: Windows 10/11 x86-64 user mode; kernel32 SetEvent and WaitForSingleObject on an unnamed auto-reset event created non-signaled",
+  "roles": [
+    "main",
+    "a",
+    "b"
+  ],
+  "scenario": {
+    "initial": {
+      "event": "CreateEventW(NULL, FALSE, FALSE, NULL) by main",
+      "pending_waiters": [
+        "a",
+        "b"
+      ]
+    },
+    "execution": {
+      "a": "WaitForSingleObject(event, 2000)",
+      "b": "WaitForSingleObject(event, 2000)",
+      "main": "after both waiters are pending: SetEvent(event) once; then WaitForSingleObject(thread_a) and WaitForSingleObject(thread_b); then WaitForSingleObject(event, 0)",
+      "signal_count": 1,
+      "resets": 0,
+      "waiter_cancellation": false
+    },
+    "observation": {
+      "phase": "after_signal_consumption"
+    }
+  },
+  "acceptance": {
+    "relation": "allowed_outcome_set",
+    "outcome": {
+      "api": "kernel32!WaitForSingleObject",
+      "return_value": 0,
+      "over_roles": [
+        "a",
+        "b"
+      ]
+    },
+    "allowed": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ],
+    "forbidden": [
+      {
+        "label": "both_waits_complete_from_the_single_signal",
+        "outcome": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "label": "no_wait_completes_from_the_signal",
+        "outcome": []
+      }
+    ],
+    "postconditions": [
+      {
+        "role": "main",
+        "api": "kernel32!WaitForSingleObject",
+        "return_value": 258
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "evidence_id": "ms-event-objects-auto-reset",
+      "category": "documented",
+      "source_ref": "https://learn.microsoft.com/en-us/windows/win32/sync/event-objects (page updated 2025-04-15; retrieved 2026-10-05)",
+      "applicability": "all Windows versions the page covers",
+      "quote": "An event object whose state remains signaled until a single waiting thread is released, at which time the system automatically sets the state to nonsignaled. If no threads are waiting, the event object's state remains signaled. If more than one thread is waiting, a waiting thread is selected. Do not assume a first-in, first-out (FIFO) order. External events such as kernel-mode APCs can change the wait order."
+    },
+    {
+      "evidence_id": "ms-waitforsingleobject-returns",
+      "category": "documented",
+      "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject (page updated 2024-11-20; retrieved 2026-10-05)",
+      "applicability": "Windows XP and later",
+      "quote": "WAIT_OBJECT_0 0x00000000L The state of the specified object is signaled. WAIT_TIMEOUT 0x00000102L The time-out interval elapsed, and the object's state is nonsignaled."
+    },
+    {
+      "evidence_id": "hyp-timed-waits-expose-the-selection",
+      "category": "hypothesis",
+      "source_ref": "reasoning: with a 2000 ms timeout far above signal latency, the released waiter returns WAIT_OBJECT_0 and the other returns WAIT_TIMEOUT, so the selected waiter is observable through GUEST_CALL_RETURNED without an object-state tag",
+      "applicability": "windows_reference profiles under normal load",
+      "distinguishing_check": "reference runs of the probe: every run shows exactly one waiter returning 0 and the other 258, and main's zero-timeout wait returning 258; a run where both time out or both return 0 refutes it"
+    },
+    {
+      "evidence_id": "obs-gha-2025-26100.33438-evt-1-10",
+      "category": "observed",
+      "source_ref": "executions evt-1..evt-10, GitHub Actions run 37738035459 (laffeyp/w2m), probe probes/event_auto_reset/event_auto_reset.c; traces in store/traces/ by sha256; judged 2026-10-07 by scripts/judge_traces.py: 10 of 10 conforms",
+      "applicability": "windows_reference: gha-windows-2025-x64-10.0.26100.33438-Server (Windows Server 2025, hosted runner, hypervisor-virtualized x64)",
+      "quote": "outcome {a} in 10 of 10 executions; outcome {b} not observed; main's WaitForSingleObject(event,0) returned 258 in 10 of 10"
+    },
+    {
+      "evidence_id": "res-hyp-timed-waits-supported",
+      "category": "observed",
+      "source_ref": "same executions as obs-gha-2025-26100.33438-evt-1-10",
+      "applicability": "resolves hyp-timed-waits-expose-the-selection on this profile",
+      "quote": "every execution showed exactly one waiter returning 0 and the other 258: the hypothesis is supported on this profile"
+    }
+  ],
+  "open_questions": [
+    "Does an APC delivered to a waiter during the wait change which waiter is selected (the page says it can change wait order)? Needs an alertable-wait variant.",
+    "Is the 2000 ms timeout safe on a loaded hosted runner? A timed-out run that should have been released would look like the forbidden empty outcome.",
+    "Waiter a (created and started first) was released in 10 of 10 runs, so this profile looks FIFO. Microsoft's text forbids assuming FIFO; outcome {b} stays allowed on documented evidence. A variant that starts b's wait first would show whether selection follows wait order or creation order."
+  ],
+  "sections": {
+    "state": "event: {signaled: bool}; waiters: ordered-by-nothing set of pending threads",
+    "transitions": "SetEvent with >=1 pending waiter: release exactly one waiter, signaled stays false; with none: signaled := true",
+    "nondeterminism": "which pending waiter is released (allowed outcome set)",
+    "ordering": "the released waiter's wait return happens-after the SetEvent call (hb edge main:SetEvent -> waiter:return)",
+    "progress": "the released waiter returns before its timeout under the scheduler assumption that a released thread runs within 2000 ms",
+    "faults": "none prescribed in this scenario",
+    "allowed_optimizations": "the implementation may choose either waiter by any policy, including always the same one"
+  }
+}

@@ -10,8 +10,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Content store and run records (regenerable; evidence is cited by hash)
-/store/
+# Run records are regenerable from the content store; the store holds reference evidence
+# (guest traces cited by sha256 in contracts) and is committed.
 /runs/
 
 # macOS
