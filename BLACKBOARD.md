@@ -78,7 +78,8 @@
 - **2026-10-08** — Sprint 017 (XED primary reference) closed. XED v2026.08.23 (0bcb6237) built under `third_party/`; `tools/xedshim/xedshim.c`, `src/w2m/xedref.py`, `tests/test_xedref.py`; differential judged by XED. Dual contract: signal vacuous; artifact pass (75 passed; ruff, mypy 0). Observation: XED decodes all 2,444,456 positions; Capstone and w2m lengths equal XED's everywhere they decode; disputed cases settled by XED.
 - **2026-10-08** — Sprint 018 (iclass identity, gaps, CPU features) closed. Spec 0.3.0 (729 rows), decoder, generator, XED shim with chip argument, tests. Dual contract: signal vacuous; artifact pass (87 passed; generator `--check` 0; ruff, mypy 0). Observation: on 2,444,456 positions ours equals XED on length and iclass at all 2,444,113 it decodes; 343 gaps, all EVEX/XOP.
 - **2026-10-08** — Sprint 019 (EVEX, XOP) closed. Spec 0.4.0 (804 rows), decoder, generator, tests. Dual contract: signal vacuous; artifact pass (93 passed; `--check` 0; ruff, mypy 0). Observation: 0 spec gaps; ours equals XED on length and iclass at all 2,444,456 positions.
-- **2026-10-08** — Sprint 020 (generated encodings) closed. `src/w2m/encgen.py`, `scripts/generated_differential.py`, `specs/x86_generated_worklist.json`. Observation: 38,592 cases — agree 68.78%, ours_accepts 29.91% (no validity rules), iclass_differs 1.31% (edge rules), length_differs 0. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
+- **2026-10-08** — Sprint 020 (generated encodings) closed. `src/w2m/encgen.py`, `scripts/generated_differential.py`, `specs/x86_generated_worklist.json`. Observation: 38,592 cases — agree 68.78%, ours_accepts 29.91% (no validity rules), iclass_differs 1.31% (edge rules), length_differs 0.
+- **2026-10-08** — Sprint 021 (validity layer) closed. Spec 0.5.1 (812 rows), decoder `InvalidEncoding`, tests. Dual contract: signal vacuous; artifact pass (108 passed; ruff, mypy, `--check` 0). Observation: generated — accepted-but-invalid 29.91% → 11.38%, iclass differs 1.31% → 0.55%, length differs 0; corpus unchanged at full agreement. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
@@ -116,6 +117,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 021 (2026-10-08, closed)
+- **Scope:** validity layer (#UD) and iclass edge rules from the generated differential.
+- **Rubber Duck Pass:**
+  - *Observation 1 (the agent's own test was wrong):* a test asserted `f0 01 03` is invalid; XED decodes it as `lock add dword ptr [rbx], eax` (opcode 01 has a memory destination). The intended case was `f0 03 03` (BAD_LOCK_PREFIX). Disposition: resolved-here — the test was checked against XED before being changed, and the decoder was right.
+  - *Observation 2 (direction of error):* the strict-prefix rule turned silent misdecodes into 73 refusals (ours has no row where XED knows a newer instruction). Disposition: recorded — a refusal is honest; the rows are worklist items.
+  - *Observation 3 (residue):* 11.38% accepted-but-invalid, mostly EVEX broadcast/zeroing/opmask rules and VEX/EVEX W constraints. Disposition: deferred — next decoder sprint; then operand comparison.
+- **Closed:** clean.
 
 ### Sprint 020 (2026-10-08, closed)
 - **Scope:** generated encodings per spec row vs XED.

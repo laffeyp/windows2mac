@@ -1,299 +1,69 @@
 {
- "cases": 38592,
+ "cases": 38976,
  "chip": "ALL",
  "outcomes": {
-  "agree": 26542,
-  "ours_accepts": 11543,
-  "iclass_differs": 507
+  "agree": 28302,
+  "both_reject": 5951,
+  "ours_accepts": 4435,
+  "iclass_differs": 215,
+  "ours_gap": 73
  },
  "kinds": [
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOV",
-   "lengths": "",
-   "count": 252,
-   "example": "f04188a4d185e3ed61e0a0 [legacy extra=f0 rex=41 mod=2 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "SHL",
-   "ours": "SAL",
-   "lengths": "",
-   "count": 235,
-   "example": "67c0f4ff [legacy extra=67 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "KMOVW",
-   "lengths": "",
-   "count": 126,
-   "example": "c4c16c9054fd242a8a70dc09 [vex w=0 l=1 vvvv=d mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "KMOVB",
-   "lengths": "",
-   "count": 126,
-   "example": "c4e17d9084e5fada19a615b6 [vex w=0 l=1 vvvv=f mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "KMOVQ",
-   "lengths": "",
-   "count": 123,
-   "example": "c4e1fc90fd97dde864127d [vex w=1 l=1 vvvv=f mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "KMOVD",
-   "lengths": "",
-   "count": 122,
-   "example": "c461f990ccdd6ad9591a18 [vex w=1 l=0 vvvv=f mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVQ",
-   "lengths": "",
-   "count": 115,
-   "example": "c4e1f27e4d75adfddfc139 [vex w=1 l=0 vvvv=e mod=1 rm=5]"
-  },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPBROADCASTW",
    "lengths": "",
-   "count": 106,
-   "example": "c462a579341204acb258dd8b [vex w=1 l=1 vvvv=4 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUSH",
-   "lengths": "",
-   "count": 100,
-   "example": "f0503226cec73fe5b888 [legacy extra=f0 rex=- mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMP",
-   "lengths": "",
-   "count": 91,
-   "example": "f06638242c2d283925590f [legacy extra=f066 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "POP",
-   "lengths": "",
-   "count": 85,
-   "example": "f06658f354b438b64e16a7 [legacy extra=f066 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPERMQ",
-   "lengths": "",
-   "count": 81,
-   "example": "c4e3f900e4269e3df55ffe [vex w=1 l=0 vvvv=f mod=3 rm=4]"
+   "count": 97,
+   "example": "c4a2fd79a210933bf05a99 [vex w=1 l=1 vvvv=f mod=2 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPBROADCASTB",
    "lengths": "",
-   "count": 80,
-   "example": "62e2cddb7a14e27b10db789ee4 [evex w=1 ll=2 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSLLDQ",
-   "lengths": "",
-   "count": 79,
-   "example": "c4e17d733c9569b394b77004 [vex w=0 l=1 vvvv=f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BSWAP",
-   "lengths": "",
-   "count": 79,
-   "example": "f0664d0fc8621ece5f715f7891 [legacy extra=f066 rex=4d mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSRLDQ",
-   "lengths": "",
-   "count": 76,
-   "example": "c4a1b9735ca3e09f6e883fcc [vex w=1 l=0 vvvv=7 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "XCHG_LOCK",
-   "lengths": "",
-   "count": 73,
-   "example": "f04186c632e5ca511efa [legacy extra=f0 rex=41 mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVNTDQ",
-   "lengths": "",
-   "count": 72,
-   "example": "c4a1b5e7f4bea424a988bb [vex w=1 l=1 vvvv=6 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "TEST",
-   "lengths": "",
-   "count": 70,
-   "example": "f04884dded3958bf9612 [legacy extra=f0 rex=48 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPBROADCASTD",
-   "lengths": "",
-   "count": 70,
-   "example": "c4e2f9587df8a1f095cc6e [vex w=1 l=0 vvvv=f mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPROTW",
-   "lengths": "",
-   "count": 70,
-   "example": "8fa8fcc1ec6f0baa77d661 [xop w=1 l=1 vvvv=f mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPROTQ",
-   "lengths": "",
-   "count": 69,
-   "example": "8fa860c3fc4e08f411bcc2 [xop w=0 l=0 vvvv=c mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVDQU16",
-   "lengths": "",
-   "count": 68,
-   "example": "62c19fd96f1d67de6a07be97 [evex w=1 ll=2 mod=0 rm=5]"
+   "count": 83,
+   "example": "62b2fdca7a550434dda527a3 [evex w=1 ll=2 mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VMOVDQA64",
    "lengths": "",
-   "count": 68,
-   "example": "6201fd1c6fb4e55072295fcb01 [evex w=1 ll=0 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVD",
-   "lengths": "",
-   "count": 67,
-   "example": "c5fd6e1c3520940fc686be [vex w=0 l=1 vvvv=f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ROR",
-   "lengths": "",
-   "count": 64,
-   "example": "f066c00c115ba195b2aa32 [legacy extra=f066 rex=- mod=0 rm=4]"
+   "count": 74,
+   "example": "6271bdae6f7c18b60e93f234fd [evex w=1 ll=1 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VMOVDQU64",
    "lengths": "",
-   "count": 64,
-   "example": "6281fedd6f855c61ef74c84e [evex w=1 ll=2 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPROTB",
-   "lengths": "",
-   "count": 64,
-   "example": "8fa8ecc0cd33bffb598a82 [xop w=1 l=1 vvvv=d mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPROTD",
-   "lengths": "",
-   "count": 63,
-   "example": "8fc87cc27c1d2496ca014923 [xop w=0 l=1 vvvv=f mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVDQU32",
-   "lengths": "",
-   "count": 62,
-   "example": "62710e9d6fad55b72813dfce [evex w=0 ll=0 mod=2 rm=5]"
+   "count": 67,
+   "example": "6221fedc6f2de08842b295b7 [evex w=1 ll=2 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VMOVDQU8",
    "lengths": "",
+   "count": 63,
+   "example": "62817f386fd566fe66fb73d0 [evex w=0 ll=1 mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VMOVDQU16",
+   "lengths": "",
    "count": 62,
-   "example": "62c1272e6f64106c91d100ab62 [evex w=0 ll=1 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RCR",
-   "lengths": "",
-   "count": 61,
-   "example": "f06642c058121b4f18d353 [legacy extra=f066 rex=42 mod=1 rm=0]"
+   "example": "62b1ff5a6f351138e92d354c [evex w=1 ll=2 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPSRLD",
-   "lengths": "",
-   "count": 61,
-   "example": "c4611972548d7285a685469e [vex w=0 l=0 vvvv=3 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSLLD",
-   "lengths": "",
-   "count": 61,
-   "example": "c4212572b4ad983978defea8 [vex w=0 l=1 vvvv=4 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SUB_LOCK",
+   "ours": "VMOVDQU32",
    "lengths": "",
    "count": 60,
-   "example": "f04328dcaec5795537cb [legacy extra=f0 rex=43 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSLLQ",
-   "lengths": "",
-   "count": 60,
-   "example": "c5fd73b4857433546d9334 [vex w=0 l=1 vvvv=f mod=2 rm=4]"
+   "example": "62d11ed96f8c66b158bb799b1b [evex w=0 ll=2 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -301,303 +71,151 @@
    "ours": "VMOVDQA32",
    "lengths": "",
    "count": 59,
-   "example": "62410d4e6f1c1e357d0afe161d [evex w=0 ll=2 mod=0 rm=4]"
+   "example": "62a17d3e6fec029c2a61735c [evex w=0 ll=1 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PSLLQ",
-   "lengths": "",
-   "count": 58,
-   "example": "f266430f73b4155d8295cc329c [legacy extra=f2 rex=43 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSRLQ",
-   "lengths": "",
-   "count": 57,
-   "example": "c4a1797314a5182f6b107379 [vex w=0 l=0 vvvv=f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ROL",
+   "ours": "VMOVNTDQ",
    "lengths": "",
    "count": 55,
-   "example": "f040c006411950a1bba5 [legacy extra=f0 rex=40 mod=0 rm=6]"
+   "example": "c4e1fde7fcde875c02fc28 [vex w=1 l=1 vvvv=f mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PSLLW",
-   "lengths": "",
-   "count": 55,
-   "example": "f2660ff155d9bb34572fd9 [legacy extra=f2 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHR",
-   "lengths": "",
-   "count": 54,
-   "example": "f048c06d66d1c73bbcd8 [legacy extra=f0 rex=48 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "XOR_LOCK",
+   "ours": "VPBROADCASTD",
    "lengths": "",
    "count": 53,
-   "example": "f0664930ef40eacfdec665 [legacy extra=f066 rex=49 mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SAL",
-   "lengths": "",
-   "count": 53,
-   "example": "f04fc0b0a8d7d407b2ea [legacy extra=f0 rex=4f mod=2 rm=0]"
+   "example": "c4e2fd58f4053974a0acc5 [vex w=1 l=1 vvvv=f mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "MOVLPD",
    "lengths": "",
-   "count": 53,
-   "example": "f066430f12dccf5c232dc7cd [legacy extra=f066 rex=43 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RCL",
-   "lengths": "",
-   "count": 52,
-   "example": "f0664ac0158a38f0175165 [legacy extra=f066 rex=4a mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SAR",
-   "lengths": "",
-   "count": 52,
-   "example": "f06643c03d2f97fcceda20 [legacy extra=f066 rex=43 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSRLQ",
-   "lengths": "",
-   "count": 52,
-   "example": "67664d0f739475baa91d1b9dd2 [legacy extra=67 rex=4d mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHL",
-   "lengths": "",
-   "count": 51,
-   "example": "f066c0a5076a8691e811 [legacy extra=f066 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSRLW",
-   "lengths": "",
-   "count": 51,
-   "example": "f2660fd14563c32e14d4ed [legacy extra=f2 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSRAD",
-   "lengths": "",
-   "count": 50,
-   "example": "f2660fe25ce57db48a5f8b77 [legacy extra=f2 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSRAW",
-   "lengths": "",
-   "count": 50,
-   "example": "f2660fe11c85c495ed430b8b [legacy extra=f2 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPERMD",
-   "lengths": "",
-   "count": 49,
-   "example": "c4e2793634dd42c0e322dabf [vex w=0 l=0 vvvv=f mod=0 rm=4]"
+   "count": 48,
+   "example": "660f12d9c07c496b63cd [legacy extra=66 rex=- mod=3 rm=1]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPBROADCASTQ",
    "lengths": "",
-   "count": 49,
-   "example": "c4e225595d8c550f9a2e74 [vex w=0 l=1 vvvv=4 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADD_LOCK",
-   "lengths": "",
-   "count": 48,
-   "example": "f0664b00ddc6890bf3ed15 [legacy extra=f066 rex=4b mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AND_LOCK",
-   "lengths": "",
-   "count": 48,
-   "example": "f0664f20fc4a261773dd69 [legacy extra=f066 rex=4f mod=3 rm=4]"
+   "count": 47,
+   "example": "c422f959048c575ce5035854 [vex w=1 l=0 vvvv=f mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPSRAD",
-   "lengths": "",
-   "count": 48,
-   "example": "c4817972a4caa66e9cc70bda [vex w=0 l=0 vvvv=f mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "MOVHPD",
+   "ours": "VPERMQ",
    "lengths": "",
    "count": 47,
-   "example": "66400f16f259b59b42168a [legacy extra=66 rex=40 mod=3 rm=2]"
+   "example": "6202fd9b369c35964d2ee1cfb5 [evex w=1 ll=0 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADC_LOCK",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSRLDQ",
    "lengths": "",
    "count": 46,
-   "example": "f010e879b3b95bcd09 [legacy extra=f0 rex=- mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "IMUL",
-   "lengths": "",
-   "count": 46,
-   "example": "f04769c4d69577836e18 [legacy extra=f0 rex=47 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSLLD",
-   "lengths": "",
-   "count": 46,
-   "example": "f3660ff214a58aeefed4050c [legacy extra=f3 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSRLD",
-   "lengths": "",
-   "count": 45,
-   "example": "f2660fd2147577c0de7642f1 [legacy extra=f2 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPCLMULQDQ",
-   "lengths": "",
-   "count": 45,
-   "example": "62e34d1944444da5b23ab83078 [evex w=0 ll=0 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SBB_LOCK",
-   "lengths": "",
-   "count": 44,
-   "example": "f04418ddc771f6f95f64 [legacy extra=f0 rex=44 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPCMPEQB",
-   "lengths": "",
-   "count": 44,
-   "example": "62518d1974050c344c500331 [evex w=1 ll=0 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPCMPEQD",
-   "lengths": "",
-   "count": 44,
-   "example": "6271f50a76dc0ce2f852119c [evex w=1 ll=0 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VEXTRACTI64X4",
-   "lengths": "",
-   "count": 44,
-   "example": "6273fd9f3b74ad3732192b46b9 [evex w=1 ll=0 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSRLW",
-   "lengths": "",
-   "count": 43,
-   "example": "c4c179715480e836f9223f51 [vex w=0 l=0 vvvv=f mod=1 rm=4]"
+   "example": "6251fdbd73dcea57aaf16992 [evex w=1 ll=1 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPSADBW",
    "lengths": "",
+   "count": 44,
+   "example": "6211fdaef61c931f70d741e1bc [evex w=1 ll=1 mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPCMPEQD",
+   "lengths": "",
    "count": 43,
-   "example": "6291fddbf6349dba76f6f141c0 [evex w=1 ll=2 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "OR_LOCK",
-   "lengths": "",
-   "count": 42,
-   "example": "f0664e08cf48b80393221c [legacy extra=f066 rex=4e mod=3 rm=7]"
+   "example": "6201a53c76343f2dac69da83de [evex w=1 ll=1 mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPCMPUW",
+   "ours": "VEXTRACTI32X4",
    "lengths": "",
-   "count": 42,
-   "example": "6223fd1a3e54f78be8c96be879 [evex w=1 ll=0 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSRLDQ",
-   "lengths": "",
-   "count": 41,
-   "example": "f0660f731cc588561c20a32c [legacy extra=f0 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VEXTRACTI64X2",
-   "lengths": "",
-   "count": 41,
-   "example": "6263fd9d392448612e79901cf6 [evex w=1 ll=0 mod=0 rm=4]"
+   "count": 43,
+   "example": "62437d0c39ccd986d7ee80cf [evex w=0 ll=0 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VEXTRACTI32X8",
    "lengths": "",
+   "count": 43,
+   "example": "62034dda3bccaa75ff4dbc3e [evex w=0 ll=2 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VEXTRACTI64X4",
+   "lengths": "",
+   "count": 43,
+   "example": "6233fdbd3b4c0f71d5084d3485 [evex w=1 ll=1 mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPCMPUW",
+   "lengths": "",
+   "count": 43,
+   "example": "6223fd0e3ebc76fe319cf6adad [evex w=1 ll=0 mod=2 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPCLMULQDQ",
+   "lengths": "",
+   "count": 43,
+   "example": "62937d3e443c41c69f11584d06 [evex w=0 ll=1 mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPERMD",
+   "lengths": "",
+   "count": 42,
+   "example": "c4e2fd36849ee23302b3054d [vex w=1 l=1 vvvv=f mod=2 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSLLDQ",
+   "lengths": "",
+   "count": 42,
+   "example": "62f1fdce737c3d05284e35cbf2 [evex w=1 ll=2 mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPCMPB",
+   "lengths": "",
+   "count": 42,
+   "example": "62f37d1e3fbcada1ae549b04bd [evex w=0 ll=0 mod=2 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "MOVHPD",
+   "lengths": "",
    "count": 41,
-   "example": "62437d893b545167cb3997ee5f [evex w=0 ll=0 mod=1 rm=4]"
+   "example": "660f16cfb90536d62a7a [legacy extra=66 rex=- mod=3 rm=7]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPCMPEQB",
+   "lengths": "",
+   "count": 41,
+   "example": "62e12d1c745cd799757fdf0640 [evex w=0 ll=0 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -605,7 +223,7 @@
    "ours": "VPCMPUB",
    "lengths": "",
    "count": 41,
-   "example": "62a37dbc3e4cc4567a9e0c4bb7 [evex w=0 ll=1 mod=1 rm=4]"
+   "example": "62534d593e7cce10ebd11f2155 [evex w=0 ll=2 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -613,279 +231,167 @@
    "ours": "VPCMPW",
    "lengths": "",
    "count": 40,
-   "example": "6283fd0d3fd5f2729179de5f [evex w=1 ll=0 mod=3 rm=5]"
+   "example": "6203a52f3ffc81a03d876268 [evex w=1 ll=1 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPMOVMSKB",
-   "lengths": "",
-   "count": 39,
-   "example": "c4a17dd7b45cfb911c9fff88 [vex w=0 l=1 vvvv=f mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VINSERTF128",
-   "lengths": "",
-   "count": 39,
-   "example": "c4037918752a10108e02e0 [vex w=0 l=0 vvvv=f mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PEXTRW",
-   "lengths": "",
-   "count": 39,
-   "example": "67660fc54c9d2b7557b0a9a3 [legacy extra=67 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VBROADCASTI128",
-   "lengths": "",
-   "count": 39,
-   "example": "c4c2955aa4e546f114f67a34 [vex w=1 l=1 vvvv=2 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VEXTRACTI32X4",
-   "lengths": "",
-   "count": 39,
-   "example": "62c3253f390c8818e7d07471bc [evex w=0 ll=1 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VINSERTI128",
-   "lengths": "",
-   "count": 38,
-   "example": "c4e3f938cc898bfde1d128 [vex w=1 l=0 vvvv=f mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPCMPB",
-   "lengths": "",
-   "count": 38,
-   "example": "62d3453c3f0c94a994625e02d0 [evex w=0 ll=1 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_REGISTER",
-   "ours": "MOV",
+   "ours": "VEXTRACTI64X2",
    "lengths": "",
    "count": 37,
-   "example": "668c3dd7003c93111b [legacy extra=66 rex=- mod=0 rm=5]"
+   "example": "62e3fd1c39c4a985591d7f83 [evex w=1 ll=0 mod=3 rm=4]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVDQA",
+   "outcome": "iclass_differs",
+   "xed": "PREFETCHRST2",
+   "ours": "NOP",
    "lengths": "",
    "count": 37,
-   "example": "c5816fc5b073d135500d [vex w=0 l=0 vvvv=0 mod=3 rm=5]"
+   "example": "670f18a489a5de3409 [legacy extra=67 rex=- mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPSRAW",
-   "lengths": "",
-   "count": 37,
-   "example": "c56571249dc84c137e9c85 [vex w=0 l=1 vvvv=c mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PMOVMSKB",
+   "ours": "VPROTW",
    "lengths": "",
    "count": 36,
-   "example": "f266430fd7645d5a042e14c5e5 [legacy extra=f2 rex=43 mod=1 rm=4]"
+   "example": "8f2880c17cbff5a44f7c3579 [xop w=1 l=0 vvvv=0 mod=1 rm=4]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSLLDQ",
+   "outcome": "iclass_differs",
+   "xed": "PREFETCHIT0",
+   "ours": "NOP",
    "lengths": "",
    "count": 36,
-   "example": "6667664c0f737c8d38bfe3301663 [legacy extra=6667 rex=4c mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPEXTRD",
-   "lengths": "",
-   "count": 36,
-   "example": "c4e37d16248368eb379ba4f2 [vex w=0 l=1 vvvv=f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VEXTRACTF128",
-   "lengths": "",
-   "count": 36,
-   "example": "c4e3791995d19fe656de6b [vex w=0 l=0 vvvv=f mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VINSERTI64X4",
-   "lengths": "",
-   "count": 36,
-   "example": "6223fd993acd7241970d48b8 [evex w=1 ll=0 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVQ",
-   "lengths": "",
-   "count": 35,
-   "example": "f066450fd6646d9ae2d6b27e5d [legacy extra=f0 rex=45 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPERM2I128",
-   "lengths": "",
-   "count": 35,
-   "example": "c463e1463c8d7ceaae298e13 [vex w=1 l=0 vvvv=c mod=0 rm=4]"
+   "example": "f3490f18bcfdd320b375 [legacy extra=f3 rex=49 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VINSERTI32X8",
    "lengths": "",
-   "count": 35,
-   "example": "62b3550d3ab43534fd68f5d426 [evex w=0 ll=0 mod=2 rm=4]"
+   "count": 34,
+   "example": "62a37d193a4c0ec84bb9c8ef23 [evex w=0 ll=0 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "MOVBE",
+   "ours": "VINSERTI64X4",
    "lengths": "",
    "count": 34,
-   "example": "2e480f38f0dd82955a7377a1 [legacy extra=2e rex=48 mod=3 rm=5]"
+   "example": "62d3fd0e3ab421355d2e49512b [evex w=1 ll=0 mod=2 rm=4]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VEXTRACTI128",
+   "outcome": "iclass_differs",
+   "xed": "PREFETCHIT1",
+   "ours": "NOP",
    "lengths": "",
    "count": 34,
-   "example": "c4e3d9390dd4ab6a6bf22e [vex w=1 l=0 vvvv=b mod=0 rm=5]"
+   "example": "66670f1874b514 [legacy extra=6667 rex=- mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPEXTRQ",
+   "ours": "VPROTQ",
+   "lengths": "",
+   "count": 33,
+   "example": "8f68f8c384aeb6b8cdcf92a7 [xop w=1 l=0 vvvv=f mod=2 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PMOVMSKB",
    "lengths": "",
    "count": 32,
-   "example": "c4e3b1165de93bc878a7d6 [vex w=1 l=0 vvvv=6 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "RORX",
-   "lengths": "",
-   "count": 32,
-   "example": "c403d3f0cc3ddad2db5946 [vex w=1 l=0 vvvv=a mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPADDQ",
-   "lengths": "",
-   "count": 31,
-   "example": "62317dd9d4d40638ca662f70 [evex w=0 ll=2 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPDPBUSD",
-   "lengths": "",
-   "count": 30,
-   "example": "6282fdcb50a42d493d2d199d08 [evex w=1 ll=2 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VINSERTI32X4",
-   "lengths": "",
-   "count": 30,
-   "example": "62037d5e382c61a3840e8b1d21 [evex w=0 ll=2 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVAPS",
-   "lengths": "",
-   "count": 29,
-   "example": "c48130288da2bcb19f1fc6 [vex w=0 l=0 vvvv=6 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHA1MSG1",
-   "lengths": "",
-   "count": 29,
-   "example": "f0660f38c9e41954075de0cf [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHLX",
-   "lengths": "",
-   "count": 29,
-   "example": "c48235f7045dddd6cce2fe72 [vex w=0 l=1 vvvv=6 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SARX",
-   "lengths": "",
-   "count": 29,
-   "example": "c4e2fef78ca01a1f814d2e2c [vex w=1 l=1 vvvv=f mod=2 rm=4]"
+   "example": "f2664d0fd7bced24842c31dc01 [legacy extra=f2 rex=4d mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VINSERTI64X2",
    "lengths": "",
+   "count": 31,
+   "example": "6273fd9c3844e000745a2e5957 [evex w=1 ll=0 mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_REGISTER",
+   "ours": "MOV",
+   "lengths": "",
+   "count": 30,
+   "example": "668c3dd7003c93111b [legacy extra=66 rex=- mod=0 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PEXTRW",
+   "lengths": "",
+   "count": 30,
+   "example": "2e664e0fc53df1dfe4346947 [legacy extra=2e rex=4e mod=0 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPROTB",
+   "lengths": "",
+   "count": 30,
+   "example": "8fc8f8c0d41d1f9d6a748a [xop w=1 l=0 vvvv=f mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "LDMXCSR",
+   "lengths": "",
    "count": 29,
-   "example": "62b3fd5f38ac5571dba8ff280b [evex w=1 ll=2 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JMP",
-   "lengths": "",
-   "count": 28,
-   "example": "f0664ce9e046670c806d91a3 [legacy extra=f066 rex=4c mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVAPD",
-   "lengths": "",
-   "count": 28,
-   "example": "f066470f288a1bc37d890439 [legacy extra=f066 rex=47 mod=2 rm=2]"
+   "example": "66670faed5ad464af1470f [legacy extra=6667 rex=- mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPSLLW",
+   "ours": "VPMOVMSKB",
    "lengths": "",
-   "count": 28,
-   "example": "c4217d7134ac2f4324926486 [vex w=0 l=1 vvvv=f mod=0 rm=4]"
+   "count": 29,
+   "example": "c4817dd7ac75f94930f07b76 [vex w=0 l=1 vvvv=f mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VMOVUPS",
+   "ours": "VMOVSS",
+   "lengths": "",
+   "count": 29,
+   "example": "c4c16a10853368a717be84 [vex w=0 l=0 vvvv=d mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSUBQ",
+   "lengths": "",
+   "count": 29,
+   "example": "62c17ddafb95fb439e5516fb [evex w=0 ll=2 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPMADDUBSW",
+   "lengths": "",
+   "count": 29,
+   "example": "62227d3d04ec6c3dd344cb90 [evex w=0 ll=1 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VINSERTI32X4",
+   "lengths": "",
+   "count": 29,
+   "example": "62133dbe38a5459f95fdbf3c [evex w=0 ll=1 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SHRX",
    "lengths": "",
    "count": 28,
-   "example": "c4c134106c8f1fb09ec27fe9 [vex w=0 l=1 vvvv=6 mod=1 rm=4]"
+   "example": "c4e27ff76cab14dd0f29bca4 [vex w=0 l=1 vvvv=f mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -893,663 +399,447 @@
    "ours": "VPBLENDD",
    "lengths": "",
    "count": 28,
-   "example": "c423f902147d86aef7351413 [vex w=1 l=0 vvvv=f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "XGETBV",
-   "lengths": "",
-   "count": 27,
-   "example": "6667480f01d053266af399b3 [legacy extra=6667 rex=48 mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "STMXCSR",
-   "lengths": "",
-   "count": 27,
-   "example": "f00faedc2b3d64970afa [legacy extra=f0 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVDQU",
-   "lengths": "",
-   "count": 27,
-   "example": "c4e15e6f74fa401e0714f3c0 [vex w=0 l=1 vvvv=b mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHLD",
-   "lengths": "",
-   "count": 27,
-   "example": "f0440fa47c2ddebd45031177 [legacy extra=f0 rex=44 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "BZHI",
-   "lengths": "",
-   "count": 27,
-   "example": "c4e28cf554b3e9da86c201f7 [vex w=1 l=1 vvvv=1 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPINSRQ",
-   "lengths": "",
-   "count": 27,
-   "example": "c4e3fd225d915a4f3d8a6f [vex w=1 l=1 vvvv=f mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSUBD",
-   "lengths": "",
-   "count": 27,
-   "example": "62512d5afaf43221ee5adba0 [evex w=0 ll=2 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVD",
-   "lengths": "",
-   "count": 26,
-   "example": "f0660f6efced94b2db3226 [legacy extra=f0 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "LDMXCSR",
-   "lengths": "",
-   "count": 26,
-   "example": "f2430fae146c50ebfd5dccde [legacy extra=f2 rex=43 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVUPD",
-   "lengths": "",
-   "count": 26,
-   "example": "c481411054cdde7db3470e97 [vex w=0 l=0 vvvv=8 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SFENCE",
-   "lengths": "",
-   "count": 26,
-   "example": "66460faef8c03e989c002e [legacy extra=66 rex=46 mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHA256RNDS2",
-   "lengths": "",
-   "count": 26,
-   "example": "f30f38cbbcbb274768e55604 [legacy extra=f3 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHA256MSG1",
-   "lengths": "",
-   "count": 26,
-   "example": "660f38cc0d92ddb0dabb51 [legacy extra=66 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JBE",
-   "lengths": "",
-   "count": 25,
-   "example": "f076345a87fafdd363ea [legacy extra=f0 rex=- mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JP",
-   "lengths": "",
-   "count": 25,
-   "example": "f07ac5c132a50c10dc6f [legacy extra=f0 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPADDD",
-   "lengths": "",
-   "count": 25,
-   "example": "62b1fd3efeac84d641464b1149 [evex w=1 ll=1 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHA1NEXTE",
-   "lengths": "",
-   "count": 24,
-   "example": "f2420f38c8e579df6630939e [legacy extra=f2 rex=42 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHA1MSG2",
-   "lengths": "",
-   "count": 24,
-   "example": "66670f38ca6d793a589433d9 [legacy extra=6667 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPINSRD",
-   "lengths": "",
-   "count": 24,
-   "example": "c4c37d22146c2b722a9aafc2 [vex w=0 l=1 vvvv=f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JB",
-   "lengths": "",
-   "count": 23,
-   "example": "f06672c4e510cd962de3c8 [legacy extra=f066 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JS",
-   "lengths": "",
-   "count": 23,
-   "example": "f0664a780a297cf7384b7372 [legacy extra=f066 rex=4a mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JLE",
-   "lengths": "",
-   "count": 23,
-   "example": "f07eca268078ced38740 [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BT",
-   "lengths": "",
-   "count": 23,
-   "example": "f066400fa3d54c66d5b3a0e5 [legacy extra=f066 rex=40 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVSS",
-   "lengths": "",
-   "count": 23,
-   "example": "c4e18e1028c51646962aeb [vex w=1 l=1 vvvv=1 mod=0 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHA256MSG2",
-   "lengths": "",
-   "count": 23,
-   "example": "f34e0f38cd85c2896d30b62d [legacy extra=f3 rex=4e mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "ANDN",
-   "lengths": "",
-   "count": 23,
-   "example": "c442fcf28c276c4c24f6c66a [vex w=1 l=1 vvvv=f mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNO",
-   "lengths": "",
-   "count": 22,
-   "example": "f06649719507aa91df9c2c0b [legacy extra=f066 rex=49 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CALL_NEAR",
-   "lengths": "",
-   "count": 22,
-   "example": "f066e8d2e3a1e939e443f8 [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVUPD",
-   "lengths": "",
-   "count": 22,
-   "example": "f066470f10dd03a963d4579f [legacy extra=f066 rex=47 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "MOVNTDQ",
-   "lengths": "",
-   "count": 22,
-   "example": "f066660fe7da47a9f16f4120 [legacy extra=f066 rex=- mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVDQU",
-   "lengths": "",
-   "count": 22,
-   "example": "f0f30f6fa446a603dd4f0e2c [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VMOVAPD",
-   "lengths": "",
-   "count": 22,
-   "example": "c4e1d9287d5a07fb576c6a [vex w=1 l=0 vvvv=b mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVLPD",
-   "lengths": "",
-   "count": 22,
-   "example": "f066490f126d5935a308c8e4 [legacy extra=f066 rex=49 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVHPD",
-   "lengths": "",
-   "count": 22,
-   "example": "f0664e0f1687ef2a50752b63 [legacy extra=f066 rex=4e mod=2 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "SHRX",
-   "lengths": "",
-   "count": 22,
-   "example": "c4e27ff7f57bcb67d4f1fa [vex w=0 l=1 vvvv=f mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPSHUFB",
-   "lengths": "",
-   "count": 22,
-   "example": "6292fd3b000c50939cfc19439f [evex w=1 ll=1 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNS",
-   "lengths": "",
-   "count": 21,
-   "example": "f066487906c753ef1b501ad4 [legacy extra=f066 rex=48 mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MUL",
-   "lengths": "",
-   "count": 21,
-   "example": "f04ff621ba3a88a25451 [legacy extra=f0 rex=4f mod=0 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "MOVQ",
-   "lengths": "",
-   "count": 21,
-   "example": "f3664a0fd6a4ad269d5b5f1fa9 [legacy extra=f3 rex=4a mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "MULX",
-   "lengths": "",
-   "count": 21,
-   "example": "c4e27ff66d53e7f79a37c6 [vex w=0 l=1 vvvv=f mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "BEXTR",
-   "lengths": "",
-   "count": 21,
-   "example": "c4e2fcf7c72bdcd4c881b0 [vex w=1 l=1 vvvv=f mod=3 rm=7]"
+   "example": "c4c3f9024dc5a797811d4a [vex w=1 l=0 vvvv=f mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPBLENDVB",
    "lengths": "",
-   "count": 21,
-   "example": "c4a3f94cad9c996a1e5f2b [vex w=1 l=0 vvvv=f mod=2 rm=5]"
+   "count": 28,
+   "example": "c4e3f94cbcbd98226d0e1062 [vex w=1 l=0 vvvv=f mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPADDB",
+   "ours": "VPSUBD",
    "lengths": "",
-   "count": 21,
-   "example": "62e17d3bfc150d1d1376994b [evex w=0 ll=1 mod=0 rm=5]"
+   "count": 28,
+   "example": "6261fd19fa141dfa4cda7e4fce [evex w=1 ll=0 mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "BEXTR",
+   "lengths": "",
+   "count": 26,
+   "example": "c422a4f7e4a78c27798a12 [vex w=1 l=1 vvvv=4 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VINSERTI128",
+   "lengths": "",
+   "count": 26,
+   "example": "c463fd38dd70a12169751f [vex w=1 l=1 vvvv=f mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSRLQ",
+   "lengths": "",
+   "count": 26,
+   "example": "6231cd3d73d426f3c7cd6c35 [evex w=1 ll=1 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPMADDWD",
    "lengths": "",
+   "count": 26,
+   "example": "6281fdbaf544bdd661e7e4479e [evex w=1 ll=1 mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "RORX",
+   "lengths": "",
+   "count": 25,
+   "example": "c4e3fff06deffc5cad053e [vex w=1 l=1 vvvv=f mod=1 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "KMOVW",
+   "lengths": "",
+   "count": 25,
+   "example": "c441789095c3555a97349c [vex w=0 l=0 vvvv=f mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSLLD",
+   "lengths": "",
+   "count": 25,
+   "example": "62c1cd8c72b566b3c34f7cf5 [evex w=1 ll=0 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPADDQ",
+   "lengths": "",
+   "count": 24,
+   "example": "62217d48d48ddaf4465f337e [evex w=0 ll=2 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSLLQ",
+   "lengths": "",
+   "count": 24,
+   "example": "62d17ddc733516e495aec8e8 [evex w=0 ll=2 mod=0 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSHUFB",
+   "lengths": "",
+   "count": 24,
+   "example": "62e2059f0004f200f623aeee3e [evex w=0 ll=0 mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPROTD",
+   "lengths": "",
+   "count": 24,
+   "example": "8fc888c2b5e3cac23278c1 [xop w=1 l=0 vvvv=1 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "STMXCSR",
+   "lengths": "",
+   "count": 23,
+   "example": "f30fae9da52baa9f2535 [legacy extra=f3 rex=- mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VINSERTF128",
+   "lengths": "",
+   "count": 23,
+   "example": "c403fd18249d0a6ebc926455 [vex w=1 l=1 vvvv=f mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VBROADCASTI128",
+   "lengths": "",
+   "count": 23,
+   "example": "c462fd5a4559fadf187668 [vex w=1 l=1 vvvv=f mod=1 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "MULX",
+   "lengths": "",
+   "count": 23,
+   "example": "c482a7f62c6580045e95003e [vex w=1 l=1 vvvv=4 mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "MOVQ",
+   "lengths": "",
+   "count": 22,
+   "example": "f266460fd65dc54060bb69f1 [legacy extra=f2 rex=46 mod=1 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SHA1MSG2",
+   "lengths": "",
+   "count": 22,
+   "example": "66670f38ca0c6f32a0f40e5304 [legacy extra=6667 rex=- mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "BZHI",
+   "lengths": "",
+   "count": 22,
+   "example": "c4c2fcf54c2d4dd276c92262 [vex w=1 l=1 vvvv=f mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPADDB",
+   "lengths": "",
+   "count": 22,
+   "example": "62517d18fcea224d08e1cd80 [evex w=0 ll=0 mod=3 rm=2]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PSLLQ",
+   "lengths": "",
    "count": 21,
-   "example": "62517d18f5cdc998ca200dd7 [evex w=0 ll=0 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNZ",
-   "lengths": "",
-   "count": 20,
-   "example": "f0667589c64f9c1f314b42 [legacy extra=f066 rex=- mod=1 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNP",
-   "lengths": "",
-   "count": 20,
-   "example": "f0667bf894c7bc8938dc8f [legacy extra=f066 rex=- mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BUFFER_TOO_SHORT",
-   "ours": "TEST",
-   "lengths": "",
-   "count": 20,
-   "example": "f0f78072f9fd813917 [legacy extra=f0 rex=- mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "IDIV",
-   "lengths": "",
-   "count": 20,
-   "example": "f06640f63c705e929dd65f92 [legacy extra=f066 rex=40 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSS",
-   "lengths": "",
-   "count": 20,
-   "example": "f066f34c0f1004cd62a37ae7c458 [legacy extra=f066 rex=4c mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UNPCKLPD",
-   "lengths": "",
-   "count": 20,
-   "example": "f0664d0f1414ad42590a32e7f0 [legacy extra=f066 rex=4d mod=0 rm=4]"
+   "example": "f266410f73f46ca9d5fbc1dd [legacy extra=f2 rex=41 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPSUBQ",
+   "ours": "SHLX",
+   "lengths": "",
+   "count": 21,
+   "example": "c462fdf72cd91c49d3387ddf [vex w=1 l=1 vvvv=f mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SARX",
+   "lengths": "",
+   "count": 21,
+   "example": "c4a27ef7d5a84b6875d9cf [vex w=0 l=1 vvvv=f mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPERM2I128",
+   "lengths": "",
+   "count": 21,
+   "example": "c483fd46bc659ac82ae2aee8 [vex w=1 l=1 vvvv=f mod=2 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPADDD",
+   "lengths": "",
+   "count": 21,
+   "example": "6211fd8efec4304adf586d8e [evex w=1 ll=0 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSRLD",
+   "lengths": "",
+   "count": 21,
+   "example": "62c1fd0d72123a4db64a0e57 [evex w=1 ll=0 mod=0 rm=2]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPDPBUSD",
+   "lengths": "",
+   "count": 21,
+   "example": "6202fd0950b57dcf4dbf6173 [evex w=1 ll=0 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PSRLW",
    "lengths": "",
    "count": 20,
-   "example": "62917d99fb9d328c86ee8696 [evex w=0 ll=0 mod=2 rm=5]"
+   "example": "f3664c0fd1ad7a5d5f6c3080 [legacy extra=f3 rex=4c mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPMADDUBSW",
+   "ours": "SHA1NEXTE",
    "lengths": "",
    "count": 20,
-   "example": "6232fd9f04f4b0c2456aa4d9 [evex w=1 ll=0 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSD_XMM",
-   "lengths": "",
-   "count": 19,
-   "example": "f0f2400f1034ae378b12bbfba0 [legacy extra=f0 rex=40 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADDPD",
-   "lengths": "",
-   "count": 19,
-   "example": "f066460f5845c425deba6d68 [legacy extra=f066 rex=46 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVDQA",
-   "lengths": "",
-   "count": 19,
-   "example": "f0660f6f7bb721dfacc60f [legacy extra=f0 rex=- mod=1 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSX",
-   "lengths": "",
-   "count": 19,
-   "example": "f0664c0fbe1d4e0b3dd9a98a [legacy extra=f066 rex=4c mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHUFPD",
-   "lengths": "",
-   "count": 19,
-   "example": "f066440fc6fd65f13ce9fa0d [legacy extra=f066 rex=44 mod=3 rm=5]"
+   "example": "6667450f38c8a422ccadbd120a77 [legacy extra=6667 rex=45 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "SHA1RNDS4",
+   "ours": "ANDN",
    "lengths": "",
-   "count": 19,
-   "example": "66670f3acc1c36e4c32018bed9 [legacy extra=6667 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNBE",
-   "lengths": "",
-   "count": 18,
-   "example": "f07746d80bd004833d9b [legacy extra=f0 rex=- mod=1 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVZX",
-   "lengths": "",
-   "count": 18,
-   "example": "f066460fb65e4dbb9449426b [legacy extra=f066 rex=46 mod=1 rm=6]"
+   "count": 20,
+   "example": "c4e27cf27c0d253ca2c6a6c7 [vex w=0 l=1 vvvv=f mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VMOVSD",
+   "ours": "VEXTRACTF128",
    "lengths": "",
-   "count": 18,
-   "example": "c4e1bf10709fcec3548eaa [vex w=1 l=1 vvvv=7 mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "MOVHPS",
-   "lengths": "",
-   "count": 18,
-   "example": "f20f162eac38e1a1d72c [legacy extra=f2 rex=- mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "LFENCE",
-   "lengths": "",
-   "count": 18,
-   "example": "f20faee8c6b07ee5b7e0 [legacy extra=f2 rex=- mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPTEST",
-   "lengths": "",
-   "count": 18,
-   "example": "c4e27517454acdb86178f0 [vex w=0 l=1 vvvv=e mod=1 rm=5]"
+   "count": 20,
+   "example": "c4e3fd197425e78452dd8249 [vex w=1 l=1 vvvv=f mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
    "ours": "VPADDW",
    "lengths": "",
+   "count": 20,
+   "example": "6231fdbcfd54af95d8af7d6b56 [evex w=1 ll=1 mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "MOVD",
+   "lengths": "",
+   "count": 19,
+   "example": "f3660f6e8fe023e2aacb14 [legacy extra=f3 rex=- mod=2 rm=7]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PSLLD",
+   "lengths": "",
+   "count": 19,
+   "example": "f2660ff2ebd626ab6445ef [legacy extra=f2 rex=- mod=3 rm=3]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PSRAW",
+   "lengths": "",
+   "count": 19,
+   "example": "f2664e0fe1c5ad9ea2bcdec2 [legacy extra=f2 rex=4e mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SFENCE",
+   "lengths": "",
+   "count": 19,
+   "example": "664a0faef8c4fab1502117 [legacy extra=66 rex=4a mod=3 rm=0]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SHA256RNDS2",
+   "lengths": "",
+   "count": 19,
+   "example": "f30f38cb54955f216dbc486c [legacy extra=f3 rex=- mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SHA256MSG2",
+   "lengths": "",
+   "count": 19,
+   "example": "660f38cdfd5c2d7d3b90b1 [legacy extra=66 rex=- mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_gap",
+   "xed": "MOVBE",
+   "ours": "",
+   "lengths": "",
+   "count": 19,
+   "example": "66674e0f38f064c18d [legacy extra=6667 rex=4e mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "KMOVQ",
+   "lengths": "",
+   "count": 19,
+   "example": "c421f890d49412445e0907 [vex w=1 l=0 vvvv=f mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "KMOVD",
+   "lengths": "",
+   "count": 19,
+   "example": "c401f990e22797accc0ab9 [vex w=1 l=0 vvvv=f mod=3 rm=2]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BUFFER_TOO_SHORT",
+   "ours": "TEST",
+   "lengths": "",
    "count": 18,
-   "example": "6221f53cfdc40a03953c9653 [evex w=1 ll=1 mod=3 rm=4]"
+   "example": "644af78769f18018f1ab [legacy extra=64 rex=4a mod=2 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "MOVAPS",
+   "ours": "XGETBV",
    "lengths": "",
-   "count": 17,
-   "example": "f24c0f28b8e0041d3e0cae [legacy extra=f2 rex=4c mod=2 rm=0]"
+   "count": 18,
+   "example": "660f01d014b9f76f2776 [legacy extra=66 rex=- mod=3 rm=0]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ORPD",
+   "outcome": "ours_gap",
+   "xed": "BSF",
+   "ours": "",
    "lengths": "",
-   "count": 17,
-   "example": "f0664b0f567d38f326b0b599 [legacy extra=f066 rex=4b mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSRLD",
-   "lengths": "",
-   "count": 17,
-   "example": "f066660fd21551d020519a22 [legacy extra=f066 rex=- mod=0 rm=5]"
+   "count": 18,
+   "example": "66674f0fbcbdb88ec56c [legacy extra=6667 rex=4f mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "MOVLPS",
+   "ours": "PSLLW",
    "lengths": "",
-   "count": 17,
-   "example": "640f13cda5305cd9277d [legacy extra=64 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ANDNPD",
-   "lengths": "",
-   "count": 17,
-   "example": "f0664a0f55b6ee06328bd252 [legacy extra=f066 rex=4a mod=2 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMADDUBSW",
-   "lengths": "",
-   "count": 17,
-   "example": "f066470f3804fdac80c6ebd722 [legacy extra=f0 rex=47 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CRC32",
-   "lengths": "",
-   "count": 17,
-   "example": "f0f20f38f075ec782ee090d3 [legacy extra=f0 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RET_NEAR",
-   "lengths": "",
-   "count": 16,
-   "example": "f0c2847c38371ed7a306 [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "INT3",
-   "lengths": "",
-   "count": 16,
-   "example": "f0cc12954a7b048d3f7a [legacy extra=f0 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ROUNDSD",
-   "lengths": "",
-   "count": 16,
-   "example": "f066410f3a0b0b7dc7a2623ec5 [legacy extra=f0 rex=41 mod=0 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PADDD",
-   "lengths": "",
-   "count": 16,
-   "example": "f066430ffe247da24e2cb2315e [legacy extra=f0 rex=43 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPGTW",
-   "lengths": "",
-   "count": 16,
-   "example": "f066664b0f650d2ad0c89eff26 [legacy extra=f066 rex=4b mod=0 rm=5]"
+   "count": 18,
+   "example": "f266420ff1575ae56f0a779e [legacy extra=f2 rex=42 mod=1 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMINUB",
+   "ours": "SHA1MSG1",
    "lengths": "",
-   "count": 16,
-   "example": "f3664b0fda244d8ab64cc6fce7 [legacy extra=f3 rex=4b mod=0 rm=4]"
+   "count": 18,
+   "example": "6667490f38c98d70dc2d2da364 [legacy extra=6667 rex=49 mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADCX",
+   "xed": "GENERAL_ERROR",
+   "ours": "SHA256MSG1",
    "lengths": "",
-   "count": 16,
-   "example": "f066490f38f67c15fd3b9ea1c83e [legacy extra=f0 rex=49 mod=1 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "VPSRAQ",
-   "ours": "VPSRAD",
-   "lengths": "",
-   "count": 16,
-   "example": "6211cd4872e52b [evex w=1 ll=2 mod=3 rm=5]"
+   "count": 18,
+   "example": "f24a0f38cc6d59793a589433 [legacy extra=f2 rex=4a mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JO",
+   "xed": "GENERAL_ERROR",
+   "ours": "VMOVSD",
    "lengths": "",
-   "count": 15,
-   "example": "f0707dbf1d6c328f59b9 [legacy extra=f0 rex=- mod=1 rm=0]"
+   "count": 17,
+   "example": "c4e18b108ce74236fd593ccc [vex w=1 l=0 vvvv=1 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JL",
+   "xed": "GENERAL_ERROR",
+   "ours": "PACKSSWB",
    "lengths": "",
-   "count": 15,
-   "example": "f04e7c11090234ae90dd9d [legacy extra=f0 rex=4e mod=1 rm=5]"
+   "count": 17,
+   "example": "f2660f639526d416fb895e [legacy extra=f2 rex=- mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "SHA1RNDS4",
+   "lengths": "",
+   "count": 17,
+   "example": "660f3accddc728f6cb28d2 [legacy extra=66 rex=- mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "KMOVB",
+   "lengths": "",
+   "count": 17,
+   "example": "c42179903671f6d47fbb76 [vex w=0 l=0 vvvv=f mod=0 rm=6]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "MOVNTDQ",
+   "lengths": "",
+   "count": 16,
+   "example": "f3664b0fe7857606bca501ee [legacy extra=f3 rex=4b mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "CLFLUSH",
+   "lengths": "",
+   "count": 16,
+   "example": "f24c0fae3c213aad23a99f03 [legacy extra=f2 rex=4c mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VEXTRACTI128",
+   "lengths": "",
+   "count": 16,
+   "example": "c4e3fd39a40f6a46e672e24d [vex w=1 l=1 vvvv=f mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -1561,283 +851,75 @@
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "DIV",
+   "xed": "GENERAL_ERROR",
+   "ours": "PSUBUSB",
    "lengths": "",
    "count": 15,
-   "example": "f04ef675e847ec7125f3 [legacy extra=f0 rex=4e mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETS",
-   "lengths": "",
-   "count": 15,
-   "example": "f0660f982cc2b793ffe043c9 [legacy extra=f066 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "XORPD",
-   "lengths": "",
-   "count": 15,
-   "example": "f0664d0f574fd112e8d62743 [legacy extra=f066 rex=4d mod=1 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SQRTSD",
-   "lengths": "",
-   "count": 15,
-   "example": "f066f2400f516c2dafcdefcc8871 [legacy extra=f066 rex=40 mod=1 rm=4]"
+   "example": "f266400fd8544ccf449a320d20 [legacy extra=f2 rex=40 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PAND",
+   "ours": "PMULLW",
    "lengths": "",
    "count": 15,
-   "example": "f366460fdb6d3fc47aaccada [legacy extra=f3 rex=46 mod=1 rm=5]"
+   "example": "f2660fd5f55f19f9c42ede [legacy extra=f2 rex=- mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "MOVD",
+   "ours": "PAVGW",
    "lengths": "",
    "count": 15,
-   "example": "f366470f6e55cf9a7f2a096e [legacy extra=f3 rex=47 mod=1 rm=5]"
+   "example": "f3660fe3447d1ca161c09fe5 [legacy extra=f3 rex=- mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VCOMISD",
+   "ours": "PSRAD",
    "lengths": "",
-   "count": 15,
-   "example": "c5d92f8003cc8ba2d3dd [vex w=0 l=0 vvvv=b mod=2 rm=0]"
+   "count": 14,
+   "example": "f366470fe27c8530f523eb3444 [legacy extra=f3 rex=47 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VCVTDQ2PD",
+   "ours": "PUNPCKLDQ",
    "lengths": "",
-   "count": 15,
-   "example": "c4e196e6d4fdf04948bea5 [vex w=1 l=1 vvvv=2 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPGTB",
-   "lengths": "",
-   "count": 15,
-   "example": "f0664d0f64dcdf4c7d04f3a2 [legacy extra=f0 rex=4d mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSUBUSW",
-   "lengths": "",
-   "count": 15,
-   "example": "f0660fd9cc1b101dc09515 [legacy extra=f0 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTSI2SD",
-   "lengths": "",
-   "count": 15,
-   "example": "f066f24c0f2ae35e21f9e3900e [legacy extra=f066 rex=4c mod=3 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CLFLUSH",
-   "lengths": "",
-   "count": 15,
-   "example": "f00faeb891c283b48f63 [legacy extra=f0 rex=- mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVBE",
-   "lengths": "",
-   "count": 15,
-   "example": "f0664d0f38f0029f12c3f608bb [legacy extra=f066 rex=4d mod=0 rm=2]"
+   "count": 14,
+   "example": "f2664d0f62d5f6ae04f5671e [legacy extra=f2 rex=4d mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PINSRQ",
-   "lengths": "",
-   "count": 15,
-   "example": "f2664c0f3a220c332f16c11448cb [legacy extra=f2 rex=4c mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JRCXZ",
-   "lengths": "",
-   "count": 15,
-   "example": "f06640e3a634f5ba67b758b9 [legacy extra=f066 rex=40 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JZ",
+   "ours": "PSUBW",
    "lengths": "",
    "count": 14,
-   "example": "f042744af5f797f997c72a [legacy extra=f0 rex=42 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNLE",
-   "lengths": "",
-   "count": 14,
-   "example": "f0667f0ca68ce50295be32 [legacy extra=f066 rex=- mod=3 rm=7]"
+   "example": "f2660ff9e5d1f92896b340 [legacy extra=f2 rex=- mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "MOVAPD",
+   "ours": "SHUFPD",
    "lengths": "",
    "count": 14,
-   "example": "f3660f28f4a200a49dceee [legacy extra=f3 rex=- mod=3 rm=4]"
+   "example": "f3660fc61d4b07680b273c [legacy extra=f3 rex=- mod=0 rm=5]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UCOMISD",
+   "outcome": "ours_gap",
+   "xed": "MOVDDUP",
+   "ours": "",
    "lengths": "",
    "count": 14,
-   "example": "f0664f0f2ed4002085f4bc91 [legacy extra=f066 rex=4f mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "COMISS",
-   "lengths": "",
-   "count": 14,
-   "example": "f2410f2f7c4da21ea6effb1c [legacy extra=f2 rex=41 mod=1 rm=4]"
+   "example": "f20f127fa6 [legacy extra=f2 rex=- mod=1 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "COMISD",
-   "lengths": "",
-   "count": 14,
-   "example": "f266490f2f54e53e7395fd4d00 [legacy extra=f2 rex=49 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "ORPS",
-   "lengths": "",
-   "count": 14,
-   "example": "f2430f56c3688fc18fc86f [legacy extra=f2 rex=43 mod=3 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADDSS",
-   "lengths": "",
-   "count": 14,
-   "example": "f0f30f58c1b1df1236202c [legacy extra=f0 rex=- mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSHUFD",
-   "lengths": "",
-   "count": 14,
-   "example": "f06666450f700cedd5afde89b71d [legacy extra=f066 rex=45 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VZEROALL",
-   "lengths": "",
-   "count": 14,
-   "example": "c5b4770531f022f1c91d4c [vex w=0 l=1 vvvv=6 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMADDWD",
-   "lengths": "",
-   "count": 14,
-   "example": "f06666410ff52c6f84fd2b6d7eb7 [legacy extra=f066 rex=41 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PACKSSWB",
-   "lengths": "",
-   "count": 14,
-   "example": "f366410f634c25746accfaf3be [legacy extra=f3 rex=41 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMULHW",
-   "lengths": "",
-   "count": 14,
-   "example": "f066664c0fe5f4425bf2c10f10 [legacy extra=f066 rex=4c mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSHUFHW",
-   "lengths": "",
-   "count": 14,
-   "example": "f066f3460f70022657c83eecf2 [legacy extra=f066 rex=46 mod=0 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "UNPCKHPS",
-   "lengths": "",
-   "count": 14,
-   "example": "f30f159cf599f1ed3ef8b6 [legacy extra=f3 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UNPCKHPD",
-   "lengths": "",
-   "count": 14,
-   "example": "f0664c0f159c35c271f9c25e10 [legacy extra=f066 rex=4c mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHRD",
-   "lengths": "",
-   "count": 14,
-   "example": "f04c0fac2aad5f47d95c54 [legacy extra=f0 rex=4c mod=0 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
    "ours": "PTEST",
    "lengths": "",
    "count": 14,
-   "example": "f066664a0f3817624c74edbf82bd [legacy extra=f066 rex=4a mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNB",
-   "lengths": "",
-   "count": 13,
-   "example": "f0664c73a184d9e81fd9cd08 [legacy extra=f066 rex=4c mod=2 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "JNL",
-   "lengths": "",
-   "count": 13,
-   "example": "f07df871181a4c98e987 [legacy extra=f0 rex=- mod=2 rm=6]"
+   "example": "f266400f381784ff8a4fd20090bc [legacy extra=f2 rex=40 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -1848,204 +930,44 @@
    "example": "f2810c855413d518b7c1 [legacy extra=f2 rex=- mod=0 rm=4]"
   },
   {
-   "outcome": "iclass_differs",
-   "xed": "XCHG",
-   "ours": "XCHG_LOCK",
-   "lengths": "",
-   "count": 13,
-   "example": "f0664a8648c3 [legacy extra=f066 rex=4a mod=1 rm=0]"
-  },
-  {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SYSCALL",
+   "xed": "GENERAL_ERROR",
+   "ours": "COMISD",
    "lengths": "",
    "count": 13,
-   "example": "f00f05954b134edd19d7d6 [legacy extra=f0 rex=- mod=2 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVP",
-   "lengths": "",
-   "count": 13,
-   "example": "f04e0f4a15f2728fd9410f [legacy extra=f0 rex=4e mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ANDPD",
-   "lengths": "",
-   "count": 13,
-   "example": "f066420f544457ba714c14ea74 [legacy extra=f066 rex=42 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "DIVSS",
-   "lengths": "",
-   "count": 13,
-   "example": "f066f30f5e1d901ba6a2d04c [legacy extra=f066 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTDQ2PD",
-   "lengths": "",
-   "count": 13,
-   "example": "f066f30fe69c05eac00621cfcb [legacy extra=f066 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUNPCKLQDQ",
-   "lengths": "",
-   "count": 13,
-   "example": "f0664d0f6c14a68bdc7a75ca24 [legacy extra=f0 rex=4d mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "TZCNT",
-   "lengths": "",
-   "count": 13,
-   "example": "f0f34d0fbc0762890648d9b7 [legacy extra=f0 rex=4d mod=0 rm=7]"
+   "example": "f2664e0f2fad84aa0b39389d [legacy extra=f2 rex=4e mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMULUDQ",
+   "ours": "PSUBD",
    "lengths": "",
    "count": 13,
-   "example": "f2664a0ff4ec02ea1f2a8ac9 [legacy extra=f2 rex=4a mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSLLD",
-   "lengths": "",
-   "count": 13,
-   "example": "f0664f0ff22599f2ad39d41c [legacy extra=f0 rex=4f mod=0 rm=5]"
+   "example": "f2664a0ffa7d47865e994e2e [legacy extra=f2 rex=4a mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKLWD",
+   "ours": "PMAXUB",
    "lengths": "",
    "count": 13,
-   "example": "f3664f0f61146595537284fcea [legacy extra=f3 rex=4f mod=0 rm=4]"
+   "example": "f3660fdeb5dcb42e1ca253 [legacy extra=f3 rex=- mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PACKSSDW",
+   "xed": "GENERAL_ERROR",
+   "ours": "MOVBE",
    "lengths": "",
    "count": 13,
-   "example": "f0664f0f6bc4ea862330e691 [legacy extra=f0 rex=4f mod=3 rm=4]"
+   "example": "0f38f0f446d4efb84144 [legacy extra=- rex=- mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMULLW",
+   "xed": "GENERAL_ERROR",
+   "ours": "PEXTRD",
    "lengths": "",
    "count": 13,
-   "example": "f0664a0fd588556438c84e79 [legacy extra=f0 rex=4a mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MAXPD",
-   "lengths": "",
-   "count": 13,
-   "example": "f0664e0f5fa84553cf468454 [legacy extra=f066 rex=4e mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ENDBR32",
-   "lengths": "",
-   "count": 13,
-   "example": "f066f34b0f1efb5cb778e5fd0e [legacy extra=f066 rex=4b mod=3 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MFENCE",
-   "lengths": "",
-   "count": 13,
-   "example": "f0460faef085057f27693a [legacy extra=f0 rex=46 mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPEQQ",
-   "lengths": "",
-   "count": 13,
-   "example": "f066660f38292d3329ad0f055c [legacy extra=f066 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMOVZXBD",
-   "lengths": "",
-   "count": 13,
-   "example": "f066410f3831da44ad9ed684de [legacy extra=f0 rex=41 mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMAXSD",
-   "lengths": "",
-   "count": 13,
-   "example": "f066470f383d8cb6eaf1e58354ec [legacy extra=f0 rex=47 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMULLD",
-   "lengths": "",
-   "count": 13,
-   "example": "f066470f3840ecaa2cd2bdf022 [legacy extra=f0 rex=47 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AESIMC",
-   "lengths": "",
-   "count": 13,
-   "example": "f066660f38db7c552a988237cf33 [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AESDEC",
-   "lengths": "",
-   "count": 13,
-   "example": "f066660f38de7dd0015eb1c47e [legacy extra=f066 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCLMULQDQ",
-   "lengths": "",
-   "count": 13,
-   "example": "f06666440f3a44549af717a30b728d [legacy extra=f066 rex=44 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AESKEYGENASSIST",
-   "lengths": "",
-   "count": 13,
-   "example": "f0664c0f3adfc43f85086629eb [legacy extra=f0 rex=4c mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSXD",
-   "lengths": "",
-   "count": 12,
-   "example": "f063fd1843845cc36c [legacy extra=f0 rex=- mod=3 rm=5]"
+   "example": "f266430f3a16ac6d30b5caba81b1 [legacy extra=f2 rex=43 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -2065,251 +987,91 @@
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RDTSC",
-   "lengths": "",
-   "count": 12,
-   "example": "f0400f31b67e8d05aa9a9c60 [legacy extra=f0 rex=40 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CPUID",
-   "lengths": "",
-   "count": 12,
-   "example": "f0440fa21d5a7fb96d816f26 [legacy extra=f0 rex=44 mod=2 rm=5]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "NOP",
-   "ours": "PREFETCHW",
-   "lengths": "",
-   "count": 12,
-   "example": "660f0dcd [legacy extra=66 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "NOP",
-   "ours": "PREFETCHNTA",
-   "lengths": "",
-   "count": 12,
-   "example": "66670f18c4 [legacy extra=6667 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTTSD2SI",
-   "lengths": "",
-   "count": 12,
-   "example": "f0f2400f2ca5a222309cbce1 [legacy extra=f0 rex=40 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVO",
-   "lengths": "",
-   "count": 12,
-   "example": "f0460f40c9805d42c0b642 [legacy extra=f0 rex=46 mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETB",
-   "lengths": "",
-   "count": 12,
-   "example": "f0400f92277bcfad5a3b3f [legacy extra=f0 rex=40 mod=0 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNB",
-   "lengths": "",
-   "count": 12,
-   "example": "f066460f438dfef2aea81db1 [legacy extra=f066 rex=46 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNBE",
-   "lengths": "",
-   "count": 12,
-   "example": "f066440f97d78f60f236844b [legacy extra=f066 rex=44 mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SQRTPD",
-   "lengths": "",
-   "count": 12,
-   "example": "f0660f515ca0705d7df10ac5 [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
+   "xed": "GENERAL_ERROR",
    "ours": "PUNPCKLBW",
    "lengths": "",
    "count": 12,
-   "example": "f066490f60441d25a1c6d8e793 [legacy extra=f0 rex=49 mod=1 rm=4]"
+   "example": "f2660f6074b9d8c5e32e880a [legacy extra=f2 rex=- mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PSUBD",
+   "ours": "POR",
    "lengths": "",
    "count": 12,
-   "example": "f3660ffad953e090a4aeaf [legacy extra=f3 rex=- mod=3 rm=1]"
+   "example": "f3660feb84ad64ce6c2ac02b [legacy extra=f3 rex=- mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VZEROUPPER",
+   "ours": "PSRLQ",
    "lengths": "",
    "count": 12,
-   "example": "c4e1a0772109e20d8180356e [vex w=1 l=0 vvvv=4 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSRLW",
-   "lengths": "",
-   "count": 12,
-   "example": "f0660fd14743a36f9512a2 [legacy extra=f0 rex=- mod=1 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSRAD",
-   "lengths": "",
-   "count": 12,
-   "example": "f066450fe2edc525983c5ab7 [legacy extra=f0 rex=45 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSRAW",
-   "lengths": "",
-   "count": 12,
-   "example": "f06666440fe11485e56157bec722 [legacy extra=f066 rex=44 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUNPCKHWD",
-   "lengths": "",
-   "count": 12,
-   "example": "f066400f69c465994e24031d [legacy extra=f0 rex=40 mod=3 rm=4]"
+   "example": "f366440f73d0138ee1b436f3 [legacy extra=f3 rex=44 mod=3 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMAXUB",
+   "ours": "PSRLDQ",
    "lengths": "",
    "count": 12,
-   "example": "f3660fde72f812d962e35e [legacy extra=f3 rex=- mod=1 rm=2]"
+   "example": "f3660f73dc63017b4ce149 [legacy extra=f3 rex=- mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMINSW",
+   "ours": "PSADBW",
    "lengths": "",
    "count": 12,
-   "example": "f3664c0fea0c8d7bf9b09d50c3 [legacy extra=f3 rex=4c mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PINSRW",
-   "lengths": "",
-   "count": 12,
-   "example": "f066460fc43ce5afd10fef2400 [legacy extra=f0 rex=46 mod=0 rm=4]"
+   "example": "f266470ff64a2c1117d9fb89 [legacy extra=f2 rex=47 mod=1 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "ANDNPS",
+   "ours": "PSRLD",
    "lengths": "",
    "count": 12,
-   "example": "f3440f551cbf4bb724c96494 [legacy extra=f3 rex=44 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MINPD",
-   "lengths": "",
-   "count": 12,
-   "example": "f0660f5dce407cefd33626 [legacy extra=f066 rex=- mod=3 rm=6]"
+   "example": "f266460fd23c8656bfacab46a5 [legacy extra=f2 rex=46 mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMULDQ",
+   "ours": "PSUBUSW",
    "lengths": "",
    "count": 12,
-   "example": "f2660f38288534d15ad9968b [legacy extra=f2 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AESDECLAST",
-   "lengths": "",
-   "count": 12,
-   "example": "f0660f38df0dce2a84ee0607 [legacy extra=f0 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADOX",
-   "lengths": "",
-   "count": 12,
-   "example": "f0f30f38f67495f809be8657bd [legacy extra=f0 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PINSRB",
-   "lengths": "",
-   "count": 12,
-   "example": "f0660f3a2004dff1fe63620faf [legacy extra=f0 rex=- mod=0 rm=4]"
+   "example": "f266440fd93deb2b5d8b3188 [legacy extra=f2 rex=44 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PINSRB",
+   "ours": "UNPCKLPD",
    "lengths": "",
    "count": 12,
-   "example": "f3664c0f3a2083186fcf3deb14 [legacy extra=f3 rex=4c mod=2 rm=3]"
+   "example": "f3660f14f04bdb2462d196 [legacy extra=f3 rex=- mod=3 rm=0]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STD",
+   "xed": "GENERAL_ERROR",
+   "ours": "PSHUFB",
    "lengths": "",
    "count": 12,
-   "example": "f0fdc03859d91a3e1daa [legacy extra=f0 rex=- mod=2 rm=3]"
+   "example": "f266470f38002e9fc1fc6ddac6 [legacy extra=f2 rex=47 mod=0 rm=6]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMPSB",
+   "xed": "GENERAL_ERROR",
+   "ours": "PMADDUBSW",
    "lengths": "",
    "count": 12,
-   "example": "f06642a683e8b210925a7c4f [legacy extra=f066 rex=42 mod=1 rm=4]"
+   "example": "f366460f38045c78b8d7c84829ea [legacy extra=f3 rex=46 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LODSB",
+   "xed": "GENERAL_ERROR",
+   "ours": "PMULLD",
    "lengths": "",
    "count": 12,
-   "example": "f0664cac1a717678a4c531c7 [legacy extra=f066 rex=4c mod=2 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BUFFER_TOO_SHORT",
-   "ours": "IMUL",
-   "lengths": "",
-   "count": 11,
-   "example": "674c692c05b8462129a6a4 [legacy extra=67 rex=4c mod=0 rm=4]"
+   "example": "f2660f38400c96f24f24a52507 [legacy extra=f2 rex=- mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -2330,50 +1092,10 @@
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "LEA",
+   "ours": "MOVAPD",
    "lengths": "",
    "count": 11,
-   "example": "f0664b8df228c012b931f5 [legacy extra=f066 rex=4b mod=3 rm=2]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "PAUSE",
-   "ours": "XCHG",
-   "lengths": "",
-   "count": 11,
-   "example": "64f34390 [legacy extra=64 rex=43 mod=1 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PREFETCHW",
-   "lengths": "",
-   "count": 11,
-   "example": "f00f0d0c258db2cd243ba9 [legacy extra=f0 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "NOP",
-   "ours": "PREFETCHT0",
-   "lengths": "",
-   "count": 11,
-   "example": "644b0f18cf [legacy extra=64 rex=4b mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETO",
-   "lengths": "",
-   "count": 11,
-   "example": "f066400f903cd9be0bc35f153a [legacy extra=f066 rex=40 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETL",
-   "lengths": "",
-   "count": 11,
-   "example": "f0660f9c0036200a87d3a6 [legacy extra=f066 rex=- mod=0 rm=0]"
+   "example": "f2660f2860d059c5b236b2 [legacy extra=f2 rex=- mod=1 rm=0]"
   },
   {
    "outcome": "ours_accepts",
@@ -2381,143 +1103,71 @@
    "ours": "ANDPD",
    "lengths": "",
    "count": 11,
-   "example": "f366470f54e48022b3049f4c [legacy extra=f3 rex=47 mod=3 rm=4]"
+   "example": "f2664b0f5434ee199aedcdfed4 [legacy extra=f2 rex=4b mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "ORPD",
+   "ours": "PCMPEQB",
    "lengths": "",
    "count": 11,
-   "example": "f2664d0f56448a15cde1b26bb8 [legacy extra=f2 rex=4d mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MULPD",
-   "lengths": "",
-   "count": 11,
-   "example": "f066410f59b85cf6fb7f48a4 [legacy extra=f066 rex=41 mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SUBPD",
-   "lengths": "",
-   "count": 11,
-   "example": "f0664e0f5cbeec8d8832df4b [legacy extra=f066 rex=4e mod=2 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "DIVPD",
-   "lengths": "",
-   "count": 11,
-   "example": "f0660f5e5d14abef86e769 [legacy extra=f066 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PXOR",
-   "lengths": "",
-   "count": 11,
-   "example": "f0660fef3569b443be1a3d [legacy extra=f0 rex=- mod=0 rm=5]"
+   "example": "f266420f741d5e8e35ebdc5d [legacy extra=f2 rex=42 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PADDQ",
+   "ours": "PAND",
    "lengths": "",
    "count": 11,
-   "example": "f2660fd49d919f238d4ee1 [legacy extra=f2 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSRLQ",
-   "lengths": "",
-   "count": 11,
-   "example": "f06666420f73d5ee1305638e94 [legacy extra=f066 rex=42 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPISTRI",
-   "lengths": "",
-   "count": 11,
-   "example": "f066410f3a633d23cec9995189 [legacy extra=f0 rex=41 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PADDB",
-   "lengths": "",
-   "count": 11,
-   "example": "f066660ffcdbc0dbec37e1ae [legacy extra=f066 rex=- mod=3 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSADBW",
-   "lengths": "",
-   "count": 11,
-   "example": "f066664c0ff617ce840cb10e6b [legacy extra=f066 rex=4c mod=0 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSLLW",
-   "lengths": "",
-   "count": 11,
-   "example": "f0660ff120561b8f02d36c [legacy extra=f0 rex=- mod=0 rm=0]"
+   "example": "f266460fdbad416788c33310 [legacy extra=f2 rex=46 mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PSUBUSB",
+   "ours": "MOVDQA",
    "lengths": "",
    "count": 11,
-   "example": "f3660fd8958657097fbe8e [legacy extra=f3 rex=- mod=2 rm=5]"
+   "example": "f2660f6f44fdff0f7cd9d30b [legacy extra=f2 rex=- mod=1 rm=4]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PADDUSW",
+   "outcome": "ours_gap",
+   "xed": "BSR",
+   "ours": "",
    "lengths": "",
    "count": 11,
-   "example": "f06666440fdd53671f91b01a73 [legacy extra=f066 rex=44 mod=1 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PADDUSW",
-   "lengths": "",
-   "count": 11,
-   "example": "f2664b0fdd9dc07c572f9f28 [legacy extra=f2 rex=4b mod=2 rm=5]"
+   "example": "664e0fbded [legacy extra=66 rex=4e mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMULHUW",
+   "ours": "PUNPCKHQDQ",
    "lengths": "",
    "count": 11,
-   "example": "f266440fe4c54eaa67414e38 [legacy extra=f2 rex=44 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PAVGW",
-   "lengths": "",
-   "count": 11,
-   "example": "f066660fe38c3bf2c7fd8becdb [legacy extra=f066 rex=- mod=2 rm=4]"
+   "example": "f266450f6d6877e0318ea963 [legacy extra=f2 rex=45 mod=1 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PAVGW",
+   "ours": "PCMPGTB",
    "lengths": "",
    "count": 11,
-   "example": "f266400fe30486f935540ba292 [legacy extra=f2 rex=40 mod=0 rm=4]"
+   "example": "f3664b0f64243df027771b9218 [legacy extra=f3 rex=4b mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PANDN",
+   "lengths": "",
+   "count": 11,
+   "example": "f2660fdfc5c547cfda67e7 [legacy extra=f2 rex=- mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PACKSSDW",
+   "lengths": "",
+   "count": 11,
+   "example": "f266490f6b72fe18bfc3b4e3 [legacy extra=f2 rex=49 mod=1 rm=2]"
   },
   {
    "outcome": "ours_accepts",
@@ -2525,127 +1175,47 @@
    "ours": "PMAXSW",
    "lengths": "",
    "count": 11,
-   "example": "f2664a0feecd45228cb92e9d [legacy extra=f2 rex=4a mod=3 rm=5]"
+   "example": "f3664d0feeed6a0de10a2aca [legacy extra=f3 rex=4d mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPSHUFD",
+   "ours": "PMOVZXDQ",
    "lengths": "",
    "count": 11,
-   "example": "c441357075dd678c321361 [vex w=0 l=1 vvvv=6 mod=1 rm=5]"
+   "example": "f2660f38353439603d7baa66e6 [legacy extra=f2 rex=- mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "SHUFPD",
+   "ours": "PMAXUD",
    "lengths": "",
    "count": 11,
-   "example": "f366440fc6d162d196f8873c [legacy extra=f3 rex=44 mod=3 rm=1]"
+   "example": "f3664f0f383fdc0723aabc9f8e [legacy extra=f3 rex=4f mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "UNPCKLPD",
+   "ours": "AESKEYGENASSIST",
    "lengths": "",
    "count": 11,
-   "example": "f2664b0f148dad207a151228 [legacy extra=f2 rex=4b mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTPS2DQ",
-   "lengths": "",
-   "count": 11,
-   "example": "f0660f5bc65c1bf4842c87 [legacy extra=f066 rex=- mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTTPS2DQ",
-   "lengths": "",
-   "count": 11,
-   "example": "f0f34f0f5b2c251d85b396e056 [legacy extra=f0 rex=4f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MINSD",
-   "lengths": "",
-   "count": 11,
-   "example": "f0f2480f5df4cdfe81ea21ea [legacy extra=f0 rex=48 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ENDBR64",
-   "lengths": "",
-   "count": 11,
-   "example": "f0f3460f1efaed33d25b3b1b [legacy extra=f0 rex=46 mod=3 rm=2]"
+   "example": "f266480f3adf7b03f8db78bbfc [legacy extra=f2 rex=48 mod=1 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "AESIMC",
+   "ours": "PINSRQ",
    "lengths": "",
    "count": 11,
-   "example": "f3660f38db98c78560b40deb [legacy extra=f3 rex=- mod=2 rm=0]"
+   "example": "f3664d0f3a22bcbd5e564fec05f9 [legacy extra=f3 rex=4d mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PEXTRD",
+   "xed": "BUFFER_TOO_SHORT",
+   "ours": "IMUL",
    "lengths": "",
-   "count": 11,
-   "example": "f266450f3a169d2f0d88ca326b [legacy extra=f2 rex=45 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PEXTRQ",
-   "lengths": "",
-   "count": 11,
-   "example": "f3664f0f3a16bdbd485b5e564f [legacy extra=f3 rex=4f mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUSHFQ",
-   "lengths": "",
-   "count": 11,
-   "example": "f04d9c3aa2b49fa2c36b92 [legacy extra=f0 rex=4d mod=3 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LEAVE",
-   "lengths": "",
-   "count": 11,
-   "example": "f04ec99b8176c5b2498bc2 [legacy extra=f0 rex=4e mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "INSB",
-   "lengths": "",
-   "count": 11,
-   "example": "f0666cea615ef4dc55fb0c [legacy extra=f066 rex=- mod=2 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "FLDCW",
-   "lengths": "",
-   "count": 11,
-   "example": "f066d92efaa827d5e423 [legacy extra=f066 rex=- mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPBROADCASTW",
-   "lengths": "",
-   "count": 11,
-   "example": "6242fdb87bfd591d3fbf2403 [evex w=1 ll=1 mod=3 rm=5]"
+   "count": 10,
+   "example": "674c692c05b8462129a6a4 [legacy extra=67 rex=4c mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -2657,243 +1227,27 @@
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LEA",
+   "xed": "GENERAL_ERROR",
+   "ours": "PADDQ",
    "lengths": "",
    "count": 10,
-   "example": "f0668d5cb91b4607951979 [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "NOP",
-   "lengths": "",
-   "count": 10,
-   "example": "f066901cf0516a1e7fa129 [legacy extra=f066 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UD2",
-   "lengths": "",
-   "count": 10,
-   "example": "f0660f0b6eb00347ecebae7e [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "NOP",
-   "ours": "PREFETCHT1",
-   "lengths": "",
-   "count": 10,
-   "example": "f24f0f18d6 [legacy extra=f2 rex=4f mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PREFETCHT2",
-   "lengths": "",
-   "count": 10,
-   "example": "f0430f181c352e281b478bdc [legacy extra=f0 rex=43 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVUPS",
-   "lengths": "",
-   "count": 10,
-   "example": "f00f108a784db51923d3 [legacy extra=f0 rex=- mod=2 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVAPS",
-   "lengths": "",
-   "count": 10,
-   "example": "f00f2860fb1c76e9fb6b [legacy extra=f0 rex=- mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTTSS2SI",
-   "lengths": "",
-   "count": 10,
-   "example": "f066f34d0f2c7c8dfc9796f3fcaf [legacy extra=f066 rex=4d mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "COMISD",
-   "lengths": "",
-   "count": 10,
-   "example": "f0660f2f01aa193525b052 [legacy extra=f066 rex=- mod=0 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNB",
-   "lengths": "",
-   "count": 10,
-   "example": "f0660f93ffa88ac058b469 [legacy extra=f066 rex=- mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVZ",
-   "lengths": "",
-   "count": 10,
-   "example": "f0660f445c675026d620249e [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVS",
-   "lengths": "",
-   "count": 10,
-   "example": "f066400f48adbb15f08f287a [legacy extra=f066 rex=40 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNS",
-   "lengths": "",
-   "count": 10,
-   "example": "f0660f49c5a59fad3568c0 [legacy extra=f066 rex=- mod=3 rm=5]"
+   "example": "f366400fd4e4e568c0836740 [legacy extra=f3 rex=40 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "ANDPS",
+   "ours": "PSLLDQ",
    "lengths": "",
    "count": 10,
-   "example": "f3440f54b734b8e875214f [legacy extra=f3 rex=44 mod=2 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPEQB",
-   "lengths": "",
-   "count": 10,
-   "example": "f066470f748da8222ef3995b [legacy extra=f0 rex=47 mod=2 rm=5]"
+   "example": "f266490f73fc69d974812a2f [legacy extra=f2 rex=49 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "POR",
-   "lengths": "",
-   "count": 10,
-   "example": "f266460febd698350790d775 [legacy extra=f2 rex=46 mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "POR",
-   "lengths": "",
-   "count": 10,
-   "example": "f066400feb5d7f0c6521bf05 [legacy extra=f0 rex=40 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSUBD",
-   "lengths": "",
-   "count": 10,
-   "example": "f066660ffa05628ef32cce7e [legacy extra=f066 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVNTDQ",
-   "lengths": "",
-   "count": 10,
-   "example": "f0664e0fe71c058443b5249b04 [legacy extra=f0 rex=4e mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "MOVDQA",
-   "lengths": "",
-   "count": 10,
-   "example": "f2664e0f6f24a22265cc8d0379 [legacy extra=f2 rex=4e mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSHUFLW",
-   "lengths": "",
-   "count": 10,
-   "example": "f0f24d0f702da517385fc9b0 [legacy extra=f0 rex=4d mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BTR_LOCK",
-   "lengths": "",
-   "count": 10,
-   "example": "f0450fb3d6b08d37502f2d [legacy extra=f0 rex=45 mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LZCNT",
-   "lengths": "",
-   "count": 10,
-   "example": "f066f3400fbd8a441fc11426f2 [legacy extra=f066 rex=40 mod=2 rm=2]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "PCMPISTRI64",
-   "ours": "PCMPISTRI",
-   "lengths": "",
-   "count": 10,
-   "example": "67664e0f3a630542aafd6364 [legacy extra=67 rex=4e mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PADDB",
-   "lengths": "",
-   "count": 10,
-   "example": "f3664f0ffcd50cc40fe5c5d8 [legacy extra=f3 rex=4f mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
    "ours": "PUNPCKHDQ",
    "lengths": "",
    "count": 10,
-   "example": "f066490f6ac4d48d60bf0a94 [legacy extra=f0 rex=49 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PCMPEQD",
-   "lengths": "",
-   "count": 10,
-   "example": "f266470f7605fd73b31133c1 [legacy extra=f2 rex=47 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PANDN",
-   "lengths": "",
-   "count": 10,
-   "example": "f3660fdfb4ae5bae017e5c00 [legacy extra=f3 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PACKSSDW",
-   "lengths": "",
-   "count": 10,
-   "example": "f266400f6b2a9b0ca8ba1441 [legacy extra=f2 rex=40 mod=0 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSUBUSW",
-   "lengths": "",
-   "count": 10,
-   "example": "f366410fd991b851aa94e757 [legacy extra=f3 rex=41 mod=2 rm=1]"
+   "example": "f366470f6a5c652bfc31e14909 [legacy extra=f3 rex=47 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -2901,143 +1255,71 @@
    "ours": "PMULHW",
    "lengths": "",
    "count": 10,
-   "example": "f266450fe5adedb63f464f18 [legacy extra=f2 rex=45 mod=2 rm=5]"
+   "example": "f3664d0fe54d142bf8a6ae0f [legacy extra=f3 rex=4d mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PAVGB",
+   "ours": "PMINUB",
    "lengths": "",
    "count": 10,
-   "example": "f2660fe0c5ffd6ffe6fd27 [legacy extra=f2 rex=- mod=3 rm=5]"
+   "example": "f2660fdaad1e2582910c3b [legacy extra=f2 rex=- mod=2 rm=5]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMINSW",
+   "outcome": "iclass_differs",
+   "xed": "UMWAIT",
+   "ours": "MFENCE",
    "lengths": "",
    "count": 10,
-   "example": "f066430feaac779bbdb2179355 [legacy extra=f0 rex=43 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMAXSW",
-   "lengths": "",
-   "count": 10,
-   "example": "f06666420fee42fc30e5a5f8d4 [legacy extra=f066 rex=42 mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTSS2SD",
-   "lengths": "",
-   "count": 10,
-   "example": "f0f3460f5acc42ad9e8c711b [legacy extra=f0 rex=46 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTSD2SS",
-   "lengths": "",
-   "count": 10,
-   "example": "f066f24e0f5a0c307b61a28c33b1 [legacy extra=f066 rex=4e mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMOVSXDQ",
-   "lengths": "",
-   "count": 10,
-   "example": "f066664e0f3825776c2c214992b4 [legacy extra=f066 rex=4e mod=1 rm=7]"
+   "example": "f2420faef0 [legacy extra=f2 rex=42 mod=3 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMOVZXDQ",
+   "ours": "PMOVZXBD",
    "lengths": "",
    "count": 10,
-   "example": "f3660f38353d0be670d03c29 [legacy extra=f3 rex=- mod=0 rm=5]"
+   "example": "f266490f3831d45d499b230b2a [legacy extra=f2 rex=49 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMAXSD",
+   "ours": "PMOVZXWD",
    "lengths": "",
    "count": 10,
-   "example": "f2660f383d247b910eea91b117 [legacy extra=f2 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PALIGNR",
-   "lengths": "",
-   "count": 10,
-   "example": "f06666410f3a0f0d081118cc00b0 [legacy extra=f066 rex=41 mod=0 rm=5]"
+   "example": "f3664b0f38336d096fb272f71c [legacy extra=f3 rex=4b mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PALIGNR",
+   "ours": "AESIMC",
    "lengths": "",
    "count": 10,
-   "example": "f266430f3a0f9d592d845ec288 [legacy extra=f2 rex=43 mod=2 rm=5]"
+   "example": "f266400f38dbbc541544781178e9 [legacy extra=f2 rex=40 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PEXTRD",
+   "xed": "GENERAL_ERROR",
+   "ours": "PINSRB",
    "lengths": "",
    "count": 10,
-   "example": "f066660f3a16d5387b8adb6355 [legacy extra=f066 rex=- mod=3 rm=5]"
+   "example": "f266450f3a203c0c7ee94cbfcd1e [legacy extra=f2 rex=45 mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
+   "xed": "GENERAL_ERROR",
    "ours": "PINSRD",
    "lengths": "",
    "count": 10,
-   "example": "f06666470f3a22fd030453d8d8e3 [legacy extra=f066 rex=47 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA1RNDS4",
-   "lengths": "",
-   "count": 10,
-   "example": "f04c0f3acc2d7337ecbd0f3c [legacy extra=f0 rex=4c mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LOOPNE",
-   "lengths": "",
-   "count": 10,
-   "example": "f04fe0a62f600e9321fe2d [legacy extra=f0 rex=4f mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "FRSTOR",
-   "lengths": "",
-   "count": 10,
-   "example": "f047dd621fec32e29a9b [legacy extra=f0 rex=47 mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "FNCLEX",
-   "lengths": "",
-   "count": 10,
-   "example": "f06640dbe27080c40c54e2 [legacy extra=f066 rex=40 mod=3 rm=2]"
+   "example": "f266460f3a22306518a17b9755 [legacy extra=f2 rex=46 mod=0 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VMOVDQU8",
+   "ours": "VMOVDQU64",
    "lengths": "",
    "count": 10,
-   "example": "624127986ffac389a90d9e62 [evex w=0 ll=0 mod=3 rm=2]"
+   "example": "62e1e6886f9475f3ab402eaeb5 [evex w=1 ll=0 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -3045,63 +1327,31 @@
    "ours": "VMOVDQA32",
    "lengths": "",
    "count": 10,
-   "example": "62517dd86f7508208132f348 [evex w=0 ll=2 mod=1 rm=5]"
+   "example": "624125986ffac389a90d9e62 [evex w=0 ll=0 mod=3 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPTERNLOGQ",
+   "ours": "VPMULLQ",
    "lengths": "",
    "count": 10,
-   "example": "6243fddd25e52b7e00fe0c86 [evex w=1 ll=2 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PREFETCHNTA",
-   "lengths": "",
-   "count": 9,
-   "example": "f04b0f18c41275fdd721e8 [legacy extra=f0 rex=4b mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETBE",
-   "lengths": "",
-   "count": 9,
-   "example": "f04b0f961c0310a83c4a91ba [legacy extra=f0 rex=4b mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNL",
-   "lengths": "",
-   "count": 9,
-   "example": "f00f4d15fd3a27573327 [legacy extra=f0 rex=- mod=0 rm=5]"
+   "example": "62f2fd1c40e0a1e14413232f [evex w=1 ll=0 mod=3 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "XORPD",
+   "ours": "PCMPISTRI64",
    "lengths": "",
-   "count": 9,
-   "example": "f266450f576517972a7ae693 [legacy extra=f2 rex=45 mod=1 rm=5]"
+   "count": 10,
+   "example": "f2664b0f3a637b5b0201d7ecb7 [legacy extra=f2 rex=4b mod=1 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKLBW",
+   "ours": "ORPD",
    "lengths": "",
    "count": 9,
-   "example": "f266460f6035fd60b29a76b2 [legacy extra=f2 rex=46 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PCMPEQW",
-   "lengths": "",
-   "count": 9,
-   "example": "f3660f75f8924b8e9e9c69 [legacy extra=f3 rex=- mod=3 rm=0]"
+   "example": "f2660f56c4960c2fae7857 [legacy extra=f2 rex=- mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -3109,271 +1359,31 @@
    "ours": "PSUBQ",
    "lengths": "",
    "count": 9,
-   "example": "f2664f0ffbdc3b05da74387c [legacy extra=f2 rex=4f mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PADDQ",
-   "lengths": "",
-   "count": 9,
-   "example": "f066660fd455e443087b3e1d [legacy extra=f066 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMPXCHG_LOCK",
-   "lengths": "",
-   "count": 9,
-   "example": "f066410fb0dcefcb706507a8 [legacy extra=f066 rex=41 mod=3 rm=4]"
+   "example": "f2660ffb15c8287dd92fe5 [legacy extra=f2 rex=- mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PADDW",
-   "lengths": "",
-   "count": 9,
-   "example": "f3660ffde645b1f7e1dc52 [legacy extra=f3 rex=- mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSLLQ",
-   "lengths": "",
-   "count": 9,
-   "example": "f0664c0ff3558933f354cf41 [legacy extra=f0 rex=4c mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKLDQ",
-   "lengths": "",
-   "count": 9,
-   "example": "f366420f62af35a73e4e9a9e [legacy extra=f3 rex=42 mod=2 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUNPCKHBW",
-   "lengths": "",
-   "count": 9,
-   "example": "f066400f68800e04e171b8d0 [legacy extra=f0 rex=40 mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKHWD",
-   "lengths": "",
-   "count": 9,
-   "example": "f266400f6955e140629a918f [legacy extra=f2 rex=40 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPGTD",
-   "lengths": "",
-   "count": 9,
-   "example": "f066664b0f6624e5595e4d8303e0 [legacy extra=f066 rex=4b mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PACKUSWB",
-   "lengths": "",
-   "count": 9,
-   "example": "f066660f67ed250489faeaac [legacy extra=f066 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PACKUSWB",
-   "lengths": "",
-   "count": 9,
-   "example": "f2660f67ec7f19f96312da [legacy extra=f2 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
    "ours": "PSUBB",
    "lengths": "",
    "count": 9,
-   "example": "f066660ff8558ea6d2f66bd0 [legacy extra=f066 rex=- mod=1 rm=5]"
+   "example": "f266470ff8fd88fcd61ba713 [legacy extra=f2 rex=47 mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PADDUSB",
+   "ours": "PMULHUW",
    "lengths": "",
    "count": 9,
-   "example": "f366490fdced84392468d041 [legacy extra=f3 rex=49 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PADDUSB",
-   "lengths": "",
-   "count": 9,
-   "example": "f066450fdc3e58d621d4d3fc [legacy extra=f0 rex=45 mod=0 rm=6]"
+   "example": "f2664c0fe4ecd8fb1398bdcb [legacy extra=f2 rex=4c mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PINSRW",
+   "ours": "PEXTRQ",
    "lengths": "",
    "count": 9,
-   "example": "f266470fc49545ae914ab912 [legacy extra=f2 rex=47 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHUFPS",
-   "lengths": "",
-   "count": 9,
-   "example": "f0450fc6b5efd12c481abc [legacy extra=f0 rex=45 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "UNPCKLPS",
-   "lengths": "",
-   "count": 9,
-   "example": "f3400f1404c522efb834cc6f [legacy extra=f3 rex=40 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "CLFLUSH",
-   "lengths": "",
-   "count": 9,
-   "example": "f2450fae7b1d7d96bdeeab [legacy extra=f2 rex=45 mod=1 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RDRAND",
-   "lengths": "",
-   "count": 9,
-   "example": "f00fc7f4038a55d6b9bc [legacy extra=f0 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSHUFB",
-   "lengths": "",
-   "count": 9,
-   "example": "f06666490f3800848b9d8a4fd20090 [legacy extra=f066 rex=49 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PMOVSXDQ",
-   "lengths": "",
-   "count": 9,
-   "example": "f2660f3825cd52c6ceb90ef1 [legacy extra=f2 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PCMPEQQ",
-   "lengths": "",
-   "count": 9,
-   "example": "f266430f3829c668611b9f2c77 [legacy extra=f2 rex=43 mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PMOVZXBD",
-   "lengths": "",
-   "count": 9,
-   "example": "f2664e0f383175552242e1ad9d [legacy extra=f2 rex=4e mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PMOVZXWD",
-   "lengths": "",
-   "count": 9,
-   "example": "f3660f3833e321d435f86996 [legacy extra=f3 rex=- mod=3 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMOVZXDQ",
-   "lengths": "",
-   "count": 9,
-   "example": "f066660f383584ab32e64f3e9327 [legacy extra=f066 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AESENC",
-   "lengths": "",
-   "count": 9,
-   "example": "f066420f38dc246afb474bd5c284 [legacy extra=f0 rex=42 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "AESENCLAST",
-   "lengths": "",
-   "count": 9,
-   "example": "f06666420f38ddd4d2120e5d3aa9 [legacy extra=f066 rex=42 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PINSRD",
-   "lengths": "",
-   "count": 9,
-   "example": "f2660f3a22ed8ff3ea0dbeb0 [legacy extra=f2 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CLD",
-   "lengths": "",
-   "count": 9,
-   "example": "f0fc9571833cae104cc0 [legacy extra=f0 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CLI",
-   "lengths": "",
-   "count": 9,
-   "example": "f06648fa32309274a86ceb73 [legacy extra=f066 rex=48 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LOOP",
-   "lengths": "",
-   "count": 9,
-   "example": "f04ce2fc3beae129aafaf6 [legacy extra=f0 rex=4c mod=1 rm=7]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_INSD",
-   "ours": "REPNE_INSD",
-   "lengths": "",
-   "count": 9,
-   "example": "f26d [legacy extra=f2 rex=- mod=2 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "FNSTCW",
-   "lengths": "",
-   "count": 9,
-   "example": "f04bd97f5bd63d614476 [legacy extra=f0 rex=4b mod=1 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPANDQ",
-   "lengths": "",
-   "count": 9,
-   "example": "62c1fd3cdbcad5e58ab260cd [evex w=1 ll=1 mod=3 rm=2]"
+   "example": "f366480f3a16ff266a6a814f03 [legacy extra=f3 rex=48 mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
@@ -3381,7 +1391,7 @@
    "ours": "VPORQ",
    "lengths": "",
    "count": 9,
-   "example": "62418d5aebfcf61a207e00e7 [evex w=1 ll=2 mod=3 rm=4]"
+   "example": "6221fdb9ebc4bc073a2b302f [evex w=1 ll=1 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -3392,372 +1402,148 @@
    "example": "81ac5739bbad40b25c [legacy extra=- rex=- mod=2 rm=4]"
   },
   {
-   "outcome": "iclass_differs",
-   "xed": "REP_MOVSB",
-   "ours": "REPNE_MOVSB",
-   "lengths": "",
-   "count": 8,
-   "example": "f244a4 [legacy extra=f2 rex=44 mod=1 rm=4]"
-  },
-  {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSB",
+   "xed": "GENERAL_ERROR",
+   "ours": "LEA",
    "lengths": "",
    "count": 8,
-   "example": "f066a400c98ac243dff3b6 [legacy extra=f066 rex=- mod=2 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STOSB",
-   "lengths": "",
-   "count": 8,
-   "example": "f066aa055525088d4be8a9 [legacy extra=f066 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PREFETCHT0",
-   "lengths": "",
-   "count": 8,
-   "example": "f0664c0f18cc5fb807b46acf [legacy extra=f066 rex=4c mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PREFETCHT1",
-   "lengths": "",
-   "count": 8,
-   "example": "f00f189547fdf387bb04 [legacy extra=f0 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNO",
-   "lengths": "",
-   "count": 8,
-   "example": "f0660f4144ec49b60ea5c951 [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVBE",
-   "lengths": "",
-   "count": 8,
-   "example": "f0490f4684058f800e74ed4e [legacy extra=f0 rex=49 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNBE",
-   "lengths": "",
-   "count": 8,
-   "example": "f00f472f2a5a7cb32a87 [legacy extra=f0 rex=- mod=0 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNP",
-   "lengths": "",
-   "count": 8,
-   "example": "f066410f9b85c8b07c3d5794 [legacy extra=f066 rex=41 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNL",
-   "lengths": "",
-   "count": 8,
-   "example": "f0664a0f9decc424d5bf4880 [legacy extra=f066 rex=4a mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVLE",
-   "lengths": "",
-   "count": 8,
-   "example": "f0660f4e259525dc9ab4e9 [legacy extra=f066 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNLE",
-   "lengths": "",
-   "count": 8,
-   "example": "f0450f9fae131d2c9cbc39 [legacy extra=f0 rex=45 mod=2 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "XORPS",
-   "lengths": "",
-   "count": 8,
-   "example": "f0420f575530e376953b05 [legacy extra=f0 rex=42 mod=1 rm=5]"
+   "example": "66498de4a9e4e767dd9a [legacy extra=66 rex=49 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "XORPS",
+   "ours": "UCOMISD",
    "lengths": "",
    "count": 8,
-   "example": "f20f57781dc366e4c080 [legacy extra=f2 rex=- mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADDSD",
-   "lengths": "",
-   "count": 8,
-   "example": "f0f2480f58941d11fed5d9a0e8 [legacy extra=f0 rex=48 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SUBSD",
-   "lengths": "",
-   "count": 8,
-   "example": "f0f20f5cdd2773c6583938 [legacy extra=f0 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "DIVSD",
-   "lengths": "",
-   "count": 8,
-   "example": "f066f2400f5e5c8d096104a97ebe [legacy extra=f066 rex=40 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BSF",
-   "lengths": "",
-   "count": 8,
-   "example": "f0660fbcb4f5020444de17b4 [legacy extra=f066 rex=- mod=2 rm=4]"
+   "example": "f3664f0f2e1550399feeaf3f [legacy extra=f3 rex=4f mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PCMPISTRI",
+   "ours": "XORPD",
    "lengths": "",
    "count": 8,
-   "example": "f2664f0f3a63e94eee91bcde4e [legacy extra=f2 rex=4f mod=3 rm=1]"
+   "example": "f3664c0f57647d4324a8d89ef5 [legacy extra=f3 rex=4c mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
+   "xed": "GENERAL_ERROR",
+   "ours": "ROUNDSD",
+   "lengths": "",
+   "count": 8,
+   "example": "f3660f3a0b6c35e4ce68f4bde8 [legacy extra=f3 rex=- mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PADDD",
+   "lengths": "",
+   "count": 8,
+   "example": "f2664e0ffe85eb3334f686da [legacy extra=f2 rex=4e mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
    "ours": "PADDW",
    "lengths": "",
    "count": 8,
-   "example": "f0660ffd35fc26f7549a09 [legacy extra=f0 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUNPCKLDQ",
-   "lengths": "",
-   "count": 8,
-   "example": "f0660f62cfbd112a4d89e2 [legacy extra=f0 rex=- mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUNPCKLWD",
-   "lengths": "",
-   "count": 8,
-   "example": "f06666410f61854710fd3fe99c [legacy extra=f066 rex=41 mod=2 rm=5]"
+   "example": "f366430ffd0a60522ddedc45 [legacy extra=f3 rex=43 mod=0 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PCMPGTW",
+   "ours": "PMADDWD",
    "lengths": "",
    "count": 8,
-   "example": "f266410f65c444ad5143baad [legacy extra=f2 rex=41 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPEQD",
-   "lengths": "",
-   "count": 8,
-   "example": "f066664c0f769c772454384357fb [legacy extra=f066 rex=4c mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PACKSSWB",
-   "lengths": "",
-   "count": 8,
-   "example": "f06666460f6315e59703f9bded [legacy extra=f066 rex=46 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSUBUSB",
-   "lengths": "",
-   "count": 8,
-   "example": "f066400fd81b54a5be804823 [legacy extra=f0 rex=40 mod=0 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMINUB",
-   "lengths": "",
-   "count": 8,
-   "example": "f0660fda9ca7d089c3b940ae [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PAVGB",
-   "lengths": "",
-   "count": 8,
-   "example": "f066664d0fe0153afef0a432c1 [legacy extra=f066 rex=4d mod=0 rm=5]"
+   "example": "f2660ff58bf694c6111b3f [legacy extra=f2 rex=- mod=2 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "SHUFPS",
+   "ours": "PUNPCKHBW",
    "lengths": "",
    "count": 8,
-   "example": "f3410fc67a225eadde4ebb [legacy extra=f3 rex=41 mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVHPS",
-   "lengths": "",
-   "count": 8,
-   "example": "f00f168cc6b5cf644802a4 [legacy extra=f0 rex=- mod=2 rm=4]"
+   "example": "f266460f68c4cc3673e33b9c [legacy extra=f2 rex=46 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "ANDNPD",
+   "ours": "PADDUSB",
    "lengths": "",
    "count": 8,
-   "example": "f3660f557b447b70a2f4a9 [legacy extra=f3 rex=- mod=1 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTPD2PS",
-   "lengths": "",
-   "count": 8,
-   "example": "f0660f5aea184043e1042d [legacy extra=f066 rex=- mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTDQ2PS",
-   "lengths": "",
-   "count": 8,
-   "example": "f04c0f5b6a2c947d572676 [legacy extra=f0 rex=4c mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTSS2SI",
-   "lengths": "",
-   "count": 8,
-   "example": "f0f30f2dd5800f22e66918 [legacy extra=f0 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTSD2SI",
-   "lengths": "",
-   "count": 8,
-   "example": "f066f20f2d7496606dd1d163e8 [legacy extra=f066 rex=- mod=1 rm=4]"
+   "example": "f366400fdcac355b9d1abeeb8e [legacy extra=f3 rex=40 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PSHUFB",
+   "ours": "PADDUSW",
    "lengths": "",
    "count": 8,
-   "example": "f266440f3800cdb705b57d5fe7 [legacy extra=f2 rex=44 mod=3 rm=5]"
+   "example": "f366460fdda40d346b88a980aa [legacy extra=f3 rex=46 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMAXUD",
+   "ours": "PMINSW",
    "lengths": "",
    "count": 8,
-   "example": "f2664f0f383f64a8aa826d8dbefb [legacy extra=f2 rex=4f mod=1 rm=4]"
+   "example": "f266440fea7ae4ea3a65b821 [legacy extra=f2 rex=44 mod=1 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMULLD",
+   "ours": "UNPCKHPD",
    "lengths": "",
    "count": 8,
-   "example": "f3660f384099062104c51ebf [legacy extra=f3 rex=- mod=2 rm=1]"
+   "example": "f3664b0f15df1ae1cd0eeff5 [legacy extra=f3 rex=4b mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
+   "ours": "RDSEED",
+   "lengths": "",
+   "count": 8,
+   "example": "f2410fc7fde106db5296b4 [legacy extra=f2 rex=41 mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PMOVSXDQ",
+   "lengths": "",
+   "count": 8,
+   "example": "f266440f3825857c31568e3001 [legacy extra=f2 rex=44 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PMAXSD",
+   "lengths": "",
+   "count": 8,
+   "example": "f266430f383d75c1cd37c8b985 [legacy extra=f2 rex=43 mod=1 rm=5]"
+  },
+  {
+   "outcome": "iclass_differs",
+   "xed": "AESDEC128KL",
    "ours": "AESENCLAST",
    "lengths": "",
    "count": 8,
-   "example": "f266460f38dd74a56d8c9611bdb2 [legacy extra=f2 rex=46 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA256MSG1",
-   "lengths": "",
-   "count": 8,
-   "example": "f00f38cc84a495ccf97e4208 [legacy extra=f0 rex=- mod=2 rm=4]"
+   "example": "f366490f38dd9ca5baf407bf [legacy extra=f3 rex=49 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PCLMULQDQ",
+   "ours": "PALIGNR",
    "lengths": "",
    "count": 8,
-   "example": "f3660f3a44361a83add576d4 [legacy extra=f3 rex=- mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PEXTRQ",
-   "lengths": "",
-   "count": 8,
-   "example": "f066490f3a16101c09337b7a0c [legacy extra=f0 rex=49 mod=0 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMC",
-   "lengths": "",
-   "count": 8,
-   "example": "f0664bf5608bd6c0dc9fbe30 [legacy extra=f066 rex=4b mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LOOPE",
-   "lengths": "",
-   "count": 8,
-   "example": "f0e1c386280efa8ece95 [legacy extra=f0 rex=- mod=0 rm=5]"
+   "example": "f3660f3a0f546446bb78b81e45 [legacy extra=f3 rex=- mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VMOVDQA64",
+   "ours": "VMOVDQU32",
    "lengths": "",
    "count": 8,
-   "example": "62b1f5986fefb73c3e90a2e4 [evex w=1 ll=0 mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPXORD",
-   "lengths": "",
-   "count": 8,
-   "example": "62117d9fefe5aa4de7f5373d [evex w=0 ll=0 mod=3 rm=5]"
+   "example": "62f17ea86fd4a720ed118961 [evex w=0 ll=1 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -3765,247 +1551,71 @@
    "ours": "VPANDD",
    "lengths": "",
    "count": 8,
-   "example": "62b17dbadbec0339dd1cfd05 [evex w=0 ll=1 mod=3 rm=4]"
+   "example": "6291359cdbf5e3d2e4a840a8 [evex w=0 ll=0 mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPANDNQ",
-   "lengths": "",
-   "count": 8,
-   "example": "6241fd59dfd46e4cdba6d86d [evex w=1 ll=2 mod=3 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_MOVSD",
-   "ours": "REPNE_MOVSD",
-   "lengths": "",
-   "count": 7,
-   "example": "f2a5 [legacy extra=f2 rex=- mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STOSW",
-   "lengths": "",
-   "count": 7,
-   "example": "f06647abe896cbf9ffd7b4de [legacy extra=f066 rex=47 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BUFFER_TOO_SHORT",
-   "ours": "MOV",
-   "lengths": "",
-   "count": 7,
-   "example": "2ec7848d1e027cc316dd [legacy extra=2e rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "INC_LOCK",
-   "lengths": "",
-   "count": 7,
-   "example": "f046fec1a0d6d80ede1e [legacy extra=f0 rex=46 mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVB",
-   "lengths": "",
-   "count": 7,
-   "example": "f0664f0f4244ba18a4e58611d6 [legacy extra=f066 rex=4f mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETZ",
-   "lengths": "",
-   "count": 7,
-   "example": "f0660f94025f5b4071c426 [legacy extra=f066 rex=- mod=0 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNZ",
-   "lengths": "",
-   "count": 7,
-   "example": "f0660f4514e2495bd357cf34 [legacy extra=f066 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNZ",
-   "lengths": "",
-   "count": 7,
-   "example": "f0400f95e5961b9b682e17 [legacy extra=f0 rex=40 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNP",
-   "lengths": "",
-   "count": 7,
-   "example": "f0400f4b7ddcbc456d7400 [legacy extra=f0 rex=40 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETLE",
-   "lengths": "",
-   "count": 7,
-   "example": "f00f9e1b785ddecb22ec [legacy extra=f0 rex=- mod=0 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVNLE",
-   "lengths": "",
-   "count": 7,
-   "example": "f0410f4fbd2128503dfc78 [legacy extra=f0 rex=41 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MULSS",
-   "lengths": "",
-   "count": 7,
-   "example": "f066f30f595d2485d1e8eb5e [legacy extra=f066 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MULSD",
-   "lengths": "",
-   "count": 7,
-   "example": "f066f20f59dc47c3d31c63f7 [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SQRTPS",
-   "lengths": "",
-   "count": 7,
-   "example": "f00f517c0d8cc2b02bc7ad [legacy extra=f0 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKLQDQ",
-   "lengths": "",
-   "count": 7,
-   "example": "f2664b0f6c4aca6766e280c1 [legacy extra=f2 rex=4b mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
    "ours": "PMULUDQ",
    "lengths": "",
    "count": 7,
-   "example": "f06666420ff4e58f772a2ec17a [legacy extra=f066 rex=42 mod=3 rm=5]"
+   "example": "f3664a0ff404d892c67b1c5d18 [legacy extra=f3 rex=4a mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PSADBW",
+   "ours": "PUNPCKLWD",
    "lengths": "",
    "count": 7,
-   "example": "f3660ff607d6f0c92e947b [legacy extra=f3 rex=- mod=0 rm=7]"
+   "example": "f366480f61a2319a06f3a279 [legacy extra=f3 rex=48 mod=2 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKHDQ",
+   "ours": "PCMPGTW",
    "lengths": "",
    "count": 7,
-   "example": "f366400f6a54c20b580466d71a [legacy extra=f3 rex=40 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PUNPCKHQDQ",
-   "lengths": "",
-   "count": 7,
-   "example": "f06666470f6d45e5343f22d2c8 [legacy extra=f066 rex=47 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PANDN",
-   "lengths": "",
-   "count": 7,
-   "example": "f066660fdfe4a12e9ecb4da8 [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMULHUW",
-   "lengths": "",
-   "count": 7,
-   "example": "f066430fe44deab9e0c1d8a2 [legacy extra=f0 rex=43 mod=1 rm=5]"
+   "example": "f266470f658da5ff81802701 [legacy extra=f2 rex=47 mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PMULLW",
+   "ours": "PCMPGTD",
    "lengths": "",
    "count": 7,
-   "example": "f2660fd5f52e9667bd7caa [legacy extra=f2 rex=- mod=3 rm=5]"
+   "example": "f2660f66147adfde23a38310 [legacy extra=f2 rex=- mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "UNPCKHPD",
+   "ours": "PAVGB",
    "lengths": "",
    "count": 7,
-   "example": "f266410f1570ce9b7652be05 [legacy extra=f2 rex=41 mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVLPS",
-   "lengths": "",
-   "count": 7,
-   "example": "f0440f122c80c100061b6f49 [legacy extra=f0 rex=44 mod=0 rm=4]"
+   "example": "f3660fe0f9f77a8a466f35 [legacy extra=f3 rex=- mod=3 rm=1]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "MOVDDUP",
+   "xed": "MOVSLDUP",
    "ours": "MOVLPD",
    "lengths": "",
    "count": 7,
-   "example": "f266470f12a01a11b99d [legacy extra=f2 rex=47 mod=2 rm=0]"
+   "example": "f366440f122f [legacy extra=f3 rex=44 mod=0 rm=7]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ANDNPS",
+   "outcome": "ours_gap",
+   "xed": "MOVSHDUP",
+   "ours": "",
    "lengths": "",
    "count": 7,
-   "example": "f0440f55bb75946690039f [legacy extra=f0 rex=44 mod=2 rm=3]"
+   "example": "f3400f16b5985c41d3 [legacy extra=f3 rex=40 mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "CVTPS2DQ",
+   "ours": "MOVHPS",
    "lengths": "",
    "count": 7,
-   "example": "f2664d0f5b25a5116a4ec7f1 [legacy extra=f2 rex=4d mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MINSS",
-   "lengths": "",
-   "count": 7,
-   "example": "f066f3460f5d4a47679f6050f3 [legacy extra=f066 rex=46 mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MAXSD",
-   "lengths": "",
-   "count": 7,
-   "example": "f066f2460f5f167bafd5c1ce8a [legacy extra=f066 rex=46 mod=0 rm=6]"
+   "example": "4f0f17c582a3999c5a0c [legacy extra=- rex=4f mod=3 rm=5]"
   },
   {
    "outcome": "iclass_differs",
@@ -4013,103 +1623,63 @@
    "ours": "CLFLUSH",
    "lengths": "",
    "count": 7,
-   "example": "66670fae3cec [legacy extra=6667 rex=- mod=0 rm=4]"
+   "example": "660fae7d3b [legacy extra=66 rex=- mod=1 rm=5]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "TPAUSE",
+   "xed": "UMONITOR",
    "ours": "MFENCE",
    "lengths": "",
    "count": 7,
-   "example": "66490faef0 [legacy extra=66 rex=49 mod=3 rm=0]"
+   "example": "f3440faef0 [legacy extra=f3 rex=44 mod=3 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "RDSEED",
+   "ours": "PMULDQ",
    "lengths": "",
    "count": 7,
-   "example": "f2440fc7fc8fe97c712516 [legacy extra=f2 rex=44 mod=3 rm=4]"
+   "example": "f266450f3828a882ab70af8b99 [legacy extra=f2 rex=45 mod=2 rm=0]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RDSEED",
+   "xed": "GENERAL_ERROR",
+   "ours": "PCMPEQQ",
    "lengths": "",
    "count": 7,
-   "example": "f00fc7fb5029c7bf8d8e [legacy extra=f0 rex=- mod=3 rm=3]"
+   "example": "f3664e0f38293c7506aa4b8a7a8e [legacy extra=f3 rex=4e mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMOVZXWD",
+   "xed": "GENERAL_ERROR",
+   "ours": "AESDEC",
    "lengths": "",
    "count": 7,
-   "example": "f066660f3833144c6fd003f65354 [legacy extra=f066 rex=- mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STI",
-   "lengths": "",
-   "count": 7,
-   "example": "f043fbddef58cbed3f4e01 [legacy extra=f0 rex=43 mod=1 rm=4]"
+   "example": "f2660f38de51727ced9f1b6a [legacy extra=f2 rex=- mod=1 rm=1]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "POPF",
-   "ours": "POPFQ",
+   "xed": "PUSHF",
+   "ours": "PUSHFQ",
    "lengths": "",
    "count": 7,
-   "example": "66439d [legacy extra=66 rex=43 mod=2 rm=5]"
+   "example": "66679c [legacy extra=6667 rex=- mod=3 rm=4]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "REP_OUTSB",
-   "ours": "REPNE_OUTSB",
+   "xed": "JECXZ",
+   "ours": "JRCXZ",
    "lengths": "",
    "count": 7,
-   "example": "f2406e [legacy extra=f2 rex=40 mod=2 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMPSQ",
-   "lengths": "",
-   "count": 7,
-   "example": "f04ca797705119d37a2715 [legacy extra=f0 rex=4c mod=2 rm=7]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_OUTSD",
-   "ours": "REPNE_OUTSD",
-   "lengths": "",
-   "count": 7,
-   "example": "f2456f [legacy extra=f2 rex=45 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "FIDIV",
-   "lengths": "",
-   "count": 7,
-   "example": "f048da353ebc6603b158 [legacy extra=f0 rex=48 mod=0 rm=5]"
+   "example": "6667e3ca [legacy extra=6667 rex=- mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VMOVDQU16",
+   "ours": "VPSRLD",
    "lengths": "",
    "count": 7,
-   "example": "6281ffa86f35e4ea17d038a5 [evex w=1 ll=1 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPERMQ",
-   "lengths": "",
-   "count": 7,
-   "example": "6232c5b83639938076a7c24d [evex w=1 ll=1 mod=0 rm=1]"
+   "example": "6211fdc87254c656e5dda0136c [evex w=1 ll=2 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -4117,135 +1687,23 @@
    "ours": "VPMULLD",
    "lengths": "",
    "count": 7,
-   "example": "622235bc40cacdc0dacafd90 [evex w=0 ll=1 mod=3 rm=2]"
+   "example": "62a27d9c40cf69eceb142616 [evex w=0 ll=0 mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPMULLD",
+   "xed": "BUFFER_TOO_SHORT",
+   "ours": "MOV",
    "lengths": "",
-   "count": 7,
-   "example": "62927dd8407d423a00db5e51 [evex w=0 ll=2 mod=1 rm=5]"
+   "count": 6,
+   "example": "2ec7848d1e027cc316dd [legacy extra=2e rex=- mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPTERNLOGD",
-   "lengths": "",
-   "count": 7,
-   "example": "62e37dbd25f9286e842f4d97 [evex w=0 ll=1 mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VINSERTI32X8",
-   "lengths": "",
-   "count": 7,
-   "example": "62437db83a5c9d19f88bdafd49 [evex w=0 ll=1 mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CBW",
+   "ours": "PUNPCKLQDQ",
    "lengths": "",
    "count": 6,
-   "example": "f0664598e4f33500a667d3f0 [legacy extra=f066 rex=45 mod=2 rm=5]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_STOSB",
-   "ours": "REPNE_STOSB",
-   "lengths": "",
-   "count": 6,
-   "example": "f2aa [legacy extra=f2 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "DEC_LOCK",
-   "lengths": "",
-   "count": 6,
-   "example": "f066fecc481a1068e228 [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "NOP",
-   "ours": "PREFETCHT2",
-   "lengths": "",
-   "count": 6,
-   "example": "2e4e0f18da [legacy extra=2e rex=4e mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "UCOMISS",
-   "lengths": "",
-   "count": 6,
-   "example": "f24e0f2ebcd735e01c2003d5 [legacy extra=f2 rex=4e mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "UCOMISD",
-   "lengths": "",
-   "count": 6,
-   "example": "f3660f2e9d58096f4b6211 [legacy extra=f3 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNS",
-   "lengths": "",
-   "count": 6,
-   "example": "f0660f9905aa633b499304 [legacy extra=f066 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETP",
-   "lengths": "",
-   "count": 6,
-   "example": "f0664a0f9aa58d79ebec538f [legacy extra=f066 rex=4a mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ADDPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f00f58dd80a7570e98ae [legacy extra=f0 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SUBSS",
-   "lengths": "",
-   "count": 6,
-   "example": "f066f3420f5cec2bb626eadc1d [legacy extra=f066 rex=42 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "DIVPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f04e0f5ec1cb6e97a483c9 [legacy extra=f0 rex=4e mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PCMPEQB",
-   "lengths": "",
-   "count": 6,
-   "example": "f2660f7458b41a9abe7ae8 [legacy extra=f2 rex=- mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PCMPEQW",
-   "lengths": "",
-   "count": 6,
-   "example": "f06666430f755c05d35ffa78d5c5 [legacy extra=f066 rex=43 mod=1 rm=4]"
+   "example": "f2660f6cf5596f75229f6f [legacy extra=f2 rex=- mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
@@ -4253,143 +1711,71 @@
    "ours": "PXOR",
    "lengths": "",
    "count": 6,
-   "example": "f3660fef5d1131d419c640 [legacy extra=f3 rex=- mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSUBQ",
-   "lengths": "",
-   "count": 6,
-   "example": "f066664c0ffb38966d7aab59bb [legacy extra=f066 rex=4c mod=0 rm=0]"
+   "example": "f366460fefb2f942458ad605 [legacy extra=f3 rex=46 mod=2 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "ROUNDSD",
+   "ours": "PCMPISTRI",
    "lengths": "",
    "count": 6,
-   "example": "f266440f3a0be49967508f08dc [legacy extra=f2 rex=44 mod=3 rm=4]"
+   "example": "f3660f3a633dc0a8ecf65e2d [legacy extra=f3 rex=- mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PADDD",
+   "ours": "PADDB",
    "lengths": "",
    "count": 6,
-   "example": "f3664e0ffec18cf4e50bc648 [legacy extra=f3 rex=4e mod=3 rm=1]"
+   "example": "f2660ffc5aead028cb5361 [legacy extra=f2 rex=- mod=1 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKHBW",
+   "ours": "PACKUSWB",
    "lengths": "",
    "count": 6,
-   "example": "f266420f68ecd0c2dbde35ef [legacy extra=f2 rex=42 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PEXTRW",
-   "lengths": "",
-   "count": 6,
-   "example": "f066470fc5f1ab566a1ecb1b [legacy extra=f0 rex=47 mod=3 rm=1]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "MOVDDUP",
-   "ours": "MOVHLPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f20f12cd [legacy extra=f2 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "MOVSHDUP",
-   "ours": "MOVLHPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f30f16ed [legacy extra=f3 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVLHPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f00f16c1de45e2af79c9 [legacy extra=f0 rex=- mod=3 rm=1]"
+   "example": "f2660f67b50bd61cd05c11 [legacy extra=f2 rex=- mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "CVTDQ2PS",
-   "lengths": "",
-   "count": 6,
-   "example": "f2470f5bb55d8966d156c6 [legacy extra=f2 rex=47 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MINPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f00f5dbcad345bfeed48ad [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MAXPS",
-   "lengths": "",
-   "count": 6,
-   "example": "f04c0f5fbd3419901ae1e5 [legacy extra=f0 rex=4c mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTSI2SS",
-   "lengths": "",
-   "count": 6,
-   "example": "f066f30f2a37c34a9a7d0c17 [legacy extra=f066 rex=- mod=0 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RDSSPD",
-   "lengths": "",
-   "count": 6,
-   "example": "f066f30f1ecc2b569b4a837c [legacy extra=f066 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
    "ours": "LFENCE",
    "lengths": "",
    "count": 6,
-   "example": "f00faee8c3820934dbea [legacy extra=f0 rex=- mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PTEST",
-   "lengths": "",
-   "count": 6,
-   "example": "f366400f3817c4a3fca3e92927 [legacy extra=f3 rex=40 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "AESENC",
-   "lengths": "",
-   "count": 6,
-   "example": "f2664b0f38dc35d90f3ebe99e6 [legacy extra=f2 rex=4b mod=0 rm=5]"
+   "example": "66410faee8c6a2aaf28f82 [legacy extra=66 rex=41 mod=3 rm=0]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "AESENC128KL",
-   "ours": "AESENC",
+   "xed": "TPAUSE",
+   "ours": "MFENCE",
    "lengths": "",
    "count": 6,
-   "example": "f3660f38dca7d888b076 [legacy extra=f3 rex=- mod=2 rm=7]"
+   "example": "660faef0 [legacy extra=66 rex=- mod=3 rm=0]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "RDRAND",
+   "lengths": "",
+   "count": 6,
+   "example": "f2490fc7f4ebf2b2b6facd [legacy extra=f2 rex=49 mod=3 rm=4]"
+  },
+  {
+   "outcome": "iclass_differs",
+   "xed": "RDPID",
+   "ours": "RDSEED",
+   "lengths": "",
+   "count": 6,
+   "example": "f3400fc7fd [legacy extra=f3 rex=40 mod=3 rm=5]"
+  },
+  {
+   "outcome": "iclass_differs",
+   "xed": "CMPXCHG8B_LOCK",
+   "ours": "CMPXCHG8B",
+   "lengths": "",
+   "count": 6,
+   "example": "f0660fc74872 [legacy extra=f066 rex=- mod=1 rm=0]"
   },
   {
    "outcome": "ours_accepts",
@@ -4397,303 +1783,135 @@
    "ours": "AESDECLAST",
    "lengths": "",
    "count": 6,
-   "example": "f2660f38df3ab755ec943d4c [legacy extra=f2 rex=- mod=0 rm=2]"
+   "example": "f266490f38df0e601e1ee8da5c [legacy extra=f2 rex=49 mod=0 rm=6]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PINSRQ",
+   "xed": "GENERAL_ERROR",
+   "ours": "PCLMULQDQ",
    "lengths": "",
    "count": 6,
-   "example": "f0664e0f3a220292e8ee3f885d [legacy extra=f0 rex=4e mod=0 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STC",
-   "lengths": "",
-   "count": 6,
-   "example": "f0f9e31954e213b2376d [legacy extra=f0 rex=- mod=3 rm=3]"
+   "example": "f366450f3a44fb209c88330fa3 [legacy extra=f3 rex=45 mod=3 rm=3]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "PUSHF",
-   "ours": "PUSHFQ",
-   "lengths": "",
-   "count": 6,
-   "example": "66459c [legacy extra=66 rex=45 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
+   "xed": "POPF",
    "ours": "POPFQ",
    "lengths": "",
    "count": 6,
-   "example": "f04d9d05c30bfe7818ddc5 [legacy extra=f0 rex=4d mod=0 rm=5]"
+   "example": "66469d [legacy extra=66 rex=46 mod=2 rm=4]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SCASB",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPXORD",
    "lengths": "",
    "count": 6,
-   "example": "f066ae23cc88f64f5e669c [legacy extra=f066 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_LODSB",
-   "ours": "REPNE_LODSB",
-   "lengths": "",
-   "count": 6,
-   "example": "f24fac [legacy extra=f2 rex=4f mod=0 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "OUTSB",
-   "lengths": "",
-   "count": 6,
-   "example": "f066426e57c8772daf7700e7 [legacy extra=f066 rex=42 mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "INSD",
-   "lengths": "",
-   "count": 6,
-   "example": "f0436d5d1aa7e853217ab3 [legacy extra=f0 rex=43 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPXORQ",
-   "lengths": "",
-   "count": 6,
-   "example": "6241fdb9efc9a1b04987dcb1 [evex w=1 ll=1 mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "VPORD",
-   "lengths": "",
-   "count": 6,
-   "example": "62817d9febfcb4cc4608c1fd [evex w=0 ll=0 mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STOSD",
-   "lengths": "",
-   "count": 5,
-   "example": "f0ab908ffdee11b8c841 [legacy extra=f0 rex=- mod=0 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "HLT",
-   "lengths": "",
-   "count": 5,
-   "example": "f06640f46d29a4efa7635145 [legacy extra=f066 rex=40 mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "NOT_LOCK",
-   "lengths": "",
-   "count": 5,
-   "example": "f044f6d6cda68f1a1c2a [legacy extra=f0 rex=44 mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "NEG_LOCK",
-   "lengths": "",
-   "count": 5,
-   "example": "f0f6dd6aa65c200e55 [legacy extra=f0 rex=- mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMOVL",
-   "lengths": "",
-   "count": 5,
-   "example": "f00f4cb446abdf1a4a055d [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MULPS",
-   "lengths": "",
-   "count": 5,
-   "example": "f0450f599154e632ba51ed [legacy extra=f0 rex=45 mod=2 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PAND",
-   "lengths": "",
-   "count": 5,
-   "example": "f06666410fdbe03b929c93dfce [legacy extra=f066 rex=41 mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PUNPCKHQDQ",
-   "lengths": "",
-   "count": 5,
-   "example": "f266490f6d35f4951115e0be [legacy extra=f2 rex=49 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSUBB",
-   "lengths": "",
-   "count": 5,
-   "example": "f2660ff8d9d9e04bec53e7 [legacy extra=f2 rex=- mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSUBW",
-   "lengths": "",
-   "count": 5,
-   "example": "f06666400ff95d467d219bd10f [legacy extra=f066 rex=40 mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PSUBW",
-   "lengths": "",
-   "count": 5,
-   "example": "f3664b0ff9c4afbe23b23cd9 [legacy extra=f3 rex=4b mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CVTPS2PD",
-   "lengths": "",
-   "count": 5,
-   "example": "f00f5a3d50469b6b5f9a [legacy extra=f0 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MAXSS",
-   "lengths": "",
-   "count": 5,
-   "example": "f066f3460f5f7adb2fc3aaba19 [legacy extra=f066 rex=46 mod=1 rm=2]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "UMONITOR",
-   "ours": "MFENCE",
-   "lengths": "",
-   "count": 5,
-   "example": "f3450faef0 [legacy extra=f3 rex=45 mod=3 rm=0]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "SENDUIPI",
-   "ours": "RDRAND",
-   "lengths": "",
-   "count": 5,
-   "example": "f34d0fc7f5 [legacy extra=f3 rex=4d mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PMADDUBSW",
-   "lengths": "",
-   "count": 5,
-   "example": "f266410f3804b7486f418f637d [legacy extra=f2 rex=41 mod=2 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMULDQ",
-   "lengths": "",
-   "count": 5,
-   "example": "f0664a0f38289db31e1f26749e [legacy extra=f0 rex=4a mod=2 rm=5]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "AESENC256KL",
-   "ours": "AESDEC",
-   "lengths": "",
-   "count": 5,
-   "example": "f3664e0f38de7bcb [legacy extra=f3 rex=4e mod=1 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA1NEXTE",
-   "lengths": "",
-   "count": 5,
-   "example": "f00f38c81db9510f85817b [legacy extra=f0 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA1MSG1",
-   "lengths": "",
-   "count": 5,
-   "example": "f00f38c9ef580dc5664752 [legacy extra=f0 rex=- mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA256MSG2",
-   "lengths": "",
-   "count": 5,
-   "example": "f00f38cdc4a1bad323e8a7 [legacy extra=f0 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "AESKEYGENASSIST",
-   "lengths": "",
-   "count": 5,
-   "example": "f266420f3adff5c61eb9b80b80 [legacy extra=f2 rex=42 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CLC",
-   "lengths": "",
-   "count": 5,
-   "example": "f066f8fa6b521c5a347ee2 [legacy extra=f066 rex=- mod=2 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMPSD",
-   "lengths": "",
-   "count": 5,
-   "example": "f046a73467b78bdf224886 [legacy extra=f0 rex=46 mod=2 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_LODSD",
-   "ours": "REPNE_LODSD",
-   "lengths": "",
-   "count": 5,
-   "example": "f2ad [legacy extra=f2 rex=- mod=2 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "OUTSD",
-   "lengths": "",
-   "count": 5,
-   "example": "f0406fde2975336b875634 [legacy extra=f0 rex=40 mod=0 rm=5]"
+   "example": "62217d99efcf9467087cb1aa [evex w=0 ll=0 mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VMOVDQU32",
+   "ours": "VPANDNQ",
+   "lengths": "",
+   "count": 6,
+   "example": "62e1fd88df367c72a6fd9819 [evex w=1 ll=0 mod=0 rm=6]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPSUBD",
+   "lengths": "",
+   "count": 6,
+   "example": "62017d98fac24af6476decab [evex w=0 ll=0 mod=3 rm=2]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPSRAD",
+   "lengths": "",
+   "count": 6,
+   "example": "62a17dd972e4df8f44597afc [evex w=0 ll=2 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPTERNLOGD",
+   "lengths": "",
+   "count": 6,
+   "example": "62237d5825dcc3e3caee8d6c [evex w=0 ll=2 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PCMPEQW",
    "lengths": "",
    "count": 5,
-   "example": "62b17ec86fdc23c63af7dfbd [evex w=0 ll=2 mod=3 rm=4]"
+   "example": "f2664f0f753b8eed8475cd70 [legacy extra=f2 rex=4f mod=0 rm=3]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PUNPCKHWD",
+   "lengths": "",
+   "count": 5,
+   "example": "f2660f69aac7a4e3fd612a [legacy extra=f2 rex=- mod=2 rm=2]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "PINSRW",
+   "lengths": "",
+   "count": 5,
+   "example": "f366420fc415b99f8020556b [legacy extra=f3 rex=42 mod=0 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "ANDNPD",
+   "lengths": "",
+   "count": 5,
+   "example": "f2660f5563192d92b86301 [legacy extra=f2 rex=- mod=1 rm=3]"
+  },
+  {
+   "outcome": "iclass_differs",
+   "xed": "AESDEC256KL",
+   "ours": "AESDECLAST",
+   "lengths": "",
+   "count": 5,
+   "example": "f366460f38df75db [legacy extra=f3 rex=46 mod=1 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VMOVDQU8",
+   "lengths": "",
+   "count": 5,
+   "example": "62a10fd86f9315e8221d2312 [evex w=0 ll=2 mod=2 rm=3]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPXORD",
+   "lengths": "",
+   "count": 5,
+   "example": "62117d98efcddade4f82487c [evex w=0 ll=0 mod=3 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPXORQ",
+   "lengths": "",
+   "count": 5,
+   "example": "62619db8eff45e4183caa323 [evex w=1 ll=1 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPANDQ",
+   "lengths": "",
+   "count": 5,
+   "example": "6281bddadbf1381f3cfb2558 [evex w=1 ll=2 mod=3 rm=1]"
   },
   {
    "outcome": "ours_accepts",
@@ -4701,23 +1919,31 @@
    "ours": "VPANDQ",
    "lengths": "",
    "count": 5,
-   "example": "62e19588dbd50171a23c562c [evex w=1 ll=0 mod=3 rm=5]"
+   "example": "62e1d5d8db9b688647ca5aba [evex w=1 ll=2 mod=2 rm=3]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPORD",
+   "lengths": "",
+   "count": 5,
+   "example": "62c17d5bebece31849ce4401 [evex w=0 ll=2 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPANDND",
+   "ours": "VPORD",
    "lengths": "",
    "count": 5,
-   "example": "62617d88df2bd52810e4304a [evex w=0 ll=0 mod=0 rm=3]"
+   "example": "62d175a8eb2d5c84583a4ac1 [evex w=0 ll=1 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPADDQ",
+   "ours": "VPADDD",
    "lengths": "",
    "count": 5,
-   "example": "62a17d98d4f4008c51488d04 [evex w=0 ll=0 mod=3 rm=4]"
+   "example": "62617dc8fe9dd57cbcea0756 [evex w=0 ll=2 mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
@@ -4725,39 +1951,39 @@
    "ours": "VPADDB",
    "lengths": "",
    "count": 5,
-   "example": "62d175b8fc658b91549e2606 [evex w=0 ll=1 mod=1 rm=5]"
+   "example": "62e135d8fc993ea35dfe364a [evex w=0 ll=2 mod=2 rm=1]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSRLDQ",
+   "ours": "VPSLLDQ",
    "lengths": "",
    "count": 5,
-   "example": "62517d8873de8138fbcc4865 [evex w=0 ll=0 mod=3 rm=6]"
+   "example": "62517d8873fe8138fbcc4865 [evex w=0 ll=0 mod=3 rm=6]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPERMQ",
+   "lengths": "",
+   "count": 5,
+   "example": "6212fd983695e8fa23a47f0f [evex w=1 ll=0 mod=2 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPBROADCASTW",
+   "lengths": "",
+   "count": 5,
+   "example": "6262fd987b0c5577d945e4067d [evex w=1 ll=0 mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "VPMULLQ",
+   "ours": "VPSRAQ",
    "lengths": "",
    "count": 5,
-   "example": "6262fd3f40dd275f4fb2acfc [evex w=1 ll=1 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPCMPW",
-   "lengths": "",
-   "count": 5,
-   "example": "6273fd983fd24e35f1b93703 [evex w=1 ll=0 mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPCMPUB",
-   "lengths": "",
-   "count": 5,
-   "example": "62e37d883e255b4d02aad68c [evex w=0 ll=0 mod=0 rm=5]"
+   "example": "6211fdbb72e72a978e37bb45 [evex w=1 ll=1 mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
@@ -4768,228 +1994,44 @@
    "example": "f04e81a22e3cfa125369 [legacy extra=f0 rex=4e mod=2 rm=2]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSQ",
-   "lengths": "",
-   "count": 4,
-   "example": "f0664aa528df6c41e7168bc3 [legacy extra=f066 rex=4a mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "INT",
-   "lengths": "",
-   "count": 4,
-   "example": "f04fcda1281cd54af60809 [legacy extra=f0 rex=4f mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "COMISS",
-   "lengths": "",
-   "count": 4,
-   "example": "f00f2f54355e696b3c7b33 [legacy extra=f0 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SETNO",
-   "lengths": "",
-   "count": 4,
-   "example": "f00f91353d6fec5b6b59 [legacy extra=f0 rex=- mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ANDPS",
-   "lengths": "",
-   "count": 4,
-   "example": "f0490f5426d344efba2a44 [legacy extra=f0 rex=49 mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SUBPS",
-   "lengths": "",
-   "count": 4,
-   "example": "f04a0f5c610c5f18f9f3bd [legacy extra=f0 rex=4a mod=1 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SQRTSS",
-   "lengths": "",
-   "count": 4,
-   "example": "f0f3460f51c9aeaebf7121fe [legacy extra=f0 rex=46 mod=3 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BTS_LOCK",
-   "lengths": "",
-   "count": 4,
-   "example": "f0480fabc52c0a7ed9e150 [legacy extra=f0 rex=48 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PMADDWD",
-   "lengths": "",
-   "count": 4,
-   "example": "f366400ff502dbe8864edde0 [legacy extra=f3 rex=40 mod=0 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PCMPGTB",
-   "lengths": "",
-   "count": 4,
-   "example": "f2664a0f647d303a4383e436 [legacy extra=f2 rex=4a mod=1 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "PCMPGTD",
-   "lengths": "",
-   "count": 4,
-   "example": "f2660f66dcd9fbf62a1ef7 [legacy extra=f2 rex=- mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UNPCKLPS",
-   "lengths": "",
-   "count": 4,
-   "example": "f0430f14d8c00c50a2ff40 [legacy extra=f0 rex=43 mod=3 rm=0]"
-  },
-  {
-   "outcome": "iclass_differs",
+   "outcome": "ours_gap",
    "xed": "MOVSLDUP",
+   "ours": "",
+   "lengths": "",
+   "count": 4,
+   "example": "f30f12ab362eedfa [legacy extra=f3 rex=- mod=2 rm=3]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
    "ours": "MOVLPS",
    "lengths": "",
    "count": 4,
-   "example": "f3470f12859c78d807 [legacy extra=f3 rex=47 mod=2 rm=5]"
+   "example": "670f13c5a3280d7dbf98 [legacy extra=67 rex=- mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "MOVLHPS",
+   "ours": "AESENC",
    "lengths": "",
    "count": 4,
-   "example": "f2490f16cc2778db40568c [legacy extra=f2 rex=49 mod=3 rm=4]"
+   "example": "f266440f38dc155fd17284421c [legacy extra=f2 rex=44 mod=0 rm=5]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "INCSSPD",
-   "ours": "LFENCE",
-   "lengths": "",
-   "count": 4,
-   "example": "f30faee8 [legacy extra=f3 rex=- mod=3 rm=0]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "UMWAIT",
-   "ours": "MFENCE",
-   "lengths": "",
-   "count": 4,
-   "example": "f24d0faef0 [legacy extra=f2 rex=4d mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SFENCE",
-   "lengths": "",
-   "count": 4,
-   "example": "f04e0faef81fd5f246c7a0 [legacy extra=f0 rex=4e mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
-   "ours": "RDRAND",
-   "lengths": "",
-   "count": 4,
-   "example": "f24d0fc7f49365178118e3 [legacy extra=f2 rex=4d mod=3 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "RDPID",
-   "ours": "RDSEED",
-   "lengths": "",
-   "count": 4,
-   "example": "f3450fc7fb [legacy extra=f3 rex=45 mod=3 rm=3]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "CMPXCHG8B_LOCK",
-   "ours": "CMPXCHG8B",
-   "lengths": "",
-   "count": 4,
-   "example": "f0660fc74e52 [legacy extra=f066 rex=- mod=1 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMAXUD",
-   "lengths": "",
-   "count": 4,
-   "example": "f066660f383f1626287f3bad71 [legacy extra=f066 rex=- mod=0 rm=6]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "AESDEC128KL",
-   "ours": "AESENCLAST",
-   "lengths": "",
-   "count": 4,
-   "example": "f3664c0f38dd16 [legacy extra=f3 rex=4c mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "GENERAL_ERROR",
+   "xed": "AESENC256KL",
    "ours": "AESDEC",
    "lengths": "",
    "count": 4,
-   "example": "f2664c0f38de2ce57ead2a9b9431 [legacy extra=f2 rex=4c mod=0 rm=4]"
+   "example": "f366480f38de41af [legacy extra=f3 rex=48 mod=1 rm=1]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA256RNDS2",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPXORQ",
    "lengths": "",
    "count": 4,
-   "example": "f0490f38cbfcb15c2d7d3b90 [legacy extra=f0 rex=49 mod=3 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "JECXZ",
-   "ours": "JRCXZ",
-   "lengths": "",
-   "count": 4,
-   "example": "6744e328 [legacy extra=67 rex=44 mod=0 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SCASW",
-   "lengths": "",
-   "count": 4,
-   "example": "f06645afc8fbe82d1c5fccd5 [legacy extra=f066 rex=45 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LODSQ",
-   "lengths": "",
-   "count": 4,
-   "example": "f06649adf54fbe70e353fb99 [legacy extra=f066 rex=49 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VMOVDQU64",
-   "lengths": "",
-   "count": 4,
-   "example": "62e1fed86fd47a658866f58d [evex w=1 ll=2 mod=3 rm=4]"
+   "example": "6231bdbaefed8a630d419220 [evex w=1 ll=1 mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
@@ -4997,31 +2039,31 @@
    "ours": "VPANDND",
    "lengths": "",
    "count": 4,
-   "example": "62a17d5adff85050099b74d6 [evex w=0 ll=2 mod=3 rm=0]"
+   "example": "62317d3cdfd39b29fc367d85 [evex w=0 ll=1 mod=3 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSRLQ",
+   "ours": "VPADDW",
    "lengths": "",
    "count": 4,
-   "example": "6271fdb87393ba80b00a3459 [evex w=1 ll=1 mod=2 rm=3]"
+   "example": "62117d98fdf499008c51488d [evex w=0 ll=0 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSHUFB",
+   "ours": "VPSLLQ",
    "lengths": "",
    "count": 4,
-   "example": "62427d8800bd6004da1396d0 [evex w=0 ll=0 mod=2 rm=5]"
+   "example": "6271fdb873b3ba80b00a3459 [evex w=1 ll=1 mod=2 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPERMD",
+   "ours": "VPDPBUSD",
    "lengths": "",
    "count": 4,
-   "example": "628265d836396104e1808e42 [evex w=0 ll=2 mod=0 rm=1]"
+   "example": "62620dc85033de2be9d74659 [evex w=0 ll=2 mod=0 rm=3]"
   },
   {
    "outcome": "ours_accepts",
@@ -5029,7 +2071,31 @@
    "ours": "VPBROADCASTB",
    "lengths": "",
    "count": 4,
-   "example": "621295c87a9d9dfb6a3d8824 [evex w=1 ll=2 mod=2 rm=5]"
+   "example": "62f2fdb87a3e123a711ba5cc [evex w=1 ll=1 mod=0 rm=6]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
+   "ours": "VPTERNLOGQ",
+   "lengths": "",
+   "count": 4,
+   "example": "62a3fd9b25db5496c335a110 [evex w=1 ll=0 mod=3 rm=3]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPCMPUB",
+   "lengths": "",
+   "count": 4,
+   "example": "62b37d983ef46bbf1ad63331 [evex w=0 ll=0 mod=3 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPCLMULQDQ",
+   "lengths": "",
+   "count": 4,
+   "example": "62e37db84418574566142f6f [evex w=0 ll=1 mod=0 rm=0]"
   },
   {
    "outcome": "ours_accepts",
@@ -5038,54 +2104,6 @@
    "lengths": "",
    "count": 3,
    "example": "f04c8115c8443bb46c7e [legacy extra=f0 rex=4c mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CQO",
-   "lengths": "",
-   "count": 3,
-   "example": "f0664899d6f89b40cc988821 [legacy extra=f066 rex=48 mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STOSQ",
-   "lengths": "",
-   "count": 3,
-   "example": "f048ab2176e7d6d5c5f4df [legacy extra=f0 rex=48 mod=0 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "XGETBV",
-   "lengths": "",
-   "count": 3,
-   "example": "f0400f01d045527a0543ef [legacy extra=f0 rex=40 mod=3 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UCOMISS",
-   "lengths": "",
-   "count": 3,
-   "example": "f0480f2e5247babd82292e [legacy extra=f0 rex=48 mod=1 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "ORPS",
-   "lengths": "",
-   "count": 3,
-   "example": "f00f5692dbcf7fd52f75 [legacy extra=f0 rex=- mod=2 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMOVMSKB",
-   "lengths": "",
-   "count": 3,
-   "example": "f066660fd7e3fffd9f57852e [legacy extra=f066 rex=- mod=3 rm=3]"
   },
   {
    "outcome": "iclass_differs",
@@ -5097,147 +2115,107 @@
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BSR",
+   "xed": "GENERAL_ERROR",
+   "ours": "PCMPEQD",
    "lengths": "",
    "count": 3,
-   "example": "f0470fbdf5e4bb0f39b501 [legacy extra=f0 rex=47 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "STMXCSR",
-   "lengths": "",
-   "count": 3,
-   "example": "f00fae9c004231095f0b50 [legacy extra=f0 rex=- mod=2 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PMAXUB",
-   "lengths": "",
-   "count": 3,
-   "example": "f06666440fde232c9de1c6ce88 [legacy extra=f066 rex=44 mod=0 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "UNPCKHPS",
-   "lengths": "",
-   "count": 3,
-   "example": "f00f155c6c87b5bc4f9dcf [legacy extra=f0 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVHLPS",
-   "lengths": "",
-   "count": 3,
-   "example": "f00f12c7bfbde87b07be [legacy extra=f0 rex=- mod=3 rm=7]"
+   "example": "f3664f0f76c03df043d5e7b9 [legacy extra=f3 rex=4f mod=3 rm=0]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "MOVSLDUP",
-   "ours": "MOVHLPS",
+   "xed": "MOVDDUP",
+   "ours": "MOVLPD",
    "lengths": "",
    "count": 3,
-   "example": "f30f12c0 [legacy extra=f3 rex=- mod=3 rm=0]"
+   "example": "f266460f12dd [legacy extra=f2 rex=46 mod=3 rm=5]"
   },
   {
    "outcome": "iclass_differs",
    "xed": "MOVSHDUP",
-   "ours": "MOVHPS",
+   "ours": "MOVHPD",
    "lengths": "",
    "count": 3,
-   "example": "f30f16444b39 [legacy extra=f3 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SHA1MSG2",
-   "lengths": "",
-   "count": 3,
-   "example": "f04c0f38ca2041e25c787152 [legacy extra=f0 rex=4c mod=0 rm=0]"
+   "example": "f366490f16254cbdfbdb [legacy extra=f3 rex=49 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "GENERAL_ERROR",
-   "ours": "ADCX",
+   "ours": "CVTPS2DQ",
    "lengths": "",
    "count": 3,
-   "example": "f2660f38f66876050ded37df [legacy extra=f2 rex=- mod=1 rm=0]"
+   "example": "f266410f5b193f28d521c42f [legacy extra=f2 rex=41 mod=0 rm=1]"
+  },
+  {
+   "outcome": "iclass_differs",
+   "xed": "INCSSPD",
+   "ours": "LFENCE",
+   "lengths": "",
+   "count": 3,
+   "example": "f30faee8 [legacy extra=f3 rex=- mod=3 rm=0]"
+  },
+  {
+   "outcome": "iclass_differs",
+   "xed": "AESENC128KL",
+   "ours": "AESENC",
+   "lengths": "",
+   "count": 3,
+   "example": "f3660f38dc9d2c08ebe2 [legacy extra=f3 rex=- mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CMPSW",
+   "xed": "GENERAL_ERROR",
+   "ours": "AESENCLAST",
    "lengths": "",
    "count": 3,
-   "example": "f066a7dcfdbfe7f230df2f [legacy extra=f066 rex=- mod=0 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SCASD",
-   "lengths": "",
-   "count": 3,
-   "example": "f044afb105eb70bb8bafbe [legacy extra=f0 rex=44 mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LODSW",
-   "lengths": "",
-   "count": 3,
-   "example": "f066ada73a2276f50f1f3b [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPXORQ",
-   "lengths": "",
-   "count": 3,
-   "example": "6281fd88efbfbd62278225b1 [evex w=1 ll=0 mod=2 rm=7]"
+   "example": "f2660f38dd268560b40debf1 [legacy extra=f2 rex=- mod=0 rm=6]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPANDD",
+   "ours": "VMOVDQU16",
    "lengths": "",
    "count": 3,
-   "example": "62617dd8db296346405c7109 [evex w=0 ll=2 mod=0 rm=1]"
+   "example": "62e1ffd86fd47a658866f58d [evex w=1 ll=2 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPORQ",
+   "ours": "VMOVDQA64",
    "lengths": "",
    "count": 3,
-   "example": "62418d98eb3c85c084736c09c5 [evex w=1 ll=0 mod=0 rm=4]"
+   "example": "6271cd886f7353282865d87c [evex w=1 ll=0 mod=1 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPANDND",
+   "lengths": "",
+   "count": 3,
+   "example": "62510d88df1c7dacf1e0ab0e0e [evex w=0 ll=0 mod=0 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "GENERAL_ERROR",
    "ours": "VPANDNQ",
    "lengths": "",
    "count": 3,
-   "example": "62c1fdb8dfec91d13fd2b773 [evex w=1 ll=1 mod=3 rm=4]"
+   "example": "6271fddedfed0ca89bc9b0a1 [evex w=1 ll=2 mod=3 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSLLD",
+   "ours": "VMOVNTDQ",
    "lengths": "",
    "count": 3,
-   "example": "62619da872f405c714b7e2c2 [evex w=1 ll=1 mod=3 rm=4]"
+   "example": "62217da8e7080bc7c55d5701 [evex w=0 ll=1 mod=0 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSLLDQ",
+   "ours": "VPCMPEQD",
    "lengths": "",
    "count": 3,
-   "example": "62e16dc8733db0abc39ed7ae [evex w=0 ll=2 mod=0 rm=5]"
+   "example": "62f1fda8766e9f401eb7c48a [evex w=1 ll=1 mod=1 rm=6]"
   },
   {
    "outcome": "ours_accepts",
@@ -5245,7 +2223,15 @@
    "ours": "VPMADDUBSW",
    "lengths": "",
    "count": 3,
-   "example": "62e2fd98045df17639cb82a6 [evex w=1 ll=0 mod=1 rm=5]"
+   "example": "62e2ed8804a4e2b1b0abc39ed7 [evex w=1 ll=0 mod=2 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPERMD",
+   "lengths": "",
+   "count": 3,
+   "example": "62c27db836f18d80ef97f2c4 [evex w=0 ll=1 mod=3 rm=1]"
   },
   {
    "outcome": "ours_accepts",
@@ -5253,15 +2239,23 @@
    "ours": "VPMULLQ",
    "lengths": "",
    "count": 3,
-   "example": "6252fdd84067751d41196f3f [evex w=1 ll=2 mod=1 rm=7]"
+   "example": "62b2ed9840cf3efd643f90c3 [evex w=1 ll=0 mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPTERNLOGD",
+   "ours": "VPBROADCASTQ",
    "lengths": "",
    "count": 3,
-   "example": "62e3358825456ebe8570a61e [evex w=0 ll=0 mod=1 rm=5]"
+   "example": "6232fdd85964a3fd62d39121d0 [evex w=1 ll=2 mod=1 rm=4]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPTERNLOGQ",
+   "lengths": "",
+   "count": 3,
+   "example": "6223fd982560aa35ae26a186 [evex w=1 ll=0 mod=1 rm=0]"
   },
   {
    "outcome": "ours_accepts",
@@ -5269,15 +2263,7 @@
    "ours": "VINSERTI32X4",
    "lengths": "",
    "count": 3,
-   "example": "62937dc838293b32af0dc598 [evex w=0 ll=2 mod=0 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VINSERTI64X2",
-   "lengths": "",
-   "count": 3,
-   "example": "6203fd88383ee2c262b8ced7 [evex w=1 ll=0 mod=0 rm=6]"
+   "example": "624345a83885e82677eb210a [evex w=0 ll=1 mod=2 rm=5]"
   },
   {
    "outcome": "ours_accepts",
@@ -5285,7 +2271,15 @@
    "ours": "VEXTRACTI64X2",
    "lengths": "",
    "count": 3,
-   "example": "6223cd98399506ce88f480de [evex w=1 ll=0 mod=2 rm=5]"
+   "example": "6203fd88393ee2c262b8ced7 [evex w=1 ll=0 mod=0 rm=6]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VINSERTI32X8",
+   "lengths": "",
+   "count": 3,
+   "example": "62737db83a697ddfa1fdcb0c [evex w=0 ll=1 mod=1 rm=1]"
   },
   {
    "outcome": "ours_accepts",
@@ -5293,7 +2287,7 @@
    "ours": "VINSERTI64X4",
    "lengths": "",
    "count": 3,
-   "example": "6233e5c83ac3e815826e6c23 [evex w=1 ll=2 mod=3 rm=3]"
+   "example": "6233fdc83ac830238e53a64c [evex w=1 ll=2 mod=3 rm=0]"
   },
   {
    "outcome": "ours_accepts",
@@ -5301,23 +2295,23 @@
    "ours": "VEXTRACTI32X8",
    "lengths": "",
    "count": 3,
-   "example": "62637db83b268bf8a82840ac [evex w=0 ll=1 mod=0 rm=6]"
+   "example": "62637d983b342456f01b665195 [evex w=0 ll=0 mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPCMPB",
+   "ours": "VEXTRACTI64X4",
    "lengths": "",
    "count": 3,
-   "example": "62637d883f5a359bc3005330 [evex w=0 ll=0 mod=1 rm=2]"
+   "example": "6233e5c83bc3e815826e6c23 [evex w=1 ll=2 mod=3 rm=3]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPMADDWD",
+   "ours": "VPCMPUW",
    "lengths": "",
    "count": 3,
-   "example": "6241fda8f5d71fdeefa96626 [evex w=1 ll=1 mod=3 rm=7]"
+   "example": "6243fdb83e5fe7605d344ad7 [evex w=1 ll=1 mod=1 rm=7]"
   },
   {
    "outcome": "ours_accepts",
@@ -5336,156 +2330,76 @@
    "example": "f0664d811d3afc4ace16db [legacy extra=f066 rex=4d mod=0 rm=5]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CWD",
+   "outcome": "iclass_differs",
+   "xed": "SENDUIPI",
+   "ours": "RDRAND",
    "lengths": "",
    "count": 2,
-   "example": "f06699b556a6c1434ece3c [legacy extra=f066 rex=- mod=1 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CDQ",
-   "lengths": "",
-   "count": 2,
-   "example": "f099a715e5adce3cf32a [legacy extra=f0 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSLLDQ",
-   "lengths": "",
-   "count": 2,
-   "example": "f0660f73fa6028879528d0 [legacy extra=f0 rex=- mod=3 rm=2]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "BTC_LOCK",
-   "lengths": "",
-   "count": 2,
-   "example": "f0480fbbf6b3b54f551802 [legacy extra=f0 rex=48 mod=3 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LDMXCSR",
-   "lengths": "",
-   "count": 2,
-   "example": "f00fae947defff2abf5bf0 [legacy extra=f0 rex=- mod=2 rm=4]"
+   "example": "f3400fc7f4 [legacy extra=f3 rex=40 mod=3 rm=4]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "MOVDDUP",
-   "ours": "MOVLPS",
+   "xed": "LOADIWKEY",
+   "ours": "AESENC",
    "lengths": "",
    "count": 2,
-   "example": "f24c0f1221 [legacy extra=f2 rex=4c mod=0 rm=1]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "MOVSLDUP",
-   "ours": "MOVLPD",
-   "lengths": "",
-   "count": 2,
-   "example": "f3664d0f12c7 [legacy extra=f3 rex=4d mod=3 rm=7]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "RDSSPQ",
-   "lengths": "",
-   "count": 2,
-   "example": "f0f34a0f1ecdf1d73f3a4ede [legacy extra=f0 rex=4a mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "LODSD",
-   "lengths": "",
-   "count": 2,
-   "example": "f0ad5f09ff8b1c5e7c68 [legacy extra=f0 rex=- mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "INSW",
-   "lengths": "",
-   "count": 2,
-   "example": "f066476ddd9ff4cc0aabae57 [legacy extra=f066 rex=47 mod=2 rm=7]"
+   "example": "f366490f38dcc4 [legacy extra=f3 rex=49 mod=3 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPXORD",
+   "ours": "VPANDD",
    "lengths": "",
    "count": 2,
-   "example": "62017db8ef158e179ae9e277 [evex w=0 ll=1 mod=0 rm=5]"
+   "example": "62017db8db158e179ae9e277 [evex w=0 ll=1 mod=0 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPORD",
+   "ours": "VPORQ",
    "lengths": "",
    "count": 2,
-   "example": "62517d88eb6818287be91b1e [evex w=0 ll=0 mod=1 rm=0]"
+   "example": "62f1a5d8eb908ce3147295f4 [evex w=1 ll=2 mod=2 rm=0]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPADDW",
+   "ours": "VPADDQ",
    "lengths": "",
    "count": 2,
-   "example": "6231fdd8fdb5bc6113a202cf [evex w=1 ll=2 mod=2 rm=5]"
+   "example": "62f17dc8d47d32ddd75d548d [evex w=0 ll=2 mod=1 rm=5]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSADBW",
+   "ours": "VPSRAD",
    "lengths": "",
    "count": 2,
-   "example": "6241d5d8f6b58b87783c6219 [evex w=1 ll=2 mod=2 rm=5]"
+   "example": "62f14dd872264aa8b16c7e01 [evex w=0 ll=2 mod=0 rm=6]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VMOVNTDQ",
+   "ours": "VPSLLD",
    "lengths": "",
    "count": 2,
-   "example": "6271fd88e748ae1e75592aaa [evex w=1 ll=0 mod=1 rm=0]"
+   "example": "6231cdc8723767d771c1626d [evex w=1 ll=2 mod=0 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPCMPEQB",
+   "ours": "VPSRLQ",
    "lengths": "",
    "count": 2,
-   "example": "62b17d98742cfa0da38cb7e246 [evex w=0 ll=0 mod=0 rm=4]"
+   "example": "62417dc8739663567ff0be68 [evex w=0 ll=2 mod=2 rm=6]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPCMPEQD",
+   "ours": "VPMULLD",
    "lengths": "",
    "count": 2,
-   "example": "62c155a8762e815e480f1c2e [evex w=0 ll=1 mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSRLD",
-   "lengths": "",
-   "count": 2,
-   "example": "62c1fdc87215d987378f8b3c [evex w=1 ll=2 mod=0 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSLLQ",
-   "lengths": "",
-   "count": 2,
-   "example": "62e17dd873f18926b544a3bf [evex w=0 ll=2 mod=3 rm=1]"
+   "example": "62b27d98402ce75dadb83f9818 [evex w=0 ll=0 mod=0 rm=4]"
   },
   {
    "outcome": "ours_accepts",
@@ -5493,15 +2407,7 @@
    "ours": "VPBROADCASTD",
    "lengths": "",
    "count": 2,
-   "example": "62523da85860e138744f5ee1 [evex w=0 ll=1 mod=1 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPBROADCASTQ",
-   "lengths": "",
-   "count": 2,
-   "example": "62e29d9859c447c78d7fc555 [evex w=1 ll=0 mod=3 rm=4]"
+   "example": "6232fdc858187f43a62a97f8 [evex w=1 ll=2 mod=0 rm=0]"
   },
   {
    "outcome": "ours_accepts",
@@ -5509,23 +2415,31 @@
    "ours": "VEXTRACTI32X4",
    "lengths": "",
    "count": 2,
-   "example": "62737db839697ddfa1fdcb0c [evex w=0 ll=1 mod=1 rm=1]"
+   "example": "625335d8397c351b7d4c68d604 [evex w=0 ll=2 mod=1 rm=4]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VEXTRACTI64X4",
+   "ours": "VPCMPW",
    "lengths": "",
    "count": 2,
-   "example": "6233fdd83b263760bcf1b85f [evex w=1 ll=2 mod=0 rm=6]"
+   "example": "6233fdd83f263760bcf1b85f [evex w=1 ll=2 mod=0 rm=6]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPCLMULQDQ",
+   "ours": "VPMADDWD",
    "lengths": "",
    "count": 2,
-   "example": "62f3fdc844d01f9d6a748aec [evex w=1 ll=2 mod=3 rm=0]"
+   "example": "62e1fd88f5da6ab8a8b9943a [evex w=1 ll=0 mod=3 rm=2]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPSRAQ",
+   "lengths": "",
+   "count": 2,
+   "example": "62c1c5a872e7de665ae2f186 [evex w=1 ll=1 mod=3 rm=7]"
   },
   {
    "outcome": "ours_accepts",
@@ -5536,76 +2450,20 @@
    "example": "f040812cad5e79892ff5de [legacy extra=f0 rex=40 mod=0 rm=4]"
   },
   {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PAUSE",
-   "lengths": "",
-   "count": 1,
-   "example": "f0f34a90ababa985a5081ef5 [legacy extra=f0 rex=4a mod=3 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "CWDE",
-   "lengths": "",
-   "count": 1,
-   "example": "f0982fb99024e61fe8a3 [legacy extra=f0 rex=- mod=0 rm=0]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "MOVSD",
-   "lengths": "",
-   "count": 1,
-   "example": "f041a5043940a270c79dd8 [legacy extra=f0 rex=41 mod=1 rm=1]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_MOVSQ",
-   "ours": "REPNE_MOVSQ",
-   "lengths": "",
-   "count": 1,
-   "example": "f24ea5 [legacy extra=f2 rex=4e mod=0 rm=6]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_STOSD",
-   "ours": "REPNE_STOSD",
-   "lengths": "",
-   "count": 1,
-   "example": "f2ab [legacy extra=f2 rex=- mod=2 rm=5]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "PSRLDQ",
-   "lengths": "",
-   "count": 1,
-   "example": "f0664c0f73dcdd4327e7b0c9 [legacy extra=f0 rex=4c mod=3 rm=4]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "XADD_LOCK",
-   "lengths": "",
-   "count": 1,
-   "example": "f0430fc1eb2ebf757c0d51 [legacy extra=f0 rex=43 mod=3 rm=3]"
-  },
-  {
    "outcome": "iclass_differs",
    "xed": "WRFSBASE",
    "ours": "LDMXCSR",
    "lengths": "",
    "count": 1,
-   "example": "f34c0faed4 [legacy extra=f3 rex=4c mod=3 rm=4]"
+   "example": "f34a0faed6 [legacy extra=f3 rex=4a mod=3 rm=6]"
   },
   {
    "outcome": "iclass_differs",
-   "xed": "MOVSHDUP",
-   "ours": "MOVHPD",
+   "xed": "INCSSPQ",
+   "ours": "LFENCE",
    "lengths": "",
    "count": 1,
-   "example": "f3660f161dc322f20a [legacy extra=f3 rex=- mod=0 rm=5]"
+   "example": "f3490faee8 [legacy extra=f3 rex=49 mod=3 rm=0]"
   },
   {
    "outcome": "iclass_differs",
@@ -5613,63 +2471,15 @@
    "ours": "CMPXCHG16B",
    "lengths": "",
    "count": 1,
-   "example": "f04d0fc70c00 [legacy extra=f0 rex=4d mod=0 rm=4]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "LOADIWKEY",
-   "ours": "AESENC",
-   "lengths": "",
-   "count": 1,
-   "example": "f3660f38dcd7 [legacy extra=f3 rex=- mod=3 rm=7]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "AESDEC256KL",
-   "ours": "AESDECLAST",
-   "lengths": "",
-   "count": 1,
-   "example": "f3660f38df48bf [legacy extra=f3 rex=- mod=1 rm=0]"
-  },
-  {
-   "outcome": "iclass_differs",
-   "xed": "REP_INSB",
-   "ours": "REPNE_INSB",
-   "lengths": "",
-   "count": 1,
-   "example": "f2496c [legacy extra=f2 rex=49 mod=0 rm=4]"
+   "example": "f04d0fc78899f72a72 [legacy extra=f0 rex=4d mod=2 rm=0]"
   },
   {
    "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "SCASQ",
+   "xed": "GENERAL_ERROR",
+   "ours": "ADCX",
    "lengths": "",
    "count": 1,
-   "example": "f04aaf13dd36d90401acf3 [legacy extra=f0 rex=4a mod=2 rm=3]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_LOCK_PREFIX",
-   "ours": "OUTSW",
-   "lengths": "",
-   "count": 1,
-   "example": "f0666fa8b98ba730f4a305 [legacy extra=f066 rex=- mod=0 rm=1]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPADDD",
-   "lengths": "",
-   "count": 1,
-   "example": "62a1fda8fe1e71599c1448de [evex w=1 ll=1 mod=0 rm=6]"
-  },
-  {
-   "outcome": "ours_accepts",
-   "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSUBD",
-   "lengths": "",
-   "count": 1,
-   "example": "62a1cdb8fac6d88538e21255 [evex w=1 ll=1 mod=3 rm=6]"
+   "example": "f2660f38f609d441d121a083 [legacy extra=f2 rex=- mod=0 rm=1]"
   },
   {
    "outcome": "ours_accepts",
@@ -5677,31 +2487,63 @@
    "ours": "VPSUBQ",
    "lengths": "",
    "count": 1,
-   "example": "62b1fda8fb6a33c3377a7a27 [evex w=1 ll=1 mod=1 rm=2]"
+   "example": "62e1fd88fbafbdb3b9158dfd [evex w=1 ll=0 mod=2 rm=7]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPSRAD",
+   "ours": "VPSADBW",
    "lengths": "",
    "count": 1,
-   "example": "6211fd8872a6b099453700c3 [evex w=1 ll=0 mod=2 rm=6]"
+   "example": "62a1cdb8f6c6d88538e21255 [evex w=1 ll=1 mod=3 rm=6]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPDPBUSD",
+   "ours": "VPCMPEQB",
    "lengths": "",
    "count": 1,
-   "example": "62b27d985036f3fbd235e2b7 [evex w=0 ll=0 mod=0 rm=6]"
+   "example": "62a1fdc874baf3eb3fb40ee6 [evex w=1 ll=2 mod=2 rm=2]"
   },
   {
    "outcome": "ours_accepts",
    "xed": "BAD_EVEX_Z_NO_MASKING",
-   "ours": "VPTERNLOGQ",
+   "ours": "VPSRLDQ",
    "lengths": "",
    "count": 1,
-   "example": "6213fdd825e33d039b5c9679 [evex w=1 ll=2 mod=3 rm=3]"
+   "example": "62d17db873190054de0d4f68 [evex w=0 ll=1 mod=0 rm=1]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPSHUFB",
+   "lengths": "",
+   "count": 1,
+   "example": "62926db800e7e5c5ea975923 [evex w=0 ll=1 mod=3 rm=7]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPTERNLOGD",
+   "lengths": "",
+   "count": 1,
+   "example": "62437dd825b84f20e52b2bae [evex w=0 ll=2 mod=2 rm=0]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VINSERTI64X2",
+   "lengths": "",
+   "count": 1,
+   "example": "62f3fd883845b3a07f7d99d9 [evex w=1 ll=0 mod=1 rm=5]"
+  },
+  {
+   "outcome": "ours_accepts",
+   "xed": "BAD_EVEX_Z_NO_MASKING",
+   "ours": "VPCMPB",
+   "lengths": "",
+   "count": 1,
+   "example": "62c37d883f23ae0688d118fe [evex w=0 ll=0 mod=0 rm=3]"
   }
  ]
 }

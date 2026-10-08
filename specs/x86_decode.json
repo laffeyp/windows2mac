@@ -1,6 +1,6 @@
 {
  "spec_id": "x86_64.decode",
- "version": "0.4.0",
+ "version": "0.5.1",
  "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
  "prefixes": {
   "legacy": [
@@ -104,7 +104,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "ADD"
+   "iclass": "ADD",
+   "lock": true
   },
   {
    "map": "1",
@@ -113,7 +114,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "ADD"
+   "iclass": "ADD",
+   "lock": true
   },
   {
    "map": "1",
@@ -160,7 +162,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "OR"
+   "iclass": "OR",
+   "lock": true
   },
   {
    "map": "1",
@@ -169,7 +172,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "OR"
+   "iclass": "OR",
+   "lock": true
   },
   {
    "map": "1",
@@ -216,7 +220,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "ADC"
+   "iclass": "ADC",
+   "lock": true
   },
   {
    "map": "1",
@@ -225,7 +230,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "ADC"
+   "iclass": "ADC",
+   "lock": true
   },
   {
    "map": "1",
@@ -272,7 +278,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "SBB"
+   "iclass": "SBB",
+   "lock": true
   },
   {
    "map": "1",
@@ -281,7 +288,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "SBB"
+   "iclass": "SBB",
+   "lock": true
   },
   {
    "map": "1",
@@ -328,7 +336,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "AND"
+   "iclass": "AND",
+   "lock": true
   },
   {
    "map": "1",
@@ -337,7 +346,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "AND"
+   "iclass": "AND",
+   "lock": true
   },
   {
    "map": "1",
@@ -384,7 +394,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "SUB"
+   "iclass": "SUB",
+   "lock": true
   },
   {
    "map": "1",
@@ -393,7 +404,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "SUB"
+   "iclass": "SUB",
+   "lock": true
   },
   {
    "map": "1",
@@ -440,7 +452,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "XOR"
+   "iclass": "XOR",
+   "lock": true
   },
   {
    "map": "1",
@@ -449,7 +462,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "XOR"
+   "iclass": "XOR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1067,7 +1081,8 @@
    "reg": 0,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "ADD"
+   "iclass": "ADD",
+   "lock": true
   },
   {
    "map": "1",
@@ -1078,7 +1093,8 @@
    "reg": 0,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "ADD"
+   "iclass": "ADD",
+   "lock": true
   },
   {
    "map": "1",
@@ -1089,7 +1105,8 @@
    "reg": 0,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "ADD"
+   "iclass": "ADD",
+   "lock": true
   },
   {
    "map": "1",
@@ -1100,7 +1117,8 @@
    "reg": 1,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "OR"
+   "iclass": "OR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1111,7 +1129,8 @@
    "reg": 1,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "OR"
+   "iclass": "OR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1122,7 +1141,8 @@
    "reg": 1,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "OR"
+   "iclass": "OR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1133,7 +1153,8 @@
    "reg": 2,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "ADC"
+   "iclass": "ADC",
+   "lock": true
   },
   {
    "map": "1",
@@ -1144,7 +1165,8 @@
    "reg": 2,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "ADC"
+   "iclass": "ADC",
+   "lock": true
   },
   {
    "map": "1",
@@ -1155,7 +1177,8 @@
    "reg": 2,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "ADC"
+   "iclass": "ADC",
+   "lock": true
   },
   {
    "map": "1",
@@ -1166,7 +1189,8 @@
    "reg": 3,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SBB"
+   "iclass": "SBB",
+   "lock": true
   },
   {
    "map": "1",
@@ -1177,7 +1201,8 @@
    "reg": 3,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SBB"
+   "iclass": "SBB",
+   "lock": true
   },
   {
    "map": "1",
@@ -1188,7 +1213,8 @@
    "reg": 3,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SBB"
+   "iclass": "SBB",
+   "lock": true
   },
   {
    "map": "1",
@@ -1199,7 +1225,8 @@
    "reg": 4,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "AND"
+   "iclass": "AND",
+   "lock": true
   },
   {
    "map": "1",
@@ -1210,7 +1237,8 @@
    "reg": 4,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "AND"
+   "iclass": "AND",
+   "lock": true
   },
   {
    "map": "1",
@@ -1221,7 +1249,8 @@
    "reg": 4,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "AND"
+   "iclass": "AND",
+   "lock": true
   },
   {
    "map": "1",
@@ -1232,7 +1261,8 @@
    "reg": 5,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SUB"
+   "iclass": "SUB",
+   "lock": true
   },
   {
    "map": "1",
@@ -1243,7 +1273,8 @@
    "reg": 5,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SUB"
+   "iclass": "SUB",
+   "lock": true
   },
   {
    "map": "1",
@@ -1254,7 +1285,8 @@
    "reg": 5,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SUB"
+   "iclass": "SUB",
+   "lock": true
   },
   {
    "map": "1",
@@ -1265,7 +1297,8 @@
    "reg": 6,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "XOR"
+   "iclass": "XOR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1276,7 +1309,8 @@
    "reg": 6,
    "imm": "z",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "XOR"
+   "iclass": "XOR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1287,7 +1321,8 @@
    "reg": 6,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "XOR"
+   "iclass": "XOR",
+   "lock": true
   },
   {
    "map": "1",
@@ -1347,7 +1382,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "XCHG"
+   "iclass": "XCHG",
+   "lock": true
   },
   {
    "map": "1",
@@ -1356,7 +1392,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "XCHG"
+   "iclass": "XCHG",
+   "lock": true
   },
   {
    "map": "1",
@@ -2247,7 +2284,7 @@
    "reg": 6,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SAL"
+   "iclass": "SHL"
   },
   {
    "map": "1",
@@ -2258,7 +2295,7 @@
    "reg": 6,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SAL"
+   "iclass": "SHL"
   },
   {
    "map": "1",
@@ -2268,7 +2305,7 @@
    "modrm": true,
    "reg": 6,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SAL"
+   "iclass": "SHL"
   },
   {
    "map": "1",
@@ -2278,7 +2315,7 @@
    "modrm": true,
    "reg": 6,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SAL"
+   "iclass": "SHL"
   },
   {
    "map": "1",
@@ -2288,7 +2325,7 @@
    "modrm": true,
    "reg": 6,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SAL"
+   "iclass": "SHL"
   },
   {
    "map": "1",
@@ -2298,7 +2335,7 @@
    "modrm": true,
    "reg": 6,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "SAL"
+   "iclass": "SHL"
   },
   {
    "map": "1",
@@ -2513,7 +2550,8 @@
    "modrm": true,
    "reg": 2,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "NOT"
+   "iclass": "NOT",
+   "lock": true
   },
   {
    "map": "1",
@@ -2523,7 +2561,8 @@
    "modrm": true,
    "reg": 2,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "NOT"
+   "iclass": "NOT",
+   "lock": true
   },
   {
    "map": "1",
@@ -2533,7 +2572,8 @@
    "modrm": true,
    "reg": 3,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "NEG"
+   "iclass": "NEG",
+   "lock": true
   },
   {
    "map": "1",
@@ -2543,7 +2583,8 @@
    "modrm": true,
    "reg": 3,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "NEG"
+   "iclass": "NEG",
+   "lock": true
   },
   {
    "map": "1",
@@ -2633,7 +2674,8 @@
    "modrm": true,
    "reg": 0,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "INC"
+   "iclass": "INC",
+   "lock": true
   },
   {
    "map": "1",
@@ -2643,7 +2685,8 @@
    "modrm": true,
    "reg": 1,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "DEC"
+   "iclass": "DEC",
+   "lock": true
   },
   {
    "map": "1",
@@ -2653,7 +2696,8 @@
    "modrm": true,
    "reg": 0,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "INC"
+   "iclass": "INC",
+   "lock": true
   },
   {
    "map": "1",
@@ -2663,7 +2707,8 @@
    "modrm": true,
    "reg": 1,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "DEC"
+   "iclass": "DEC",
+   "lock": true
   },
   {
    "map": "1",
@@ -2739,7 +2784,8 @@
    "modrm": true,
    "reg": 1,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PREFETCHW"
+   "iclass": "PREFETCHW",
+   "form": "mem"
   },
   {
    "map": "0f",
@@ -2749,7 +2795,8 @@
    "modrm": true,
    "reg": 0,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PREFETCHNTA"
+   "iclass": "PREFETCHNTA",
+   "form": "mem"
   },
   {
    "map": "0f",
@@ -2759,7 +2806,8 @@
    "modrm": true,
    "reg": 1,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PREFETCHT0"
+   "iclass": "PREFETCHT0",
+   "form": "mem"
   },
   {
    "map": "0f",
@@ -2769,7 +2817,8 @@
    "modrm": true,
    "reg": 2,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PREFETCHT1"
+   "iclass": "PREFETCHT1",
+   "form": "mem"
   },
   {
    "map": "0f",
@@ -2779,7 +2828,8 @@
    "modrm": true,
    "reg": 3,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PREFETCHT2"
+   "iclass": "PREFETCHT2",
+   "form": "mem"
   },
   {
    "map": "0f",
@@ -3725,7 +3775,8 @@
    "reg": 2,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PSRLQ"
+   "iclass": "PSRLQ",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -3736,7 +3787,8 @@
    "reg": 3,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PSRLDQ"
+   "iclass": "PSRLDQ",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -3747,7 +3799,8 @@
    "reg": 6,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PSLLQ"
+   "iclass": "PSLLQ",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -3758,7 +3811,8 @@
    "reg": 7,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PSLLDQ"
+   "iclass": "PSLLDQ",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -3776,7 +3830,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "BTS"
+   "iclass": "BTS",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3785,7 +3840,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "BTR"
+   "iclass": "BTR",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3794,7 +3850,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "BTC"
+   "iclass": "BTC",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3812,7 +3869,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CMPXCHG"
+   "iclass": "CMPXCHG",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3821,7 +3879,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CMPXCHG"
+   "iclass": "CMPXCHG",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3866,7 +3925,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "XADD"
+   "iclass": "XADD",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3875,7 +3935,8 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "XADD"
+   "iclass": "XADD",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3943,7 +4004,8 @@
    "reg": 5,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "BTS"
+   "iclass": "BTS",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3954,7 +4016,8 @@
    "reg": 6,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "BTR"
+   "iclass": "BTR",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3965,7 +4028,8 @@
    "reg": 7,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "BTC"
+   "iclass": "BTC",
+   "lock": true
   },
   {
    "map": "0f",
@@ -3995,7 +4059,8 @@
    "modrm": true,
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-5 (three-byte 0F3A map)",
-   "iclass": "PCMPISTRI"
+   "iclass": "PCMPISTRI",
+   "w": 0
   },
   {
    "map": "0f3a",
@@ -4015,7 +4080,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVDQA"
+   "iclass": "VMOVDQA",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4025,7 +4092,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVDQA"
+   "iclass": "VMOVDQA",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4035,7 +4104,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVDQU"
+   "iclass": "VMOVDQU",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4045,7 +4116,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVDQU"
+   "iclass": "VMOVDQU",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4055,7 +4128,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVNTDQ"
+   "iclass": "VMOVNTDQ",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4065,7 +4140,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVSD"
+   "iclass": "VMOVSD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4075,7 +4151,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVSD"
+   "iclass": "VMOVSD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4085,7 +4162,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVAPD"
+   "iclass": "VMOVAPD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4095,7 +4174,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVAPD"
+   "iclass": "VMOVAPD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4105,7 +4186,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VADDSD"
+   "iclass": "VADDSD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4115,7 +4197,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMULSD"
+   "iclass": "VMULSD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4125,7 +4208,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VSUBSD"
+   "iclass": "VSUBSD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4135,7 +4219,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VDIVSD"
+   "iclass": "VDIVSD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4145,7 +4230,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VCOMISD"
+   "iclass": "VCOMISD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4155,7 +4242,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VCVTDQ2PD"
+   "iclass": "VCVTDQ2PD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4165,7 +4254,10 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVQ"
+   "iclass": "VMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4175,7 +4267,10 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVQ"
+   "iclass": "VMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4185,7 +4280,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPAND"
+   "iclass": "VPAND",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4195,7 +4291,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPOR"
+   "iclass": "VPOR",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4205,7 +4302,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPXOR"
+   "iclass": "VPXOR",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4215,7 +4313,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPSUBQ"
+   "iclass": "VPSUBQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4225,7 +4324,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPSUBD"
+   "iclass": "VPSUBD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4235,7 +4335,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPADDQ"
+   "iclass": "VPADDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4245,7 +4346,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPCMPEQB"
+   "iclass": "VPCMPEQB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4255,7 +4357,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPCMPEQW"
+   "iclass": "VPCMPEQW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4265,7 +4368,9 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPMOVMSKB"
+   "iclass": "VPMOVMSKB",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4275,7 +4380,8 @@
    "modrm": true,
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPSRLQ"
+   "iclass": "VPSRLQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4286,7 +4392,10 @@
    "vex": true,
    "w": 0,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVD"
+   "iclass": "VMOVD",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4297,7 +4406,10 @@
    "vex": true,
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVQ"
+   "iclass": "VMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4308,7 +4420,10 @@
    "vex": true,
    "w": 0,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVD"
+   "iclass": "VMOVD",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4319,7 +4434,10 @@
    "vex": true,
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVQ"
+   "iclass": "VMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4331,7 +4449,9 @@
    "imm": "b",
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPSRLQ"
+   "iclass": "VPSRLQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -4343,7 +4463,9 @@
    "imm": "b",
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPSLLQ"
+   "iclass": "VPSLLQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -4354,7 +4476,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "l": 0,
-   "iclass": "VZEROUPPER"
+   "iclass": "VZEROUPPER",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -4365,7 +4489,9 @@
    "imm": "b",
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VINSERTF128"
+   "iclass": "VINSERTF128",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -4376,7 +4502,8 @@
    "vex": true,
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VFMADD213SD"
+   "iclass": "VFMADD213SD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -4387,7 +4514,8 @@
    "vex": true,
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VFMADD231SD"
+   "iclass": "VFMADD231SD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -4398,7 +4526,8 @@
    "vex": true,
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VFMSUB213SD"
+   "iclass": "VFMSUB213SD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4409,7 +4538,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "l": 1,
    "vex": true,
-   "iclass": "VZEROALL"
+   "iclass": "VZEROALL",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4428,7 +4559,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPADDD"
+   "iclass": "VPADDD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4447,7 +4579,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPADDW"
+   "iclass": "VPADDW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4466,7 +4599,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPADDB"
+   "iclass": "VPADDB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4485,7 +4619,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMULUDQ"
+   "iclass": "VPMULUDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4504,7 +4639,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMADDWD"
+   "iclass": "VPMADDWD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4523,7 +4659,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSADBW"
+   "iclass": "VPSADBW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4542,7 +4679,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSLLD"
+   "iclass": "VPSLLD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4561,7 +4699,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSLLQ"
+   "iclass": "VPSLLQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4580,7 +4719,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSRLD"
+   "iclass": "VPSRLD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4599,7 +4739,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSRLW"
+   "iclass": "VPSRLW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4618,7 +4759,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSLLW"
+   "iclass": "VPSLLW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4637,7 +4779,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSRAD"
+   "iclass": "VPSRAD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4656,7 +4799,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSRAW"
+   "iclass": "VPSRAW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4675,7 +4819,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKLDQ"
+   "iclass": "VPUNPCKLDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4694,7 +4839,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKLWD"
+   "iclass": "VPUNPCKLWD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4713,7 +4859,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKHDQ"
+   "iclass": "VPUNPCKHDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4732,7 +4879,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKHQDQ"
+   "iclass": "VPUNPCKHQDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4751,7 +4899,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKHBW"
+   "iclass": "VPUNPCKHBW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4770,7 +4919,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKHWD"
+   "iclass": "VPUNPCKHWD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4789,7 +4939,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPCMPGTB"
+   "iclass": "VPCMPGTB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4808,7 +4959,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPCMPGTW"
+   "iclass": "VPCMPGTW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4827,7 +4979,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPCMPGTD"
+   "iclass": "VPCMPGTD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4846,7 +4999,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPCMPEQD"
+   "iclass": "VPCMPEQD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4865,7 +5019,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPANDN"
+   "iclass": "VPANDN",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4884,7 +5039,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPACKUSWB"
+   "iclass": "VPACKUSWB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4903,7 +5059,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPACKSSDW"
+   "iclass": "VPACKSSDW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4922,7 +5079,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPACKSSWB"
+   "iclass": "VPACKSSWB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4941,7 +5099,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSUBUSW"
+   "iclass": "VPSUBUSW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4960,7 +5119,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSUBUSB"
+   "iclass": "VPSUBUSB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4979,7 +5139,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSUBB"
+   "iclass": "VPSUBB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -4998,7 +5159,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSUBW"
+   "iclass": "VPSUBW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5017,7 +5179,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPADDUSB"
+   "iclass": "VPADDUSB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5036,7 +5199,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPADDUSW"
+   "iclass": "VPADDUSW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5055,7 +5219,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMULHUW"
+   "iclass": "VPMULHUW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5074,7 +5239,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMULHW"
+   "iclass": "VPMULHW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5093,7 +5259,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMULLW"
+   "iclass": "VPMULLW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5112,7 +5279,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMINUB"
+   "iclass": "VPMINUB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5131,7 +5299,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMAXUB"
+   "iclass": "VPMAXUB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5150,7 +5319,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPAVGB"
+   "iclass": "VPAVGB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5169,7 +5339,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPAVGW"
+   "iclass": "VPAVGW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5188,7 +5359,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMINSW"
+   "iclass": "VPMINSW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5207,7 +5379,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMAXSW"
+   "iclass": "VPMAXSW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5227,7 +5400,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "reg": 2,
    "imm": "b",
-   "iclass": "PSRLD"
+   "iclass": "PSRLD",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5239,7 +5413,9 @@
    "reg": 2,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSRLD"
+   "iclass": "VPSRLD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5250,7 +5426,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "reg": 4,
    "imm": "b",
-   "iclass": "PSRAD"
+   "iclass": "PSRAD",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5262,7 +5439,9 @@
    "reg": 4,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSRAD"
+   "iclass": "VPSRAD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5273,7 +5452,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "reg": 6,
    "imm": "b",
-   "iclass": "PSLLD"
+   "iclass": "PSLLD",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5285,7 +5465,9 @@
    "reg": 6,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSLLD"
+   "iclass": "VPSLLD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5296,7 +5478,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "reg": 2,
    "imm": "b",
-   "iclass": "PSRLW"
+   "iclass": "PSRLW",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5308,7 +5491,9 @@
    "reg": 2,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSRLW"
+   "iclass": "VPSRLW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5319,7 +5504,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "reg": 4,
    "imm": "b",
-   "iclass": "PSRAW"
+   "iclass": "PSRAW",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5331,7 +5517,9 @@
    "reg": 4,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSRAW"
+   "iclass": "VPSRAW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5342,7 +5530,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "reg": 6,
    "imm": "b",
-   "iclass": "PSLLW"
+   "iclass": "PSLLW",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5354,7 +5543,9 @@
    "reg": 6,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSLLW"
+   "iclass": "VPSLLW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5366,7 +5557,9 @@
    "reg": 3,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSRLDQ"
+   "iclass": "VPSRLDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5378,7 +5571,9 @@
    "reg": 7,
    "imm": "b",
    "vex": true,
-   "iclass": "VPSLLDQ"
+   "iclass": "VPSLLDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -5399,7 +5594,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VPSHUFD"
+   "iclass": "VPSHUFD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5768,7 +5965,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVUPS"
+   "iclass": "VMOVUPS",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5778,7 +5977,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVUPS"
+   "iclass": "VMOVUPS",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5788,7 +5989,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVUPD"
+   "iclass": "VMOVUPD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5798,7 +6001,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVUPD"
+   "iclass": "VMOVUPD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5808,7 +6013,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVSS"
+   "iclass": "VMOVSS",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5818,7 +6024,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVSS"
+   "iclass": "VMOVSS",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5828,7 +6035,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVAPS"
+   "iclass": "VMOVAPS",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5838,7 +6047,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VMOVAPS"
+   "iclass": "VMOVAPS",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5848,7 +6059,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VXORPS"
+   "iclass": "VXORPS",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5858,7 +6070,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VXORPD"
+   "iclass": "VXORPD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5868,7 +6081,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VANDPS"
+   "iclass": "VANDPS",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5878,7 +6092,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VANDPD"
+   "iclass": "VANDPD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5888,7 +6103,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKLDQ"
+   "iclass": "VPUNPCKLDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5898,7 +6114,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKHDQ"
+   "iclass": "VPUNPCKHDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5908,7 +6125,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKLQDQ"
+   "iclass": "VPUNPCKLQDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -5918,7 +6136,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPUNPCKHQDQ"
+   "iclass": "VPUNPCKHQDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -6173,7 +6392,8 @@
     "16": "CMPXCHG8B",
     "32": "CMPXCHG8B",
     "64": "CMPXCHG16B"
-   }
+   },
+   "lock": true
   },
   {
    "map": "0f38",
@@ -6538,7 +6758,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPSHUFB"
+   "iclass": "VPSHUFB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6548,7 +6769,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPMADDUBSW"
+   "iclass": "VPMADDUBSW",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6558,7 +6780,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPTEST"
+   "iclass": "VPTEST",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6568,7 +6792,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPERMD"
+   "iclass": "VPERMD",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6579,7 +6805,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "w": 0,
    "vex": true,
-   "iclass": "VPSRLVD"
+   "iclass": "VPSRLVD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6590,7 +6817,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "w": 1,
    "vex": true,
-   "iclass": "VPSRLVQ"
+   "iclass": "VPSRLVQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6601,7 +6829,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "w": 0,
    "vex": true,
-   "iclass": "VPSLLVD"
+   "iclass": "VPSLLVD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6612,7 +6841,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "w": 1,
    "vex": true,
-   "iclass": "VPSLLVQ"
+   "iclass": "VPSLLVQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6622,7 +6852,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPBROADCASTD"
+   "iclass": "VPBROADCASTD",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6632,7 +6864,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPBROADCASTQ"
+   "iclass": "VPBROADCASTQ",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6642,7 +6876,10 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VBROADCASTI128"
+   "iclass": "VBROADCASTI128",
+   "vvvv": "1111",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6652,7 +6889,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VPBROADCASTW"
+   "iclass": "VPBROADCASTW",
+   "vvvv": "1111",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6662,7 +6901,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VAESENC"
+   "iclass": "VAESENC",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6672,7 +6912,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VAESENCLAST"
+   "iclass": "VAESENCLAST",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6682,7 +6923,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VAESDEC"
+   "iclass": "VAESDEC",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6692,7 +6934,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "VAESDECLAST"
+   "iclass": "VAESDECLAST",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6702,7 +6945,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "ANDN"
+   "iclass": "ANDN",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6712,7 +6956,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "BZHI"
+   "iclass": "BZHI",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6722,7 +6967,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "MULX"
+   "iclass": "MULX",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6732,7 +6978,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "BEXTR"
+   "iclass": "BEXTR",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6742,7 +6989,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "SHLX"
+   "iclass": "SHLX",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6752,7 +7000,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "SARX"
+   "iclass": "SARX",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f38",
@@ -6762,7 +7011,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
-   "iclass": "SHRX"
+   "iclass": "SHRX",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6774,7 +7024,10 @@
    "imm": "b",
    "w": 1,
    "vex": true,
-   "iclass": "VPERMQ"
+   "iclass": "VPERMQ",
+   "vvvv": "1111",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6785,7 +7038,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VPBLENDD"
+   "iclass": "VPBLENDD",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6796,7 +7050,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VPALIGNR"
+   "iclass": "VPALIGNR",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6808,7 +7063,10 @@
    "imm": "b",
    "w": 0,
    "vex": true,
-   "iclass": "VPEXTRD"
+   "iclass": "VPEXTRD",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6820,7 +7078,10 @@
    "imm": "b",
    "w": 1,
    "vex": true,
-   "iclass": "VPEXTRQ"
+   "iclass": "VPEXTRQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6831,7 +7092,10 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VEXTRACTF128"
+   "iclass": "VEXTRACTF128",
+   "vvvv": "1111",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6843,7 +7107,9 @@
    "imm": "b",
    "w": 0,
    "vex": true,
-   "iclass": "VPINSRD"
+   "iclass": "VPINSRD",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6855,7 +7121,9 @@
    "imm": "b",
    "w": 1,
    "vex": true,
-   "iclass": "VPINSRQ"
+   "iclass": "VPINSRQ",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6866,7 +7134,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VINSERTI128"
+   "iclass": "VINSERTI128",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6877,7 +7147,10 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VEXTRACTI128"
+   "iclass": "VEXTRACTI128",
+   "vvvv": "1111",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6888,7 +7161,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VPCLMULQDQ"
+   "iclass": "VPCLMULQDQ",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6899,7 +7173,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VPERM2I128"
+   "iclass": "VPERM2I128",
+   "l": 1,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6910,7 +7186,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "VPBLENDVB"
+   "iclass": "VPBLENDVB",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f3a",
@@ -6921,7 +7198,8 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "imm": "b",
    "vex": true,
-   "iclass": "RORX"
+   "iclass": "RORX",
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -6932,7 +7210,10 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVW"
+   "iclass": "KMOVW",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -6943,7 +7224,10 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 1,
    "vex": true,
-   "iclass": "KMOVQ"
+   "iclass": "KMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -6954,7 +7238,10 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVB"
+   "iclass": "KMOVB",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -6965,7 +7252,10 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 1,
    "vex": true,
-   "iclass": "KMOVD"
+   "iclass": "KMOVD",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
    "map": "0f",
@@ -6976,7 +7266,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVW"
+   "iclass": "KMOVW",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -6987,7 +7281,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVB"
+   "iclass": "KMOVB",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -6998,7 +7296,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVD"
+   "iclass": "KMOVD",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -7009,7 +7311,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 1,
    "vex": true,
-   "iclass": "KMOVQ"
+   "iclass": "KMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -7020,7 +7326,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVW"
+   "iclass": "KMOVW",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -7031,7 +7341,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVB"
+   "iclass": "KMOVB",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -7042,7 +7356,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 0,
    "vex": true,
-   "iclass": "KMOVD"
+   "iclass": "KMOVD",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "0f",
@@ -7053,7 +7371,11 @@
    "src": "Intel SDM Vol 2A KMOVW/KMOVB/KMOVQ/KMOVD (VEX-encoded mask moves)",
    "w": 1,
    "vex": true,
-   "iclass": "KMOVQ"
+   "iclass": "KMOVQ",
+   "vvvv": "1111",
+   "l": 0,
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "form": "reg"
   },
   {
    "map": "1",
@@ -7793,7 +8115,8 @@
    "iclass": "VPSRAD",
    "evex": true,
    "reg": 4,
-   "imm": "b"
+   "imm": "b",
+   "w": 0
   },
   {
    "map": "0f",
@@ -8225,7 +8548,8 @@
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTB",
    "xop": true,
-   "imm": "b"
+   "imm": "b",
+   "l": 0
   },
   {
    "map": "x8",
@@ -8237,7 +8561,8 @@
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTW",
    "xop": true,
-   "imm": "b"
+   "imm": "b",
+   "l": 0
   },
   {
    "map": "x8",
@@ -8249,7 +8574,8 @@
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTD",
    "xop": true,
-   "imm": "b"
+   "imm": "b",
+   "l": 0
   },
   {
    "map": "x8",
@@ -8261,7 +8587,8 @@
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTQ",
    "xop": true,
-   "imm": "b"
+   "imm": "b",
+   "l": 0
   },
   {
    "map": "x9",
@@ -8272,7 +8599,8 @@
    "enc": "xop",
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTB",
-   "xop": true
+   "xop": true,
+   "l": 0
   },
   {
    "map": "x9",
@@ -8283,7 +8611,8 @@
    "enc": "xop",
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTW",
-   "xop": true
+   "xop": true,
+   "l": 0
   },
   {
    "map": "x9",
@@ -8294,7 +8623,8 @@
    "enc": "xop",
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTD",
-   "xop": true
+   "xop": true,
+   "l": 0
   },
   {
    "map": "x9",
@@ -8305,7 +8635,8 @@
    "enc": "xop",
    "src": "AMD64 Architecture Programmer's Manual Vol 6 (XOP encoding, maps 8/9/A); AMD pub. 43479",
    "iclass": "VPROTQ",
-   "xop": true
+   "xop": true,
+   "l": 0
   },
   {
    "map": "0f",
@@ -8317,9 +8648,99 @@
    "evex": true,
    "iclass": "VPMADDWD",
    "src": "Intel SDM Vol 2A section 2.7 (EVEX) with the instruction pages of Vol 2B/2C"
+  },
+  {
+   "map": "0f3a",
+   "op": 99,
+   "mn": "pcmpistri",
+   "pfx": "66",
+   "modrm": true,
+   "imm": "b",
+   "w": 1,
+   "iclass": "PCMPISTRI64",
+   "src": "Intel SDM Vol 2B PCMPISTRI (REX.W selects RCX as the index)"
+  },
+  {
+   "map": "0f",
+   "op": 114,
+   "mn": "vpsraq",
+   "pfx": "66",
+   "modrm": true,
+   "reg": 4,
+   "imm": "b",
+   "w": 1,
+   "enc": "evex",
+   "evex": true,
+   "iclass": "VPSRAQ",
+   "src": "Intel SDM Vol 2A section 2.7 (EVEX) with the instruction pages of Vol 2B/2C"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "form": "reg",
+   "iclass": "NOP",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (reserved-NOP register forms)"
+  },
+  {
+   "map": "0f",
+   "op": 13,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "form": "reg",
+   "iclass": "NOP",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (reserved-NOP register forms)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 4,
+   "form": "mem",
+   "iclass": "NOP",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (0F 18 /4-/7 reserved-NOP)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 5,
+   "form": "mem",
+   "iclass": "NOP",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (0F 18 /4-/7 reserved-NOP)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 6,
+   "form": "mem",
+   "iclass": "NOP",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (0F 18 /4-/7 reserved-NOP)"
+  },
+  {
+   "map": "0f",
+   "op": 24,
+   "mn": "nop",
+   "pfx": "none",
+   "modrm": true,
+   "reg": 7,
+   "form": "mem",
+   "iclass": "NOP",
+   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (0F 18 /4-/7 reserved-NOP)"
   }
  ],
- "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`",
+ "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes",
  "identity": "iclass: XED instruction-class naming (github.com/intelxed/xed), assigned per row by rule; corrections recorded as spec revisions with XED as evidence. Fusion: LOCK prefix -> <ICLASS>_LOCK; REP -> REP_<ICLASS>; REPE -> REPE_<ICLASS>; REPNE -> REPNE_<ICLASS>.",
- "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08."
+ "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08.",
+ "validity": "Rows may carry `lock` (LOCK allowed on the memory form), `vvvv` ('1111' when the operand is unused), `l` (required VEX.L), `form`. An encoding outside these raises InvalidEncoding: the guest observes #UD (v0.2 section 5.1). Strict mandatory prefix: in the 0F/0F38/0F3A maps, an opcode whose rows include any mandatory-prefix row is an SSE-family opcode; a 66/F2/F3 prefix with no matching row means the bytes are a different instruction or invalid, never the unprefixed row. On opcodes with only unprefixed rows, 66 stays operand size."
 }

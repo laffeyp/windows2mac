@@ -41,7 +41,7 @@ def main(argv: list[str]) -> int:
         try:
             g = decode(c.raw + b"\0" * 15)
             ours: tuple[int, str] | None = (g.length, g.iclass)
-        except (DecodeError, IndexError, KeyError):
+        except (DecodeError, IndexError, KeyError):  # InvalidEncoding is a DecodeError
             ours = None
         if not x.ok and ours is None:
             o, k = "both_reject", ("", "", "")

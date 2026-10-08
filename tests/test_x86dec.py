@@ -75,3 +75,43 @@ def test_decoding_depends_on_cpu_features(features: frozenset[str] | None, expec
 def test_unknown_opcode_is_reported() -> None:
     with pytest.raises(DecodeError, match="no entry"):
         decode(bytes.fromhex("0f0e") + b"\0" * 15)        # femms (3DNow!) is not in the spec
+
+
+@pytest.mark.parametrize(("hexbytes", "why"), [
+    ("f04188a4d185e3ed61", "LOCK on MOV"),
+    ("f00303", "LOCK with register-destination form 03 (add eax, [rbx])"),
+    ("f001c0", "LOCK on register form of ADD"),
+    ("c5e877c0", "VZEROUPPER needs VEX.vvvv=1111"),
+    ("c5fd73348574", "VEX shift-by-immediate group is register-only"),
+    ("f30f1234", "F3 on SSE-family 0F 12: not MOVLPS"),
+])
+def test_invalid_encodings_are_refused(hexbytes: str, why: str) -> None:
+    from w2m.x86dec import DecodeError
+    with pytest.raises(DecodeError):
+        decode(bytes.fromhex(hexbytes) + b"\0" * 15)
+
+
+@pytest.mark.parametrize(("hexbytes", "iclass"), [
+    ("f00100", "ADD_LOCK"), ("f0870a", "XCHG"), ("c0f401", "SHL"), ("f2a4", "REP_MOVSB"),
+    ("f2a6", "REPNE_CMPSB"), ("f34390", "PAUSE"), ("0f18c0", "NOP"), ("660fb6c0", "MOVZX"),
+])
+def test_edge_rules_from_generated_differential(hexbytes: str, iclass: str) -> None:
+    assert decode(bytes.fromhex(hexbytes) + b"\0" * 15).iclass == iclass
+
+
+def test_generated_encodings_never_disagree_on_length() -> None:
+    from w2m.encgen import cases
+    from w2m.x86dec import DecodeError
+    from w2m.xedref import ROOT, XED_KIT_GLOB, decode_many
+    if not list(ROOT.glob(XED_KIT_GLOB)):
+        pytest.skip("XED kit not built")
+    cs = list(cases(per_row=8))
+    bad = []
+    for c, x in zip(cs, decode_many([c.raw for c in cs])):
+        try:
+            g = decode(c.raw + b"\0" * 15)
+        except DecodeError:
+            continue
+        if x.ok and g.length != x.length:
+            bad.append((c.raw.hex(), c.note, x.length, g.length))
+    assert not bad, bad[:5]

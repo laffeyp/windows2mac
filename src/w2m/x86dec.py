@@ -32,6 +32,11 @@ class DecodeError(ValueError):
     """The spec has no entry for these bytes, or they exceed 15 bytes."""
 
 
+class InvalidEncoding(DecodeError):
+    """The bytes break a validity rule of the spec (LOCK, VEX.vvvv, VEX.L): the guest observes
+    #UD (v0.2 section 5.1), not an instruction."""
+
+
 def _pick(cands: tuple[Entry, ...], mpfx: list[str]) -> list[Entry]:
     """Mandatory-prefix selection: the most specific prefix present that has entries wins."""
     for p in mpfx:
@@ -59,6 +64,7 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
     enc = "legacy"
     w = (rex >> 3) & 1
     vl: int | None = None
+    vvvv: int | None = None
     if b[i] == 0x62 and not rex:
         # EVEX (SDM Vol 2A 2.7): 62 P0 P1 P2; in 64-bit mode 62 is never BOUND
         p0, p1, p2 = b[i + 1], b[i + 2], b[i + 3]
@@ -79,13 +85,14 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
         enc = "vex"
         if b[i] == 0xC5:
             p = b[i + 1]
-            mp, pp, vl = "0f", p & 3, (p >> 2) & 1
+            mp, pp, vl, vvvv = "0f", p & 3, (p >> 2) & 1, (p >> 3) & 0xF
             i += 2
         else:
             p1, p2 = b[i + 1], b[i + 2]
             if (p1 & 0x1F) not in VEX_MAP:
                 raise DecodeError(f"VEX map field {p1 & 0x1F}")
             mp, pp, w, vl = VEX_MAP[p1 & 0x1F], p2 & 3, p2 >> 7, (p2 >> 2) & 1
+            vvvv = (p2 >> 3) & 0xF
             i += 3
         mpfx = [VEX_PFX[pp]]
     else:
@@ -107,6 +114,10 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x}"
                           f"{'' if enc == 'legacy' else f' ({enc})'}")
     chosen = _pick(cands, mpfx)
+    sse_family = mp != "1" and any(c[0] != "none" for c in cands)
+    if enc == "legacy" and sse_family and chosen and chosen[0][0] == "none" and len(mpfx) > 1:
+        # a 66/F2/F3 prefix with no row of its own on an SSE-family opcode: not this instruction
+        raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} with prefixes {mpfx}")
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} with prefixes {mpfx}")
     modrm = b[i] if any(c[2] for c in chosen) else None
@@ -118,11 +129,15 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
         exact = [c for c in chosen if c[6] is not None]
         chosen = exact or chosen
     chosen = [c for c in chosen if c[7] is None or c[7] == w]
-    chosen = [c for c in chosen if c[8] is None or (enc == "vex" and c[8] == vl)]
+    chosen = [c for c in chosen if c[8] is None or (enc in ("vex", "xop") and c[8] == vl)]
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} modrm "
                           f"{'none' if modrm is None else hex(modrm)} w {w} l {vl}")
-    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback = chosen[0]
+    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq = chosen[0]
+    if 0xF0 in pfx and not (lock_ok and modrm is not None and modrm >> 6 != 3):
+        raise InvalidEncoding(f"LOCK prefix on {mn} {'register' if modrm is not None and modrm >> 6 == 3 else ''} form")
+    if enc == "vex" and vreq == "1111" and vvvv != 0xF:
+        raise InvalidEncoding(f"VEX.vvvv must be 1111b for {mn}")
     if has_modrm:
         assert modrm is not None
         i += 1
@@ -152,10 +167,12 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
         iclass = dict(isizes)[opsize]
     if requires and fallback and features is not None and requires not in features:
         mn, iclass = fallback                         # same bytes, older CPU (spec `features` note)
-    if mp == "1" and op == 0x90 and rex & 1:
+    if mp == "1" and op == 0x90 and rex & 1 and 0xF3 not in pfx:
         mn, iclass = "xchg", "XCHG"                   # 41 90: xchg r8, rax (SDM: NOP is 90 without REX.B)
     if 0xF0 in pfx and mn in LOCKABLE:
-        mn, iclass = "lock " + mn, iclass + "_LOCK"
+        mn = "lock " + mn
+        if iclass != "XCHG":                            # XED: XCHG with memory is locked either way
+            iclass += "_LOCK"
     # REP applies to the one-byte string opcodes only. "movsd" also names SSE F2 0F 10/11,
     # where F2 is a mandatory prefix, not a repeat (SDM Vol 2B MOVSD notes both instructions).
     if mp == "1" and mn in REP_STRING:
@@ -163,5 +180,7 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
             word = "repe" if mn in REPE_STRING else "rep"
             mn, iclass = f"{word} {mn}", f"{word.upper()}_{iclass}"
         elif 0xF2 in pfx:
-            mn, iclass = "repne " + mn, "REPNE_" + iclass
+            # REPNE has meaning only for cmps/scas; on other string ops F2 repeats like REP (XED REP_*)
+            mn = "repne " + mn
+            iclass = ("REPNE_" if mn[6:] in REPE_STRING else "REP_") + iclass
     return Decoded(i, mn, iclass)
