@@ -9,6 +9,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+.hypothesis/
 
 # Scratch run records. Judge records regenerate from the committed store
 # (scripts/judge_traces.py store:<run id>); Mac hardware run records cited as evidence are

@@ -101,7 +101,10 @@ class _Reader:
         end = self.data.find(b"\0", off, off + limit)
         if end < 0:
             raise PeError(f"unterminated string at offset 0x{off:x}")
-        return self.data[off:end].decode("ascii", errors="strict")
+        try:
+            return self.data[off:end].decode("ascii", errors="strict")
+        except UnicodeDecodeError:              # found by tests/test_fuzz.py (Sprint 027)
+            raise PeError(f"non-ASCII string at offset 0x{off:x}") from None
 
 
 def _rva_to_offset(sections: tuple[Section, ...], rva: int) -> int:

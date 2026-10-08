@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ruff==0.15.17", "mypy", "pytest", "pytest-asyncio", "pytest-timeout"]  # ruff pinned to substrate's pin
+dev = ["ruff==0.15.17", "mypy", "pytest", "pytest-asyncio", "pytest-timeout", "hypothesis==6.168.5"]  # ruff pinned to substrate's pin
 reference = [
     "capstone==5.0.9",
 ]
@@ -41,3 +41,4 @@ files = ["src/w2m"]
 [[tool.mypy.overrides]]
 module = "capstone.*"
 ignore_missing_imports = true
+

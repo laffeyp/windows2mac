@@ -53,12 +53,14 @@ Rows are added as types stabilize.
 
 ## External SDK bridge mappings
 
-Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Pending, each needed before its first bridge sprint:
+Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hypervisor.framework, Capstone and XED were used from Sprints 008, 014 and 017 without an entry here; the entries below were added 2026-10-08 (Sprint 027) after the project review found them missing.
 
 - **substrate (`substrate.api`)** — source: substrate `docs/api.md` (read 2026-10-03). Surface in use: `TopologyBuilder.producer_kind / initial / trigger / route / view / termination / baseline`, `Runtime.run`, `read_record`, `assert_event`, `assert_no_event`, `assert_sequence`, `first_divergence`, `embedded_substrate`. Known gotchas from the docs: `finalised` does not mean succeeded (check `ProducerFailed`, `PredicateQuarantined`, or run `substrate run --strict`); predicates must call `.value()` on Views; `KindBuffer` is unbounded; `all_completed` hangs a resumed paused run; Level-3(b) replay is deferred.
-- **Hypervisor.framework** — pending (macOS 26 SDK headers in Xcode 26.6).
+- **Hypervisor.framework** — source: macOS 26 SDK headers in Xcode 26.6 (`Hypervisor/hv_vm.h`, `hv_vcpu.h`, `hv_vm_config.h`, `hv_sys_reg.h`), read for Sprint 008. Surface in use: `hv_vm_config_create`, `hv_vm_config_set_ipa_granule(HV_IPA_GRANULE_4KB)` (macOS 26), `hv_vm_create`, `hv_vm_map`, `hv_vcpu_create`, `hv_vcpu_run`, `hv_vcpu_get_exit_info`, `hv_vcpu_set_reg`/`get_reg`, `hv_vcpu_set_sys_reg(HV_SYS_REG_ACTLR_EL1, 1 << 1)` (EnTSO, macOS 15). Gotchas found: the process needs the `com.apple.security.hypervisor` entitlement (`probes/mac_hv_capability/entitlements.plist`); the default IPA granule is 16 KB and refuses a 4 KB map (HV_BAD_ARGUMENT); with the guest MMU off, data accesses are Device memory and ordering looks strong regardless of EnTSO, so litmus runs need stage-1 tables with Normal WB memory; one `hv_vcpu_t` per host thread.
 - **Metal / Metal Shader Converter** — pending; `metal-shaderconverter` is not installed on this host.
 - **DepotDownloader** — pending; not installed; flags confirmed from its README: `-os windows`, `-qr`, `-remember-password`.
+- **Capstone 5.0.9 (Python)** — source: capstone PyPI package and `capstone/__init__.py`, `x86_const.py`, read for Sprint 014. Surface in use: `Cs(CS_ARCH_X86, CS_MODE_64)`, `.detail = True`, `disasm(raw, address, count=1)`, `insn.groups` (`X86_GRP_JUMP`, `X86_GRP_CALL`), `insn.operands` (`X86_OP_IMM`, `X86_OP_MEM` with `mem.base == X86_REG_RIP`). Gotchas: no type stubs (mypy override in `pyproject.toml`); Woodruff et al. (LangSec 2021) measured Capstone as unreliable on unusual encodings, so it is a voter, not a judge (Decision 2026-10-08).
+- **Intel XED v2026.08.23** — source: `third_party/xed` at commit 0bcb6237345c (`xed-interface.h`, `xed-decoded-inst-api.h`, `examples/`), read for Sprints 017 and 022. Surface in use (`tools/xedshim/xedshim.c`): `xed_tables_init`, `xed_decoded_inst_zero`, `set_mode(XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b)`, `set_input_chip`, `xed_decode`, `xed_format_context(XED_SYNTAX_INTEL)`, iclass/iform/length getters, operand walk via `xed_decoded_inst_inst`, `xed_inst_operand`, `xed_operand_operand_visibility`, register, memory, immediate and branch-displacement getters. Gotchas: without a chip, XED decodes for an older CPU (BSF for F3 0F BC; NOP for F3 0F 1E FA), so the shim sets a chip (ALL by default); mbuild looks for `llvm-ar` on macOS (`--ar=$(xcrun --find ar)`).
 
 ---
 
@@ -83,19 +85,19 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Pend
 
 - Windows tiebreak probe: `gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id>`, then `gh run watch <run-id> --exit-status`, `gh run download <run-id> -n trace-<id>`; ingest from `store/traces/<sha256>.jsonl`. Runner: `windows-2025` (Windows Server 2025 x64, LLVM 20.1.8). Private repo: uses the account's included Actions minutes.
 
-Permitted dependencies: runtime `substrate-kernel==1.1.1`; dev `ruff==0.15.17`, `mypy`, `pytest`, `pytest-asyncio`, `pytest-timeout`; extra `reference`: `capstone==5.0.9` (reference decoder). Environment sync: `uv sync --all-extras`. Native reference: Intel XED v2026.08.23 (commit 0bcb6237345c, Apache-2.0) with mbuild 1b437e409221, cloned into `third_party/` and built with `python3 mfile.py --ar=$(xcrun --find ar) install`; not committed. Anything else is an agent-resolved decision recorded first.
+Permitted dependencies: runtime `substrate-kernel==1.1.1`; dev `ruff==0.15.17`, `mypy`, `pytest`, `pytest-asyncio`, `pytest-timeout`, `hypothesis==6.168.5` (property-based fuzzing, Sprint 027; agent-resolved 2026-10-08: the review named fuzzing parsers of untrusted input as missing, and Hypothesis runs inside pytest with no native build); extra `reference`: `capstone==5.0.9` (reference decoder). Environment sync: `uv sync --all-extras`. Native reference: Intel XED v2026.08.23 (commit 0bcb6237345c, Apache-2.0) with mbuild 1b437e409221, cloned into `third_party/` and built with `python3 mfile.py --ar=$(xcrun --find ar) install`; not committed. Anything else is an agent-resolved decision recorded first.
 
 ---
 
 ## Observation contract environment
 
-Host: macOS 26.5.1 (25F80), Apple M5 Max, 128 GB, 16 KB pages, Xcode 26.6 (17F113), `metal` at the Xcode toolchain path. Windows oracle: pending user answer (Q2).
+Host: macOS 26.5.1 (25F80), Apple M5 Max, 128 GB, 16 KB pages, Xcode 26.6 (17F113), `metal` at the Xcode toolchain path. Windows reference: the GitHub-hosted `windows-2025` runner (`.github/workflows/windows-probe.yml`; user decisions 2026-10-05 and 2026-10-07: no physical machine, reference runs optional). CI: `.github/workflows/ci.yml` on `ubuntu-24.04`.
 
 ---
 
 ## Hand-author log
 
-*(empty until the first bypass)*
+- **2026-10-05, Sprint 000** — `scripts/check_vocab.py` was authored outside its card's artifact contract to gate the vocabulary; recorded in that sprint's tail, entered here 2026-10-08 (Sprint 027) after the project review found the log empty.
 
 ---
 
@@ -109,7 +111,7 @@ CLI strings: lowercase first word in errors, no exclamation marks, no emoji, abs
 
 - **Phase 0 (Vocabulary Session):** `signals/0.1.json` + rationale covering evidence, contracts, probes, code validity, discrepancies, repair vs revision, backends, artifacts, and the product lifecycle (v0.2 §3, §5.1, §11, §12, §14).
 - **Phase 1 (Contract construction and harness):** the contract format with evidence categories (v0.2 §11.1-11.2); substrate topologies for probe, model check, candidate, comparison, and reduction (§11.4); first probes on the Windows reference profile.
-- **Phase 2 (Destination capability probes):** both backend candidates probed on this host: VM 4 KB IPA granule and guest TSOEN (OQ-1); native-process page enforcement and ordering costs. Output: capability-profile evidence, not a backend choice (§8.2).
+- **Phase 2 (Destination capability probes):** both backend candidates probed on this host: VM 4 KB IPA granule and guest TSOEN (OQ-1); native-process page enforcement and the execution time of ordering variants. Output: capability-profile evidence, not a backend choice (§8.2).
 - **Phase 3 (Application profile and product slice):** first game chosen (user-only Q1); its profile drives contract coverage; the product slice covers acquisition, Steam session, run, state, close, relaunch, update, removal (§12.1).
 
 - **Decoder phase (Sprints 013-023, inside Phase 3):** PE reader, reference traversal, spec-generated decoder, differentials against XED. Exit criteria (Decision 2026-10-08):
@@ -117,6 +119,8 @@ CLI strings: lowercase first word in errors, no exclamation marks, no emoji, abs
   - (b) corpus and probe binaries: length and iclass equal XED's at every reachable position; spec gaps 0 (met, Sprint 023);
   - (c) the faults XED reports for a legacy prefix or REX before VEX/EVEX/XOP, for length over 15, and for truncated input are refused as `InvalidEncoding` or `Truncated` (met, Sprint 023);
   - (d) every spec row that the chosen game's reachable code uses is XED-confirmed in `specs/x86_decode_confirmations.json` (open: needs the BioShock 2 Remastered depot, Sprint 030).
+
+- **Phase acceptance evidence** (added 2026-10-08; review §6.8). Phase 0: vocabulary locked, `check_vocab.py` 0 (met 2026-10-05). Phase 1: one contract accepted on documented or observed evidence and judged by a substrate run (met 2026-10-07). Phase 2: each §8.1 capability recorded on this host as present, absent or not_established with its run record committed (met 2026-10-08, records in `store/runs/`). Phase 3 closes when the walking skeleton runs end to end (a Windows PE loaded, lifted, executed in the VM backend, its guest trace judged against a contract), one generated implementation is judged against a contract with CANDIDATE_* and DISCREPANCY_* on the record, and decoder exit criterion (d) holds on BioShock 2 Remastered.
 
 Superseded 2026-10-03 (kept for audit): the earlier four-phase plan that fixed a VM-first backend and a D3D11/DXBC slice; see `BLACKBOARD.md` `## Decisions`, user entry for v0.2.
 
@@ -135,4 +139,4 @@ Superseded 2026-10-03 (kept for audit): the earlier four-phase plan that fixed a
 
 ## Custom techniques
 
-- **Oracle-first contract mining.** A contract clause enters `contracts/` only with a probe program and a recorded oracle run that witnesses it; documentation citations are attached as hints. Success: every clause cites an oracle run record.
+- **Oracle-first contract mining** (amended 2026-10-08 to match the 2026-10-07 user decision that reference runs are optional). A contract clause enters `contracts/` with documented or observed evidence; a hypothesis alone cannot carry acceptance (`src/w2m/contract.py`). Observed evidence names its executions (`execution_ids`, resolved against `store/`). Success: every accepted clause cites a quoted document or a stored execution. The original wording required an oracle run for every clause.
