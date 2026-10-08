@@ -26,6 +26,7 @@ class XedResult:
     iform: str = ""
     text: str = ""
     error: str = ""
+    operands: tuple[str, ...] = ()
 
 
 def build_shim() -> Path:
@@ -55,7 +56,9 @@ def decode_many(items: Sequence[bytes], chip: str = "ALL") -> list[XedResult]:
     for line in out:
         f = line.split("\t")
         if f[0] == "ok":
-            results.append(XedResult(True, int(f[1]), f[2], f[3], f[4] if len(f) > 4 else ""))
+            ops = tuple(f[5].split(";")) if len(f) > 5 and f[5] else ()
+            results.append(XedResult(True, int(f[1]), f[2], f[3], f[4] if len(f) > 4 else "",
+                                     operands=ops))
         else:
             results.append(XedResult(False, error=f[1] if len(f) > 1 else "unknown"))
     return results

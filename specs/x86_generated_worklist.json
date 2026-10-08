@@ -8,6 +8,8 @@
   "iclass_differs": 215,
   "ours_gap": 73
  },
+ "operands_compared": 11924,
+ "operand_differs": [],
  "kinds": [
   {
    "outcome": "ours_accepts",

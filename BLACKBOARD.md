@@ -80,6 +80,7 @@
 - **2026-10-08** — Sprint 019 (EVEX, XOP) closed. Spec 0.4.0 (804 rows), decoder, generator, tests. Dual contract: signal vacuous; artifact pass (93 passed; `--check` 0; ruff, mypy 0). Observation: 0 spec gaps; ours equals XED on length and iclass at all 2,444,456 positions.
 - **2026-10-08** — Sprint 020 (generated encodings) closed. `src/w2m/encgen.py`, `scripts/generated_differential.py`, `specs/x86_generated_worklist.json`. Observation: 38,592 cases — agree 68.78%, ours_accepts 29.91% (no validity rules), iclass_differs 1.31% (edge rules), length_differs 0.
 - **2026-10-08** — Sprint 021 (validity layer) closed. Spec 0.5.1 (812 rows), decoder `InvalidEncoding`, tests. Dual contract: signal vacuous; artifact pass (108 passed; ruff, mypy, `--check` 0). Observation: generated — accepted-but-invalid 29.91% → 11.38%, iclass differs 1.31% → 0.55%, length differs 0; corpus unchanged at full agreement. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
+- **2026-10-08** — Sprint 022 (operands) closed. Spec 0.6.1 (`ops` templates on 303 integer rows, `opsize64` d64/f64), `src/w2m/x86ops.py`, `Fields` from `x86dec.decode`, xedshim operand output, `scripts/operand_differential.py`, operand check in `scripts/generated_differential.py`, `tests/test_x86ops.py`. Dual contract: signal vacuous; artifact pass (125 passed; ruff, mypy, `--check` 0). Observation: operands equal XED's at all 2,312,797 compared corpus positions (94.6% of 2,444,456) and all 11,924 compared generated cases; a planted byte-register fault gave 224 disagreements.
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
@@ -117,6 +118,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 022 (2026-10-08, closed)
+- **Scope:** explicit operands, w2m (SDM Appendix A templates) vs XED, corpus and generated encodings.
+- **Rubber Duck Pass:**
+  - *Observation 1 (zero is a claim that needs a test):* the first corpus run reported 0 differences in 2.26 M comparisons. A planted fault (REX byte-register names without REX) produced 224 differences, so the comparison has power. Disposition: resolved-here; the planted-fault result is in the card.
+  - *Observation 2 (the literature's prediction held again):* both template errors (f64 on FF /2, /4; MOVSXD `Ez`) appeared only in generated encodings, never in 2.44 M compiler-emitted instructions. Disposition: resolved-here — spec 0.6.1.
+  - *Observation 3 (a recorded number looked wrong):* this run reported 2,391,671 positions against the 2,444,456 recorded since Sprint 017. The recorded figure includes the 52,785 probe instructions; both are now reported separately. Disposition: resolved-here.
+  - *Observation 4 (coverage):* 5.4% of corpus positions have no template (no-operand rows, SSE/AVX). Disposition: deferred — next decoder sprint, with the AVX-512 validity tail.
+- **Closed:** clean.
 
 ### Sprint 021 (2026-10-08, closed)
 - **Scope:** validity layer (#UD) and iclass edge rules from the generated differential.

@@ -22,10 +22,30 @@ MAX_LEN = 15
 
 
 @dataclass(frozen=True)
+class Fields:
+    """Decoded fields the operand layer needs (src/w2m/x86ops.py)."""
+
+    prefixes: tuple[int, ...]
+    rex: int
+    enc: str
+    opcode: int
+    modrm: int | None
+    sib: int | None
+    disp: int            # sign-extended displacement value (0 when absent)
+    disp_size: int
+    imm: bytes           # raw immediate bytes, in encoding order
+    opsize: int          # 16, 32, or 64
+    asize: int           # 32 or 64 (address size)
+    ops: str | None      # the row's operand template (SDM Appendix A notation), if any
+    vvvv: int | None
+
+
+@dataclass(frozen=True)
 class Decoded:
     length: int
     mnemonic: str
     iclass: str
+    fields: Fields | None = None
 
 
 class DecodeError(ValueError):
@@ -133,11 +153,13 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} modrm "
                           f"{'none' if modrm is None else hex(modrm)} w {w} l {vl}")
-    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq = chosen[0]
+    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq, opst, osz64 = chosen[0]
     if 0xF0 in pfx and not (lock_ok and modrm is not None and modrm >> 6 != 3):
         raise InvalidEncoding(f"LOCK prefix on {mn} {'register' if modrm is not None and modrm >> 6 == 3 else ''} form")
     if enc == "vex" and vreq == "1111" and vvvv != 0xF:
         raise InvalidEncoding(f"VEX.vvvv must be 1111b for {mn}")
+    sib: int | None = None
+    disp_size = 0
     if has_modrm:
         assert modrm is not None
         i += 1
@@ -147,18 +169,22 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
                 sib = b[i]
                 i += 1
                 if (sib & 7) == 5 and mod == 0:
-                    i += 4
+                    disp_size = 4
             if mod == 0 and rm == 5:
-                i += 4
+                disp_size = 4
             elif mod == 1:
-                i += 1
+                disp_size = 1
             elif mod == 2:
-                i += 4
+                disp_size = 4
+    disp = int.from_bytes(b[i:i + disp_size], "little", signed=True) if disp_size else 0
+    i += disp_size
     opsize = "64" if w and enc == "legacy" else "16" if 0x66 in pfx else "32"
-    i += {None: 0, "b": 1, "w": 2, "d": 4,
-          "z": 2 if opsize == "16" else 4,
-          "v": 8 if opsize == "64" else 2 if opsize == "16" else 4,
-          "moffs": 4 if 0x67 in pfx else 8}[imm]
+    imm_size = {None: 0, "b": 1, "w": 2, "d": 4,
+                "z": 2 if opsize == "16" else 4,
+                "v": 8 if opsize == "64" else 2 if opsize == "16" else 4,
+                "moffs": 4 if 0x67 in pfx else 8}[imm]
+    imm_bytes = bytes(b[i:i + imm_size])
+    i += imm_size
     if i > MAX_LEN:
         raise DecodeError(f"length {i} exceeds 15")
     if sizes:
@@ -183,4 +209,8 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
             # REPNE has meaning only for cmps/scas; on other string ops F2 repeats like REP (XED REP_*)
             mn = "repne " + mn
             iclass = ("REPNE_" if mn[6:] in REPE_STRING else "REP_") + iclass
-    return Decoded(i, mn, iclass)
+    # SDM Table A-1: d64 defaults to 64 bits (66 selects 16); f64 forces 64 (66 ignored, Intel)
+    eff = 64 if osz64 == "f64" or (osz64 == "d64" and opsize == "32") else int(opsize)
+    fields = Fields(tuple(pfx), rex, enc, op, modrm, sib, disp, disp_size, imm_bytes, eff,
+                    32 if 0x67 in pfx else 64, opst, vvvv)
+    return Decoded(i, mn, iclass, fields)

@@ -7,6 +7,8 @@ Outcome classes per case:
   ours_gap         XED decodes; ours has no entry — a coverage gap outside the corpus
   length_differs   both decode, different length — a structural bug
   iclass_differs   both decode, same length, different iclass
+Operands (Sprint 022): on `agree` cases whose row carries an operand template, the explicit
+operands are compared with XED's after x86ops.normalize.
 
 Usage: uv run python scripts/generated_differential.py [--per-row 48] [--chip ALL] [--json out]
 """
@@ -21,7 +23,8 @@ from collections import Counter
 from pathlib import Path
 
 from w2m.encgen import cases
-from w2m.x86dec import DecodeError, decode
+from w2m.x86dec import DecodeError, Decoded, decode
+from w2m.x86ops import OperandError, normalize, operands
 from w2m.xedref import decode_many
 
 
@@ -37,16 +40,31 @@ def main(argv: list[str]) -> int:
     outcome: Counter[str] = Counter()
     kinds: Counter[tuple[str, str, str]] = Counter()
     example: dict[tuple[str, str, str], str] = {}
+    op_n = 0
+    op_diff: Counter[tuple[str, str]] = Counter()
+    op_ex: dict[tuple[str, str], str] = {}
     for c, x in zip(cs, xs):
         try:
-            g = decode(c.raw + b"\0" * 15)
+            g: Decoded | None = decode(c.raw + b"\0" * 15)
+            assert g is not None
             ours: tuple[int, str] | None = (g.length, g.iclass)
         except (DecodeError, IndexError, KeyError):  # InvalidEncoding is a DecodeError
-            ours = None
+            g, ours = None, None
         if not x.ok and ours is None:
             o, k = "both_reject", ("", "", "")
         elif x.ok and ours is not None and (x.length, x.iclass) == ours:
             o, k = "agree", ("", "", "")
+            if g is not None and g.fields is not None and g.fields.ops:
+                try:
+                    mine = ";".join(map(normalize, operands(g.fields)))
+                except OperandError:
+                    mine = None
+                if mine is not None:
+                    op_n += 1
+                    theirs = ";".join(map(normalize, x.operands))
+                    if mine != theirs:
+                        op_diff[(x.iform, f"{theirs} | {mine}")] += 1
+                        op_ex.setdefault((x.iform, f"{theirs} | {mine}"), c.raw[:x.length].hex())
         elif not x.ok:
             assert ours is not None
             o, k = "ours_accepts", (x.error, ours[1], "")
@@ -64,6 +82,9 @@ def main(argv: list[str]) -> int:
     print(f"cases {total} ({a.per_row} per row, chip {a.chip}); {time.monotonic() - t0:.0f} s")
     for o in ("agree", "both_reject", "ours_accepts", "ours_gap", "length_differs", "iclass_differs"):
         print(f"  {o:15} {outcome[o]:7} ({outcome[o] / total:.2%})")
+    print(f"operands: compared {op_n}; differ {sum(op_diff.values())} in {len(op_diff)} kinds")
+    for ok_, n in op_diff.most_common(12):
+        print(f"  {n:6} {ok_[0]} xed | ours: {ok_[1]} {op_ex[ok_]}")
     for o in ("length_differs", "iclass_differs", "ours_gap", "ours_accepts"):
         top = [(k, n) for k, n in kinds.most_common() if k[0] == o][:12]
         if top:
@@ -72,6 +93,10 @@ def main(argv: list[str]) -> int:
                 print(f"  {n:6} {k[1:]} {example[k]}")
     if a.json:
         a.json.write_text(json.dumps({"cases": total, "chip": a.chip, "outcomes": dict(outcome),
+                                      "operands_compared": op_n,
+                                      "operand_differs": [{"iform": k[0], "xed_vs_ours": k[1],
+                                                           "count": n, "example": op_ex[k]}
+                                                          for k, n in op_diff.most_common()],
                                       "kinds": [{"outcome": k[0], "xed": k[1], "ours": k[2],
                                                  "lengths": k[3], "count": n, "example": example[k]}
                                                 for k, n in kinds.most_common()]}, indent=1) + "\n")
