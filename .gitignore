@@ -22,3 +22,6 @@ __pycache__/
 
 # Third-party corpora are re-downloaded from their manifests (corpus/*.manifest.json)
 /corpus/*/
+
+# Third-party source trees (pinned commits recorded in WORKING_AGREEMENT.md)
+/third_party/

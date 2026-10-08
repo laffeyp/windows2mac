@@ -1,8 +1,9 @@
-"""decoder_differential.py — the two-decoder differential over every PE in a directory (Sprint 016).
+"""decoder_differential.py — decoder differential over every PE in a directory (Sprints 016-017).
 
-Capstone (reference) and w2m's spec-generated decoder decode every statically reachable
-instruction; the report gives agreement, spec gaps (opcodes the spec has no entry for), and
-disagreements (both decoded, different length or mnemonic), each with a byte example.
+Positions come from the Capstone recursive traversal. Intel XED (primary reference, decision
+2026-10-08) judges length at every position; Capstone and w2m's spec-generated decoder are each
+compared with XED. The report also keeps the w2m-vs-Capstone mnemonic comparison and lists spec
+gaps (opcodes the spec has no entry for), each with a byte example.
 
 Usage: uv run python scripts/decoder_differential.py <dir> [--json out.json]
 """
@@ -19,6 +20,7 @@ from pathlib import Path
 from w2m.pe import PeError, parse
 from w2m.x86dec import DecodeError, decode
 from w2m.x86ref import walk
+from w2m.xedref import decode_many
 
 SUFFIXES = (".exe", ".dll", ".pyd")
 
@@ -34,6 +36,9 @@ def main(argv: list[str]) -> int:
     diffs: Counter[tuple[str, str, int, int]] = Counter()
     example: dict[object, str] = {}
     per_file: list[tuple[str, int, int, int]] = []
+    xed_bad: Counter[tuple[str, str]] = Counter()
+    cs_vs_xed: Counter[tuple[str, int, int]] = Counter()
+    ours_vs_xed: Counter[tuple[str, int, int]] = Counter()
     for f in sorted(a.root.iterdir()):
         if f.suffix.lower() not in SUFFIXES:
             continue
@@ -45,15 +50,29 @@ def main(argv: list[str]) -> int:
             continue
         r = walk(img, data)
         ok = 0
-        for ins in r.insns.values():
+        insns = list(r.insns.values())
+        raws = [img.read_rva(data, i.rva, 15) for i in insns]
+        for ins, raw, x in zip(insns, raws, decode_many(raws)):
             total += 1
+            if not x.ok:
+                xk = (x.error, ins.mnemonic)
+                xed_bad[xk] += 1
+                example.setdefault(xk, ins.raw.hex())
+            elif x.length != ins.size:
+                ck = (x.iclass, x.length, ins.size)
+                cs_vs_xed[ck] += 1
+                example.setdefault(ck, ins.raw.hex())
             try:
-                got = decode(img.read_rva(data, ins.rva, 15))
+                got = decode(raw)
             except DecodeError as e:
                 gk = (str(e).split(" with ")[0].split(" modrm")[0], ins.mnemonic)
                 gaps[gk] += 1
                 example.setdefault(gk, ins.raw.hex())
                 continue
+            if x.ok and got.length != x.length:
+                ok_key = (x.iclass, x.length, got.length)
+                ours_vs_xed[ok_key] += 1
+                example.setdefault(ok_key, raw[:x.length].hex())
             if (got.length, got.mnemonic) == (ins.size, ins.mnemonic):
                 agree += 1
                 ok += 1
@@ -65,6 +84,10 @@ def main(argv: list[str]) -> int:
     print(f"files {len(per_file)}; instructions {total}; agree {agree} ({agree / total:.2%}); "
           f"spec gaps {sum(gaps.values())} in {len(gaps)} kinds; disagreements "
           f"{sum(diffs.values())} in {len(diffs)} kinds; {time.monotonic() - t0:.0f} s")
+    print(f"vs XED: XED cannot decode {sum(xed_bad.values())}; Capstone length differs "
+          f"{sum(cs_vs_xed.values())}; ours length differs {sum(ours_vs_xed.values())}")
+    for k3, n in (cs_vs_xed + ours_vs_xed).most_common(10):
+        print(f"  length vs XED {n:6} {k3} {example[k3]}")
     for name, n, ok, und in sorted(per_file, key=lambda x: -x[1])[:8]:
         print(f"  {name:22} {n:8} insns  agree {ok / n:.1%}  capstone-undecodable {und}")
     print("top spec gaps (missing entry, capstone mnemonic): count, example bytes")

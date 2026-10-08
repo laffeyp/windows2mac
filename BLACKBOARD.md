@@ -73,7 +73,8 @@
 - **2026-10-08** — Sprint 013 (PE32+ reader) closed; Phase 3 opened. `src/w2m/pe.py`, `tests/test_pe.py`, fixtures `store/binaries/9708e648...exe` (hello) and `98e74d00...exe` (event_auto_reset), runner runs 37823653332 and 37823658739. Dual contract: signal vacuous (library); artifact pass (suite 50 passed; ruff, mypy 0). Observation: pass — entry, image base, and all imports equal llvm-objdump on both; malformed inputs refused.
 - **2026-10-08** — Sprint 014 (reference decoder) closed. `src/w2m/x86ref.py`, `tests/test_x86ref.py`; `pe.py` gains IAT slot names and `.pdata` starts; Capstone 5.0.9 extra. Dual contract: signal vacuous (library); artifact pass (suite 54 passed; ruff, mypy 0). Observation: pass — hello 26,198 / event_auto_reset 26,587 reachable instructions, 151 distinct mnemonics each, 95.2% of executable bytes; Capstone and LLVM agree on length and mnemonic at all 52,785.
 - **2026-10-08** — Sprint 015 (own decoder, differential) closed. `specs/x86_decode.json` (430 SDM-cited entries), `scripts/gen_decoder.py`, `src/w2m/x86dec_tables.py` (generated), `src/w2m/x86dec.py`, `tests/test_x86dec.py`. Dual contract: signal vacuous (library); artifact pass (generator `--check` 0; suite 71 passed; ruff, mypy 0). Observation: first run 99.82% agreement, one disagreement class fixed; final 52,785 / 52,785 on length and mnemonic.
-- **2026-10-08** — Sprint 016 (unseen-corpus differential) closed. `scripts/decoder_differential.py`, `specs/x86_decode_worklist.json`, `corpus/python-3.14.8.manifest.json` (Python 3.14.8 embeddable, 33 MSVC-built PEs, zip sha256 a93abe45...a310). Observation: 2,391,671 reachable instructions, 99.24% agree; 17,804 in 203 spec-gap kinds; 273 disagreements in 2 kinds (repz ret spelling; vzeroall/vzeroupper — spec ignores VEX.L); no length disagreements; 15 locations Capstone cannot decode. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
+- **2026-10-08** — Sprint 016 (unseen-corpus differential) closed. `scripts/decoder_differential.py`, `specs/x86_decode_worklist.json`, `corpus/python-3.14.8.manifest.json` (Python 3.14.8 embeddable, 33 MSVC-built PEs, zip sha256 a93abe45...a310). Observation: 2,391,671 reachable instructions, 99.24% agree; 17,804 in 203 spec-gap kinds; 273 disagreements in 2 kinds (repz ret spelling; vzeroall/vzeroupper — spec ignores VEX.L); no length disagreements; 15 locations Capstone cannot decode.
+- **2026-10-08** — Sprint 017 (XED primary reference) closed. XED v2026.08.23 (0bcb6237) built under `third_party/`; `tools/xedshim/xedshim.c`, `src/w2m/xedref.py`, `tests/test_xedref.py`; differential judged by XED. Dual contract: signal vacuous; artifact pass (75 passed; ruff, mypy 0). Observation: XED decodes all 2,444,456 positions; Capstone and w2m lengths equal XED's everywhere they decode; disputed cases settled by XED. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
@@ -88,6 +89,8 @@
 - **2026-10-07 (Agent)** — Full x86-TSO litmus coverage on the VM backend (SB must stay observable, LB/2+2W/IRIW must stay forbidden) using herdtools7's x86 tests as the model reference. Re-visit when the CPU translator emits guest code for these tests.
 
 - **2026-10-08 (Agent)** — Hoisted page-protection checks need an invalidation rule against concurrent VirtualProtect (protection epoch or re-translation). Re-visit when the native-process backend compiles its first loop with hoisted checks.
+
+- **2026-10-08 (Agent)** — Static traversal walks into data embedded in hand-written assembly (OpenSSL credit strings in libcrypto `.text`). Re-visit when the traversal feeds the translator: refuse-by-all-decoders marks a data region.
 
 ---
 
@@ -109,6 +112,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 017 (2026-10-08, closed)
+- **Scope:** XED built from source and made the judge of length in the differential.
+- **Rubber Duck Pass:**
+  - *Observation 1 (what agreement means):* on 2.44 M compiler-produced instructions no decoder disagrees with XED on length. Disposition: recorded — consistent with the literature (decoder bugs live in unusual encodings); generated encodings are the next test, not more corpus.
+  - *Observation 2 (traversal, not decoder):* the 15 Capstone failures are ASCII credit strings inside libcrypto's `.text`. Disposition: deferred — the traversal needs data detection for hand-written assembly (stop at bytes all decoders refuse; mark the region data); Deferred entry.
+  - *Observation 3 (identity):* XED's iclass names separate what mnemonics conflate (MOVSD vs MOVSD_XMM). Disposition: deferred to Sprint 018 — the spec adopts XED iclass as each row's identity (a contract revision of `specs/x86_decode.json`).
+- **Files:** tools/xedshim/xedshim.c, src/w2m/xedref.py, tests/test_xedref.py, scripts/decoder_differential.py
+- **Closed:** clean.
 
 ### Sprint 016 (2026-10-08, closed)
 - **Scope:** generalization test of the spec-generated decoder on 33 binaries it was not written from.
