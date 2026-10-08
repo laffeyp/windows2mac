@@ -94,7 +94,7 @@
   - *Sequence narration (evt-1):* main 6680 started; SetEvent returned 1; join of waiter 5880 returned 0 after 5880:2; join of 4328 returned 0 after 4328:2; WaitForSingleObject(event,0) returned 258. Waiter a's wait returned 0 citing main's SetEvent line; waiter b's returned 258.
   - *Observation 1 (timing surprise):* waiter a released in 10 of 10 executions; the profile looks FIFO. Disposition: recorded — documented evidence keeps {b} allowed (v0.2 §11.1: repeated observations are witnesses, not rules); open question added to 0.2.0 for a wait-order variant.
   - *Observation 2 (payload anomaly, resolved):* the Sprint 006 watchlist item: profile_id now carries UBR 33438 and `Server`. Disposition: resolved-here; watchlist item closed.
-  - *Observation 3 (missing pair):* the imported executions' EXECUTION_STARTED carries `elapsed_seconds=0.0` and timeout 600 s (job limit), not measured values, because the probe ran on the runner, not under the harness clock. Disposition: deferred — the probe writes its own elapsed time in a later probe-format revision.
+  - *Observation 3 (missing pair):* the imported executions carry `elapsed_seconds=0.0` on EXECUTION_COMPLETED and timeout 600 s (job limit) on EXECUTION_STARTED, not measured values, because the probe ran on the runner, not under the harness clock. Disposition: deferred — the probe writes its own elapsed time in a later probe-format revision.
 - **Files:** probes/event_auto_reset/event_auto_reset.c, scripts/judge_traces.py, .github/workflows/windows-probe.yml, contracts/.../0.2.0.json
 - **Closed:** clean.
 
