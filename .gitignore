@@ -19,3 +19,6 @@ __pycache__/
 
 # Local probe binaries
 /build/
+
+# Third-party corpora are re-downloaded from their manifests (corpus/*.manifest.json)
+/corpus/*/
