@@ -1,4 +1,4 @@
-"""gen_events.py — generate src/w2m/events.py from signals/0.1.json.
+"""gen_events.py — generate src/w2m/events.py from the current vocabulary (signals/current.json).
 
 One frozen msgspec Struct per tag; the class name IS the tag, so substrate records the event
 under the vocabulary's name (substrate kernel/sequencer.py: event_kind = type(obj).__name__).
@@ -17,11 +17,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VOCAB = ROOT / "signals" / "0.1.json"
+VOCAB = ROOT / "signals" / (json.loads((ROOT / "signals" / "current.json").read_text())["version"] + ".json")
 OUT = ROOT / "src" / "w2m" / "events.py"
 
 # Vocabulary `types` -> annotation. `version` accepts major.minor[.patch]: the vocabulary's
-# own version is "0.1" (see proposals.json P8).
+# own version is major.minor (proposal P8, ratified into 0.2).
 TYPE_ALIASES = {
     "sha256": 'Annotated[str, Meta(pattern=r"^sha256:[0-9a-f]{64}$")]',
     "id": "Annotated[str, Meta(min_length=1)]",
@@ -81,6 +81,9 @@ def render(vocab_bytes: bytes) -> str:
         "",
         f'VOCAB_VERSION = "{v["version"]}"',
         f'VOCAB_SHA256 = "sha256:{digest}"',
+        "GUEST_PLANE_VERSIONS: tuple[str, ...] = ("
+        + "".join(f'"{x}", ' for x in v.get("guest_plane_compatible_versions", [v["version"]]))
+        + ")",
         "",
     ]
     for key, expr in TYPE_ALIASES.items():

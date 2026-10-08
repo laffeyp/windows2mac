@@ -16,7 +16,9 @@ from substrate.api import threshold_count
 
 from w2m import VOCAB_VERSION, events
 
-VOCAB = json.loads((Path(__file__).resolve().parent.parent / "signals" / "0.1.json").read_text())
+SIGNALS = Path(__file__).resolve().parent.parent / "signals"
+VOCAB = json.loads((SIGNALS / (json.loads((SIGNALS / "current.json").read_text())["version"]
+                              + ".json")).read_text())
 H = "sha256:" + "ab" * 32
 
 
@@ -44,7 +46,7 @@ async def test_session_events_land_on_a_substrate_record(tmp_path: Path) -> None
     result = await Runtime(tmp_path / "run").run(topology)
     assert result.status == "finalised"
     rec = result.record_root
-    assert_event(rec, "SESSION_INIT", vocab_version="0.1", purpose="conformance")
+    assert_event(rec, "SESSION_INIT", vocab_version=VOCAB_VERSION, purpose="conformance")
     assert_event(rec, "SESSION_COMPLETED", outcome="completed")
     assert_no_event(rec, "substrate.ProducerEmittedInvalidEvent")
     assert_no_event(rec, "substrate.ProducerFailed")

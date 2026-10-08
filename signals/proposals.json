@@ -1,5 +1,5 @@
 {
-  "vocabulary": "signals/0.1.json",
+  "vocabulary": "signals/0.2.json (current); signals/0.1.json (prior)",
   "taxonomy_version": "0.1",
   "proposals": [
     {
@@ -107,8 +107,32 @@
       ],
       "source": "Sprint 002: substrate.api.canonical_bytes raises NonCanonicalValueError for |n| > 2^53-1 (RFC 8785); signals/0.1.json types.version text says major.minor.patch while version is '0.1'",
       "rationale": "Both are already enforced by the generated validators (scripts/gen_events.py); no tag or field changes. Written into the vocabulary at the next version bump so the constraint is visible outside the generator.",
-      "status": "open",
-      "revisit": "next vocabulary version bump"
+      "status": "ratified",
+      "revisit": "next vocabulary version bump",
+      "ratified": {
+        "date": "2026-10-07",
+        "by": "agent-resolved",
+        "into": "0.2",
+        "grounds": "substrate.api.canonical_bytes rejects |n| > 2^53-1 (Sprint 002); the vocabulary's own version '0.1' contradicted its types.version text; PRINCIPLES.md commitment 1 (the constraint must be visible in the contract, not only in the generator)"
+      }
+    },
+    {
+      "id": "P9",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "candidate": [
+        "MEASUREMENT_RECORDED.metric gains enum value ns_per_access",
+        "MEASUREMENT_RECORDED gains optional payload field variant (text)"
+      ],
+      "source": "v0.2 section 8.2 (both backends measured; neither assigned an assumed per-access cost) and section 13 (measure ordering operations and memory checks); Sprint 011 needs per-access cost of TSO lowerings",
+      "rationale": "No existing metric expresses per-access cost, and no field names which lowering or configuration produced a number; without them the backend comparison cannot be recorded.",
+      "status": "ratified",
+      "ratified": {
+        "date": "2026-10-07",
+        "by": "agent-resolved",
+        "into": "0.2",
+        "grounds": "project \u2014 v0.2 sections 8.2, 13; SDD \u2014 PRINCIPLES.md proposal taxonomy (PAYLOAD_FIELD_PROPOSED), 0.1 Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
+      }
     }
   ]
 }

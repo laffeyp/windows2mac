@@ -1,4 +1,4 @@
-"""trace.py — guest-trace ingest (signals/0.1.json operator `trace_ingester`).
+"""trace.py — guest-trace ingest (vocabulary operator `trace_ingester`).
 
 A guest trace is a JSONL file in the content store at `<store>/traces/<hex>.jsonl`. Only a trace
 that passes every check here becomes citable evidence (TRACE_INGESTED); anything else yields
@@ -32,7 +32,7 @@ def trace_path(store_root: Path, trace_sha256: str) -> Path:
     return store_root / TRACES / f"{trace_sha256.removeprefix('sha256:')}.jsonl"
 
 
-def _check(raw: bytes, trace_sha256: str, execution_id: str) -> tuple[int, int]:
+def _check(raw: bytes, trace_sha256: str, execution_id: str) -> tuple[int, int, str]:
     actual = "sha256:" + hashlib.sha256(raw).hexdigest()
     if actual != trace_sha256:
         raise _Reject(0, f"content hash {actual} does not match {trace_sha256}")
@@ -43,6 +43,7 @@ def _check(raw: bytes, trace_sha256: str, execution_id: str) -> tuple[int, int]:
     seen: set[str] = set()
     pending_hb: list[tuple[int, str]] = []
     closed: events.GUEST_TRACE_CLOSED | None = None
+    trace_version = ""
     for n, line in enumerate(lines, start=1):
         if closed is not None:
             raise _Reject(n, "line after GUEST_TRACE_CLOSED (S14)")
@@ -55,8 +56,10 @@ def _check(raw: bytes, trace_sha256: str, execution_id: str) -> tuple[int, int]:
                 raise _Reject(1, "first line is not GUEST_TRACE_OPENED (T5)")
             if ev.execution_id != execution_id:
                 raise _Reject(1, f"execution_id {ev.execution_id} does not match {execution_id}")
-            if ev.vocab_version != events.VOCAB_VERSION:
-                raise _Reject(1, f"vocab_version {ev.vocab_version} is not {events.VOCAB_VERSION}")
+            if ev.vocab_version not in events.GUEST_PLANE_VERSIONS:
+                raise _Reject(1, f"vocab_version {ev.vocab_version} not in "
+                                 f"{list(events.GUEST_PLANE_VERSIONS)}")
+            trace_version = ev.vocab_version
             continue
         if isinstance(ev, events.GUEST_TRACE_OPENED):
             raise _Reject(n, "second GUEST_TRACE_OPENED (T5)")
@@ -85,7 +88,7 @@ def _check(raw: bytes, trace_sha256: str, execution_id: str) -> tuple[int, int]:
         raise _Reject(len(lines), f"line_count {closed.line_count}, file has {len(lines)}")
     if closed.thread_count != len(next_seq):
         raise _Reject(len(lines), f"thread_count {closed.thread_count}, trace has {len(next_seq)}")
-    return len(lines), len(next_seq)
+    return len(lines), len(next_seq), trace_version
 
 
 def ingest(
@@ -94,7 +97,7 @@ def ingest(
     """Validate one guest trace and return the validated harness event that records the outcome."""
     path = trace_path(store_root, trace_sha256)
     try:
-        line_count, thread_count = _check(path.read_bytes(), trace_sha256, execution_id)
+        line_count, thread_count, version = _check(path.read_bytes(), trace_sha256, execution_id)
     except FileNotFoundError:
         return events.validate(events.TRACE_REJECTED(
             trace_sha256=trace_sha256, execution_id=execution_id, first_invalid_line=0,
@@ -105,7 +108,7 @@ def ingest(
             first_invalid_line=r.line, reason=r.reason))
     return events.validate(events.TRACE_INGESTED(
         trace_sha256=trace_sha256, execution_id=execution_id, line_count=line_count,
-        thread_count=thread_count, vocab_version=events.VOCAB_VERSION))
+        thread_count=thread_count, vocab_version=version))
 
 
 def trace_ingester(

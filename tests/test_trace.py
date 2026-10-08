@@ -149,3 +149,21 @@ async def test_observation_rejected_on_the_record(tmp_path: Path) -> None:
     digest, rec = await _run(tmp_path, _mutate(4, thread_seq=3)(good_lines()))
     assert_event(rec, "TRACE_REJECTED", trace_sha256=digest, first_invalid_line=5)
     assert_no_event(rec, "TRACE_INGESTED")
+
+
+def test_unknown_vocab_version_rejected_and_old_versions_kept(tmp_path: Path) -> None:
+    lines = good_lines()
+    lines[0] = {**lines[0], "vocab_version": "9.9"}
+    out = ingest(tmp_path, store(tmp_path, lines), "e1")
+    assert isinstance(out, events.TRACE_REJECTED) and "9.9" in out.reason
+    assert "0.1" in events.GUEST_PLANE_VERSIONS          # committed 0.1 traces stay evidence
+
+
+def test_every_committed_reference_trace_still_ingests() -> None:
+    root = Path(__file__).resolve().parent.parent / "store"
+    traces = sorted((root / "traces").glob("*.jsonl"))
+    assert traces
+    for t in traces:
+        eid = json.loads(t.read_bytes().splitlines()[0])["execution_id"]
+        out = ingest(root, "sha256:" + t.stem, eid)
+        assert isinstance(out, events.TRACE_INGESTED), (t.name, out)

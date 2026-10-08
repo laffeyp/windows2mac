@@ -1,6 +1,6 @@
 """check_vocab.py — structural gate for signals/<version>.json (Sprint 000 self-review, BOOTSTRAP Steps 1-10).
 
-Usage: python3 scripts/check_vocab.py [signals/0.1.json]
+Usage: python3 scripts/check_vocab.py [signals/<version>.json]   (default: signals/current.json)
 Exit 0 when every check passes; 1 with the failures listed on stderr.
 """
 from __future__ import annotations
@@ -91,7 +91,8 @@ def check(path: str) -> list[str]:
 
 
 if __name__ == "__main__":
-    errors = check(sys.argv[1] if len(sys.argv) > 1 else "signals/0.1.json")
+    current = "signals/" + json.load(open("signals/current.json"))["version"] + ".json"
+    errors = check(sys.argv[1] if len(sys.argv) > 1 else current)
     for e in errors:
         print(e, file=sys.stderr)
     sys.exit(1 if errors else 0)
