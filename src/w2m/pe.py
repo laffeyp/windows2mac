@@ -1,0 +1,203 @@
+"""pe.py — PE32+ (x86-64) image reader (v0.2 section 4.1: the frontend starts from the PE).
+
+Reads headers, sections, imports, base relocations, exports, and TLS callbacks from the bytes
+of a Windows executable, following Microsoft's "PE Format" specification. Malformed input
+raises PeError naming the file offset; nothing is guessed. The import table is the first
+draft of an application's contract inventory (v0.2 section 7); the entry point, exports, and
+TLS callbacks are statically known code targets (v0.2 section 5.1).
+"""
+
+from __future__ import annotations
+
+import struct
+from dataclasses import dataclass, field
+
+IMAGE_FILE_MACHINE_AMD64 = 0x8664
+PE32_PLUS = 0x20B
+SCN_MEM_EXECUTE = 0x20000000
+SCN_MEM_READ = 0x40000000
+SCN_MEM_WRITE = 0x80000000
+DIR_EXPORT, DIR_IMPORT, DIR_BASERELOC, DIR_TLS = 0, 1, 5, 9
+REL_ABSOLUTE, REL_DIR64 = 0, 10
+
+
+class PeError(ValueError):
+    """The bytes are not a well-formed PE32+ image."""
+
+
+@dataclass(frozen=True)
+class Section:
+    name: str
+    virtual_address: int
+    virtual_size: int
+    raw_offset: int
+    raw_size: int
+    characteristics: int
+
+    @property
+    def flags(self) -> str:
+        c = self.characteristics
+        return ("r" if c & SCN_MEM_READ else "-") + ("w" if c & SCN_MEM_WRITE else "-") + (
+            "x" if c & SCN_MEM_EXECUTE else "-")
+
+
+@dataclass(frozen=True)
+class PeImage:
+    machine: int
+    timestamp: int
+    characteristics: int
+    image_base: int
+    entry_rva: int
+    section_alignment: int
+    size_of_image: int
+    subsystem: int
+    dll_characteristics: int
+    sections: tuple[Section, ...]
+    imports: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    relocations: dict[int, int] = field(default_factory=dict)  # type -> count
+    exports: tuple[tuple[str, int], ...] = ()                  # (name, rva)
+    tls_callbacks: tuple[int, ...] = ()                         # RVAs
+
+    def code_targets(self) -> list[tuple[str, int]]:
+        """Statically known entries into guest code: (discovery kind, RVA)."""
+        out = [("static", self.entry_rva)] if self.entry_rva else []
+        out += [("export", rva) for _, rva in self.exports]
+        out += [("callback", rva) for rva in self.tls_callbacks]
+        return out
+
+
+class _Reader:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def u(self, fmt: str, off: int) -> tuple[int, ...]:
+        size = struct.calcsize(fmt)
+        if off < 0 or off + size > len(self.data):
+            raise PeError(f"read of {size} bytes at offset 0x{off:x} beyond file size 0x{len(self.data):x}")
+        return struct.unpack_from(fmt, self.data, off)
+
+    def cstr(self, off: int, limit: int = 4096) -> str:
+        if off < 0 or off >= len(self.data):
+            raise PeError(f"string at offset 0x{off:x} beyond file size")
+        end = self.data.find(b"\0", off, off + limit)
+        if end < 0:
+            raise PeError(f"unterminated string at offset 0x{off:x}")
+        return self.data[off:end].decode("ascii", errors="strict")
+
+
+def _rva_to_offset(sections: tuple[Section, ...], rva: int) -> int:
+    for s in sections:
+        span = max(s.virtual_size, s.raw_size)
+        if s.virtual_address <= rva < s.virtual_address + span:
+            delta = rva - s.virtual_address
+            if delta >= s.raw_size:
+                raise PeError(f"RVA 0x{rva:x} lies in uninitialized data of {s.name}")
+            return s.raw_offset + delta
+    raise PeError(f"RVA 0x{rva:x} is in no section")
+
+
+def parse(data: bytes) -> PeImage:
+    """Parse a PE32+ x86-64 image; raise PeError on anything malformed."""
+    r = _Reader(data)
+    if data[:2] != b"MZ":
+        raise PeError("no MZ signature at offset 0")
+    (lfanew,) = r.u("<I", 0x3C)
+    if data[lfanew:lfanew + 4] != b"PE\0\0":
+        raise PeError(f"no PE signature at e_lfanew 0x{lfanew:x}")
+    coff = lfanew + 4
+    machine, nsec, timestamp, _, _, opt_size, chars = r.u("<HHIIIHH", coff)
+    if machine != IMAGE_FILE_MACHINE_AMD64:
+        raise PeError(f"machine 0x{machine:x} is not AMD64 (0x8664)")
+    opt = coff + 20
+    (magic,) = r.u("<H", opt)
+    if magic != PE32_PLUS:
+        raise PeError(f"optional header magic 0x{magic:x} is not PE32+ (0x20b)")
+    (entry,) = r.u("<I", opt + 16)
+    (image_base,) = r.u("<Q", opt + 24)
+    sect_align, _ = r.u("<II", opt + 32)
+    size_of_image, _ = r.u("<II", opt + 56)
+    subsystem, dllchars = r.u("<HH", opt + 68)
+    (ndirs,) = r.u("<I", opt + 108)
+    dirs: list[tuple[int, int]] = []
+    for i in range(min(ndirs, 16)):
+        va, sz = r.u("<II", opt + 112 + 8 * i)
+        dirs.append((va, sz))
+
+    sections = tuple(
+        Section(
+            name=data[o:o + 8].rstrip(b"\0").decode("ascii", errors="replace"),
+            virtual_size=r.u("<I", o + 8)[0], virtual_address=r.u("<I", o + 12)[0],
+            raw_size=r.u("<I", o + 16)[0], raw_offset=r.u("<I", o + 20)[0],
+            characteristics=r.u("<I", o + 36)[0])
+        for o in (opt + opt_size + 40 * i for i in range(nsec)))
+
+    def d(i: int) -> tuple[int, int]:
+        return dirs[i] if i < len(dirs) else (0, 0)
+
+    imports: dict[str, tuple[str, ...]] = {}
+    rva, size = d(DIR_IMPORT)
+    if rva:
+        off = _rva_to_offset(sections, rva)
+        while True:
+            oft, _, _, name_rva, ft = r.u("<IIIII", off)
+            if (oft, name_rva, ft) == (0, 0, 0):
+                break
+            dll = r.cstr(_rva_to_offset(sections, name_rva))
+            thunk = _rva_to_offset(sections, oft or ft)
+            names: list[str] = []
+            while True:
+                (t,) = r.u("<Q", thunk)
+                if t == 0:
+                    break
+                if t >> 63:
+                    names.append(f"#{t & 0xFFFF}")
+                else:
+                    names.append(r.cstr(_rva_to_offset(sections, t & 0x7FFFFFFF) + 2))
+                thunk += 8
+            imports[dll] = tuple(names)
+            off += 20
+
+    relocs: dict[int, int] = {}
+    rva, size = d(DIR_BASERELOC)
+    if rva:
+        off, end = _rva_to_offset(sections, rva), _rva_to_offset(sections, rva) + size
+        while off < end:
+            _, block = r.u("<II", off)
+            if block < 8:
+                raise PeError(f"relocation block size {block} at offset 0x{off:x}")
+            for i in range((block - 8) // 2):
+                (e,) = r.u("<H", off + 8 + 2 * i)
+                relocs[e >> 12] = relocs.get(e >> 12, 0) + 1
+            off += block
+
+    exports: list[tuple[str, int]] = []
+    rva, size = d(DIR_EXPORT)
+    if rva:
+        e = _rva_to_offset(sections, rva)
+        _, _, _, _, _, _, nfuncs, nnames, funcs, names_rva, ords = r.u("<IIHHIIIIIII", e)
+        for i in range(nnames):
+            (nrva,) = r.u("<I", _rva_to_offset(sections, names_rva) + 4 * i)
+            (ordinal,) = r.u("<H", _rva_to_offset(sections, ords) + 2 * i)
+            (frva,) = r.u("<I", _rva_to_offset(sections, funcs) + 4 * ordinal)
+            exports.append((r.cstr(_rva_to_offset(sections, nrva)), frva))
+
+    callbacks: list[int] = []
+    rva, size = d(DIR_TLS)
+    if rva:
+        (cb_va,) = r.u("<Q", _rva_to_offset(sections, rva) + 24)
+        if cb_va:
+            off = _rva_to_offset(sections, cb_va - image_base)
+            while True:
+                (va,) = r.u("<Q", off)
+                if va == 0:
+                    break
+                callbacks.append(va - image_base)
+                off += 8
+
+    if not 0 <= entry < size_of_image:
+        raise PeError(f"entry RVA 0x{entry:x} outside image size 0x{size_of_image:x}")
+    return PeImage(machine=machine, timestamp=timestamp, characteristics=chars,
+                   image_base=image_base, entry_rva=entry, section_alignment=sect_align,
+                   size_of_image=size_of_image, subsystem=subsystem, dll_characteristics=dllchars,
+                   sections=sections, imports=imports, relocations=relocs,
+                   exports=tuple(exports), tls_callbacks=tuple(callbacks))
