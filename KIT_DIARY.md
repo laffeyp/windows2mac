@@ -108,3 +108,15 @@
 
 6. The observation contract template could carry a "power" line for any check that passes on absence (zero violations, no errors): name the control that must fail in the same run.
 7. Measurement sprints could require symmetric setup (warm passes, same allocation path) as a self-review checklist item.
+
+## Phase boundary synthesis — Phase 2 (destination capability probes), 2026-10-08
+
+**Delivered:** measured inputs for v0.2 §8.2 on both backends, on mac-Mac17,7-macos-25F80. Managed VM: 4 KB IPA granule present; guest TSO present and effective (MP 2245/50M off, 0/50M on); 4 KB guest page protection present in hardware; per-access cost of TSO and 4 KB pages within ~10% of native plain code. Native process: no public TSO control; LDAPR/STLR lowering correct and 2.6-2.7x per access; DMB fences 7.4x; no 4 KB mprotect (EINVAL); software page checks 2.1x per access, 1.04-1.12x when hoisted to page entry, valid only with an invalidation rule.
+
+**Not delivered, by design:** a backend choice. v0.2 §8.2 requires guest/host interface costs (graphics, audio, input, file I/O across the VM boundary) and whole-application measurements, which need the CPU translator and a game.
+
+**Through-line:** three of the four first-pass numbers in Phase 2 measurements were wrong for reasons the observation contract exposed and content assertions never would: warm-up asymmetry (6.2x), a litmus with no power, and branch layout (1.9x). H4 confirmed; the kit's measurement guidance needs symmetric setup, same-run controls, and a layout check for hot loops.
+
+**What this says about the next kit version:**
+
+8. Measurement sprints: treat each first-pass number as a hypothesis and name, before running, what would make it an artifact (warm-up, power, code layout, core placement).

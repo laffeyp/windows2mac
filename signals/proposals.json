@@ -1,5 +1,5 @@
 {
-  "vocabulary": "signals/0.2.json (current); signals/0.1.json (prior)",
+  "vocabulary": "signals/0.3.json (current); signals/0.2.json, signals/0.1.json (prior)",
   "taxonomy_version": "0.1",
   "proposals": [
     {
@@ -132,6 +132,23 @@
         "by": "agent-resolved",
         "into": "0.2",
         "grounds": "project \u2014 v0.2 sections 8.2, 13; SDD \u2014 PRINCIPLES.md proposal taxonomy (PAYLOAD_FIELD_PROPOSED), 0.1 Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
+      }
+    },
+    {
+      "id": "P10",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "candidate": [
+        "CAPABILITY_PROBED.capability gains native_mprotect_4k, native_page_check_4k, guest_page_protection_4k"
+      ],
+      "source": "v0.2 section 8 (two contiguous 4 KB pages with different protection; guest page metadata separate from host allocation); Sprint 012 probes",
+      "rationale": "The 0.2 capability enum names the IPA granule but not whether 4 KB guest page protection is enforceable: by host mprotect (native), by a software shadow check (native), or by guest stage-1 page tables (VM).",
+      "status": "ratified",
+      "ratified": {
+        "date": "2026-10-08",
+        "by": "agent-resolved",
+        "into": "0.3",
+        "grounds": "project \u2014 v0.2 section 8; SDD \u2014 PRINCIPLES.md proposal taxonomy, Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
       }
     }
   ]
