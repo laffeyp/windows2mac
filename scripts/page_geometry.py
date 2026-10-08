@@ -1,4 +1,4 @@
-"""page_geometry.py — 4 KB guest page protection on this Mac: correctness and cost (Sprint 012).
+"""page_geometry.py — 4 KB guest page protection on this Mac: correctness and execution time of each enforcement variant (Sprint 012).
 
 Builds and signs probes/page_geometry/page_geometry.c; runs the native and VM correctness checks
 for the v0.2 section 8 example (page A read/write, page A+4096 inaccessible); then times

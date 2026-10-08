@@ -1,4 +1,4 @@
-"""ordering_cost.py — per-access cost of x86-TSO ordering, native process vs managed VM (Sprint 011).
+"""ordering_cost.py — execution time of x86-TSO ordering lowerings on one synthetic kernel, native process and managed VM (Sprint 011).
 
 Builds and signs probes/ordering_cost/ordering_cost.c, checks the native TSO lowering with an MP
 litmus (ldapr/stlr must show zero forbidden outcomes), then times 6 variants x 2 working sets,
@@ -63,14 +63,14 @@ def main(argv: list[str]) -> int:
         print(f"native mp litmus attempt {attempt}: plain {mp['plain_forbidden']}/"
               f"{mp['iterations']}, ldapr_stlr {mp['ldapr_stlr_forbidden']}/{mp['iterations']}")
         if mp["ldapr_stlr_forbidden"] != 0:
-            print("ldapr/stlr lowering admitted a forbidden MP outcome; no costs recorded",
+            print("ldapr/stlr lowering admitted a forbidden MP outcome; no timings recorded",
                   file=sys.stderr)
             return 1
         if mp["plain_forbidden"] > 0:
             break
     else:
         print("plain never failed in 10 attempts; the lowering check has no power; "
-              "no costs recorded", file=sys.stderr)
+              "no timings recorded", file=sys.stderr)
         return 1
 
     samples: dict[tuple[str, str, str], list[float]] = {}

@@ -1,4 +1,4 @@
-# Sprint 011 — cost of x86-TSO ordering, native process vs managed VM
+# Sprint 011 — execution time of x86-TSO ordering lowerings, native process and managed VM
 
 ```yaml
 ---
@@ -51,16 +51,16 @@ Author `probes/ordering_cost/ordering_cost.c` and `scripts/ordering_cost.py`. On
 
 ## done criteria
 
-The per-access cost of x86 ordering is measured on both backends on this host, with the native lowering shown correct first.
+The execution time of each ordering lowering on this kernel is measured on this host, with the native lowering shown correct first.
 
 ## notes
 
-This measures one ingredient of v0.2 §8.2, not a backend decision: v0.2 forbids choosing a backend from a single cost. VM numbers exclude exit costs by design (one entry per timed run, milliseconds long); exit-heavy workloads are a separate measurement.
+This measures one ingredient of v0.2 §8.2, not a backend decision: v0.2 forbids choosing a backend from a single measurement. VM numbers exclude exit costs by design (one entry per timed run, milliseconds long); exit-heavy workloads are a separate measurement.
 
 ## self-review checklist
 
 - [x] Scope concrete.
-- [x] Correctness precondition before cost.
+- [x] Correctness precondition before timing.
 - [x] Emits use 0.2 tags/fields.
 - [x] Assertions gradable.
 - [x] Observation contract present.

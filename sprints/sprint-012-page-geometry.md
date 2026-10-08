@@ -1,4 +1,4 @@
-# Sprint 012 — 4 KB page protection: correctness and cost on both backends
+# Sprint 012 — 4 KB page protection: correctness and execution time on both backends
 
 ```yaml
 ---
@@ -11,7 +11,7 @@ pass_kind: observation
 
 ## scope
 
-Probe v0.2 §8's example (page A read/write, page A+4096 inaccessible) on this Mac: native `mprotect` at 4 KB granularity; a native software shadow check (1 byte per 4 KB page); guest 4 KB stage-1 pages in a Hypervisor.framework VM with one invalid page and a guest vector table that exits on the fault. Then measure per-access cost: native plain / check_each / check_page_cross, VM pages_4k / blocks_2m, L1- and DRAM-sized working sets. Ratify P10 into vocabulary 0.3 (three capability values) in the same sprint.
+Probe v0.2 §8's example (page A read/write, page A+4096 inaccessible) on this Mac: native `mprotect` at 4 KB granularity; a native software shadow check (1 byte per 4 KB page); guest 4 KB stage-1 pages in a Hypervisor.framework VM with one invalid page and a guest vector table that exits on the fault. Then measure execution time per access: native plain / check_each / check_page_cross, VM pages_4k / blocks_2m, L1- and DRAM-sized working sets. Ratify P10 into vocabulary 0.3 (three capability values) in the same sprint.
 
 ## files
 
@@ -34,6 +34,6 @@ Emits SESSION_INIT, CAPABILITY_PROBED x3, MEASUREMENT_RECORDED x10, SESSION_COMP
 
 ## self-review checklist
 
-- [x] Correctness precondition before cost; the driver refuses to measure if any check fails.
+- [x] Correctness precondition before timing; the driver refuses to measure if any check fails.
 - [x] Vocabulary change by proposal, ratified in the needing sprint (PRINCIPLES.md).
 - [x] Symmetric setup: VM and native both have a warm pass (KIT_DIARY finding 7).

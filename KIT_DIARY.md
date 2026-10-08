@@ -89,7 +89,7 @@
 
 5. Hard rule 6 could exempt generated files whose generator is in the same sprint and whose `--check` is a graded command.
 
-### 2026-10-07 — Sprints 004-011 (contracts, Windows reference loop, Mac capability and cost probes)
+### 2026-10-07 — Sprints 004-011 (contracts, Windows reference loop, Mac capability and timing probes)
 
 **What happened:** Eight sprints took the project from a vocabulary to evidence on both sides: an accepted Windows contract backed by 10 runs on a hosted `windows-2025` runner, public Hypervisor.framework controls for 4 KB guest pages and guest TSO, a litmus test showing EnTSO's effect (2245 vs 0 forbidden outcomes in 50M), and per-access costs of TSO on both backends. One vocabulary evolution (0.1 → 0.2) went through the proposal taxonomy.
 
@@ -120,3 +120,15 @@
 **What this says about the next kit version:**
 
 8. Measurement sprints: treat each first-pass number as a hypothesis and name, before running, what would make it an artifact (warm-up, power, code layout, core placement).
+
+### 2026-10-08 — User correction: no "cost" framing
+
+**What happened:** The user rejected the word "cost" and the phrase "the native backend pays 2.7x" in the Phase 2 report: "There's no cost... It's going to poison your whole analysis."
+
+**What was wrong:** The Phase 2 numbers are execution times of specific lowerings applied to every access of one synthetic loop. Reporting them as what a backend "pays" assigned a per-access penalty to the native backend in advance, which v0.2 §8.2 forbids ("Neither is assigned an assumed per-access or zero-crossing cost in advance") and §13 contradicts (enforcement is measured after optimization). A specializing compiler emits ordering only where the contract requires it and removes redundant checks; the microbenchmark measured neither.
+
+**Correction:** Phase 2 delivered correctness evidence on both backends and the execution time of each enforcement variant on one kernel. It delivered no property of either backend. The phrases in this diary's Phase 2 synthesis ("per-access cost of TSO", "2.6-2.7x per access", "software page checks 2.1x per access") read as measurements of those variants on that kernel only.
+
+**What this says about the next kit version:**
+
+9. Report measurements as what was measured (variant, kernel, ratio, run). Value words (cost, pays, penalty, overhead, cheap) import a conclusion the data does not carry.
