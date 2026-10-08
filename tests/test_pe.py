@@ -95,3 +95,23 @@ def test_read_rva_stops_at_section_end() -> None:
     end = s.virtual_address + max(s.virtual_size, s.raw_size)
     assert len(img.read_rva(data, end - 3, 15)) == 3
     assert len(img.read_rva(data, s.virtual_address, 15)) == 15
+
+
+CORPUS = Path(__file__).resolve().parent.parent / "corpus" / "python-3.14.8"
+
+
+@pytest.mark.skipif(not (CORPUS / "_wmi.pyd").exists(), reason="corpus not downloaded")
+def test_delay_load_imports_resolve() -> None:
+    """Sprint 026: directory 13 read; every delay IAT slot is named (review 2026-10-08, 4.9)."""
+    img = parse((CORPUS / "_wmi.pyd").read_bytes())
+    assert img.delay_imports == {"ole32.dll": ("CoInitializeEx", "CoCreateInstance",
+                                               "CoSetProxyBlanket", "CoInitializeSecurity",
+                                               "CoUninitialize")}
+    assert sum(v.startswith("ole32.dll!") for v in img.iat.values()) == 5
+
+
+@pytest.mark.parametrize("path", BINARIES, ids=lambda p: p.name[:12])
+def test_relocation_sites_match_counts(path: Path) -> None:
+    img = parse(path.read_bytes())
+    assert len(img.relocation_sites) == sum(n for t, n in img.relocations.items() if t)
+    assert all(t == 10 for _, t in img.relocation_sites)        # IMAGE_REL_BASED_DIR64 only

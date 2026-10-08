@@ -69,3 +69,9 @@ def test_capstone_agrees_with_llvm(path: Path) -> None:
     spelling = [(hex(i.rva), i.mnemonic, llvm[i.rva][0]) for i in r.insns.values()
                 if llvm[i.rva][0] != i.mnemonic]
     assert not spelling, spelling[:10]
+
+
+def test_noreturn_names_cover_documented_exits() -> None:
+    """Sprint 026: calls to these imports end a traversal path (review 2026-10-08, 4.9)."""
+    from w2m.x86ref import NORETURN
+    assert {"ExitProcess", "ExitThread", "abort", "exit", "_invalid_parameter_noinfo_noreturn"} <= NORETURN

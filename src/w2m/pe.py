@@ -17,7 +17,7 @@ PE32_PLUS = 0x20B
 SCN_MEM_EXECUTE = 0x20000000
 SCN_MEM_READ = 0x40000000
 SCN_MEM_WRITE = 0x80000000
-DIR_EXPORT, DIR_IMPORT, DIR_EXCEPTION, DIR_BASERELOC, DIR_TLS = 0, 1, 3, 5, 9
+DIR_EXPORT, DIR_IMPORT, DIR_EXCEPTION, DIR_BASERELOC, DIR_TLS, DIR_DELAY = 0, 1, 3, 5, 9, 13
 REL_ABSOLUTE, REL_DIR64 = 0, 10
 
 
@@ -55,9 +55,11 @@ class PeImage:
     sections: tuple[Section, ...]
     imports: dict[str, tuple[str, ...]] = field(default_factory=dict)
     relocations: dict[int, int] = field(default_factory=dict)  # type -> count
+    relocation_sites: tuple[tuple[int, int], ...] = ()          # (RVA, type), type != ABSOLUTE
+    delay_imports: dict[str, tuple[str, ...]] = field(default_factory=dict)  # bound on first call
     exports: tuple[tuple[str, int], ...] = ()                  # (name, rva)
     tls_callbacks: tuple[int, ...] = ()                         # RVAs
-    iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name"
+    iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name" (incl. delay)
     function_starts: tuple[int, ...] = ()                       # .pdata RUNTIME_FUNCTION.BeginAddress
 
     def read_rva(self, data: bytes, rva: int, size: int) -> bytes:
@@ -178,17 +180,47 @@ def parse(data: bytes) -> PeImage:
             imports[dll] = tuple(names)
             off += 20
 
+    # Delay-load imports (PE Format, "Delay-Load Directory Table"; descriptor field order from
+    # LLVM Object/COFF.h delay_import_directory_table_entry). The loader binds a slot on its first
+    # call, so calls through it land on the named function exactly as an ordinary import does.
+    delay: dict[str, tuple[str, ...]] = {}
+    rva, size = d(DIR_DELAY)
+    if rva:
+        off = _rva_to_offset(sections, rva)
+        while True:
+            attrs, name_rva, _, diat, dint, _, _, _ = r.u("<IIIIIIII", off)
+            if name_rva == 0:
+                break
+            if not attrs & 1:   # pre-VC7 descriptors hold VAs, not RVAs (delayimp.h dlattrRva)
+                raise PeError(f"delay-load descriptor at offset 0x{off:x} uses VAs (attributes 0)")
+            dll = r.cstr(_rva_to_offset(sections, name_rva))
+            thunk, slot, names = _rva_to_offset(sections, dint), diat, []
+            while True:
+                (t,) = r.u("<Q", thunk)
+                if t == 0:
+                    break
+                names.append(f"#{t & 0xFFFF}" if t >> 63
+                             else r.cstr(_rva_to_offset(sections, t & 0x7FFFFFFF) + 2))
+                iat[slot] = f"{dll}!{names[-1]}"
+                thunk += 8
+                slot += 8
+            delay[dll] = tuple(names)
+            off += 32
+
     relocs: dict[int, int] = {}
+    sites: list[tuple[int, int]] = []
     rva, size = d(DIR_BASERELOC)
     if rva:
         off, end = _rva_to_offset(sections, rva), _rva_to_offset(sections, rva) + size
         while off < end:
-            _, block = r.u("<II", off)
+            page, block = r.u("<II", off)
             if block < 8:
                 raise PeError(f"relocation block size {block} at offset 0x{off:x}")
             for i in range((block - 8) // 2):
                 (e,) = r.u("<H", off + 8 + 2 * i)
                 relocs[e >> 12] = relocs.get(e >> 12, 0) + 1
+                if e >> 12:                       # type 0 (ABSOLUTE) is block padding
+                    sites.append((page + (e & 0xFFF), e >> 12))
             off += block
 
     exports: list[tuple[str, int]] = []
@@ -229,5 +261,6 @@ def parse(data: bytes) -> PeImage:
                    image_base=image_base, entry_rva=entry, section_alignment=sect_align,
                    size_of_image=size_of_image, subsystem=subsystem, dll_characteristics=dllchars,
                    sections=sections, imports=imports, relocations=relocs,
+                   relocation_sites=tuple(sites), delay_imports=delay,
                    exports=tuple(exports), tls_callbacks=tuple(callbacks), iat=iat,
                    function_starts=tuple(starts))

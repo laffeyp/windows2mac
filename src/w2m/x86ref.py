@@ -22,6 +22,16 @@ from capstone import x86 as cx86
 from w2m.pe import SCN_MEM_EXECUTE, PeImage
 
 STOP = {"ret", "retf", "jmp", "int3", "ud2", "hlt"}
+# Imports documented to end the calling thread or process; a call to one does not return, so the
+# bytes after it are not reached through it (Andriesse et al., USENIX Security 2016: missed
+# non-returning calls are a main source of recursive-disassembly error). Sources: Microsoft Learn
+# pages for ExitProcess, ExitThread, FreeLibraryAndExitThread, RaiseFailFastException; C standard
+# exit/_Exit/quick_exit/abort; MSVC CRT _invalid_parameter_noinfo_noreturn, _invoke_watson.
+NORETURN = frozenset({
+    "ExitProcess", "ExitThread", "FreeLibraryAndExitThread", "RaiseFailFastException",
+    "RtlExitUserThread", "RtlExitUserProcess", "exit", "_exit", "_Exit", "quick_exit", "abort",
+    "_invalid_parameter_noinfo_noreturn", "_invoke_watson", "_CxxThrowException",
+})
 MAX_INSN = 15
 
 
@@ -93,12 +103,15 @@ def walk(img: PeImage, data: bytes) -> Reachable:
                     slot = nxt + op.mem.disp
                     if slot in img.iat:
                         out.imports_called[img.iat[slot]] += 1
+                        if (cx86.X86_GRP_CALL in groups
+                                and img.iat[slot].rsplit("!", 1)[1] in NORETURN):
+                            break
                     else:
                         out.unresolved_indirect.append(rva)
                 else:
                     out.unresolved_indirect.append(rva)
-            if got.mnemonic in STOP:
-                break
+            if got.mnemonic in STOP or (got.mnemonic == "int" and got.op_str == "0x29"):
+                break                                 # int 0x29 is __fastfail: never returns
             rva = nxt
     return out
 

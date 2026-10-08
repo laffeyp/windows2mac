@@ -69,3 +69,28 @@ def test_accepted_version_with_observed_evidence() -> None:
     c = load_contract(EVENT.parent / "0.2.0.json")
     assert c.status == "accepted"
     assert sum(e.category == "observed" for e in c.evidence) == 2
+
+
+def test_observed_evidence_ids_resolve_in_store() -> None:
+    """Sprint 026: execution_ids checked against store traces (review 2026-10-08, 4.9)."""
+    store = Path(__file__).resolve().parent.parent / "store"
+    c = load_contract(EVENT.parent / "0.2.1.json", store=store)
+    assert {x for e in c.evidence for x in e.execution_ids} == (
+        {f"evt-{i}" for i in range(1, 11)} | {"evt24-1", "evt24-2"})
+
+
+def test_observed_evidence_without_executions_refused(tmp_path: Path) -> None:
+    doc = json.loads((EVENT.parent / "0.2.1.json").read_text())
+    for e in doc["evidence"]:
+        if e["category"] == "observed":
+            e["execution_ids"] = []
+            e["source_ref"] = "a run on the runner"
+    with pytest.raises(ContractError, match="execution_ids"):
+        load_contract(_write(tmp_path, doc))
+
+
+def test_unknown_execution_id_refused(tmp_path: Path) -> None:
+    doc = json.loads((EVENT.parent / "0.2.1.json").read_text())
+    doc["evidence"][-1]["execution_ids"] = ["evt-999"]
+    with pytest.raises(ContractError, match="evt-999"):
+        load_contract(_write(tmp_path, doc), store=Path(__file__).resolve().parent.parent / "store")

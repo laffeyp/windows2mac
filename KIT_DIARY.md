@@ -146,3 +146,11 @@
 10. A generated-input differential is only as wide as its generator. The card for a generator should name the fields it varies, derived from the format's own definition, and list what it does not vary.
 11. A chain of sprints in one area needs an exit criterion written in the first card of the chain. "The residue becomes the next sprint" is the failure mode to name.
 12. "Signal vacuous (library)" should be refused for any sprint whose code produces verdicts: a comparison is an operator, and its verdicts belong on the signal plane.
+
+### 2026-10-08 — Two records of what was not looked at
+
+**What happened:** In Sprint 024 the agent wrote a Signal Report trace from memory; it listed session tags the judge had never emitted. In Sprint 026 a web-fetch summary gave a wrong field order for a binary format. Both were caught only because the next step read the primary source: the run record, LLVM's struct and the bytes of a real file.
+
+**What this says about the next kit version:**
+
+13. A Signal Report's `signal_trace` should be produced by a command that reads the record (the kit's `lib/sdd.py` could ship one), never typed. Format facts for binary parsers should be checked against a second implementation and a real file, not a prose summary of the specification.

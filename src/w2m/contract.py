@@ -8,6 +8,7 @@ are added as contracts need them.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -29,6 +30,7 @@ class Evidence(Struct, frozen=True, forbid_unknown_fields=True):
     applicability: str
     quote: str | None = None
     distinguishing_check: str | None = None
+    execution_ids: tuple[str, ...] = ()     # observed: the executions whose traces witness it
 
 
 class CallReturn(Struct, frozen=True, forbid_unknown_fields=True):
@@ -98,8 +100,10 @@ def _check(c: Contract, path: Path) -> None:
                 raise ContractError(f"{e.evidence_id}: documented evidence needs a verbatim quote")
         if e.category == "hypothesis" and not e.distinguishing_check:
             raise ContractError(f"{e.evidence_id}: hypothesis needs distinguishing_check (E2)")
-        if e.category == "observed" and not e.source_ref:
-            raise ContractError(f"{e.evidence_id}: observed evidence needs an execution_id")
+        if e.category == "observed" and not e.execution_ids and not re.search(
+                r"\bexecutions?\b", e.source_ref):
+            raise ContractError(f"{e.evidence_id}: observed evidence needs execution_ids (or, in "
+                                "contracts before 0.2.1, a source_ref naming the executions)")
     roles = set(c.roles)
     a = c.acceptance
     over = set(a.outcome.over_roles)
@@ -125,11 +129,20 @@ def _check(c: Contract, path: Path) -> None:
             f"{c.contract_id}: an accepted contract needs documented or observed evidence")
 
 
-def load_contract(path: Path) -> Contract:
-    """Decode `path` strictly and enforce the format and evidence rules; raise ContractError."""
+def load_contract(path: Path, store: Path | None = None) -> Contract:
+    """Decode `path` strictly and enforce the format and evidence rules; raise ContractError.
+    With `store`, every execution id cited by observed evidence must have a trace in the store
+    (vocabulary evidence constraint E3: an execution_id with a trace on record)."""
     try:
         c = msgspec.json.decode(path.read_bytes(), type=Contract)
     except msgspec.ValidationError as e:
         raise ContractError(f"{path}: {e}") from None
     _check(c, path)
+    if store is not None:
+        known = {json.loads(t.read_bytes().split(b"\n", 1)[0])["execution_id"]
+                 for t in (store / "traces").glob("*.jsonl")}
+        for e in c.evidence:
+            missing = [x for x in e.execution_ids if x not in known]
+            if missing:
+                raise ContractError(f"{e.evidence_id}: no trace in {store} for {missing}")
     return c
