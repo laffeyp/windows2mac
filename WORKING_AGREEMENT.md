@@ -82,6 +82,7 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 - `uv run pytest` — expected exit 0.
 - `uv run ruff check` — expected exit 0.
 - `uv run mypy` — expected exit 0 (strict, `src/w2m`).
+- `scripts/gates.sh` — runs every gate above fail-fast; expected last line `gates: all passed`. A sprint closes and commits only after it exits 0 (added Sprint 028).
 
 - Windows tiebreak probe: `gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id>`, then `gh run watch <run-id> --exit-status`, `gh run download <run-id> -n trace-<id>`; ingest from `store/traces/<sha256>.jsonl`. Runner: `windows-2025` (Windows Server 2025 x64, LLVM 20.1.8). Private repo: uses the account's included Actions minutes.
 
@@ -120,7 +121,7 @@ CLI strings: lowercase first word in errors, no exclamation marks, no emoji, abs
   - (c) the faults XED reports for a legacy prefix or REX before VEX/EVEX/XOP, for length over 15, and for truncated input are refused as `InvalidEncoding` or `Truncated` (met, Sprint 023);
   - (d) every spec row that the chosen game's reachable code uses is XED-confirmed in `specs/x86_decode_confirmations.json` (open: needs the BioShock 2 Remastered depot, Sprint 030).
 
-- **Phase acceptance evidence** (added 2026-10-08; review §6.8). Phase 0: vocabulary locked, `check_vocab.py` 0 (met 2026-10-05). Phase 1: one contract accepted on documented or observed evidence and judged by a substrate run (met 2026-10-07). Phase 2: each §8.1 capability recorded on this host as present, absent or not_established with its run record committed (met 2026-10-08, records in `store/runs/`). Phase 3 closes when the walking skeleton runs end to end (a Windows PE loaded, lifted, executed in the VM backend, its guest trace judged against a contract), one generated implementation is judged against a contract with CANDIDATE_* and DISCREPANCY_* on the record, and decoder exit criterion (d) holds on BioShock 2 Remastered.
+- **Phase acceptance evidence** (added 2026-10-08; review §6.8). Phase 0: vocabulary locked, `check_vocab.py` 0 (met 2026-10-05). Phase 1: one contract accepted on documented or observed evidence and judged by a substrate run (met 2026-10-07; the event contract's precondition witnessed from 0.3.1, Sprint 028). Phase 2: each §8.1 capability recorded on this host as present, absent or not_established with its run record committed (met 2026-10-08, records in `store/runs/`). Phase 3 closes when the walking skeleton runs end to end (a Windows PE loaded, lifted, executed in the VM backend, its guest trace judged against a contract), one generated implementation is judged against a contract with CANDIDATE_* and DISCREPANCY_* on the record, and decoder exit criterion (d) holds on BioShock 2 Remastered.
 
 Superseded 2026-10-03 (kept for audit): the earlier four-phase plan that fixed a VM-first backend and a D3D11/DXBC slice; see `BLACKBOARD.md` `## Decisions`, user entry for v0.2.
 

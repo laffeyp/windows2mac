@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 028
-status: active
+status: closed
 phase: 3
 pass_kind: functional
 ---
@@ -67,3 +67,12 @@ The contract's precondition is observed in each counted run, and runs without th
 ## self-review checklist
 
 - [x] Scope concrete. [x] Sources retrieved and named. [x] Emits uses a tag ratified in this sprint. [x] Observation declared before running. [ ] ≤2 files: exception recorded.
+
+## observed
+
+- Runner run 37854891607 (evt28-1..20): the probe compiled and ran with the declared layouts; every trace holds two `GUEST_THREAD_STATE_OBSERVED` lines, thread_state 5, wait_reason 6, on poll 1 of 500, at main thread_seq 1 and 2, before `kernel32!SetEvent`.
+- Judge under 0.3.0: 20 of 20 conforms, released a in 20 of 20; exit code 0 in 20 of 20; elapsed 2.007-2.017 s. Under 0.3.1 (accepted on this evidence): 20 of 20 conforms.
+- The 12 earlier executions: inconclusive under 0.3.0 (no witness), conforms under 0.2.1, as declared.
+- Tamper tests: removing the witness, moving it after SetEvent, or changing state 5 to 2 each gives inconclusive.
+- What this settles and what it does not: the 12-of-12 FIFO-looking result could have come from waiter b not yet waiting; with both proven pending, a is still released 20 of 20. Creation order and wait order still coincide (a first in both), so FIFO by wait order is not yet separated from FIFO by creation order (open question in 0.3.1).
+- Process: part 1 was committed with a failing test (gates chained with `;`); fixed in the next commit, and `scripts/gates.sh` now gates every commit.

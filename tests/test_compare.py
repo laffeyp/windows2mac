@@ -144,3 +144,54 @@ async def test_observation_forbidden_run(tmp_path: Path) -> None:
     rec = await _run(tmp_path, event_probe_trace(OK, OK))
     hit = assert_event(rec, "COMPARISON_COMPLETED", verdict="discrepancy")
     assert "both_waits_complete_from_the_single_signal" in hit["payload"]["first_divergence"]
+
+
+# Sprint 028: the pending-waiters precondition must be witnessed in the trace.
+STORE = Path(__file__).resolve().parent.parent / "store"
+
+
+def _witnessed_trace() -> tuple[bytes, dict[str, int]]:
+    for m in sorted((STORE / "executions").glob("*.json")):
+        meta = json.loads(m.read_text())
+        if meta.get("github_run_id") == "37854891607":
+            return (STORE / "traces" / f"{m.stem}.jsonl").read_bytes(), meta["roles"]
+    pytest.skip("witnessed runner traces not in store")
+
+
+def _judge(raw: bytes, roles: dict[str, int], version: str) -> events.COMPARISON_COMPLETED:
+    c = load_contract(CONTRACTS / CID / f"{version}.json")
+    return compare_allowed_outcome_set(c, raw, roles, "cmp", "ref", "exec")
+
+
+def test_witnessed_run_conforms() -> None:
+    raw, roles = _witnessed_trace()
+    assert _judge(raw, roles, "0.3.1").verdict == "conforms"
+
+
+def test_missing_witness_is_inconclusive() -> None:
+    raw, roles = _witnessed_trace()
+    stripped = b"\n".join(x for x in raw.splitlines() if b"GUEST_THREAD_STATE_OBSERVED" not in x)
+    v = _judge(stripped + b"\n", roles, "0.3.1")
+    assert v.verdict == "inconclusive" and "precondition unwitnessed" in (v.first_divergence or "")
+
+
+def test_witness_after_setevent_is_inconclusive() -> None:
+    raw, roles = _witnessed_trace()
+    late = raw.replace(b'"thread_seq":1,"hb_refs":[],"subject', b'"thread_seq":99,"hb_refs":[],"subject')
+    late = late.replace(b'"thread_seq":2,"hb_refs":[],"subject', b'"thread_seq":98,"hb_refs":[],"subject')
+    assert _judge(late, roles, "0.3.1").verdict == "inconclusive"
+
+
+def test_wrong_state_is_inconclusive() -> None:
+    raw, roles = _witnessed_trace()
+    running = raw.replace(b'"thread_state":5', b'"thread_state":2', 1)      # Running, not Wait
+    assert _judge(running, roles, "0.3.1").verdict == "inconclusive"
+
+
+def test_unwitnessed_old_run_conforms_under_0_2_1_only() -> None:
+    old = next(m for m in sorted((STORE / "executions").glob("*.json"))
+               if json.loads(m.read_text()).get("github_run_id") == "37738035459")
+    raw = (STORE / "traces" / f"{old.stem}.jsonl").read_bytes()
+    roles = json.loads(old.read_text())["roles"]
+    assert _judge(raw, roles, "0.2.1").verdict == "conforms"
+    assert _judge(raw, roles, "0.3.1").verdict == "inconclusive"

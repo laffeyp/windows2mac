@@ -62,6 +62,8 @@
 - **2026-10-08 agent-resolved** — Sequence after the decoder close: Sprints 024-027 repair what the review confirmed (vocabulary 0.4 and evidence defects; decoder differential on the signal plane; PE reader and traversal defects; records, CI, and fuzzing). Then Sprint 028 builds the walking skeleton (a no-CRT Windows probe, run on the runner and in the Mac VM, judged by `compare.py`), Sprint 029 runs one generated implementation against `windows.event.auto_reset.single_signal@0.2.0`, and Sprint 030 fetches BioShock 2 Remastered's Windows depot (needs one interactive Steam login by the user). Grounds: project — v0.2 §1, §2, §11.4, §12.1; review §2 and §8; SDD — AGENTS.md hard rule 6; practice — walking skeleton (Cockburn 2004), tracer bullets (Hunt and Thomas 1999). Revisit if: a repair sprint uncovers a defect that blocks the skeleton.
 - **2026-10-08 agent-resolved** — Model-attribution strings removed from committed records: five BLACKBOARD signatures ("Claude Code", "Claude Code (Opus 5.5)") and the sign-off lines of `signals/0.1-rationale.md`, `0.2-rationale.md`, `0.3-rationale.md` now read "agent". The user's standing rule forbids model attribution in any committed artifact; the earlier signatures broke it. Content is otherwise unchanged. Grounds: project — user global instruction (no Claude attribution in git, ever); SDD — AGENTS.md hard rule 4; practice — n/a. Revisit if: never.
 - **2026-10-08 agent-resolved** — Supersedes the 2026-10-07 claim that run records regenerate from the content store. That held for judge records only if the runner role maps survived; they were not committed and were recovered from GitHub artifacts (run 37738035459, before the 90-day expiry) into `store/executions/`. Mac hardware run records (capability, litmus, ordering, page geometry) cannot be regenerated and are now committed under `store/runs/`. Grounds: project — v0.2 §14 (provenance back to evidence), review §4.8; SDD — AGENTS.md hard rule 4; practice — n/a. Revisit if: a run record exceeds a few MB (then archive by hash outside git).
+- **2026-10-08 user** — Do not defer the event probe's unwitnessed precondition ("dont defer! lets do it", chat 2026-10-08). Done in Sprint 028; the sequence Decision above shifts by one: walking skeleton 029, generated implementation 030, BioShock 2 Remastered depot 031.
+- **2026-10-08 agent-resolved** — Witness source for "thread is waiting": `NtQuerySystemInformation(SystemProcessInformation)` `SYSTEM_THREAD_INFORMATION.ThreadState`/`WaitReason`, values per .NET `ThreadState` (Wait = 5) and `ThreadWaitReason` (UserRequest = 6). Wait Chain Traversal was rejected: its documented primitives exclude event objects. The function is documented as subject to change, so the probe links it at run time and the precondition's evidence cites the page's warning; a future Windows build that changes the layout shows up as a missing witness (inconclusive), not as a false conforms. Grounds: project — v0.2 §3, §11.1; SDD — AGENTS.md hard rule 4; practice — Microsoft Learn pages retrieved 2026-10-08. Revisit if: a witness ever reads a state other than 5/6 on poll 500, or the runner image changes Windows build.
 
 ---
 
@@ -95,6 +97,7 @@
 - **2026-10-08** — Sprint 025 (decoder differential on the record) closed. `generated_differential.py --record` (SESSION_INIT, COMPARISON_COMPLETED, DISCREPANCY_REPORTED/ROUTED per class, SESSION_COMPLETED; examples in `store/programs/`); `judge_traces.py` session tags (T1, T2); run roots by `time.time_ns()` in five scripts. Dual contract: signal pass (300 reported, 300 routed, contract_revision; first firing of the discrepancy tags); artifact pass. Observation: runner run 37850017162 (evt24 ×2) judged with observed exit code and elapsed time; waiter a released 12 of 12 overall. Report: `signal-reports/sprint-025-report.md` (also corrects the Sprint 024 report's trace).
 - **2026-10-08** — Sprint 026 (PE, traversal, evidence ids) closed. `pe.py` delay-load imports and relocation sites; `x86ref.py` NORETURN imports and `int 0x29`; `contract.py` `execution_ids` checked against store traces; `contracts/windows.event.auto_reset.single_signal/0.2.1.json` (12 observed executions; precondition caveat as an open question). Dual contract: signal pass (judge runs unchanged in shape); artifact pass (147 passed; ruff, mypy 0). Observation: corpus traversal −120 instructions, nearly all int3 padding after abort/exit; libcrypto strings not caused by non-returning calls.
 - **2026-10-08** — Sprint 027 (records, CI, fuzzing) closed. `.github/workflows/ci.yml` (all gates; XED, llvm-objdump, corpus present; skips fail), `tests/conftest.py`, `tests/test_fuzz.py` (Hypothesis 6.168.5), `pe.py` non-ASCII strings → PeError, `WORKING_AGREEMENT.md` (bridge mappings, phase acceptance, hand-author log, amended technique), `docs/sprint-tail-archive.md`. Dual contract: signal vacuous by declaration; artifact pass (CI run 37851288883 success, 150 passed, 0 skipped). Reports: `signal-reports/sprint-026-report.md`, `sprint-027-report.md`.
+- **2026-10-08** — Sprint 028 (witnessed pending waiters) closed. `signals/0.5.json` (P14, `GUEST_THREAD_STATE_OBSERVED`), probe witness via NtQuerySystemInformation, contract `preconditions` + comparator `inconclusive` when unwitnessed, contracts 0.3.0 (proposed) and 0.3.1 (accepted), `scripts/gates.sh`. Dual contract: signal pass (2 witness lines per trace ×20; judge tags as declared); artifact pass (gates.sh 0, 155 passed). Observation: precondition witnessed 20/20 on poll 1; outcome {a} 20/20; the 12 earlier executions inconclusive under 0.3.x. Report: `signal-reports/sprint-028-report.md`.
 
 ---
 
@@ -111,7 +114,7 @@
 
 - **2026-10-08 (Agent)** — Static traversal walks into data embedded in hand-written assembly (OpenSSL credit strings in libcrypto `.text`). Re-visit when the traversal feeds the translator: refuse-by-all-decoders marks a data region.
 
-- **2026-10-08 (Agent)** — The event probe's precondition (both waiters inside `WaitForSingleObject` when `SetEvent` runs) rests on `Sleep(200)` and is not witnessed (review §4.7). The 10/10 release of waiter a fits FIFO selection and fits waiter b sometimes not yet waiting. Candidate witness (unverified, needs a doc check): read each waiter thread's state and wait reason from `NtQuerySystemInformation(SystemProcessInformation)` just before `SetEvent` and record it in the trace. Re-visit at the next runner sprint for this contract; the contract's acceptance set {a},{b} is unaffected, its 'observed' evidence of FIFO-looking order is.
+- **2026-10-08 (Agent) — RESOLVED 2026-10-08, Sprint 028 (witness in the trace; contract 0.3.1)** — The event probe's precondition (both waiters inside `WaitForSingleObject` when `SetEvent` runs) rests on `Sleep(200)` and is not witnessed (review §4.7). The 10/10 release of waiter a fits FIFO selection and fits waiter b sometimes not yet waiting. Candidate witness (unverified, needs a doc check): read each waiter thread's state and wait reason from `NtQuerySystemInformation(SystemProcessInformation)` just before `SetEvent` and record it in the trace. Re-visit at the next runner sprint for this contract; the contract's acceptance set {a},{b} is unaffected, its 'observed' evidence of FIFO-looking order is.
 
 ---
 
@@ -133,6 +136,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 028 (2026-10-08, closed)
+- **Scope:** witness the pending-waiters precondition instead of assuming it.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* on the runner, main started a and b, waited for both announcements, read the kernel's thread table once, found both in Wait/UserRequest, wrote two GUEST_THREAD_STATE_OBSERVED lines, then SetEvent; a returned 0, b timed out (258) after 2 s; main's final zero-timeout wait returned 258. The judge opened a session, imported 20 executions with observed exit codes and times, ingested 20 traces, found each witness ahead of SetEvent, and returned conforms ×20.
+  - *Observation 1 (the defer was not needed):* the witness took one documented interface and one guest tag; the struct offsets derived from the documented layouts were right on the first runner build. Disposition: resolved-here.
+  - *Observation 2 (third false gate):* part 1 was committed with a failing test because gates were chained with `;`. Disposition: resolved-here; `scripts/gates.sh` (fail-fast) now gates commits.
+  - *Observation 3 (what the data now says):* waiter b was always pending, and a still won 20 of 20. Creation order and wait order coincide; separating them is the contract's open question.
+- **Closed:** clean.
 
 ### Sprint 027 (2026-10-08, closed)
 - **Scope:** records repair, CI with nothing skipped, property-based fuzzing; review §3, §5, §6.8.
@@ -210,14 +222,4 @@
 - **Files:** specs/x86_decode.json, scripts/gen_decoder.py, src/w2m/x86dec.py, src/w2m/x86dec_tables.py, tests/test_x86dec.py
 - **Closed:** clean.
 
-### Sprint 018 (2026-10-08, closed)
-- **Scope:** XED-style iclass identity, corpus gaps closed except EVEX/XOP, CPU-feature dependence.
-- **Rubber Duck Pass:**
-  - *Observation 1 (a reference artifact that was a fact):* the four iclass differences on first run came from XED decoding for an unspecified chip. The bytes F3 0F BC are TZCNT on BMI1 CPUs and BSF on older ones; the results differ for a zero input. Disposition: recorded — Decision 2026-10-08 (decoder takes the CPU feature set); this is a semantic, not cosmetic, dependence.
-  - *Observation 2 (independence held):* iclass names were assigned by rule before comparison; 99.997% matched XED on first run, and the residue was the chip effect, not naming errors.
-  - *Observation 3 (remaining gaps):* 343 positions, 25 kinds, all EVEX or XOP. Disposition: deferred — EVEX/XOP prefix parsing is the next decoder sprint (implementation repair first, then rows).
-  - *Observation 4 (vocabulary gap):* the generated-encoding test (mishegos-style, decision 2026-10-08 item 3) has not run; corpus agreement still says nothing about unusual encodings. Disposition: deferred — next after EVEX/XOP.
-- **Files:** specs/x86_decode.json, scripts/gen_decoder.py, src/w2m/x86dec.py, src/w2m/x86dec_tables.py, tools/xedshim/xedshim.c, src/w2m/xedref.py, tests/test_x86dec.py, tests/test_xedref.py, scripts/decoder_differential.py
-- **Closed:** clean.
-
-Older entries (Sprints 000-017): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-018): `docs/sprint-tail-archive.md`.

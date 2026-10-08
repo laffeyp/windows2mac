@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027), verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 018 (2026-10-08, closed)
+- **Scope:** XED-style iclass identity, corpus gaps closed except EVEX/XOP, CPU-feature dependence.
+- **Rubber Duck Pass:**
+  - *Observation 1 (a reference artifact that was a fact):* the four iclass differences on first run came from XED decoding for an unspecified chip. The bytes F3 0F BC are TZCNT on BMI1 CPUs and BSF on older ones; the results differ for a zero input. Disposition: recorded — Decision 2026-10-08 (decoder takes the CPU feature set); this is a semantic, not cosmetic, dependence.
+  - *Observation 2 (independence held):* iclass names were assigned by rule before comparison; 99.997% matched XED on first run, and the residue was the chip effect, not naming errors.
+  - *Observation 3 (remaining gaps):* 343 positions, 25 kinds, all EVEX or XOP. Disposition: deferred — EVEX/XOP prefix parsing is the next decoder sprint (implementation repair first, then rows).
+  - *Observation 4 (vocabulary gap):* the generated-encoding test (mishegos-style, decision 2026-10-08 item 3) has not run; corpus agreement still says nothing about unusual encodings. Disposition: deferred — next after EVEX/XOP.
+- **Files:** specs/x86_decode.json, scripts/gen_decoder.py, src/w2m/x86dec.py, src/w2m/x86dec_tables.py, tools/xedshim/xedshim.c, src/w2m/xedref.py, tests/test_x86dec.py, tests/test_xedref.py, scripts/decoder_differential.py
+- **Closed:** clean.
 ### Sprint 017 (2026-10-08, closed)
 - **Scope:** XED built from source and made the judge of length in the differential.
 - **Rubber Duck Pass:**

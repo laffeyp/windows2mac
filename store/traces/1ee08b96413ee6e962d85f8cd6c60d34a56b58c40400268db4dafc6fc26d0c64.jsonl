@@ -1,0 +1,15 @@
+{"tag":"GUEST_TRACE_OPENED","execution_id":"evt28-1","vocab_version":"0.5","profile_id":"gha-windows-2025-x64-10.0.26100.33438-Server","trace_format_version":"0.1"}
+{"tag":"GUEST_THREAD_STARTED","thread_id":6976,"thread_seq":0,"hb_refs":[],"parent_thread_id":0,"start_address":140701123153920,"suspended":false}
+{"tag":"GUEST_THREAD_STATE_OBSERVED","thread_id":6976,"thread_seq":1,"hb_refs":[],"subject_thread_id":2536,"thread_state":5,"wait_reason":6,"source":"ntdll!NtQuerySystemInformation(SystemProcessInformation), poll 1 of 500"}
+{"tag":"GUEST_THREAD_STATE_OBSERVED","thread_id":6976,"thread_seq":2,"hb_refs":[],"subject_thread_id":3560,"thread_state":5,"wait_reason":6,"source":"ntdll!NtQuerySystemInformation(SystemProcessInformation), poll 1 of 500"}
+{"tag":"GUEST_CALL_RETURNED","thread_id":6976,"thread_seq":3,"hb_refs":[],"api":"kernel32!SetEvent","args_sha256":"sha256:e2594bfce7ce638b5286fac085db7c4b437fdc568173ef1595903c55b800c8fa","return_value":1,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":6976,"thread_seq":4,"hb_refs":["2536:2"],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:695e0f830b4a26bdeaafac2f2d909d1b0f2f061054171793d58448ad42e7257d","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":6976,"thread_seq":5,"hb_refs":["3560:2"],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:807086e2235fd6be2e39b5c15f732dce8b2abc0a24feb075106deb296ab0b2aa","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":6976,"thread_seq":6,"hb_refs":[],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:70a14e5bea789f9a3d214198e7220ba56bdb854f4aae0f638fb34b56ad4c0b23","return_value":258,"last_error":0}
+{"tag":"GUEST_THREAD_STARTED","thread_id":2536,"thread_seq":0,"hb_refs":["6976:0"],"parent_thread_id":6976,"start_address":140701123157008,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":2536,"thread_seq":1,"hb_refs":["6976:3"],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:c48db4c6077e24bc1ff2108ee25157ca5d286b543a5d5896055b3b1aad14fb61","return_value":0,"last_error":0}
+{"tag":"GUEST_THREAD_EXITED","thread_id":2536,"thread_seq":2,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_THREAD_STARTED","thread_id":3560,"thread_seq":0,"hb_refs":["6976:0"],"parent_thread_id":6976,"start_address":140701123157008,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":3560,"thread_seq":1,"hb_refs":[],"api":"kernel32!WaitForSingleObject","args_sha256":"sha256:c48db4c6077e24bc1ff2108ee25157ca5d286b543a5d5896055b3b1aad14fb61","return_value":258,"last_error":0}
+{"tag":"GUEST_THREAD_EXITED","thread_id":3560,"thread_seq":2,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_TRACE_CLOSED","line_count":15,"thread_count":3,"dropped_count":0}

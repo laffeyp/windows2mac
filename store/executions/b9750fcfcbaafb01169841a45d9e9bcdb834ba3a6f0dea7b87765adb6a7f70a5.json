@@ -1,0 +1,11 @@
+{
+ "elapsed_seconds": 2.0143561,
+ "exit_code": 0,
+ "github_run_id": "37854891607",
+ "probe_sha256": "sha256:4e2bb8e672273ee7b25da1b9afb63b790179bc76874cc0296d4488407000f606",
+ "roles": {
+  "a": 3712,
+  "b": 6780,
+  "main": 4488
+ }
+}
