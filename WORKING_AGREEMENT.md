@@ -112,6 +112,12 @@ CLI strings: lowercase first word in errors, no exclamation marks, no emoji, abs
 - **Phase 2 (Destination capability probes):** both backend candidates probed on this host: VM 4 KB IPA granule and guest TSOEN (OQ-1); native-process page enforcement and ordering costs. Output: capability-profile evidence, not a backend choice (§8.2).
 - **Phase 3 (Application profile and product slice):** first game chosen (user-only Q1); its profile drives contract coverage; the product slice covers acquisition, Steam session, run, state, close, relaunch, update, removal (§12.1).
 
+- **Decoder phase (Sprints 013-023, inside Phase 3):** PE reader, reference traversal, spec-generated decoder, differentials against XED. Exit criteria (Decision 2026-10-08):
+  - (a) generated differential: `length_differs` 0, and the decoder raises nothing but `DecodeError` and its subclasses on any input (met, Sprint 023);
+  - (b) corpus and probe binaries: length and iclass equal XED's at every reachable position; spec gaps 0 (met, Sprint 023);
+  - (c) the faults XED reports for a legacy prefix or REX before VEX/EVEX/XOP, for length over 15, and for truncated input are refused as `InvalidEncoding` or `Truncated` (met, Sprint 023);
+  - (d) every spec row that the chosen game's reachable code uses is XED-confirmed in `specs/x86_decode_confirmations.json` (open: needs the BioShock 2 Remastered depot, Sprint 030).
+
 Superseded 2026-10-03 (kept for audit): the earlier four-phase plan that fixed a VM-first backend and a D3D11/DXBC slice; see `BLACKBOARD.md` `## Decisions`, user entry for v0.2.
 
 ---

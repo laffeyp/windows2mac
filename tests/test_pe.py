@@ -85,3 +85,13 @@ def test_wrong_machine_refused() -> None:
     data[lfanew + 4:lfanew + 6] = (0x14C).to_bytes(2, "little")   # i386
     with pytest.raises(PeError, match="not AMD64"):
         parse(bytes(data))
+
+
+def test_read_rva_stops_at_section_end() -> None:
+    """Sprint 023: no invented bytes past a section's virtual extent (review 2026-10-08, 4.4)."""
+    data = BINARIES[0].read_bytes() if BINARIES else pytest.skip("no fixtures")
+    img = parse(data)
+    s = img.sections[0]
+    end = s.virtual_address + max(s.virtual_size, s.raw_size)
+    assert len(img.read_rva(data, end - 3, 15)) == 3
+    assert len(img.read_rva(data, s.virtual_address, 15)) == 15

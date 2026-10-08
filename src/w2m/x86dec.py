@@ -53,8 +53,14 @@ class DecodeError(ValueError):
 
 
 class InvalidEncoding(DecodeError):
-    """The bytes break a validity rule of the spec (LOCK, VEX.vvvv, VEX.L): the guest observes
-    #UD (v0.2 section 5.1), not an instruction."""
+    """The bytes break a validity rule of the spec (LOCK, VEX.vvvv, VEX.L, a prefix before VEX/
+    EVEX/XOP, length over 15): the guest observes a fault (v0.2 section 5.1), not an instruction.
+    #UD for encoding rules; #GP for length over 15 (SDM Vol 3A 6.15, interrupt 13)."""
+
+
+class Truncated(DecodeError):
+    """The input ends inside the instruction (XED BUFFER_TOO_SHORT). Not a guest fault: the
+    bytes that would decide the instruction are not in the input."""
 
 
 def _pick(cands: tuple[Entry, ...], mpfx: list[str]) -> list[Entry]:
@@ -67,8 +73,20 @@ def _pick(cands: tuple[Entry, ...], mpfx: list[str]) -> list[Entry]:
 
 
 def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
-    """Decode one instruction. `features` is the CPU profile's feature set (XED feature names such
-    as BMI1, LZCNT, CET_IBT, CET_SS); None means a CPU with every feature."""
+    """Decode one instruction from the start of `b`. `features` is the CPU profile's feature set
+    (XED feature names such as BMI1, LZCNT, CET_IBT, CET_SS); None means a CPU with every feature.
+    Raises InvalidEncoding (guest fault), Truncated (input too short), or DecodeError (no spec
+    row); never IndexError."""
+    try:
+        d = _decode(b, features)
+    except IndexError:
+        raise Truncated(f"input of {len(b)} bytes ends inside the instruction") from None
+    if d.length > len(b):
+        raise Truncated(f"instruction needs {d.length} bytes; input has {len(b)}")
+    return d
+
+
+def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
     i = 0
     pfx: list[int] = []
     rex = 0
@@ -81,6 +99,17 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
             pfx.append(b[i])
             rex = 0
         i += 1
+    if i >= MAX_LEN:
+        raise InvalidEncoding("prefixes reach 15 bytes; length over 15 (#GP)")
+    v = b[i]
+    if v in (0x62, 0xC4, 0xC5) or (v == 0x8F and (b[i + 1] & 0x1F) >= 8):
+        # In 64-bit mode C4/C5 are always VEX and 62 always EVEX. A 66/F2/F3/F0 or REX before
+        # VEX, EVEX or XOP causes #UD (SDM Vol 2A 2.3.2; XED BAD_LEGACY_PREFIX, BAD_REX_PREFIX).
+        bad = [f"{p:02x}" for p in pfx if p in (0x66, 0xF2, 0xF3, 0xF0)]
+        if bad:
+            raise InvalidEncoding(f"legacy prefix {' '.join(bad)} before VEX/EVEX/XOP")
+        if rex:
+            raise InvalidEncoding(f"REX {rex:02x} before VEX/EVEX/XOP")
     enc = "legacy"
     w = (rex >> 3) & 1
     vl: int | None = None

@@ -10,19 +10,26 @@ Outcome classes per case:
 Operands (Sprint 022): on `agree` cases whose row carries an operand template, the explicit
 operands are compared with XED's after x86ops.normalize.
 
+Per-row confirmation (Sprint 023, review 2026-10-08 item 4.2): --confirmations writes, for every
+spec row, its outcome counts and whether XED confirmed it (no ours_accepts, ours_gap, length,
+iclass or operand difference among its cases). Rows are keyed by the sha256 of their canonical
+JSON, so an edited row loses its confirmation until the differential runs again.
+
 Usage: uv run python scripts/generated_differential.py [--per-row 48] [--chip ALL] [--json out]
+       [--confirmations specs/x86_decode_confirmations.json]
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
 from collections import Counter
 from pathlib import Path
 
-from w2m.encgen import cases
+from w2m.encgen import SPEC, cases
 from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86ops import OperandError, normalize, operands
 from w2m.xedref import decode_many
@@ -33,6 +40,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--per-row", type=int, default=48)
     ap.add_argument("--chip", default="ALL")
     ap.add_argument("--json", type=Path)
+    ap.add_argument("--confirmations", type=Path)
     a = ap.parse_args(argv)
     t0 = time.monotonic()
     cs = list(cases(per_row=a.per_row))
@@ -40,15 +48,16 @@ def main(argv: list[str]) -> int:
     outcome: Counter[str] = Counter()
     kinds: Counter[tuple[str, str, str]] = Counter()
     example: dict[tuple[str, str, str], str] = {}
+    per_row: dict[int, Counter[str]] = {}
     op_n = 0
     op_diff: Counter[tuple[str, str]] = Counter()
     op_ex: dict[tuple[str, str], str] = {}
     for c, x in zip(cs, xs):
         try:
-            g: Decoded | None = decode(c.raw + b"\0" * 15)
+            g: Decoded | None = decode(c.raw)   # same bytes XED sees; no padding
             assert g is not None
             ours: tuple[int, str] | None = (g.length, g.iclass)
-        except (DecodeError, IndexError, KeyError):  # InvalidEncoding is a DecodeError
+        except DecodeError:   # InvalidEncoding, Truncated, no row; any other exception is a bug
             g, ours = None, None
         if not x.ok and ours is None:
             o, k = "both_reject", ("", "", "")
@@ -64,6 +73,7 @@ def main(argv: list[str]) -> int:
                     theirs = ";".join(map(normalize, x.operands))
                     if mine != theirs:
                         op_diff[(x.iform, f"{theirs} | {mine}")] += 1
+                        per_row[c.row]["operand_differs"] += 1
                         op_ex.setdefault((x.iform, f"{theirs} | {mine}"), c.raw[:x.length].hex())
         elif not x.ok:
             assert ours is not None
@@ -75,6 +85,7 @@ def main(argv: list[str]) -> int:
         else:
             o, k = "iclass_differs", (x.iclass, ours[1], "")
         outcome[o] += 1
+        per_row.setdefault(c.row, Counter())[o] += 1
         if o not in ("both_reject", "agree"):
             kinds[(o, *k[:2], k[2])] += 1  # type: ignore[arg-type]
             example.setdefault((o, *k[:2], k[2]), f"{c.raw[:x.length or 15].hex()} [{c.note}]")  # type: ignore[arg-type]
@@ -91,6 +102,21 @@ def main(argv: list[str]) -> int:
             print(f"{o} (xed, ours, lengths): count, example")
             for k, n in top:
                 print(f"  {n:6} {k[1:]} {example[k]}")
+    if a.confirmations:
+        rows = json.loads(SPEC.read_text())["entries"]
+        bad = ("ours_accepts", "ours_gap", "length_differs", "iclass_differs", "operand_differs")
+        conf = {}
+        for idx, e in enumerate(rows):
+            n = per_row.get(idx, Counter())
+            key = "sha256:" + hashlib.sha256(json.dumps(e, sort_keys=True).encode()).hexdigest()
+            conf[key] = {"row": idx, "mn": e["mn"], "cases": sum(n.values()), **dict(sorted(n.items())),
+                         "confirmed": sum(n.values()) > 0 and not any(n[b] for b in bad)}
+        ok = sum(v["confirmed"] for v in conf.values())
+        a.confirmations.write_text(json.dumps({
+            "reference": f"Intel XED v2026.08.23 (0bcb6237345c), chip {a.chip}",
+            "cases_per_row": a.per_row, "rows": len(conf), "confirmed": ok, "by_row_sha256": conf},
+            indent=1) + "\n")
+        print(f"confirmations: {ok} of {len(conf)} rows confirmed by XED -> {a.confirmations}")
     if a.json:
         a.json.write_text(json.dumps({"cases": total, "chip": a.chip, "outcomes": dict(outcome),
                                       "operands_compared": op_n,

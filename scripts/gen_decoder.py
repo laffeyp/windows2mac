@@ -22,7 +22,12 @@ def render(raw: bytes) -> str:
     spec = json.loads(raw)
     digest = hashlib.sha256(raw).hexdigest()
     table: dict[tuple[str, int, str], list[tuple[object, ...]]] = {}
-    for e in spec["entries"]:
+    seen: dict[str, int] = {}
+    for idx, e in enumerate(spec["entries"]):
+        h = json.dumps(e, sort_keys=True)
+        if h in seen:
+            raise SystemExit(f"spec row {idx} duplicates row {seen[h]}: {e['mn']}")
+        seen[h] = idx
         enc = ("evex" if e.get("evex") else "xop" if e.get("xop") else
                "vex" if e.get("vex") else "legacy")
         key = (e["map"], e["op"], enc)

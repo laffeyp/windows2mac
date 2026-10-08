@@ -4,7 +4,9 @@ Corpus binaries exercise the regular part of the encoding space compilers emit; 
 live outside it (Paleari et al., ISSTA 2010; Woodruff et al., LangSec 2021). For every row of
 specs/x86_decode.json this module builds encodings that vary what the row leaves free: legacy
 prefixes, REX bits, ModRM mode and r/m (including SIB, base-5, RIP-relative), the ModRM.reg
-field when the row does not fix it, VEX/EVEX W, L, and vvvv, and immediate/displacement bytes.
+field when the row does not fix it, VEX/EVEX W, L, and vvvv, and immediate/displacement bytes;
+for VEX/XOP/EVEX rows, a quarter of cases also appear with a legacy prefix or REX before the
+escape (added 2026-10-08 after the project review found the class untested).
 Seeded: the same seed gives the same cases.
 """
 
@@ -44,6 +46,7 @@ def _modrm_tail(rng: random.Random, reg: int, mod: int, rm: int) -> bytes:
 
 def cases(seed: int = 2026_10_08, per_row: int = 48) -> Iterator[Case]:
     rng = random.Random(seed)
+    prng = random.Random(seed + 1)   # separate stream: the unprefixed cases do not depend on it
     spec = json.loads(SPEC.read_text())
     for idx, e in enumerate(spec["entries"]):
         enc = "evex" if e.get("evex") else "xop" if e.get("xop") else "vex" if e.get("vex") else "legacy"
@@ -88,3 +91,8 @@ def cases(seed: int = 2026_10_08, per_row: int = 48) -> Iterator[Case]:
                 raw = b"\x62" + bytes([p0, p1, p2, e["op"]]) + tail
                 note = f"evex w={w} ll={ll} mod={mod} rm={rm}"
             yield Case(raw[:15], idx, note)
+            if enc != "legacy" and prng.random() < 0.25:
+                # a legacy prefix or REX before the VEX/XOP/EVEX escape: #UD (SDM Vol 2A 2.3.2)
+                pre = prng.choice([b"\x66", b"\xf2", b"\xf3", b"\xf0", b"\x2e", b"\x67",
+                                   b"\x40", b"\x48"])
+                yield Case((pre + raw)[:15], idx, f"prefix={pre.hex()} {note}")

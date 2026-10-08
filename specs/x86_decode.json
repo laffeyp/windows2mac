@@ -1,6 +1,6 @@
 {
  "spec_id": "x86_64.decode",
- "version": "0.6.1",
+ "version": "0.6.2",
  "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
  "prefixes": {
   "legacy": [
@@ -6701,28 +6701,6 @@
   },
   {
    "map": "0f",
-   "op": 98,
-   "mn": "vpunpckldq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VPUNPCKLDQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 106,
-   "mn": "vpunpckhdq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VPUNPCKHDQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
    "op": 108,
    "mn": "vpunpcklqdq",
    "pfx": "66",
@@ -6730,17 +6708,6 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "VPUNPCKLQDQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 109,
-   "mn": "vpunpckhqdq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VPUNPCKHQDQ",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -9367,7 +9334,7 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (0F 18 /4-/7 reserved-NOP)"
   }
  ],
- "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez",
+ "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows",
  "identity": "iclass: XED instruction-class naming (github.com/intelxed/xed), assigned per row by rule; corrections recorded as spec revisions with XED as evidence. Fusion: LOCK prefix -> <ICLASS>_LOCK; REP -> REP_<ICLASS>; REPE -> REPE_<ICLASS>; REPNE -> REPNE_<ICLASS>.",
  "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08.",
  "validity": "Rows may carry `lock` (LOCK allowed on the memory form), `vvvv` ('1111' when the operand is unused), `l` (required VEX.L), `form`. An encoding outside these raises InvalidEncoding: the guest observes #UD (v0.2 section 5.1). Strict mandatory prefix: in the 0F/0F38/0F3A maps, an opcode whose rows include any mandatory-prefix row is an SSE-family opcode; a 66/F2/F3 prefix with no matching row means the bytes are a different instruction or invalid, never the unprefixed row. On opcodes with only unprefixed rows, 66 stays operand size."

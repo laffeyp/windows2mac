@@ -109,9 +109,36 @@ def test_generated_encodings_never_disagree_on_length() -> None:
     bad = []
     for c, x in zip(cs, decode_many([c.raw for c in cs])):
         try:
-            g = decode(c.raw + b"\0" * 15)
+            g = decode(c.raw)
         except DecodeError:
             continue
         if x.ok and g.length != x.length:
             bad.append((c.raw.hex(), c.note, x.length, g.length))
     assert not bad, bad[:5]
+
+
+# Sprint 023 (project review 2026-10-08, items 4.3 and 4.4). XED v2026.08.23 verdicts in comments.
+@pytest.mark.parametrize("hexbytes", [
+    "66c5f877",          # BAD_LEGACY_PREFIX: 66 before VEX
+    "f3c5f877",          # BAD_LEGACY_PREFIX: F3 before VEX
+    "f2c4e17d58c0",      # BAD_LEGACY_PREFIX: F2 before 3-byte VEX
+    "6662f17c4858c0",    # BAD_LEGACY_PREFIX: 66 before EVEX
+    "40c5f877",          # BAD_REX_PREFIX: REX before VEX
+    "66" * 15,           # INSTR_TOO_LONG
+])
+def test_prefix_and_length_faults_are_invalid_encodings(hexbytes: str) -> None:
+    from w2m.x86dec import InvalidEncoding
+    with pytest.raises(InvalidEncoding):
+        decode(bytes.fromhex(hexbytes))
+
+
+def test_segment_and_address_size_prefixes_before_vex_are_allowed() -> None:
+    assert decode(bytes.fromhex("2ec5f877")).iclass == "VZEROUPPER"   # XED: VZEROUPPER, length 4
+    assert decode(bytes.fromhex("67c5f877")).length == 4
+
+
+@pytest.mark.parametrize("hexbytes", ["", "66", "0f", "48", "c5", "e8000000", "488b0425"])
+def test_short_input_is_truncated_not_indexerror(hexbytes: str) -> None:
+    from w2m.x86dec import Truncated
+    with pytest.raises(Truncated):
+        decode(bytes.fromhex(hexbytes))

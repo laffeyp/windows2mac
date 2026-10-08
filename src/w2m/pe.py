@@ -61,10 +61,15 @@ class PeImage:
     function_starts: tuple[int, ...] = ()                       # .pdata RUNTIME_FUNCTION.BeginAddress
 
     def read_rva(self, data: bytes, rva: int, size: int) -> bytes:
-        """Bytes of the image at `rva` (zero past a section's raw data), from file `data`."""
+        """Up to `size` bytes of the image at `rva`, from file `data`. Bytes past a section's raw
+        data but inside its virtual size read as zero, as the loader maps them (PE Format,
+        "Section Table": the remainder is zero-padded). The result stops at the section's end;
+        it never invents bytes beyond it, so a decoder sees a truncated instruction as such."""
         for s in self.sections:
-            if s.virtual_address <= rva < s.virtual_address + max(s.virtual_size, s.raw_size):
+            extent = max(s.virtual_size, s.raw_size)
+            if s.virtual_address <= rva < s.virtual_address + extent:
                 delta = rva - s.virtual_address
+                size = min(size, extent - delta)
                 raw = data[s.raw_offset + delta: s.raw_offset + min(s.raw_size, delta + size)]
                 return raw + b"\0" * (size - len(raw))
         raise PeError(f"RVA 0x{rva:x} is in no section")

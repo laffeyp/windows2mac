@@ -132,3 +132,17 @@
 **What this says about the next kit version:**
 
 9. Report measurements as what was measured (variant, kernel, ratio, run). Value words (cost, pays, penalty, overhead, cheap) import a conclusion the data does not carry.
+
+### 2026-10-08 — Project review: the decoder phase ran outside the kit
+
+**What happened:** An external review (`docs/review-2026-10-08-project.md`) of commit 34b85f0 found that Sprints 013-022 kept their gates and observations but dropped the vocabulary (no signals from any differential), six required card sections, pre-declared observation contracts, and append-only record order. Ten sprints ran in one day with no exit criterion, each naming the next decoder sprint from the last one's residue. The plan's central loop (contract, generated implementation, verification) was never exercised in 23 sprints.
+
+**Why it happened:** Each decoder sprint had a real external check (XED), so each felt verified. The check was real and the discipline around it decayed: a differential that prints a table looks like an observation, so the signal leg was graded "vacuous (library)" ten times without anyone asking whether a comparison that produces verdicts is a library. The residue of every differential is a ready-made next sprint, which makes the work self-perpetuating unless a finish line is written before it starts.
+
+**What the review got right that the sprints missed:** one decoder defect class (prefix before VEX, 1,170 of 2,813 such generated cases wrongly accepted) sat outside the generator's variation space; the review found it by reading SDM §2.3.2, not by running more cases.
+
+**What this says about the next kit version:**
+
+10. A generated-input differential is only as wide as its generator. The card for a generator should name the fields it varies, derived from the format's own definition, and list what it does not vary.
+11. A chain of sprints in one area needs an exit criterion written in the first card of the chain. "The residue becomes the next sprint" is the failure mode to name.
+12. "Signal vacuous (library)" should be refused for any sprint whose code produces verdicts: a comparison is an operator, and its verdicts belong on the signal plane.
