@@ -58,6 +58,7 @@
 - **2026-10-05** — Sprint 004 (contract format and first contract) closed. `src/w2m/contract.py`, `contracts/windows.event.auto_reset.single_signal/0.1.0.json` (status proposed; two documented evidence entries quoted from Microsoft Learn, one hypothesis), `tests/test_contract.py`. Dual contract: signal vacuous; artifact pass (suite 27 passed, ruff 0, mypy 0).
 - **2026-10-05** — Sprint 005 (allowed_outcome_set comparator) closed. `src/w2m/compare.py`, `tests/test_compare.py`. Dual contract: signal pass (COMPARISON_COMPLETED conforms and discrepancy); artifact pass (suite 37 passed, ruff 0, mypy 0). Observation: pass — record chain EXECUTION_COMPLETED → TRACE_INGESTED → COMPARISON_COMPLETED.
 - **2026-10-07** — Sprint 006 (Windows runner probe loop) closed. `probes/hello/hello.c`, `.github/workflows/windows-probe.yml`, `.gitignore`; repo `laffeyp/w2m` (private). Dual contract: signal pass (8 guest lines on the trace; TRACE_INGESTED on the Mac); artifact pass (`gh repo create` 0; run 37718681787 success; ingest TRACE_INGESTED; suite 38 passed). Observation: pass — Windows 10.0.26100 (`windows-2025`), trace sha256:fd933867ff19a7ea5c17a740fbed0d7f319d24f7bbbe7bafbc8921846023555a identical on runner and Mac.
+- **2026-10-07** — Sprint 009 (EnTSO message-passing litmus) closed. `probes/mac_hv_litmus/mp_litmus.c`, `scripts/litmus_mp.py`. Dual contract: signal pass (SESSION_INIT, CAPABILITY_PROBED guest_tsoen and guest_tsoen_context_switch, SESSION_COMPLETED); artifact pass (driver exit 0; suite 39 passed; ruff, mypy 0). Observation: pass — record runs/litmus-1791441621: entso off 2245/50M forbidden MP outcomes, entso on 0/50M; ACTLR_EL1 correct after all 200 exits.
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
@@ -69,9 +70,13 @@
 
 ---
 
+- **2026-10-07 (Agent)** — Full x86-TSO litmus coverage on the VM backend (SB must stay observable, LB/2+2W/IRIW must stay forbidden) using herdtools7's x86 tests as the model reference. Re-visit when the CPU translator emits guest code for these tests.
+
+---
+
 ## Open questions
 
-- **OQ-1.** Is `ACTLR_EL1.TSOEN` settable for a guest vCPU through public Hypervisor.framework on macOS 26, or only through a private path? Settled by a probe sprint, not by reading. — **Answered 2026-10-07 (Sprint 008):** public. `HV_SYS_REG_ACTLR_EL1` (macOS 15.0+, SDK header `hv_vcpu_types.h`: "only allows getting / setting of the ACTLR_EL1.EnTSO bit (index 1)"); on Mac17,7 / macOS 25F80 the bit sets, reads back 0x2, and survives an `hv_vcpu_run` exit. Still open: the ordering *effect* (a two-vCPU litmus test).
+- **OQ-1.** Is `ACTLR_EL1.TSOEN` settable for a guest vCPU through public Hypervisor.framework on macOS 26, or only through a private path? Settled by a probe sprint, not by reading. — **Answered 2026-10-07 (Sprint 008):** public. `HV_SYS_REG_ACTLR_EL1` (macOS 15.0+, SDK header `hv_vcpu_types.h`: "only allows getting / setting of the ACTLR_EL1.EnTSO bit (index 1)"); on Mac17,7 / macOS 25F80 the bit sets, reads back 0x2, and survives an `hv_vcpu_run` exit. Still open: the ordering *effect* (a two-vCPU litmus test). — **Effect demonstrated 2026-10-07 (Sprint 009):** MP litmus, 2 vCPUs, guest MMU on with Normal WB memory: EnTSO off 2245 / 50,000,000 forbidden outcomes; EnTSO on 0 / 50,000,000 (95% upper bound 6.0e-08).
 - **OQ-3.** (Answered with OQ-1: the custom-guest path is public Hypervisor.framework, not a Virtualization.framework/Rosetta-only facility.) v0.2 §8.1 cites Apple's "Accelerating the performance of Rosetta" for guest `ACTLR.TSOEN` control. That page describes Rosetta inside a Linux guest under Virtualization.framework; whether a custom compact guest under Hypervisor.framework gets the same control is OQ-1, settled by the capability probe v0.2 §8.1 calls for.
 - **OQ-2.** Which Metal Shader Converter version and license terms apply to redistributing its output inside a generated app bundle?
 
@@ -86,6 +91,18 @@
 ---
 
 ## Sprint tail
+
+### Sprint 009 (2026-10-07, closed)
+- **Scope:** demonstrate that ACTLR_EL1.EnTSO changes guest memory ordering; MP litmus on two vCPUs, rounds alternating off/on.
+- **Dual contract:** signal pass; artifact pass (see Built).
+- **Observation contract:** pass — the "effect demonstrated" branch.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* SESSION_INIT (mac-Mac17,7-macos-25F80, capability). CAPABILITY_PROBED guest_tsoen present: off 2245/50,000,000, on 0/50,000,000, bound 6.0e-08, effect demonstrated. CAPABILITY_PROBED guest_tsoen_context_switch present: 200 exits, 0 mismatches. SESSION_COMPLETED.
+  - *Observation 1 (timing surprise):* the off-mode rate was 1.2e-03 in a 4-round trial (233/200,000) and 4.5e-05 in the 100-round run. Disposition: recorded — the rate depends on timing and round length; the claim rests on off > 0 and on = 0 in alternating rounds, not on the rate.
+  - *Observation 2 (vocabulary gap):* MP checks load-load and store-store order only. x86-TSO also *allows* store-load reordering (SB), and a backend must not be stronger than it claims to measure nor weaker than TSO elsewhere (LB, 2+2W, IRIW). Disposition: deferred — the herdtools7 x86-TSO suite on two to four vCPUs is a later sprint; Deferred entry added.
+  - *Observation 3 (payload anomaly):* the guest MMU had to be on: with SCTLR_EL1.M=0, EL1 data accesses are Device-nGnRnE, which would have produced a false "TSO" result in the off mode. Disposition: resolved-here (identity map, Normal WB ISH).
+- **Files:** probes/mac_hv_litmus/mp_litmus.c, scripts/litmus_mp.py
+- **Closed:** clean.
 
 ### Sprint 008 (2026-10-07, closed)
 - **Scope:** Hypervisor.framework capability probe on this Mac; CAPABILITY_PROBED on a substrate record.
