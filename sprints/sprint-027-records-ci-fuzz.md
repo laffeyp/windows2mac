@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 027
-status: active
+status: closed
 phase: 3
 pass_kind: functional
 ---
@@ -64,3 +64,9 @@ The records say what is true now, and every push runs the full gate list with no
 ## self-review checklist
 
 - [x] Scope concrete. [x] Gradable. [x] Observation declared before running. [ ] ≤2 files: exception recorded.
+
+## observed
+
+- CI run 37851288883 on commit of this sprint: conclusion success in 1 min 53 s; XED built at 0bcb6237345c (`xed-install-base-2026-10-08-lin-x86-64`); corpus zip matched its manifest sha256; pytest `150 passed`, 0 skipped under `W2M_REQUIRE_REFERENCES=1`.
+- Fuzzing: `pe.parse` raised `UnicodeDecodeError` on a non-ASCII DLL name (header byte 276 flipped); fixed. Decoder properties hold over 5,000 + 5,000 examples, seeds 1-3; aimed at the pre-023 decoder, the first property finds its `IndexError`.
+- Tail: 10 entries kept (018-027), 18 archived verbatim.
