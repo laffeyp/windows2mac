@@ -26,6 +26,35 @@ def _returns(trace_bytes: bytes) -> dict[int, list[events.GUEST_CALL_RETURNED]]:
     return by_thread
 
 
+def unwitnessed(contract: Contract, trace_bytes: bytes, role_map: Mapping[str, int]) -> str | None:
+    """The first contract precondition the trace does not witness, as text; None if all are.
+    A precondition holds only if the observer recorded each role in the required state before
+    its `before` call, in the observer's own thread order (v0.2 3: a schedule is witnessed,
+    not assumed)."""
+    seen: dict[int, list[events.GUEST_THREAD_STATE_OBSERVED]] = {}
+    calls = _returns(trace_bytes)
+    for line in trace_bytes.splitlines():
+        ev = events.decode_guest_line(line)
+        if isinstance(ev, events.GUEST_THREAD_STATE_OBSERVED):
+            seen.setdefault(ev.thread_id, []).append(ev)
+    for pre in contract.preconditions:
+        if any(r not in role_map for r in (*pre.roles, pre.observer, pre.before.role)):
+            return "precondition roles missing from the role map"
+        anchor = next((c for c in calls.get(role_map[pre.before.role], [])
+                       if c.api == pre.before.api), None)
+        if anchor is None:
+            return f"no {pre.before.api} line for {pre.before.role}"
+        for role in pre.roles:
+            ok = [o for o in seen.get(role_map[pre.observer], [])
+                  if o.subject_thread_id == role_map[role] and o.thread_state == pre.thread_state
+                  and o.wait_reason == pre.wait_reason
+                  and (pre.observer != pre.before.role or o.thread_seq < anchor.thread_seq)]
+            if not ok:
+                return (f"precondition unwitnessed: {role} not observed by {pre.observer} in "
+                        f"state {pre.thread_state}/{pre.wait_reason} before {pre.before.api}")
+    return None
+
+
 def compare_allowed_outcome_set(
     contract: Contract,
     trace_bytes: bytes,
@@ -50,6 +79,9 @@ def compare_allowed_outcome_set(
                      if r not in role_map]
     if missing_roles:
         return done("inconclusive")
+    gap = unwitnessed(contract, trace_bytes, role_map)
+    if gap is not None:
+        return done("inconclusive", gap)          # the run is not an instance of the scenario
     outcome: list[str] = []
     witnesses: list[str] = []
     for role in rule.over_roles:

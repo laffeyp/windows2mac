@@ -1,9 +1,13 @@
 /* event_auto_reset.c — probe for windows.event.auto_reset.single_signal@0.1.0 (Sprint 007).
  *
  * main creates an auto-reset event (non-signaled), starts waiters a and b, each calling
- * WaitForSingleObject(event, 2000). When both have announced themselves, main sleeps 200 ms so
- * both are inside the wait, then calls SetEvent once, joins both, and calls
- * WaitForSingleObject(event, 0). Each thread buffers its own lines; main writes the file after
+ * WaitForSingleObject(event, 2000). When both have announced themselves, main polls the kernel's
+ * view of both threads (NtQuerySystemInformation(SystemProcessInformation)) until each shows
+ * ThreadState 5 (Wait) with WaitReason 6 (UserRequest), at most 500 polls 1 ms apart, records one
+ * GUEST_THREAD_STATE_OBSERVED line per waiter (vocabulary 0.5), then calls SetEvent once, joins
+ * both, and calls WaitForSingleObject(event, 0). Sprint 028 replaced the earlier Sleep(200)
+ * assumption with this witness: between announcing itself and WaitForSingleObject a waiter calls
+ * nothing that can block, so Wait/UserRequest there means it is inside that wait. Each thread buffers its own lines; main writes the file after
  * the joins. The released waiter's wait return carries an hb edge to main's SetEvent line;
  * main's joins carry hb edges to each waiter's exit line.
  *
@@ -17,7 +21,48 @@
 #include <string.h>
 
 #define LINELEN 640
-#define MAXLINES 8
+#define MAXLINES 12
+
+/* Layouts from Microsoft Learn, NtQuerySystemInformation (winternl.h), x64. Declared here so the
+ * probe does not depend on which members a given SDK's winternl.h exposes. The function "may be
+ * altered or unavailable in future versions", so it is linked at run time, as the page directs. */
+typedef struct {
+    ULONG NextEntryOffset;
+    ULONG NumberOfThreads;
+    BYTE Reserved1[48];
+    USHORT NameLength, NameMaximumLength;
+    PWSTR NameBuffer;
+    LONG BasePriority;
+    HANDLE UniqueProcessId;
+    HANDLE InheritedFromUniqueProcessId;
+    ULONG HandleCount;
+    ULONG SessionId;
+    PVOID Reserved3;
+    SIZE_T PeakVirtualSize, VirtualSize;
+    ULONG Reserved4;
+    SIZE_T PeakWorkingSetSize, WorkingSetSize;
+    PVOID Reserved5;
+    SIZE_T QuotaPagedPoolUsage;
+    PVOID Reserved6;
+    SIZE_T QuotaNonPagedPoolUsage, PagefileUsage, PeakPagefileUsage, PrivatePageCount;
+    LARGE_INTEGER Reserved7[6];
+} W2M_PROCESS_INFO; /* followed by NumberOfThreads W2M_THREAD_INFO entries */
+typedef struct {
+    LARGE_INTEGER Reserved1[3];
+    ULONG Reserved2;
+    PVOID StartAddress;
+    HANDLE UniqueProcess, UniqueThread; /* CLIENT_ID */
+    LONG Priority;
+    LONG BasePriority;
+    ULONG Reserved3;
+    ULONG ThreadState; /* .NET System.Diagnostics.ThreadState: 5 = Wait */
+    ULONG WaitReason;  /* .NET ThreadWaitReason: 6 = UserRequest; valid only in Wait */
+} W2M_THREAD_INFO;
+_Static_assert(sizeof(W2M_PROCESS_INFO) == 256, "SYSTEM_PROCESS_INFORMATION x64 size");
+_Static_assert(sizeof(W2M_THREAD_INFO) == 80, "SYSTEM_THREAD_INFORMATION x64 size");
+typedef LONG(NTAPI *NtQsiFn)(ULONG, PVOID, ULONG, PULONG);
+#define SYSTEM_PROCESS_INFORMATION_CLASS 5
+#define STATUS_INFO_LENGTH_MISMATCH ((LONG)0xC0000004)
 
 typedef struct {
     DWORD tid;
@@ -57,6 +102,41 @@ static void call(Tr *t, const char *hb, const char *api, const char *args, long 
     ev(t, "GUEST_CALL_RETURNED", hb,
        "\"api\":\"%s\",\"args_sha256\":\"%s\",\"return_value\":%lld,\"last_error\":%lu",
        api, h, ret, last_error);
+}
+
+/* Fill state[i], reason[i] for each of n thread ids of this process; return how many were found. */
+static int thread_states(NtQsiFn q, const DWORD *tids, ULONG *state, ULONG *reason, int n) {
+    static BYTE *buf;
+    static ULONG cap = 1 << 20;
+    ULONG need = 0;
+    LONG st;
+    for (;;) {
+        if (!buf) buf = (BYTE *)VirtualAlloc(NULL, cap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!buf) return 0;
+        st = q(SYSTEM_PROCESS_INFORMATION_CLASS, buf, cap, &need);
+        if (st != STATUS_INFO_LENGTH_MISMATCH) break;
+        VirtualFree(buf, 0, MEM_RELEASE);
+        buf = NULL;
+        cap = need + (1 << 16);
+    }
+    if (st < 0) return 0;
+    DWORD pid = GetCurrentProcessId();
+    int found = 0;
+    for (BYTE *e = buf;; e += ((W2M_PROCESS_INFO *)e)->NextEntryOffset) {
+        W2M_PROCESS_INFO *pi = (W2M_PROCESS_INFO *)e;
+        if ((DWORD)(ULONG_PTR)pi->UniqueProcessId == pid) {
+            W2M_THREAD_INFO *ti = (W2M_THREAD_INFO *)(pi + 1);
+            for (ULONG k = 0; k < pi->NumberOfThreads; k++)
+                for (int i = 0; i < n; i++)
+                    if ((DWORD)(ULONG_PTR)ti[k].UniqueThread == tids[i]) {
+                        state[i] = ti[k].ThreadState;
+                        reason[i] = ti[k].WaitReason;
+                        found++;
+                    }
+            return found;
+        }
+        if (!pi->NextEntryOffset) return 0;
+    }
 }
 
 static DWORD WINAPI waiter(LPVOID p) {
@@ -121,7 +201,25 @@ int main(int argc, char **argv) {
         return 1;
     }
     while (InterlockedCompareExchange(&g_ready, 0, 0) < 2) Sleep(1);
-    Sleep(200); /* scheduler assumption: both waiters are inside the wait after 200 ms */
+
+    /* Witness the precondition: both waiters in Wait (5) for UserRequest (6). */
+    NtQsiFn q = (NtQsiFn)(void *)GetProcAddress(GetModuleHandleW(L"ntdll.dll"),
+                                                "NtQuerySystemInformation");
+    DWORD tids[2] = {GetThreadId(ha), GetThreadId(hbt)};
+    ULONG state[2] = {0, 0}, reason[2] = {0, 0};
+    int found = 0, polls = 0;
+    while (q && polls < 500) {
+        polls++;
+        found = thread_states(q, tids, state, reason, 2);
+        if (found == 2 && state[0] == 5 && reason[0] == 6 && state[1] == 5 && reason[1] == 6) break;
+        Sleep(1);
+    }
+    if (found == 2)
+        for (int i = 0; i < 2; i++)
+            ev(&tr_main, "GUEST_THREAD_STATE_OBSERVED", "",
+               "\"subject_thread_id\":%lu,\"thread_state\":%lu,\"wait_reason\":%lu,"
+               "\"source\":\"ntdll!NtQuerySystemInformation(SystemProcessInformation), poll %d of 500\"",
+               tids[i], state[i], reason[i], polls);
 
     InterlockedExchange(&g_setevent_seq, tr_main.seq);
     BOOL ok = SetEvent(g_event);
@@ -146,7 +244,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     int total = 2 + tr_main.n + tr_a.n + tr_b.n;
-    fprintf(f, "{\"tag\":\"GUEST_TRACE_OPENED\",\"execution_id\":\"%s\",\"vocab_version\":\"0.1\","
+    fprintf(f, "{\"tag\":\"GUEST_TRACE_OPENED\",\"execution_id\":\"%s\",\"vocab_version\":\"0.5\","
                "\"profile_id\":\"%s\",\"trace_format_version\":\"0.1\"}\n",
             argv[1], prof);
     Tr *all[3] = {&tr_main, &tr_a, &tr_b};

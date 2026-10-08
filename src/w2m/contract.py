@@ -65,6 +65,29 @@ class AllowedOutcomeSet(Struct, frozen=True, forbid_unknown_fields=True,
 Acceptance = AllowedOutcomeSet
 
 
+class Before(Struct, frozen=True, forbid_unknown_fields=True):
+    """A role's GUEST_CALL_RETURNED line for `api`; a precondition must be seen ahead of it."""
+
+    role: str
+    api: str
+
+
+class ThreadStatePrecondition(Struct, frozen=True, forbid_unknown_fields=True,
+                              tag="thread_state", tag_field="kind"):
+    """Each of `roles` is observed by `observer` (GUEST_THREAD_STATE_OBSERVED) in `thread_state`
+    with `wait_reason`, earlier in the observer's thread order than `before` (Sprint 028)."""
+
+    roles: tuple[str, ...]
+    observer: str
+    thread_state: int
+    wait_reason: int
+    before: Before
+    evidence_ids: tuple[str, ...]     # documented meanings of the two values
+
+
+Precondition = ThreadStatePrecondition
+
+
 class Contract(Struct, frozen=True, forbid_unknown_fields=True):
     contract_id: ContractId
     version: Version
@@ -77,6 +100,7 @@ class Contract(Struct, frozen=True, forbid_unknown_fields=True):
     evidence: tuple[Evidence, ...]
     open_questions: tuple[str, ...]
     sections: dict[str, str]
+    preconditions: tuple[Precondition, ...] = ()
 
 
 _RETRIEVED = re.compile(r"retrieved \d{4}-\d{2}-\d{2}")
@@ -122,6 +146,13 @@ def _check(c: Contract, path: Path) -> None:
     for p in a.postconditions:
         if p.role not in roles:
             raise ContractError(f"{c.contract_id}: postcondition role {p.role} undeclared")
+    ev_ids = {e.evidence_id for e in c.evidence}
+    for pre in c.preconditions:
+        named = {*pre.roles, pre.observer, pre.before.role}
+        if not named <= roles:
+            raise ContractError(f"{c.contract_id}: precondition roles {sorted(named - roles)} undeclared")
+        if not pre.evidence_ids or not set(pre.evidence_ids) <= ev_ids:
+            raise ContractError(f"{c.contract_id}: precondition needs evidence_ids from its evidence")
     # Reference runs are optional (user decision 2026-10-07): documented or observed evidence
     # can carry acceptance; a hypothesis alone cannot.
     if c.status == "accepted" and not any(e.category != "hypothesis" for e in c.evidence):

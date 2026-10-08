@@ -22,7 +22,7 @@ FK_ALIAS = {
     "reference_profile": "referenceprofile", "profile": "referenceprofile", "bundle": "bundle",
     "app": "distribution", "build": "distribution", "from_build": "distribution",
     "to_build": "distribution", "depot": "distribution", "thread": "guestthread",
-    "parent_thread": "guestthread",
+    "parent_thread": "guestthread", "subject_thread": "guestthread",
 }
 
 

@@ -1,5 +1,5 @@
 {
- "vocabulary": "signals/0.4.json (current); signals/0.3.json, signals/0.2.json, signals/0.1.json (prior)",
+ "vocabulary": "signals/0.5.json (current); signals/0.4.json, 0.3.json, 0.2.json, 0.1.json (prior)",
  "taxonomy_version": "0.1",
  "proposals": [
   {
@@ -202,6 +202,23 @@
     "by": "agent-resolved",
     "into": "0.4",
     "grounds": "project — review 2026-10-08 §4.7; v0.2 3.1, 14; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice — TECHNIQUES.md #47 (substrate-gap-honest events)"
+   }
+  },
+  {
+   "id": "P14",
+   "kind": "TAG_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "GUEST_THREAD_STATE_OBSERVED (thread_id, thread_seq, hb_refs, subject_thread_id, thread_state, wait_reason, source)"
+   ],
+   "source": "user decision 2026-10-08 ('dont defer! lets do it'); project review 2026-10-08 §4.7; contract windows.event.auto_reset.single_signal open question 4",
+   "rationale": "The event contract's precondition (both waiters pending at SetEvent) rested on Sleep(200). No guest tag could record one thread observing another's scheduler state, so the precondition could not be witnessed in a trace.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-08",
+    "by": "agent-resolved",
+    "into": "0.5",
+    "grounds": "project — v0.2 §3 (a schedule must be witnessed, not assumed), §11.1 (observed evidence); SDD — PRINCIPLES.md proposal taxonomy (new tag bumps the minor version); practice — Microsoft Learn NtQuerySystemInformation, .NET ThreadState and ThreadWaitReason (retrieved 2026-10-08)"
    }
   }
  ]
