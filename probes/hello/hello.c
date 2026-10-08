@@ -7,6 +7,7 @@
  *
  * Usage: hello.exe <execution_id> <trace_path>
  */
+#define _CRT_SECURE_NO_WARNINGS /* fopen/snprintf: MSVC CRT deprecation, run 37718622857 */
 #include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
