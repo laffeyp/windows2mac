@@ -141,8 +141,8 @@ def load_contract(path: Path, store: Path | None = None) -> Contract:
     if store is not None:
         known = {json.loads(t.read_bytes().split(b"\n", 1)[0])["execution_id"]
                  for t in (store / "traces").glob("*.jsonl")}
-        for e in c.evidence:
-            missing = [x for x in e.execution_ids if x not in known]
+        for ev in c.evidence:
+            missing = [x for x in ev.execution_ids if x not in known]
             if missing:
-                raise ContractError(f"{e.evidence_id}: no trace in {store} for {missing}")
+                raise ContractError(f"{ev.evidence_id}: no trace in {store} for {missing}")
     return c

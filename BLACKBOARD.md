@@ -139,6 +139,7 @@
   - *Observation 1 (a fetched summary was wrong):* the web-fetch summary of the PE Format delay-load table put Attributes at offset 24 and omitted the timestamp. LLVM `Object/COFF.h` and the 0x40-byte directory in `_wmi.pyd` agree on Attributes at 0 and 32-byte descriptors. Disposition: resolved-here; the code cites LLVM. KIT_DIARY finding 13.
   - *Observation 2 (a review question answered):* libcrypto's code-decoded strings do not come from non-returning calls. Disposition: recorded; the Deferred entry stands.
   - *Observation 3 (immutability kept):* 0.2.0 is not edited; the loader keeps a legacy rule for prose-cited executions and 0.2.1 carries ids. Disposition: resolved-here.
+  - *Observation 4 (a gate that could not fail):* the close ran `uv run mypy | tail -1`; the pipe hid mypy's exit 1, and the Built entry claimed mypy 0. Fixed after commit 1c214cf; gates now run unpiped with each exit status printed. Disposition: resolved-here; same family as KIT_DIARY H4 (a check needs a way to fail).
 - **Closed:** clean.
 
 ### Sprint 025 (2026-10-08, closed)

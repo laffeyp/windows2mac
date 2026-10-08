@@ -76,3 +76,4 @@ The PE reader inventories every import the loader binds, the traversal stops whe
 - Contract 0.2.1 loads with the store check (22 execution-id citations, 12 distinct executions); 0.2.0 still loads on the legacy prose rule; judge 10/10 and 2/2 conforms under 0.2.1.
 - Delay-load descriptors with Attributes bit 0 clear (pre-VC7, VA form) are refused with `PeError`, not guessed.
 - Grading gap: the NORETURN test checks the set, not traversal behavior; the behavior evidence is the corpus measurement above.
+- Correction (after commit 1c214cf): the close claimed mypy 0; mypy exited 1 (`contract.py`: loop variable `e` reused after an `except ... as e`). The gate ran as `uv run mypy | tail -1`, and the pipe returned tail's status. Fixed in the next commit (variable renamed); mypy 0 verified at d19d501, 193f254, f3b54b6 and after the fix. Gates now run without pipes, each exit status printed.
