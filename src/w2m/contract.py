@@ -1,0 +1,135 @@
+"""contract.py — the contract file format (v0.2 sections 11.1-11.2).
+
+A contract lives at `contracts/<id>/<version>.json`. It carries its behavioral definition and
+the evidence for it; documentation and observation keep their identities (v0.2 11.1). Today
+one acceptance kind is defined, `allowed_outcome_set`; other relations from v0.2 section 3
+are added as contracts need them.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Annotated, Any, Literal
+
+import msgspec
+from msgspec import Meta, Struct
+
+from w2m.events import ContractId, EnumEvidenceCategory, Version
+
+
+class ContractError(ValueError):
+    """A contract file is malformed or breaks a v0.2 evidence rule."""
+
+
+class Evidence(Struct, frozen=True, forbid_unknown_fields=True):
+    evidence_id: Annotated[str, Meta(min_length=1)]
+    category: EnumEvidenceCategory
+    source_ref: str
+    applicability: str
+    quote: str | None = None
+    distinguishing_check: str | None = None
+
+
+class CallReturn(Struct, frozen=True, forbid_unknown_fields=True):
+    """A role's GUEST_CALL_RETURNED with this api and return value."""
+
+    role: str
+    api: str
+    return_value: int
+
+
+class OutcomeRule(Struct, frozen=True, forbid_unknown_fields=True):
+    """The outcome is the set of roles whose `api` call returned `return_value`."""
+
+    api: str
+    return_value: int
+    over_roles: tuple[str, ...]
+
+
+class Forbidden(Struct, frozen=True, forbid_unknown_fields=True):
+    label: str
+    outcome: tuple[str, ...]
+
+
+class AllowedOutcomeSet(Struct, frozen=True, forbid_unknown_fields=True,
+                        tag="allowed_outcome_set", tag_field="relation"):
+    outcome: OutcomeRule
+    allowed: tuple[tuple[str, ...], ...]
+    forbidden: tuple[Forbidden, ...]
+    postconditions: tuple[CallReturn, ...] = ()
+
+
+Acceptance = AllowedOutcomeSet
+
+
+class Contract(Struct, frozen=True, forbid_unknown_fields=True):
+    contract_id: ContractId
+    version: Version
+    status: Literal["proposed", "accepted", "superseded", "rejected"]
+    summary: str
+    applicability: str
+    roles: tuple[str, ...]
+    scenario: dict[str, Any]
+    acceptance: Acceptance
+    evidence: tuple[Evidence, ...]
+    open_questions: tuple[str, ...]
+    sections: dict[str, str]
+
+
+_RETRIEVED = re.compile(r"retrieved \d{4}-\d{2}-\d{2}")
+
+
+def _check(c: Contract, path: Path) -> None:
+    if path.parent.name != c.contract_id or path.stem != c.version:
+        raise ContractError(
+            f"{path} must be contracts/{c.contract_id}/{c.version}.json")
+    if not c.evidence:
+        raise ContractError(f"{c.contract_id}: no evidence")
+    ids = [e.evidence_id for e in c.evidence]
+    if len(ids) != len(set(ids)):
+        raise ContractError(f"{c.contract_id}: duplicate evidence_id")
+    for e in c.evidence:
+        if e.category == "documented":
+            if not e.source_ref.startswith("https://") or not _RETRIEVED.search(e.source_ref):
+                raise ContractError(
+                    f"{e.evidence_id}: documented evidence needs an https URL and 'retrieved YYYY-MM-DD'")
+            if not e.quote:
+                raise ContractError(f"{e.evidence_id}: documented evidence needs a verbatim quote")
+        if e.category == "hypothesis" and not e.distinguishing_check:
+            raise ContractError(f"{e.evidence_id}: hypothesis needs distinguishing_check (E2)")
+        if e.category == "observed" and not e.source_ref:
+            raise ContractError(f"{e.evidence_id}: observed evidence needs an execution_id")
+    roles = set(c.roles)
+    a = c.acceptance
+    over = set(a.outcome.over_roles)
+    if not over <= roles:
+        raise ContractError(f"{c.contract_id}: outcome roles {sorted(over - roles)} undeclared")
+    sets = [tuple(sorted(s)) for s in a.allowed] + [tuple(sorted(f.outcome)) for f in a.forbidden]
+    for s in sets:
+        if not set(s) <= over:
+            raise ContractError(f"{c.contract_id}: outcome {list(s)} names roles outside over_roles")
+    allowed = {tuple(sorted(s)) for s in a.allowed}
+    if len(allowed) != len(a.allowed):
+        raise ContractError(f"{c.contract_id}: an allowed outcome is listed twice")
+    clash = allowed & {tuple(sorted(f.outcome)) for f in a.forbidden}
+    if clash:
+        raise ContractError(f"{c.contract_id}: outcome both allowed and forbidden: {sorted(clash)}")
+    for p in a.postconditions:
+        if p.role not in roles:
+            raise ContractError(f"{c.contract_id}: postcondition role {p.role} undeclared")
+    # Reference runs are optional (user decision 2026-10-07): documented or observed evidence
+    # can carry acceptance; a hypothesis alone cannot.
+    if c.status == "accepted" and not any(e.category != "hypothesis" for e in c.evidence):
+        raise ContractError(
+            f"{c.contract_id}: an accepted contract needs documented or observed evidence")
+
+
+def load_contract(path: Path) -> Contract:
+    """Decode `path` strictly and enforce the format and evidence rules; raise ContractError."""
+    try:
+        c = msgspec.json.decode(path.read_bytes(), type=Contract)
+    except msgspec.ValidationError as e:
+        raise ContractError(f"{path}: {e}") from None
+    _check(c, path)
+    return c

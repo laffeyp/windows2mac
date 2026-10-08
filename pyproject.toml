@@ -1,0 +1,35 @@
+# w2m harness: contract construction, probes, and verification orchestrated on substrate.
+# Plan: windows_to_macos_research_direction_v0_2.md. Vocabulary: signals/0.1.json.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "w2m"
+version = "0.0.1"
+description = "Windows-to-macOS binary porting system: harness package."
+requires-python = ">=3.12"          # substrate-kernel's floor
+dependencies = [
+  "substrate-kernel==1.1.1",        # orchestration harness (BLACKBOARD 2026-10-03); brings msgspec>=0.21,<0.22
+]
+
+[project.optional-dependencies]
+dev = ["ruff==0.15.17", "mypy", "pytest", "pytest-asyncio", "pytest-timeout"]  # ruff pinned to substrate's pin
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/w2m"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+timeout = 30
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["sdd-kit-3", "substrate"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/w2m"]

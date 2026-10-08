@@ -1,0 +1,40 @@
+# Tiebreak probe runner (Sprint 006). Builds probes/<probe>/<probe>.c with clang on real x64
+# Windows, runs it, and uploads the guest trace for ingest on the Mac.
+# Dispatch: gh workflow run windows-probe.yml -f probe=hello -f execution_id=<id>
+name: windows-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: probe directory under probes/
+        required: true
+      execution_id:
+        description: execution_id written into the trace
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        shell: pwsh
+        run: |
+          clang --version
+          clang -O1 -Wall -Werror -o probe.exe "probes/${{ inputs.probe }}/${{ inputs.probe }}.c"
+      - name: run
+        shell: pwsh
+        run: |
+          ./probe.exe "${{ inputs.execution_id }}" "trace.jsonl"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-FileHash -Algorithm SHA256 trace.jsonl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trace-${{ inputs.execution_id }}
+          path: trace.jsonl
+          if-no-files-found: error

@@ -1,0 +1,18 @@
+# Separate repositories living beside the project (not w2m code)
+/substrate/
+/substrate-bash-fix/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Content store and run records (regenerable; evidence is cited by hash)
+/store/
+/runs/
+
+# macOS
+.DS_Store

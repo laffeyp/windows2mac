@@ -1,0 +1,114 @@
+{
+  "vocabulary": "signals/0.1.json",
+  "taxonomy_version": "0.1",
+  "proposals": [
+    {
+      "id": "P1",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "candidate": [
+        "SHADER_TRANSLATED",
+        "PIPELINE_ARCHIVED"
+      ],
+      "category": "compile",
+      "source": "v0.2 section 10.1-10.2 (shader paths DXBC/DXIL/HLSL; Metal binary archives)",
+      "rationale": "Graphics artifacts are covered today by ARTIFACT_BUILT with artifact_kind metal_library / pipeline_archive; shader-specific payload (input path, shader model, binding layout hash) waits for the first graphics profile, which v0.2 section 15 leaves open.",
+      "status": "open",
+      "revisit": "first Phase 3 sprint that translates a BioShock 2 Remastered (DXBC) or Dawnwalker (DXIL) shader"
+    },
+    {
+      "id": "P2",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "candidate": [
+        "WINDOW_PRESENTED"
+      ],
+      "category": "view (new)",
+      "source": "BOOTSTRAP Step 9 dual-contract audit; v0.2 section 12 (Application level: graphics, input)",
+      "rationale": "APPLICATION_LAUNCHED has no view-side counterpart; a presented first frame with the view-universal payload (frame, visible, scene_id, layer) is the visible proof of a launch.",
+      "status": "open",
+      "revisit": "first sprint that presents a Metal frame"
+    },
+    {
+      "id": "P3",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "candidate": [
+        "FRAME_TIME_SAMPLED"
+      ],
+      "category": "perf",
+      "stratum": "ambient",
+      "source": "v0.2 section 13 (frame-time distributions); TECHNIQUES.md game-dev class (frame budget as a signal stratum)",
+      "rationale": "MEASUREMENT_RECORDED carries p50/p99 summaries; a sampled ambient tag needs a cadence, and no measured cadence exists yet. BOOTSTRAP Step 5: an ambient tag with no cadence is not admitted.",
+      "status": "open",
+      "revisit": "first sustained-run measurement on either backend"
+    },
+    {
+      "id": "P4",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "candidate": [
+        "GUEST_OBJECT_TRANSITIONED"
+      ],
+      "category": "guest",
+      "source": "v0.2 section 11.2 (auto-reset event example: signaled_after_consumption postcondition)",
+      "rationale": "GUEST_CALL_RETURNED plus hb_refs records wait completion and the satisfying signal; an explicit object-state line would let a probe assert the postcondition without inferring it from call returns.",
+      "status": "open",
+      "revisit": "first synchronization-object contract that cannot be checked from call returns alone"
+    },
+    {
+      "id": "P5",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "candidate": [
+        "GUEST_MODULE_LOADED",
+        "GUEST_CODE_MODIFIED"
+      ],
+      "category": "guest",
+      "source": "v0.2 section 5.1 (newly loaded modules; code changed during execution; publication contract)",
+      "rationale": "The compile side has CODE_TARGET_DISCOVERED (loaded_module, generated_code) and TRANSLATION_INVALIDATED (code_modified); the guest side needs the observation that triggered them for code-publication probes.",
+      "status": "open",
+      "revisit": "first code-publication or self-modifying-code probe"
+    },
+    {
+      "id": "P6",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "candidate": [
+        "PROFILE_REGISTERED"
+      ],
+      "category": "session",
+      "source": "v0.2 section 11.1 (reference profile fields); constraint E13 (ids resolve to registry files)",
+      "rationale": "Profiles currently live as files under profiles/; a tag would put profile creation on the record. Not needed until profiles change during a run.",
+      "status": "open",
+      "revisit": "a run that registers or edits a profile"
+    },
+    {
+      "id": "P7",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 4,
+      "candidate": "GUEST_CLOCK_READ(clock=qpc) values are non-decreasing per process",
+      "source": "v0.2 section 3.1",
+      "rationale": "Clock behavior is contract content, not vocabulary: each clock's monotonicity, wraparound, and cross-thread rules belong in contracts/windows.clock.* with evidence. Putting it in the vocabulary would assert a behavior without evidence.",
+      "status": "rejected",
+      "ratified": {
+        "date": "2026-10-05",
+        "by": "agent-resolved",
+        "grounds": "v0.2 3.1 and 11.1; PRINCIPLES.md commitment 1 (vocabulary names events, contracts define allowed behavior)"
+      }
+    },
+    {
+      "id": "P8",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "candidate": [
+        "types.version is major.minor[.patch] (the vocabulary's own version is '0.1')",
+        "harness-plane integer fields lie in [-(2^53-1), 2^53-1]; guest-plane integers keep the full 64-bit range"
+      ],
+      "source": "Sprint 002: substrate.api.canonical_bytes raises NonCanonicalValueError for |n| > 2^53-1 (RFC 8785); signals/0.1.json types.version text says major.minor.patch while version is '0.1'",
+      "rationale": "Both are already enforced by the generated validators (scripts/gen_events.py); no tag or field changes. Written into the vocabulary at the next version bump so the constraint is visible outside the generator.",
+      "status": "open",
+      "revisit": "next vocabulary version bump"
+    }
+  ]
+}
