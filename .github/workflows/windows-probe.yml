@@ -31,16 +31,31 @@ jobs:
         shell: pwsh
         run: |
           clang --version
-          clang -O1 -Wall -Werror -o probe.exe "probes/${{ inputs.probe }}/${{ inputs.probe }}.c" -ladvapi32 -lbcrypt
+          # probes/<probe>/probe.json may set cflags, libs, and mode (Sprint 029: no-CRT probes)
+          $cfg = "probes/${{ inputs.probe }}/probe.json"
+          $flags = @("-O1", "-Wall", "-Werror"); $libs = @("-ladvapi32", "-lbcrypt")
+          if (Test-Path $cfg) { $c = Get-Content $cfg -Raw | ConvertFrom-Json; $flags = $c.cflags -split " "; $libs = $c.libs -split " " }
+          clang @flags -o probe.exe "probes/${{ inputs.probe }}/${{ inputs.probe }}.c" @libs
       - name: run
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
           (Get-FileHash -Algorithm SHA256 probe.exe).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out/probe.sha256
           Copy-Item probe.exe out/probe.exe
+          $mode = "args"
+          $cfg = "probes/${{ inputs.probe }}/probe.json"
+          if (Test-Path $cfg) { $mode = (Get-Content $cfg -Raw | ConvertFrom-Json).mode }
+          $cv = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+          $v = [Environment]::OSVersion.Version
+          "gha-windows-2025-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
           for ($i = 1; $i -le [int]"${{ inputs.repeat }}"; $i++) {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            ./probe.exe "${{ inputs.execution_id }}-$i" "out/trace-$i.jsonl" "out/roles-$i.json"
+            if ($mode -eq "stdout") {
+              # mode stdout: the probe writes its own trace body; cmd keeps the bytes unchanged
+              cmd /c "probe.exe > out\body-$i.jsonl"
+            } else {
+              ./probe.exe "${{ inputs.execution_id }}-$i" "out/trace-$i.jsonl" "out/roles-$i.json"
+            }
             $code = $LASTEXITCODE
             $sw.Stop()
             # observed per execution (vocabulary 0.4, P13): exit code and wall time of the process
