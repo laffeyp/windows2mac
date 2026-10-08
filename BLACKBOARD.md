@@ -76,7 +76,8 @@
 - **2026-10-08** — Sprint 015 (own decoder, differential) closed. `specs/x86_decode.json` (430 SDM-cited entries), `scripts/gen_decoder.py`, `src/w2m/x86dec_tables.py` (generated), `src/w2m/x86dec.py`, `tests/test_x86dec.py`. Dual contract: signal vacuous (library); artifact pass (generator `--check` 0; suite 71 passed; ruff, mypy 0). Observation: first run 99.82% agreement, one disagreement class fixed; final 52,785 / 52,785 on length and mnemonic.
 - **2026-10-08** — Sprint 016 (unseen-corpus differential) closed. `scripts/decoder_differential.py`, `specs/x86_decode_worklist.json`, `corpus/python-3.14.8.manifest.json` (Python 3.14.8 embeddable, 33 MSVC-built PEs, zip sha256 a93abe45...a310). Observation: 2,391,671 reachable instructions, 99.24% agree; 17,804 in 203 spec-gap kinds; 273 disagreements in 2 kinds (repz ret spelling; vzeroall/vzeroupper — spec ignores VEX.L); no length disagreements; 15 locations Capstone cannot decode.
 - **2026-10-08** — Sprint 017 (XED primary reference) closed. XED v2026.08.23 (0bcb6237) built under `third_party/`; `tools/xedshim/xedshim.c`, `src/w2m/xedref.py`, `tests/test_xedref.py`; differential judged by XED. Dual contract: signal vacuous; artifact pass (75 passed; ruff, mypy 0). Observation: XED decodes all 2,444,456 positions; Capstone and w2m lengths equal XED's everywhere they decode; disputed cases settled by XED.
-- **2026-10-08** — Sprint 018 (iclass identity, gaps, CPU features) closed. Spec 0.3.0 (729 rows), decoder, generator, XED shim with chip argument, tests. Dual contract: signal vacuous; artifact pass (87 passed; generator `--check` 0; ruff, mypy 0). Observation: on 2,444,456 positions ours equals XED on length and iclass at all 2,444,113 it decodes; 343 gaps, all EVEX/XOP. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
+- **2026-10-08** — Sprint 018 (iclass identity, gaps, CPU features) closed. Spec 0.3.0 (729 rows), decoder, generator, XED shim with chip argument, tests. Dual contract: signal vacuous; artifact pass (87 passed; generator `--check` 0; ruff, mypy 0). Observation: on 2,444,456 positions ours equals XED on length and iclass at all 2,444,113 it decodes; 343 gaps, all EVEX/XOP.
+- **2026-10-08** — Sprint 019 (EVEX, XOP) closed. Spec 0.4.0 (804 rows), decoder, generator, tests. Dual contract: signal vacuous; artifact pass (93 passed; `--check` 0; ruff, mypy 0). Observation: 0 spec gaps; ours equals XED on length and iclass at all 2,444,456 positions. Execution time relative to native plain, same run: L1 — check_each 2.10x, check_page_cross 1.04x, VM pages_4k 1.00x, VM blocks_2m 1.05x; DRAM-sized — check_each 2.11x, check_page_cross 1.12x, VM pages_4k 1.06x, VM blocks_2m 0.96x.
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 
 ---
@@ -114,6 +115,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 019 (2026-10-08, closed)
+- **Scope:** EVEX and XOP prefix decoding; last corpus gaps.
+- **Rubber Duck Pass:**
+  - *Observation 1:* EVEX and XOP decoded correctly on the first run; one missing row (EVEX vpmaddwd) found by the differential and added. Disposition: resolved-here.
+  - *Observation 2 (what this does not show):* full agreement on 2.44 M compiler-produced instructions. The literature (Paleari 2010; Woodruff et al. 2021) places decoder bugs in unusual encodings this corpus does not contain. Disposition: deferred to Sprint 020, generated encodings per spec row.
+- **Files:** specs/x86_decode.json, scripts/gen_decoder.py, src/w2m/x86dec.py, src/w2m/x86dec_tables.py, tests/test_x86dec.py
+- **Closed:** clean.
 
 ### Sprint 018 (2026-10-08, closed)
 - **Scope:** XED-style iclass identity, corpus gaps closed except EVEX/XOP, CPU-feature dependence.

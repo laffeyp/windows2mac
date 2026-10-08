@@ -1,159 +1,8 @@
 {
  "files": 33,
  "instructions": 2391671,
- "agree": 2391066,
- "gaps": [
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vmovdqu32",
-   "count": 74,
-   "example": "62e17e286f2557d10800"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x8f",
-   "capstone": "vprotd",
-   "count": 56,
-   "example": "8fe878c2e410"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x8f",
-   "capstone": "vprotq",
-   "count": 32,
-   "example": "8f4878c3c838"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vmovdqu8",
-   "count": 32,
-   "example": "62f17fa96f02"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpclmulqdq",
-   "count": 32,
-   "example": "62f37d4844cd01"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpmullq",
-   "count": 19,
-   "example": "62f2fd0840cb"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpternlogd",
-   "count": 16,
-   "example": "62e3754825c496"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpaddd",
-   "count": 14,
-   "example": "62b17520fec3"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpxord",
-   "count": 11,
-   "example": "62a17d00efc0"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vmovntdq",
-   "count": 8,
-   "example": "62f17d48e701"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpdpbusd",
-   "count": 6,
-   "example": "62b2752850e2"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vinserti32x4",
-   "count": 6,
-   "example": "62f37548381201"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vextracti32x4",
-   "count": 6,
-   "example": "62f37d48391f01"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpshufb",
-   "count": 5,
-   "example": "62f26d0a00c8"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpsadbw",
-   "count": 4,
-   "example": "62f15548f6c1"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vmovdqa64",
-   "count": 4,
-   "example": "62f1fd487f01"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpermd",
-   "count": 3,
-   "example": "62f25d2036ca"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpslld",
-   "count": 3,
-   "example": "62b17d2872f105"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpternlogq",
-   "count": 3,
-   "example": "62f3fd0825d996"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpbroadcastb",
-   "count": 3,
-   "example": "62f27d487ac2"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vextracti64x4",
-   "count": 2,
-   "example": "62f3fd483bd001"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpcmpleb",
-   "count": 1,
-   "example": "62f37d083f0de89a230002"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpbroadcastw",
-   "count": 1,
-   "example": "62e27d487bcb"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpmaddubsw",
-   "count": 1,
-   "example": "62b2754804c2"
-  },
-  {
-   "entry": "no entry for map 1 opcode 0x62",
-   "capstone": "vpmaddwd",
-   "count": 1,
-   "example": "62b17d48f5c9"
-  }
- ],
+ "agree": 2391408,
+ "gaps": [],
  "disagreements": [
   {
    "capstone": "repz ret",
@@ -162,6 +11,14 @@
    "our_len": 2,
    "count": 262,
    "example": "f3c3"
+  },
+  {
+   "capstone": "vpcmpleb",
+   "ours": "vpcmpb",
+   "capstone_len": 11,
+   "our_len": 11,
+   "count": 1,
+   "example": "62f37d083f0de89a230002"
   }
  ]
 }

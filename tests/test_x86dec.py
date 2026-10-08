@@ -50,6 +50,12 @@ def test_own_decoder_agrees_with_reference(path: Path) -> None:
     ("40498b4078", 5, "mov", "MOV"),            # two REX bytes: only the last applies
     ("a3790800837b0800ed", 9, "movabs", "MOV"),  # moffs64 operand
     ("f3a6", 2, "repe cmpsb", "REPE_CMPSB"),
+    ("62e17e286f2557d10800", 10, "vmovdqu32", "VMOVDQU32"),   # EVEX, W0, F3
+    ("62f1fd487f01", 6, "vmovdqa64", "VMOVDQA64"),             # EVEX, W1, 66
+    ("62e3754825c496", 7, "vpternlogd", "VPTERNLOGD"),         # EVEX 0F3A, imm8
+    ("8fe878c2e410", 6, "vprotd", "VPROTD"),                    # XOP map 8, imm8
+    ("8f4878c3c838", 6, "vprotq", "VPROTQ"),
+    ("8f00", 2, "pop", "POP"),                                  # 8F with map field < 8 is POP r/m
 ])
 def test_known_encodings(hexbytes: str, length: int, mnemonic: str, iclass: str) -> None:
     got = decode(bytes.fromhex(hexbytes) + b"\0" * 15)

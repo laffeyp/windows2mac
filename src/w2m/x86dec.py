@@ -15,6 +15,8 @@ from w2m.x86dec_tables import LOCKABLE, REP_STRING, REPE_STRING, TABLE, Entry
 LEGACY = frozenset({0xF0, 0xF2, 0xF3, 0x2E, 0x36, 0x3E, 0x26, 0x64, 0x65, 0x66, 0x67})
 MAPS_3 = {0x38: "0f38", 0x3A: "0f3a"}
 VEX_MAP = {1: "0f", 2: "0f38", 3: "0f3a"}
+EVEX_MAP = {1: "0f", 2: "0f38", 3: "0f3a"}
+XOP_MAP = {8: "x8", 9: "x9", 10: "xa"}
 VEX_PFX = {0: "none", 1: "66", 2: "f3", 3: "f2"}
 MAX_LEN = 15
 
@@ -54,11 +56,27 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
             pfx.append(b[i])
             rex = 0
         i += 1
-    vex = False
+    enc = "legacy"
     w = (rex >> 3) & 1
     vl: int | None = None
-    if b[i] in (0xC4, 0xC5) and not rex:
-        vex = True
+    if b[i] == 0x62 and not rex:
+        # EVEX (SDM Vol 2A 2.7): 62 P0 P1 P2; in 64-bit mode 62 is never BOUND
+        p0, p1, p2 = b[i + 1], b[i + 2], b[i + 3]
+        if (p0 & 7) not in EVEX_MAP:
+            raise DecodeError(f"EVEX map field {p0 & 7}")
+        enc, mp, w, pp, vl = "evex", EVEX_MAP[p0 & 7], p1 >> 7, p1 & 3, (p2 >> 5) & 3
+        i += 4
+        mpfx = [VEX_PFX[pp]]
+    elif b[i] == 0x8F and (b[i + 1] & 0x1F) >= 8 and not rex:
+        # XOP (AMD APM Vol 6): 8F RXB.mmmmm W.vvvv.L.pp; map field < 8 means POP r/m instead
+        p1, p2 = b[i + 1], b[i + 2]
+        if (p1 & 0x1F) not in XOP_MAP:
+            raise DecodeError(f"XOP map field {p1 & 0x1F}")
+        enc, mp, w, pp, vl = "xop", XOP_MAP[p1 & 0x1F], p2 >> 7, p2 & 3, (p2 >> 2) & 1
+        i += 3
+        mpfx = [VEX_PFX[pp]]
+    elif b[i] in (0xC4, 0xC5) and not rex:
+        enc = "vex"
         if b[i] == 0xC5:
             p = b[i + 1]
             mp, pp, vl = "0f", p & 3, (p >> 2) & 1
@@ -84,9 +102,10 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
         mpfx = ([f"{reps[-1]:02x}"] if reps else []) + (["66"] if 0x66 in pfx else []) + ["none"]
     op = b[i]
     i += 1
-    cands = TABLE.get((mp, op, vex))
+    cands = TABLE.get((mp, op, enc))
     if not cands:
-        raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x}{' (vex)' if vex else ''}")
+        raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x}"
+                          f"{'' if enc == 'legacy' else f' ({enc})'}")
     chosen = _pick(cands, mpfx)
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} with prefixes {mpfx}")
@@ -99,7 +118,7 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
         exact = [c for c in chosen if c[6] is not None]
         chosen = exact or chosen
     chosen = [c for c in chosen if c[7] is None or c[7] == w]
-    chosen = [c for c in chosen if c[8] is None or c[8] == vl]
+    chosen = [c for c in chosen if c[8] is None or (enc == "vex" and c[8] == vl)]
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} modrm "
                           f"{'none' if modrm is None else hex(modrm)} w {w} l {vl}")
@@ -120,7 +139,7 @@ def decode(b: bytes, features: frozenset[str] | None = None) -> Decoded:
                 i += 1
             elif mod == 2:
                 i += 4
-    opsize = "64" if w and not vex else "16" if 0x66 in pfx else "32"
+    opsize = "64" if w and enc == "legacy" else "16" if 0x66 in pfx else "32"
     i += {None: 0, "b": 1, "w": 2, "d": 4,
           "z": 2 if opsize == "16" else 4,
           "v": 8 if opsize == "64" else 2 if opsize == "16" else 4,
