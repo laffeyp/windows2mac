@@ -55,7 +55,7 @@ The execution time of each ordering lowering on this kernel is measured on this 
 
 ## notes
 
-This measures one ingredient of v0.2 §8.2, not a backend decision: v0.2 forbids choosing a backend from a single measurement. VM numbers exclude exit costs by design (one entry per timed run, milliseconds long); exit-heavy workloads are a separate measurement.
+This measures one ingredient of v0.2 §8.2, not a backend decision: v0.2 forbids choosing a backend from a single measurement. VM timings exclude vCPU exits by design (one entry per timed run, milliseconds long); exit-heavy workloads are a separate measurement.
 
 ## self-review checklist
 
