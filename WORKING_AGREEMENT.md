@@ -74,6 +74,8 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Pend
 - `uv run ruff check` — expected exit 0.
 - `uv run mypy` — expected exit 0 (strict, `src/w2m`).
 
+- Windows tiebreak probe: `gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id>`, then `gh run watch <run-id> --exit-status`, `gh run download <run-id> -n trace-<id>`; ingest from `store/traces/<sha256>.jsonl`. Runner: `windows-2025` (Windows Server 2025 x64, LLVM 20.1.8). Private repo: uses the account's included Actions minutes.
+
 Permitted dependencies: runtime `substrate-kernel==1.1.1`; dev `ruff==0.15.17`, `mypy`, `pytest`, `pytest-asyncio`, `pytest-timeout`. Anything else is an agent-resolved decision recorded first.
 
 ---

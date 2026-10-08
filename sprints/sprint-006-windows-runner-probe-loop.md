@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 006
-status: active
+status: closed
 phase: 1
 pass_kind: bridge
 ---

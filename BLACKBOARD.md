@@ -43,6 +43,7 @@
 - **2026-10-07 user** — Windows reference runs are optional, not a gate ("there you go. that makes sense", chat 2026-10-07, answering the recommendation to accept contracts on documented evidence and run reference probes only as tiebreakers). Supersedes the 2026-10-05 agent-resolved "how §11.1's reference is met" entry's framing of a rented instance as the reference. `src/w2m/contract.py` now accepts a contract on documented or observed evidence; a hypothesis alone still cannot carry acceptance. The Sprint 005 drift item (placeholder reference_ref) stands: a comparison against documentation cites the contract version as its reference.
 - **2026-10-07 agent-resolved** — Concrete Windows-evidence sources, by question type: (1) OS behavior — Microsoft Learn via the MicrosoftDocs git repos (commit-pinned quotes); Wine's per-DLL conformance tests (`dlls/*/tests/*.c`, results on real Win10/Win11 at test.winehq.org); Microsoft public symbols for structure layouts; (2) CPU behavior — Intel SDM and AMD APM text, herdtools7 x86-TSO model for ordering; (3) tiebreak runs — GitHub-hosted `windows-2025` runner (Windows Server 2025, x64) driven by `gh workflow run` from this Mac; (4) the games' own traces on w2m. A Windows-on-Arm VM is valid for OS-behavior contracts only (E4). Grounds: project — user decision above, v0.2 §11.1; SDD — AGENTS.md resolve-and-record; practice — github.com/actions/runner-images (read 2026-10-07), test.winehq.org/data (read 2026-10-07). Revisit if: a source above disappears or a contract needs an observation none of them supplies.
 - **2026-10-07 user** — Sources 6 (GitHub-hosted `windows-2025` runner) and 7 (Windows-on-Arm VM on this Mac) are approved for tiebreak and OS-behavior probes ("6 and seven both seem appropriate", chat 2026-10-07). Open: whether the w2m GitHub repo is public or private; repo creation waits on that answer.
+- **2026-10-07 user** — Create the w2m repo private ("go", chat 2026-10-07, answering the recommendation `laffeyp/w2m`, private). Done: https://github.com/laffeyp/w2m, visibility PRIVATE, first commit 052383a.
 
 ---
 
@@ -54,6 +55,7 @@
 - **2026-10-05** — Sprint 003 (guest-trace ingester) closed. `src/w2m/trace.py`, `tests/test_trace.py`. Dual contract: signal pass (EXECUTION_STARTED, EXECUTION_COMPLETED, TRACE_INGESTED; TRACE_REJECTED in the gap run); artifact pass (suite 18 passed, ruff 0, mypy 0, generator `--check` 0, vocab gate 0). Observation: pass — record narrated, payloads round-trip into their Structs.
 - **2026-10-05** — Sprint 004 (contract format and first contract) closed. `src/w2m/contract.py`, `contracts/windows.event.auto_reset.single_signal/0.1.0.json` (status proposed; two documented evidence entries quoted from Microsoft Learn, one hypothesis), `tests/test_contract.py`. Dual contract: signal vacuous; artifact pass (suite 27 passed, ruff 0, mypy 0).
 - **2026-10-05** — Sprint 005 (allowed_outcome_set comparator) closed. `src/w2m/compare.py`, `tests/test_compare.py`. Dual contract: signal pass (COMPARISON_COMPLETED conforms and discrepancy); artifact pass (suite 37 passed, ruff 0, mypy 0). Observation: pass — record chain EXECUTION_COMPLETED → TRACE_INGESTED → COMPARISON_COMPLETED.
+- **2026-10-07** — Sprint 006 (Windows runner probe loop) closed. `probes/hello/hello.c`, `.github/workflows/windows-probe.yml`, `.gitignore`; repo `laffeyp/w2m` (private). Dual contract: signal pass (8 guest lines on the trace; TRACE_INGESTED on the Mac); artifact pass (`gh repo create` 0; run 37718681787 success; ingest TRACE_INGESTED; suite 38 passed). Observation: pass — Windows 10.0.26100 (`windows-2025`), trace sha256:fd933867ff19a7ea5c17a740fbed0d7f319d24f7bbbe7bafbc8921846023555a identical on runner and Mac.
 
 ---
 
@@ -74,12 +76,25 @@
 
 ## Drift watchlist
 
+- **Reference profile_id too coarse** (Sprint 006 observation 2). Needs UBR and product type (Server vs client). Re-visit at the next Windows probe.
 - **Unresolvable reference_ref in comparisons** (Sprint 005 observation 1). Every COMPARISON_COMPLETED so far cites a placeholder reference. Re-visit at the first reference run on the rented x86-64 Windows instance; from then on reference_ref must name an EXECUTION_STARTED on a windows_reference profile (E4, E13).
 - **APPLICATION_LAUNCHED without a view pairing** (Sprint 000 observation 3). Re-visit at the first sprint that presents a Metal frame; ratify P2 then.
 
 ---
 
 ## Sprint tail
+
+### Sprint 006 (2026-10-07, closed)
+- **Scope:** private repo; hello probe built and run on the `windows-2025` hosted runner; trace ingested on the Mac.
+- **Dual contract:** signal pass; artifact pass (run 37718681787 conclusion success; ingest TRACE_INGESTED line_count=8 thread_count=2; `uv run pytest` 38 passed).
+- **Observation contract:** pass. profile_id `gha-windows-2025-x64-10.0.26100`; runner Get-FileHash FD933867...555A equals Mac shasum.
+- **Rubber Duck Pass:**
+  - *Sequence narration (guest plane):* OPENED hello-001 on 10.0.26100. Thread 6588 started, read QPC 2267788232. Thread 8820 started after 6588:1, read QPC 2267788974, exited. Thread 6588 read QPC 2267789575 after 8820:2. CLOSED with 8 lines, 2 threads, 0 dropped.
+  - *Observation 1 (order):* QPC values rise along both hb edges (…232 < …974 < …575), as the edges require. Disposition: resolved-here (no fault; first observed evidence that QPC is consistent across threads on this profile — one run, a witness, not a rule).
+  - *Observation 2 (payload anomaly):* profile_id carries 10.0.26100 but not the update build revision (the runner README lists Build 33438) nor that the OS is Windows Server, not a client SKU. v0.2 §11.1 asks for the Windows build. Disposition: deferred — the next probe reads UBR and product type from the registry; Drift watchlist.
+  - *Observation 3 (timing):* first dispatch (run 37718622857) failed at build: MSVC CRT deprecates `fopen` and `-Werror` promoted it. Disposition: resolved-here (`_CRT_SECURE_NO_WARNINGS`, commit after 052383a).
+- **Files:** probes/hello/hello.c, .github/workflows/windows-probe.yml, .gitignore
+- **Closed:** clean.
 
 ### Sprint 005 (2026-10-05, closed)
 - **Scope:** comparator for allowed_outcome_set; substrate Producer triggered by TRACE_INGESTED.
