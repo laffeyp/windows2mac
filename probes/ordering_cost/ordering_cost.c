@@ -1,4 +1,4 @@
-/* ordering_cost.c — per-access cost of x86-TSO ordering on this Mac (Sprint 011).
+/* ordering_cost.c — execution time of x86-TSO ordering lowerings on one synthetic kernel (Sprint 011).
  *
  * Kernel: for r < reps: for i < n: a[i] += b[i]   (2 loads + 1 store per element).
  * Native variants run in this process; VM variants run the plain kernel in a guest with
