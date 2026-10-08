@@ -37,6 +37,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
           (Get-FileHash -Algorithm SHA256 probe.exe).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out/probe.sha256
+          Copy-Item probe.exe out/probe.exe
           for ($i = 1; $i -le [int]"${{ inputs.repeat }}"; $i++) {
             ./probe.exe "${{ inputs.execution_id }}-$i" "out/trace-$i.jsonl" "out/roles-$i.json"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
