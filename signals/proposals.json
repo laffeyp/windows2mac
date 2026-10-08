@@ -150,6 +150,18 @@
         "into": "0.3",
         "grounds": "project \u2014 v0.2 section 8; SDD \u2014 PRINCIPLES.md proposal taxonomy, Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
       }
+    },
+    {
+      "id": "P11",
+      "kind": "TAG_DEPRECATION_PROPOSED",
+      "layer": 2,
+      "candidate": [
+        "BACKEND_EVALUATED.cost_objective_ref is deprecated and replaced by objective_ref (same type, same meaning: the declared optimization objective)"
+      ],
+      "source": "user decision 2026-10-08: 'cost' refers to money only",
+      "rationale": "The field name imports a monetary word into an optimization target; an agent reading it would treat execution time as something to spend less of at the expense of correctness or coverage.",
+      "status": "open",
+      "revisit": "next vocabulary version bump; ratify then (a field rename removes a required field, so 0.4 lists the deprecation explicitly)"
     }
   ]
 }
