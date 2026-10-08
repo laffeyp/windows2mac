@@ -106,7 +106,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"capability-{int(time.time())}").run(topology))
+    result = asyncio.run(Runtime(a.runs / f"capability-{time.time_ns()}").run(topology))
     expected = {"ipa_granule_4k": "present", "guest_tsoen": "present",
                 "guest_tsoen_context_switch": "present", "host_page_16k": "present",
                 "native_process_tso": "absent"}

@@ -48,3 +48,7 @@ litmus:     CAPABILITY_PROBED guest_tsoen present (off 35/50,000,000; on 0/50,00
 ## 4. Hypothesis
 
 > The workflow's new `exec-<i>.json` has not run yet; its PowerShell quoting is unexercised. The next runner dispatch is its test, and `judge_traces.py` will omit nothing on that run if it works.
+
+## Correction (2026-10-08, Sprint 025)
+
+The `signal_trace` above was written from memory, not read from the records, and it is wrong in two places. `runs/judge-1791496361` holds no `SESSION_INIT` or `SESSION_COMPLETED`: `judge_traces.py` had never emitted them (vocabulary invariants T1, T2), so the judge line should begin at `EXECUTION_STARTED` and end at `COMPARISON_COMPLETED`. `runs/litmus-1791496387` holds no `MEASUREMENT_RECORDED`; `signal_trace_tags` should not list it. Read back from the records: judge — EXECUTION_STARTED 10, EXECUTION_COMPLETED 10, TRACE_INGESTED 10, COMPARISON_COMPLETED 10; litmus — SESSION_INIT 1, CAPABILITY_PROBED 2, SESSION_COMPLETED 1. Sprint 025 adds the judge's session tags. The signal-contract grade "pass" stands for what the card declared; the trace it cited was not the record.

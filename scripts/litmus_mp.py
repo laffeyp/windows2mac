@@ -95,7 +95,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"litmus-{int(time.time())}").run(topology))
+    result = asyncio.run(Runtime(a.runs / f"litmus-{time.time_ns()}").run(topology))
     for e in read_record(result.record_root):
         if e["kind"] == "CAPABILITY_PROBED":
             print(f"{e['payload']['capability']:28} {e['payload']['outcome']:8} {e['payload']['detail']}")

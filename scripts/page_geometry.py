@@ -122,7 +122,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"pagegeom-{int(time.time())}").run(topology))
+    result = asyncio.run(Runtime(a.runs / f"pagegeom-{time.time_ns()}").run(topology))
     rec = read_record(result.record_root)
     vals: dict[str, float] = {}
     for e in rec:

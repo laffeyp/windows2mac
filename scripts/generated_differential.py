@@ -15,22 +15,39 @@ spec row, its outcome counts and whether XED confirmed it (no ours_accepts, ours
 iclass or operand difference among its cases). Rows are keyed by the sha256 of their canonical
 JSON, so an edited row loses its confirmation until the differential runs again.
 
+Signal plane (Sprint 025): --record writes a substrate run: SESSION_INIT, COMPARISON_COMPLETED
+(relation exact, contract x86.decode at the spec version, reference XED), then per disagreement
+class DISCREPANCY_REPORTED and DISCREPANCY_ROUTED, then SESSION_COMPLETED. Routing follows the
+vocabulary's rule from the outcome class: length_differs -> implementation_repair (the spec row's
+fields agree with XED; the decoder routine is wrong); every other class -> contract_revision (the
+spec lacks the row or rule XED applies). Each class's example bytes are stored at
+store/programs/<hex>.bin, named by minimized_program_sha256.
+
 Usage: uv run python scripts/generated_differential.py [--per-row 48] [--chip ALL] [--json out]
-       [--confirmations specs/x86_decode_confirmations.json]
+       [--confirmations specs/x86_decode_confirmations.json] [--record] [--runs runs]
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import sys
 import time
 from collections import Counter
+from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
+
+import msgspec
+from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
+
+from w2m import VOCAB_VERSION, events
 
 from w2m.encgen import SPEC, cases
 from w2m.x86dec import DecodeError, Decoded, decode
+from w2m.x86dec_tables import SPEC_VERSION
 from w2m.x86ops import OperandError, normalize, operands
 from w2m.xedref import decode_many
 
@@ -41,6 +58,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--chip", default="ALL")
     ap.add_argument("--json", type=Path)
     ap.add_argument("--confirmations", type=Path)
+    ap.add_argument("--record", action="store_true")
+    ap.add_argument("--runs", type=Path, default=Path("runs"))
+    ap.add_argument("--store", type=Path, default=Path("store"))
     a = ap.parse_args(argv)
     t0 = time.monotonic()
     cs = list(cases(per_row=a.per_row))
@@ -117,6 +137,10 @@ def main(argv: list[str]) -> int:
             "cases_per_row": a.per_row, "rows": len(conf), "confirmed": ok, "by_row_sha256": conf},
             indent=1) + "\n")
         print(f"confirmations: {ok} of {len(conf)} rows confirmed by XED -> {a.confirmations}")
+    if a.record:
+        classes = [(k, n, example[k]) for k, n in kinds.most_common()]
+        classes += [(("operand_differs", *k, ""), n, op_ex[k]) for k, n in op_diff.most_common()]
+        record(a, classes, total, time.monotonic() - t0)
     if a.json:
         a.json.write_text(json.dumps({"cases": total, "chip": a.chip, "outcomes": dict(outcome),
                                       "operands_compared": op_n,
@@ -127,6 +151,66 @@ def main(argv: list[str]) -> int:
                                                  "lengths": k[3], "count": n, "example": example[k]}
                                                 for k, n in kinds.most_common()]}, indent=1) + "\n")
     return 0
+
+
+XED_PROFILE = "xed-v2026.08.23-0bcb6237345c"
+EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
+
+
+def record(a: argparse.Namespace, classes: list[tuple[tuple[str, ...], int, str]], total: int,
+           elapsed: float) -> None:
+    """One substrate run holding this differential's verdict and its routed discrepancies."""
+    run_id = f"gendiff-{time.time_ns()}"
+    ours = f"w2m-x86dec-spec-{SPEC_VERSION}"
+    progs = a.store / "programs"
+    progs.mkdir(parents=True, exist_ok=True)
+
+    async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
+        yield events.validate(events.SESSION_INIT(
+            vocab_version=VOCAB_VERSION, profile=ours, contract_version=SPEC_VERSION,
+            harness_version="0.0.1", purpose="conformance"))
+        cmp_id = f"cmp-{run_id}"
+        yield events.validate(events.COMPARISON_COMPLETED(
+            comparison_id=cmp_id, contract_id="x86.decode", contract_version=SPEC_VERSION,
+            relation="exact", reference_ref=XED_PROFILE, target_execution_id=run_id,
+            verdict="discrepancy" if classes else "conforms",
+            rule_ref=f"{total} generated cases, {a.per_row} per row, chip {a.chip}"))
+        for i, (k, n, ex) in enumerate(classes, 1):
+            raw = bytes.fromhex(ex.split()[0])
+            digest = hashlib.sha256(raw).hexdigest()
+            (progs / f"{digest}.bin").write_bytes(raw)
+            did = f"{run_id}-d{i}"
+            yield events.validate(events.DISCREPANCY_REPORTED(
+                discrepancy_id=did, contract_id="x86.decode", contract_version=SPEC_VERSION,
+                mismatch_class="exact", minimized_program_sha256=f"sha256:{digest}",
+                initial_state_sha256=EMPTY,
+                first_divergence=f"{k[0]}: xed={k[1] or '-'} ours={k[2] or '-'}"
+                                 f"{' lengths ' + k[3] if k[3] else ''}; {n} cases",
+                reference_profile_id=XED_PROFILE, destination_profile_id=ours,
+                comparison_id=cmp_id))
+            impl = k[0] == "length_differs"
+            yield events.validate(events.DISCREPANCY_ROUTED(
+                discrepancy_id=did,
+                repair_path="implementation_repair" if impl else "contract_revision",
+                reference_conforms=impl,
+                grounds=("spec row fields agree with XED; the decoder's length routine is wrong"
+                         if impl else "the spec lacks the row or validity rule XED applies "
+                                      "(Decision 2026-10-08: XED judges)")))
+        yield events.validate(events.SESSION_COMPLETED(
+            outcome="completed_with_discrepancies" if classes else "completed",
+            discrepancy_count=len(classes), accepted_count=0, elapsed_seconds=round(elapsed, 3)))
+
+    def topology(b: TopologyBuilder) -> None:
+        b.baseline(spec_version=SPEC_VERSION, reference=XED_PROFILE, cases=total, chip=a.chip)
+        b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
+                        factory=lambda: harness)
+        b.initial("comparator", input=None)
+        b.termination(threshold_count("substrate.ProducerCompleted", 1))
+
+    result = asyncio.run(Runtime(a.runs / run_id).run(topology))
+    kinds = Counter(e["kind"] for e in read_record(result.record_root)
+                    if not e["kind"].startswith("substrate."))
+    print(f"record {result.record_root}: {dict(kinds)}")
 
 
 if __name__ == "__main__":

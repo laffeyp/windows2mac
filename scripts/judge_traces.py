@@ -36,7 +36,7 @@ from substrate.api import (
     quiescence_with_watchdog, read_record,
 )
 
-from w2m import events
+from w2m import VOCAB_VERSION, events
 from w2m.compare import comparator
 from w2m.trace import trace_ingester, trace_path
 
@@ -92,7 +92,13 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
                  cid: str, cver: str) -> Any:
     roles = {it["execution_id"]: it["roles"] for it in items}
 
+    t0 = time.monotonic()
+    seen: list[str] = []
+
     async def importer(_inp: Any) -> AsyncIterator[msgspec.Struct]:
+        yield events.validate(events.SESSION_INIT(          # T1: first application event
+            vocab_version=VOCAB_VERSION, profile=items[0]["profile_id"], contract_version=cver,
+            harness_version="0.0.1", purpose="conformance"))
         for it in items:
             yield events.validate(events.EXECUTION_STARTED(
                 execution_id=it["execution_id"], subject_kind="probe", subject_sha256=probe_sha,
@@ -110,10 +116,23 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
                                   "uploaded trace implies exit 0; inferred, not emitted)"}
                    if missing else {})))
 
+    def last_verdict(ctx: Any) -> bool:
+        seen.append(ctx.event.payload["verdict"])
+        return len(seen) == len(items)
+
+    async def closer(_inp: Any) -> AsyncIterator[msgspec.Struct]:
+        bad = sum(v != "conforms" for v in seen)
+        yield events.validate(events.SESSION_COMPLETED(     # T2: last application event
+            outcome="completed_with_discrepancies" if bad else "completed",
+            discrepancy_count=bad, accepted_count=0,
+            elapsed_seconds=round(time.monotonic() - t0, 3)))
+
     def topology(b: TopologyBuilder) -> None:
         b.baseline(contract=f"{cid}@{cver}", probe_sha256=probe_sha, traces=len(items))
-        b.producer_kind("reference_runner", schemas=[events.EXECUTION_STARTED,
+        b.producer_kind("reference_runner", schemas=[events.SESSION_INIT, events.EXECUTION_STARTED,
                         events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: importer)
+        b.producer_kind("harness", schemas=[events.SESSION_COMPLETED], schema_version=1,
+                        factory=lambda: closer)
         b.producer_kind("trace_ingester", schemas=[events.TRACE_INGESTED, events.TRACE_REJECTED],
                         schema_version=1, factory=lambda: trace_ingester(store))
         b.producer_kind("comparator", schemas=[events.COMPARISON_COMPLETED], schema_version=1,
@@ -132,6 +151,9 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
                       "comparison_id": "cmp-" + ctx.event.payload["execution_id"],
                       "reference_ref": f"{cid}@{cver}",
                       "target_execution_id": ctx.event.payload["execution_id"]})
+        b.trigger("close", subscription=Subscription(kinds=frozenset({"COMPARISON_COMPLETED"})),
+                  predicate=last_verdict, starts="harness", policy=PerEvent(),
+                  input_builder=lambda ctx: None)
         b.termination(quiescence_with_watchdog(seconds=2))
 
     return topology
@@ -161,7 +183,7 @@ def main(argv: list[str]) -> int:
         probe_sha, items = load_store(a.store, a.src.removeprefix("store:"))
     else:
         probe_sha, items = load_dir(Path(a.src), a.store, a.run_id)
-    root = a.runs / f"judge-{int(time.time())}"
+    root = a.runs / f"judge-{time.time_ns()}"
     result = asyncio.run(Runtime(root).run(
         topology_for(probe_sha, items, a.store, a.contracts, cid, cver)))
     verdicts = {e["payload"]["target_execution_id"]: e["payload"]

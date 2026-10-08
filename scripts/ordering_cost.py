@@ -110,7 +110,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"ordering-{int(time.time())}").run(topology))
+    result = asyncio.run(Runtime(a.runs / f"ordering-{time.time_ns()}").run(topology))
     rec = {e["payload"]["variant"]: e["payload"]["value"]
            for e in read_record(result.record_root) if e["kind"] == "MEASUREMENT_RECORDED"}
     for set_name in SETS:

@@ -92,6 +92,7 @@
 - **2026-10-07** — Sprint 007 (event contract reference runs) closed. `probes/event_auto_reset/event_auto_reset.c`, `scripts/judge_traces.py`, workflow `repeat` input; `contracts/windows.event.auto_reset.single_signal/0.2.0.json` (accepted: two documented + two observed evidence entries). Dual contract: signal pass (130 guest lines over 10 traces; 10 TRACE_INGESTED, 10 COMPARISON_COMPLETED conforms); artifact pass (run 37738035459 success; judge exit 0 against 0.1.0 and 0.2.0; suite 39 passed; ruff, mypy 0). Observation: pass.
 - **2026-10-08** — Sprint 023 (decoder phase close) closed. `InvalidEncoding` for prefixes/REX before VEX/EVEX/XOP and length over 15; `Truncated`; `read_rva` bounded; prefixed cases in `encgen`; `specs/x86_decode_confirmations.json` (548 of 809 rows confirmed by XED); spec 0.6.2 (3 duplicate rows removed). Dual contract: signal vacuous by declaration; artifact pass (140 passed; ruff, mypy, `--check` 0). Observation: prefixed cases accepted against XED 1,170 → 172 of 2,813; length differs 0. Report: `signal-reports/sprint-023-report.md`.
 - **2026-10-08** — Sprint 024 (vocabulary 0.4, evidence) closed. `signals/0.4.json` + rationale (P11, P12, P13 ratified), `judge_traces.py` (no placeholder payloads; `store:<run id>` re-judges from committed data), `store/executions/` (role maps recovered from the runner artifacts of run 37738035459), `litmus_mp.py` (present needs off > 0), `probe_capabilities.py` (`native_process_tso` not_established), workflow (per-execution exit code and elapsed time; actions pinned by SHA), `store/runs/` (8 Mac hardware run records). Dual contract: signal pass (expected tags fired; payloads checked); artifact pass (140 passed; check_vocab, gen_events --check, ruff, mypy 0). Observation: judge 10/10 conforms from the store alone; litmus off 35/50M, on 0/50M. Report: `signal-reports/sprint-024-report.md`.
+- **2026-10-08** — Sprint 025 (decoder differential on the record) closed. `generated_differential.py --record` (SESSION_INIT, COMPARISON_COMPLETED, DISCREPANCY_REPORTED/ROUTED per class, SESSION_COMPLETED; examples in `store/programs/`); `judge_traces.py` session tags (T1, T2); run roots by `time.time_ns()` in five scripts. Dual contract: signal pass (300 reported, 300 routed, contract_revision; first firing of the discrepancy tags); artifact pass. Observation: runner run 37850017162 (evt24 ×2) judged with observed exit code and elapsed time; waiter a released 12 of 12 overall. Report: `signal-reports/sprint-025-report.md` (also corrects the Sprint 024 report's trace).
 
 ---
 
@@ -130,6 +131,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 025 (2026-10-08, closed)
+- **Scope:** decoder differential on the signal plane; judge session tags.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the differential opened a conformance session for `w2m-x86dec-spec-0.6.2`, recorded one exact comparison against XED with verdict discrepancy, then 300 discrepancy pairs, each naming its stored example and routed to contract revision, then closed with 300. The judge opened, imported 2 runner executions whose exit code and elapsed time were observed for the first time, ingested and compared both (conforms), and closed with 0.
+  - *Observation 1 (a report written from memory):* the Sprint 024 report listed SESSION_INIT/COMPLETED and MEASUREMENT_RECORDED that its records do not contain. The defect it hid (judge runs without session tags, T1/T2) was real. Disposition: resolved-here; correction appended to that report; this report's trace is read from the records.
+  - *Observation 2 (a latent collision):* run roots named by whole seconds; two judge runs in one second wrote one directory, and substrate's gap check caught it. Disposition: resolved-here in five scripts.
+  - *Observation 3 (card invariant was wrong):* "classes the text report prints" counts 30, not 300. Disposition: corrected at close in the card.
+- **Closed:** clean.
 
 ### Sprint 024 (2026-10-08, closed)
 - **Scope:** vocabulary 0.4 and evidence defects; review items 4.5-4.8.
