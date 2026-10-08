@@ -1,167 +1,208 @@
 {
-  "vocabulary": "signals/0.3.json (current); signals/0.2.json, signals/0.1.json (prior)",
-  "taxonomy_version": "0.1",
-  "proposals": [
-    {
-      "id": "P1",
-      "kind": "NEW_TAG_PROPOSED",
-      "layer": 1,
-      "candidate": [
-        "SHADER_TRANSLATED",
-        "PIPELINE_ARCHIVED"
-      ],
-      "category": "compile",
-      "source": "v0.2 section 10.1-10.2 (shader paths DXBC/DXIL/HLSL; Metal binary archives)",
-      "rationale": "Graphics artifacts are covered today by ARTIFACT_BUILT with artifact_kind metal_library / pipeline_archive; shader-specific payload (input path, shader model, binding layout hash) waits for the first graphics profile, which v0.2 section 15 leaves open.",
-      "status": "open",
-      "revisit": "first Phase 3 sprint that translates a BioShock 2 Remastered (DXBC) or Dawnwalker (DXIL) shader"
-    },
-    {
-      "id": "P2",
-      "kind": "NEW_TAG_PROPOSED",
-      "layer": 1,
-      "candidate": [
-        "WINDOW_PRESENTED"
-      ],
-      "category": "view (new)",
-      "source": "BOOTSTRAP Step 9 dual-contract audit; v0.2 section 12 (Application level: graphics, input)",
-      "rationale": "APPLICATION_LAUNCHED has no view-side counterpart; a presented first frame with the view-universal payload (frame, visible, scene_id, layer) is the visible proof of a launch.",
-      "status": "open",
-      "revisit": "first sprint that presents a Metal frame"
-    },
-    {
-      "id": "P3",
-      "kind": "NEW_TAG_PROPOSED",
-      "layer": 1,
-      "candidate": [
-        "FRAME_TIME_SAMPLED"
-      ],
-      "category": "perf",
-      "stratum": "ambient",
-      "source": "v0.2 section 13 (frame-time distributions); TECHNIQUES.md game-dev class (frame budget as a signal stratum)",
-      "rationale": "MEASUREMENT_RECORDED carries p50/p99 summaries; a sampled ambient tag needs a cadence, and no measured cadence exists yet. BOOTSTRAP Step 5: an ambient tag with no cadence is not admitted.",
-      "status": "open",
-      "revisit": "first sustained-run measurement on either backend"
-    },
-    {
-      "id": "P4",
-      "kind": "NEW_TAG_PROPOSED",
-      "layer": 1,
-      "candidate": [
-        "GUEST_OBJECT_TRANSITIONED"
-      ],
-      "category": "guest",
-      "source": "v0.2 section 11.2 (auto-reset event example: signaled_after_consumption postcondition)",
-      "rationale": "GUEST_CALL_RETURNED plus hb_refs records wait completion and the satisfying signal; an explicit object-state line would let a probe assert the postcondition without inferring it from call returns.",
-      "status": "open",
-      "revisit": "first synchronization-object contract that cannot be checked from call returns alone"
-    },
-    {
-      "id": "P5",
-      "kind": "NEW_TAG_PROPOSED",
-      "layer": 1,
-      "candidate": [
-        "GUEST_MODULE_LOADED",
-        "GUEST_CODE_MODIFIED"
-      ],
-      "category": "guest",
-      "source": "v0.2 section 5.1 (newly loaded modules; code changed during execution; publication contract)",
-      "rationale": "The compile side has CODE_TARGET_DISCOVERED (loaded_module, generated_code) and TRANSLATION_INVALIDATED (code_modified); the guest side needs the observation that triggered them for code-publication probes.",
-      "status": "open",
-      "revisit": "first code-publication or self-modifying-code probe"
-    },
-    {
-      "id": "P6",
-      "kind": "NEW_TAG_PROPOSED",
-      "layer": 1,
-      "candidate": [
-        "PROFILE_REGISTERED"
-      ],
-      "category": "session",
-      "source": "v0.2 section 11.1 (reference profile fields); constraint E13 (ids resolve to registry files)",
-      "rationale": "Profiles currently live as files under profiles/; a tag would put profile creation on the record. Not needed until profiles change during a run.",
-      "status": "open",
-      "revisit": "a run that registers or edits a profile"
-    },
-    {
-      "id": "P7",
-      "kind": "INVARIANT_PROPOSED",
-      "layer": 4,
-      "candidate": "GUEST_CLOCK_READ(clock=qpc) values are non-decreasing per process",
-      "source": "v0.2 section 3.1",
-      "rationale": "Clock behavior is contract content, not vocabulary: each clock's monotonicity, wraparound, and cross-thread rules belong in contracts/windows.clock.* with evidence. Putting it in the vocabulary would assert a behavior without evidence.",
-      "status": "rejected",
-      "ratified": {
-        "date": "2026-10-05",
-        "by": "agent-resolved",
-        "grounds": "v0.2 3.1 and 11.1; PRINCIPLES.md commitment 1 (vocabulary names events, contracts define allowed behavior)"
-      }
-    },
-    {
-      "id": "P8",
-      "kind": "INVARIANT_PROPOSED",
-      "layer": 7,
-      "candidate": [
-        "types.version is major.minor[.patch] (the vocabulary's own version is '0.1')",
-        "harness-plane integer fields lie in [-(2^53-1), 2^53-1]; guest-plane integers keep the full 64-bit range"
-      ],
-      "source": "Sprint 002: substrate.api.canonical_bytes raises NonCanonicalValueError for |n| > 2^53-1 (RFC 8785); signals/0.1.json types.version text says major.minor.patch while version is '0.1'",
-      "rationale": "Both are already enforced by the generated validators (scripts/gen_events.py); no tag or field changes. Written into the vocabulary at the next version bump so the constraint is visible outside the generator.",
-      "status": "ratified",
-      "revisit": "next vocabulary version bump",
-      "ratified": {
-        "date": "2026-10-07",
-        "by": "agent-resolved",
-        "into": "0.2",
-        "grounds": "substrate.api.canonical_bytes rejects |n| > 2^53-1 (Sprint 002); the vocabulary's own version '0.1' contradicted its types.version text; PRINCIPLES.md commitment 1 (the constraint must be visible in the contract, not only in the generator)"
-      }
-    },
-    {
-      "id": "P9",
-      "kind": "PAYLOAD_FIELD_PROPOSED",
-      "layer": 2,
-      "candidate": [
-        "MEASUREMENT_RECORDED.metric gains enum value ns_per_access",
-        "MEASUREMENT_RECORDED gains optional payload field variant (text)"
-      ],
-      "source": "v0.2 section 8.2 (both backends measured; neither assigned an assumed per-access cost) and section 13 (measure ordering operations and memory checks); Sprint 011 needs per-access cost of TSO lowerings",
-      "rationale": "No existing metric expresses per-access cost, and no field names which lowering or configuration produced a number; without them the backend comparison cannot be recorded.",
-      "status": "ratified",
-      "ratified": {
-        "date": "2026-10-07",
-        "by": "agent-resolved",
-        "into": "0.2",
-        "grounds": "project \u2014 v0.2 sections 8.2, 13; SDD \u2014 PRINCIPLES.md proposal taxonomy (PAYLOAD_FIELD_PROPOSED), 0.1 Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
-      }
-    },
-    {
-      "id": "P10",
-      "kind": "PAYLOAD_FIELD_PROPOSED",
-      "layer": 2,
-      "candidate": [
-        "CAPABILITY_PROBED.capability gains native_mprotect_4k, native_page_check_4k, guest_page_protection_4k"
-      ],
-      "source": "v0.2 section 8 (two contiguous 4 KB pages with different protection; guest page metadata separate from host allocation); Sprint 012 probes",
-      "rationale": "The 0.2 capability enum names the IPA granule but not whether 4 KB guest page protection is enforceable: by host mprotect (native), by a software shadow check (native), or by guest stage-1 page tables (VM).",
-      "status": "ratified",
-      "ratified": {
-        "date": "2026-10-08",
-        "by": "agent-resolved",
-        "into": "0.3",
-        "grounds": "project \u2014 v0.2 section 8; SDD \u2014 PRINCIPLES.md proposal taxonomy, Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
-      }
-    },
-    {
-      "id": "P11",
-      "kind": "TAG_DEPRECATION_PROPOSED",
-      "layer": 2,
-      "candidate": [
-        "BACKEND_EVALUATED.cost_objective_ref is deprecated and replaced by objective_ref (same type, same meaning: the declared optimization objective)"
-      ],
-      "source": "user decision 2026-10-08: 'cost' refers to money only",
-      "rationale": "The field name imports a monetary word into an optimization target; an agent reading it would treat execution time as something to spend less of at the expense of correctness or coverage.",
-      "status": "open",
-      "revisit": "next vocabulary version bump; ratify then (a field rename removes a required field, so 0.4 lists the deprecation explicitly)"
-    }
-  ]
+ "vocabulary": "signals/0.4.json (current); signals/0.3.json, signals/0.2.json, signals/0.1.json (prior)",
+ "taxonomy_version": "0.1",
+ "proposals": [
+  {
+   "id": "P1",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "SHADER_TRANSLATED",
+    "PIPELINE_ARCHIVED"
+   ],
+   "category": "compile",
+   "source": "v0.2 section 10.1-10.2 (shader paths DXBC/DXIL/HLSL; Metal binary archives)",
+   "rationale": "Graphics artifacts are covered today by ARTIFACT_BUILT with artifact_kind metal_library / pipeline_archive; shader-specific payload (input path, shader model, binding layout hash) waits for the first graphics profile, which v0.2 section 15 leaves open.",
+   "status": "open",
+   "revisit": "first Phase 3 sprint that translates a BioShock 2 Remastered (DXBC) or Dawnwalker (DXIL) shader"
+  },
+  {
+   "id": "P2",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "WINDOW_PRESENTED"
+   ],
+   "category": "view (new)",
+   "source": "BOOTSTRAP Step 9 dual-contract audit; v0.2 section 12 (Application level: graphics, input)",
+   "rationale": "APPLICATION_LAUNCHED has no view-side counterpart; a presented first frame with the view-universal payload (frame, visible, scene_id, layer) is the visible proof of a launch.",
+   "status": "open",
+   "revisit": "first sprint that presents a Metal frame"
+  },
+  {
+   "id": "P3",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "FRAME_TIME_SAMPLED"
+   ],
+   "category": "perf",
+   "stratum": "ambient",
+   "source": "v0.2 section 13 (frame-time distributions); TECHNIQUES.md game-dev class (frame budget as a signal stratum)",
+   "rationale": "MEASUREMENT_RECORDED carries p50/p99 summaries; a sampled ambient tag needs a cadence, and no measured cadence exists yet. BOOTSTRAP Step 5: an ambient tag with no cadence is not admitted.",
+   "status": "open",
+   "revisit": "first sustained-run measurement on either backend"
+  },
+  {
+   "id": "P4",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "GUEST_OBJECT_TRANSITIONED"
+   ],
+   "category": "guest",
+   "source": "v0.2 section 11.2 (auto-reset event example: signaled_after_consumption postcondition)",
+   "rationale": "GUEST_CALL_RETURNED plus hb_refs records wait completion and the satisfying signal; an explicit object-state line would let a probe assert the postcondition without inferring it from call returns.",
+   "status": "open",
+   "revisit": "first synchronization-object contract that cannot be checked from call returns alone"
+  },
+  {
+   "id": "P5",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "GUEST_MODULE_LOADED",
+    "GUEST_CODE_MODIFIED"
+   ],
+   "category": "guest",
+   "source": "v0.2 section 5.1 (newly loaded modules; code changed during execution; publication contract)",
+   "rationale": "The compile side has CODE_TARGET_DISCOVERED (loaded_module, generated_code) and TRANSLATION_INVALIDATED (code_modified); the guest side needs the observation that triggered them for code-publication probes.",
+   "status": "open",
+   "revisit": "first code-publication or self-modifying-code probe"
+  },
+  {
+   "id": "P6",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "PROFILE_REGISTERED"
+   ],
+   "category": "session",
+   "source": "v0.2 section 11.1 (reference profile fields); constraint E13 (ids resolve to registry files)",
+   "rationale": "Profiles currently live as files under profiles/; a tag would put profile creation on the record. Not needed until profiles change during a run.",
+   "status": "open",
+   "revisit": "a run that registers or edits a profile"
+  },
+  {
+   "id": "P7",
+   "kind": "INVARIANT_PROPOSED",
+   "layer": 4,
+   "candidate": "GUEST_CLOCK_READ(clock=qpc) values are non-decreasing per process",
+   "source": "v0.2 section 3.1",
+   "rationale": "Clock behavior is contract content, not vocabulary: each clock's monotonicity, wraparound, and cross-thread rules belong in contracts/windows.clock.* with evidence. Putting it in the vocabulary would assert a behavior without evidence.",
+   "status": "rejected",
+   "ratified": {
+    "date": "2026-10-05",
+    "by": "agent-resolved",
+    "grounds": "v0.2 3.1 and 11.1; PRINCIPLES.md commitment 1 (vocabulary names events, contracts define allowed behavior)"
+   }
+  },
+  {
+   "id": "P8",
+   "kind": "INVARIANT_PROPOSED",
+   "layer": 7,
+   "candidate": [
+    "types.version is major.minor[.patch] (the vocabulary's own version is '0.1')",
+    "harness-plane integer fields lie in [-(2^53-1), 2^53-1]; guest-plane integers keep the full 64-bit range"
+   ],
+   "source": "Sprint 002: substrate.api.canonical_bytes raises NonCanonicalValueError for |n| > 2^53-1 (RFC 8785); signals/0.1.json types.version text says major.minor.patch while version is '0.1'",
+   "rationale": "Both are already enforced by the generated validators (scripts/gen_events.py); no tag or field changes. Written into the vocabulary at the next version bump so the constraint is visible outside the generator.",
+   "status": "ratified",
+   "revisit": "next vocabulary version bump",
+   "ratified": {
+    "date": "2026-10-07",
+    "by": "agent-resolved",
+    "into": "0.2",
+    "grounds": "substrate.api.canonical_bytes rejects |n| > 2^53-1 (Sprint 002); the vocabulary's own version '0.1' contradicted its types.version text; PRINCIPLES.md commitment 1 (the constraint must be visible in the contract, not only in the generator)"
+   }
+  },
+  {
+   "id": "P9",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "MEASUREMENT_RECORDED.metric gains enum value ns_per_access",
+    "MEASUREMENT_RECORDED gains optional payload field variant (text)"
+   ],
+   "source": "v0.2 section 8.2 (both backends measured; neither assigned an assumed per-access cost) and section 13 (measure ordering operations and memory checks); Sprint 011 needs per-access cost of TSO lowerings",
+   "rationale": "No existing metric expresses per-access cost, and no field names which lowering or configuration produced a number; without them the backend comparison cannot be recorded.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-07",
+    "by": "agent-resolved",
+    "into": "0.2",
+    "grounds": "project — v0.2 sections 8.2, 13; SDD — PRINCIPLES.md proposal taxonomy (PAYLOAD_FIELD_PROPOSED), 0.1 Layer 10 override (enum addition bumps the minor version); practice — n/a"
+   }
+  },
+  {
+   "id": "P10",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "CAPABILITY_PROBED.capability gains native_mprotect_4k, native_page_check_4k, guest_page_protection_4k"
+   ],
+   "source": "v0.2 section 8 (two contiguous 4 KB pages with different protection; guest page metadata separate from host allocation); Sprint 012 probes",
+   "rationale": "The 0.2 capability enum names the IPA granule but not whether 4 KB guest page protection is enforceable: by host mprotect (native), by a software shadow check (native), or by guest stage-1 page tables (VM).",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-08",
+    "by": "agent-resolved",
+    "into": "0.3",
+    "grounds": "project — v0.2 section 8; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (enum addition bumps the minor version); practice — n/a"
+   }
+  },
+  {
+   "id": "P11",
+   "kind": "TAG_DEPRECATION_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "BACKEND_EVALUATED.cost_objective_ref is deprecated and replaced by objective_ref (same type, same meaning: the declared optimization objective)"
+   ],
+   "source": "user decision 2026-10-08: 'cost' refers to money only",
+   "rationale": "The field name imports a monetary word into an optimization target; an agent reading it would treat execution time as something to spend less of at the expense of correctness or coverage.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-08",
+    "by": "agent-resolved",
+    "into": "0.4",
+    "grounds": "project — user decision 2026-10-08 ('cost' refers to money only); SDD — PRINCIPLES.md proposal taxonomy; practice — n/a. BACKEND_EVALUATED has never fired, so no record is invalidated."
+   }
+  },
+  {
+   "id": "P12",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "capability_outcome gains not_established"
+   ],
+   "source": "project review 2026-10-08 §4.5, §4.6; v0.2 8.1",
+   "rationale": "0.3 offers present, absent, error. A probe that cannot decide (an SDK header search for native TSO; a litmus run whose control shows no effect) had no honest value and recorded absent or present.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-08",
+    "by": "agent-resolved",
+    "into": "0.4",
+    "grounds": "project — review 2026-10-08 §4.6; v0.2 8.1; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice — TECHNIQUES.md #47 (do not fake-emit)"
+   }
+  },
+  {
+   "id": "P13",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "EXECUTION_STARTED.timeout_seconds, kill_grace_seconds -> optional",
+    "EXECUTION_COMPLETED.exit_code, elapsed_seconds -> optional",
+    "both tags gain optional unobserved (text)"
+   ],
+   "source": "project review 2026-10-08 §4.7; Sprint 007 Rubber Duck observation 3",
+   "rationale": "Runner executions are imported after the fact; the harness neither set a timeout nor timed them. 0.3 required the fields, so the importer wrote 600.0, 0.0, and exit_code 0 as constants.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-08",
+    "by": "agent-resolved",
+    "into": "0.4",
+    "grounds": "project — review 2026-10-08 §4.7; v0.2 3.1, 14; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice — TECHNIQUES.md #47 (substrate-gap-honest events)"
+   }
+  }
+ ]
 }

@@ -10,8 +10,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Run records are regenerable from the content store; the store holds reference evidence
-# (guest traces cited by sha256 in contracts) and is committed.
+# Scratch run records. Judge records regenerate from the committed store
+# (scripts/judge_traces.py store:<run id>); Mac hardware run records cited as evidence are
+# copied into store/runs/ and committed (Decision 2026-10-08, review item 4.8).
 /runs/
 
 # macOS

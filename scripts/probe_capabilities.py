@@ -50,9 +50,11 @@ def capabilities(host_id: str) -> list[events.CAPABILITY_PROBED]:
     k4, k16 = run_mode("4k"), run_mode("16k")
     page = int(sh("sysctl", "-n", "hw.pagesize"))
 
-    def cap(name: events.EnumCapability, ok: bool, detail: str) -> events.CAPABILITY_PROBED:
+    def cap(name: events.EnumCapability, ok: bool | None, detail: str) -> events.CAPABILITY_PROBED:
+        """ok None: the probe cannot decide (vocabulary 0.4, P12)."""
         return events.validate(events.CAPABILITY_PROBED(
-            capability=name, host_id=host_id, outcome="present" if ok else "absent",
+            capability=name, host_id=host_id,
+            outcome="not_established" if ok is None else "present" if ok else "absent",
             detail=detail))
 
     ran = k4["guest_runs_from_4k_page"]
@@ -71,9 +73,10 @@ def capabilities(host_id: str) -> list[events.CAPABILITY_PROBED]:
             f"after one hv_vcpu_run exit, ACTLR_EL1 reads: {k4['entso_after_run']['detail']}; "
             f"one vCPU, one exit; effect on ordering not tested here"),
         cap("host_page_16k", page == 16384, f"sysctl hw.pagesize = {page}"),
-        cap("native_process_tso", False,
-            "no public interface in macOS 26.5 SDK headers outside Hypervisor.framework "
-            "(searched EnTSO, TSOEN, total store order); an SDK fact, not a hardware claim"),
+        cap("native_process_tso", None,
+            "no public interface found in macOS 26.5 SDK headers outside Hypervisor.framework "
+            "(searched EnTSO, TSOEN, total store order); a header search cannot establish "
+            "absence, and v0.2 8.1 keeps the question open"),
     ]
 
 

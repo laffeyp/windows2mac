@@ -60,7 +60,10 @@ def main(argv: list[str]) -> int:
     demonstrated = off["forbidden_outcomes"] > 0 and on["forbidden_outcomes"] == 0
     tso = events.validate(events.CAPABILITY_PROBED(
         capability="guest_tsoen", host_id=host_id,
-        outcome="present" if on["forbidden_outcomes"] == 0 else "absent",
+        # present needs power: the same run's EnTSO-off rounds must show a forbidden outcome
+        # (KIT_DIARY H4). off = 0 and on = 0 means the test could not tell (vocabulary 0.4, P12).
+        outcome=("present" if demonstrated else "absent" if on["forbidden_outcomes"] > 0
+                 else "not_established"),
         detail=(f"mp litmus, 2 vcpus, guest mmu on (normal wb ish), {a.rounds} rounds alternating: "
                 f"entso off {off['forbidden_outcomes']}/{off['iterations']} forbidden outcomes "
                 f"({off['forbidden_outcomes'] / off['iterations']:.3e}); entso on "
@@ -99,7 +102,7 @@ def main(argv: list[str]) -> int:
     print(f"record {result.record_root}; probe {elapsed:.1f} s; "
           f"off rate {off['forbidden_outcomes'] / off['iterations']:.3e}, "
           f"log10 ratio vs bound {math.log10(max(off['forbidden_outcomes'], 1) / off['iterations'] / bound):.1f}")
-    return 0 if on["forbidden_outcomes"] == 0 and drift == 0 else 1
+    return 0 if demonstrated and drift == 0 else 1
 
 
 if __name__ == "__main__":
