@@ -43,10 +43,11 @@ def build_shim() -> Path:
     return SHIM
 
 
-def decode_many(items: Sequence[bytes]) -> list[XedResult]:
-    """Decode each byte string (first 15 bytes used) with XED; one result per input, in order."""
+def decode_many(items: Sequence[bytes], chip: str = "ALL") -> list[XedResult]:
+    """Decode each byte string (first 15 bytes used) with XED for `chip` (an XED chip name such as
+    ALL, SKYLAKE, or AMD_ZEN4 — decoding depends on CPU features); one result per input, in order."""
     shim = build_shim()
-    out = subprocess.run([str(shim)], input="".join(b[:15].hex() + "\n" for b in items),
+    out = subprocess.run([str(shim), chip], input="".join(b[:15].hex() + "\n" for b in items),
                          capture_output=True, text=True, check=True).stdout.splitlines()
     if len(out) != len(items):
         raise RuntimeError(f"xedshim returned {len(out)} lines for {len(items)} inputs")

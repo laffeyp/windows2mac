@@ -39,6 +39,7 @@ def main(argv: list[str]) -> int:
     xed_bad: Counter[tuple[str, str]] = Counter()
     cs_vs_xed: Counter[tuple[str, int, int]] = Counter()
     ours_vs_xed: Counter[tuple[str, int, int]] = Counter()
+    iclass_vs_xed: Counter[tuple[str, str]] = Counter()
     for f in sorted(a.root.iterdir()):
         if f.suffix.lower() not in SUFFIXES:
             continue
@@ -73,6 +74,10 @@ def main(argv: list[str]) -> int:
                 ok_key = (x.iclass, x.length, got.length)
                 ours_vs_xed[ok_key] += 1
                 example.setdefault(ok_key, raw[:x.length].hex())
+            elif x.ok and got.iclass != x.iclass:
+                ik = (x.iclass, got.iclass)
+                iclass_vs_xed[ik] += 1
+                example.setdefault(ik, raw[:x.length].hex())
             if (got.length, got.mnemonic) == (ins.size, ins.mnemonic):
                 agree += 1
                 ok += 1
@@ -85,7 +90,10 @@ def main(argv: list[str]) -> int:
           f"spec gaps {sum(gaps.values())} in {len(gaps)} kinds; disagreements "
           f"{sum(diffs.values())} in {len(diffs)} kinds; {time.monotonic() - t0:.0f} s")
     print(f"vs XED: XED cannot decode {sum(xed_bad.values())}; Capstone length differs "
-          f"{sum(cs_vs_xed.values())}; ours length differs {sum(ours_vs_xed.values())}")
+          f"{sum(cs_vs_xed.values())}; ours length differs {sum(ours_vs_xed.values())}; ours iclass "
+          f"differs {sum(iclass_vs_xed.values())}")
+    for ik, n in iclass_vs_xed.most_common(10):
+        print(f"  iclass vs XED (xed, ours) {n:6} {ik} {example[ik]}")
     for k3, n in (cs_vs_xed + ours_vs_xed).most_common(10):
         print(f"  length vs XED {n:6} {k3} {example[k3]}")
     for name, n, ok, und in sorted(per_file, key=lambda x: -x[1])[:8]:

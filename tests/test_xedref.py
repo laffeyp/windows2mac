@@ -22,6 +22,25 @@ def test_xed_settles_the_disputed_cases() -> None:
     assert [(x.iclass, x.length) for x in got] == list(cases.values())
 
 
+@pytest.mark.parametrize(("chip", "expected"), [
+    ("ALL", ["TZCNT", "ENDBR64"]), ("SKYLAKE", ["TZCNT", "NOP"]), ("PENTIUM4", ["BSF", "NOP"])])
+def test_xed_decoding_depends_on_chip(chip: str, expected: list[str]) -> None:
+    got = decode_many([bytes.fromhex("f30fbcc1"), bytes.fromhex("f30f1efa")], chip)
+    assert [x.iclass for x in got] == expected
+
+
+def test_own_decoder_matches_xed_iclass_on_probes() -> None:
+    from w2m.x86ref import walk
+    for path in BINARIES:
+        data = path.read_bytes()
+        img = parse(data)
+        insns = list(walk(img, data).insns.values())
+        raws = [img.read_rva(data, i.rva, 15) for i in insns]
+        for ins, raw, x in zip(insns, raws, decode_many(raws)):
+            got = decode(raw)
+            assert (got.length, got.iclass) == (x.length, x.iclass), (hex(ins.rva), raw.hex(), x)
+
+
 def test_embedded_text_is_not_code() -> None:
     # OpenSSL credit strings inside libcrypto's .text, reached by static traversal
     x = decode_many([b"Camellia", b"by <appr"])

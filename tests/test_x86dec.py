@@ -38,17 +38,32 @@ def test_own_decoder_agrees_with_reference(path: Path) -> None:
     assert not d, d.most_common(10)
 
 
-@pytest.mark.parametrize(("hexbytes", "length", "mnemonic"), [
-    ("90", 1, "nop"), ("4190", 2, "xchg"), ("f390", 2, "pause"),
-    ("48b88877665544332211", 10, "movabs"), ("b844332211", 5, "mov"),
-    ("f2410f114bd8", 6, "movsd"),          # SSE movsd: F2 is mandatory, not repne
-    ("f348ab", 3, "rep stosq"), ("f0ff05aabbccdd", 7, "lock inc"),
-    ("c5f877", 3, "vzeroupper"), ("4898", 2, "cdqe"), ("6698", 2, "cbw"),
-    ("0f01d0", 3, "xgetbv"), ("e800000000", 5, "call"), ("7400", 2, "je"),
+@pytest.mark.parametrize(("hexbytes", "length", "mnemonic", "iclass"), [
+    ("90", 1, "nop", "NOP"), ("4190", 2, "xchg", "XCHG"), ("f390", 2, "pause", "PAUSE"),
+    ("48b88877665544332211", 10, "movabs", "MOV"), ("b844332211", 5, "mov", "MOV"),
+    ("f2410f114bd8", 6, "movsd", "MOVSD_XMM"),   # SSE movsd: F2 is mandatory, not repne
+    ("a5", 1, "movsd", "MOVSD"),                 # the string move with the same mnemonic
+    ("f348ab", 3, "rep stosq", "REP_STOSQ"), ("f0ff05aabbccdd", 7, "lock inc", "INC_LOCK"),
+    ("c5f877", 3, "vzeroupper", "VZEROUPPER"), ("c5fc77", 3, "vzeroall", "VZEROALL"),
+    ("4898", 2, "cdqe", "CDQE"), ("6698", 2, "cbw", "CBW"), ("0f01d0", 3, "xgetbv", "XGETBV"),
+    ("e800000000", 5, "call", "CALL_NEAR"), ("7400", 2, "je", "JZ"),
+    ("40498b4078", 5, "mov", "MOV"),            # two REX bytes: only the last applies
+    ("a3790800837b0800ed", 9, "movabs", "MOV"),  # moffs64 operand
+    ("f3a6", 2, "repe cmpsb", "REPE_CMPSB"),
 ])
-def test_known_encodings(hexbytes: str, length: int, mnemonic: str) -> None:
+def test_known_encodings(hexbytes: str, length: int, mnemonic: str, iclass: str) -> None:
     got = decode(bytes.fromhex(hexbytes) + b"\0" * 15)
-    assert (got.length, got.mnemonic) == (length, mnemonic)
+    assert (got.length, got.mnemonic, got.iclass) == (length, mnemonic, iclass)
+
+
+@pytest.mark.parametrize(("features", "expected"), [
+    (None, ["TZCNT", "LZCNT", "ENDBR64", "RDSSPQ"]),
+    (frozenset({"BMI1", "LZCNT"}), ["TZCNT", "LZCNT", "NOP", "NOP"]),
+    (frozenset(), ["BSF", "BSR", "NOP", "NOP"]),
+])
+def test_decoding_depends_on_cpu_features(features: frozenset[str] | None, expected: list[str]) -> None:
+    cases = ["f30fbcc1", "f30fbdc1", "f30f1efa", "f3490f1eca"]
+    assert [decode(bytes.fromhex(h) + b"\0" * 15, features).iclass for h in cases] == expected
 
 
 def test_unknown_opcode_is_reported() -> None:
