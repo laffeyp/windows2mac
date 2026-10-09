@@ -1,0 +1,623 @@
+{
+ "spec_id": "w2m.guest_state",
+ "version": "0.1.0",
+ "sources": {
+  "winnt.h": "Windows SDK on the windows-2025 runner, read by probes/guest_state (offsetof/sizeof)",
+  "winternl.h": "same; Microsoft Learn TEB page (MicrosoftDocs/sdk-api docs 7659b39b6294): 'This structure may be altered in future versions of Windows'",
+  "observation": "probes/guest_state on the windows-2025 runner: the field read through gs: or from a handler's CONTEXT equals the value an API reports",
+  "mono": "Unity-Technologies/mono unity-2019.4-mbe: mono_amd64_emit_tls_get reads gs:[0x1480 + key*8] and gs:[0x1780]"
+ },
+ "state_block": {
+  "size": 896,
+  "align": 64,
+  "note": "one per guest thread, in guest memory; translated code holds live values in host registers and spills here at every exit, fault and host call",
+  "fields": [
+   {
+    "field": "rax",
+    "offset": 0,
+    "size": 8
+   },
+   {
+    "field": "rcx",
+    "offset": 8,
+    "size": 8
+   },
+   {
+    "field": "rdx",
+    "offset": 16,
+    "size": 8
+   },
+   {
+    "field": "rbx",
+    "offset": 24,
+    "size": 8
+   },
+   {
+    "field": "rsp",
+    "offset": 32,
+    "size": 8
+   },
+   {
+    "field": "rbp",
+    "offset": 40,
+    "size": 8
+   },
+   {
+    "field": "rsi",
+    "offset": 48,
+    "size": 8
+   },
+   {
+    "field": "rdi",
+    "offset": 56,
+    "size": 8
+   },
+   {
+    "field": "r8",
+    "offset": 64,
+    "size": 8
+   },
+   {
+    "field": "r9",
+    "offset": 72,
+    "size": 8
+   },
+   {
+    "field": "r10",
+    "offset": 80,
+    "size": 8
+   },
+   {
+    "field": "r11",
+    "offset": 88,
+    "size": 8
+   },
+   {
+    "field": "r12",
+    "offset": 96,
+    "size": 8
+   },
+   {
+    "field": "r13",
+    "offset": 104,
+    "size": 8
+   },
+   {
+    "field": "r14",
+    "offset": 112,
+    "size": 8
+   },
+   {
+    "field": "r15",
+    "offset": 120,
+    "size": 8
+   },
+   {
+    "field": "rip",
+    "offset": 128,
+    "size": 8
+   },
+   {
+    "field": "rflags",
+    "offset": 136,
+    "size": 8,
+    "note": "materialized from the flag registers at every exit and fault; bits 1 and 9 (IF) read as 1"
+   },
+   {
+    "field": "flags_undefined",
+    "offset": 144,
+    "size": 8,
+    "note": "one bit per flag (C=1 Z=2 S=4 O=8 P=16) while undefined, as x24"
+   },
+   {
+    "field": "mxcsr",
+    "offset": 152,
+    "size": 4
+   },
+   {
+    "field": "x87_control_word",
+    "offset": 156,
+    "size": 2
+   },
+   {
+    "field": "x87_status_word",
+    "offset": 158,
+    "size": 2
+   },
+   {
+    "field": "x87_tag_abridged",
+    "offset": 160,
+    "size": 1,
+    "note": "FXSAVE form, as XMM_SAVE_AREA32.TagWord"
+   },
+   {
+    "field": "fs_base",
+    "offset": 168,
+    "size": 8
+   },
+   {
+    "field": "gs_base",
+    "offset": 176,
+    "size": 8,
+    "note": "the thread's TEB address; gs: operands add it"
+   },
+   {
+    "field": "teb",
+    "offset": 184,
+    "size": 8,
+    "note": "equal to gs_base; kept separate so a guest write to GS base cannot lose the TEB"
+   },
+   {
+    "field": "thread_state",
+    "offset": 192,
+    "size": 4,
+    "note": "0 running, 1 suspended at a boundary, 2 in a host call, 3 exited"
+   },
+   {
+    "field": "suspend_count",
+    "offset": 196,
+    "size": 4
+   },
+   {
+    "field": "xmm0",
+    "offset": 256,
+    "size": 16
+   },
+   {
+    "field": "xmm1",
+    "offset": 272,
+    "size": 16
+   },
+   {
+    "field": "xmm2",
+    "offset": 288,
+    "size": 16
+   },
+   {
+    "field": "xmm3",
+    "offset": 304,
+    "size": 16
+   },
+   {
+    "field": "xmm4",
+    "offset": 320,
+    "size": 16
+   },
+   {
+    "field": "xmm5",
+    "offset": 336,
+    "size": 16
+   },
+   {
+    "field": "xmm6",
+    "offset": 352,
+    "size": 16
+   },
+   {
+    "field": "xmm7",
+    "offset": 368,
+    "size": 16
+   },
+   {
+    "field": "xmm8",
+    "offset": 384,
+    "size": 16
+   },
+   {
+    "field": "xmm9",
+    "offset": 400,
+    "size": 16
+   },
+   {
+    "field": "xmm10",
+    "offset": 416,
+    "size": 16
+   },
+   {
+    "field": "xmm11",
+    "offset": 432,
+    "size": 16
+   },
+   {
+    "field": "xmm12",
+    "offset": 448,
+    "size": 16
+   },
+   {
+    "field": "xmm13",
+    "offset": 464,
+    "size": 16
+   },
+   {
+    "field": "xmm14",
+    "offset": 480,
+    "size": 16
+   },
+   {
+    "field": "xmm15",
+    "offset": 496,
+    "size": 16
+   },
+   {
+    "field": "ymm0_high",
+    "offset": 512,
+    "size": 16
+   },
+   {
+    "field": "ymm1_high",
+    "offset": 528,
+    "size": 16
+   },
+   {
+    "field": "ymm2_high",
+    "offset": 544,
+    "size": 16
+   },
+   {
+    "field": "ymm3_high",
+    "offset": 560,
+    "size": 16
+   },
+   {
+    "field": "ymm4_high",
+    "offset": 576,
+    "size": 16
+   },
+   {
+    "field": "ymm5_high",
+    "offset": 592,
+    "size": 16
+   },
+   {
+    "field": "ymm6_high",
+    "offset": 608,
+    "size": 16
+   },
+   {
+    "field": "ymm7_high",
+    "offset": 624,
+    "size": 16
+   },
+   {
+    "field": "ymm8_high",
+    "offset": 640,
+    "size": 16
+   },
+   {
+    "field": "ymm9_high",
+    "offset": 656,
+    "size": 16
+   },
+   {
+    "field": "ymm10_high",
+    "offset": 672,
+    "size": 16
+   },
+   {
+    "field": "ymm11_high",
+    "offset": 688,
+    "size": 16
+   },
+   {
+    "field": "ymm12_high",
+    "offset": 704,
+    "size": 16
+   },
+   {
+    "field": "ymm13_high",
+    "offset": 720,
+    "size": 16
+   },
+   {
+    "field": "ymm14_high",
+    "offset": 736,
+    "size": 16
+   },
+   {
+    "field": "ymm15_high",
+    "offset": 752,
+    "size": 16
+   },
+   {
+    "field": "st0",
+    "offset": 768,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st1",
+    "offset": 784,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st2",
+    "offset": 800,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st3",
+    "offset": 816,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st4",
+    "offset": 832,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st5",
+    "offset": 848,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st6",
+    "offset": 864,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "st7",
+    "offset": 880,
+    "size": 16,
+    "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   }
+  ]
+ },
+ "host_registers": {
+  "gpr": "x86 GPR i in x_i (i = 0..15)",
+  "flags": "CF ZF SF OF PF in x19..x23 as 0/1; x24 one bit per undefined flag",
+  "xmm": "XMM i in v_i (i = 0..15)",
+  "ymm_high": "upper 128 bits of YMM i in v(16+i)",
+  "mxcsr": "rounding control mirrored into FPCR.RMode; FTZ and DAZ into FPCR.FZ and FPCR.FIZ where present; exception flags kept in the state block",
+  "x87": "state block only",
+  "scratch": "x16, x17, x18, x25-x27, x29, x30 (temporaries of one lifted instruction); x28 points at the monitor data page"
+ },
+ "reconstruction_table": {
+  "note": "per translated block; produces a CONTEXT at any guest instruction boundary, mid-block included (v0.2 section 5)",
+  "entry": {
+   "host_pc_start": "u64",
+   "host_pc_end": "u64, exclusive",
+   "guest_rip": "u64",
+   "locations": "per guest register: {'host': '<A64 register>'} or {'block': '<state block field>'}; flags: {'host': 'x19..x23', 'undefined': 'x24'} or {'block': 'rflags'}"
+  },
+  "rule": "every host PC at which the block can fault, exit or be suspended lies in exactly one entry; hv_vcpus_exit stops a vCPU at an instruction boundary of the host code, and the table maps it to the guest boundary that precedes it"
+ },
+ "windows": {
+  "CONTEXT": {
+   "source": "winnt.h",
+   "fields": {
+    "sizeof": 1232,
+    "ContextFlags": 48,
+    "MxCsr": 52,
+    "SegCs": 56,
+    "SegGs": 64,
+    "EFlags": 68,
+    "Dr0": 72,
+    "Rax": 120,
+    "Rcx": 128,
+    "Rdx": 136,
+    "Rbx": 144,
+    "Rsp": 152,
+    "Rbp": 160,
+    "Rsi": 168,
+    "Rdi": 176,
+    "R8": 184,
+    "R9": 192,
+    "R10": 200,
+    "R11": 208,
+    "R12": 216,
+    "R13": 224,
+    "R14": 232,
+    "R15": 240,
+    "Rip": 248,
+    "FltSave": 256,
+    "Xmm0": 416,
+    "Xmm6": 512,
+    "Xmm15": 656,
+    "VectorRegister": 768,
+    "VectorControl": 1184,
+    "DebugControl": 1192,
+    "LastExceptionToRip": 1216
+   }
+  },
+  "XMM_SAVE_AREA32": {
+   "source": "winnt.h",
+   "fields": {
+    "sizeof": 512,
+    "ControlWord": 0,
+    "StatusWord": 2,
+    "TagWord": 4,
+    "MxCsr": 24,
+    "FloatRegisters": 32,
+    "XmmRegisters": 160
+   }
+  },
+  "EXCEPTION_RECORD": {
+   "source": "winnt.h",
+   "fields": {
+    "sizeof": 152,
+    "ExceptionCode": 0,
+    "ExceptionFlags": 4,
+    "ExceptionAddress": 16,
+    "NumberParameters": 24,
+    "ExceptionInformation": 32
+   }
+  },
+  "TEB": {
+   "fields": [
+    {
+     "name": "NtTib.StackBase",
+     "offset": 8,
+     "size": 8,
+     "source": "observation",
+     "check": "teb.stack_base"
+    },
+    {
+     "name": "NtTib.StackLimit",
+     "offset": 16,
+     "size": 8,
+     "source": "observation",
+     "check": "teb.stack_limit_in_reserve"
+    },
+    {
+     "name": "NtTib.Self",
+     "offset": 48,
+     "size": 8,
+     "source": "observation",
+     "check": "teb.self"
+    },
+    {
+     "name": "ClientId.UniqueProcess",
+     "offset": 64,
+     "size": 8,
+     "source": "observation",
+     "check": "teb.client_id.process"
+    },
+    {
+     "name": "ClientId.UniqueThread",
+     "offset": 72,
+     "size": 8,
+     "source": "observation",
+     "check": "teb.client_id.thread"
+    },
+    {
+     "name": "ProcessEnvironmentBlock",
+     "offset": 96,
+     "size": 8,
+     "source": "winternl.h",
+     "check": "teb.peb"
+    },
+    {
+     "name": "LastErrorValue",
+     "offset": 104,
+     "size": 4,
+     "source": "observation",
+     "check": "teb.last_error"
+    },
+    {
+     "name": "TlsSlots",
+     "offset": 5248,
+     "size": 512,
+     "source": "winternl.h",
+     "check": "teb.tls_slot",
+     "reader": "mono"
+    },
+    {
+     "name": "TlsExpansionSlots",
+     "offset": 6016,
+     "size": 8,
+     "source": "winternl.h",
+     "check": "teb.tls_expansion_slot",
+     "reader": "mono"
+    }
+   ]
+  },
+  "PEB": {
+   "fields": [
+    {
+     "name": "BeingDebugged",
+     "offset": 2,
+     "size": 1,
+     "source": "winternl.h"
+    },
+    {
+     "name": "ImageBaseAddress",
+     "offset": 16,
+     "size": 8,
+     "source": "observation",
+     "check": "peb.image_base"
+    },
+    {
+     "name": "Ldr",
+     "offset": 24,
+     "size": 8,
+     "source": "winternl.h"
+    },
+    {
+     "name": "ProcessParameters",
+     "offset": 32,
+     "size": 8,
+     "source": "winternl.h"
+    },
+    {
+     "name": "SessionId",
+     "offset": 704,
+     "size": 4,
+     "source": "winternl.h"
+    }
+   ]
+  },
+  "defaults_at_thread_start": {
+   "mxcsr": 8064,
+   "x87_control_word": 639,
+   "rflags_if": 1,
+   "source": "observation (fault.mxcsr, fault.x87_control_word, fault.eflags_if)"
+  }
+ },
+ "context_from_state": {
+  "note": "how the guest runtime fills a CONTEXT from the state block after reconstruction",
+  "map": {
+   "Rax": "rax",
+   "Rcx": "rcx",
+   "Rdx": "rdx",
+   "Rbx": "rbx",
+   "Rsp": "rsp",
+   "Rbp": "rbp",
+   "Rsi": "rsi",
+   "Rdi": "rdi",
+   "R8": "r8",
+   "R9": "r9",
+   "R10": "r10",
+   "R11": "r11",
+   "R12": "r12",
+   "R13": "r13",
+   "R14": "r14",
+   "R15": "r15",
+   "Rip": "rip",
+   "EFlags": "rflags",
+   "MxCsr": "mxcsr",
+   "FltSave.MxCsr": "mxcsr",
+   "FltSave.ControlWord": "x87_control_word",
+   "FltSave.StatusWord": "x87_status_word",
+   "FltSave.TagWord": "x87_tag_abridged",
+   "Xmm0": "xmm0",
+   "Xmm1": "xmm1",
+   "Xmm2": "xmm2",
+   "Xmm3": "xmm3",
+   "Xmm4": "xmm4",
+   "Xmm5": "xmm5",
+   "Xmm6": "xmm6",
+   "Xmm7": "xmm7",
+   "Xmm8": "xmm8",
+   "Xmm9": "xmm9",
+   "Xmm10": "xmm10",
+   "Xmm11": "xmm11",
+   "Xmm12": "xmm12",
+   "Xmm13": "xmm13",
+   "Xmm14": "xmm14",
+   "Xmm15": "xmm15",
+   "FltSave.FloatRegisters[0]": "st0",
+   "FltSave.FloatRegisters[1]": "st1",
+   "FltSave.FloatRegisters[2]": "st2",
+   "FltSave.FloatRegisters[3]": "st3",
+   "FltSave.FloatRegisters[4]": "st4",
+   "FltSave.FloatRegisters[5]": "st5",
+   "FltSave.FloatRegisters[6]": "st6",
+   "FltSave.FloatRegisters[7]": "st7"
+  },
+  "SegGs": {
+   "value": 43,
+   "source": "unobserved: not read by probes/guest_state 0.1; next probe revision records CONTEXT.SegCs/SegGs/SegSs"
+  },
+  "SegCs": {
+   "value": 51,
+   "source": "unobserved: as SegGs"
+  },
+  "ContextFlags": "CONTEXT_ALL as requested, minus what the request omits"
+ }
+}

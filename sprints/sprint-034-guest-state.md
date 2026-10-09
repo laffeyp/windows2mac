@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 034
-status: open
+status: closed
 phase: 3
 pass_kind: functional
 ---
@@ -69,3 +69,12 @@ Every Windows-visible field the guest runtime will hold has an offset confirmed 
 - [x] Scope concrete. [x] Sources named. [x] No new vocabulary. [x] Observation declared before running, with expected values. [x] File count recorded (7).
 
 ## observed
+- Runner run 37989842529 (windows-probe.yml, probe `guest_state`, 3 executions of one build, gha-windows-2025-x64-10.0.26100.33438-Server): exit 0 three times (0.23-0.26 s); 41 checks equal in every run; layout lines identical across runs. Output and the probe binary in `store/probe-runs/37989842529/`.
+- Every expected value held: CONTEXT 0x4D0 bytes; ContextFlags 0x30, MxCsr 0x34, SegCs 0x38, SegGs 0x40, EFlags 0x44, Rax 0x78 through R15 0xF0, Rip 0xF8, FltSave 0x100, Xmm0 0x1A0, Xmm6 0x200, Xmm15 0x290, VectorRegister 0x300; XMM_SAVE_AREA32 512 bytes with MxCsr at 0x18 and XmmRegisters at 0xA0; EXCEPTION_RECORD 0x98 bytes, ExceptionInformation at 0x20; TEB ProcessEnvironmentBlock 0x60, TlsSlots 0x1480, TlsExpansionSlots 0x1780; PEB Ldr 0x18, ProcessParameters 0x20, SessionId 0x2C0.
+- Observed through gs: and equal to the API: Self 0x30, PEB 0x60, ClientId process 0x40 and thread 0x48, LastErrorValue 0x68 (32-bit), StackBase 0x08, StackLimit 0x10 inside the reserve; a TLS slot below 64 in TlsSlots and a slot at 64 or above through the TlsExpansionSlots pointer (Mono's two forms); PEB+0x10 = the image base.
+- Fault: a first vectored handler saw ExceptionCode 0xC0000005, two parameters (read, address 0), RIP at the faulting instruction, RBX, RSI, RDI, R12-R15 and XMM6 as set, MxCsr 0x1F80 in both places, x87 control word 0x27F, IF set; setting RIP past the instruction and RCX to a marker resumed the thread with the marker in RCX.
+- Suspend: SuspendThread returned prior count 0; GetThreadContext(CONTEXT_FULL) returned the spinning thread's RBX and R12 and a RIP inside the spin loop; SetThreadContext changed RBX and the resumed thread left the loop with the new value.
+- `specs/guest_state.json` 0.1.0: state block 0x380 bytes (GPRs in encoding order, RIP, materialized RFLAGS, undefined-flag bits, MXCSR, x87 control/status/tag, FS and GS bases, TEB, thread state, suspend count, XMM0-15, YMM upper halves, ST0-7); host registers (GPR i in x_i, flags x19-x23 and x24, XMM i in v_i, YMM i upper half in v(16+i)); reconstruction-table format; the Windows fields above with sources; CONTEXT-from-state map. SegCs 0x33 and SegGs 0x2B are written from memory and marked unobserved.
+- `scripts/check_guest_state.py` against the run: 62 fields, 0 differences; record `store/runs/gueststate-1791579238609115000` (SESSION_INIT, COMPARISON_COMPLETED conforms, SESSION_COMPLETED). Controls: a planted CONTEXT.Rip 0xF0, a planted LastErrorValue 0x6C, a planted MXCSR default and a planted failed run are each caught (`tests/test_guest_state.py`).
+- Gates: `scripts/gates.sh` 0.
+

@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 024 (2026-10-08, closed)
+- **Scope:** vocabulary 0.4 and evidence defects; review items 4.5-4.8.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `judge_traces.py store:37738035459` opened a run (SESSION_INIT), imported 10 runner executions (EXECUTION_STARTED with `unobserved` naming timeout and grace; EXECUTION_COMPLETED with exit code and elapsed omitted and named), ingested each trace (TRACE_INGESTED ×10, hashes match the committed files), and compared each against `windows.event.auto_reset.single_signal@0.2.0` (COMPARISON_COMPLETED ×10, verdict conforms, released a). `probe_capabilities.py` fired CAPABILITY_PROBED ×5, `native_process_tso` not_established. `litmus_mp.py` fired CAPABILITY_PROBED guest_tsoen present with off 35 > 0.
+  - *Observation 1 (a recorded claim was false):* the 2026-10-07 Decision said judge records regenerate from the store; the role maps they need were never committed. Recovered from GitHub artifacts days before nothing could have recovered them. Disposition: resolved-here; superseding Decision.
+  - *Observation 2 (rates are not properties):* EnTSO-off forbidden rate was 4.5e-5 on 2026-10-07 and 7.0e-7 today, same binary, same host. Only power (off > 0, on = 0) is evidence. Disposition: recorded.
+  - *Observation 3 (my own slip):* Sprint 023's Built entry went in after Sprint 022, not at the section end, an hour after the correction Decision said entries append at the end. Moved to the end in this sprint. Disposition: resolved-here.
+- **Closed:** clean.
+
 ### Sprint 023 (2026-10-08, closed)
 - **Scope:** decoder phase close; review items 4.3, 4.4, 4.2.
 - **Rubber Duck Pass:**

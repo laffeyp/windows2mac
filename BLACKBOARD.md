@@ -128,6 +128,7 @@
 - **2026-10-08** — Sprint 031 (candidate loop) closed. `src/w2m/candidate.py` (admission check: two functions, fixed signature, no calls, imports, loops or other attributes, empty builtins; prompt; install into kernel32), `scripts/run_candidate_loop.py` (one substrate run with separate generator, runner, ingester, comparator, acceptance guard, reducer and harness operators), `tests/test_candidate_loop.py`. Dual contract: signal pass (two real records: accepted on attempt 1; planted wrong candidate rejected, reported, routed implementation_repair, repaired by the model, accepted, resolved); artifact pass (gates.sh 0, 183 passed). Observation: `qwen2.5-coder:7b` (local) wrote a conforming candidate in 1,044 ms and repaired the planted one from the structured divergence alone in 372 ms. Defect found: contract 0.1.0 accepts a constant. Report: `signal-reports/sprint-031-report.md`.
 - **2026-10-09** — Sprint 032 (last-error contract on run-time values) closed. `contracts/windows.thread.last_error.set_get/0.2.0.json` (relation `exact`), `probes/last_error_values/` (QueryPerformanceCounter chooses 3 values from `values.h`), `scripts/gen_last_error_values.py`, `ExactReturnOfArgument` in `src/w2m/contract.py`, `compare()` in `src/w2m/compare.py`, QueryPerformanceCounter and HandlerFailed in `src/w2m/kernel32.py`, declared parameter counts in `src/w2m/candidate.py`, `tests/test_last_error_values.py`. Fixed: lockstep skipped a check when a kernel32 call returned to an already-compiled block; the loop rejected a candidate once per failed run. Dual contract: signal pass (Windows, model, VM 3 of 3 conform each, relation exact; constant rejected; model repaired it); artifact pass (gates.sh 0, 202 passed). Report: `signal-reports/sprint-032-report.md`.
 - **2026-10-09** — Sprint 033 (Hail to the Rainbow's code on the Windows runner) closed. `scripts/pack_game.py`, `games/hail-to-the-rainbow/{files,release}.json`, private release `game-1699230-24247624` (5 parts, 8,098,738,888 bytes; plus the run 37982448071 capture), `tools/jit_capture/jit_capture.c` (format 2), `src/w2m/jit_capture.py`, `.github/workflows/windows-game.yml`, `scripts/game_code_differential.py`, `Decoded.row`, spec 0.6.3, `store/game-runs/37982448071/`, `store/runs/gamediff-1791576553479425000`. Dual contract: signal pass (COMPARISON_COMPLETED 1, DISCREPANCY_REPORTED 125, DISCREPANCY_ROUTED 125, contract_revision); artifact pass (gates.sh 0, 208 passed). Observation: pass — the game ran 190 s in batch mode on the runner; 564 Assembly-CSharp methods and 4,840 trampolines captured; 6,192,478 positions, 0 length or iclass differences from XED, 8,962 without a row in 125 kinds; criterion (d) 438 of 579 rows confirmed.
+- **2026-10-09** — Sprint 034 (guest state, measured on Windows) closed. `probes/guest_state/`, `specs/guest_state.json` 0.1.0, `scripts/check_guest_state.py`, `tests/test_guest_state.py`, `store/probe-runs/37989842529/`, `store/runs/gueststate-1791579238609115000`; `windows-probe.yml` uploads output when a probe fails. Dual contract: signal pass (COMPARISON_COMPLETED conforms); artifact pass (gates.sh 0). Observation: pass — 41 checks equal in 3 runner runs; 62 spec fields, 0 differences; four planted faults caught.
 
 ## Deferred
 
@@ -166,6 +167,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 034 (2026-10-09, closed)
+- **Scope:** CONTEXT, TEB, PEB and fault/suspend behavior measured on the runner; the guest state spec judged against it.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the runner built the probe, which printed header offsets, read its own TEB through gs: against the APIs, faulted under a first vectored handler with known registers and resumed it by rewriting CONTEXT, and suspended a spinning thread to read and change its registers; the checker compared the spec's 62 fields with three runs and recorded the verdict.
+  - *Observation 1 (a clean check needs a failing control):* four planted spec faults are each caught with the exact field and value. Disposition: resolved-here (tests).
+  - *Observation 2 (values written from memory):* SegCs 0x33 and SegGs 0x2B were not read by the probe. Disposition: marked unobserved in the spec; the next probe revision reads them.
+- **Closed:** clean.
 
 ### Sprint 033 (2026-10-09, closed)
 - **Scope:** Hail to the Rainbow's native and Mono-generated code, captured on the Windows runner and judged against XED.
@@ -248,13 +257,4 @@
   - *Observation 3 (card invariant was wrong):* "classes the text report prints" counts 30, not 300. Disposition: corrected at close in the card.
 - **Closed:** clean.
 
-### Sprint 024 (2026-10-08, closed)
-- **Scope:** vocabulary 0.4 and evidence defects; review items 4.5-4.8.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* `judge_traces.py store:37738035459` opened a run (SESSION_INIT), imported 10 runner executions (EXECUTION_STARTED with `unobserved` naming timeout and grace; EXECUTION_COMPLETED with exit code and elapsed omitted and named), ingested each trace (TRACE_INGESTED ×10, hashes match the committed files), and compared each against `windows.event.auto_reset.single_signal@0.2.0` (COMPARISON_COMPLETED ×10, verdict conforms, released a). `probe_capabilities.py` fired CAPABILITY_PROBED ×5, `native_process_tso` not_established. `litmus_mp.py` fired CAPABILITY_PROBED guest_tsoen present with off 35 > 0.
-  - *Observation 1 (a recorded claim was false):* the 2026-10-07 Decision said judge records regenerate from the store; the role maps they need were never committed. Recovered from GitHub artifacts days before nothing could have recovered them. Disposition: resolved-here; superseding Decision.
-  - *Observation 2 (rates are not properties):* EnTSO-off forbidden rate was 4.5e-5 on 2026-10-07 and 7.0e-7 today, same binary, same host. Only power (off > 0, on = 0) is evidence. Disposition: recorded.
-  - *Observation 3 (my own slip):* Sprint 023's Built entry went in after Sprint 022, not at the section end, an hour after the correction Decision said entries append at the end. Moved to the end in this sprint. Disposition: resolved-here.
-- **Closed:** clean.
-
-Older entries (Sprints 000-023): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-024): `docs/sprint-tail-archive.md`.
