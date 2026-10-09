@@ -67,6 +67,7 @@
 - **2026-10-08 agent-resolved** — The walking skeleton's first execution backend is a host executor of the lifted operations (profile_kind `model`), not the Hypervisor.framework VM. Every v0.2 §2 stage now exists once: Windows reference run, contract, PE load, decode, lift to explicit operations, execution, kernel32 in the host, guest trace, ingest, comparison. The VM back end compiles the same operations to AArch64 and is Sprint 030; the generated implementation moves to 031 and the BioShock 2 Remastered depot to 032. Grounds: project — v0.2 §2, §5 (an explicit semantics layer between decode and execution), §8.2 (backends are evaluated, not assumed); SDD — AGENTS.md hard rule 6 (thinnest slice first); practice — walking skeleton (Cockburn 2004). Revisit if: the VM back end needs operations the IR cannot express.
 
 ---
+- **2026-10-08 user** — Name things what they are ("name things what they are. best practices", chat 2026-10-08). Modules, tools and identifiers say what they hold or do: `vm_monitor`, `a64_encoder`, `vm_backend`, `kernel32`, `Assembler`, `REG_UNDEFINED_FLAGS`, not `hvrun`, `a64`, `vm`, `k32`, `Asm`, `UMASK`. Applied in Sprint 030 to the code it wrote or touched.
 
 ## Built
 
@@ -102,6 +103,7 @@
 - **2026-10-08** — Sprint 029 (walking skeleton) closed. `probes/skeleton/` (no-CRT, 6 kernel32 imports), workflow per-probe build flags and stdout mode, `contracts/windows.thread.last_error.set_get/0.1.0.json`, `src/w2m/loader.py`, `src/w2m/lift.py`, `src/w2m/runtime.py`, `scripts/run_skeleton.py`, `tests/test_runtime.py`. Dual contract: signal pass (judge records: 3 windows_reference + 3 model, conforms 6/6); artifact pass (gates.sh 0). Observation: the runner-built .exe runs on the Mac through w2m's decoder, lifter and runtime: 217 distinct instructions, 5,153 executed, 6 kernel32 calls, exit 0. Report: `signal-reports/sprint-029-report.md`.
 
 ---
+- **2026-10-08** — Sprint 030 (managed-VM back end) closed. `tools/vm_monitor/vm_monitor.c` (policy-free VM monitor: shared memory file, registers, run, exit lines, watchdog), `src/w2m/a64_encoder.py`, `src/w2m/vm_backend.py` (stage-1 tables mapping x86 addresses to themselves, per-block AArch64 compiler of lifted operations, in-guest dispatch table, host kernel32, lockstep and random-state differential against the model), `src/w2m/kernel32.py` (shared by both backends). Dual contract: signal pass (judge records: 3 windows_reference + 3 model + 3 managed_vm, conforms 9/9); artifact pass (gates.sh 0, 177 passed). Observation: the runner-built .exe runs inside the VM as compiled AArch64; 5,153 instructions, 217 distinct, exit 0; lockstep 0 differences over 5,159 comparisons; state differential 0 differences over 8,680 cases. Report: `signal-reports/sprint-030-report.md`.
 
 ## Deferred
 
@@ -138,6 +140,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 030 (2026-10-08, closed)
+- **Scope:** AArch64 back end in the Hypervisor.framework VM (profile_kind managed_vm).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the host loaded the runner-built .exe into a shared memory file, wrote stage-1 tables so each x86 address maps to itself, wrote the dispatcher and vector table, and started the monitor. The vCPU entered the dispatcher with x17 = the entry address; each miss exited to the host, which lifted and compiled one basic block, filled the dispatch table and resumed. Six times control reached a kernel32 thunk; the host serviced the call on the guest's registers and memory and resumed at the return address. ExitProcess(0) ended the run after 5,153 instructions in 43 blocks.
+  - *Observation 1 (one real bug, found by the first run):* conditional branches were treated as ending control flow; the not-taken path ran into the next block. The failure was loud (undefined instruction at a named x86 address). Disposition: resolved-here.
+  - *Observation 2 (lockstep is not enough):* a planted signed-carry fault passed lockstep over the whole program, because no SUB on the path mixes signs. Disposition: resolved-here; a random-state differential (8,680 cases) now runs before every VM judging and in the gates. It found both planted faults it had first missed only after its memory comparison covered the bytes around every effective address, not just the stack.
+  - *Observation 3 (what is not yet isolated):* the monitor's tables and code share EL1 and the address space with translated guest code. Disposition: recorded for the next VM widening.
+- **Closed:** clean.
 
 ### Sprint 029 (2026-10-08, closed)
 - **Scope:** walking skeleton through every v0.2 §2 stage.
@@ -217,12 +228,4 @@
   - *Observation 3 (residue):* 11.38% accepted-but-invalid, mostly EVEX broadcast/zeroing/opmask rules and VEX/EVEX W constraints. Disposition: deferred — next decoder sprint; then operand comparison.
 - **Closed:** clean.
 
-### Sprint 020 (2026-10-08, closed)
-- **Scope:** generated encodings per spec row vs XED.
-- **Rubber Duck Pass:**
-  - *Observation 1 (the literature's prediction held):* full agreement on 2.44 M corpus instructions coexisted with 31% disagreement on generated encodings. Disposition: recorded — corpus agreement is not decoder correctness.
-  - *Observation 2 (vocabulary gap → spec schema):* the spec has no validity layer; invalid encodings decode instead of producing #UD, which v0.2 §5.1 requires ("or produces the fault prescribed by the guest contract"). Disposition: deferred to Sprint 021 — LOCK rule, VEX/EVEX L/W/vvvv constraints from the SDM opcode column.
-  - *Observation 3 (structure held):* length_differs 0 across all generated cases.
-- **Closed:** clean.
-
-Older entries (Sprints 000-019): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-020): `docs/sprint-tail-archive.md`.

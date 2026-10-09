@@ -47,7 +47,7 @@ def test_skeleton_runs_and_conforms() -> None:
 
 def test_planted_kernel32_fault_is_a_discrepancy() -> None:
     rt = Runtime(load(_skeleton()))
-    rt.k32["SetLastError"] = lambda: None                      # forgets the value
+    rt.kernel32["SetLastError"] = lambda: None                      # forgets the value
     r = rt.run()
     assert r.exit_code == 1 and _verdict(r.stdout) == "discrepancy"
 

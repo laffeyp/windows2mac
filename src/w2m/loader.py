@@ -27,7 +27,7 @@ class GuestFault(RuntimeError):
 @dataclass
 class Region:
     base: int
-    data: bytearray
+    data: bytearray | memoryview          # memoryview: guest memory shared with the VM (vm.py)
     name: str
 
 

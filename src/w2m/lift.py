@@ -56,7 +56,7 @@ class Lifted:
     ops: tuple[Op, ...]
 
 
-class _B:
+class _OpBuilder:
     def __init__(self) -> None:
         self.ops: list[Op] = []
         self.n = 0
@@ -69,7 +69,7 @@ class _B:
         self.ops.append(op)
 
 
-def _operand(b: _B, s: str, next_ip: int, width_hint: int | None = None) -> tuple[str, object, int]:
+def _operand(b: _OpBuilder, s: str, next_ip: int, width_hint: int | None = None) -> tuple[str, object, int]:
     """Parse one xedshim-format operand; return (kind, loc-or-temp, bits)."""
     p = s.split(":")
     if p[0] == "R":
@@ -102,7 +102,7 @@ def _operand(b: _B, s: str, next_ip: int, width_hint: int | None = None) -> tupl
     raise LiftError(f"operand {s}")
 
 
-def _val(b: _B, kind: str, x: object) -> int:
+def _val(b: _OpBuilder, kind: str, x: object) -> int:
     if kind == "loc":
         t = b.t()
         b.emit("ld", t, x)
@@ -111,7 +111,7 @@ def _val(b: _B, kind: str, x: object) -> int:
     return x
 
 
-def _push(b: _B, value_t: int) -> None:
+def _push(b: _OpBuilder, value_t: int) -> None:
     sp, eight, nsp = b.t(), b.t(), b.t()
     b.emit("ld", sp, ("r", RSP, 64, False))
     b.emit("imm", eight, 8)
@@ -120,7 +120,7 @@ def _push(b: _B, value_t: int) -> None:
     b.emit("st", ("m", nsp, 8), value_t)
 
 
-def _pop(b: _B) -> int:
+def _pop(b: _OpBuilder) -> int:
     sp, eight, nsp, v = b.t(), b.t(), b.t(), b.t()
     b.emit("ld", sp, ("r", RSP, 64, False))
     b.emit("ld", v, ("m", sp, 8))
@@ -136,7 +136,7 @@ def lift(code: bytes, address: int) -> Lifted:
     f = d.fields
     ic = d.iclass
     nxt = address + d.length
-    b = _B()
+    b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
     if ic == "NOP":
         pass

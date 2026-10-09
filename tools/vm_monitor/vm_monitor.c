@@ -1,0 +1,165 @@
+/* vm_monitor.c — VM monitor for the w2m managed-VM back end (Sprint 030).
+ *
+ * Holds no policy: src/w2m/vm_backend.py builds the page tables, compiles the code, and services every
+ * exit. This program maps one shared memory file into the guest at a fixed IPA, sets registers
+ * on command, runs the single vCPU, and reports each exit as one line.
+ *
+ * Usage: vm_monitor <memfile> <ipa_base_hex> <size_hex>
+ * Commands on stdin, one per line; each gets one line on stdout:
+ *   sys <id_hex> <value_hex>            HV_SYS_REG_* id from hv_vcpu_types.h      -> ok | err <rc>
+ *   set <pc> <cpsr> <x0> ... <x30>      33 hex values                              -> ok
+ *   run <ms>                            run until an exit the host must see, or ms elapse
+ *       -> exit <kind> <syndrome> <pc> <cpsr> <esr_el1> <far_el1> <elr_el1> <x0> ... <x30>
+ *          kind: hvc (EC 0x16; syndrome low 16 bits = immediate), exc (other EC), cancel
+ *          (time limit reached), fail (hv_vcpu_run error; syndrome = hv_return_t)
+ *   quit
+ * VTIMER exits are masked and the run continues (the guest never enables the timer).
+ */
+#include <Hypervisor/Hypervisor.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <time.h>
+
+static hv_vcpu_t vcpu;
+static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
+static int running, fired;
+static struct timespec deadline;
+
+/* Cancels the vCPU when a run passes its deadline. hv_vcpus_exit may be called from any thread
+ * (hv_vcpu.h). */
+static void *watchdog(void *arg) {
+    (void)arg;
+    pthread_mutex_lock(&mu);
+    for (;;) {
+        while (!running || fired) pthread_cond_wait(&cv, &mu);
+        if (pthread_cond_timedwait(&cv, &mu, &deadline) == ETIMEDOUT && running && !fired) {
+            fired = 1;
+            hv_vcpus_exit(&vcpu, 1);
+        }
+    }
+    return NULL;
+}
+
+static void report(const char *kind, uint64_t syndrome) {
+    uint64_t pc = 0, cpsr = 0, esr = 0, far = 0, elr = 0, x;
+    hv_vcpu_get_reg(vcpu, HV_REG_PC, &pc);
+    hv_vcpu_get_reg(vcpu, HV_REG_CPSR, &cpsr);
+    hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_ESR_EL1, &esr);
+    hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_FAR_EL1, &far);
+    hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_ELR_EL1, &elr);
+    printf("exit %s %llx %llx %llx %llx %llx %llx", kind, (unsigned long long)syndrome,
+           (unsigned long long)pc, (unsigned long long)cpsr, (unsigned long long)esr,
+           (unsigned long long)far, (unsigned long long)elr);
+    for (int i = 0; i <= 30; i++) {
+        hv_vcpu_get_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), &x);
+        printf(" %llx", (unsigned long long)x);
+    }
+    printf("\n");
+}
+
+static void run(long ms, hv_vcpu_exit_t *ex) {
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+    pthread_mutex_lock(&mu);
+    deadline.tv_sec = now.tv_sec + ms / 1000;
+    deadline.tv_nsec = now.tv_nsec + (ms % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec++;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    running = 1;
+    fired = 0;
+    pthread_cond_signal(&cv);
+    pthread_mutex_unlock(&mu);
+    const char *kind = NULL;
+    uint64_t syn = 0;
+    while (!kind) {
+        hv_return_t r = hv_vcpu_run(vcpu);
+        if (r != HV_SUCCESS) {
+            kind = "fail";
+            syn = (uint64_t)r;
+        } else if (ex->reason == HV_EXIT_REASON_VTIMER_ACTIVATED) {
+            hv_vcpu_set_vtimer_mask(vcpu, true);
+        } else if (ex->reason == HV_EXIT_REASON_CANCELED) {
+            pthread_mutex_lock(&mu);
+            if (fired) kind = "cancel";
+            pthread_mutex_unlock(&mu);
+        } else if (ex->reason == HV_EXIT_REASON_EXCEPTION) {
+            syn = ex->exception.syndrome;
+            kind = ((syn >> 26) & 0x3f) == 0x16 ? "hvc" : "exc";
+        } else {
+            kind = "fail";
+            syn = 0x10000u | ex->reason;
+        }
+    }
+    pthread_mutex_lock(&mu);
+    running = 0;
+    pthread_mutex_unlock(&mu);
+    report(kind, syn);
+}
+
+int main(int argc, char **argv) {
+    if (argc != 4) {
+        fprintf(stderr, "usage: vm_monitor <memfile> <ipa_base_hex> <size_hex>\n");
+        return 2;
+    }
+    uint64_t ipa = strtoull(argv[2], NULL, 16), size = strtoull(argv[3], NULL, 16);
+    int fd = open(argv[1], O_RDWR);
+    if (fd < 0) {
+        perror("open");
+        return 1;
+    }
+    void *mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mem == MAP_FAILED) {
+        perror("mmap");
+        return 1;
+    }
+    hv_vm_config_t cfg = hv_vm_config_create();
+    hv_return_t r;
+    if ((r = hv_vm_config_set_ipa_granule(cfg, HV_IPA_GRANULE_4KB)) || (r = hv_vm_create(cfg)) ||
+        (r = hv_vm_map(mem, ipa, size, HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC))) {
+        fprintf(stderr, "vm setup failed: hv_return 0x%x\n", r);
+        return 1;
+    }
+    hv_vcpu_exit_t *ex;
+    if ((r = hv_vcpu_create(&vcpu, &ex, NULL))) {
+        fprintf(stderr, "vcpu_create failed: hv_return 0x%x\n", r);
+        return 1;
+    }
+    pthread_t wd;
+    pthread_create(&wd, NULL, watchdog, NULL);
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    char line[1024];
+    while (fgets(line, sizeof line, stdin)) {
+        char *p = line;
+        if (!strncmp(p, "sys ", 4)) {
+            uint64_t id = strtoull(p + 4, &p, 16), v = strtoull(p, &p, 16);
+            r = hv_vcpu_set_sys_reg(vcpu, (hv_sys_reg_t)id, v);
+            if (r) printf("err %x\n", r);
+            else printf("ok\n");
+        } else if (!strncmp(p, "set ", 4)) {
+            p += 4;
+            hv_vcpu_set_reg(vcpu, HV_REG_PC, strtoull(p, &p, 16));
+            hv_vcpu_set_reg(vcpu, HV_REG_CPSR, strtoull(p, &p, 16));
+            for (int i = 0; i <= 30; i++)
+                hv_vcpu_set_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), strtoull(p, &p, 16));
+            printf("ok\n");
+        } else if (!strncmp(p, "run ", 4)) {
+            run(strtol(p + 4, NULL, 10), ex);
+        } else if (!strncmp(p, "quit", 4)) {
+            break;
+        } else {
+            printf("err bad-command\n");
+        }
+    }
+    hv_vcpu_destroy(vcpu);
+    hv_vm_destroy();
+    return 0;
+}

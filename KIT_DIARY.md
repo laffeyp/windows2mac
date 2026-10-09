@@ -154,3 +154,11 @@
 **What this says about the next kit version:**
 
 13. A Signal Report's `signal_trace` should be produced by a command that reads the record (the kit's `lib/sdd.py` could ship one), never typed. Format facts for binary parsers should be checked against a second implementation and a real file, not a prose summary of the specification.
+
+### 2026-10-08 — One program path under lockstep passed a planted compiler fault
+
+**What happened:** Sprint 030 compared the VM back end with the model after every one of the skeleton's 5,153 instructions and found no difference. A planted fault (SUB's borrow compiled as a signed compare) also found no difference, because every SUB on that path had operands of equal sign. A random-state differential over the same 217 instructions found it at the second case. The same differential then missed a planted store-width fault twice: first because the compared stack was all zeros, then because the skeleton's 32-bit stores go to .data, outside the compared window.
+
+**What this says about the next kit version:**
+
+14. A comparison oracle is graded by the faults it finds, not by the runs it passes. A card that declares an equivalence check should also declare at least one planted fault per rule class it claims to cover (flag rule, width, memory), and the check counts only after each planted fault is found.

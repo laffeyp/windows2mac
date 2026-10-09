@@ -5,7 +5,10 @@ exec-<i>.json, probe.exe, probe.sha256, profile.txt). The script
   1. wraps each runner body in GUEST_TRACE_OPENED/CLOSED and judges it (Windows reference);
   2. runs the same probe.exe on the Mac in w2m's model runtime (loader -> x86dec -> lift ->
      runtime with host kernel32), wraps its stdout body the same way, and judges it;
-both through scripts/judge_traces.py, against one contract. The probe binary is copied into
+  3. (Sprint 030) runs it in the managed-VM back end (lift -> AArch64 in a Hypervisor.framework
+     VM, kernel32 in the host), after lockstep and random-state comparison with the model, and
+     judges those traces too;
+all through scripts/judge_traces.py, against one contract. The probe binary is copied into
 store/binaries/<sha256>.exe; the Mac runs execute those bytes.
 
 Usage: uv run python scripts/run_skeleton.py <artifact dir> --run-id ID
@@ -29,7 +32,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import judge_traces  # noqa: E402
 
 from w2m.loader import load  # noqa: E402
-from w2m.runtime import Runtime  # noqa: E402
+from w2m.runtime import Result, Runtime  # noqa: E402
+from w2m.vm_backend import VM, lockstep, state_differential  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 
 
@@ -65,10 +69,9 @@ def main(argv: list[str]) -> int:
     (ROOT / "store" / "binaries" / f"{digest}.exe").write_bytes(exe)
     status = 0
     with tempfile.TemporaryDirectory() as tmp:
-        win, mac = Path(tmp) / "win", Path(tmp) / "mac"
-        for d in (win, mac):
-            d.mkdir()
-            (d / "probe.sha256").write_text(digest)
+        win = Path(tmp) / "win"
+        win.mkdir()
+        (win / "probe.sha256").write_text(digest)
         profile = (a.src / "profile.txt").read_text().strip()
         for body in sorted(a.src.glob("body-*.jsonl"), key=lambda p: int(p.stem.split("-")[1])):
             i = body.stem.split("-")[1]
@@ -79,26 +82,49 @@ def main(argv: list[str]) -> int:
         print("windows reference:")
         status |= judge_traces.main([str(win), "--run-id", a.run_id, "--contract", a.contract])
 
-        mac_profile = (f"w2m-model-{sh('sysctl', '-n', 'hw.model').replace(',', '-').lower()}-"
-                       f"macos-{sh('sw_vers', '-buildVersion').lower()}-spec-{SPEC_VERSION}")
-        stamp = time.time_ns()
-        for i in range(1, a.mac_runs + 1):
-            t0 = time.monotonic()
-            r = Runtime(load(exe)).run()
-            elapsed = time.monotonic() - t0
-            print(f"mac run {i}: stop {r.stop}; exit {r.exit_code}; {r.instructions_executed} "
-                  f"instructions, {r.distinct_addresses} distinct; calls {r.calls}")
-            if r.exit_code is None:
-                return 1
-            trace, roles = wrap(r.stdout, f"{a.prefix}-mac-{stamp}-{i}", mac_profile)
-            (mac / f"trace-{i}.jsonl").write_bytes(trace)
-            (mac / f"roles-{i}.json").write_text(json.dumps(roles))
-            (mac / f"exec-{i}.json").write_text(json.dumps({
-                "exit_code": r.exit_code, "elapsed_seconds": round(elapsed, 6),
-                "profile_kind": "model", "instructions_executed": r.instructions_executed,
-                "distinct_addresses": r.distinct_addresses}))
-        print("mac model runtime:")
-        status |= judge_traces.main([str(mac), "--run-id", f"mac-{stamp}", "--contract", a.contract])
+        host = (f"{sh('sysctl', '-n', 'hw.model').replace(',', '-').lower()}-"
+                f"macos-{sh('sw_vers', '-buildVersion').lower()}-spec-{SPEC_VERSION}")
+        ls = lockstep(exe)
+        sd = state_differential(exe)
+        print(f"lockstep: {ls.compared} comparisons, {len(ls.differences)} differences; "
+              f"state differential: {sd.cases} cases over {sd.instructions} instructions, "
+              f"{len(sd.differences)} differences")
+        if ls.differences or sd.differences:
+            print("\n".join(ls.differences + sd.differences))
+            return 1
+
+        def run_vm() -> Result:
+            vm = VM(load(exe))
+            try:
+                return vm.run()
+            finally:
+                vm.close()
+
+        backends = (("model", "w2m-model", lambda: Runtime(load(exe)).run()),
+                    ("managed_vm", "w2m-vm", run_vm))
+        for kind, prefix, execute in backends:
+            out = Path(tmp) / kind
+            out.mkdir()
+            (out / "probe.sha256").write_text(digest)
+            stamp = time.time_ns()
+            for i in range(1, a.mac_runs + 1):
+                t0 = time.monotonic()
+                r = execute()
+                elapsed = time.monotonic() - t0
+                print(f"{kind} run {i}: stop {r.stop}; exit {r.exit_code}; {r.instructions_executed} "
+                      f"instructions, {r.distinct_addresses} distinct; {elapsed * 1000:.1f} ms")
+                if r.exit_code is None:
+                    return 1
+                trace, roles = wrap(r.stdout, f"{a.prefix}-{kind}-{stamp}-{i}", f"{prefix}-{host}")
+                (out / f"trace-{i}.jsonl").write_bytes(trace)
+                (out / f"roles-{i}.json").write_text(json.dumps(roles))
+                (out / f"exec-{i}.json").write_text(json.dumps({
+                    "exit_code": r.exit_code, "elapsed_seconds": round(elapsed, 6),
+                    "profile_kind": kind, "instructions_executed": r.instructions_executed,
+                    "distinct_addresses": r.distinct_addresses}))
+            print(f"mac {kind}:")
+            status |= judge_traces.main([str(out), "--run-id", f"{kind}-{stamp}",
+                                         "--contract", a.contract])
     return status
 
 

@@ -198,3 +198,11 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
   - *Observation 4 (citation slip):* the reference-machine Decision cited the wrong addendum item. Disposition: recorded — correction entry in `## Decisions`.
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
+
+### Sprint 020 (2026-10-08, closed)
+- **Scope:** generated encodings per spec row vs XED.
+- **Rubber Duck Pass:**
+  - *Observation 1 (the literature's prediction held):* full agreement on 2.44 M corpus instructions coexisted with 31% disagreement on generated encodings. Disposition: recorded — corpus agreement is not decoder correctness.
+  - *Observation 2 (vocabulary gap → spec schema):* the spec has no validity layer; invalid encodings decode instead of producing #UD, which v0.2 §5.1 requires ("or produces the fault prescribed by the guest contract"). Disposition: deferred to Sprint 021 — LOCK rule, VEX/EVEX L/W/vvvv constraints from the SDM opcode column.
+  - *Observation 3 (structure held):* length_differs 0 across all generated cases.
+- **Closed:** clean.

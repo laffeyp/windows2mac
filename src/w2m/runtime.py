@@ -1,38 +1,23 @@
 """runtime.py — execute lifted x86-64 operations on the host, with kernel32 serviced in the host
 (Sprint 029; profile_kind `model`). One guest thread. The executor runs `lift.py` operations; a
-branch to a loader thunk calls the named kernel32 function here, under the Microsoft x64 calling
-convention (arguments in RCX, RDX, R8, R9, then the stack above a 32-byte shadow area; result in
-RAX), then returns to the caller as RET would.
+branch to a loader thunk calls the named kernel32 function (src/w2m/kernel32.py), which returns to the
+caller as RET would. Since Sprint 030 it is also the reference the managed-VM back end is compared
+against, one instruction at a time (`step`).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
+from w2m.kernel32 import M64, Kernel32, Thread, Unimplemented
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
 
-M64 = (1 << 64) - 1
-STD_OUTPUT_HANDLE = 0xFFFFFFF5          # (DWORD)-11, Microsoft Learn GetStdHandle
-STDOUT = 0x0000_0000_0000_0074         # the runtime's handle value for standard output
+__all__ = ["Result", "Runtime", "UndefinedFlag", "Unimplemented"]
 
 
 class UndefinedFlag(RuntimeError):
     """An instruction read a flag the SDM leaves undefined after the instruction that set it."""
-
-
-class Unimplemented(RuntimeError):
-    """The guest called an import, or used an argument form, the runtime does not implement."""
-
-
-@dataclass
-class Thread:
-    tid: int
-    regs: list[int] = field(default_factory=lambda: [0] * 16)
-    rip: int = 0
-    flags: dict[str, bool | None] = field(default_factory=lambda: dict.fromkeys("CZSOP"))
-    last_error: int = 0
 
 
 @dataclass
@@ -58,14 +43,21 @@ class Runtime:
         self.ld = loaded
         self.mem = loaded.memory
         self.th = Thread(tid)
-        self.out = bytearray()
-        self.exit_code: int | None = None
+        self.th.rip = loaded.entry
+        self.th.regs[4] = loaded.stack_top - 0x100 - 8           # entry as if called: RSP % 16 == 8
         self.cache: dict[int, Lifted] = {}
-        self.calls: list[str] = []
-        self.k32: dict[str, Callable[[], int | None]] = {
-            "GetCurrentThreadId": self._get_current_thread_id, "SetLastError": self._set_last_error,
-            "GetLastError": self._get_last_error, "GetStdHandle": self._get_std_handle,
-            "WriteFile": self._write_file, "ExitProcess": self._exit_process}
+        self.kernel = Kernel32(self.mem)
+        self.kernel32 = self.kernel.handlers
+        self.steps = 0
+        self.seen: set[int] = set()
+
+    @property
+    def exit_code(self) -> int | None:
+        return self.kernel.exit_code
+
+    @property
+    def calls(self) -> list[str]:
+        return self.kernel.calls
 
     # registers -------------------------------------------------------------------------------
     def _rd(self, idx: int, bits: int, hi: bool) -> int:
@@ -197,79 +189,32 @@ class Runtime:
                 raise LiftError(f"operation {k}")
         self.th.rip = nxt
 
-    def run(self, max_steps: int = 1_000_000) -> Result:
+    def step(self) -> bool:
+        """Execute one x86 instruction, or service one kernel32 call when RIP is a thunk.
+        Returns False once the process has exited."""
         th = self.th
-        th.rip = self.ld.entry
-        th.regs[4] = self.ld.stack_top - 0x100 - 8               # entry as if called: RSP % 16 == 8
-        steps, seen, stop = 0, set(), "max_steps"
+        if th.rip in self.ld.thunks:
+            ret = self.kernel.call(self.ld.thunks[th.rip], th)
+            if ret is None:
+                return False
+            th.rip = ret
+            return True
+        ins = self.cache.get(th.rip)
+        if ins is None:
+            ins = self.cache[th.rip] = lift(self.mem.code_at(th.rip), th.rip)
+        self.seen.add(th.rip)
+        self._exec(ins)
+        self.steps += 1
+        return True
+
+    def run(self, max_steps: int = 1_000_000) -> Result:
+        stop = "max_steps"
         try:
-            while steps < max_steps:
-                if th.rip in self.ld.thunks:
-                    self._host_call(self.ld.thunks[th.rip])
-                    if self.exit_code is not None:
-                        stop = "ExitProcess"
-                        break
-                    continue
-                ins = self.cache.get(th.rip)
-                if ins is None:
-                    ins = self.cache[th.rip] = lift(self.mem.code_at(th.rip), th.rip)
-                seen.add(th.rip)
-                self._exec(ins)
-                steps += 1
+            while self.steps < max_steps:
+                if not self.step():
+                    stop = "ExitProcess"
+                    break
         except (LiftError, GuestFault, UndefinedFlag, Unimplemented) as e:
             stop = f"{type(e).__name__}: {e}"
-        return Result(self.exit_code, bytes(self.out), steps, len(seen), self.calls, stop)
-
-    # kernel32 (Microsoft Learn pages retrieved 2026-10-08) -------------------------------------
-    def _arg(self, i: int) -> int:
-        if i < 4:
-            return self.th.regs[(1, 2, 8, 9)[i]]
-        sp = self.th.regs[4]                                      # [rsp] = return address
-        return int.from_bytes(self.mem.read(sp + 8 + 32 + 8 * (i - 4), 8), "little")
-
-    def _host_call(self, name: str) -> None:
-        dll, fn = name.split("!", 1)
-        impl = self.k32.get(fn) if dll.upper() == "KERNEL32.DLL" else None
-        if impl is None:
-            raise Unimplemented(f"import {name}")
-        self.calls.append(fn)
-        ret = impl()
-        if self.exit_code is not None:
-            return
-        if ret is not None:
-            self.th.regs[0] = ret & M64
-        sp = self.th.regs[4]
-        self.th.rip = int.from_bytes(self.mem.read(sp, 8), "little")
-        self.th.regs[4] = sp + 8
-
-    def _get_current_thread_id(self) -> int:
-        return self.th.tid                                        # "thread identifier of the calling thread"
-
-    def _set_last_error(self) -> None:
-        self.th.last_error = self._arg(0) & 0xFFFFFFFF            # per-thread last-error code; returns None
-        return None
-
-    def _get_last_error(self) -> int:
-        return self.th.last_error                                 # "the calling thread's last-error code"
-
-    def _get_std_handle(self) -> int:
-        if self._arg(0) & 0xFFFFFFFF == STD_OUTPUT_HANDLE:
-            return STDOUT
-        raise Unimplemented(f"GetStdHandle({self._arg(0) & 0xFFFFFFFF:#x})")
-
-    def _write_file(self) -> int:
-        h, buf, n, pwritten, povl = (self._arg(i) for i in range(5))
-        n &= 0xFFFFFFFF
-        if pwritten == 0 or povl != 0:
-            raise Unimplemented("WriteFile without lpNumberOfBytesWritten, or overlapped")
-        self.mem.write(pwritten, (0).to_bytes(4, "little"))      # "sets this value to zero before doing any work"
-        if h != STDOUT:
-            self.th.last_error = 6                                # ERROR_INVALID_HANDLE
-            return 0
-        self.out += self.mem.read(buf, n)
-        self.mem.write(pwritten, n.to_bytes(4, "little"))
-        return 1                                                  # "nonzero (TRUE)" on success
-
-    def _exit_process(self) -> None:
-        self.exit_code = self._arg(0) & 0xFFFFFFFF
-        return None
+        return Result(self.exit_code, bytes(self.kernel.out), self.steps, len(self.seen),
+                      self.calls, stop)
