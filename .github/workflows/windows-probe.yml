@@ -49,6 +49,7 @@ jobs:
           $cv = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
           $v = [Environment]::OSVersion.Version
           "gha-windows-2025-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
+          (Get-CimInstance Win32_Processor | Select-Object -First 1).Name | Out-File -Encoding ascii -NoNewline out/cpu.txt
           for ($i = 1; $i -le [int]"${{ inputs.repeat }}"; $i++) {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             if ($mode -eq "file") {

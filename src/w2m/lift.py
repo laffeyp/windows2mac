@@ -111,13 +111,14 @@ def _val(b: _OpBuilder, kind: str, x: object) -> int:
     return x
 
 
-def _push(b: _OpBuilder, value_t: int) -> None:
-    sp, eight, nsp = b.t(), b.t(), b.t()
+def _push(b: _OpBuilder, value_t: int, size: int = 8) -> None:
+    """RSP -= size; store `size` bytes at the new RSP (size 2 for a 66-prefixed PUSH)."""
+    sp, step, nsp = b.t(), b.t(), b.t()
     b.emit("ld", sp, ("r", RSP, 64, False))
-    b.emit("imm", eight, 8)
-    b.emit("alu", nsp, "sub", sp, eight, 64)
+    b.emit("imm", step, size)
+    b.emit("alu", nsp, "sub", sp, step, 64)
     b.emit("st", ("r", RSP, 64, False), nsp)
-    b.emit("st", ("m", nsp, 8), value_t)
+    b.emit("st", ("m", nsp, size), value_t)
 
 
 def _pop(b: _OpBuilder) -> int:
@@ -211,12 +212,24 @@ def lift(code: bytes, address: int) -> Lifted:
             _push(b, ret)
         b.emit("br", "always", target)
     elif ic == "PUSH":
-        k, x, bits = _operand(b, ops[0], nxt, 64)
-        if bits not in (8, 32, 64) or (k == "loc" and bits != 64):
+        # operand size 64 by default, 16 with 66 (SDM PUSH: "decrements the stack pointer by 2"
+        # for a 16-bit operand); the semantics oracle found a 66 PUSH lifted as 8 bytes (Sprint 037)
+        size = 2 if f is not None and f.opsize == 16 else 8
+        k, x, bits = _operand(b, ops[0], nxt, 8 * size)
+        if bits not in (8, 16, 32, 64) or (k == "loc" and bits != 8 * size):
             raise LiftError(f"PUSH {bits}-bit")
-        _push(b, _val(b, k, x))
+        _push(b, _val(b, k, x), size)
     elif ic == "POP":
         _, dst, bits = _operand(b, ops[0], nxt)
+        if bits == 16:                                     # 66 POP: RSP += 2
+            sp, two, nsp, v = b.t(), b.t(), b.t(), b.t()
+            b.emit("ld", sp, ("r", RSP, 64, False))
+            b.emit("ld", v, ("m", sp, 2))
+            b.emit("imm", two, 2)
+            b.emit("alu", nsp, "add", sp, two, 64)
+            b.emit("st", ("r", RSP, 64, False), nsp)
+            b.emit("st", dst, v)
+            return Lifted(address, d.length, ic, tuple(b.ops))
         if bits != 64:
             raise LiftError(f"POP {bits}-bit")
         b.emit("st", dst, _pop(b))
