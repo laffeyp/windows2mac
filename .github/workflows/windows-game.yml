@@ -27,6 +27,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - name: build launcher
+        shell: pwsh
+        run: |
+          clang --version
+          clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c "-Wl,/subsystem:windows"
       - name: disk
         shell: pwsh
         run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
@@ -63,11 +68,9 @@ jobs:
               assert h.hexdigest() == f["sha256"], f["path"]; n += 1
           print(f"{n} files verified against files.json")
           EOF
-      - name: build launcher
+      - name: install launcher
         shell: pwsh
         run: |
-          clang --version
-          clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c -Wl,/subsystem:windows
           Move-Item "$env:GAME_DIR\${{ inputs.exe }}.exe" "$env:GAME_DIR\${{ inputs.exe }}.original.exe"
           Copy-Item jit_capture.exe "$env:GAME_DIR\${{ inputs.exe }}.exe"
       - name: run
