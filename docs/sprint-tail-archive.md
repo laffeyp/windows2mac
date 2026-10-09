@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 025 (2026-10-08, closed)
+- **Scope:** decoder differential on the signal plane; judge session tags.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the differential opened a conformance session for `w2m-x86dec-spec-0.6.2`, recorded one exact comparison against XED with verdict discrepancy, then 300 discrepancy pairs, each naming its stored example and routed to contract revision, then closed with 300. The judge opened, imported 2 runner executions whose exit code and elapsed time were observed for the first time, ingested and compared both (conforms), and closed with 0.
+  - *Observation 1 (a report written from memory):* the Sprint 024 report listed SESSION_INIT/COMPLETED and MEASUREMENT_RECORDED that its records do not contain. The defect it hid (judge runs without session tags, T1/T2) was real. Disposition: resolved-here; correction appended to that report; this report's trace is read from the records.
+  - *Observation 2 (a latent collision):* run roots named by whole seconds; two judge runs in one second wrote one directory, and substrate's gap check caught it. Disposition: resolved-here in five scripts.
+  - *Observation 3 (card invariant was wrong):* "classes the text report prints" counts 30, not 300. Disposition: corrected at close in the card.
+- **Closed:** clean.
+
 ### Sprint 024 (2026-10-08, closed)
 - **Scope:** vocabulary 0.4 and evidence defects; review items 4.5-4.8.
 - **Rubber Duck Pass:**

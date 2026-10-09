@@ -7,8 +7,11 @@ on command; everything with policy lives here: page tables, code generation, dis
 Guest address space (stage 1, 4 KB granule, 48-bit VA, EL1, MMU on). Every x86 region from
 `loader.load` (the image at its preferred base, the stack) appears at its own x86 virtual
 address, so an x86 load or store becomes one AArch64 load or store at the same address. The
-monitor (counters, vectors, dispatcher, dispatch table, code cache) sits at MONITOR_VA. Loader
-thunks are not mapped: control reaching one exits to the host, which services kernel32 there.
+monitor (counters, vectors, dispatcher, dispatch table, code cache, guest runtime image and its
+stack) sits at MONITOR_VA. Loader thunks are not mapped: the dispatch table sends each one to an
+AArch64 bridge stub that calls the guest runtime's C service for that import (Sprint 035,
+tools/guest_runtime/). The thread's TEB, the PEB, its state block, the host transport page and the
+service ring sit at PROCESS_VA, at the offsets of specs/guest_state.json.
 
 Register map. x86 GPR i is x_i (i = 0..15). CF ZF SF OF PF are x19..x23 as 0/1; x24 holds one
 bit per flag (C=1 Z=2 S=4 O=8 P=16) set while that flag is undefined; x28 points at the monitor
@@ -16,7 +19,9 @@ data page; x16, x17 are scratch (x17 carries the x86 target into the dispatcher)
 one lifted instruction use x18, x25-x27, x29, x30.
 
 Exits (HVC immediate): 1 dispatch miss (x17 = x86 target), 2 EL1 exception taken through the
-vector table, 4 step limit, 0x40|bit an undefined flag read. Each mirrors a stop of runtime.py.
+vector table, 4 step limit, 8 a host request from the guest runtime (the transport page holds
+it), 9 an import with no guest service (x17 = its thunk), 0x40|bit an undefined flag read. Each
+mirrors a stop of runtime.py.
 """
 
 from __future__ import annotations
@@ -30,9 +35,11 @@ from bisect import bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from w2m import a64_encoder as a64
-from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
+from w2m import guest_runtime
+from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded, Memory, Region
 from w2m.runtime import Result
@@ -55,7 +62,24 @@ TRANSLATION_TABLES = 0x12000            # stage-1 translation tables
 TRANSLATION_TABLES_SIZE = 0x40000
 CODE_CACHE = 0x60000
 CODE_CACHE_SIZE = 0x400000
-MONITOR_SIZE = CODE_CACHE + CODE_CACHE_SIZE
+RUNTIME_IMAGE = 0x460000              # guest runtime (tools/guest_runtime), linked at MONITOR_VA + this
+RUNTIME_IMAGE_SIZE = 0x20000
+RUNTIME_STACK = 0x480000              # the runtime's AArch64 stack (SP set by each bridge)
+RUNTIME_STACK_SIZE = 0x10000
+MONITOR_SIZE = RUNTIME_STACK + RUNTIME_STACK_SIZE
+# process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
+PROCESS_VA = 0x7FFE_0000_0000
+TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
+RING_SIZE = 0x4000
+PROCESS_SIZE = RING_OFF + RING_SIZE
+STDOUT_HANDLE = 0x74
+# kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
+SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
+            "GetLastError": ("k32_GetLastError", True), "GetStdHandle": ("k32_GetStdHandle", True),
+            "WriteFile": ("k32_WriteFile", True), "ExitProcess": ("k32_ExitProcess", False),
+            "QueryPerformanceCounter": ("k32_QueryPerformanceCounter", True)}
+HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED = 1, 2, 3, 4
+Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
 SYS_REG_ID = {"SCTLR_EL1": 0xC080, "TTBR0_EL1": 0xC100, "TCR_EL1": 0xC102, "MAIR_EL1": 0xC510,
        "VBAR_EL1": 0xC600}
@@ -420,12 +444,15 @@ class VM:
     """
 
     def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False,
-                 clock: Callable[[], int] = monotonic_count) -> None:
+                 clock: Callable[[], int] = monotonic_count, last_error_source: str | None = None) -> None:
         self.ld = loaded
         self.lockstep = lockstep
+        self.clock = clock
         self.th = Thread(tid)
+        self.exit_code: int | None = None
+        self.out = bytearray()
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
-        size = MONITOR_SIZE
+        size = MONITOR_SIZE + PROCESS_SIZE
         placed: list[tuple[Region, int]] = []
         for r in regions:
             placed.append((r, size))
@@ -441,16 +468,106 @@ class VM:
             n = len(r.data)
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
-        self.kernel = Kernel32(self.mem, clock)
-        self.kernel32 = self.kernel.handlers
-        maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE)] + [(r.base, IPA_BASE + off, _round_up(len(r.data)))
-                                                 for r, off in placed]
+        self.runtime = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, {
+            "W2M_TEB_VA": PROCESS_VA + TEB_OFF, "W2M_PEB_VA": PROCESS_VA + PEB_OFF,
+            "W2M_TRANSPORT_VA": PROCESS_VA + TRANSPORT_OFF, "W2M_RING_VA": PROCESS_VA + RING_OFF},
+            last_error_source)
+        if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
+            raise CompileError(f"guest runtime image ends at 0x{self.runtime.end:x}, past its area")
+        for va, data in self.runtime.segments:
+            off = va - MONITOR_VA
+            self.mm[off:off + len(data)] = data
+        self._init_process(tid)
+        maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE), (PROCESS_VA, IPA_BASE + MONITOR_SIZE, PROCESS_SIZE)]
+        maps += [(r.base, IPA_BASE + off, _round_up(len(r.data))) for r, off in placed]
         self.ttbr = _write_translation_tables(self.mm, maps)
         self.code_cursor = CODE_CACHE
         self.blocks: dict[int, int] = {}                 # x86 address -> code VA
         self.addrs: set[int] = set()                     # x86 instructions compiled into blocks
         self.pc_map: list[tuple[int, int]] = []           # (code VA, x86 address), sorted
+        self.translations: list[tuple[int, int, Discovery]] = []   # (guest start, guest end, discovery)
         self._write_monitor()
+        self.bridges = {thunk: self._bridge(name) for thunk, name in loaded.thunks.items()}
+
+    def _process(self, off: int) -> int:
+        """File offset of a process-area offset."""
+        return MONITOR_SIZE + off
+
+    def _init_process(self, tid: int) -> None:
+        """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header."""
+        teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
+        stack = next(r for r in self.mem.regions if r.name == "stack")
+        t = self._process(TEB_OFF)
+        for field_off, value in ((0x08, self.ld.stack_top), (0x10, stack.base), (0x30, teb),
+                                 (0x40, 1), (0x48, tid), (0x60, peb)):
+            struct.pack_into("<Q", self.mm, t + field_off, value)
+        struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
+        struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - 16) // 24)
+
+    def _bridge(self, import_name: str) -> int:
+        """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
+        R9 and RSP in x0-x4, call the C service on the runtime stack, put its result in RAX unless
+        the service is void, restore the GPRs, and do RET's pop (Microsoft x64 calling convention;
+        AAPCS64 keeps x19-x28, so the flag registers survive). An import with no service exits
+        with hvc #9."""
+        dll, fn = import_name.split("!", 1)
+        a = Assembler(MONITOR_VA + self.code_cursor)
+        service = SERVICES.get(fn) if dll.upper() == "KERNEL32.DLL" else None
+        state = PROCESS_VA + STATE_OFF
+        if service is None:
+            a.emit(a64.hvc(9))
+        else:
+            symbol, sets_rax = service
+            a.emit(a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.stp(i, i + 1, 16, 8 * i))
+            a.emit(a64.mov(0, 1), a64.mov(1, 2), a64.mov(2, 8), a64.mov(3, 9))   # x4 = RSP already
+            a.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0))
+            a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
+            a.emit(a64.mov_imm(16, state))
+            if sets_rax:
+                a.emit(a64.str_(8, 0, 16, 0))
+            for i in range(0, 16, 2):
+                a.emit(a64.ldp(i, i + 1, 16, 8 * i))
+            a.emit(a64.ldr(8, 17, 4, 0), a64.addi(4, 4, 8))
+            a.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
+        words = a.finish()
+        va = MONITOR_VA + self.code_cursor
+        self._write_words(self.code_cursor, words)
+        self.code_cursor += 4 * len(words)
+        return va
+
+    def _host_request(self, x: list[int]) -> bool:
+        """Service the transport page (hvc #8). False when the guest exited."""
+        t = self._process(TRANSPORT_OFF)
+        op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
+        if op == HOST_WRITE:
+            self.out += self.mem.read(a0, a1)
+            result = a1
+        elif op == HOST_EXIT:
+            self.exit_code = a0 & 0xFFFFFFFF
+            return False
+        elif op == HOST_CLOCK:
+            result = self.clock() & M64
+        elif op == HOST_UNIMPLEMENTED:
+            name = guest_runtime.api_ids().get(a0, f"api {a0}")
+            raise Unimplemented(f"{name} argument form 0x{a1:x}")
+        else:
+            raise CompileError(f"guest runtime: unknown host request {op}")
+        struct.pack_into("<Q", self.mm, t + 56, result)
+        return True
+
+    def calls(self) -> list[str]:
+        """The service calls the guest runtime logged, in order."""
+        count, capacity = struct.unpack_from("<QQ", self.mm, self._process(RING_OFF))
+        if count > capacity:
+            raise CompileError(f"service ring overflowed: {count} calls, capacity {capacity}")
+        names = guest_runtime.api_ids()
+        return [names[struct.unpack_from("<Q", self.mm, self._process(RING_OFF) + 16 + 24 * i)[0]]
+                for i in range(count)]
+
+    def teb_u32(self, offset: int) -> int:
+        return int(struct.unpack_from("<I", self.mm, self._process(TEB_OFF) + offset)[0])
 
     # monitor code ----------------------------------------------------------------------------
     def _write_monitor(self) -> None:
@@ -517,6 +634,7 @@ class VM:
         self.pc_map.sort()
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
+        self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
         return va
 
     def x86_address_at(self, pc: int) -> int:
@@ -568,33 +686,23 @@ class VM:
                 imm = e.syndrome & 0xFFFF
                 where = self.x86_address_at(e.pc - 4)
                 if imm == 1:
-                    exited = False
-                    while True:
-                        if on_dispatch:
-                            on_dispatch(self, x)              # may replace the state in x
-                        target = x[17]
-                        if target not in self.ld.thunks:
-                            va = self.blocks.get(target) or self._compile(target)
-                            struct.pack_into("<QQ", self.mm,
-                                             DISPATCH_TABLE + 16 * (target & (DISPATCH_ENTRIES - 1)),
-                                             target, va)
-                            break
-                        self.th.regs = x[:16]
-                        ret = self.kernel.call(self.ld.thunks[target], self.th)
-                        if ret is None:
-                            exited = True
-                            break
-                        x[:16] = self.th.regs
-                        x[17] = ret
-                        if not self.lockstep:
-                            break
-                        # Lockstep: the return address is a step of its own. Re-dispatching in
-                        # the guest would run its block, if already compiled, before the next
-                        # check (Sprint 032: a loop returning twice to one address).
-                    if exited:
+                    if on_dispatch:
+                        on_dispatch(self, x)                  # may replace the state in x
+                    target = x[17]
+                    if target in self.bridges:
+                        va = self.bridges[target]
+                    else:
+                        va = self.blocks.get(target) or self._compile(target)
+                    struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * (target & (DISPATCH_ENTRIES - 1)),
+                                     target, va)
+                    pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
+                elif imm == 8:
+                    if not self._host_request(x):
                         stop = "ExitProcess"
                         break
-                    pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
+                    pc = e.pc
+                elif imm == 9:
+                    raise Unimplemented(f"import {self.ld.thunks.get(x[17], hex(x[17]))}")
                 elif imm == 2:
                     ec = e.esr >> 26 & 0x3F
                     if ec == 0x25:
@@ -625,8 +733,7 @@ class VM:
             proc.wait(timeout=10)
         executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
         self.final = x
-        return Result(self.kernel.exit_code, bytes(self.kernel.out), executed, len(self.addrs),
-                      self.kernel.calls, stop)
+        return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop)
 
     def close(self) -> None:
         for r in self.mem.regions:
@@ -828,3 +935,50 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
     finally:
         vm.close()
     return StateDifferential(pos[0], len(addresses), diffs)
+
+
+def record_translations(vm: VM, image_sha256: str, runs_root: Path, profile: str) -> Path:
+    """One substrate run (session purpose `compilation`) holding the blocks `vm` translated:
+    per block CODE_TARGET_DISCOVERED (the entry point is `static`, every other start
+    `runtime_transfer`; stage `execution`), then TRANSLATION_PUBLISHED for its guest range at code
+    version 0, under the decoder spec version the lifter decodes with (Sprint 035; vocabulary 0.5).
+    """
+    import asyncio
+    import time
+    from collections.abc import AsyncIterator
+    from typing import Any
+
+    import msgspec
+    from substrate.api import Runtime as SubstrateRuntime, threshold_count
+
+    from w2m import VOCAB_VERSION, events
+    from w2m.x86dec_tables import SPEC_VERSION
+
+    run_id = f"translations-{time.time_ns()}"
+    blocks = list(vm.translations)
+
+    async def translator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
+        t0 = time.monotonic()
+        yield events.validate(events.SESSION_INIT(
+            vocab_version=VOCAB_VERSION, profile=profile, contract_version=SPEC_VERSION,
+            harness_version="0.0.1", purpose="compilation"))
+        for start, end, discovery in blocks:
+            yield events.validate(events.CODE_TARGET_DISCOVERED(
+                image_sha256=image_sha256, guest_address=start, discovery=discovery, stage="execution"))
+            yield events.validate(events.TRANSLATION_PUBLISHED(
+                translation_id=f"tr-{image_sha256[7:19]}-{start:x}", image_sha256=image_sha256,
+                guest_range_start=start, guest_range_end=end, code_version=0, stage="execution",
+                contract_version=SPEC_VERSION, artifact_id=f"vm-code-cache:{vm.blocks[start]:x}"))
+        yield events.validate(events.SESSION_COMPLETED(
+            outcome="completed", discrepancy_count=0, accepted_count=0,
+            elapsed_seconds=round(time.monotonic() - t0, 3)))
+
+    def topology(b: Any) -> None:
+        b.baseline(image_sha256=image_sha256, runtime_image=vm.runtime.sha256, blocks=len(blocks))
+        b.producer_kind("translator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
+                        factory=lambda: translator)
+        b.initial("translator", input=None)
+        b.termination(threshold_count("substrate.ProducerCompleted", 1))
+
+    result = asyncio.run(SubstrateRuntime(runs_root / run_id).run(topology))
+    return Path(result.record_root)

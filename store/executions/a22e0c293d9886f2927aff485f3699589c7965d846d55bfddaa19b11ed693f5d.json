@@ -1,0 +1,12 @@
+{
+ "distinct_addresses": 217,
+ "elapsed_seconds": 0.031833,
+ "exit_code": 0,
+ "github_run_id": "managed_vm-1791579895724408000",
+ "instructions_executed": 5153,
+ "probe_sha256": "sha256:18f721e66de4b57e59330135d7c137c03890c94180455210cf979b8ae35074c8",
+ "profile_kind": "managed_vm",
+ "roles": {
+  "main": 4
+ }
+}

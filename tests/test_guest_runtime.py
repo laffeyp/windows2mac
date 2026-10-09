@@ -1,0 +1,82 @@
+"""Sprint 035: kernel32 runs as C inside the VM. The guest runtime image builds and names its
+services; a run leaves the last error in the TEB at 0x68, logs its calls in the guest ring, and
+matches the model; an import with no guest service stops the run by name; every compiled block is
+discovered and published on the signal plane."""
+
+from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
+
+import pytest
+from substrate.api import read_record
+
+from w2m import guest_runtime, vm_backend
+from w2m.loader import load
+from w2m.runtime import Runtime
+
+ROOT = Path(__file__).resolve().parent.parent
+SKELETON = "18f721e66de4b57e59330135d7c137c03890c94180455210cf979b8ae35074c8"
+
+
+def _skeleton() -> bytes:
+    return (ROOT / "store" / "binaries" / f"{SKELETON}.exe").read_bytes()
+
+
+def test_api_ids_match_the_services() -> None:
+    assert set(guest_runtime.api_ids().values()) == set(vm_backend.SERVICES)
+
+
+@pytest.mark.hvf
+def test_image_links_at_its_address_with_every_service() -> None:
+    base = vm_backend.MONITOR_VA + vm_backend.RUNTIME_IMAGE
+    im = guest_runtime.build(base, {"W2M_TEB_VA": 0x7FFE_0000_0000, "W2M_PEB_VA": 0x7FFE_0000_2000,
+                                    "W2M_TRANSPORT_VA": 0x7FFE_0000_4000, "W2M_RING_VA": 0x7FFE_0000_5000})
+    assert im.segments[0][0] == base
+    assert {sym for sym, _ in vm_backend.SERVICES.values()} <= set(im.symbols)
+
+
+@pytest.mark.hvf
+def test_kernel32_in_the_guest_matches_the_model_and_keeps_state_in_the_teb() -> None:
+    vm = vm_backend.VM(load(_skeleton()))
+    try:
+        r = vm.run()
+        m = Runtime(load(_skeleton())).run()
+        assert (r.stop, r.exit_code) == ("ExitProcess", 0)
+        assert r.calls == m.calls and r.stdout == m.stdout
+        assert vm.teb_u32(0x68) == 1234                       # SetLastError(1234) wrote TEB+0x68
+        assert vm.teb_u32(0x48) == 4                          # ClientId.UniqueThread
+    finally:
+        vm.close()
+
+
+@pytest.mark.hvf
+def test_import_without_a_guest_service_stops_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    services = dict(vm_backend.SERVICES)
+    del services["GetStdHandle"]
+    monkeypatch.setattr(vm_backend, "SERVICES", services)
+    vm = vm_backend.VM(load(_skeleton()))
+    try:
+        r = vm.run()
+        assert r.exit_code is None and r.stop == "Unimplemented: import KERNEL32.dll!GetStdHandle"
+    finally:
+        vm.close()
+
+
+@pytest.mark.hvf
+def test_every_compiled_block_is_discovered_and_published(tmp_path: Path) -> None:
+    vm = vm_backend.VM(load(_skeleton()))
+    try:
+        vm.run()
+        rec = vm_backend.record_translations(vm, f"sha256:{SKELETON}", tmp_path, "w2m-vm-test")
+        evs = [(e["kind"], e["payload"]) for e in read_record(rec) if not e["kind"].startswith("substrate.")]
+        kinds = Counter(k for k, _ in evs)
+        assert kinds["CODE_TARGET_DISCOVERED"] == kinds["TRANSLATION_PUBLISHED"] == len(vm.translations) > 0
+        discovered = [p for k, p in evs if k == "CODE_TARGET_DISCOVERED"]
+        assert discovered[0]["guest_address"] == vm.ld.entry and discovered[0]["discovery"] == "static"
+        assert {p["discovery"] for p in discovered[1:]} == {"runtime_transfer"}
+        for (k1, d), (k2, t) in zip(evs[1:-1:2], evs[2:-1:2], strict=True):
+            assert (k1, k2) == ("CODE_TARGET_DISCOVERED", "TRANSLATION_PUBLISHED")
+            assert t["guest_range_start"] == d["guest_address"] < t["guest_range_end"]
+    finally:
+        vm.close()

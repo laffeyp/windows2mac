@@ -34,7 +34,7 @@ import judge_traces  # noqa: E402
 from w2m import VOCAB_VERSION  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.runtime import Result, Runtime  # noqa: E402
-from w2m.vm_backend import VM, lockstep, state_differential  # noqa: E402
+from w2m.vm_backend import VM, lockstep, record_translations, state_differential  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 
 
@@ -48,6 +48,19 @@ def wrap(body: bytes, execution_id: str, profile_id: str) -> tuple[bytes, dict[s
                          "thread_count": len({json.loads(x)["thread_id"] for x in lines}),
                          "dropped_count": 0}, separators=(",", ":"))
     return b"\n".join([opened.encode(), *lines, closed.encode()]) + b"\n", {"main": tid}
+
+
+def stored_reference_ids(store: Path, probe_sha: str) -> dict[str, str]:
+    """sha256 of each stored Windows reference body of `probe_sha` -> its execution id."""
+    out = {}
+    for m in (store / "executions").glob("*.json"):
+        meta = json.loads(m.read_text())
+        if meta.get("probe_sha256") != probe_sha or "profile_kind" in meta:
+            continue
+        lines = (store / "traces" / f"{m.stem}.jsonl").read_bytes().splitlines()
+        body = b"\n".join(lines[1:-1]) + b"\n"
+        out[hashlib.sha256(body).hexdigest()] = json.loads(lines[0])["execution_id"]
+    return out
 
 
 def sh(*cmd: str) -> str:
@@ -74,9 +87,13 @@ def main(argv: list[str]) -> int:
         win.mkdir()
         (win / "probe.sha256").write_text(digest)
         profile = (a.src / "profile.txt").read_text().strip()
+        stored = stored_reference_ids(ROOT / "store", f"sha256:{digest}")
         for body in sorted(a.src.glob("body-*.jsonl"), key=lambda p: int(p.stem.split("-")[1])):
             i = body.stem.split("-")[1]
-            trace, roles = wrap(body.read_bytes(), f"{a.prefix}-{i}", profile)
+            # a runner body already in the store keeps its execution id, so re-judging it adds no
+            # second reference execution (Sprint 035: a new prefix doubled the 0.2.0 references)
+            xid = stored.get(hashlib.sha256(body.read_bytes()).hexdigest(), f"{a.prefix}-{i}")
+            trace, roles = wrap(body.read_bytes(), xid, profile)
             (win / f"trace-{i}.jsonl").write_bytes(trace)
             (win / f"roles-{i}.json").write_text(json.dumps(roles))
             shutil.copy(a.src / f"exec-{i}.json", win / f"exec-{i}.json")
@@ -94,12 +111,15 @@ def main(argv: list[str]) -> int:
             print("\n".join(ls.differences + sd.differences))
             return 1
 
+        translation_records: list[Path] = []
+        finished_vms: list[VM] = []
+
         def run_vm() -> Result:
             vm = VM(load(exe))
             try:
                 return vm.run()
             finally:
-                vm.close()
+                finished_vms.append(vm)                # recorded and closed after timing
 
         backends = (("model", "w2m-model", lambda: Runtime(load(exe)).run()),
                     ("managed_vm", "w2m-vm", run_vm))
@@ -123,6 +143,15 @@ def main(argv: list[str]) -> int:
                     "exit_code": r.exit_code, "elapsed_seconds": round(elapsed, 6),
                     "profile_kind": kind, "instructions_executed": r.instructions_executed,
                     "distinct_addresses": r.distinct_addresses}))
+            if kind == "managed_vm":
+                for vm in finished_vms:
+                    try:
+                        translation_records.append(record_translations(
+                            vm, f"sha256:{digest}", ROOT / "runs", f"w2m-vm-{host}"))
+                    finally:
+                        vm.close()
+                for rec in translation_records:
+                    print(f"translations {rec}")
             print(f"mac {kind}:")
             status |= judge_traces.main([str(out), "--run-id", f"{kind}-{stamp}",
                                          "--contract", a.contract])

@@ -1,0 +1,12 @@
+{
+ "distinct_addresses": 410,
+ "elapsed_seconds": 0.028066,
+ "exit_code": 0,
+ "github_run_id": "model-1791580107951799000",
+ "instructions_executed": 12100,
+ "probe_sha256": "sha256:d210df33adce2f0807fefba2e572cc48bddf9649b8b2474658c92fb46f7b1210",
+ "profile_kind": "model",
+ "roles": {
+  "main": 4
+ }
+}

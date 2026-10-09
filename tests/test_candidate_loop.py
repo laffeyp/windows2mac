@@ -3,7 +3,8 @@ since Sprint 032. A scripted Responder stands in for the model so the record's s
 exactly: repair after a discrepancy, refusal of code outside the admitted language, and
 rejection when the acceptance condition changes during the session. Sprint 032: candidates that
 ignore SetLastError's argument (a constant, the thread id) are rejected under 0.2.0; 0.1.0
-accepted the constant."""
+accepted the constant. Sprint 035: candidates are C; the model backend runs a host build of
+them behind kernel32.py, the managed VM compiles them into the guest runtime."""
 
 from __future__ import annotations
 
@@ -19,21 +20,21 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from run_candidate_loop import PROBE_SHA256, probe_binary, run_loop  # noqa: E402
 
-GOOD = '''```python
-def SetLastError(thread, args):
-    thread.last_error = args[0] & 0xFFFFFFFF
-    return None
+GOOD = """```c
+void w2m_set_last_error(u32 code) {
+    w2m_teb()->last_error_value = code;
+}
 
-def GetLastError(thread, args):
-    return thread.last_error
-```'''
-LOSES_VALUE = GOOD.replace("thread.last_error = args[0] & 0xFFFFFFFF", "pass")
-IMPORTS = GOOD.replace("```python\n", "```python\nimport os\n")
-CONSTANT = "def SetLastError(thread, args):\n    return None\n\n" \
-           "def GetLastError(thread, args):\n    return 1234\n"
-THREAD_ID = CONSTANT.replace("return 1234", "return thread.tid")
-ECHO_RCX = CONSTANT.replace("return 1234", "return args[0]")
-DIVIDES = CONSTANT.replace("return 1234", "return 1 // (thread.last_error - thread.last_error)")
+u32 w2m_get_last_error(void) {
+    return w2m_teb()->last_error_value;
+}
+```"""
+LOSES_VALUE = GOOD.replace("w2m_teb()->last_error_value = code;", "(void)code;")
+INCLUDES = GOOD.replace("```c\n", "```c\n#include <stdio.h>\n")
+CONSTANT = (ROOT / "probes" / "last_error_values" / "candidates" / "returns_constant.c").read_text()
+THREAD_ID = CONSTANT.replace("return 1234;", "return (u32)w2m_teb()->client_thread;")
+GETLASTERROR_WITH_ARGUMENT = CONSTANT.replace("u32 w2m_get_last_error(void)", "u32 w2m_get_last_error(u32 code)")
+DOES_NOT_COMPILE = CONSTANT.replace("return 1234;", "return undeclared_value;")
 CONTRACT = "windows.thread.last_error.set_get@0.2.0"
 
 
@@ -125,10 +126,10 @@ def test_repair_after_discrepancy(store: Path, tmp_path: Path) -> None:
 
 
 def test_code_outside_admitted_language_never_runs(store: Path, tmp_path: Path) -> None:
-    evs = _run(store, tmp_path, Scripted(IMPORTS, GOOD))
+    evs = _run(store, tmp_path, Scripted(INCLUDES, GOOD))
     failed = [pl for k, pl in evs if k == "EXECUTION_FAILED"]
     assert len(failed) == 1 and failed[0]["failure"] == "launch_failed"
-    assert "Import is not allowed" in failed[0]["diagnostic"] or "only function" in failed[0]["diagnostic"]
+    assert "preprocessor lines are not allowed" in failed[0]["diagnostic"]
     assert not any(k == "EXECUTION_COMPLETED" and pl["execution_id"] == failed[0]["execution_id"]
                    for k, pl in evs)
     assert _kinds(evs, {"CANDIDATE_REJECTED", "CANDIDATE_ACCEPTED", "DISCREPANCY_REPORTED"}) == [
@@ -190,18 +191,27 @@ def test_thread_id_candidate_is_rejected(store: Path, tmp_path: Path) -> None:
 
 
 def test_reading_a_parameter_getlasterror_lacks_is_refused(store: Path, tmp_path: Path) -> None:
-    evs = _run(store, tmp_path, Scripted(ECHO_RCX), attempts=1)
+    """Sprint 032's rule (GetLastError has no argument to echo) is now the C signature."""
+    evs = _run(store, tmp_path, Scripted(GETLASTERROR_WITH_ARGUMENT), attempts=1)
     failed = [pl for k, pl in evs if k == "EXECUTION_FAILED"]
-    assert len(failed) == 1 and "GetLastError has 0 parameters; args[0] does not exist" in \
+    assert len(failed) == 1 and "the signature must be u32 w2m_get_last_error(void)" in \
         failed[0]["diagnostic"]
     assert not any(k == "EXECUTION_COMPLETED" for k, _ in evs)
 
 
-def test_candidate_that_raises_stops_its_runs(store: Path, tmp_path: Path) -> None:
-    evs = _run(store, tmp_path, Scripted(DIVIDES), attempts=1)
+def test_candidate_that_does_not_compile_is_refused_with_the_compiler_message(
+        store: Path, tmp_path: Path) -> None:
+    evs = _run(store, tmp_path, Scripted(DOES_NOT_COMPILE), attempts=1)
     failed = [pl for k, pl in evs if k == "EXECUTION_FAILED"]
-    assert len(failed) == 3 and all("HandlerFailed: GetLastError raised ZeroDivisionError"
-                                    in pl["diagnostic"] for pl in failed)
+    assert len(failed) == 1 and "does not compile" in failed[0]["diagnostic"]
+    assert "undeclared_value" in failed[0]["diagnostic"]
     rejected = [pl for k, pl in evs if k == "CANDIDATE_REJECTED"]
     assert len(rejected) == 1 and not rejected[0].get("discrepancy_id")
     assert evs[-1][1]["outcome"] == "aborted"
+
+
+@pytest.mark.hvf
+def test_planted_constant_rejected_in_managed_vm(store: Path, tmp_path: Path) -> None:
+    evs = _run(store, tmp_path, Scripted(CONSTANT), backend="managed_vm", attempts=1)
+    rejected = [pl for k, pl in evs if k == "CANDIDATE_REJECTED"]
+    assert len(rejected) == 1 and "returned 1234" in rejected[0]["reason"]

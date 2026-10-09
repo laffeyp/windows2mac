@@ -1,13 +1,25 @@
-"""candidate.py — admit, prompt for, and install a generated kernel32 implementation (Sprint 031).
+"""candidate.py — admit, prompt for, and install a generated last-error implementation (Sprint 031;
+C since Sprint 035).
 
-A candidate is Python source for the functions a contract governs. It reaches the runtime only
-through `admit`, which parses it and allows a fixed set of syntax. Each function takes
-`(thread, args)`. `thread.last_error` may be read and assigned, and `thread.tid` read. `args` is
-the tuple of the function's declared parameters, in order (PARAMETER_COUNT; at most four, from
-RCX, RDX, R8, R9). Sprint 032: with four registers always passed, a GetLastError returning
-`args[0]` read RCX, which can still hold SetLastError's argument. The function returns an int,
-which the runtime places in RAX, or None. No calls, imports, loops, comprehensions, lambdas,
-or other attributes are admitted, and the code runs with empty builtins.
+A candidate is C source for the contract's surface as the guest runtime declares it
+(tools/guest_runtime/runtime.h):
+
+    void w2m_set_last_error(u32 code);
+    u32 w2m_get_last_error(void);
+
+`w2m_teb()` returns the calling thread's TEB; its `last_error_value` (TEB+0x68, where Windows
+keeps it; Sprint 034) may be read and written and `client_thread` read. The declared signatures
+carry the parameter rule Sprint 032 enforced by hand for Python: GetLastError takes no argument,
+so it cannot read one.
+
+`admit` refuses, before anything compiles: preprocessor lines, assembly, loops, goto, string and
+character literals, pointer syntax other than `w2m_teb()->`, division and remainder (an x86 host
+traps on division by zero, AArch64 does not), and every call except `w2m_teb()`. Then the source
+must compile with `-Wall -Werror` against runtime.h. Admitted code runs in two places:
+
+  managed_vm — compiled into the guest runtime image (src/w2m/guest_runtime.py) and run in the VM;
+  model      — compiled for the host as a shared library whose TEB is a host buffer, and called
+               from kernel32.py's SetLastError/GetLastError through ctypes.
 
 The check limits what a local code model's output can do inside the harness. It is not a
 security boundary against an adversary who controls the generator.
@@ -15,143 +27,146 @@ security boundary against an adversary who controls the generator.
 
 from __future__ import annotations
 
-import ast
+import ctypes
 import hashlib
 import re
-from collections.abc import Callable
+import subprocess
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
 
 from w2m.contract import Contract
-from w2m.kernel32 import M64, Kernel32, Thread
+from w2m.kernel32 import Kernel32
 
-CandidateFunction = Callable[[Any, tuple[int, ...]], Any]
-
-ALLOWED_NODES = (
-    ast.Module, ast.FunctionDef, ast.arguments, ast.arg, ast.Return, ast.Assign, ast.AugAssign,
-    ast.Expr, ast.Constant, ast.Name, ast.Load, ast.Store, ast.Attribute, ast.Subscript,
-    ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare, ast.If, ast.IfExp, ast.Pass,
-    ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod, ast.BitAnd, ast.BitOr, ast.BitXor,
-    ast.LShift, ast.RShift, ast.Invert, ast.Not, ast.USub, ast.UAdd, ast.And, ast.Or,
-    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Is, ast.IsNot,
-)
-READABLE = {"last_error", "tid"}
-# Declared parameters, from the Microsoft Learn signatures (retrieved 2026-10-08):
-# void SetLastError(DWORD dwErrCode); DWORD GetLastError(void).
-PARAMETER_COUNT = {"SetLastError": 1, "GetLastError": 0}
-WRITABLE = {"last_error"}
+ROOT = Path(__file__).resolve().parents[2]
+RUNTIME_SOURCE = ROOT / "tools" / "guest_runtime"
+HOST_CACHE = ROOT / "build" / "candidates"
+SIGNATURES = {"SetLastError": "void w2m_set_last_error(u32 code)", "GetLastError": "u32 w2m_get_last_error(void)"}
+FIELDS = {"last_error_value": "read and write", "client_thread": "read"}
+KEYWORDS = {"void", "u32", "u64", "unsigned", "int", "long", "const", "return", "if", "else"}
+REFUSED_WORDS = {"asm", "__asm", "__asm__", "goto", "while", "for", "do", "switch", "extern",
+                 "volatile", "register", "static", "sizeof", "typedef", "struct", "union", "enum"}
+TEB_OFFSETS = {"last_error_value": 0x68, "client_thread": 0x48}
 
 
 class CandidateError(ValueError):
-    """The candidate source is outside the admitted language or interface."""
+    """The candidate source is outside the admitted language or interface, or does not compile."""
 
 
 @dataclass(frozen=True)
 class Candidate:
     source: str
     sha256: str                       # "sha256:<hex>" of the source bytes
-    functions: dict[str, CandidateFunction]
-
-
-class _ThreadView:
-    """What a candidate sees of the calling thread."""
-
-    __slots__ = ("_th",)
-    _th: Thread
-
-    def __init__(self, th: Thread) -> None:
-        object.__setattr__(self, "_th", th)
-
-    @property
-    def tid(self) -> int:
-        return int(self._th.tid)
-
-    @property
-    def last_error(self) -> int:
-        return int(self._th.last_error)
-
-    @last_error.setter
-    def last_error(self, v: int) -> None:
-        if not isinstance(v, int):
-            raise CandidateError(f"thread.last_error assigned {type(v).__name__}")
-        self._th.last_error = v & 0xFFFFFFFF
 
 
 def sha256_of(source: str) -> str:
     return "sha256:" + hashlib.sha256(source.encode()).hexdigest()
 
 
+def _strip_comments(src: str) -> str:
+    return re.sub(r"//[^\n]*|/\*.*?\*/", " ", src, flags=re.S)
+
+
 def admit(source: str, names: tuple[str, ...]) -> Candidate:
-    """Parse `source` and admit it when it defines exactly `names` in the allowed language."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError as e:
-        raise CandidateError(f"syntax error: {e.msg} at line {e.lineno}") from None
-    defined = []
-    for top in tree.body:
-        if isinstance(top, ast.Expr) and isinstance(top.value, ast.Constant):
-            continue                                         # a module docstring
-        if not isinstance(top, ast.FunctionDef):
-            raise CandidateError(f"line {top.lineno}: only function definitions are allowed")
-        params = [a.arg for a in top.args.args]
-        if params != ["thread", "args"] or top.args.vararg or top.args.kwarg or \
-                top.args.kwonlyargs or top.args.defaults or top.decorator_list or top.returns:
-            raise CandidateError(f"{top.name}: the signature must be ({', '.join(['thread', 'args'])})")
-        defined.append(top.name)
-    if sorted(defined) != sorted(names):
-        raise CandidateError(f"defines {sorted(defined)}; required {sorted(names)}")
-    for top in tree.body:
-        if isinstance(top, ast.FunctionDef):
-            count = PARAMETER_COUNT[top.name]
-            for node in ast.walk(top):
-                if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and \
-                        isinstance(node.slice.value, int) and node.slice.value >= count:
-                    raise CandidateError(f"line {node.lineno}: {top.name} has {count} parameter"
-                                         f"{'' if count == 1 else 's'}; args[{node.slice.value}] "
-                                         "does not exist")
-    for node in ast.walk(tree):
-        if not isinstance(node, ALLOWED_NODES):
-            raise CandidateError(f"line {getattr(node, 'lineno', '?')}: {type(node).__name__} "
-                                 "is not allowed")
-        if isinstance(node, ast.Name) and node.id.startswith("_"):
-            raise CandidateError(f"line {node.lineno}: name {node.id} is not allowed")
-        if isinstance(node, ast.Attribute):
-            ok = isinstance(node.value, ast.Name) and node.value.id == "thread" and (
-                node.attr in (WRITABLE if isinstance(node.ctx, ast.Store) else READABLE))
-            if not ok:
-                raise CandidateError(f"line {node.lineno}: attribute .{node.attr} is not allowed")
-        if isinstance(node, ast.Subscript) and not (
-                isinstance(node.value, ast.Name) and node.value.id == "args"
-                and isinstance(node.slice, ast.Constant) and node.slice.value in (0, 1, 2, 3)):
-            raise CandidateError(f"line {node.lineno}: only args[0] to args[3] may be indexed")
-        if isinstance(node, ast.Constant) and not isinstance(node.value, (int, str, type(None))):
-            raise CandidateError(f"line {node.lineno}: constant {node.value!r} is not allowed")
-    namespace: dict[str, Any] = {"__builtins__": {}}
-    exec(compile(tree, "<candidate>", "exec"), namespace)    # noqa: S102 — admitted code only
-    return Candidate(source, sha256_of(source), {n: namespace[n] for n in names})
+    """Admit `source` when it defines exactly the functions for `names` with their declared
+    signatures, uses only the admitted C, and compiles against runtime.h."""
+    code = _strip_comments(source)
+    for line_no, line in enumerate(code.splitlines(), 1):
+        if line.lstrip().startswith("#"):
+            raise CandidateError(f"line {line_no}: preprocessor lines are not allowed")
+    if re.search(r"[\"'\[\]]", code):
+        raise CandidateError("string or character literals and subscripts are not allowed")
+    if re.search(r"[/%]", code):
+        raise CandidateError("division and remainder are not allowed")
+    words = set(re.findall(r"[A-Za-z_]\w*", code))
+    refused = sorted(words & REFUSED_WORDS)
+    if refused:
+        raise CandidateError(f"{refused[0]} is not allowed")
+    if re.search(r"->", re.sub(r"w2m_teb\(\)\s*->\s*(" + "|".join(FIELDS) + r")\b", "", code)):
+        raise CandidateError(f"only w2m_teb()->{{{', '.join(FIELDS)}}} may be dereferenced")
+    ops = code.replace("&&", " and ").replace("&=", " andeq ").replace("*=", " muleq ")
+    before = r"(?:^|[=(,;{}!~+\-*&|^<>?:]|\breturn)\s*"          # where a unary operator stands
+    cast = r"\(\s*(?:const\s+)?(?:void|u32|u64|unsigned|int|long)[\s\w]*\)\s*"   # (type) before a unary op
+    if re.search(before + r"[*&]", ops, re.M) or re.search(cast + r"[*&]", ops) or re.search(r"\*\s*\)", ops):
+        raise CandidateError("pointer syntax is not allowed")
+    wanted = {SIGNATURES[n].split("(")[0].split()[-1]: SIGNATURES[n] for n in names}
+    defined = re.findall(r"\b(?:void|u32|u64|unsigned|int)\s+(\w+)\s*\(([^)]*)\)\s*\{", code)
+    if sorted(n for n, _ in defined) != sorted(wanted):
+        raise CandidateError(f"defines {sorted(n for n, _ in defined)}; required {sorted(wanted)}")
+    for name, params in defined:
+        want = wanted[name].split("(", 1)[1].rstrip(")")
+        if " ".join(params.split()) != want:
+            raise CandidateError(f"{name}: the signature must be {wanted[name]}")
+    for callee in re.findall(r"\b([A-Za-z_]\w*)\s*\(", code):
+        if callee not in ("w2m_teb", "if", "return") and callee not in wanted:
+            raise CandidateError(f"call to {callee} is not allowed")
+    for name in wanted:
+        if re.search(rf"\b{name}\s*\(", re.sub(rf"\b(?:void|u32)\s+{name}\s*\(", "", code)):
+            raise CandidateError(f"{name} calls itself")
+    _host_library(source)                                      # compiles with -Wall -Werror
+    return Candidate(source, sha256_of(source))
+
+
+PRELUDE = "extern unsigned char w2m_host_teb[];\n"
+HOST_SHIM = "unsigned char w2m_host_teb[0x1800] __attribute__((aligned(16)));\n"
+
+
+def _host_library(source: str) -> Path:
+    """Compile the candidate for this host as a shared library; its TEB is `w2m_host_teb`."""
+    header = (RUNTIME_SOURCE / "runtime.h").read_text()
+    key = hashlib.sha256("\0".join([source, header, PRELUDE, HOST_SHIM]).encode()).hexdigest()
+    lib = HOST_CACHE / f"{key}.so"
+    if lib.exists():
+        return lib
+    HOST_CACHE.mkdir(parents=True, exist_ok=True)
+    work = HOST_CACHE / key
+    work.mkdir(exist_ok=True)
+    (work / "prelude.h").write_text(PRELUDE)
+    (work / "shim.c").write_text(HOST_SHIM)
+    (work / "candidate.c").write_text('#include "runtime.h"\n' + source)
+    r = subprocess.run(["clang", "-std=c11", "-O1", "-Wall", "-Werror", "-shared", "-fPIC",
+                        "-include", str(work / "prelude.h"), f"-I{RUNTIME_SOURCE}",
+                        "-DW2M_TEB_VA=((u64)w2m_host_teb)", "-o", str(lib),
+                        str(work / "candidate.c"), str(work / "shim.c")],
+                       capture_output=True, text=True)
+    if r.returncode:
+        msg = re.sub(r"\S*/candidate\.c:(\d+)", lambda m: f"line {int(m.group(1)) - 1}", r.stderr)
+        raise CandidateError(f"does not compile: {msg.strip()[:600]}")
+    return lib
 
 
 def install(kernel: Kernel32, cand: Candidate) -> None:
-    """Replace the kernel32 handlers the candidate defines."""
+    """Route the model runtime's SetLastError/GetLastError through the candidate (host build).
+    The thread's last-error value and id are copied into the host TEB before each call and the
+    value back after it."""
+    lib = ctypes.CDLL(str(_host_library(cand.source)))
+    teb = ctypes.addressof(ctypes.c_ubyte.in_dll(lib, "w2m_host_teb"))
+    last_error = ctypes.c_uint32.from_address(teb + TEB_OFFSETS["last_error_value"])
+    thread_id = ctypes.c_uint64.from_address(teb + TEB_OFFSETS["client_thread"])
+    lib.w2m_set_last_error.argtypes, lib.w2m_set_last_error.restype = [ctypes.c_uint32], None
+    lib.w2m_get_last_error.argtypes, lib.w2m_get_last_error.restype = [], ctypes.c_uint32
 
-    def bind(name: str, fn: CandidateFunction) -> Callable[[], int | None]:
-        def handler() -> int | None:
-            args = tuple(kernel.argument(i) for i in range(PARAMETER_COUNT[name]))
-            ret = fn(_ThreadView(kernel.th), args)
-            if ret is None:
-                return None
-            if isinstance(ret, bool) or not isinstance(ret, int):
-                raise CandidateError(f"returned {type(ret).__name__}, not int or None")
-            return ret & M64
-        return handler
+    def enter() -> None:
+        last_error.value = kernel.th.last_error & 0xFFFFFFFF
+        thread_id.value = kernel.th.tid
 
-    for name, fn in cand.functions.items():
-        kernel.handlers[name] = bind(name, fn)
+    def set_last_error() -> None:
+        enter()
+        lib.w2m_set_last_error(kernel.argument(0) & 0xFFFFFFFF)
+        kernel.th.last_error = last_error.value
+
+    def get_last_error() -> int:
+        enter()
+        value = int(lib.w2m_get_last_error())
+        kernel.th.last_error = last_error.value
+        return value
+
+    kernel.handlers["SetLastError"] = set_last_error
+    kernel.handlers["GetLastError"] = get_last_error
 
 
 def extract_code(reply: str) -> str:
     """The first fenced code block of a model reply, or the whole reply when it has none."""
-    m = re.search(r"```(?:python|py)?[ \t]*\n(.*?)```", reply, re.S)
+    m = re.search(r"```(?:c|C)?[ \t]*\n(.*?)```", reply, re.S)
     return (m.group(1) if m else reply).strip() + "\n"
 
 
@@ -162,7 +177,7 @@ def prompt(contract: Contract, names: tuple[str, ...], feedback: str | None) -> 
     time."""
     quotes = "\n".join(f"- {e.source_ref}\n  \"{e.quote}\"" for e in contract.evidence
                        if e.category == "documented" and e.quote)
-    text = f"""Write Python implementations of the Windows kernel32 functions {', '.join(names)}.
+    text = f"""Write C implementations of the Windows kernel32 functions {', '.join(names)}.
 
 Contract {contract.contract_id} version {contract.version}: {contract.summary}
 Applicability: {contract.applicability}
@@ -171,14 +186,12 @@ Documented behavior:
 {quotes}
 
 Interface (exact):
-- Define exactly these functions, each as `def NAME(thread, args):`: {', '.join(names)}.
-- `thread.last_error` is the calling thread's last-error code (an int); you may read and assign it.
-- `thread.tid` is the calling thread's id (read only).
-- `args` is a tuple of the function's declared parameters, in order: {'; '.join(f"{n}: {PARAMETER_COUNT[n]}" for n in names)}.
-- Return an int (the function's return value) or None (for a function that returns no value).
-- Allowed: assignments, arithmetic, comparisons, if/else, return. Not allowed: imports, function calls, loops, classes, other attributes, names starting with "_".
+- Define exactly these functions with these signatures: {'; '.join(SIGNATURES[n] for n in names)}.
+- `w2m_teb()` returns the calling thread's environment block. `w2m_teb()->last_error_value` (u32) is the calling thread's last-error code; you may read and assign it. `w2m_teb()->client_thread` is the calling thread's id (read only).
+- `u32` is a 32-bit unsigned integer. Do not include headers; they are provided.
+- Allowed: local variables, arithmetic other than division and remainder, comparisons, if/else, return. Not allowed: preprocessor lines, loops, goto, pointers, arrays, string literals, assembly, calls to any function other than w2m_teb().
 
-Reply with one ```python code block and nothing else."""
+Reply with one ```c code block and nothing else."""
     if feedback:
         text += f"\n\nA previous candidate was rejected. Fix it. The verifier reported:\n{feedback}"
     return text

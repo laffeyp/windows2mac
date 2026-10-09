@@ -5,7 +5,9 @@ One substrate run of the v0.2 §11.2-11.4 loop for one contract and one probe:
   harness             SESSION_INIT ... SESSION_COMPLETED
   candidate_generator CANDIDATE_GENERATED     (a Responder writes the contract's functions)
   destination_runner  EXECUTION_STARTED, EXECUTION_COMPLETED | EXECUTION_FAILED
-                      (the probe runs N times with the candidate installed in kernel32)
+                      (the probe runs N times with the candidate: C compiled into the guest
+                      runtime image in the VM, or a host build of it behind kernel32.py in the
+                      model; Sprint 035)
   trace_ingester      TRACE_INGESTED
   comparator          COMPARISON_COMPLETED    (src/w2m/compare.py, unchanged)
   acceptance_guard    CANDIDATE_ACCEPTED | CANDIDATE_REJECTED, ACCEPTANCE_CONDITION_ALTERED
@@ -149,9 +151,12 @@ def execute(s: Session, source: str, timeout_seconds: int) -> Result:
     cand = admit(source, NAMES)                       # raises CandidateError before anything runs
     ld = load(s.probe)
     if s.backend == "managed_vm":
+        from w2m.guest_runtime import BuildError
         from w2m.vm_backend import VM
-        vm = VM(ld)
-        install(vm.kernel, cand)
+        try:
+            vm = VM(ld, last_error_source=cand.source)
+        except BuildError as e:
+            raise CandidateError(f"does not build into the guest runtime: {e}") from None
         try:
             return vm.run(timeout_ms=timeout_seconds * 1000)
         finally:
@@ -188,7 +193,7 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
         yield usage
         source = extract_code(reply)
         digest = hashlib.sha256(source.encode()).hexdigest()
-        (store / "candidates" / f"{digest}.py").write_text(source)
+        (store / "candidates" / f"{digest}.c").write_text(source)
         cand_id = f"cand-{digest[:16]}-a{s.attempt}"
         s.sources[cand_id] = source
         s.results[cand_id] = []

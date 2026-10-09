@@ -180,6 +180,13 @@ def ldp(rt: int, rt2: int, rn: int, offset: int = 0) -> int:
     return 0xA9400000 | ((offset // 8) & 0x7F) << 15 | rt2 << 10 | rn << 5 | rt
 
 
+def stp(rt: int, rt2: int, rn: int, offset: int = 0) -> int:
+    """STP Xt, Xt2, [Xn|SP, #offset] (signed offset form)."""
+    _r(rt, rt2, rn)
+    assert offset % 8 == 0 and -64 <= offset // 8 < 64
+    return 0xA9000000 | ((offset // 8) & 0x7F) << 15 | rt2 << 10 | rn << 5 | rt
+
+
 def b(offset: int) -> int:
     assert offset % 4 == 0 and -(1 << 27) <= offset < 1 << 27
     return 0x14000000 | (offset >> 2) & 0x3FFFFFF
@@ -209,6 +216,11 @@ def tbz(rt: int, bit: int, offset: int) -> int:
 def br(rn: int) -> int:
     _r(rn)
     return 0xD61F0000 | rn << 5
+
+
+def blr(rn: int) -> int:
+    _r(rn)
+    return 0xD63F0000 | rn << 5
 
 
 def hvc(imm16: int) -> int:
