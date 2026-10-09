@@ -1,0 +1,5 @@
+{
+ "cflags": "-O1 -Wall -Werror",
+ "libs": "-lkernel32",
+ "mode": "stdout"
+}
