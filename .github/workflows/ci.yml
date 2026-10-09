@@ -53,3 +53,5 @@ jobs:
         env:
           W2M_REQUIRE_REFERENCES: "1"
         run: uv run pytest -q -rs
+      - name: record replay
+        run: uv run python scripts/check_replay.py
