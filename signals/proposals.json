@@ -220,6 +220,40 @@
     "into": "0.5",
     "grounds": "project — v0.2 §3 (a schedule must be witnessed, not assumed), §11.1 (observed evidence); SDD — PRINCIPLES.md proposal taxonomy (new tag bumps the minor version); practice — Microsoft Learn NtQuerySystemInformation, .NET ThreadState and ThreadWaitReason (retrieved 2026-10-08)"
    }
+  },
+  {
+   "id": "P15",
+   "kind": "TAG_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "SERVICE_UNIMPLEMENTED (execution_id, service, guest_address, instructions_executed)"
+   ],
+   "source": "roadmap docs/plan.md Sprint 038; review docs/review-2026-10-09-progress.md §6.3 (the frontier as signals)",
+   "rationale": "The frontier stops when the game calls a Windows service w2m lacks. EXECUTION_FAILED means the harness obtained no execution; EXECUTION_COMPLETED needs a trace and an exit status; BRIDGE_CALL_UNMAPPED is for Steam interface methods (v0.2 4.2). The roadmap and the review had planned to misuse the last; no tag fit.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-09",
+    "by": "agent-resolved",
+    "into": "0.6",
+    "grounds": "project — v0.2 §7 (the contract inventory follows the application's required behavior), §11.4; SDD — PRINCIPLES.md proposal taxonomy (a new tag bumps the minor version)"
+   }
+  },
+  {
+   "id": "P16",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "acquisition_tool += steamcmd"
+   ],
+   "source": "Decision 2026-10-09 (tools adopted in Sprint 033: Valve's SteamCMD, DepotDownloader not adopted)",
+   "rationale": "Both depots were fetched with SteamCMD; the enum named only depotdownloader and local_path, so DISTRIBUTION_ACQUIRED could not state the tool used.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-09",
+    "by": "agent-resolved",
+    "into": "0.6",
+    "grounds": "project — v0.2 §4.1; SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version)"
+   }
   }
  ]
 }

@@ -30,6 +30,8 @@
 #include <windows.h>
 #include <intrin.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 typedef void *(*profiler_create_fn)(void *prof);
 typedef void (*jit_done_cb)(void *prof, void *method, void *jinfo);
@@ -129,6 +131,135 @@ static void put_cpuid(void) {
     }
 }
 
+
+/* ---- import-call log (Sprint 038) -----------------------------------------------------------
+ * Before Unity starts, every IAT slot of UnityPlayer.dll and mono-2.0-bdwgc.dll is pointed at a
+ * thunk `lock inc qword [counter]; jmp qword [original]` (F0 48 FF 05 rel32; FF 25 rel32), so each
+ * call to a Windows function through those images is counted. Their GetProcAddress slots go to
+ * log_get_proc_address instead, which records each name resolved at run time (d3d11, dxgi, XInput
+ * are reached that way, not through imports). A monitor thread rewrites <capture>.imports.tsv,
+ * <capture>.dynamic.tsv and <capture>.threads.txt every 5 s (peak and distinct thread counts from
+ * Toolhelp snapshots each second), so the data survives the process being stopped.
+ * Images loaded later by Unity (plugins, steam_api64) are not hooked; the log says so. */
+#include <tlhelp32.h>
+
+#define MAX_HOOKS 4096
+typedef struct { volatile LONG64 count; void *original; char name[96]; } hook_t;
+static hook_t *hooks;
+static unsigned char *thunks;
+static int nhooks;
+static CRITICAL_SECTION dyn_lock;
+static char dynamic_names[2048][96];
+static int ndynamic;
+static FARPROC (WINAPI *real_get_proc_address)(HMODULE, LPCSTR);
+static WCHAR log_base[MAX_PATH];
+static int peak_threads;
+static DWORD seen_tids[16384];
+static int nseen;
+
+static FARPROC WINAPI log_get_proc_address(HMODULE m, LPCSTR name) {
+    if ((ULONG_PTR)name > 0xFFFF) {
+        EnterCriticalSection(&dyn_lock);
+        int known = 0;
+        for (int i = 0; i < ndynamic && !known; i++) known = !lstrcmpA(dynamic_names[i], name);
+        if (!known && ndynamic < 2048) lstrcpynA(dynamic_names[ndynamic++], name, 96);
+        LeaveCriticalSection(&dyn_lock);
+    }
+    return real_get_proc_address(m, name);
+}
+
+static void hook_image(HMODULE image, const char *label) {
+    unsigned char *base = (unsigned char *)image;
+    IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_DATA_DIRECTORY dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!dir.VirtualAddress) return;
+    for (IMAGE_IMPORT_DESCRIPTOR *d = (IMAGE_IMPORT_DESCRIPTOR *)(base + dir.VirtualAddress); d->Name; d++) {
+        const char *dll = (const char *)(base + d->Name);
+        IMAGE_THUNK_DATA64 *names = (IMAGE_THUNK_DATA64 *)(base + (d->OriginalFirstThunk ? d->OriginalFirstThunk : d->FirstThunk));
+        IMAGE_THUNK_DATA64 *slots = (IMAGE_THUNK_DATA64 *)(base + d->FirstThunk);
+        for (; names->u1.AddressOfData && nhooks < MAX_HOOKS; names++, slots++) {
+            char fn[64];
+            if (IMAGE_SNAP_BY_ORDINAL64(names->u1.Ordinal)) snprintf(fn, sizeof fn, "#%u", (unsigned)IMAGE_ORDINAL64(names->u1.Ordinal));
+            else lstrcpynA(fn, ((IMAGE_IMPORT_BY_NAME *)(base + names->u1.AddressOfData))->Name, 64);
+            DWORD old;
+            VirtualProtect(&slots->u1.Function, 8, PAGE_READWRITE, &old);
+            if (!lstrcmpA(fn, "GetProcAddress")) {
+                real_get_proc_address = (FARPROC (WINAPI *)(HMODULE, LPCSTR))(ULONG_PTR)slots->u1.Function;
+                slots->u1.Function = (ULONGLONG)(ULONG_PTR)log_get_proc_address;
+            }
+            hook_t *h = &hooks[nhooks];
+            snprintf(h->name, sizeof h->name, "%s\t%s\t%s", label, dll, fn);
+            h->original = (void *)(ULONG_PTR)slots->u1.Function;
+            unsigned char *t = thunks + 16 * nhooks;
+            LONG cdisp = (LONG)((unsigned char *)&h->count - (t + 8));
+            LONG odisp = (LONG)((unsigned char *)&h->original - (t + 14));
+            t[0] = 0xF0; t[1] = 0x48; t[2] = 0xFF; t[3] = 0x05; memcpy(t + 4, &cdisp, 4);
+            t[8] = 0xFF; t[9] = 0x25; memcpy(t + 10, &odisp, 4);
+            slots->u1.Function = (ULONGLONG)(ULONG_PTR)t;
+            VirtualProtect(&slots->u1.Function, 8, old, &old);
+            nhooks++;
+        }
+    }
+}
+
+static void write_logs(void) {
+    WCHAR path[MAX_PATH];
+    char line[256];
+    DWORD w;
+    lstrcpyW(path, log_base); lstrcatW(path, L".imports.tsv");
+    HANDLE f = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        for (int i = 0; i < nhooks; i++) {
+            int n = snprintf(line, sizeof line, "%s\t%lld\n", hooks[i].name, (long long)hooks[i].count);
+            WriteFile(f, line, n, &w, NULL);
+        }
+        CloseHandle(f);
+    }
+    lstrcpyW(path, log_base); lstrcatW(path, L".dynamic.tsv");
+    f = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        EnterCriticalSection(&dyn_lock);
+        for (int i = 0; i < ndynamic; i++) {
+            int n = snprintf(line, sizeof line, "%s\n", dynamic_names[i]);
+            WriteFile(f, line, n, &w, NULL);
+        }
+        LeaveCriticalSection(&dyn_lock);
+        CloseHandle(f);
+    }
+    lstrcpyW(path, log_base); lstrcatW(path, L".threads.txt");
+    f = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        int n = snprintf(line, sizeof line, "peak %d\ndistinct %d\nhooked_imports %d\n", peak_threads, nseen, nhooks);
+        WriteFile(f, line, n, &w, NULL);
+        CloseHandle(f);
+    }
+}
+
+static DWORD WINAPI monitor(LPVOID p) {
+    (void)p;
+    DWORD pid = GetCurrentProcessId();
+    for (int tick = 0;; tick++) {
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if (snap != INVALID_HANDLE_VALUE) {
+            THREADENTRY32 te;
+            te.dwSize = sizeof te;
+            int now = 0;
+            for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+                if (te.th32OwnerProcessID != pid) continue;
+                now++;
+                int known = 0;
+                for (int i = 0; i < nseen && !known; i++) known = seen_tids[i] == te.th32ThreadID;
+                if (!known && nseen < 16384) seen_tids[nseen++] = te.th32ThreadID;
+            }
+            CloseHandle(snap);
+            if (now > peak_threads) peak_threads = now;
+        }
+        if (tick % 5 == 4) write_logs();
+        Sleep(1000);
+    }
+    return 0;
+}
+
 static void fail(const char *what) {
     HANDLE e = GetStdHandle(STD_ERROR_HANDLE);
     DWORD w;
@@ -175,6 +306,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, LPWSTR cmd, int show) {
     lstrcatW(path, L"UnityPlayer.dll");
     HMODULE unity = LoadLibraryW(path);
     if (!unity) fail("jit_capture: cannot load UnityPlayer.dll\n");
+    InitializeCriticalSection(&dyn_lock);
+    /* one allocation: each thunk reaches its counter and original through a rip-relative rel32 */
+    thunks = VirtualAlloc(NULL, 16 * MAX_HOOKS + sizeof(hook_t) * MAX_HOOKS, MEM_COMMIT | MEM_RESERVE,
+                          PAGE_EXECUTE_READWRITE);
+    if (!thunks) fail("jit_capture: cannot allocate hooks\n");
+    hooks = (hook_t *)(thunks + 16 * MAX_HOOKS);
+    lstrcpyW(log_base, cap);
+    hook_image(unity, "UnityPlayer.dll");
+    hook_image(mono, "mono-2.0-bdwgc.dll");
+    CreateThread(NULL, 0, monitor, NULL, 0, NULL);
     unity_main_fn unity_main = (unity_main_fn)GetProcAddress(unity, "UnityMain");
     if (!unity_main) fail("jit_capture: UnityMain missing\n");
     return unity_main(inst, prev, cmd, show);

@@ -26,7 +26,7 @@ import gen_last_error_values  # noqa: E402
 
 CONTRACTS = ROOT / "contracts" / "windows.thread.last_error.set_get"
 PROBE_SHA256 = "d210df33adce2f0807fefba2e572cc48bddf9649b8b2474658c92fb46f7b1210"
-OPENED = (b'{"tag":"GUEST_TRACE_OPENED","execution_id":"t","vocab_version":"0.5","profile_id":"t",'
+OPENED = (b'{"tag":"GUEST_TRACE_OPENED","execution_id":"t","vocab_version":"0.6","profile_id":"t",'
           b'"trace_format_version":"0.1"}')
 
 

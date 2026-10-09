@@ -451,6 +451,7 @@ class VM:
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
+        self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
         placed: list[tuple[Region, int]] = []
@@ -702,7 +703,10 @@ class VM:
                         break
                     pc = e.pc
                 elif imm == 9:
-                    raise Unimplemented(f"import {self.ld.thunks.get(x[17], hex(x[17]))}")
+                    name = self.ld.thunks.get(x[17], hex(x[17]))
+                    # the call's return address is at the guest RSP (the bridge has not popped it)
+                    self.unimplemented = (name, int.from_bytes(self.mem.read(x[4], 8), "little"))
+                    raise Unimplemented(f"import {name}")
                 elif imm == 2:
                     ec = e.esr >> 26 & 0x3F
                     if ec == 0x25:

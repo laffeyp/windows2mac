@@ -1,7 +1,9 @@
 # Game runner (Sprint 033). Unpacks a game from its private release, checks every file against
 # games/<game>/files.json, starts it through tools/jit_capture (Mono JIT-done hook) in Unity batch
 # mode, and uploads the capture and the Unity log for the decoder differential on the Mac.
-# Dispatch: gh workflow run windows-game.yml -f game=hail-to-the-rainbow -f exe="Hail to the Rainbow" [-f seconds=N]
+# Dispatch: gh workflow run windows-game.yml -f game=hail-to-the-rainbow -f exe="Hail to the Rainbow" [-f seconds=N] [-f mode=batch|play]
+# The launcher also writes <capture>.imports.tsv (calls per imported function of UnityPlayer and Mono),
+# .dynamic.tsv (names resolved with GetProcAddress) and .threads.txt (peak and distinct threads) (Sprint 038).
 name: windows-game
 
 on:
@@ -17,6 +19,10 @@ on:
         description: how long the game runs before it is stopped
         required: false
         default: "180"
+      mode:
+        description: "batch (-batchmode -nographics) or play (a window, the software renderer, keys sent every 3 s)"
+        required: false
+        default: "batch"
 
 permissions:
   contents: read
@@ -93,9 +99,24 @@ jobs:
           (Get-CimInstance Win32_Processor | Select-Object -First 1).Name | Out-File -Encoding ascii -NoNewline out/cpu.txt
           $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          if ("${{ inputs.mode }}" -eq "play") {
+            # a window on the runner's display; Unity picks its device (no GPU: Microsoft's software renderer
+            # if Unity accepts it); Enter and Space every 3 s to pass the intro and the main menu
+            $gameArgs = @("-screen-fullscreen", "0", "-screen-width", "1280", "-screen-height", "720", "-logFile", "`"$PWD\out\unity.log`"")
+          } else {
+            $gameArgs = @("-batchmode", "-nographics", "-logFile", "`"$PWD\out\unity.log`"")
+          }
           $p = Start-Process -FilePath "$env:GAME_DIR\${{ inputs.exe }}.exe" -WorkingDirectory "$env:GAME_DIR" `
-               -ArgumentList "-batchmode", "-nographics", "-logFile", "`"$PWD\out\unity.log`"" -PassThru
-          $done = $p.WaitForExit([int]"${{ inputs.seconds }}" * 1000)
+               -ArgumentList $gameArgs -PassThru
+          $deadline = (Get-Date).AddSeconds([int]"${{ inputs.seconds }}")
+          $shell = New-Object -ComObject WScript.Shell
+          $done = $false
+          while ((Get-Date) -lt $deadline -and -not $done) {
+            $done = $p.WaitForExit(3000)
+            if (-not $done -and "${{ inputs.mode }}" -eq "play") {
+              [void]$shell.AppActivate($p.Id); $shell.SendKeys("{ENTER}"); $shell.SendKeys(" ")
+            }
+          }
           $sw.Stop()
           if (-not $done) { Stop-Process -Id $p.Id -Force; $code = $null } else { $code = $p.ExitCode }
           $exit = if ($null -eq $code) { "null" } else { "$code" }

@@ -34,7 +34,7 @@ def _skeleton() -> bytes:
 def _verdict(stdout: bytes) -> str:
     lines = stdout.splitlines()
     tid = json.loads(lines[0])["thread_id"]
-    opened = b'{"tag":"GUEST_TRACE_OPENED","execution_id":"t","vocab_version":"0.5","profile_id":"t","trace_format_version":"0.1"}'
+    opened = b'{"tag":"GUEST_TRACE_OPENED","execution_id":"t","vocab_version":"0.6","profile_id":"t","trace_format_version":"0.1"}'
     raw = b"\n".join([opened, *lines]) + b"\n"
     return compare_allowed_outcome_set(load_contract(CONTRACT), raw, {"main": tid}, "c", "r", "t").verdict
 
