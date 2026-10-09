@@ -1,33 +1,78 @@
-# w2m plan — the current order of work
+# w2m roadmap
 
-This file is the plan's one home (Decision 2026-10-09, review 2026-10-09 progress K3). It is edited in place; git holds its history; `BLACKBOARD.md` Decisions record why it changed. Each sprint below names what it delivers and how its result is judged.
+This file is the plan's one home (Decision 2026-10-09; review `docs/review-2026-10-09-progress.md`, K3). It is edited in place, with history in git; `BLACKBOARD.md` Decisions record why it changed. Every sprint states what it delivers and how it is judged: a bound, an expected value, or a planted fault that must be caught (WORKING_AGREEMENT, observation contracts).
 
-Goal of the current phase: Hail to the Rainbow (Steam app 1699230, build 24247624, x86-64, Unity 2019.4 with Mono) runs on this Mac. Milestones: **A** batch-mode parity (the game under w2m writes the runner's `unity.log`), **B** first frame, **C** playable (review 2026-10-09 progress §5.1).
+**Goal of this roadmap:** Hail to the Rainbow (Steam app 1699230, build 24247624; x86-64; Unity 2019.4 with Mono) is playable on this Mac. Milestones:
 
-## Done (2026-10-09)
+- **A — batch-mode parity:** the game runs under w2m with `-batchmode -nographics` and writes the same `unity.log` the Windows runner wrote (168 lines, Sprint 033).
+- **B — first frame:** the game draws its first frame through Metal.
+- **C — playable:** input, audio, video and Steam work, and frames take under 16.7 ms.
 
-- Decoder exit criteria (a)-(d) met; (d) on the game: 718 of 718 rows XED-confirmed (Sprint 036).
-- Runtime architecture decided and on the signal plane: managed VM; Windows-visible state in guest memory; services as guest C (Sprints 034-035; `store/runs/backend-selection-2026-10-09`).
-- Lifter judged by real x86 CPUs: 20,116 cases, all agreeing on Intel (Sprint 037).
-- Threading M:N on at most 64 vCPUs; reconstruction runs forward; AF and DF in the state; guest CPUID x86-64-v2 Intel (Decisions 2026-10-09).
+Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 
-## Next, in order
+## Where the review's findings land
+
+| Finding | What it asks | Sprint |
+|---|---|---|
+| N1 vCPU cap of 64 | M:N scheduling; measure the game's threads | Decision done; measured 038; skeleton 040; full 047 |
+| N2 reconstruction rule | commit after the last fault point; run forward on asynchronous stops | Spec done (guest_state 0.2.0); oracle fault cases 039; built 040 |
+| N3 AF, DF | in the state and the oracle | Spec done; oracle 039; built 040 |
+| N4 SSE vs AArch64 | oracle with XMM and FP boundaries; FPCR.AH probe | 039; SSE rules through the pool 041 |
+| N5 reference CPU and guest CPUID | a CPUID decision; the game's CPUID reads; Intel references | Decision done; reads measured 038; profile built 040; Intel-run rule 039 |
+| N6 transport round trip | measure; design graphics around a ring | Measured (≈27 µs); shared-memory transport 044; command ring in phase 6 |
+| N7, N8, K2, K3, K4, S5 | record fixes, affirmation, plan home, outcome rule, replay gate | Done |
+| N9 startup-only capture | play-time capture | 038 |
+| K1, M3 tags without emitters | decisions on the signal plane | Backend done; acquisition, contract and probe tags 038; translation invalidation 049; the rest by first use |
+| S1, S3 records without causality | real topologies; discrepancies resolved across runs | 041 (instruction items), 043 (existing differentials converted) |
+| S2 reuse substrate's correction flows | `best_of_n_correction`, `coding_flow` where the shape fits | 041, 042 |
+| S4 duplicated record code | a `w2m.record` helper | 038 |
+| §6.3 breadth as many runs | one run per item; a process pool; the frontier as a topology | 038 (frontier), 041 (instruction pool), 045 (function pool) |
+| §5.4 the generation bet | CreateFileW against contracts | 042, before any pool depends on it |
+| Recommendation 9 | track comparison subjects | standing, at each phase boundary |
+
+## Phase 3 (closing): measure the game and build the floor
 
 | Sprint | Delivers | Judged by |
 |---|---|---|
-| 038 | The frontier as a substrate topology: the game runs in w2m until it stops; each stop is `EXECUTION_FAILED` or `BRIDGE_CALL_UNMAPPED`; the topology starts an item run for the cause and resumes when its artifact is accepted. Emitters: `DISTRIBUTION_RESOLVED`/`ACQUIRED`/`ACQUISITION_FAILED` (SteamCMD driver, both depots), `CONTRACT_PROPOSED`/`ACCEPTED`/`REVISED`, `EVIDENCE_RECORDED`, `PROBE_AUTHORED`. On the runner: the game's calls to Windows functions with counts, its peak and total thread counts, the CPUID leaves its code reads; a play-time capture past the main menu. A `w2m.record` helper replaces the hand-written record functions. | The stop list reproduces from the record; peak threads measured; every new emitter fires on a real run. |
-| 039 | The semantics oracle extended: XMM and MXCSR state; NaN, denormal, overflow and float-to-integer boundary cases; AF, DF; fault cases that test the commit-after-last-fault rule. A VM probe for FEAT_AFP in the guest and FPCR.AH. | Planted faults: a lifted MINPS returning the NaN operand, a CVTTSS2SI that saturates, an AF left undefined, and a store committed before a fault are each reported by the CPU alone. |
-| 040 | Guest state built: the state block, the reconstruction table and CONTEXT production in the VM back end; lazy AF, DF; the guest CPUID profile; the M:N scheduler skeleton (one vCPU, many guest threads). | Sprint 034's runner records (fault CONTEXT, Get/SetThreadContext) reproduced inside w2m; a suspend inside a multi-effect sequence resumes without re-executing a store. |
-| 041 | The instruction-class item topology: lifter rules split one per class; one substrate run per class, the oracle as its comparator; a process pool over the 323 classes UnityPlayer reaches, ordered by the frontier. | Each accepted rule carries an oracle verdict on its record; discrepancies reported, routed and resolved across runs. |
-| 042 | The generation bet measured on a stateful service: CreateFileW (sharing modes, dispositions, errors) generated against a contract and judged against runner traces. | Its accepted body passes the contract's cases; the attempt count and the model's usage are on the record. If the loop cannot produce it, the plan's breadth model changes before the pool depends on it. |
-| 043 | The Windows-function item pool: one run per import the frontier reaches, kernel32 first; several images (relocations, TLS, DllMain); VEH and SEH. | Milestone A's ordered sub-goals: CRT start-up, UnityMain entered, Mono initialized. |
-| later | Threads with waits and suspension on the M:N scheduler; the Mono JIT region with write detection and retranslation (`TRANSLATION_INVALIDATED`); file I/O over the 15.6 GB of assets. | Milestone A. |
-| phase | Graphics: a window over AppKit, DXGI to CAMetalLayer, D3D11, DXBC to Metal (comparison subjects DXMT and D3DMetal). Commands batch through a shared ring: one host round trip costs about 27 µs (measured 2026-10-09), about 600 per frame. | Milestone B. |
-| phase | Input, audio, Steamworks, video; frame time (ahead-of-time translation, flags in NZCV or lazy, register allocation across blocks). | Milestone C. |
-| phase | 32-bit: BioShock 2 Remastered (depot on disk). | Its own milestones, after B on the x86-64 profile. |
+| **038 — the frontier and the game's demands** | The frontier as a substrate topology: the game runs in w2m until it stops; each stop becomes `EXECUTION_FAILED` or `BRIDGE_CALL_UNMAPPED`; the run records what it needs next. On the runner: every Windows function the game calls, with counts and threads; peak and total thread counts; the CPUID leaves its code reads; a play-time capture past the main menu. Emitters: `DISTRIBUTION_RESOLVED`, `DISTRIBUTION_ACQUIRED`, `ACQUISITION_FAILED` (a SteamCMD driver, both depots), `CONTRACT_PROPOSED`, `CONTRACT_ACCEPTED`, `CONTRACT_REVISED`, `EVIDENCE_RECORDED`, `PROBE_AUTHORED`. The `w2m.record` helper. | The frontier's first stop is `GetSystemTimeAsFileTime` after 13 instructions, as measured by hand; the runner call log names at least the 7 functions w2m already serves; peak thread count is a number on the record; every new emitter fires on a real run and the records replay. |
+| **039 — the floating-point and fault oracle** | The semantics oracle compares XMM and MXCSR, AF and DF, and covers NaN, denormal, overflow and float-to-integer boundaries and fault cases (a store before a fault). A VM probe for FEAT_AFP in the guest and FPCR.AH. Verdicts that must come from Intel retry until an Intel runner answers. | Planted faults, each caught by the CPU alone: MINPS returning the NaN operand; CVTTSS2SI saturating; AF left undefined; a store committed before a fault. |
+| **040 — guest state built** | In the VM back end: the state block, the reconstruction table, CONTEXT built at any boundary (forward rule), lazy AF and DF, the guest CPUID profile (Intel x86-64-v2), and an M:N scheduler skeleton (one vCPU, several guest threads). | Sprint 034's runner records reproduced inside w2m: a first vectored handler's CONTEXT and write-back; GetThreadContext and SetThreadContext on a suspended thread; a suspend inside a PUSH or `ADD [m], r` resumes without repeating a store. |
+
+## Phase 4: the breadth engine
+
+| Sprint | Delivers | Judged by |
+|---|---|---|
+| **041 — instruction classes as item runs** | Lifter rules split one per class; a substrate topology per class (draft a rule, build, run the oracle's cases, accept or report-route-repair), reusing substrate's correction flow where its shape fits; a process pool over the 323 classes UnityPlayer reaches, ordered by the frontier; SSE rules on the FP oracle. | Every accepted rule has an oracle verdict on its own record; discrepancies are reported, routed and resolved across runs; the pool clears a first block of classes chosen by frequency (MOVAPS, MOVSS, MOVUPS, MULSS, the LOCK atomics, IMUL, CMOVcc, shifts). |
+| **042 — the generation bet** | CreateFileW (sharing modes, dispositions, errors) generated against a contract and judged against runner traces. | The accepted body passes the contract's cases; attempts and model usage are on the record. If the loop cannot produce it, this sprint records how the breadth model changes before 045. |
+| **043 — causality in every record** | The existing differentials (decoder, game code, guest state, semantics, capability, ordering) become real topologies: the comparison causes the discrepancy, the route causes the repair run, a later acceptance resolves it. | `explain_producer` and `trace_ancestry` on each record show the chain; replay stays green. |
+| **044 — the transport** | The text pipe between Python and the VM monitor replaced by shared-memory rings; host requests batched. | The round trip measured before and after (27 µs today); lockstep and the oracle unchanged. |
+
+## Phase 5: milestone A, batch-mode parity
+
+| Sprint | Delivers | Judged by |
+|---|---|---|
+| **045 — the Windows-function pool** | One item run per import the frontier reaches, kernel32 first, each a guest C unit judged against runner traces; the frontier resumes on acceptances. | The frontier passes C runtime start-up and enters `UnityMain`. |
+| **046 — several images** | Loading `UnityPlayer.dll`, `mono-2.0-bdwgc.dll` and the rest: relocations, imports between images, TLS callbacks, DllMain, the PEB loader list. | Each native file's DllMain runs to its return; the loader list matches the runner's. |
+| **047 — exceptions and threads** | VEH, SEH unwinding, C++ exceptions; the M:N scheduler with waits, events and suspension. | Sprint 028's event contract and Sprint 034's suspend records conform under w2m. |
+| **048 — memory and files** | VirtualAlloc/Protect at 4 KB, file mapping, file I/O over the 15.6 GB of assets. | The game reads its first asset bundle; page-protection faults match the runner. |
+| **049 — the Mono JIT region** | Write detection on RWX regions, invalidation and retranslation, `TRANSLATION_INVALIDATED`. | Mono's first managed method runs; a rewritten call site is retranslated, never stale. |
+| **050 — milestone A** | The game under w2m in batch mode. | Its `unity.log` matches the runner's 168 lines. |
+
+## Phase 6: milestone B, first frame
+
+A window and message loop over AppKit; DXGI to CAMetalLayer; the D3D11 device and context; DXBC to Metal (comparison subjects DXMT and D3DMetal); commands through a shared ring (one round trip ≈27 µs, about 600 per frame). Sprint cards are written when phase 5 closes, from the frontier's record.
+
+## Phase 7: milestone C, playable
+
+Input (XInput, raw input), audio (CoreAudio), Steamworks (a stub first: the game continues after `SteamAPI_Init` fails), Media Foundation video; frame time under 16.7 ms (ahead-of-time translation, flags in NZCV or lazy, register allocation across blocks).
+
+## Phase 8 and after
+
+- 32-bit: BioShock 2 Remastered (depot on disk): a second translator mode, the TEB through FS, x87, stdcall and thiscall, 32-bit entry points for each service.
+- Further profiles: The Blood of Dawnwalker (D3D12/DXIL) after the user's purchase; then by engine and API.
 
 ## Standing items
 
-- Comparison subjects, checked at each phase boundary and recorded: Wine and CrossOver (D3DMetal, DXMT, CrossOver's macOS FEX port), Rosetta's post-macOS-27 games subset, Prism, box64, FEX.
-- The Blood of Dawnwalker (D3D12 profile) waits on the user's purchase.
+- Comparison subjects, recorded at each phase boundary: Wine and CrossOver (D3DMetal, DXMT, CrossOver's macOS FEX port), Rosetta's post-macOS-27 games subset, Prism, box64, FEX.
 - Every probe run records its CPU; a verdict names the CPU it came from.
+- Gates on every commit include record replay.
