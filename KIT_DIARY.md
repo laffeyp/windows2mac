@@ -189,3 +189,11 @@
 
 **Kit change suggested:** the closed user-only list and the profile templates should carry "binary facts read from the artifact" as a required field, not a note.
 
+### 2026-10-09 — The first independent check found what two agreeing checks could not
+
+**What happened:** Sprint 037 ran 20,116 single instructions on the runner's CPU and compared them with the model. A 66-prefixed PUSH (`66 41 6a 48`) moved RSP by 8 in the model and by 2 on the CPU. The defect had been in `lift.py` since Sprint 029. Lockstep (VM against model, every instruction) and the state differential (16,400 random states) both passed it, because both sides executed `lift.py`'s operations. The same oracle's self-check found the lifter reading `gs:[0x1480]` as absolute address 0x1480, and three CPU models showed Intel and AMD disagreeing on `0F 0D` register forms.
+
+**Finding (#18):** a check is independent only if its reference shares no code and no source with what it judges. Two implementations derived from one specification agree on that specification's errors (Knight and Leveson 1986, cited by this project since 2026-10-08 and not acted on for nine sprints). The cheapest independent reference here was the real CPU on a free runner; it took one sprint.
+
+**Kit change suggested:** a technique entry for "external oracle": every verifier states what its reference is derived from, and a phase cannot close on verifiers that share a derivation.
+

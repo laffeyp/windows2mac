@@ -2,6 +2,14 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 027 (2026-10-08, closed)
+- **Scope:** records repair, CI with nothing skipped, property-based fuzzing; review §3, §5, §6.8.
+- **Rubber Duck Pass:**
+  - *Observation 1 (fuzzing found a defect at once):* one header-byte flip made an import DLL name non-ASCII and `pe.parse` raised `UnicodeDecodeError`, not `PeError`. Fixed in `_Reader.cstr`. The same property, pointed at the pre-023 decoder, found its `IndexError` within 5,000 examples, so the decoder property has power too. Disposition: resolved-here.
+  - *Observation 2 (bridge mappings were written after the code):* Hypervisor.framework, Capstone and XED entries now exist; the agreement says they were added late. Disposition: recorded.
+  - *Observation 3 (tail roll):* entries for Sprints 000-017 moved verbatim to `docs/sprint-tail-archive.md`; nothing deleted. Disposition: resolved-here.
+- **Closed:** clean (CI run 37851288883: 150 passed, 0 skipped).
+
 ### Sprint 026 (2026-10-08, closed)
 - **Scope:** review §4.9 code defects: delay-load, relocation sites, non-returning calls, observed-evidence execution ids.
 - **Rubber Duck Pass:**

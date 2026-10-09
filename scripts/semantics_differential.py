@@ -325,9 +325,13 @@ def record(a: argparse.Namespace, profile: str, total: int, classes: Counter[str
                 mismatch_class="exact", minimized_program_sha256=f"sha256:{digest}",
                 initial_state_sha256=empty, first_divergence=f"{k}: {n} cases; {example[k]}",
                 reference_profile_id=profile, destination_profile_id=target, comparison_id=cmp_id))
+            fault = k.endswith("cpu fault")
             yield events.validate(events.DISCREPANCY_ROUTED(
-                discrepancy_id=did, repair_path="implementation_repair", reference_conforms=True,
-                grounds="the runner's CPU executed the instruction; lift.py's operations disagree"))
+                discrepancy_id=did, repair_path="contract_revision" if fault else "implementation_repair",
+                reference_conforms=True,
+                grounds=("the decode spec calls these bytes an instruction and this CPU faults on them: "
+                         "the contract lacks this CPU's rule" if fault else
+                         "the runner's CPU executed the instruction; lift.py's operations disagree")))
         yield events.validate(events.SESSION_COMPLETED(
             outcome="completed_with_discrepancies" if classes else "completed",
             discrepancy_count=len(classes), accepted_count=0, elapsed_seconds=round(elapsed, 3)))
