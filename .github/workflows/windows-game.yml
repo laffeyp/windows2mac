@@ -1,0 +1,98 @@
+# Game runner (Sprint 033). Unpacks a game from its private release, checks every file against
+# games/<game>/files.json, starts it through tools/jit_capture (Mono JIT-done hook) in Unity batch
+# mode, and uploads the capture and the Unity log for the decoder differential on the Mac.
+# Dispatch: gh workflow run windows-game.yml -f game=hail-to-the-rainbow -f exe="Hail to the Rainbow" [-f seconds=N]
+name: windows-game
+
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: directory under games/
+        required: true
+      exe:
+        description: game executable name without .exe (Unity finds <exe>_Data by it)
+        required: true
+      seconds:
+        description: how long the game runs before it is stopped
+        required: false
+        default: "180"
+
+permissions:
+  contents: read
+
+jobs:
+  game:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - name: disk
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
+      - name: fetch and unpack
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          meta="games/${{ inputs.game }}"
+          tag=$(python -c "import json;print(json.load(open('$meta/release.json'))['tag'])")
+          base=/c/w2m; [ -d /d ] && base=/d/w2m                      # the drive with room, when present
+          mkdir -p $base/parts $base/game
+          echo "GAME_DIR=$(cygpath -w $base/game)" >> "$GITHUB_ENV"
+          gh release download "$tag" --repo "${{ github.repository }}" --dir $base/parts
+          python - "$meta/release.json" "$base/parts" <<'EOF'
+          import hashlib, json, sys
+          for p in json.load(open(sys.argv[1]))["parts"]:
+              h = hashlib.sha256()
+              with open(sys.argv[2] + "/" + p["name"], "rb") as f:
+                  while c := f.read(1 << 22): h.update(c)
+              assert h.hexdigest() == p["sha256"], p["name"]
+          print("parts verified")
+          EOF
+          zstd --version || choco install zstandard -y --no-progress
+          for p in $base/parts/*; do cat "$p"; rm "$p"; done | zstd -d -c | tar -xf - -C $base/game
+          python - "$meta/files.json" "$base/game" <<'EOF'
+          import hashlib, json, os, sys
+          m = json.load(open(sys.argv[1])); n = 0
+          for f in m["listing"]:
+              h = hashlib.sha256()
+              with open(sys.argv[2] + "/" + f["path"], "rb") as fh:
+                  while c := fh.read(1 << 22): h.update(c)
+              assert h.hexdigest() == f["sha256"], f["path"]; n += 1
+          print(f"{n} files verified against files.json")
+          EOF
+      - name: build launcher
+        shell: pwsh
+        run: |
+          clang --version
+          clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c -Wl,/subsystem:windows
+          Move-Item "$env:GAME_DIR\${{ inputs.exe }}.exe" "$env:GAME_DIR\${{ inputs.exe }}.original.exe"
+          Copy-Item jit_capture.exe "$env:GAME_DIR\${{ inputs.exe }}.exe"
+      - name: run
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          $cv = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+          $v = [Environment]::OSVersion.Version
+          "gha-windows-2025-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
+          (Get-CimInstance Win32_Processor | Select-Object -First 1).Name | Out-File -Encoding ascii -NoNewline out/cpu.txt
+          $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          $p = Start-Process -FilePath "$env:GAME_DIR\${{ inputs.exe }}.exe" -WorkingDirectory "$env:GAME_DIR" `
+               -ArgumentList "-batchmode", "-nographics", "-logFile", "`"$PWD\out\unity.log`"" -PassThru
+          $done = $p.WaitForExit([int]"${{ inputs.seconds }}" * 1000)
+          $sw.Stop()
+          if (-not $done) { Stop-Process -Id $p.Id -Force; $code = $null } else { $code = $p.ExitCode }
+          $exit = if ($null -eq $code) { "null" } else { "$code" }
+          "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds)}" | Out-File -Encoding ascii -NoNewline out/exec.json
+          Get-Content out/exec.json
+          Get-ChildItem out | Format-Table Name, Length
+          Get-ChildItem out | Get-FileHash -Algorithm SHA256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: always()
+        with:
+          name: game-${{ inputs.game }}-${{ github.run_id }}
+          path: out/
+          if-no-files-found: error

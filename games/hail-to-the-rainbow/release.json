@@ -1,0 +1,30 @@
+{
+ "tag": "game-1699230-24247624",
+ "parts": [
+  {
+   "name": "hail-to-the-rainbow-24247624.tar.zst.part-aa",
+   "size": 1992294400,
+   "sha256": "2c5e53e78bce423b43567b458b6afae207f5180a1b6e897a80a8b2e62ff31ada"
+  },
+  {
+   "name": "hail-to-the-rainbow-24247624.tar.zst.part-ab",
+   "size": 1992294400,
+   "sha256": "409af587a9bbdbb9be08ad9e081cfc335679b02b77053ab0ba2fdcc9ee533a08"
+  },
+  {
+   "name": "hail-to-the-rainbow-24247624.tar.zst.part-ac",
+   "size": 1992294400,
+   "sha256": "3b137d2327085aad0f1bc9b0382ef6a3a1edd0b68f475d5f1c949c17cfc34bcd"
+  },
+  {
+   "name": "hail-to-the-rainbow-24247624.tar.zst.part-ad",
+   "size": 1992294400,
+   "sha256": "9020dacc7f653164cae59f146d9f4ee238f4adff01f991cc2b861c2ccd5db998"
+  },
+  {
+   "name": "hail-to-the-rainbow-24247624.tar.zst.part-ae",
+   "size": 129561288,
+   "sha256": "eb28987a6444fa5d5962506419a7058420aff2daf71aac749add2e61045dc1b7"
+  }
+ ]
+}
