@@ -126,6 +126,7 @@
 - **2026-10-08** — Sprint 030 (managed-VM back end) closed. `tools/vm_monitor/vm_monitor.c` (policy-free VM monitor: shared memory file, registers, run, exit lines, watchdog), `src/w2m/a64_encoder.py`, `src/w2m/vm_backend.py` (stage-1 tables mapping x86 addresses to themselves, per-block AArch64 compiler of lifted operations, in-guest dispatch table, host kernel32, lockstep and random-state differential against the model), `src/w2m/kernel32.py` (shared by both backends). Dual contract: signal pass (judge records: 3 windows_reference + 3 model + 3 managed_vm, conforms 9/9); artifact pass (gates.sh 0, 177 passed). Observation: the runner-built .exe runs inside the VM as compiled AArch64; 5,153 instructions, 217 distinct, exit 0; lockstep 0 differences over 5,159 comparisons; state differential 0 differences over 8,680 cases. Report: `signal-reports/sprint-030-report.md`.
 - **2026-10-08** — Sprint 031 (candidate loop) closed. `src/w2m/candidate.py` (admission check: two functions, fixed signature, no calls, imports, loops or other attributes, empty builtins; prompt; install into kernel32), `scripts/run_candidate_loop.py` (one substrate run with separate generator, runner, ingester, comparator, acceptance guard, reducer and harness operators), `tests/test_candidate_loop.py`. Dual contract: signal pass (two real records: accepted on attempt 1; planted wrong candidate rejected, reported, routed implementation_repair, repaired by the model, accepted, resolved); artifact pass (gates.sh 0, 183 passed). Observation: `qwen2.5-coder:7b` (local) wrote a conforming candidate in 1,044 ms and repaired the planted one from the structured divergence alone in 372 ms. Defect found: contract 0.1.0 accepts a constant. Report: `signal-reports/sprint-031-report.md`.
 - **2026-10-09** — Sprint 032 (last-error contract on run-time values) closed. `contracts/windows.thread.last_error.set_get/0.2.0.json` (relation `exact`), `probes/last_error_values/` (QueryPerformanceCounter chooses 3 values from `values.h`), `scripts/gen_last_error_values.py`, `ExactReturnOfArgument` in `src/w2m/contract.py`, `compare()` in `src/w2m/compare.py`, QueryPerformanceCounter and HandlerFailed in `src/w2m/kernel32.py`, declared parameter counts in `src/w2m/candidate.py`, `tests/test_last_error_values.py`. Fixed: lockstep skipped a check when a kernel32 call returned to an already-compiled block; the loop rejected a candidate once per failed run. Dual contract: signal pass (Windows, model, VM 3 of 3 conform each, relation exact; constant rejected; model repaired it); artifact pass (gates.sh 0, 202 passed). Report: `signal-reports/sprint-032-report.md`.
+- **2026-10-09** — Sprint 033 (Hail to the Rainbow's code on the Windows runner) closed. `scripts/pack_game.py`, `games/hail-to-the-rainbow/{files,release}.json`, private release `game-1699230-24247624` (5 parts, 8,098,738,888 bytes; plus the run 37982448071 capture), `tools/jit_capture/jit_capture.c` (format 2), `src/w2m/jit_capture.py`, `.github/workflows/windows-game.yml`, `scripts/game_code_differential.py`, `Decoded.row`, spec 0.6.3, `store/game-runs/37982448071/`, `store/runs/gamediff-1791576553479425000`. Dual contract: signal pass (COMPARISON_COMPLETED 1, DISCREPANCY_REPORTED 125, DISCREPANCY_ROUTED 125, contract_revision); artifact pass (gates.sh 0, 208 passed). Observation: pass — the game ran 190 s in batch mode on the runner; 564 Assembly-CSharp methods and 4,840 trampolines captured; 6,192,478 positions, 0 length or iclass differences from XED, 8,962 without a row in 125 kinds; criterion (d) 438 of 579 rows confirmed.
 
 ## Deferred
 
@@ -164,6 +165,16 @@
 ---
 
 ## Sprint tail
+
+### Sprint 033 (2026-10-09, closed)
+- **Scope:** Hail to the Rainbow's native and Mono-generated code, captured on the Windows runner and judged against XED.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the depot was packed into five zstd tar parts on a private release; the runner checked each part's hash, unpacked, checked all 297 files and that no other file was present, built the launcher, and started the game through UnityMain with Mono's jit_done and jit_code_buffer hooks; the hooks wrote each method's image, name and bytes, each trampoline's bytes, and the CPU's features; on the Mac the differential decoded every native position and every captured region, let XED decide where w2m's decoder refused, and wrote one substrate run.
+  - *Observation 1 (the fixture was wrong twice):* BioShock 2 Remastered was 32-bit, and the decoder's "0 gaps" came from a Python corpus. Disposition: recorded (KIT_DIARY #17); criterion (d) re-pointed at this game.
+  - *Observation 2 (the reader trusted its first record):* empty image names and data decoded as IN/OUT came from Mono reporting methods twice and trampolines carrying inline arguments. Disposition: resolved-here, with tests.
+  - *Observation 3 (captures depend on the CPU):* run 1 had an Intel Xeon 8370C, run 2 an AMD EPYC 7763; Mono selects instructions by feature. Disposition: CPUID is recorded in every capture.
+  - *Observation 4 (why rows are unconfirmed):* two missing validity rules (LEA mod=3; F2/F3 over 66). Disposition: deferred to Sprint 036 (decoder), first items.
+- **Closed:** clean.
 
 ### Sprint 032 (2026-10-09, closed)
 - **Scope:** last-error contract 0.2.0 judged on values chosen at run time.
@@ -245,12 +256,4 @@
   - *Observation 3 (my own slip):* Sprint 023's Built entry went in after Sprint 022, not at the section end, an hour after the correction Decision said entries append at the end. Moved to the end in this sprint. Disposition: resolved-here.
 - **Closed:** clean.
 
-### Sprint 023 (2026-10-08, closed)
-- **Scope:** decoder phase close; review items 4.3, 4.4, 4.2.
-- **Rubber Duck Pass:**
-  - *Observation 1 (a measuring tool that hid its own blind spot):* `encgen` never put a prefix before a VEX/XOP/EVEX escape, so 1,170 accepted-but-invalid cases were invisible to every differential since Sprint 020. The review found the class by reading SDM §2.3.2. Disposition: resolved-here; KIT_DIARY finding 10.
-  - *Observation 2 (a review claim holds only in part):* zero-fill between raw and virtual size is the loader's behavior and stays; bytes past the section end were invented and are gone. Disposition: resolved-here.
-  - *Observation 3 (hashing found a spec defect):* keying confirmations by row hash exposed three duplicate rows. Disposition: resolved-here; generator refuses duplicates.
-- **Closed:** clean.
-
-Older entries (Sprints 000-022): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-023): `docs/sprint-tail-archive.md`.

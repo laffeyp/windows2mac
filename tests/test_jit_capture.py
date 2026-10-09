@@ -59,8 +59,18 @@ def test_format_2_methods_buffers_and_cpuid() -> None:
     assert cap.format == 2 and cap.torn_tail_bytes == 0
     assert [(r.kind, r.image) for r in cap.records] == [
         ("method", "Assembly-CSharp"), ("specific_trampoline", ""), ("imt_trampoline", "")]
+    assert [r.code_ends_at_first_call for r in cap.records] == [False, True, False]
     f = cpu_features(cap)
     assert f["sse4_2"] and f["avx"] and f["avx2"] and not f["fma"] and not f["avx512f"]
+
+
+def test_jit_done_record_replaces_method_buffer_at_same_address() -> None:
+    data = (b"W2MJ" + struct.pack("<I", 2)
+            + _buffer_2(0x1000, 0, "A:f ()", BODY)                # METHOD buffer: no image
+            + _method_2(0x1000, "A:f ()", "Assembly-CSharp", BODY)
+            + _method_2(0x1000, "A:f ()", "Assembly-CSharp", BODY))
+    (r,) = parse(data).regions()
+    assert (r.kind, r.image) == ("method", "Assembly-CSharp")
 
 
 def test_unknown_format_and_kind_are_refused() -> None:

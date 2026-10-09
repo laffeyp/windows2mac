@@ -223,3 +223,11 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
   - *Observation 3 (a recorded number looked wrong):* this run reported 2,391,671 positions against the 2,444,456 recorded since Sprint 017. The recorded figure includes the 52,785 probe instructions; both are now reported separately. Disposition: resolved-here.
   - *Observation 4 (coverage):* 5.4% of corpus positions have no template (no-operand rows, SSE/AVX). Disposition: deferred — next decoder sprint, with the AVX-512 validity tail.
 - **Closed:** clean.
+
+### Sprint 023 (2026-10-08, closed)
+- **Scope:** decoder phase close; review items 4.3, 4.4, 4.2.
+- **Rubber Duck Pass:**
+  - *Observation 1 (a measuring tool that hid its own blind spot):* `encgen` never put a prefix before a VEX/XOP/EVEX escape, so 1,170 accepted-but-invalid cases were invisible to every differential since Sprint 020. The review found the class by reading SDM §2.3.2. Disposition: resolved-here; KIT_DIARY finding 10.
+  - *Observation 2 (a review claim holds only in part):* zero-fill between raw and virtual size is the loader's behavior and stays; bytes past the section end were invented and are gone. Disposition: resolved-here.
+  - *Observation 3 (hashing found a spec defect):* keying confirmations by row hash exposed three duplicate rows. Disposition: resolved-here; generator refuses duplicates.
+- **Closed:** clean.

@@ -5,8 +5,14 @@ assembly image, and code buffers (jit_code_buffer: trampolines and stubs). Forma
 the first runner capture, run 37979176570) holds methods only: u64 code_start, u32 code_size,
 u32 name_len, name, code bytes. All integers little-endian.
 
-Mono can report one code region more than once (jit_done fires again for some wrappers;
-mini.c), so `regions()` keeps the first record per code_start.
+Mono reports a compiled method twice: as a code buffer of type METHOD (no image name) and through
+jit_done (with its image); jit_done can also fire again for some wrappers (mini.c). `regions()`
+keeps one region per code_start, preferring the jit_done record.
+
+A specific trampoline is `call <generic trampoline>` followed by a length byte (4 or 8) and the
+argument: "The trampoline code will obtain the argument from the instruction stream"
+(Unity-Technologies/mono unity-2019.4-mbe, mono/mini/tramp-amd64.c,
+mono_arch_create_specific_trampoline). Its code ends at that call: `Region.code_ends_at_first_call`.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ from dataclasses import dataclass, field
 
 MAGIC = b"W2MJ"
 KIND_CPUID, KIND_METHOD, KIND_BUFFER = 0, 1, 2
-BUFFER_TYPES = ("method", "method_trampoline", "unbox_trampoline", "imt_trampoline",
+BUFFER_TYPES = ("method_buffer", "method_trampoline", "unbox_trampoline", "imt_trampoline",
                 "generics_trampoline", "specific_trampoline", "helper", "monitor",
                 "delegate_invoke", "exception_handling")      # MonoProfilerCodeBufferType, profiler.h
 
@@ -33,7 +39,11 @@ class Region:
     code: bytes
     name: str            # method full name, or the buffer's description
     image: str           # assembly image name for methods; "" when unknown
-    kind: str            # "method" or a BUFFER_TYPES entry
+    kind: str            # "method" (jit_done) or a BUFFER_TYPES entry
+
+    @property
+    def code_ends_at_first_call(self) -> bool:
+        return self.kind == "specific_trampoline"
 
 
 @dataclass
@@ -44,14 +54,14 @@ class Capture:
     torn_tail_bytes: int = 0         # bytes after the last whole record (process stopped mid-write)
 
     def regions(self) -> list[Region]:
-        """Records with duplicate code_start removed, first kept, in file order."""
-        seen: set[int] = set()
-        out = []
+        """One region per code_start, in first-seen order; a jit_done record replaces a
+        METHOD-typed code buffer at the same address (it carries the image name)."""
+        by_start: dict[int, Region] = {}
         for r in self.records:
-            if r.start not in seen:
-                seen.add(r.start)
-                out.append(r)
-        return out
+            old = by_start.get(r.start)
+            if old is None or (old.kind == "method_buffer" and r.kind == "method"):
+                by_start[r.start] = r
+        return list(by_start.values())
 
 
 def parse(data: bytes) -> Capture:

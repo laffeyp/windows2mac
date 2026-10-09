@@ -7,7 +7,8 @@ Positions:
             code_start removed), decoded linearly from its first byte. Where w2m's decoder refuses
             a position, XED decides: if XED decodes it, the position is a gap and the pass
             continues at XED's length; if XED refuses it too, the region's code has ended (data,
-            padding, or a table) and the pass stops there.
+            padding, or a table) and the pass stops there. A specific trampoline's code ends at
+            its first CALL; the argument bytes after it are data (jit_capture.Region).
 
 Outcome per position: agree (length and iclass equal XED's), length_differs, iclass_differs,
 ours_gap (XED decodes, w2m's decoder has no row), xed_refused (native only: Capstone decoded a
@@ -43,7 +44,7 @@ import msgspec
 from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
-from w2m.jit_capture import cpu_features, parse as parse_capture
+from w2m.jit_capture import Region, cpu_features, parse as parse_capture
 from w2m.pe import PeError, parse
 from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86dec_tables import SPEC_VERSION
@@ -109,12 +110,12 @@ def native(root: Path, t: Tally) -> int:
     return n
 
 
-def runtime_code(regions: list[bytes], t: Tally) -> tuple[int, Counter[str]]:
+def runtime_code(regions: list[Region], t: Tally) -> tuple[int, Counter[str]]:
     """Linear pass per region; XED decides where w2m's decoder refuses."""
     n = 0
     ends: Counter[str] = Counter()
-    for code in regions:
-        off = 0
+    for region in regions:
+        code, off = region.code, 0
         batch: list[tuple[bytes, Decoded]] = []
         while off < len(code):
             raw = code[off:off + 15]
@@ -122,6 +123,9 @@ def runtime_code(regions: list[bytes], t: Tally) -> tuple[int, Counter[str]]:
             if ours is not None:
                 batch.append((raw, ours))
                 off += ours.length
+                if region.code_ends_at_first_call and ours.iclass.startswith("CALL"):
+                    ends["trampoline_call"] += 1
+                    break
                 continue
             (x,) = decode_many([raw])
             if not x.ok:
@@ -153,7 +157,7 @@ def main(argv: list[str]) -> int:
     n_native = native(a.native_dir, t)
     cap = parse_capture(a.capture.read_bytes())
     regions = cap.regions()
-    n_runtime, ends = runtime_code([r.code for r in regions], t)
+    n_runtime, ends = runtime_code(regions, t)
     conf = json.loads(CONFIRMATIONS.read_text())["by_row_sha256"]
     unconfirmed = {r: n for r, n in t.rows.items() if not conf.get(r, {}).get("confirmed")}
     total = n_native + n_runtime
