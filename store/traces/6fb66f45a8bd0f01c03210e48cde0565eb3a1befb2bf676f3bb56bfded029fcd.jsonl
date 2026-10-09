@@ -1,0 +1,10 @@
+{"tag":"GUEST_TRACE_OPENED","execution_id":"lev-managed_vm-1791529701021388000-2","vocab_version":"0.5","profile_id":"w2m-vm-mac17-7-macos-25f80-spec-0.6.2","trace_format_version":"0.1"}
+{"tag":"GUEST_THREAD_STARTED","thread_id":4,"thread_seq":0,"hb_refs":[],"parent_thread_id":0,"start_address":5368713216,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":4,"thread_seq":1,"hb_refs":[],"api":"kernel32!SetLastError","args_sha256":"sha256:b571f8b676d33e20fcbead0a183b0e2e7db553ce8191eef35a1a89c9b6f02abf","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":4,"thread_seq":2,"hb_refs":[],"api":"kernel32!GetLastError","args_sha256":"sha256:d767c2ccfb34d58d8fbdc63817ba854589de1374265ca5f5ee8860fae59590ed","return_value":4038852168,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":4,"thread_seq":3,"hb_refs":[],"api":"kernel32!SetLastError","args_sha256":"sha256:ceab7c8685ccc9ca5ee549e1231da5f93abc07097db651831e21833485f046ae","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":4,"thread_seq":4,"hb_refs":[],"api":"kernel32!GetLastError","args_sha256":"sha256:d767c2ccfb34d58d8fbdc63817ba854589de1374265ca5f5ee8860fae59590ed","return_value":3597446665,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":4,"thread_seq":5,"hb_refs":[],"api":"kernel32!SetLastError","args_sha256":"sha256:f0db7cad90bf0bbc7148f9209758b9cd8918f66833b2a8b0b0c585a71d2d8c8f","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":4,"thread_seq":6,"hb_refs":[],"api":"kernel32!GetLastError","args_sha256":"sha256:d767c2ccfb34d58d8fbdc63817ba854589de1374265ca5f5ee8860fae59590ed","return_value":3481551682,"last_error":0}
+{"tag":"GUEST_THREAD_EXITED","thread_id":4,"thread_seq":7,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_TRACE_CLOSED","line_count":10,"thread_count":1,"dropped_count":0}

@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from w2m import a64_encoder as a64
-from w2m.kernel32 import M64, Kernel32, Thread, Unimplemented
+from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded, Memory, Region
 from w2m.runtime import Result
@@ -419,7 +419,8 @@ class VM:
     so `on_dispatch` sees the guest state after each instruction (and after each kernel32 call).
     """
 
-    def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False) -> None:
+    def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False,
+                 clock: Callable[[], int] = monotonic_count) -> None:
         self.ld = loaded
         self.lockstep = lockstep
         self.th = Thread(tid)
@@ -440,7 +441,7 @@ class VM:
             n = len(r.data)
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
-        self.kernel = Kernel32(self.mem)
+        self.kernel = Kernel32(self.mem, clock)
         self.kernel32 = self.kernel.handlers
         maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE)] + [(r.base, IPA_BASE + off, _round_up(len(r.data)))
                                                  for r, off in placed]
@@ -567,21 +568,32 @@ class VM:
                 imm = e.syndrome & 0xFFFF
                 where = self.x86_address_at(e.pc - 4)
                 if imm == 1:
-                    if on_dispatch:
-                        on_dispatch(self, x)                  # may replace the state in x
-                    target = x[17]
-                    if target in self.ld.thunks:
+                    exited = False
+                    while True:
+                        if on_dispatch:
+                            on_dispatch(self, x)              # may replace the state in x
+                        target = x[17]
+                        if target not in self.ld.thunks:
+                            va = self.blocks.get(target) or self._compile(target)
+                            struct.pack_into("<QQ", self.mm,
+                                             DISPATCH_TABLE + 16 * (target & (DISPATCH_ENTRIES - 1)),
+                                             target, va)
+                            break
                         self.th.regs = x[:16]
                         ret = self.kernel.call(self.ld.thunks[target], self.th)
                         if ret is None:
-                            stop = "ExitProcess"
+                            exited = True
                             break
                         x[:16] = self.th.regs
                         x[17] = ret
-                    else:
-                        va = self.blocks.get(target) or self._compile(target)
-                        struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * (target & (DISPATCH_ENTRIES - 1)),
-                                         target, va)
+                        if not self.lockstep:
+                            break
+                        # Lockstep: the return address is a step of its own. Re-dispatching in
+                        # the guest would run its block, if already compiled, before the next
+                        # check (Sprint 032: a loop returning twice to one address).
+                    if exited:
+                        stop = "ExitProcess"
+                        break
                     pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
                 elif imm == 2:
                     ec = e.esr >> 26 & 0x3F
@@ -602,7 +614,7 @@ class VM:
                     break
         except StopRun:
             stop = "stopped by on_dispatch"
-        except (LiftError, GuestFault, Unimplemented, CompileError) as ex:
+        except (LiftError, GuestFault, Unimplemented, HandlerFailed, CompileError) as ex:
             stop = f"{type(ex).__name__}: {ex}"
         finally:
             try:
@@ -639,6 +651,9 @@ class Lockstep:
     model: Result
 
 
+LOCKSTEP_COUNT = 0x0123_4567_89AB_CDEF                  # QueryPerformanceCounter during lockstep
+
+
 def lockstep(data: bytes, max_steps: int = 1_000_000, limit: int = 20) -> Lockstep:
     """Run `data` in the VM one x86 instruction per exit and in runtime.Runtime side by side;
     after every instruction compare RIP, the 16 GPRs, and each flag's defined value or its being
@@ -646,8 +661,8 @@ def lockstep(data: bytes, max_steps: int = 1_000_000, limit: int = 20) -> Lockst
     from w2m.loader import load
     from w2m.runtime import Runtime
 
-    model = Runtime(load(data))
-    vm = VM(load(data), lockstep=True)
+    model = Runtime(load(data), clock=lambda: LOCKSTEP_COUNT)   # one count for both sides
+    vm = VM(load(data), lockstep=True, clock=lambda: LOCKSTEP_COUNT)
     diffs: list[str] = []
     n = [0]
     running = [True]

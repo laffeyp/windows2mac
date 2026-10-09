@@ -7,9 +7,10 @@ against, one instruction at a time (`step`).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from w2m.kernel32 import M64, Kernel32, Thread, Unimplemented
+from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
 
@@ -39,14 +40,15 @@ def _parity(v: int) -> bool:
 
 
 class Runtime:
-    def __init__(self, loaded: Loaded, tid: int = 4) -> None:
+    def __init__(self, loaded: Loaded, tid: int = 4,
+                 clock: Callable[[], int] = monotonic_count) -> None:
         self.ld = loaded
         self.mem = loaded.memory
         self.th = Thread(tid)
         self.th.rip = loaded.entry
         self.th.regs[4] = loaded.stack_top - 0x100 - 8           # entry as if called: RSP % 16 == 8
         self.cache: dict[int, Lifted] = {}
-        self.kernel = Kernel32(self.mem)
+        self.kernel = Kernel32(self.mem, clock)
         self.kernel32 = self.kernel.handlers
         self.steps = 0
         self.seen: set[int] = set()
@@ -214,7 +216,7 @@ class Runtime:
                 if not self.step():
                     stop = "ExitProcess"
                     break
-        except (LiftError, GuestFault, UndefinedFlag, Unimplemented) as e:
+        except (LiftError, GuestFault, UndefinedFlag, Unimplemented, HandlerFailed) as e:
             stop = f"{type(e).__name__}: {e}"
         return Result(self.exit_code, bytes(self.kernel.out), self.steps, len(self.seen),
                       self.calls, stop)

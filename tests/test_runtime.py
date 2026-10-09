@@ -21,12 +21,14 @@ SKELETON = ROOT / "store" / "binaries"
 CONTRACT = ROOT / "contracts" / "windows.thread.last_error.set_get" / "0.1.0.json"
 
 
+SKELETON_SHA256 = "18f721e66de4b57e59330135d7c137c03890c94180455210cf979b8ae35074c8"
+
+
 def _skeleton() -> bytes:
-    for p in sorted(SKELETON.glob("*.exe")):
-        data = p.read_bytes()
-        if b"GUEST_THREAD_STARTED" in data and b"SetLastError" in data and b"bcrypt" not in data.lower():
-            return data
-    pytest.skip("skeleton.exe not in store/binaries")
+    p = SKELETON / f"{SKELETON_SHA256}.exe"
+    if not p.exists():
+        pytest.skip("skeleton.exe not in store/binaries")
+    return p.read_bytes()
 
 
 def _verdict(stdout: bytes) -> str:

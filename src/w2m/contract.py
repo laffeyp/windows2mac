@@ -1,9 +1,10 @@
 """contract.py — the contract file format (v0.2 sections 11.1-11.2).
 
 A contract lives at `contracts/<id>/<version>.json`. It carries its behavioral definition and
-the evidence for it; documentation and observation keep their identities (v0.2 11.1). Today
-one acceptance kind is defined, `allowed_outcome_set`; other relations from v0.2 section 3
-are added as contracts need them.
+the evidence for it; documentation and observation keep their identities (v0.2 11.1). Two
+acceptance kinds are defined: `allowed_outcome_set`, and `exact` in the form "a read call
+returns the argument of the role's latest write call" (Sprint 032). Other relations from v0.2
+section 3 are added as contracts need them.
 """
 
 from __future__ import annotations
@@ -62,7 +63,21 @@ class AllowedOutcomeSet(Struct, frozen=True, forbid_unknown_fields=True,
     postconditions: tuple[CallReturn, ...] = ()
 
 
-Acceptance = AllowedOutcomeSet
+class ExactReturnOfArgument(Struct, frozen=True, forbid_unknown_fields=True,
+                            tag="exact", tag_field="relation"):
+    """Each `read_api` call a role in `over_roles` makes returns exactly the integer argument of
+    the role's most recent `write_api` call (v0.2 section 3, exact value: error codes). The trace
+    carries that argument only as args_sha256 of 'Function(<decimal>)' (vocabulary 0.4 note), so
+    the comparator hashes the rendering of each returned value and compares. `pairs` is the
+    number of read calls the scenario makes per role; fewer is inconclusive."""
+
+    write_api: str
+    read_api: str
+    over_roles: tuple[str, ...]
+    pairs: Annotated[int, Meta(ge=1)]
+
+
+Acceptance = AllowedOutcomeSet | ExactReturnOfArgument
 
 
 class Before(Struct, frozen=True, forbid_unknown_fields=True):
@@ -129,7 +144,29 @@ def _check(c: Contract, path: Path) -> None:
             raise ContractError(f"{e.evidence_id}: observed evidence needs execution_ids (or, in "
                                 "contracts before 0.2.1, a source_ref naming the executions)")
     roles = set(c.roles)
-    a = c.acceptance
+    if isinstance(c.acceptance, ExactReturnOfArgument):
+        x = c.acceptance
+        if not set(x.over_roles) <= roles:
+            raise ContractError(f"{c.contract_id}: roles {sorted(set(x.over_roles) - roles)} undeclared")
+        if x.write_api == x.read_api:
+            raise ContractError(f"{c.contract_id}: write_api and read_api must differ")
+    else:
+        _check_allowed_outcome_set(c, c.acceptance, roles)
+    ev_ids = {e.evidence_id for e in c.evidence}
+    for pre in c.preconditions:
+        named = {*pre.roles, pre.observer, pre.before.role}
+        if not named <= roles:
+            raise ContractError(f"{c.contract_id}: precondition roles {sorted(named - roles)} undeclared")
+        if not pre.evidence_ids or not set(pre.evidence_ids) <= ev_ids:
+            raise ContractError(f"{c.contract_id}: precondition needs evidence_ids from its evidence")
+    # Reference runs are optional (user decision 2026-10-07): documented or observed evidence
+    # can carry acceptance; a hypothesis alone cannot.
+    if c.status == "accepted" and not any(e.category != "hypothesis" for e in c.evidence):
+        raise ContractError(
+            f"{c.contract_id}: an accepted contract needs documented or observed evidence")
+
+
+def _check_allowed_outcome_set(c: Contract, a: AllowedOutcomeSet, roles: set[str]) -> None:
     over = set(a.outcome.over_roles)
     if not over <= roles:
         raise ContractError(f"{c.contract_id}: outcome roles {sorted(over - roles)} undeclared")
@@ -146,18 +183,6 @@ def _check(c: Contract, path: Path) -> None:
     for p in a.postconditions:
         if p.role not in roles:
             raise ContractError(f"{c.contract_id}: postcondition role {p.role} undeclared")
-    ev_ids = {e.evidence_id for e in c.evidence}
-    for pre in c.preconditions:
-        named = {*pre.roles, pre.observer, pre.before.role}
-        if not named <= roles:
-            raise ContractError(f"{c.contract_id}: precondition roles {sorted(named - roles)} undeclared")
-        if not pre.evidence_ids or not set(pre.evidence_ids) <= ev_ids:
-            raise ContractError(f"{c.contract_id}: precondition needs evidence_ids from its evidence")
-    # Reference runs are optional (user decision 2026-10-07): documented or observed evidence
-    # can carry acceptance; a hypothesis alone cannot.
-    if c.status == "accepted" and not any(e.category != "hypothesis" for e in c.evidence):
-        raise ContractError(
-            f"{c.contract_id}: an accepted contract needs documented or observed evidence")
 
 
 def load_contract(path: Path, store: Path | None = None) -> Contract:

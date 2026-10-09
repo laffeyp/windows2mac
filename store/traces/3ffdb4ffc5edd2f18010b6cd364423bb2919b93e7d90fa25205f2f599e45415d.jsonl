@@ -1,0 +1,10 @@
+{"tag":"GUEST_TRACE_OPENED","execution_id":"lev-1","vocab_version":"0.5","profile_id":"gha-windows-2025-x64-10.0.26100.33438-Server","trace_format_version":"0.1"}
+{"tag":"GUEST_THREAD_STARTED","thread_id":7592,"thread_seq":0,"hb_refs":[],"parent_thread_id":0,"start_address":140697242767360,"suspended":false}
+{"tag":"GUEST_CALL_RETURNED","thread_id":7592,"thread_seq":1,"hb_refs":[],"api":"kernel32!SetLastError","args_sha256":"sha256:62742548e2f6316375a8572b2dadcef8c1442bc4e0f53140efbbac382af4c47e","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":7592,"thread_seq":2,"hb_refs":[],"api":"kernel32!GetLastError","args_sha256":"sha256:d767c2ccfb34d58d8fbdc63817ba854589de1374265ca5f5ee8860fae59590ed","return_value":356448838,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":7592,"thread_seq":3,"hb_refs":[],"api":"kernel32!SetLastError","args_sha256":"sha256:b78e1cce1072ca0d972ab330f7ff3c12553994f750c30a5e9fe3b9faa88eb2cd","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":7592,"thread_seq":4,"hb_refs":[],"api":"kernel32!GetLastError","args_sha256":"sha256:d767c2ccfb34d58d8fbdc63817ba854589de1374265ca5f5ee8860fae59590ed","return_value":1430617007,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":7592,"thread_seq":5,"hb_refs":[],"api":"kernel32!SetLastError","args_sha256":"sha256:d2078433fecd32cafdd7e02fdfe6e8cb8978edb47ff476259874243893566cfb","return_value":0,"last_error":0}
+{"tag":"GUEST_CALL_RETURNED","thread_id":7592,"thread_seq":6,"hb_refs":[],"api":"kernel32!GetLastError","args_sha256":"sha256:d767c2ccfb34d58d8fbdc63817ba854589de1374265ca5f5ee8860fae59590ed","return_value":2640021302,"last_error":0}
+{"tag":"GUEST_THREAD_EXITED","thread_id":7592,"thread_seq":7,"hb_refs":[],"exit_code":0}
+{"tag":"GUEST_TRACE_CLOSED","line_count":10,"thread_count":1,"dropped_count":0}

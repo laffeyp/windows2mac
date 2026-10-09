@@ -1,7 +1,9 @@
-"""Sprint 031 grading surface: the candidate loop on windows.thread.last_error.set_get@0.1.0.
-A scripted Responder stands in for the model so the record's shape is checked exactly: repair
-after a discrepancy, refusal of code outside the admitted language, and rejection when the
-acceptance condition changes during the session."""
+"""Sprint 031 grading surface: the candidate loop on windows.thread.last_error.set_get, at 0.2.0
+since Sprint 032. A scripted Responder stands in for the model so the record's shape is checked
+exactly: repair after a discrepancy, refusal of code outside the admitted language, and
+rejection when the acceptance condition changes during the session. Sprint 032: candidates that
+ignore SetLastError's argument (a constant, the thread id) are rejected under 0.2.0; 0.1.0
+accepted the constant."""
 
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from substrate.api import read_record
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from run_candidate_loop import run_loop, skeleton_probe  # noqa: E402
+from run_candidate_loop import PROBE_SHA256, probe_binary, run_loop  # noqa: E402
 
 GOOD = '''```python
 def SetLastError(thread, args):
@@ -27,6 +29,12 @@ def GetLastError(thread, args):
 ```'''
 LOSES_VALUE = GOOD.replace("thread.last_error = args[0] & 0xFFFFFFFF", "pass")
 IMPORTS = GOOD.replace("```python\n", "```python\nimport os\n")
+CONSTANT = "def SetLastError(thread, args):\n    return None\n\n" \
+           "def GetLastError(thread, args):\n    return 1234\n"
+THREAD_ID = CONSTANT.replace("return 1234", "return thread.tid")
+ECHO_RCX = CONSTANT.replace("return 1234", "return args[0]")
+DIVIDES = CONSTANT.replace("return 1234", "return 1 // (thread.last_error - thread.last_error)")
+CONTRACT = "windows.thread.last_error.set_get@0.2.0"
 
 
 class Scripted:
@@ -44,18 +52,15 @@ class Scripted:
         return self.replies.pop(0)
 
 
-@pytest.fixture
-def store(tmp_path: Path) -> Path:
-    """A store holding the skeleton and its committed Windows reference executions."""
+def _store(tmp_path: Path, contract: str) -> Path:
+    """A store holding the contract's probe and its committed Windows reference executions."""
     src = ROOT / "store"
-    dst = tmp_path / "store"
+    dst = tmp_path / f"store-{contract.split('@')[1]}"
     (dst / "binaries").mkdir(parents=True)
     (dst / "executions").mkdir()
     (dst / "traces").mkdir()
-    probe = skeleton_probe(src)
-    import hashlib
-    sha = "sha256:" + hashlib.sha256(probe).hexdigest()
-    (dst / "binaries" / f"{sha[7:]}.exe").write_bytes(probe)
+    sha = PROBE_SHA256[contract]
+    (dst / "binaries" / f"{sha[7:]}.exe").write_bytes(probe_binary(src, contract))
     n = 0
     for m in (src / "executions").glob("*.json"):
         meta = json.loads(m.read_text())
@@ -67,12 +72,18 @@ def store(tmp_path: Path) -> Path:
     return dst
 
 
+@pytest.fixture
+def store(tmp_path: Path) -> Path:
+    return _store(tmp_path, CONTRACT)
+
+
 def _run(store: Path, tmp_path: Path, responder: Scripted, backend: str = "model",
-         contracts: Path = ROOT / "contracts") -> list[tuple[str, dict]]:
+         contracts: Path = ROOT / "contracts", contract: str = CONTRACT,
+         attempts: int = 3) -> list[tuple[str, dict]]:
     record = run_loop(responder, "scripted (tests/test_candidate_loop.py)",
-                      contract="windows.thread.last_error.set_get@0.1.0", backend=backend,
-                      runs=3, attempts=3, store=store, contracts=contracts,
-                      runs_root=tmp_path / "runs", probe=skeleton_probe(store),
+                      contract=contract, backend=backend,
+                      runs=3, attempts=attempts, store=store, contracts=contracts,
+                      runs_root=tmp_path / "runs", probe=probe_binary(store, contract),
                       profile_id="w2m-test")
     return [(e["kind"], e["payload"]) for e in read_record(record)
             if not e["kind"].startswith("substrate.") and e["kind"] != "ModelUsage"]
@@ -106,8 +117,11 @@ def test_repair_after_discrepancy(store: Path, tmp_path: Path) -> None:
     assert len(accepted["comparison_ids"]) == 3 and set(accepted["comparison_ids"]) <= conforming
     assert p["DISCREPANCY_RESOLVED"]["resolving_ref"] == accepted["candidate_id"]
     assert p["SESSION_COMPLETED"]["outcome"] == "completed_with_discrepancies"
-    assert "value lost" in responder.prompts[1]                 # the structured divergence
-    assert "1234" not in responder.prompts[0]                   # the scenario value is withheld
+    assert "is not the argument of kernel32!SetLastError" in responder.prompts[1]
+    assert "relation exact" in responder.prompts[1]
+    reported = next(pl for k, pl in evs if k == "DISCREPANCY_REPORTED")
+    assert reported["mismatch_class"] == "exact"
+    assert "1234" not in responder.prompts[0]
 
 
 def test_code_outside_admitted_language_never_runs(store: Path, tmp_path: Path) -> None:
@@ -124,10 +138,10 @@ def test_code_outside_admitted_language_never_runs(store: Path, tmp_path: Path) 
 def test_altered_contract_rejects_every_candidate(store: Path, tmp_path: Path) -> None:
     contracts = tmp_path / "contracts"
     shutil.copytree(ROOT / "contracts", contracts)
-    target = contracts / "windows.thread.last_error.set_get" / "0.1.0.json"
+    target = contracts / "windows.thread.last_error.set_get" / "0.2.0.json"
 
     def alter() -> None:
-        target.write_text(target.read_text().replace('"value lost"', '"value gone"'))
+        target.write_text(target.read_text().replace('"pairs": 3', '"pairs": 2'))
 
     evs = _run(store, tmp_path, Scripted(GOOD, GOOD, GOOD, side_effect=alter), contracts=contracts)
     altered = [pl for k, pl in evs if k == "ACCEPTANCE_CONDITION_ALTERED"]
@@ -156,11 +170,38 @@ def test_generator_failure_closes_the_session(store: Path, tmp_path: Path) -> No
     assert evs[-1][1]["outcome"] == "aborted"                 # T2 holds when an operator fails
 
 
-def test_one_scenario_contract_accepts_a_constant(store: Path, tmp_path: Path) -> None:
-    """Known defect, recorded 2026-10-08 (Sprint 031): 0.1.0 judges one scenario, SetLastError(1234)
-    then GetLastError, so `return 1234` conforms. The fix is a contract version whose scenario
-    the candidate cannot predict; when it lands this test must flip to CANDIDATE_REJECTED."""
-    constant = "def SetLastError(thread, args):\n    return None\n\n" \
-               "def GetLastError(thread, args):\n    return 1234\n"
-    evs = _run(store, tmp_path, Scripted(constant))
-    assert _kinds(evs, {"CANDIDATE_ACCEPTED", "CANDIDATE_REJECTED"}) == ["CANDIDATE_ACCEPTED"]
+def test_constant_rejected_under_0_2_0_accepted_under_0_1_0(tmp_path: Path) -> None:
+    """Sprint 031 found 0.1.0 accepts `return 1234` (its one scenario fixes the value at build
+    time). Under 0.2.0 the values are chosen at run time and the constant is a discrepancy."""
+    old = _run(_store(tmp_path, "windows.thread.last_error.set_get@0.1.0"), tmp_path,
+               Scripted(CONSTANT), contract="windows.thread.last_error.set_get@0.1.0")
+    assert _kinds(old, {"CANDIDATE_ACCEPTED", "CANDIDATE_REJECTED"}) == ["CANDIDATE_ACCEPTED"]
+    new = _run(_store(tmp_path, CONTRACT), tmp_path, Scripted(CONSTANT), attempts=1)
+    rejected = [pl for k, pl in new if k == "CANDIDATE_REJECTED"]
+    assert len(rejected) == 1 and rejected[0]["discrepancy_id"]
+    assert "returned 1234" in rejected[0]["reason"]
+    assert not any(k == "CANDIDATE_ACCEPTED" for k, _ in new)
+
+
+def test_thread_id_candidate_is_rejected(store: Path, tmp_path: Path) -> None:
+    evs = _run(store, tmp_path, Scripted(THREAD_ID), attempts=1)
+    assert _kinds(evs, {"CANDIDATE_ACCEPTED", "CANDIDATE_REJECTED", "DISCREPANCY_ROUTED"}) == [
+        "CANDIDATE_REJECTED", "DISCREPANCY_ROUTED"]
+
+
+def test_reading_a_parameter_getlasterror_lacks_is_refused(store: Path, tmp_path: Path) -> None:
+    evs = _run(store, tmp_path, Scripted(ECHO_RCX), attempts=1)
+    failed = [pl for k, pl in evs if k == "EXECUTION_FAILED"]
+    assert len(failed) == 1 and "GetLastError has 0 parameters; args[0] does not exist" in \
+        failed[0]["diagnostic"]
+    assert not any(k == "EXECUTION_COMPLETED" for k, _ in evs)
+
+
+def test_candidate_that_raises_stops_its_runs(store: Path, tmp_path: Path) -> None:
+    evs = _run(store, tmp_path, Scripted(DIVIDES), attempts=1)
+    failed = [pl for k, pl in evs if k == "EXECUTION_FAILED"]
+    assert len(failed) == 3 and all("HandlerFailed: GetLastError raised ZeroDivisionError"
+                                    in pl["diagnostic"] for pl in failed)
+    rejected = [pl for k, pl in evs if k == "CANDIDATE_REJECTED"]
+    assert len(rejected) == 1 and not rejected[0].get("discrepancy_id")
+    assert evs[-1][1]["outcome"] == "aborted"

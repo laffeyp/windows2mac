@@ -214,3 +214,12 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
   - *Observation 2 (direction of error):* the strict-prefix rule turned silent misdecodes into 73 refusals (ours has no row where XED knows a newer instruction). Disposition: recorded — a refusal is honest; the rows are worklist items.
   - *Observation 3 (residue):* 11.38% accepted-but-invalid, mostly EVEX broadcast/zeroing/opmask rules and VEX/EVEX W constraints. Disposition: deferred — next decoder sprint; then operand comparison.
 - **Closed:** clean.
+
+### Sprint 022 (2026-10-08, closed)
+- **Scope:** explicit operands, w2m (SDM Appendix A templates) vs XED, corpus and generated encodings.
+- **Rubber Duck Pass:**
+  - *Observation 1 (zero is a claim that needs a test):* the first corpus run reported 0 differences in 2.26 M comparisons. A planted fault (REX byte-register names without REX) produced 224 differences, so the comparison has power. Disposition: resolved-here; the planted-fault result is in the card.
+  - *Observation 2 (the literature's prediction held again):* both template errors (f64 on FF /2, /4; MOVSXD `Ez`) appeared only in generated encodings, never in 2.44 M compiler-emitted instructions. Disposition: resolved-here — spec 0.6.1.
+  - *Observation 3 (a recorded number looked wrong):* this run reported 2,391,671 positions against the 2,444,456 recorded since Sprint 017. The recorded figure includes the 52,785 probe instructions; both are now reported separately. Disposition: resolved-here.
+  - *Observation 4 (coverage):* 5.4% of corpus positions have no template (no-operand rows, SSE/AVX). Disposition: deferred — next decoder sprint, with the AVX-512 validity tail.
+- **Closed:** clean.

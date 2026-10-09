@@ -3,7 +3,9 @@
 A candidate is Python source for the functions a contract governs. It reaches the runtime only
 through `admit`, which parses it and allows a fixed set of syntax. Each function takes
 `(thread, args)`. `thread.last_error` may be read and assigned, and `thread.tid` read. `args` is
-the tuple of the first four integer arguments (RCX, RDX, R8, R9). The function returns an int,
+the tuple of the function's declared parameters, in order (PARAMETER_COUNT; at most four, from
+RCX, RDX, R8, R9). Sprint 032: with four registers always passed, a GetLastError returning
+`args[0]` read RCX, which can still hold SetLastError's argument. The function returns an int,
 which the runtime places in RAX, or None. No calls, imports, loops, comprehensions, lambdas,
 or other attributes are admitted, and the code runs with empty builtins.
 
@@ -34,6 +36,9 @@ ALLOWED_NODES = (
     ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Is, ast.IsNot,
 )
 READABLE = {"last_error", "tid"}
+# Declared parameters, from the Microsoft Learn signatures (retrieved 2026-10-08):
+# void SetLastError(DWORD dwErrCode); DWORD GetLastError(void).
+PARAMETER_COUNT = {"SetLastError": 1, "GetLastError": 0}
 WRITABLE = {"last_error"}
 
 
@@ -95,6 +100,15 @@ def admit(source: str, names: tuple[str, ...]) -> Candidate:
         defined.append(top.name)
     if sorted(defined) != sorted(names):
         raise CandidateError(f"defines {sorted(defined)}; required {sorted(names)}")
+    for top in tree.body:
+        if isinstance(top, ast.FunctionDef):
+            count = PARAMETER_COUNT[top.name]
+            for node in ast.walk(top):
+                if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and \
+                        isinstance(node.slice.value, int) and node.slice.value >= count:
+                    raise CandidateError(f"line {node.lineno}: {top.name} has {count} parameter"
+                                         f"{'' if count == 1 else 's'}; args[{node.slice.value}] "
+                                         "does not exist")
     for node in ast.walk(tree):
         if not isinstance(node, ALLOWED_NODES):
             raise CandidateError(f"line {getattr(node, 'lineno', '?')}: {type(node).__name__} "
@@ -120,9 +134,9 @@ def admit(source: str, names: tuple[str, ...]) -> Candidate:
 def install(kernel: Kernel32, cand: Candidate) -> None:
     """Replace the kernel32 handlers the candidate defines."""
 
-    def bind(fn: CandidateFunction) -> Callable[[], int | None]:
+    def bind(name: str, fn: CandidateFunction) -> Callable[[], int | None]:
         def handler() -> int | None:
-            args = tuple(kernel.argument(i) for i in range(4))
+            args = tuple(kernel.argument(i) for i in range(PARAMETER_COUNT[name]))
             ret = fn(_ThreadView(kernel.th), args)
             if ret is None:
                 return None
@@ -132,7 +146,7 @@ def install(kernel: Kernel32, cand: Candidate) -> None:
         return handler
 
     for name, fn in cand.functions.items():
-        kernel.handlers[name] = bind(fn)
+        kernel.handlers[name] = bind(name, fn)
 
 
 def extract_code(reply: str) -> str:
@@ -143,9 +157,9 @@ def extract_code(reply: str) -> str:
 
 def prompt(contract: Contract, names: tuple[str, ...], feedback: str | None) -> str:
     """The generation prompt: the contract's summary and documented evidence, the interface,
-    and on a repair attempt the verifier's report. The acceptance scenario's values (the
-    probe's 1234) are withheld: a contract judged on one scenario cannot tell an
-    implementation from a constant that matches it."""
+    and on a repair attempt the verifier's report. The scenario's values are not in the prompt:
+    contract 0.1.0's one fixed value (1234) let a constant pass; 0.2.0 picks values at run
+    time."""
     quotes = "\n".join(f"- {e.source_ref}\n  \"{e.quote}\"" for e in contract.evidence
                        if e.category == "documented" and e.quote)
     text = f"""Write Python implementations of the Windows kernel32 functions {', '.join(names)}.
@@ -160,7 +174,7 @@ Interface (exact):
 - Define exactly these functions, each as `def NAME(thread, args):`: {', '.join(names)}.
 - `thread.last_error` is the calling thread's last-error code (an int); you may read and assign it.
 - `thread.tid` is the calling thread's id (read only).
-- `args` is a tuple of the first four integer arguments, args[0] to args[3], in calling-convention order.
+- `args` is a tuple of the function's declared parameters, in order: {'; '.join(f"{n}: {PARAMETER_COUNT[n]}" for n in names)}.
 - Return an int (the function's return value) or None (for a function that returns no value).
 - Allowed: assignments, arithmetic, comparisons, if/else, return. Not allowed: imports, function calls, loops, classes, other attributes, names starting with "_".
 

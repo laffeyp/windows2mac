@@ -170,3 +170,11 @@
 **What this says about the next kit version:**
 
 15. A contract that will judge generated code should be tried against the cheapest wrong implementations (a constant, a no-op, an echo of the input) before it is accepted. If one passes, the scenario is not discriminating, however well the evidence supports it.
+
+### 2026-10-09 — Two harness bugs that only a new program could reach
+
+**What happened:** Sprint 032 replaced the skeleton with a probe that loops three times over SetLastError and GetLastError. Lockstep, clean on the skeleton since Sprint 030, reported the VM one instruction ahead at step 4,404: after a kernel32 call the VM re-entered the guest, and a return address compiled on an earlier pass ran before the next check. The skeleton returns to each address once. The same sprint's test of a candidate that raises found the loop rejecting one candidate three times: the runner had filled the shared result list for all three failed runs before the trigger read the first event. Sprint 031 never had every run fail. Neither bug was in the code under test; both were in the code that judges it.
+
+**What this says about the next kit version:**
+
+16. A verification harness has control paths of its own, and a clean result covers only the paths the subject program drove. A card that relies on an oracle should name the oracle's branches (first visit and revisit; all runs pass, some fail, all fail) and give a fixture for each, the way #14 asks for a planted fault per rule class. A trigger predicate should read its event, not state another operator writes.

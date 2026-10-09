@@ -1,19 +1,23 @@
 """compare.py — the comparator operator (v0.2 section 3 relations).
 
 Implements `allowed_outcome_set`: the contract names an outcome rule over roles, the allowed
-outcomes, the forbidden outcomes, and postconditions. A probe declares which guest thread plays
-each role (`role_map`). Only per-thread lines are read, so the verdict never depends on how the
-tracer interleaved threads in the file (v0.2 11.4: file order is not guest order).
+outcomes, the forbidden outcomes, and postconditions. Implements `exact` in the form of
+contract.ExactReturnOfArgument (Sprint 032): each read call returns the argument of the role's
+latest write call, checked through the write line's args_sha256. A probe declares which guest
+thread plays each role (`role_map`). Only per-thread lines are read, in thread_seq order, so the
+verdict never depends on how the tracer interleaved threads in the file (v0.2 11.4: file order
+is not guest order).
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import AsyncIterator, Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from w2m import events
-from w2m.contract import Contract, load_contract
+from w2m.contract import AllowedOutcomeSet, Contract, ExactReturnOfArgument, load_contract
 from w2m.trace import trace_path
 
 
@@ -65,6 +69,7 @@ def compare_allowed_outcome_set(
 ) -> events.COMPARISON_COMPLETED:
     """Judge one ingested trace against the contract's allowed_outcome_set acceptance."""
     a = contract.acceptance
+    assert isinstance(a, AllowedOutcomeSet)
     rule = a.outcome
     calls = _returns(trace_bytes)
 
@@ -107,6 +112,65 @@ def compare_allowed_outcome_set(
     return done("conforms")
 
 
+def compare_exact_return_of_argument(
+    contract: Contract,
+    trace_bytes: bytes,
+    role_map: Mapping[str, int],
+    comparison_id: str,
+    reference_ref: str,
+    target_execution_id: str,
+) -> events.COMPARISON_COMPLETED:
+    """Judge one ingested trace against an ExactReturnOfArgument acceptance. A read's return
+    value r conforms when sha256 of '<write function>(<r in decimal>)' equals the args_sha256
+    of the role's most recent write line; the comparator never learns the argument otherwise."""
+    x = contract.acceptance
+    assert isinstance(x, ExactReturnOfArgument)
+    write_fn = x.write_api.split("!", 1)[1]
+
+    def done(verdict: events.EnumVerdict, divergence: str | None = None) -> events.COMPARISON_COMPLETED:
+        return events.validate(events.COMPARISON_COMPLETED(
+            comparison_id=comparison_id, contract_id=contract.contract_id,
+            contract_version=contract.version, relation="exact",
+            reference_ref=reference_ref, target_execution_id=target_execution_id,
+            verdict=verdict, first_divergence=divergence))
+
+    if any(r not in role_map for r in x.over_roles):
+        return done("inconclusive", "roles missing from the role map")
+    calls = _returns(trace_bytes)
+    for role in x.over_roles:
+        mine = sorted((c for c in calls.get(role_map[role], [])
+                       if c.api in (x.write_api, x.read_api)), key=lambda c: c.thread_seq)
+        last_write: events.GUEST_CALL_RETURNED | None = None
+        reads = 0
+        for c in mine:
+            if c.api == x.write_api:
+                last_write = c
+                continue
+            reads += 1
+            if last_write is None:
+                return done("inconclusive", f"{role}: {x.read_api} at {c.thread_id}:{c.thread_seq} "
+                                            f"precedes any {x.write_api}")
+            rendered = f"{write_fn}({c.return_value})".encode()
+            if "sha256:" + hashlib.sha256(rendered).hexdigest() != last_write.args_sha256:
+                return done("discrepancy",
+                            f"{role}: {x.read_api} at {c.thread_id}:{c.thread_seq} (read {reads} of "
+                            f"{x.pairs}) returned {c.return_value}, which is not the argument of "
+                            f"{x.write_api} at {last_write.thread_id}:{last_write.thread_seq}")
+        if reads < x.pairs:
+            return done("inconclusive", f"{role}: {reads} {x.read_api} lines; the scenario "
+                                        f"makes {x.pairs}")
+    return done("conforms")
+
+
+def compare(contract: Contract, trace_bytes: bytes, role_map: Mapping[str, int],
+            comparison_id: str, reference_ref: str,
+            target_execution_id: str) -> events.COMPARISON_COMPLETED:
+    """Judge with the relation the contract's acceptance names."""
+    judge = (compare_exact_return_of_argument if isinstance(contract.acceptance, ExactReturnOfArgument)
+             else compare_allowed_outcome_set)
+    return judge(contract, trace_bytes, role_map, comparison_id, reference_ref, target_execution_id)
+
+
 def comparator(
     store_root: Path, contracts_root: Path,
 ) -> Callable[[Any], AsyncIterator[events.COMPARISON_COMPLETED]]:
@@ -117,7 +181,7 @@ def comparator(
         contract = load_contract(
             contracts_root / inp["contract_id"] / f"{inp['contract_version']}.json")
         raw = trace_path(store_root, inp["trace_sha256"]).read_bytes()
-        yield compare_allowed_outcome_set(
+        yield compare(
             contract, raw, {k: int(v) for k, v in inp["role_map"].items()},
             inp["comparison_id"], inp["reference_ref"], inp["target_execution_id"])
 

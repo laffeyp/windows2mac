@@ -18,9 +18,12 @@ hashes and cannot change what the guard compares against. A rejection with a dis
 reported and routed; a rejection without one (refused code, inconclusive runs, an altered
 acceptance condition) feeds its reason back. Either starts the next attempt until --attempts.
 
+Each contract version is judged on its own probe (PROBE_SHA256): 0.1.0 on the Sprint 029
+skeleton, 0.2.0 on probes/last_error_values (Sprint 032), whose values are chosen at run time.
+
 Usage:
     uv run python scripts/run_candidate_loop.py --model qwen2.5-coder:7b
-        [--contract windows.thread.last_error.set_get@0.1.0] [--backend managed_vm|model]
+        [--contract windows.thread.last_error.set_get@0.2.0] [--backend managed_vm|model]
         [--runs-per-candidate 3] [--attempts 3] [--first-candidate FILE]
 
 --first-candidate plants attempt 1 (for example a known-wrong implementation) so the model's
@@ -52,7 +55,7 @@ from run_skeleton import wrap  # noqa: E402
 
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.candidate import CandidateError, admit, extract_code, install, prompt  # noqa: E402
-from w2m.compare import compare_allowed_outcome_set, comparator  # noqa: E402
+from w2m.compare import compare, comparator  # noqa: E402
 from w2m.contract import load_contract  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.runtime import Result, Runtime as ModelRuntime  # noqa: E402
@@ -61,7 +64,14 @@ from w2m.trace import trace_ingester, trace_path  # noqa: E402
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 ACCEPTANCE_FILES = (ROOT / "src" / "w2m" / "compare.py", ROOT / "src" / "w2m" / "contract.py")
 NAMES = ("SetLastError", "GetLastError")
+REFUSED = "candidate refused by admission check: "
 TIMEOUT_SECONDS = 10
+PROBE_SHA256 = {                    # contract@version -> the probe binary it is judged on
+    "windows.thread.last_error.set_get@0.1.0":
+        "sha256:18f721e66de4b57e59330135d7c137c03890c94180455210cf979b8ae35074c8",
+    "windows.thread.last_error.set_get@0.2.0":
+        "sha256:d210df33adce2f0807fefba2e572cc48bddf9649b8b2474658c92fb46f7b1210",
+}
 
 
 class Responder(Protocol):
@@ -127,8 +137,7 @@ def reference_conforms(store: Path, contracts: Path, cid: str, cver: str,
                 meta.get("profile_kind", "windows_reference") != "windows_reference":
             continue
         raw = trace_path(store, "sha256:" + m.stem).read_bytes()
-        verdicts.append(compare_allowed_outcome_set(contract, raw, meta["roles"], "ref", "ref",
-                                                    "ref").verdict)
+        verdicts.append(compare(contract, raw, meta["roles"], "ref", "ref", "ref").verdict)
     if not verdicts:
         return None, "no Windows reference execution of this probe in the store"
     ok = all(v == "conforms" for v in verdicts)
@@ -156,6 +165,7 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
                  cver: str) -> Callable[[TopologyBuilder], None]:
     t0 = time.monotonic()
     contract = load_contract(s.contract_path)
+    relation = type(contract.acceptance).__struct_config__.tag      # "exact" | "allowed_outcome_set"
     (store / "candidates").mkdir(parents=True, exist_ok=True)
 
     async def harness_open(_inp: Any) -> AsyncIterator[msgspec.Struct]:
@@ -202,16 +212,14 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
             try:
                 r = execute(s, s.sources[cand_id], TIMEOUT_SECONDS)
             except CandidateError as e:
-                s.results[cand_id].append({"execution_id": xid, "refused": str(e)})
                 yield events.validate(events.EXECUTION_FAILED(
                     execution_id=xid, failure="launch_failed",
-                    diagnostic=f"candidate refused by admission check: {e}"))
+                    diagnostic=f"{REFUSED}{e}"))
                 return
             elapsed = time.monotonic() - started
             body = r.stdout if r.stdout.strip() else b""
             trace, roles = wrap(body, xid, profile) if body else (b"", {})
             if not body:
-                s.results[cand_id].append({"execution_id": xid, "stop": r.stop})
                 yield events.validate(events.EXECUTION_FAILED(
                     execution_id=xid, failure="harness_error",
                     diagnostic=f"no guest trace; the run stopped: {r.stop}"))
@@ -242,6 +250,9 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
         return execution_id.rsplit("-x", 1)[0]
 
     def candidate_done(ctx: Any) -> bool:
+        """Record this event's outcome, then say whether the candidate's runs are all in. Each
+        outcome is recorded here, as its event arrives: the runner can finish all its runs
+        before the first event is read (Sprint 032: three failed runs gave three rejections)."""
         p = ctx.event.payload
         if ctx.event.kind == "COMPARISON_COMPLETED":
             cand = candidate_of(p["target_execution_id"])
@@ -250,6 +261,9 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
                                     "first_divergence": p.get("first_divergence")})
         else:
             cand = candidate_of(p["execution_id"])
+            outcome = ({"refused": p["diagnostic"].removeprefix(REFUSED)}
+                       if p["failure"] == "launch_failed" else {"stop": p["diagnostic"]})
+            s.results[cand].append({"execution_id": p["execution_id"], **outcome})
         res = s.results[cand]
         return any("refused" in r for r in res) or len(res) == s.runs
 
@@ -311,7 +325,7 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
             preserved_mismatch=True))
         yield events.validate(events.DISCREPANCY_REPORTED(
             discrepancy_id=did, contract_id=cid, contract_version=cver,
-            mismatch_class="allowed_outcome_set", minimized_program_sha256=s.probe_sha,
+            mismatch_class=relation, minimized_program_sha256=s.probe_sha,
             initial_state_sha256=EMPTY, first_divergence=first["first_divergence"],
             reference_profile_id="windows_reference (committed store executions)",
             destination_profile_id=f"{s.profile_id}-{cand_id}",
@@ -331,7 +345,7 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
             first = next(r for r in s.results[cand] if r.get("verdict") == "discrepancy")
             return {"parent_candidate_id": cand, "discrepancy_id": p["discrepancy_id"],
                     "feedback": f"DISCREPANCY_REPORTED {p['discrepancy_id']}: contract {cid}@{cver}, "
-                                f"relation allowed_outcome_set, first divergence: "
+                                f"relation {relation}, first divergence: "
                                 f"{first['first_divergence']}"}
         return {"parent_candidate_id": p["candidate_id"], "feedback": p["reason"]}
 
@@ -444,12 +458,13 @@ def run_loop(responder: Responder, generator_ref: str, *, contract: str, backend
     return Path(result.record_root)
 
 
-def skeleton_probe(store: Path) -> bytes:
-    for p in sorted((store / "binaries").glob("*.exe")):
-        data = p.read_bytes()
-        if b"GUEST_THREAD_STARTED" in data and b"SetLastError" in data and b"bcrypt" not in data.lower():
-            return data
-    raise SystemExit("skeleton.exe not in store/binaries")
+def probe_binary(store: Path, contract: str) -> bytes:
+    """The probe binary `contract` is judged on, from store/binaries, checked against its hash."""
+    sha = PROBE_SHA256[contract]
+    data = (store / "binaries" / f"{sha.removeprefix('sha256:')}.exe").read_bytes()
+    if "sha256:" + hashlib.sha256(data).hexdigest() != sha:
+        raise SystemExit(f"store/binaries copy of {sha} does not match its hash")
+    return data
 
 
 def summary(record: Path) -> list[str]:
@@ -469,7 +484,7 @@ def summary(record: Path) -> list[str]:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help="Ollama model tag (local)")
-    ap.add_argument("--contract", default="windows.thread.last_error.set_get@0.1.0")
+    ap.add_argument("--contract", default="windows.thread.last_error.set_get@0.2.0")
     ap.add_argument("--backend", choices=("managed_vm", "model"), default="managed_vm")
     ap.add_argument("--runs-per-candidate", type=int, default=3)
     ap.add_argument("--attempts", type=int, default=3)
@@ -489,7 +504,7 @@ def main(argv: list[str]) -> int:
     record = run_loop(responder, ref,
                       contract=a.contract, backend=a.backend, runs=a.runs_per_candidate,
                       attempts=a.attempts, store=a.store, contracts=a.contracts,
-                      runs_root=a.runs, probe=skeleton_probe(a.store),
+                      runs_root=a.runs, probe=probe_binary(a.store, a.contract),
                       profile_id=f"w2m-{'vm' if a.backend == 'managed_vm' else 'model'}")
     print(f"record {record}")
     print("\n".join(summary(record)))

@@ -1,0 +1,54 @@
+{
+ "contract_id": "windows.thread.last_error.set_get",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "GetLastError on a thread returns exactly the value the thread's most recent SetLastError call was given, when no call between them sets the last-error code.",
+ "applicability": "Windows desktop, kernel32 (Windows XP and later per the pages cited)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "thread": "main, the process's first thread"
+  },
+  "execution": {
+   "main": "QueryPerformanceCounter once, before any SetLastError; three values chosen from that count, consecutive values different; for each value v: SetLastError(v), then, with no intervening call that sets the last-error code, GetLastError()"
+  },
+  "observation": {
+   "phase": "after each GetLastError returns"
+  }
+ },
+ "acceptance": {
+  "relation": "exact",
+  "write_api": "kernel32!SetLastError",
+  "read_api": "kernel32!GetLastError",
+  "over_roles": [
+   "main"
+  ],
+  "pairs": 3
+ },
+ "evidence": [
+  {
+   "evidence_id": "ms-setlasterror",
+   "category": "documented",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setlasterror (page updated 2025-08-27; retrieved 2026-10-08)",
+   "applicability": "Windows XP and later",
+   "quote": "Sets the last-error code for the calling thread. ... The last-error code is kept in thread local storage so that multiple threads do not overwrite each other's values."
+  },
+  {
+   "evidence_id": "ms-getlasterror",
+   "category": "documented",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror (page updated 2024-02-22; retrieved 2026-10-08)",
+   "applicability": "Windows XP and later",
+   "quote": "The return value is the calling thread's last-error code. ... If the function is not documented to set the last-error code, the value returned by this function is simply the most recent last-error code to have been set"
+  }
+ ],
+ "open_questions": [
+  "The values come from a 256-entry table built into the probe (probes/last_error_values/values.h), so the trace can carry true args_sha256 values without hashing in the guest; a candidate that ignores its argument passes one pair with probability 1/256 at most, and consecutive pairs use different values.",
+  "QueryPerformanceCounter is used only to choose values; its own behavior is not judged here (v0.2 section 3.1 gives clocks their own contracts)."
+ ],
+ "sections": {
+  "supersedes": "0.1.0, whose one fixed value (SetLastError(1234)) let a candidate returning the constant 1234 conform (Sprint 031).",
+  "probe": "probes/last_error_values (Sprint 032)"
+ }
+}
