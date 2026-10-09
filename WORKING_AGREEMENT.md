@@ -9,8 +9,8 @@
 - **Project name:** w2m
 - **Project type:** binary-translation toolchain + guest runtime + CLI; multi-language.
 - **Project classes (TECHNIQUES.md §2):** CLI; game development (input replay, frame budget, determinism); visual (Metal output frames); audio; embedded-adjacent (guest runtime inside a VM).
-- **Primary languages:** decided per component in Phase 1 and recorded here. Harness and probes: Python 3.12 (substrate's floor). Guest runtime: C, freestanding, compiled to AArch64 with clang and run inside the managed VM; Windows-visible state in guest memory at Windows layouts (Decision 2026-10-09, runtime architecture). Translator: Python on the host (`lift.py`, `vm_backend.py`) behind one block-translation interface.
-- **Primary build commands:** none yet; Sprint 0 is content-only.
+- **Primary languages:** decided per component in Phase 1 and recorded here. Harness and probes: Python 3.12 (substrate's floor). Guest runtime: C, freestanding, compiled to AArch64 with clang (`--target=arm64-apple-macos14`, linked by `ld -preload` into an MH_PRELOAD image) and run inside the managed VM; Windows-visible state in guest memory at Windows layouts (Decision 2026-10-09, runtime architecture). Translator: Python on the host (`lift.py`, `vm_backend.py`) behind one block-translation interface.
+- **Primary build commands:** `uv sync --all-extras`; `scripts/gates.sh` (all gates); the VM monitor builds itself (`clang`, `codesign` with `tools/vm_monitor/entitlements.plist`); the guest runtime builds itself (`clang --target=arm64-apple-macos14 -ffreestanding`, `ld -arch arm64 -preload`; `src/w2m/guest_runtime.py`); runner probes build on the runner (`clang`, `.github/workflows/windows-probe.yml`); the decode spec rebuilds from 0.6.3 with `scripts/rebuild_decode_spec.py`.
 - **Adopted SDD kit version:** `sdd-kit-3` (2026-09-27).
 
 ---
@@ -56,6 +56,10 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | Game file and part manifests (`files.json`, `release.json`) | `games/<game>/`, written by `scripts/pack_game.py` |
 | Mono JIT capture: launcher; reader (`parse`, `Capture`, `Region`, `cpu_features`) | `tools/jit_capture/jit_capture.c`; `src/w2m/jit_capture.py` |
 | Game code differential (native and Mono-generated code vs XED; decoder criterion (d)) | `scripts/game_code_differential.py` |
+| The plan: current order of work | `docs/plan.md` (edited in place; Decisions record why it changed) |
+| Guest state spec (state block, host registers, reconstruction, Windows layouts) | `specs/guest_state.json`; checker `scripts/check_guest_state.py` |
+| Semantics oracle (cases, runner harness, judge) | `probes/semantics/`, `scripts/semantics_differential.py` |
+| Record replay gate | `scripts/check_replay.py` |
 | Reviews and specs | `docs/` |
 
 Rows are added as types stabilize.
@@ -99,6 +103,7 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 - `uv run pytest` — expected exit 0.
 - `uv run ruff check` — expected exit 0.
 - `uv run mypy` — expected exit 0 (strict, `src/w2m`).
+- `uv run python scripts/check_replay.py` — expected exit 0 (every record under `store/runs/` replays at level 2).
 - `scripts/gates.sh` — runs every gate above fail-fast; expected last line `gates: all passed`. A sprint closes and commits only after it exits 0 (added Sprint 028).
 
 - Windows tiebreak probe: `gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id>`, then `gh run watch <run-id> --exit-status`, `gh run download <run-id> -n trace-<id>`; ingest from `store/traces/<sha256>.jsonl`. Runner: `windows-2025` (Windows Server 2025 x64, LLVM 20.1.8). Private repo: uses the account's included Actions minutes.
@@ -127,6 +132,7 @@ CLI strings: lowercase first word in errors, no exclamation marks, no emoji, abs
 
 ## Sprint cadence policy
 
+- **Observation contracts state an outcome (2026-10-09, review progress K4):** a bound, an expected value, or a planted fault the check must catch. "Whatever the record shows" is not an observation contract.
 - **Hard rule 6 override (2026-10-09, BLACKBOARD Decision; settles KIT_DIARY H3):** a sprint holds one concept, one observation contract and one verdict. Its file count is recorded, not capped; a card over 10 files names why it is not two sprints. Two failed attempts at a sprint over 10 files split it.
 - **Phase 0 (Vocabulary Session):** `signals/0.1.json` + rationale covering evidence, contracts, probes, code validity, discrepancies, repair vs revision, backends, artifacts, and the product lifecycle (v0.2 §3, §5.1, §11, §12, §14).
 - **Phase 1 (Contract construction and harness):** the contract format with evidence categories (v0.2 §11.1-11.2); substrate topologies for probe, model check, candidate, comparison, and reduction (§11.4); first probes on the Windows reference profile.

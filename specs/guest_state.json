@@ -1,6 +1,6 @@
 {
  "spec_id": "w2m.guest_state",
- "version": "0.1.0",
+ "version": "0.2.0",
  "sources": {
   "winnt.h": "Windows SDK on the windows-2025 runner, read by probes/guest_state (offsetof/sizeof)",
   "winternl.h": "same; Microsoft Learn TEB page (MicrosoftDocs/sdk-api docs 7659b39b6294): 'This structure may be altered in future versions of Windows'",
@@ -365,12 +365,24 @@
     "offset": 880,
     "size": 16,
     "note": "80-bit value in a 16-byte slot, as FXSAVE"
+   },
+   {
+    "field": "af_operands",
+    "offset": 200,
+    "size": 24,
+    "note": "AF is lazy: the last flag-setting operation's two operands and result (8 bytes each); AF = bit 4 of (a ^ b ^ r), materialized into rflags at every exit, fault and CONTEXT (review 2026-10-09 progress N3)"
+   },
+   {
+    "field": "df",
+    "offset": 224,
+    "size": 1,
+    "note": "DF (direction for string instructions); written by STD/CLD/POPF, read by REP MOVS/STOS/CMPS/SCAS; kept in the state block, not a host register (N3)"
    }
   ]
  },
  "host_registers": {
   "gpr": "x86 GPR i in x_i (i = 0..15)",
-  "flags": "CF ZF SF OF PF in x19..x23 as 0/1; x24 one bit per undefined flag",
+  "flags": "CF ZF SF OF PF in x19..x23 as 0/1; x24 one bit per undefined flag; AF lazy (state block af_operands); DF in the state block",
   "xmm": "XMM i in v_i (i = 0..15)",
   "ymm_high": "upper 128 bits of YMM i in v(16+i)",
   "mxcsr": "rounding control mirrored into FPCR.RMode; FTZ and DAZ into FPCR.FZ and FPCR.FIZ where present; exception flags kept in the state block",
@@ -383,9 +395,9 @@
    "host_pc_start": "u64",
    "host_pc_end": "u64, exclusive",
    "guest_rip": "u64",
-   "locations": "per guest register: {'host': '<A64 register>'} or {'block': '<state block field>'}; flags: {'host': 'x19..x23', 'undefined': 'x24'} or {'block': 'rflags'}"
+   "locations": "per guest register: {'host': '<A64 register>'} or {'block': '<state block field>'}; flags: {'host': 'x19..x23', 'undefined': 'x24'} or {'block': 'rflags'}; AF from af_operands; DF from the state block"
   },
-  "rule": "every host PC at which the block can fault, exit or be suspended lies in exactly one entry; hv_vcpus_exit stops a vCPU at an instruction boundary of the host code, and the table maps it to the guest boundary that precedes it"
+  "rule": "Two rules (review 2026-10-09 progress N2). Faults: a translated instruction commits no guest-visible effect (memory store, register write, RSP, flags) before its last possible fault point, so a fault maps to the boundary before the instruction and resuming re-executes it whole; the semantics oracle checks this with fault cases. Asynchronous stops (hv_vcpus_exit for SuspendThread, GetThreadContext, a GC stop): the vCPU runs forward to the next table boundary before the CONTEXT is built; it never maps backward, because a backward map would re-execute half-done effects (PUSH: store then RSP; ADD [m], r: load, store, flags; LOCK XADD: a reference count)"
  },
  "windows": {
   "CONTEXT": {
@@ -619,5 +631,8 @@
    "source": "unobserved: as SegGs"
   },
   "ContextFlags": "CONTEXT_ALL as requested, minus what the request omits"
- }
+ },
+ "changes": [
+  "0.2.0 (2026-10-09): AF (lazy) and DF added; reconstruction rule replaced: commit after the last fault point, and run forward to the next boundary on an asynchronous stop (review 2026-10-09 progress N2, N3)"
+ ]
 }

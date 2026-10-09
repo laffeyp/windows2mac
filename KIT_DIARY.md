@@ -197,3 +197,11 @@
 
 **Kit change suggested:** a technique entry for "external oracle": every verifier states what its reference is derived from, and a phase cannot close on verifiers that share a derivation.
 
+### 2026-10-09 — Substrate used as a file format
+
+**What happened:** The progress review counted nine of eleven substrate users computing everything in plain Python and then replaying the results through a one-producer topology. Their records show that a list was written, not that a comparison caused a discrepancy or a discrepancy a route. The repair loops that moved the project (the SDM row generator, the oracle's two lifter fixes) ran in the agent session, so their discrepancies live in commit messages. Only the candidate loop is a real topology. The architecture decision, which constrains everything, existed only as prose although the vocabulary has BACKEND_EVALUATED and BACKEND_SELECTED.
+
+**Finding (#19):** a signal record is worth its causal chain. A producer that yields precomputed events is a log. Decisions with a tag belong on the signal plane, made inside a topology where the evidence causes the decision (now done for the backend: two evaluations trigger the selection). Repair loops belong in topologies too, triggered by DISCREPANCY_ROUTED.
+
+**Kit change suggested:** a check that flags producers yielding more than N events with no trigger between them, and a review question: "which tagged decisions in this sprint exist only as prose?"
+

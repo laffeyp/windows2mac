@@ -10,4 +10,5 @@ python3 scripts/gen_decoder.py --check
 uv run ruff check src scripts tests
 uv run mypy
 uv run pytest -q
+uv run python scripts/check_replay.py
 echo "gates: all passed"
