@@ -9,7 +9,7 @@
 - **Project name:** w2m
 - **Project type:** binary-translation toolchain + guest runtime + CLI; multi-language.
 - **Project classes (TECHNIQUES.md §2):** CLI; game development (input replay, frame budget, determinism); visual (Metal output frames); audio; embedded-adjacent (guest runtime inside a VM).
-- **Primary languages:** decided per component in Phase 1 and recorded here. Harness and probes: Python 3.12 (substrate's floor). Guest runtime and translator: not yet decided; Sprint 034 decides it with grounds (Decision 2026-10-09, sequence after review 2026-10-09 H1). The interim runtime is Python on the host (`kernel32.py`, `runtime.py`) with lifted code compiled to AArch64 in the VM (`vm_backend.py`).
+- **Primary languages:** decided per component in Phase 1 and recorded here. Harness and probes: Python 3.12 (substrate's floor). Guest runtime: C, freestanding, compiled to AArch64 with clang and run inside the managed VM; Windows-visible state in guest memory at Windows layouts (Decision 2026-10-09, runtime architecture). Translator: Python on the host (`lift.py`, `vm_backend.py`) behind one block-translation interface.
 - **Primary build commands:** none yet; Sprint 0 is content-only.
 - **Adopted SDD kit version:** `sdd-kit-3` (2026-09-27).
 
