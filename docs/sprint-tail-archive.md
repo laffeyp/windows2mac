@@ -206,3 +206,11 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
   - *Observation 2 (vocabulary gap → spec schema):* the spec has no validity layer; invalid encodings decode instead of producing #UD, which v0.2 §5.1 requires ("or produces the fault prescribed by the guest contract"). Disposition: deferred to Sprint 021 — LOCK rule, VEX/EVEX L/W/vvvv constraints from the SDM opcode column.
   - *Observation 3 (structure held):* length_differs 0 across all generated cases.
 - **Closed:** clean.
+
+### Sprint 021 (2026-10-08, closed)
+- **Scope:** validity layer (#UD) and iclass edge rules from the generated differential.
+- **Rubber Duck Pass:**
+  - *Observation 1 (the agent's own test was wrong):* a test asserted `f0 01 03` is invalid; XED decodes it as `lock add dword ptr [rbx], eax` (opcode 01 has a memory destination). The intended case was `f0 03 03` (BAD_LOCK_PREFIX). Disposition: resolved-here — the test was checked against XED before being changed, and the decoder was right.
+  - *Observation 2 (direction of error):* the strict-prefix rule turned silent misdecodes into 73 refusals (ours has no row where XED knows a newer instruction). Disposition: recorded — a refusal is honest; the rows are worklist items.
+  - *Observation 3 (residue):* 11.38% accepted-but-invalid, mostly EVEX broadcast/zeroing/opmask rules and VEX/EVEX W constraints. Disposition: deferred — next decoder sprint; then operand comparison.
+- **Closed:** clean.

@@ -162,3 +162,11 @@
 **What this says about the next kit version:**
 
 14. A comparison oracle is graded by the faults it finds, not by the runs it passes. A card that declares an equivalence check should also declare at least one planted fault per rule class it claims to cover (flag rule, width, memory), and the check counts only after each planted fault is found.
+
+### 2026-10-08 — The first generated candidate showed the contract was the weak part
+
+**What happened:** Sprint 031 ran a local code model against `windows.thread.last_error.set_get@0.1.0`. The loop worked: generate, admit, run in the VM, judge, accept; and on a planted wrong candidate, reject, report, route, repair, accept, resolve. Checking what else the guard would accept showed `return 1234` conforms. The contract had been accepted on documented evidence and three Windows runs, and nothing in its construction asked whether a trivial implementation would pass it.
+
+**What this says about the next kit version:**
+
+15. A contract that will judge generated code should be tried against the cheapest wrong implementations (a constant, a no-op, an echo of the input) before it is accepted. If one passes, the scenario is not discriminating, however well the evidence supports it.

@@ -62,7 +62,8 @@ class Kernel32:
         th.regs[4] = sp + 8
         return int.from_bytes(self.mem.read(sp, 8), "little")
 
-    def _argument(self, i: int) -> int:
+    def argument(self, i: int) -> int:
+        """Argument i of the current call under the Microsoft x64 calling convention."""
         if i < 4:
             return self.th.regs[(1, 2, 8, 9)[i]]
         sp = self.th.regs[4]                                      # [rsp] = return address
@@ -72,19 +73,19 @@ class Kernel32:
         return self.th.tid                                        # "thread identifier of the calling thread"
 
     def _set_last_error(self) -> None:
-        self.th.last_error = self._argument(0) & 0xFFFFFFFF            # per-thread last-error code; returns None
+        self.th.last_error = self.argument(0) & 0xFFFFFFFF            # per-thread last-error code; returns None
         return None
 
     def _get_last_error(self) -> int:
         return self.th.last_error                                 # "the calling thread's last-error code"
 
     def _get_std_handle(self) -> int:
-        if self._argument(0) & 0xFFFFFFFF == STD_OUTPUT_HANDLE:
+        if self.argument(0) & 0xFFFFFFFF == STD_OUTPUT_HANDLE:
             return STDOUT
-        raise Unimplemented(f"GetStdHandle({self._argument(0) & 0xFFFFFFFF:#x})")
+        raise Unimplemented(f"GetStdHandle({self.argument(0) & 0xFFFFFFFF:#x})")
 
     def _write_file(self) -> int:
-        h, buf, n, pwritten, povl = (self._argument(i) for i in range(5))
+        h, buf, n, pwritten, povl = (self.argument(i) for i in range(5))
         n &= 0xFFFFFFFF
         if pwritten == 0 or povl != 0:
             raise Unimplemented("WriteFile without lpNumberOfBytesWritten, or overlapped")
@@ -97,5 +98,5 @@ class Kernel32:
         return 1                                                  # "nonzero (TRUE)" on success
 
     def _exit_process(self) -> None:
-        self.exit_code = self._argument(0) & 0xFFFFFFFF
+        self.exit_code = self.argument(0) & 0xFFFFFFFF
         return None

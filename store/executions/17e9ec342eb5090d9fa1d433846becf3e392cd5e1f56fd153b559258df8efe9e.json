@@ -1,0 +1,12 @@
+{
+ "candidate_id": "cand-72ae741703af5f46-a1",
+ "candidate_sha256": "sha256:72ae741703af5f463658f72e28c6c169df88f8f6bac6e78b678bbc5fe3fbc460",
+ "elapsed_seconds": 0.027043,
+ "exit_code": 1,
+ "probe_sha256": "sha256:18f721e66de4b57e59330135d7c137c03890c94180455210cf979b8ae35074c8",
+ "profile_kind": "managed_vm",
+ "roles": {
+  "main": 4
+ },
+ "stop": "ExitProcess"
+}
