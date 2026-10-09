@@ -138,6 +138,12 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
+    if f is not None and (0x64 in f.prefixes or 0x65 in f.prefixes) and any(o[0] in "MA" for o in ops):
+        # FS/GS add a segment base (GS = the TEB on Windows x64; Mono reads gs:[0x1480 + key*8]);
+        # the model holds no segment bases yet (specs/guest_state.json fs_base/gs_base), so
+        # lifting this as a plain address would read the wrong memory (Sprint 037)
+        raise LiftError(f"FS/GS-relative memory operand at 0x{address:x} ({code[:d.length].hex()}): "
+                        "segment bases are not modeled")
     if not ops and ic not in ("NOP", "RET_NEAR"):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")

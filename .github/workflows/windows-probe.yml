@@ -1,7 +1,8 @@
 # Tiebreak probe runner (Sprints 006-007). Builds probes/<probe>/<probe>.c with clang on real x64
 # Windows, runs it `repeat` times, and uploads the guest traces and role maps for ingest on the Mac.
 # Dispatch: gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id> [-f repeat=N]
-# Probe CLI: <probe>.exe <execution_id> <trace_path> <roles_path>
+# Probe CLI: <probe>.exe <execution_id> <trace_path> <roles_path>; mode stdout: no arguments;
+# mode file: <probe>.exe probes/<probe>/cases.bin out/result-<i>.bin
 name: windows-probe
 
 on:
@@ -50,7 +51,10 @@ jobs:
           "gha-windows-2025-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
           for ($i = 1; $i -le [int]"${{ inputs.repeat }}"; $i++) {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            if ($mode -eq "stdout") {
+            if ($mode -eq "file") {
+              # mode file (Sprint 037): probes/<probe>/cases.bin in, a result file out
+              ./probe.exe "probes/${{ inputs.probe }}/cases.bin" "out/result-$i.bin"
+            } elseif ($mode -eq "stdout") {
               # mode stdout: the probe writes its own trace body; cmd keeps the bytes unchanged
               cmd /c "probe.exe > out\body-$i.jsonl"
             } else {
