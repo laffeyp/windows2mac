@@ -58,7 +58,10 @@ jobs:
           [ "$free" -ge "$need" ] || { echo "not enough disk"; exit 1; }
           mkdir -p $base/parts $base/game
           echo "GAME_DIR=$(cygpath -w $base/game)" >> "$GITHUB_ENV"
-          gh release download "$tag" --repo "${{ github.repository }}" --dir $base/parts
+          # only the parts release.json names: the release also holds other assets (Sprint 033's capture)
+          for part in $(python -c "import json;print(' '.join(p['name'] for p in json.load(open('$meta/release.json'))['parts']))"); do
+            gh release download "$tag" --repo "${{ github.repository }}" --dir $base/parts --pattern "$part"
+          done
           python - "$meta/release.json" "$base/parts" <<'EOF'
           import hashlib, json, sys
           for p in json.load(open(sys.argv[1]))["parts"]:
@@ -69,7 +72,9 @@ jobs:
           print("parts verified")
           EOF
           zstd --version || choco install zstandard -y --no-progress
-          for p in $base/parts/*; do cat "$p"; rm "$p"; done | zstd -d -c | tar -xf - -C $base/game
+          for part in $(python -c "import json;print(' '.join(p['name'] for p in json.load(open('$meta/release.json'))['parts']))"); do
+            cat "$base/parts/$part"; rm "$base/parts/$part"
+          done | zstd -d -c | tar -xf - -C $base/game
           python - "$meta/files.json" "$base/game" <<'EOF'
           import hashlib, json, os, sys
           m = json.load(open(sys.argv[1])); n = 0
