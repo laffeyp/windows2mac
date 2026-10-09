@@ -47,7 +47,7 @@ jobs:
           # GitHub documents 14 GB for this runner; run 37979176570 measured 118 GB free on D:.
           # Parts and the unpacked tree need about 24 GB at the peak: stop early if that is gone.
           need=$((26 * 1024 * 1024 * 1024))
-          free=$(python -c "import shutil;print(shutil.disk_usage('${base%/w2m}/').free)")
+          free=$(python -c "import shutil, sys; print(shutil.disk_usage(sys.argv[1]).free)" "${base%/w2m}/")   # Git Bash converts the argument to D:/
           echo "free on ${base%/w2m}: $free bytes; need $need"
           [ "$free" -ge "$need" ] || { echo "not enough disk"; exit 1; }
           mkdir -p $base/parts $base/game
