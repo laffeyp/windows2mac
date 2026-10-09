@@ -10,7 +10,7 @@
 |---|---|---|---|
 | H1 | The research direction's discrepancy report (§11) and the kit's Signal Report are the same artifact; one vocabulary serves both the w2m runtime trace and the sprint loop. | _pending_ | — |
 | H2 | Resolve-and-record holds up on a project whose key facts (TSO access, oracle behavior) can only be settled by probes: the agent records the decision provisionally and a probe sprint confirms or supersedes it, with no wait state. | partially | 2026-10-03: four same-day agent decisions superseded cleanly by the v0.2 user decision; but two of them were scope (intent), not probe-settleable facts. OQ-1 is still the first probe test. |
-| H3 | The ≤2-files sprint rule fits a compiler/runtime project if contracts are one file each. | _pending_ | — |
+| H3 | The ≤2-files sprint rule fits a compiler/runtime project if contracts are one file each. | refuted | Sprints 023-033: ten of eleven cards recorded an exception; Sprints 029-032 touched 27-55 files each. The checkable unit is one path from input to verdict. Project override recorded 2026-10-09. |
 | H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
 
 ---
@@ -178,3 +178,14 @@
 **What this says about the next kit version:**
 
 16. A verification harness has control paths of its own, and a clean result covers only the paths the subject program drove. A card that relies on an oracle should name the oracle's branches (first visit and revisit; all runs pass, some fail, all fail) and give a fixture for each, the way #14 asks for a planted fault per rule class. A trigger predicate should read its event, not state another operator writes.
+
+### 2026-10-09 — Two fixtures chosen from a description, not from the thing
+
+**What happened:** The test game, BioShock 2 Remastered, was chosen on 2026-10-05 from its Steam store page ("64-bit only"). Its Windows depot, fetched on 2026-10-09, is 32-bit: `Bioshock2HD.exe` and six DLLs are PE machine 0x014c. The store line and Steam's `osarch 64` describe the required OS, not the binary. Separately, the decoder phase closed on 2026-10-08 on "spec gaps 0" measured on the Python 3.14.8 corpus. On the replacement game, Hail to the Rainbow, the decoder has no row at 8,935 reachable positions in 123 kinds, all SIMD (CMPPS 4,757; MOVMSKPS 1,442; RSQRTPS 432; RCPPS 423; MOVNTPS 357), and 142 of the 577 rows the game uses lack XED confirmation. Integer-heavy interpreter code was a sound fixture for integer decoding and the wrong one for a game engine.
+
+**Finding (#17):** a fixture is chosen by reading the artifact the work will run on. A profile record states the PE machine field, read from the binary. An exit criterion names its fixture and says why that fixture stands for the target; when the target changes, the criterion is re-measured on it before it is cited as met.
+
+**What worked:** the 2026-10-08 Decision kept criterion (d) open until the real game arrived. That one open item is how the gap surfaced on the first day the game's code was read.
+
+**Kit change suggested:** the closed user-only list and the profile templates should carry "binary facts read from the artifact" as a required field, not a note.
+
