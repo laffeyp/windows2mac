@@ -44,6 +44,12 @@ jobs:
           meta="games/${{ inputs.game }}"
           tag=$(python -c "import json;print(json.load(open('$meta/release.json'))['tag'])")
           base=/c/w2m; [ -d /d ] && base=/d/w2m                      # the drive with room, when present
+          # GitHub documents 14 GB for this runner; run 37979176570 measured 118 GB free on D:.
+          # Parts and the unpacked tree need about 24 GB at the peak: stop early if that is gone.
+          need=$((26 * 1024 * 1024 * 1024))
+          free=$(python -c "import shutil;print(shutil.disk_usage('${base%/w2m}/').free)")
+          echo "free on ${base%/w2m}: $free bytes; need $need"
+          [ "$free" -ge "$need" ] || { echo "not enough disk"; exit 1; }
           mkdir -p $base/parts $base/game
           echo "GAME_DIR=$(cygpath -w $base/game)" >> "$GITHUB_ENV"
           gh release download "$tag" --repo "${{ github.repository }}" --dir $base/parts
@@ -66,7 +72,11 @@ jobs:
               with open(sys.argv[2] + "/" + f["path"], "rb") as fh:
                   while c := fh.read(1 << 22): h.update(c)
               assert h.hexdigest() == f["sha256"], f["path"]; n += 1
-          print(f"{n} files verified against files.json")
+          listed = {f["path"] for f in m["listing"]}
+          present = {os.path.relpath(os.path.join(r, x), sys.argv[2]).replace(os.sep, "/")
+                     for r, _, xs in os.walk(sys.argv[2]) for x in xs}
+          assert present == listed, f"unlisted {sorted(present - listed)[:5]} missing {sorted(listed - present)[:5]}"
+          print(f"{n} files verified against files.json; no other file present")
           EOF
       - name: install launcher
         shell: pwsh

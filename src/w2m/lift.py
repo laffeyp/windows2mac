@@ -138,6 +138,9 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
+    if not ops and ic not in ("NOP", "RET_NEAR"):
+        # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
+        raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     if ic == "NOP":
         pass
     elif ic == "RET_NEAR" and not ops:

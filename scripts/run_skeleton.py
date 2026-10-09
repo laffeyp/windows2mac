@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import judge_traces  # noqa: E402
 
+from w2m import VOCAB_VERSION  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.runtime import Result, Runtime  # noqa: E402
 from w2m.vm_backend import VM, lockstep, state_differential  # noqa: E402
@@ -41,7 +42,7 @@ def wrap(body: bytes, execution_id: str, profile_id: str) -> tuple[bytes, dict[s
     lines = body.splitlines()
     tid = json.loads(lines[0])["thread_id"]
     opened = json.dumps({"tag": "GUEST_TRACE_OPENED", "execution_id": execution_id,
-                         "vocab_version": "0.5", "profile_id": profile_id,
+                         "vocab_version": VOCAB_VERSION, "profile_id": profile_id,
                          "trace_format_version": "0.1"}, separators=(",", ":"))
     closed = json.dumps({"tag": "GUEST_TRACE_CLOSED", "line_count": len(lines) + 2,
                          "thread_count": len({json.loads(x)["thread_id"] for x in lines}),

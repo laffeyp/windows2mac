@@ -2,7 +2,7 @@
  "reference": "Intel XED v2026.08.23 (0bcb6237345c), chip ALL",
  "cases_per_row": 48,
  "rows": 809,
- "confirmed": 548,
+ "confirmed": 549,
  "by_row_sha256": {
   "sha256:63c3cf2c49d3801d9064970e8a4c54177583d2ddac61413cabfa3bd18e300ab5": {
    "row": 0,
@@ -4976,9 +4976,8 @@
    "row": 605,
    "mn": "cmpxchg8b",
    "cases": 48,
-   "agree": 39,
-   "iclass_differs": 9,
-   "confirmed": false
+   "agree": 48,
+   "confirmed": true
   },
   "sha256:20c6d08071100b65dade74337379e622d1a6d64a7690a1f3b185cbcc0c409840": {
    "row": 606,

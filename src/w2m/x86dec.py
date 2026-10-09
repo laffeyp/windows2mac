@@ -46,6 +46,7 @@ class Decoded:
     mnemonic: str
     iclass: str
     fields: Fields | None = None
+    row: str | None = None    # sha256 of the spec row that decoded it (key of x86_decode_confirmations.json)
 
 
 class DecodeError(ValueError):
@@ -182,7 +183,7 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} modrm "
                           f"{'none' if modrm is None else hex(modrm)} w {w} l {vl}")
-    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq, opst, osz64 = chosen[0]
+    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq, opst, osz64, row = chosen[0]
     if 0xF0 in pfx and not (lock_ok and modrm is not None and modrm >> 6 != 3):
         raise InvalidEncoding(f"LOCK prefix on {mn} {'register' if modrm is not None and modrm >> 6 == 3 else ''} form")
     if enc == "vex" and vreq == "1111" and vvvv != 0xF:
@@ -242,4 +243,4 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
     eff = 64 if osz64 == "f64" or (osz64 == "d64" and opsize == "32") else int(opsize)
     fields = Fields(tuple(pfx), rex, enc, op, modrm, sib, disp, disp_size, imm_bytes, eff,
                     32 if 0x67 in pfx else 64, opst, vvvv)
-    return Decoded(i, mn, iclass, fields)
+    return Decoded(i, mn, iclass, fields, row)
