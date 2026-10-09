@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from w2m.x86dec_tables import LOCKABLE, REP_STRING, REPE_STRING, TABLE, Entry
+from w2m.x86dec_tables import LOCKABLE, LEGACY_PREFIX_OPCODES, REP_STRING, REPE_STRING, TABLE, Entry
 
 LEGACY = frozenset({0xF0, 0xF2, 0xF3, 0x2E, 0x36, 0x3E, 0x26, 0x64, 0x65, 0x66, 0x67})
 MAPS_3 = {0x38: "0f38", 0x3A: "0f3a"}
@@ -129,6 +129,7 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
         if (p1 & 0x1F) not in XOP_MAP:
             raise DecodeError(f"XOP map field {p1 & 0x1F}")
         enc, mp, w, pp, vl = "xop", XOP_MAP[p1 & 0x1F], p2 >> 7, p2 & 3, (p2 >> 2) & 1
+        vvvv = (p2 >> 3) & 0xF
         i += 3
         mpfx = [VEX_PFX[pp]]
     elif b[i] in (0xC4, 0xC5) and not rex:
@@ -163,11 +164,33 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
     if not cands:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x}"
                           f"{'' if enc == 'legacy' else f' ({enc})'}")
-    chosen = _pick(cands, mpfx)
     sse_family = mp != "1" and any(c[0] != "none" for c in cands)
-    if enc == "legacy" and sse_family and chosen and chosen[0][0] == "none" and len(mpfx) > 1:
-        # a 66/F2/F3 prefix with no row of its own on an SSE-family opcode: not this instruction
-        raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} with prefixes {mpfx}")
+    if enc == "legacy" and sse_family and (mp, op) in LEGACY_PREFIX_OPCODES:
+        # A general-purpose opcode with F2/F3 rows: a prefix with no row keeps its legacy meaning
+        # only where the spec says so (MOVBE: 66 is the operand size, F3 is invalid; BSF: F2 is
+        # ignored). Walk the prefixes in precedence order.
+        legacy = LEGACY_PREFIX_OPCODES[(mp, op)]
+        chosen = []
+        for prefix in mpfx:
+            rows = [c for c in cands if c[0] == prefix]
+            if rows and any(c[2] for c in rows) and i < len(b):
+                # a prefix's rows count only if one fits this ModRM (F3 0F C7 /1 is CMPXCHG8B:
+                # the F3 rows are /6 and /7)
+                m = b[i]
+                rows = [c for c in rows if (c[1] is None or c[1] == (m >> 3) & 7)
+                        and (c[6] is None or int(c[6], 16) == m) and (c[9] is None or (c[9] == "reg") == (m >> 6 == 3))]
+            if rows:
+                chosen = [c for c in cands if c[0] == prefix]
+                break
+            if prefix != "none" and prefix not in legacy:
+                break
+    elif enc == "legacy" and sse_family:
+        # The mandatory prefix is the present prefix of highest precedence (the last F2/F3, then
+        # 66). With no row for it the bytes are not an instruction: F2 66 0F 6F is not MOVDQA
+        # (XED refuses it; spec 0.7.0). No fallback to a lower prefix's row.
+        chosen = [c for c in cands if c[0] == mpfx[0]]
+    else:
+        chosen = _pick(cands, mpfx)
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} with prefixes {mpfx}")
     modrm = b[i] if any(c[2] for c in chosen) else None
@@ -183,11 +206,18 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
     if not chosen:
         raise DecodeError(f"no entry for map {mp} opcode 0x{op:02x} modrm "
                           f"{'none' if modrm is None else hex(modrm)} w {w} l {vl}")
-    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq, opst, osz64, row = chosen[0]
+    _, _, has_modrm, imm, mn, sizes, _, _, _, _, iclass, isizes, requires, fallback, lock_ok, vreq, opst, osz64, row, np, reg_valid = chosen[0]
+    if np and enc == "legacy" and any(p in pfx for p in ((0xF2, 0xF3) if np == "nfx" else (0x66, 0xF2, 0xF3))):
+        # SDM NP: 66, F2 and F3 are not allowed (66 0F 52 is not RSQRTPS; 66 0F 01 D0 is not
+        # XGETBV); NFx: F2 and F3 are not allowed, 66 is (RDRAND r16)
+        raise InvalidEncoding(f"{mn} is {'NFx' if np == 'nfx' else 'NP'}: prefix not allowed")
+    if reg_valid is not None and modrm is not None and ((rex >> 2 & 1) << 3 | modrm >> 3 & 7) not in reg_valid:
+        # ModRM.reg names a register that does not exist (CR1, DR8, segment register 6)
+        raise InvalidEncoding(f"{mn}: register {(rex >> 2 & 1) << 3 | modrm >> 3 & 7} does not exist")
     if 0xF0 in pfx and not (lock_ok and modrm is not None and modrm >> 6 != 3):
         raise InvalidEncoding(f"LOCK prefix on {mn} {'register' if modrm is not None and modrm >> 6 == 3 else ''} form")
-    if enc == "vex" and vreq == "1111" and vvvv != 0xF:
-        raise InvalidEncoding(f"VEX.vvvv must be 1111b for {mn}")
+    if enc in ("vex", "xop") and vreq == "1111" and vvvv != 0xF:
+        raise InvalidEncoding(f"{enc.upper()}.vvvv must be 1111b for {mn}")
     sib: int | None = None
     disp_size = 0
     if has_modrm:
@@ -212,7 +242,8 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
     imm_size = {None: 0, "b": 1, "w": 2, "d": 4,
                 "z": 2 if opsize == "16" else 4,
                 "v": 8 if opsize == "64" else 2 if opsize == "16" else 4,
-                "moffs": 4 if 0x67 in pfx else 8}[imm]
+                "moffs": 4 if 0x67 in pfx else 8,
+                "wb": 3}[imm]                                   # ENTER iw ib (SDM ENTER)
     imm_bytes = bytes(b[i:i + imm_size])
     i += imm_size
     if i > MAX_LEN:
@@ -223,6 +254,8 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
         iclass = dict(isizes)[opsize]
     if requires and fallback and features is not None and requires not in features:
         mn, iclass = fallback                         # same bytes, older CPU (spec `features` note)
+    if mp == "1" and op == 0xE3 and 0x67 in pfx:
+        mn, iclass = "jecxz", "JECXZ"                 # E3 with the 67 prefix tests ECX (SDM Jcc: JECXZ)
     if mp == "1" and op == 0x90 and rex & 1 and 0xF3 not in pfx:
         mn, iclass = "xchg", "XCHG"                   # 41 90: xchg r8, rax (SDM: NOP is 90 without REX.B)
     if 0xF0 in pfx and mn in LOCKABLE:

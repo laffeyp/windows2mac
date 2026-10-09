@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 026 (2026-10-08, closed)
+- **Scope:** review §4.9 code defects: delay-load, relocation sites, non-returning calls, observed-evidence execution ids.
+- **Rubber Duck Pass:**
+  - *Observation 1 (a fetched summary was wrong):* the web-fetch summary of the PE Format delay-load table put Attributes at offset 24 and omitted the timestamp. LLVM `Object/COFF.h` and the 0x40-byte directory in `_wmi.pyd` agree on Attributes at 0 and 32-byte descriptors. Disposition: resolved-here; the code cites LLVM. KIT_DIARY finding 13.
+  - *Observation 2 (a review question answered):* libcrypto's code-decoded strings do not come from non-returning calls. Disposition: recorded; the Deferred entry stands.
+  - *Observation 3 (immutability kept):* 0.2.0 is not edited; the loader keeps a legacy rule for prose-cited executions and 0.2.1 carries ids. Disposition: resolved-here.
+  - *Observation 4 (a gate that could not fail):* the close ran `uv run mypy | tail -1`; the pipe hid mypy's exit 1, and the Built entry claimed mypy 0. Fixed after commit 1c214cf; gates now run unpiped with each exit status printed. Disposition: resolved-here; same family as KIT_DIARY H4 (a check needs a way to fail).
+- **Closed:** clean.
+
 ### Sprint 025 (2026-10-08, closed)
 - **Scope:** decoder differential on the signal plane; judge session tags.
 - **Rubber Duck Pass:**

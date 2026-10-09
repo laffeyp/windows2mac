@@ -1,0 +1,49 @@
+{
+ "game": "hail-to-the-rainbow",
+ "spec_version": "0.7.0",
+ "positions": 6192478,
+ "native": 5801517,
+ "runtime": 390961,
+ "outcomes": {
+  "agree": 6192476,
+  "ours_gap": 2
+ },
+ "region_ends": {
+  "exact_end": 4451,
+  "trampoline_call": 4840,
+  "region_end": 222,
+  "xed_refuses": 111
+ },
+ "capture": {
+  "format": 2,
+  "records": 16295,
+  "regions": 9624,
+  "torn_tail_bytes": 0,
+  "cpu_features": {
+   "sse2": true,
+   "sse3": true,
+   "ssse3": true,
+   "sse4_1": true,
+   "sse4_2": true,
+   "popcnt": true,
+   "avx": true,
+   "fma": true,
+   "avx2": true,
+   "bmi1": true,
+   "bmi2": true,
+   "avx512f": false
+  }
+ },
+ "rows_used": 718,
+ "rows_unconfirmed": [],
+ "kinds": [
+  {
+   "outcome": "ours_gap",
+   "xed": "ADD",
+   "ours": "",
+   "lengths": "",
+   "count": 2,
+   "example": "d54881c2f0feffff"
+  }
+ ]
+}

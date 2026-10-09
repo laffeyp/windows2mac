@@ -131,6 +131,7 @@
 - **2026-10-09** — Sprint 033 (Hail to the Rainbow's code on the Windows runner) closed. `scripts/pack_game.py`, `games/hail-to-the-rainbow/{files,release}.json`, private release `game-1699230-24247624` (5 parts, 8,098,738,888 bytes; plus the run 37982448071 capture), `tools/jit_capture/jit_capture.c` (format 2), `src/w2m/jit_capture.py`, `.github/workflows/windows-game.yml`, `scripts/game_code_differential.py`, `Decoded.row`, spec 0.6.3, `store/game-runs/37982448071/`, `store/runs/gamediff-1791576553479425000`. Dual contract: signal pass (COMPARISON_COMPLETED 1, DISCREPANCY_REPORTED 125, DISCREPANCY_ROUTED 125, contract_revision); artifact pass (gates.sh 0, 208 passed). Observation: pass — the game ran 190 s in batch mode on the runner; 564 Assembly-CSharp methods and 4,840 trampolines captured; 6,192,478 positions, 0 length or iclass differences from XED, 8,962 without a row in 125 kinds; criterion (d) 438 of 579 rows confirmed.
 - **2026-10-09** — Sprint 034 (guest state, measured on Windows) closed. `probes/guest_state/`, `specs/guest_state.json` 0.1.0, `scripts/check_guest_state.py`, `tests/test_guest_state.py`, `store/probe-runs/37989842529/`, `store/runs/gueststate-1791579238609115000`; `windows-probe.yml` uploads output when a probe fails. Dual contract: signal pass (COMPARISON_COMPLETED conforms); artifact pass (gates.sh 0). Observation: pass — 41 checks equal in 3 runner runs; 62 spec fields, 0 differences; four planted faults caught.
 - **2026-10-09** — Sprint 035 (the guest runtime: kernel32 in C inside the VM) closed. `tools/guest_runtime/{runtime.h,runtime.c,last_error.c}`, `src/w2m/guest_runtime.py`, `src/w2m/vm_backend.py` (bridges, process area, transport, ring, `record_translations`), `src/w2m/candidate.py` (C candidates), `src/w2m/a64_encoder.py` (`stp`, `blr`), `scripts/run_candidate_loop.py`, `scripts/run_skeleton.py`, `tests/test_guest_runtime.py`, `store/runs/translations-1791579909159674000`, `store/runs/candidates-1791579927493057000`, `store/runs/candidates-1791579948983398000`. Dual contract: signal pass (CODE_TARGET_DISCOVERED 62, TRANSLATION_PUBLISHED 62; candidate loop records as listed); artifact pass (gates.sh 0). Observation: pass — both probes 3/3 under their contracts in the VM with kernel32 as guest C; lockstep and state differential 0 differences; the model wrote a C candidate accepted on attempt 1 and repaired a planted constant.
+- **2026-10-09** — Sprint 036 (the decoder for Hail to the Rainbow) closed. `specs/x86_decode.json` 0.7.0 (1,061 rows), `src/w2m/x86dec.py` (strict mandatory prefix, per-opcode legacy prefixes, row-level NP/NFx, ModRM.reg validity, XOP vvvv, JECXZ), `scripts/rows_from_sdm.py`, `scripts/merge_sdm_rows.py`, `scripts/rebuild_decode_spec.py`, `specs/x86_decode_sdm_request.txt`, `specs/x86_decode_confirmations.json`, `store/runs/gendiff-1791583020404460000`, `store/runs/gamediff-1791583316617553000`. Dual contract: signal pass; artifact pass (gates.sh 0, 231 passed). Observation: pass — decoder exit criterion (d) met on Hail to the Rainbow (718 of 718 used rows confirmed); game positions without a row 8,962 → 2 (APX, refused as the target CPUs do); generated confirmations 549/809 → 971/1,061; criteria (a)-(c) unchanged.
 
 ## Deferred
 
@@ -169,6 +170,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 036 (2026-10-09, closed)
+- **Scope:** the decoder for Hail to the Rainbow — validity rules and the game's rows; criterion (d).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* two validity rules went in; a script read the SDM's opcode lines for every iclass the game needs and proposed rows; a merge replaced hand-written vector rows and kept general-purpose ones; the generated differential named each wrong row and the cause was fixed in the generator or the merge, not in the row; the game differential then found every used row confirmed.
+  - *Observation 1 (the fallback hid missing rows):* a decoder that falls back to a lower prefix's row decodes bytes it has no row for. Disposition: resolved-here (strict prefix with per-opcode exceptions taken from XED).
+  - *Observation 2 (a quiet merge was a lying merge):* "already present" counted rows with the same bytes and a different iclass; making that a conflict exposed four generator faults at once. Disposition: resolved-here.
+  - *Observation 3 (a script must reproduce the session):* the committed rebuild first differed from the step-by-step spec by one row, because request order decided which row won a key. Disposition: resolved-here; the rebuild now equals it row for row.
+- **Closed:** clean.
 
 ### Sprint 035 (2026-10-09, closed)
 - **Scope:** kernel32 for both probes as freestanding C in the VM; C candidates; translation on the signal plane.
@@ -250,13 +260,4 @@
   - *Observation 3 (tail roll):* entries for Sprints 000-017 moved verbatim to `docs/sprint-tail-archive.md`; nothing deleted. Disposition: resolved-here.
 - **Closed:** clean (CI run 37851288883: 150 passed, 0 skipped).
 
-### Sprint 026 (2026-10-08, closed)
-- **Scope:** review §4.9 code defects: delay-load, relocation sites, non-returning calls, observed-evidence execution ids.
-- **Rubber Duck Pass:**
-  - *Observation 1 (a fetched summary was wrong):* the web-fetch summary of the PE Format delay-load table put Attributes at offset 24 and omitted the timestamp. LLVM `Object/COFF.h` and the 0x40-byte directory in `_wmi.pyd` agree on Attributes at 0 and 32-byte descriptors. Disposition: resolved-here; the code cites LLVM. KIT_DIARY finding 13.
-  - *Observation 2 (a review question answered):* libcrypto's code-decoded strings do not come from non-returning calls. Disposition: recorded; the Deferred entry stands.
-  - *Observation 3 (immutability kept):* 0.2.0 is not edited; the loader keeps a legacy rule for prose-cited executions and 0.2.1 carries ids. Disposition: resolved-here.
-  - *Observation 4 (a gate that could not fail):* the close ran `uv run mypy | tail -1`; the pipe hid mypy's exit 1, and the Built entry claimed mypy 0. Fixed after commit 1c214cf; gates now run unpiped with each exit status printed. Disposition: resolved-here; same family as KIT_DIARY H4 (a check needs a way to fail).
-- **Closed:** clean.
-
-Older entries (Sprints 000-025): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-026): `docs/sprint-tail-archive.md`.

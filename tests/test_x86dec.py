@@ -74,7 +74,7 @@ def test_decoding_depends_on_cpu_features(features: frozenset[str] | None, expec
 
 def test_unknown_opcode_is_reported() -> None:
     with pytest.raises(DecodeError, match="no entry"):
-        decode(bytes.fromhex("0f0e") + b"\0" * 15)        # femms (3DNow!) is not in the spec
+        decode(bytes.fromhex("0f04") + b"\0" * 15)        # 0F 04 is undefined (XED refuses it too)
 
 
 @pytest.mark.parametrize(("hexbytes", "why"), [
@@ -83,7 +83,11 @@ def test_unknown_opcode_is_reported() -> None:
     ("f001c0", "LOCK on register form of ADD"),
     ("c5e877c0", "VZEROUPPER needs VEX.vvvv=1111"),
     ("c5fd73348574", "VEX shift-by-immediate group is register-only"),
-    ("f30f1234", "F3 on SSE-family 0F 12: not MOVLPS"),
+    ("f2660f6f00", "F2 takes precedence over 66 on 0F 6F, and F2 0F 6F has no row (not MOVDQA)"),
+    ("660f5200", "RSQRTPS is NP: 66 0F 52 is not an instruction"),
+    ("660f01d0", "XGETBV is NP"),
+    ("8dc0", "LEA with a register operand (mod = 3) is #UD"),
+    ("f30f38f000", "MOVBE refuses F3 (F3 has no row there and is not ignored)"),
 ])
 def test_invalid_encodings_are_refused(hexbytes: str, why: str) -> None:
     from w2m.x86dec import DecodeError
@@ -92,6 +96,8 @@ def test_invalid_encodings_are_refused(hexbytes: str, why: str) -> None:
 
 
 @pytest.mark.parametrize(("hexbytes", "iclass"), [
+    ("f30f1234", "MOVSLDUP"), ("660f38f000", "MOVBE"), ("f20fbc00", "BSF"), ("f30fc70f", "CMPXCHG8B"),
+    ("66cf", "IRET"), ("67e300", "JECXZ"), ("f0490fc708", "CMPXCHG16B_LOCK"),
     ("f00100", "ADD_LOCK"), ("f0870a", "XCHG"), ("c0f401", "SHL"), ("f2a4", "REP_MOVSB"),
     ("f2a6", "REPNE_CMPSB"), ("f34390", "PAUSE"), ("0f18c0", "NOP"), ("660fb6c0", "MOVZX"),
 ])

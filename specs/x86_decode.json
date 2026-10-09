@@ -1,6 +1,6 @@
 {
  "spec_id": "x86_64.decode",
- "version": "0.6.3",
+ "version": "0.7.0",
  "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
  "prefixes": {
   "legacy": [
@@ -79,7 +79,59 @@
    "scasq"
   ],
   "evex": "62 (always EVEX in 64-bit mode): P0 R X B R' 0 m m m; P1 W vvvv 1 pp; P2 z L'L b V' aaa (SDM Vol 2A 2.7)",
-  "xop": "8F with (next byte & 0x1F) >= 8: like 3-byte VEX, maps 8/9/A (AMD APM Vol 6); otherwise 8F is POP r/m"
+  "xop": "8F with (next byte & 0x1F) >= 8: like 3-byte VEX, maps 8/9/A (AMD APM Vol 6); otherwise 8F is POP r/m",
+  "legacy_prefix_opcodes": [
+   {
+    "opcode": [
+     "0f38",
+     240
+    ],
+    "legacy": [
+     "66"
+    ]
+   },
+   {
+    "opcode": [
+     "0f38",
+     241
+    ],
+    "legacy": [
+     "66"
+    ]
+   },
+   {
+    "opcode": [
+     "0f",
+     188
+    ],
+    "legacy": [
+     "66",
+     "f2"
+    ]
+   },
+   {
+    "opcode": [
+     "0f",
+     189
+    ],
+    "legacy": [
+     "66",
+     "f2"
+    ]
+   },
+   {
+    "opcode": [
+     "0f",
+     199
+    ],
+    "legacy": [
+     "66",
+     "f2",
+     "f3"
+    ]
+   }
+  ],
+  "legacy_prefix_opcodes_note": "Opcodes with F2/F3 rows whose no-prefix row is a general-purpose instruction. A prefix with no row of its own keeps its legacy meaning only where listed: MOVBE (0F38 F0/F1, CRC32 at F2) takes 66 as operand size and refuses F3; BSF/BSR (0F BC/BD, TZCNT/LZCNT at F3) take 66 as operand size and ignore F2; 0F C7 (CMPXCHG8B/16B, RDRAND, RDSEED; RDPID and SENDUIPI at F3) takes 66 as operand size and ignores F2, and F3 where no F3 row fits the ModRM. On every other SSE-family opcode the highest-precedence prefix must have a row (XED: 66 0F38 F0 is MOVBE, F2 0F BC is BSF, F3 0F C7 /1 is CMPXCHG8B, but F2 66 0F 6F is invalid)."
  },
  "immediates": {
   "b": "1 byte",
@@ -87,7 +139,8 @@
   "d": "4 bytes",
   "z": "2 bytes with 66 operand-size, else 4",
   "v": "8 with REX.W, 2 with 66, else 4",
-  "moffs": "absolute address: 8 bytes, or 4 with 67 address-size (SDM Vol 2A 2.2.1.4)"
+  "moffs": "absolute address: 8 bytes, or 4 with 67 address-size (SDM Vol 2A 2.2.1.4)",
+  "wb": "3 bytes: a word then a byte (ENTER iw ib)"
  },
  "sources": [
   "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
@@ -1724,7 +1777,21 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "MOV"
+   "iclass": "MOV",
+   "reg_valid": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13
+   ]
   },
   {
    "map": "1",
@@ -1735,7 +1802,8 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
    "iclass": "LEA",
    "ops": "Gv,M",
-   "src_ops": "SDM Vol 2D Appendix A operand notation (Table A-1 abbreviations: E, G, I, J, M, Z; b, w, d, v, z)"
+   "src_ops": "SDM Vol 2D Appendix A operand notation (Table A-1 abbreviations: E, G, I, J, M, Z; b, w, d, v, z)",
+   "form": "mem"
   },
   {
    "map": "1",
@@ -1744,7 +1812,21 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "MOV"
+   "iclass": "MOV",
+   "reg_valid": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13
+   ]
   },
   {
    "map": "1",
@@ -3349,7 +3431,8 @@
    "modrm": true,
    "mod": "D0",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "XGETBV"
+   "iclass": "XGETBV",
+   "np": true
   },
   {
    "map": "0f",
@@ -4110,15 +4193,6 @@
   },
   {
    "map": "0f",
-   "op": 96,
-   "mn": "punpcklbw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PUNPCKLBW"
-  },
-  {
-   "map": "0f",
    "op": 108,
    "mn": "punpcklqdq",
    "pfx": "66",
@@ -4146,15 +4220,6 @@
   },
   {
    "map": "0f",
-   "op": 215,
-   "mn": "pmovmskb",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PMOVMSKB"
-  },
-  {
-   "map": "0f",
    "op": 219,
    "mn": "pand",
    "pfx": "66",
@@ -4170,15 +4235,6 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
    "iclass": "POR"
-  },
-  {
-   "map": "0f",
-   "op": 239,
-   "mn": "pxor",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PXOR"
   },
   {
    "map": "0f",
@@ -4206,73 +4262,6 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
    "iclass": "PADDQ"
-  },
-  {
-   "map": "0f",
-   "op": 231,
-   "mn": "movntdq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVNTDQ"
-  },
-  {
-   "map": "0f",
-   "op": 214,
-   "mn": "movq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVQ"
-  },
-  {
-   "map": "0f",
-   "op": 110,
-   "mn": "movd",
-   "pfx": "66",
-   "modrm": true,
-   "w": 0,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVD"
-  },
-  {
-   "map": "0f",
-   "op": 110,
-   "mn": "movq",
-   "pfx": "66",
-   "modrm": true,
-   "w": 1,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVQ"
-  },
-  {
-   "map": "0f",
-   "op": 126,
-   "mn": "movd",
-   "pfx": "66",
-   "modrm": true,
-   "w": 0,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVD"
-  },
-  {
-   "map": "0f",
-   "op": 126,
-   "mn": "movq",
-   "pfx": "66",
-   "modrm": true,
-   "w": 1,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVQ"
-  },
-  {
-   "map": "0f",
-   "op": 126,
-   "mn": "movq",
-   "pfx": "f3",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVQ"
   },
   {
    "map": "0f",
@@ -4329,18 +4318,6 @@
    "imm": "b",
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
    "iclass": "PSHUFLW"
-  },
-  {
-   "map": "0f",
-   "op": 115,
-   "mn": "psrlq",
-   "pfx": "66",
-   "modrm": true,
-   "reg": 2,
-   "imm": "b",
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "PSRLQ",
-   "form": "reg"
   },
   {
    "map": "0f",
@@ -4638,26 +4615,6 @@
    "src_ops": "SDM Vol 2D Appendix A operand notation (Table A-1 abbreviations: E, G, I, J, M, Z; b, w, d, v, z)"
   },
   {
-   "map": "0f",
-   "op": 174,
-   "mn": "ldmxcsr",
-   "pfx": "none",
-   "modrm": true,
-   "reg": 2,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "LDMXCSR"
-  },
-  {
-   "map": "0f",
-   "op": 174,
-   "mn": "stmxcsr",
-   "pfx": "none",
-   "modrm": true,
-   "reg": 3,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "iclass": "STMXCSR"
-  },
-  {
    "map": "0f3a",
    "op": 99,
    "mn": "pcmpistri",
@@ -4724,40 +4681,6 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVDQU",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 231,
-   "mn": "vmovntdq",
-   "pfx": "66",
-   "modrm": true,
-   "vex": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVNTDQ",
-   "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 16,
-   "mn": "vmovsd",
-   "pfx": "f2",
-   "modrm": true,
-   "vex": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVSD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 17,
-   "mn": "vmovsd",
-   "pfx": "f2",
-   "modrm": true,
-   "vex": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VMOVSD",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -4968,18 +4891,6 @@
   },
   {
    "map": "0f",
-   "op": 215,
-   "mn": "vpmovmskb",
-   "pfx": "66",
-   "modrm": true,
-   "vex": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VPMOVMSKB",
-   "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
    "op": 211,
    "mn": "vpsrlq",
    "pfx": "66",
@@ -5087,19 +4998,6 @@
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
-   "map": "0f3a",
-   "op": 24,
-   "mn": "vinsertf128",
-   "pfx": "66",
-   "modrm": true,
-   "imm": "b",
-   "vex": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "iclass": "VINSERTF128",
-   "l": 1,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
    "map": "0f38",
    "op": 169,
    "mn": "vfmadd213sd",
@@ -5151,15 +5049,6 @@
   {
    "map": "0f",
    "op": 254,
-   "mn": "paddd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PADDD"
-  },
-  {
-   "map": "0f",
-   "op": 254,
    "mn": "vpaddd",
    "pfx": "66",
    "modrm": true,
@@ -5167,15 +5056,6 @@
    "vex": true,
    "iclass": "VPADDD",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 253,
-   "mn": "paddw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PADDW"
   },
   {
    "map": "0f",
@@ -5371,15 +5251,6 @@
   {
    "map": "0f",
    "op": 226,
-   "mn": "psrad",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PSRAD"
-  },
-  {
-   "map": "0f",
-   "op": 226,
    "mn": "vpsrad",
    "pfx": "66",
    "modrm": true,
@@ -5387,15 +5258,6 @@
    "vex": true,
    "iclass": "VPSRAD",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 225,
-   "mn": "psraw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PSRAW"
   },
   {
    "map": "0f",
@@ -5411,15 +5273,6 @@
   {
    "map": "0f",
    "op": 98,
-   "mn": "punpckldq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PUNPCKLDQ"
-  },
-  {
-   "map": "0f",
-   "op": 98,
    "mn": "vpunpckldq",
    "pfx": "66",
    "modrm": true,
@@ -5431,15 +5284,6 @@
   {
    "map": "0f",
    "op": 97,
-   "mn": "punpcklwd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PUNPCKLWD"
-  },
-  {
-   "map": "0f",
-   "op": 97,
    "mn": "vpunpcklwd",
    "pfx": "66",
    "modrm": true,
@@ -5447,15 +5291,6 @@
    "vex": true,
    "iclass": "VPUNPCKLWD",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 106,
-   "mn": "punpckhdq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PUNPCKHDQ"
   },
   {
    "map": "0f",
@@ -5491,15 +5326,6 @@
   {
    "map": "0f",
    "op": 104,
-   "mn": "punpckhbw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PUNPCKHBW"
-  },
-  {
-   "map": "0f",
-   "op": 104,
    "mn": "vpunpckhbw",
    "pfx": "66",
    "modrm": true,
@@ -5507,15 +5333,6 @@
    "vex": true,
    "iclass": "VPUNPCKHBW",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 105,
-   "mn": "punpckhwd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PUNPCKHWD"
   },
   {
    "map": "0f",
@@ -5631,15 +5448,6 @@
   {
    "map": "0f",
    "op": 103,
-   "mn": "packuswb",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PACKUSWB"
-  },
-  {
-   "map": "0f",
-   "op": 103,
    "mn": "vpackuswb",
    "pfx": "66",
    "modrm": true,
@@ -5751,15 +5559,6 @@
   {
    "map": "0f",
    "op": 249,
-   "mn": "psubw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PSUBW"
-  },
-  {
-   "map": "0f",
-   "op": 249,
    "mn": "vpsubw",
    "pfx": "66",
    "modrm": true,
@@ -5831,15 +5630,6 @@
   {
    "map": "0f",
    "op": 229,
-   "mn": "pmulhw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PMULHW"
-  },
-  {
-   "map": "0f",
-   "op": 229,
    "mn": "vpmulhw",
    "pfx": "66",
    "modrm": true,
@@ -5847,15 +5637,6 @@
    "vex": true,
    "iclass": "VPMULHW",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 213,
-   "mn": "pmullw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PMULLW"
   },
   {
    "map": "0f",
@@ -5990,15 +5771,6 @@
   },
   {
    "map": "0f",
-   "op": 211,
-   "mn": "psrlq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PSRLQ"
-  },
-  {
-   "map": "0f",
    "op": 114,
    "mn": "psrld",
    "pfx": "66",
@@ -6021,18 +5793,6 @@
    "vex": true,
    "iclass": "VPSRLD",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
-   "form": "reg"
-  },
-  {
-   "map": "0f",
-   "op": 114,
-   "mn": "psrad",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "reg": 4,
-   "imm": "b",
-   "iclass": "PSRAD",
    "form": "reg"
   },
   {
@@ -6099,18 +5859,6 @@
    "vex": true,
    "iclass": "VPSRLW",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
-   "form": "reg"
-  },
-  {
-   "map": "0f",
-   "op": 113,
-   "mn": "psraw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "reg": 4,
-   "imm": "b",
-   "iclass": "PSRAW",
    "form": "reg"
   },
   {
@@ -6216,16 +5964,6 @@
   },
   {
    "map": "0f",
-   "op": 197,
-   "mn": "pextrw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "imm": "b",
-   "iclass": "PEXTRW"
-  },
-  {
-   "map": "0f",
    "op": 198,
    "mn": "shufps",
    "pfx": "none",
@@ -6279,100 +6017,6 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
    "iclass": "UNPCKHPD"
-  },
-  {
-   "map": "0f",
-   "op": 18,
-   "mn": "movlps",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "form": "mem",
-   "iclass": "MOVLPS"
-  },
-  {
-   "map": "0f",
-   "op": 18,
-   "mn": "movhlps",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "form": "reg",
-   "iclass": "MOVHLPS"
-  },
-  {
-   "map": "0f",
-   "op": 18,
-   "mn": "movlpd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVLPD"
-  },
-  {
-   "map": "0f",
-   "op": 22,
-   "mn": "movhps",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "form": "mem",
-   "iclass": "MOVHPS"
-  },
-  {
-   "map": "0f",
-   "op": 22,
-   "mn": "movlhps",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "form": "reg",
-   "iclass": "MOVLHPS"
-  },
-  {
-   "map": "0f",
-   "op": 22,
-   "mn": "movhpd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVHPD"
-  },
-  {
-   "map": "0f",
-   "op": 19,
-   "mn": "movlps",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVLPS"
-  },
-  {
-   "map": "0f",
-   "op": 23,
-   "mn": "movhps",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVHPS"
-  },
-  {
-   "map": "0f",
-   "op": 19,
-   "mn": "movlpd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVLPD"
-  },
-  {
-   "map": "0f",
-   "op": 23,
-   "mn": "movhpd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVHPD"
   },
   {
    "map": "0f",
@@ -6609,28 +6253,6 @@
    "vex": true,
    "iclass": "VMOVUPD",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 16,
-   "mn": "vmovss",
-   "pfx": "f3",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VMOVSS",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f",
-   "op": 17,
-   "mn": "vmovss",
-   "pfx": "f3",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VMOVSS",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -6926,7 +6548,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "mod": "E8",
-   "iclass": "LFENCE"
+   "iclass": "LFENCE",
+   "np": true
   },
   {
    "map": "0f",
@@ -6936,7 +6559,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "mod": "F0",
-   "iclass": "MFENCE"
+   "iclass": "MFENCE",
+   "np": true
   },
   {
    "map": "0f",
@@ -6946,29 +6570,8 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
    "mod": "F8",
-   "iclass": "SFENCE"
-  },
-  {
-   "map": "0f",
-   "op": 199,
-   "mn": "rdrand",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "reg": 6,
-   "form": "reg",
-   "iclass": "RDRAND"
-  },
-  {
-   "map": "0f",
-   "op": 199,
-   "mn": "rdseed",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg)",
-   "reg": 7,
-   "form": "reg",
-   "iclass": "RDSEED"
+   "iclass": "SFENCE",
+   "np": true
   },
   {
    "map": "0f",
@@ -7000,15 +6603,6 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
    "iclass": "PSHUFB"
-  },
-  {
-   "map": "0f38",
-   "op": 4,
-   "mn": "pmaddubsw",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "PMADDUBSW"
   },
   {
    "map": "0f38",
@@ -7108,114 +6702,6 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
    "iclass": "AESIMC"
-  },
-  {
-   "map": "0f38",
-   "op": 220,
-   "mn": "aesenc",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "AESENC"
-  },
-  {
-   "map": "0f38",
-   "op": 221,
-   "mn": "aesenclast",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "AESENCLAST"
-  },
-  {
-   "map": "0f38",
-   "op": 222,
-   "mn": "aesdec",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "AESDEC"
-  },
-  {
-   "map": "0f38",
-   "op": 223,
-   "mn": "aesdeclast",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "AESDECLAST"
-  },
-  {
-   "map": "0f38",
-   "op": 200,
-   "mn": "sha1nexte",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "SHA1NEXTE"
-  },
-  {
-   "map": "0f38",
-   "op": 201,
-   "mn": "sha1msg1",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "SHA1MSG1"
-  },
-  {
-   "map": "0f38",
-   "op": 202,
-   "mn": "sha1msg2",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "SHA1MSG2"
-  },
-  {
-   "map": "0f38",
-   "op": 203,
-   "mn": "sha256rnds2",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "SHA256RNDS2"
-  },
-  {
-   "map": "0f38",
-   "op": 204,
-   "mn": "sha256msg1",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "SHA256MSG1"
-  },
-  {
-   "map": "0f38",
-   "op": 205,
-   "mn": "sha256msg2",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "SHA256MSG2"
-  },
-  {
-   "map": "0f38",
-   "op": 240,
-   "mn": "movbe",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "MOVBE"
-  },
-  {
-   "map": "0f38",
-   "op": 241,
-   "mn": "movbe",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-4 (three-byte 0F38 map)",
-   "iclass": "MOVBE"
   },
   {
    "map": "0f38",
@@ -7338,16 +6824,6 @@
    "iclass": "PINSRQ"
   },
   {
-   "map": "0f3a",
-   "op": 204,
-   "mn": "sha1rnds4",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2D Appendix A, Table A-5 (three-byte 0F3A map)",
-   "imm": "b",
-   "iclass": "SHA1RNDS4"
-  },
-  {
    "map": "0f38",
    "op": 0,
    "mn": "vpshufb",
@@ -7379,18 +6855,6 @@
    "vex": true,
    "iclass": "VPTEST",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
-   "op": 54,
-   "mn": "vpermd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VPERMD",
-   "l": 1,
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -7439,30 +6903,6 @@
    "w": 1,
    "vex": true,
    "iclass": "VPSLLVQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
-   "op": 88,
-   "mn": "vpbroadcastd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VPBROADCASTD",
-   "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
-   "op": 89,
-   "mn": "vpbroadcastq",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "VPBROADCASTQ",
-   "vvvv": "1111",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -7536,17 +6976,6 @@
   },
   {
    "map": "0f38",
-   "op": 242,
-   "mn": "andn",
-   "pfx": "none",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "ANDN",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
    "op": 245,
    "mn": "bzhi",
    "pfx": "none",
@@ -7554,17 +6983,6 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "BZHI",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
-   "op": 246,
-   "mn": "mulx",
-   "pfx": "f2",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "MULX",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -7581,34 +6999,12 @@
   {
    "map": "0f38",
    "op": 247,
-   "mn": "shlx",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "SHLX",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
-   "op": 247,
    "mn": "sarx",
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "SARX",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f38",
-   "op": 247,
-   "mn": "shrx",
-   "pfx": "f2",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "vex": true,
-   "iclass": "SHRX",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -7624,18 +7020,6 @@
    "iclass": "VPERMQ",
    "vvvv": "1111",
    "l": 1,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f3a",
-   "op": 2,
-   "mn": "vpblendd",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "imm": "b",
-   "vex": true,
-   "iclass": "VPBLENDD",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -7682,20 +7066,6 @@
   },
   {
    "map": "0f3a",
-   "op": 25,
-   "mn": "vextractf128",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "imm": "b",
-   "vex": true,
-   "iclass": "VEXTRACTF128",
-   "vvvv": "1111",
-   "l": 1,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f3a",
    "op": 34,
    "mn": "vpinsrd",
    "pfx": "66",
@@ -7720,33 +7090,6 @@
    "vex": true,
    "iclass": "VPINSRQ",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f3a",
-   "op": 56,
-   "mn": "vinserti128",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "imm": "b",
-   "vex": true,
-   "iclass": "VINSERTI128",
-   "l": 1,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f3a",
-   "op": 57,
-   "mn": "vextracti128",
-   "pfx": "66",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "imm": "b",
-   "vex": true,
-   "iclass": "VEXTRACTI128",
-   "vvvv": "1111",
-   "l": 1,
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -7784,18 +7127,6 @@
    "imm": "b",
    "vex": true,
    "iclass": "VPBLENDVB",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
-  },
-  {
-   "map": "0f3a",
-   "op": 240,
-   "mn": "rorx",
-   "pfx": "f2",
-   "modrm": true,
-   "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
-   "imm": "b",
-   "vex": true,
-   "iclass": "RORX",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
   },
   {
@@ -8044,7 +7375,18 @@
    "pfx": "none",
    "modrm": false,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "PUSHFQ"
+   "iclass": "PUSHFQ",
+   "iclass_sizes": {
+    "16": "PUSHF",
+    "32": "PUSHFQ",
+    "64": "PUSHFQ"
+   },
+   "sizes": {
+    "16": "pushf",
+    "32": "pushfq",
+    "64": "pushfq"
+   },
+   "src_validity": "XED: 66 9C/9D is the 16-bit PUSHF/POPF (Sprint 036)"
   },
   {
    "map": "1",
@@ -8053,7 +7395,18 @@
    "pfx": "none",
    "modrm": false,
    "src": "Intel SDM Vol 2D Appendix A, Table A-2 (one-byte opcode map)",
-   "iclass": "POPFQ"
+   "iclass": "POPFQ",
+   "iclass_sizes": {
+    "16": "POPF",
+    "32": "POPFQ",
+    "64": "POPFQ"
+   },
+   "sizes": {
+    "16": "popf",
+    "32": "popfq",
+    "64": "popfq"
+   },
+   "src_validity": "XED: 66 9C/9D is the 16-bit PUSHF/POPF (Sprint 036)"
   },
   {
    "map": "1",
@@ -9172,7 +8525,10 @@
    "iclass": "VPROTD",
    "xop": true,
    "imm": "b",
-   "l": 0
+   "l": 0,
+   "w": 0,
+   "vvvv": "1111",
+   "src_validity": "AMD XOP immediate form: XOP.W0 and vvvv 1111 (XED refuses W1 and other vvvv; Sprint 036)"
   },
   {
    "map": "x8",
@@ -9185,7 +8541,10 @@
    "iclass": "VPROTQ",
    "xop": true,
    "imm": "b",
-   "l": 0
+   "l": 0,
+   "w": 0,
+   "vvvv": "1111",
+   "src_validity": "AMD XOP immediate form: XOP.W0 and vvvv 1111 (XED refuses W1 and other vvvv; Sprint 036)"
   },
   {
    "map": "x9",
@@ -9334,9 +8693,3609 @@
    "form": "mem",
    "iclass": "NOP",
    "src": "Intel SDM Vol 2D Appendix A, Table A-6 (opcode extensions by ModRM.reg) (0F 18 /4-/7 reserved-NOP)"
+  },
+  {
+   "map": "0f38",
+   "op": 222,
+   "mn": "aesdec",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page AESDEC (opcode line \"66 0F 38 DE /r AESDEC xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/aesdec, retrieved 2026-10-09",
+   "iclass": "AESDEC"
+  },
+  {
+   "map": "0f38",
+   "op": 223,
+   "mn": "aesdeclast",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page AESDECLAST (opcode line \"66 0F 38 DF /r AESDECLAST xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/aesdeclast, retrieved 2026-10-09",
+   "iclass": "AESDECLAST"
+  },
+  {
+   "map": "0f38",
+   "op": 220,
+   "mn": "aesenc",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page AESENC (opcode line \"66 0F 38 DC /r AESENC xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/aesenc, retrieved 2026-10-09",
+   "iclass": "AESENC"
+  },
+  {
+   "map": "0f38",
+   "op": 221,
+   "mn": "aesenclast",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page AESENCLAST (opcode line \"66 0F 38 DD /r AESENCLAST xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/aesenclast, retrieved 2026-10-09",
+   "iclass": "AESENCLAST"
+  },
+  {
+   "map": "0f38",
+   "op": 242,
+   "mn": "andn",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page ANDN (opcode line \"VEX.LZ.0F38.W0 F2 /r ANDN r32a, r32b, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/andn, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "ANDN"
+  },
+  {
+   "map": "0f38",
+   "op": 242,
+   "mn": "andn",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page ANDN (opcode line \"VEX.LZ.0F38.W1 F2 /r ANDN r64a, r64b, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/andn, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 0,
+   "iclass": "ANDN"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "call",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CALL (opcode line \"FF /3 CALL m16:16\"), as transcribed at https://www.felixcloutier.com/x86/call, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "w": 0,
+   "iclass": "CALL_FAR"
+  },
+  {
+   "map": "1",
+   "op": 255,
+   "mn": "call",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CALL (opcode line \"REX.W FF /3 CALL m16:64\"), as transcribed at https://www.felixcloutier.com/x86/call, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "w": 1,
+   "iclass": "CALL_FAR"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "clflushopt",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CLFLUSHOPT (opcode line \"NFx 66 0F AE /7 CLFLUSHOPT m8\"), as transcribed at https://www.felixcloutier.com/x86/clflushopt, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "mem",
+   "np": "nfx",
+   "iclass": "CLFLUSHOPT"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "cmppd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CMPPD (opcode line \"66 0F C2 /r ib CMPPD xmm1, xmm2/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmppd, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "CMPPD"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "cmpps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CMPPS (opcode line \"NP 0F C2 /r ib CMPPS xmm1, xmm2/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpps, retrieved 2026-10-09",
+   "imm": "b",
+   "np": true,
+   "iclass": "CMPPS"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "cmpsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CMPSD (opcode line \"F2 0F C2 /r ib CMPSD xmm1, xmm2/m64, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpsd, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "CMPSD_XMM"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "cmpss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CMPSS (opcode line \"F3 0F C2 /r ib CMPSS xmm1, xmm2/m32, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpss, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "CMPSS"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "cvtpd2dq",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CVTPD2DQ (opcode line \"F2 0F E6 /r CVTPD2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvtpd2dq, retrieved 2026-10-09",
+   "iclass": "CVTPD2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "cvttpd2dq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page CVTTPD2DQ (opcode line \"66 0F E6 /r CVTTPD2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvttpd2dq, retrieved 2026-10-09",
+   "iclass": "CVTTPD2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 119,
+   "mn": "emms",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page EMMS (opcode line \"NP 0F 77 EMMS\"), as transcribed at https://www.felixcloutier.com/x86/emms, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "EMMS"
+  },
+  {
+   "map": "1",
+   "op": 200,
+   "mn": "enter",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page ENTER (opcode line \"C8 iw 00 ENTER imm16, 0\"), as transcribed at https://www.felixcloutier.com/x86/enter, retrieved 2026-10-09",
+   "imm": "wb",
+   "iclass": "ENTER"
+  },
+  {
+   "map": "1",
+   "op": 216,
+   "mn": "fadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"D8 /0 FADD m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "mem",
+   "iclass": "FADD"
+  },
+  {
+   "map": "1",
+   "op": 220,
+   "mn": "fadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"DC /0 FADD m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "mem",
+   "iclass": "FADD"
+  },
+  {
+   "map": "1",
+   "op": 216,
+   "mn": "fadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"D8 C0+i FADD ST(0), ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "reg",
+   "iclass": "FADD"
+  },
+  {
+   "map": "1",
+   "op": 220,
+   "mn": "fadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"DC C0+i FADD ST(i), ST(0)\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "reg",
+   "iclass": "FADD"
+  },
+  {
+   "map": "1",
+   "op": 217,
+   "mn": "fcos",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FCOS (opcode line \"D9 FF FCOS\"), as transcribed at https://www.felixcloutier.com/x86/fcos, retrieved 2026-10-09",
+   "mod": "ff",
+   "form": "reg",
+   "iclass": "FCOS"
+  },
+  {
+   "map": "1",
+   "op": 218,
+   "mn": "fiadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FIADD (opcode line \"DA /0 FIADD m32int\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "mem",
+   "iclass": "FIADD"
+  },
+  {
+   "map": "1",
+   "op": 222,
+   "mn": "fiadd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FIADD (opcode line \"DE /0 FIADD m16int\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "mem",
+   "iclass": "FIADD"
+  },
+  {
+   "map": "1",
+   "op": 218,
+   "mn": "fidivr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FIDIVR (opcode line \"DA /7 FIDIVR m32int\"), as transcribed at https://www.felixcloutier.com/x86/fdivr:fdivrp:fidivr, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "mem",
+   "iclass": "FIDIVR"
+  },
+  {
+   "map": "1",
+   "op": 222,
+   "mn": "fidivr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FIDIVR (opcode line \"DE /7 FIDIVR m16int\"), as transcribed at https://www.felixcloutier.com/x86/fdivr:fdivrp:fidivr, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "mem",
+   "iclass": "FIDIVR"
+  },
+  {
+   "map": "1",
+   "op": 223,
+   "mn": "fistp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FISTP (opcode line \"DF /3 FISTP m16int\"), as transcribed at https://www.felixcloutier.com/x86/fist:fistp, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "iclass": "FISTP"
+  },
+  {
+   "map": "1",
+   "op": 219,
+   "mn": "fistp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FISTP (opcode line \"DB /3 FISTP m32int\"), as transcribed at https://www.felixcloutier.com/x86/fist:fistp, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "iclass": "FISTP"
+  },
+  {
+   "map": "1",
+   "op": 223,
+   "mn": "fistp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FISTP (opcode line \"DF /7 FISTP m64int\"), as transcribed at https://www.felixcloutier.com/x86/fist:fistp, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "mem",
+   "iclass": "FISTP"
+  },
+  {
+   "map": "1",
+   "op": 223,
+   "mn": "fisttp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FISTTP (opcode line \"DF /1 FISTTP m16int\"), as transcribed at https://www.felixcloutier.com/x86/fisttp, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "mem",
+   "iclass": "FISTTP"
+  },
+  {
+   "map": "1",
+   "op": 219,
+   "mn": "fisttp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FISTTP (opcode line \"DB /1 FISTTP m32int\"), as transcribed at https://www.felixcloutier.com/x86/fisttp, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "mem",
+   "iclass": "FISTTP"
+  },
+  {
+   "map": "1",
+   "op": 221,
+   "mn": "fisttp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FISTTP (opcode line \"DD /1 FISTTP m64int\"), as transcribed at https://www.felixcloutier.com/x86/fisttp, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "mem",
+   "iclass": "FISTTP"
+  },
+  {
+   "map": "1",
+   "op": 217,
+   "mn": "fld",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"D9 /0 FLD m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "mem",
+   "iclass": "FLD"
+  },
+  {
+   "map": "1",
+   "op": 221,
+   "mn": "fld",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"DD /0 FLD m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "mem",
+   "iclass": "FLD"
+  },
+  {
+   "map": "1",
+   "op": 219,
+   "mn": "fld",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"DB /5 FLD m80fp\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
+   "reg": 5,
+   "form": "mem",
+   "iclass": "FLD"
+  },
+  {
+   "map": "1",
+   "op": 217,
+   "mn": "fld",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"D9 C0+i FLD ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
+   "reg": 0,
+   "form": "reg",
+   "iclass": "FLD"
+  },
+  {
+   "map": "1",
+   "op": 216,
+   "mn": "fmul",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"D8 /1 FMUL m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "mem",
+   "iclass": "FMUL"
+  },
+  {
+   "map": "1",
+   "op": 220,
+   "mn": "fmul",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"DC /1 FMUL m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "mem",
+   "iclass": "FMUL"
+  },
+  {
+   "map": "1",
+   "op": 216,
+   "mn": "fmul",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"D8 C8+i FMUL ST(0), ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "reg",
+   "iclass": "FMUL"
+  },
+  {
+   "map": "1",
+   "op": 220,
+   "mn": "fmul",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"DC C8+i FMUL ST(i), ST(0)\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
+   "reg": 1,
+   "form": "reg",
+   "iclass": "FMUL"
+  },
+  {
+   "map": "1",
+   "op": 221,
+   "mn": "fnstsw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FNSTSW (opcode line \"DD /7 FNSTSW m2byte\"), as transcribed at https://www.felixcloutier.com/x86/fstsw:fnstsw, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "mem",
+   "iclass": "FNSTSW"
+  },
+  {
+   "map": "1",
+   "op": 223,
+   "mn": "fnstsw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FNSTSW (opcode line \"DF E0 FNSTSW AX\"), as transcribed at https://www.felixcloutier.com/x86/fstsw:fnstsw, retrieved 2026-10-09",
+   "mod": "e0",
+   "form": "reg",
+   "iclass": "FNSTSW"
+  },
+  {
+   "map": "1",
+   "op": 217,
+   "mn": "fsin",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSIN (opcode line \"D9 FE FSIN\"), as transcribed at https://www.felixcloutier.com/x86/fsin, retrieved 2026-10-09",
+   "mod": "fe",
+   "form": "reg",
+   "iclass": "FSIN"
+  },
+  {
+   "map": "1",
+   "op": 217,
+   "mn": "fsqrt",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSQRT (opcode line \"D9 FA FSQRT\"), as transcribed at https://www.felixcloutier.com/x86/fsqrt, retrieved 2026-10-09",
+   "mod": "fa",
+   "form": "reg",
+   "iclass": "FSQRT"
+  },
+  {
+   "map": "1",
+   "op": 217,
+   "mn": "fstp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"D9 /3 FSTP m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "iclass": "FSTP"
+  },
+  {
+   "map": "1",
+   "op": 221,
+   "mn": "fstp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"DD /3 FSTP m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "iclass": "FSTP"
+  },
+  {
+   "map": "1",
+   "op": 219,
+   "mn": "fstp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"DB /7 FSTP m80fp\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "mem",
+   "iclass": "FSTP"
+  },
+  {
+   "map": "1",
+   "op": 221,
+   "mn": "fstp",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"DD D8+i FSTP ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "reg",
+   "iclass": "FSTP"
+  },
+  {
+   "map": "1",
+   "op": 216,
+   "mn": "fsub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSUB (opcode line \"D8 /4 FSUB m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fsub:fsubp:fisub, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "mem",
+   "iclass": "FSUB"
+  },
+  {
+   "map": "1",
+   "op": 220,
+   "mn": "fsub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSUB (opcode line \"DC /4 FSUB m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fsub:fsubp:fisub, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "mem",
+   "iclass": "FSUB"
+  },
+  {
+   "map": "1",
+   "op": 216,
+   "mn": "fsub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSUB (opcode line \"D8 E0+i FSUB ST(0), ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fsub:fsubp:fisub, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "reg",
+   "iclass": "FSUB"
+  },
+  {
+   "map": "1",
+   "op": 220,
+   "mn": "fsub",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page FSUB (opcode line \"DC E8+i FSUB ST(i), ST(0)\"), as transcribed at https://www.felixcloutier.com/x86/fsub:fsubp:fisub, retrieved 2026-10-09",
+   "reg": 5,
+   "form": "reg",
+   "iclass": "FSUB"
+  },
+  {
+   "map": "1",
+   "op": 155,
+   "mn": "wait",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page WAIT (opcode line \"9B WAIT\"), as transcribed at https://www.felixcloutier.com/x86/wait:fwait, retrieved 2026-10-09",
+   "iclass": "FWAIT"
+  },
+  {
+   "map": "1",
+   "op": 228,
+   "mn": "in",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page IN (opcode line \"E4 ib IN AL, imm8 IN\"), as transcribed at https://www.felixcloutier.com/x86/in, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "IN"
+  },
+  {
+   "map": "1",
+   "op": 229,
+   "mn": "in",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page IN (opcode line \"E5 ib IN AX, imm8 IN\"), as transcribed at https://www.felixcloutier.com/x86/in, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "IN"
+  },
+  {
+   "map": "1",
+   "op": 236,
+   "mn": "in",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page IN (opcode line \"EC IN AL,DX IN\"), as transcribed at https://www.felixcloutier.com/x86/in, retrieved 2026-10-09",
+   "iclass": "IN"
+  },
+  {
+   "map": "1",
+   "op": 237,
+   "mn": "in",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page IN (opcode line \"ED IN AX,DX IN\"), as transcribed at https://www.felixcloutier.com/x86/in, retrieved 2026-10-09",
+   "iclass": "IN"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "incsspd",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page INCSSPD (opcode line \"F3 0F AE /05 INCSSPD r32\"), as transcribed at https://www.felixcloutier.com/x86/incsspd:incsspq, retrieved 2026-10-09",
+   "reg": 5,
+   "form": "reg",
+   "w": 0,
+   "iclass": "INCSSPD"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "incsspq",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page INCSSPQ (opcode line \"F3 REX.W 0F AE /05 INCSSPQ r64\"), as transcribed at https://www.felixcloutier.com/x86/incsspd:incsspq, retrieved 2026-10-09",
+   "reg": 5,
+   "form": "reg",
+   "w": 1,
+   "iclass": "INCSSPQ"
+  },
+  {
+   "map": "1",
+   "op": 241,
+   "mn": "int1",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page INT1 (opcode line \"F1 INT1\"), as transcribed at https://www.felixcloutier.com/x86/intn:into:int3:int1, retrieved 2026-10-09",
+   "iclass": "INT1"
+  },
+  {
+   "map": "1",
+   "op": 207,
+   "mn": "iret",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page IRET (opcode line \"CF IRET\"), as transcribed at https://www.felixcloutier.com/x86/iret:iretd:iretq, retrieved 2026-10-09",
+   "w": 0,
+   "iclass": "IRETD",
+   "iclass_sizes": {
+    "16": "IRET",
+    "32": "IRETD",
+    "64": "IRETD"
+   },
+   "sizes": {
+    "16": "iret",
+    "32": "iretd",
+    "64": "iretd"
+   }
+  },
+  {
+   "map": "1",
+   "op": 207,
+   "mn": "iretq",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page IRETQ (opcode line \"REX.W + CF IRETQ\"), as transcribed at https://www.felixcloutier.com/x86/iret:iretd:iretq, retrieved 2026-10-09",
+   "w": 1,
+   "iclass": "IRETQ"
+  },
+  {
+   "map": "0f",
+   "op": 2,
+   "mn": "lar",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page LAR (opcode line \"0F 02 /r LAR r16, r16 /m16\"), as transcribed at https://www.felixcloutier.com/x86/lar, retrieved 2026-10-09",
+   "iclass": "LAR"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "ldmxcsr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page LDMXCSR (opcode line \"NP 0F AE /2 LDMXCSR m32\"), as transcribed at https://www.felixcloutier.com/x86/ldmxcsr, retrieved 2026-10-09",
+   "reg": 2,
+   "form": "mem",
+   "np": true,
+   "iclass": "LDMXCSR"
+  },
+  {
+   "map": "0f",
+   "op": 32,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 20 /r MOV r64, CR0–CR7\"), as transcribed at https://www.felixcloutier.com/x86/mov-1, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOV_CR",
+   "reg_valid": [
+    0,
+    2,
+    3,
+    4,
+    8
+   ]
+  },
+  {
+   "map": "0f",
+   "op": 34,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 22 /r MOV CR0–CR7, r64\"), as transcribed at https://www.felixcloutier.com/x86/mov-1, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOV_CR",
+   "reg_valid": [
+    0,
+    2,
+    3,
+    4,
+    8
+   ]
+  },
+  {
+   "map": "0f",
+   "op": 33,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 21 /r MOV r64, DR0–DR7\"), as transcribed at https://www.felixcloutier.com/x86/mov-2, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOV_DR",
+   "reg_valid": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  },
+  {
+   "map": "0f",
+   "op": 35,
+   "mn": "mov",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 23 /r MOV DR0–DR7, r64\"), as transcribed at https://www.felixcloutier.com/x86/mov-2, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOV_DR",
+   "reg_valid": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  },
+  {
+   "map": "0f38",
+   "op": 240,
+   "mn": "movbe",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVBE (opcode line \"0F 38 F0 /r MOVBE r16, m16\"), as transcribed at https://www.felixcloutier.com/x86/movbe, retrieved 2026-10-09",
+   "form": "mem",
+   "w": 0,
+   "iclass": "MOVBE"
+  },
+  {
+   "map": "0f38",
+   "op": 240,
+   "mn": "movbe",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVBE (opcode line \"REX.W + 0F 38 F0 /r MOVBE r64, m64\"), as transcribed at https://www.felixcloutier.com/x86/movbe, retrieved 2026-10-09",
+   "form": "mem",
+   "w": 1,
+   "iclass": "MOVBE"
+  },
+  {
+   "map": "0f38",
+   "op": 241,
+   "mn": "movbe",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVBE (opcode line \"0F 38 F1 /r MOVBE m16, r16\"), as transcribed at https://www.felixcloutier.com/x86/movbe, retrieved 2026-10-09",
+   "form": "mem",
+   "w": 0,
+   "iclass": "MOVBE"
+  },
+  {
+   "map": "0f38",
+   "op": 241,
+   "mn": "movbe",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVBE (opcode line \"REX.W + 0F 38 F1 /r MOVBE m64, r64\"), as transcribed at https://www.felixcloutier.com/x86/movbe, retrieved 2026-10-09",
+   "form": "mem",
+   "w": 1,
+   "iclass": "MOVBE"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "movd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVD (opcode line \"NP 0F 6E /r MOVD mm, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 0,
+   "np": true,
+   "iclass": "MOVD"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVD (opcode line \"NP 0F 7E /r MOVD r/m32, mm\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 0,
+   "np": true,
+   "iclass": "MOVD"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "movd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVD (opcode line \"66 0F 6E /r MOVD xmm, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 0,
+   "iclass": "MOVD"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVD (opcode line \"66 0F 7E /r MOVD r/m32, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 0,
+   "iclass": "MOVD"
+  },
+  {
+   "map": "0f",
+   "op": 18,
+   "mn": "movddup",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVDDUP (opcode line \"F2 0F 12 /r MOVDDUP xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/movddup, retrieved 2026-10-09",
+   "iclass": "MOVDDUP"
+  },
+  {
+   "map": "0f",
+   "op": 214,
+   "mn": "movdq2q",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVDQ2Q (opcode line \"F2 0F D6 /r MOVDQ2Q mm, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movdq2q, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOVDQ2Q"
+  },
+  {
+   "map": "0f",
+   "op": 18,
+   "mn": "movhlps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVHLPS (opcode line \"NP 0F 12 /r MOVHLPS xmm1, xmm2\"), as transcribed at https://www.felixcloutier.com/x86/movhlps, retrieved 2026-10-09",
+   "form": "reg",
+   "np": true,
+   "iclass": "MOVHLPS"
+  },
+  {
+   "map": "0f",
+   "op": 22,
+   "mn": "movhpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVHPD (opcode line \"66 0F 16 /r MOVHPD xmm1, m64\"), as transcribed at https://www.felixcloutier.com/x86/movhpd, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVHPD"
+  },
+  {
+   "map": "0f",
+   "op": 23,
+   "mn": "movhpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVHPD (opcode line \"66 0F 17 /r MOVHPD m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movhpd, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVHPD"
+  },
+  {
+   "map": "0f",
+   "op": 22,
+   "mn": "movhps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVHPS (opcode line \"NP 0F 16 /r MOVHPS xmm1, m64\"), as transcribed at https://www.felixcloutier.com/x86/movhps, retrieved 2026-10-09",
+   "form": "mem",
+   "np": true,
+   "iclass": "MOVHPS"
+  },
+  {
+   "map": "0f",
+   "op": 23,
+   "mn": "movhps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVHPS (opcode line \"NP 0F 17 /r MOVHPS m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movhps, retrieved 2026-10-09",
+   "form": "mem",
+   "np": true,
+   "iclass": "MOVHPS"
+  },
+  {
+   "map": "0f",
+   "op": 22,
+   "mn": "movlhps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVLHPS (opcode line \"NP 0F 16 /r MOVLHPS xmm1, xmm2\"), as transcribed at https://www.felixcloutier.com/x86/movlhps, retrieved 2026-10-09",
+   "form": "reg",
+   "np": true,
+   "iclass": "MOVLHPS"
+  },
+  {
+   "map": "0f",
+   "op": 18,
+   "mn": "movlpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVLPD (opcode line \"66 0F 12 /r MOVLPD xmm1, m64\"), as transcribed at https://www.felixcloutier.com/x86/movlpd, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVLPD"
+  },
+  {
+   "map": "0f",
+   "op": 19,
+   "mn": "movlpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVLPD (opcode line \"66 0F 13 /r MOVLPD m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movlpd, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVLPD"
+  },
+  {
+   "map": "0f",
+   "op": 18,
+   "mn": "movlps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVLPS (opcode line \"NP 0F 12 /r MOVLPS xmm1, m64\"), as transcribed at https://www.felixcloutier.com/x86/movlps, retrieved 2026-10-09",
+   "form": "mem",
+   "np": true,
+   "iclass": "MOVLPS"
+  },
+  {
+   "map": "0f",
+   "op": 19,
+   "mn": "movlps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVLPS (opcode line \"0F 13 /r MOVLPS m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movlps, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVLPS"
+  },
+  {
+   "map": "0f",
+   "op": 80,
+   "mn": "movmskpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVMSKPD (opcode line \"66 0F 50 /r MOVMSKPD reg, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movmskpd, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOVMSKPD"
+  },
+  {
+   "map": "0f",
+   "op": 80,
+   "mn": "movmskps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVMSKPS (opcode line \"NP 0F 50 /r MOVMSKPS reg, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movmskps, retrieved 2026-10-09",
+   "form": "reg",
+   "np": true,
+   "iclass": "MOVMSKPS"
+  },
+  {
+   "map": "0f",
+   "op": 231,
+   "mn": "movntdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVNTDQ (opcode line \"66 0F E7 /r MOVNTDQ m128, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movntdq, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVNTDQ"
+  },
+  {
+   "map": "0f",
+   "op": 43,
+   "mn": "movntpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVNTPD (opcode line \"66 0F 2B /r MOVNTPD m128, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movntpd, retrieved 2026-10-09",
+   "form": "mem",
+   "iclass": "MOVNTPD"
+  },
+  {
+   "map": "0f",
+   "op": 43,
+   "mn": "movntps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVNTPS (opcode line \"NP 0F 2B /r MOVNTPS m128, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movntps, retrieved 2026-10-09",
+   "form": "mem",
+   "np": true,
+   "iclass": "MOVNTPS"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "movq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"NP REX.W + 0F 6E /r MOVQ mm, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 1,
+   "np": true,
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"NP REX.W + 0F 7E /r MOVQ r/m64, mm\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 1,
+   "np": true,
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 110,
+   "mn": "movq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"66 REX.W 0F 6E /r MOVQ xmm, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 1,
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"66 REX.W 0F 7E /r MOVQ r/m64, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
+   "w": 1,
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 111,
+   "mn": "movq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"NP 0F 6F /r MOVQ mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/movq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 127,
+   "mn": "movq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"NP 0F 7F /r MOVQ mm/m64, mm\"), as transcribed at https://www.felixcloutier.com/x86/movq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 126,
+   "mn": "movq",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"F3 0F 7E /r MOVQ xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/movq, retrieved 2026-10-09",
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 214,
+   "mn": "movq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"66 0F D6 /r MOVQ xmm2/m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movq, retrieved 2026-10-09",
+   "iclass": "MOVQ"
+  },
+  {
+   "map": "0f",
+   "op": 214,
+   "mn": "movq2dq",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVQ2DQ (opcode line \"F3 0F D6 /r MOVQ2DQ xmm, mm\"), as transcribed at https://www.felixcloutier.com/x86/movq2dq, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "MOVQ2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 22,
+   "mn": "movshdup",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVSHDUP (opcode line \"F3 0F 16 /r MOVSHDUP xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/movshdup, retrieved 2026-10-09",
+   "iclass": "MOVSHDUP"
+  },
+  {
+   "map": "0f",
+   "op": 18,
+   "mn": "movsldup",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MOVSLDUP (opcode line \"F3 0F 12 /r MOVSLDUP xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/movsldup, retrieved 2026-10-09",
+   "iclass": "MOVSLDUP"
+  },
+  {
+   "map": "0f38",
+   "op": 246,
+   "mn": "mulx",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MULX (opcode line \"VEX.LZ.F2.0F38.W0 F6 /r MULX r32a, r32b, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/mulx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "MULX"
+  },
+  {
+   "map": "0f38",
+   "op": 246,
+   "mn": "mulx",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page MULX (opcode line \"VEX.LZ.F2.0F38.W1 F6 /r MULX r64a, r64b, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/mulx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 0,
+   "iclass": "MULX"
+  },
+  {
+   "map": "1",
+   "op": 230,
+   "mn": "out",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page OUT (opcode line \"E6 ib OUT imm8, AL\"), as transcribed at https://www.felixcloutier.com/x86/out, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "OUT"
+  },
+  {
+   "map": "1",
+   "op": 231,
+   "mn": "out",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page OUT (opcode line \"E7 ib OUT imm8, AX\"), as transcribed at https://www.felixcloutier.com/x86/out, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "OUT"
+  },
+  {
+   "map": "1",
+   "op": 238,
+   "mn": "out",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page OUT (opcode line \"EE OUT DX, AL\"), as transcribed at https://www.felixcloutier.com/x86/out, retrieved 2026-10-09",
+   "iclass": "OUT"
+  },
+  {
+   "map": "1",
+   "op": 239,
+   "mn": "out",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page OUT (opcode line \"EF OUT DX, AX\"), as transcribed at https://www.felixcloutier.com/x86/out, retrieved 2026-10-09",
+   "iclass": "OUT"
+  },
+  {
+   "map": "0f38",
+   "op": 29,
+   "mn": "pabsw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PABSW (opcode line \"NP 0F 38 1D /r PABSW mm1, mm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/pabsb:pabsw:pabsd:pabsq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PABSW"
+  },
+  {
+   "map": "0f38",
+   "op": 29,
+   "mn": "pabsw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PABSW (opcode line \"66 0F 38 1D /r PABSW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pabsb:pabsw:pabsd:pabsq, retrieved 2026-10-09",
+   "iclass": "PABSW"
+  },
+  {
+   "map": "0f",
+   "op": 103,
+   "mn": "packuswb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PACKUSWB (opcode line \"NP 0F 67 /r PACKUSWB mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/packuswb, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PACKUSWB"
+  },
+  {
+   "map": "0f",
+   "op": 103,
+   "mn": "packuswb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PACKUSWB (opcode line \"66 0F 67 /r PACKUSWB xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/packuswb, retrieved 2026-10-09",
+   "iclass": "PACKUSWB"
+  },
+  {
+   "map": "0f",
+   "op": 254,
+   "mn": "paddd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDD (opcode line \"NP 0F FE /r PADDD mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/paddb:paddw:paddd:paddq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PADDD"
+  },
+  {
+   "map": "0f",
+   "op": 254,
+   "mn": "paddd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDD (opcode line \"66 0F FE /r PADDD xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/paddb:paddw:paddd:paddq, retrieved 2026-10-09",
+   "iclass": "PADDD"
+  },
+  {
+   "map": "0f",
+   "op": 236,
+   "mn": "paddsb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDSB (opcode line \"NP 0F EC /r PADDSB mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/paddsb:paddsw, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PADDSB"
+  },
+  {
+   "map": "0f",
+   "op": 236,
+   "mn": "paddsb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDSB (opcode line \"66 0F EC /r PADDSB xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/paddsb:paddsw, retrieved 2026-10-09",
+   "iclass": "PADDSB"
+  },
+  {
+   "map": "0f",
+   "op": 237,
+   "mn": "paddsw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDSW (opcode line \"NP 0F ED /r PADDSW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/paddsb:paddsw, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PADDSW"
+  },
+  {
+   "map": "0f",
+   "op": 237,
+   "mn": "paddsw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDSW (opcode line \"66 0F ED /r PADDSW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/paddsb:paddsw, retrieved 2026-10-09",
+   "iclass": "PADDSW"
+  },
+  {
+   "map": "0f",
+   "op": 253,
+   "mn": "paddw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDW (opcode line \"NP 0F FD /r PADDW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/paddb:paddw:paddd:paddq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PADDW"
+  },
+  {
+   "map": "0f",
+   "op": 253,
+   "mn": "paddw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PADDW (opcode line \"66 0F FD /r PADDW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/paddb:paddw:paddd:paddq, retrieved 2026-10-09",
+   "iclass": "PADDW"
+  },
+  {
+   "map": "0f",
+   "op": 197,
+   "mn": "pextrw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PEXTRW (opcode line \"NP 0F C5 /r ib PEXTRW reg, mm, imm8\"), as transcribed at https://www.felixcloutier.com/x86/pextrw, retrieved 2026-10-09",
+   "form": "reg",
+   "imm": "b",
+   "np": true,
+   "iclass": "PEXTRW"
+  },
+  {
+   "map": "0f",
+   "op": 197,
+   "mn": "pextrw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PEXTRW (opcode line \"66 0F C5 /r ib PEXTRW reg, xmm, imm8\"), as transcribed at https://www.felixcloutier.com/x86/pextrw, retrieved 2026-10-09",
+   "form": "reg",
+   "imm": "b",
+   "iclass": "PEXTRW"
+  },
+  {
+   "map": "0f3a",
+   "op": 21,
+   "mn": "pextrw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PEXTRW (opcode line \"66 0F 3A 15 /r ib PEXTRW reg/m16, xmm, imm8\"), as transcribed at https://www.felixcloutier.com/x86/pextrw, retrieved 2026-10-09",
+   "imm": "b",
+   "iclass": "PEXTRW"
+  },
+  {
+   "map": "0f38",
+   "op": 4,
+   "mn": "pmaddubsw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMADDUBSW (opcode line \"NP 0F 38 04 /r PMADDUBSW mm1, mm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/pmaddubsw, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PMADDUBSW"
+  },
+  {
+   "map": "0f38",
+   "op": 4,
+   "mn": "pmaddubsw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMADDUBSW (opcode line \"66 0F 38 04 /r PMADDUBSW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pmaddubsw, retrieved 2026-10-09",
+   "iclass": "PMADDUBSW"
+  },
+  {
+   "map": "0f38",
+   "op": 62,
+   "mn": "pmaxuw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMAXUW (opcode line \"66 0F 38 3E /r PMAXUW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pmaxub:pmaxuw, retrieved 2026-10-09",
+   "iclass": "PMAXUW"
+  },
+  {
+   "map": "0f38",
+   "op": 57,
+   "mn": "pminsd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMINSD (opcode line \"66 0F 38 39 /r PMINSD xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pminsd:pminsq, retrieved 2026-10-09",
+   "iclass": "PMINSD"
+  },
+  {
+   "map": "0f",
+   "op": 215,
+   "mn": "pmovmskb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMOVMSKB (opcode line \"NP 0F D7 /r PMOVMSKB reg, mm\"), as transcribed at https://www.felixcloutier.com/x86/pmovmskb, retrieved 2026-10-09",
+   "form": "reg",
+   "np": true,
+   "iclass": "PMOVMSKB"
+  },
+  {
+   "map": "0f",
+   "op": 215,
+   "mn": "pmovmskb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMOVMSKB (opcode line \"66 0F D7 /r PMOVMSKB reg, xmm\"), as transcribed at https://www.felixcloutier.com/x86/pmovmskb, retrieved 2026-10-09",
+   "form": "reg",
+   "iclass": "PMOVMSKB"
+  },
+  {
+   "map": "0f",
+   "op": 229,
+   "mn": "pmulhw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMULHW (opcode line \"NP 0F E5 /r PMULHW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/pmulhw, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PMULHW"
+  },
+  {
+   "map": "0f",
+   "op": 229,
+   "mn": "pmulhw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMULHW (opcode line \"66 0F E5 /r PMULHW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pmulhw, retrieved 2026-10-09",
+   "iclass": "PMULHW"
+  },
+  {
+   "map": "0f",
+   "op": 213,
+   "mn": "pmullw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMULLW (opcode line \"NP 0F D5 /r PMULLW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/pmullw, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PMULLW"
+  },
+  {
+   "map": "0f",
+   "op": 213,
+   "mn": "pmullw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PMULLW (opcode line \"66 0F D5 /r PMULLW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pmullw, retrieved 2026-10-09",
+   "iclass": "PMULLW"
+  },
+  {
+   "map": "0f",
+   "op": 184,
+   "mn": "popcnt",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page POPCNT (opcode line \"F3 0F B8 /r POPCNT r16, r/m16\"), as transcribed at https://www.felixcloutier.com/x86/popcnt, retrieved 2026-10-09",
+   "w": 0,
+   "iclass": "POPCNT"
+  },
+  {
+   "map": "0f",
+   "op": 184,
+   "mn": "popcnt",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page POPCNT (opcode line \"F3 REX.W 0F B8 /r POPCNT r64, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/popcnt, retrieved 2026-10-09",
+   "w": 1,
+   "iclass": "POPCNT"
+  },
+  {
+   "map": "0f",
+   "op": 226,
+   "mn": "psrad",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAD (opcode line \"NP 0F E2 /r PSRAD mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PSRAD"
+  },
+  {
+   "map": "0f",
+   "op": 226,
+   "mn": "psrad",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAD (opcode line \"66 0F E2 /r PSRAD xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "iclass": "PSRAD"
+  },
+  {
+   "map": "0f",
+   "op": 114,
+   "mn": "psrad",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAD (opcode line \"NP 0F 72 /4 ib PSRAD mm, imm8\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "reg",
+   "imm": "b",
+   "np": true,
+   "iclass": "PSRAD"
+  },
+  {
+   "map": "0f",
+   "op": 114,
+   "mn": "psrad",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAD (opcode line \"66 0F 72 /4 ib PSRAD xmm1, imm8\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "reg",
+   "imm": "b",
+   "iclass": "PSRAD"
+  },
+  {
+   "map": "0f",
+   "op": 225,
+   "mn": "psraw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAW (opcode line \"NP 0F E1 /r PSRAW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PSRAW"
+  },
+  {
+   "map": "0f",
+   "op": 225,
+   "mn": "psraw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAW (opcode line \"66 0F E1 /r PSRAW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "iclass": "PSRAW"
+  },
+  {
+   "map": "0f",
+   "op": 113,
+   "mn": "psraw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAW (opcode line \"NP 0F 71 /4 ib PSRAW mm, imm8\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "reg",
+   "imm": "b",
+   "np": true,
+   "iclass": "PSRAW"
+  },
+  {
+   "map": "0f",
+   "op": 113,
+   "mn": "psraw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRAW (opcode line \"66 0F 71 /4 ib PSRAW xmm1, imm8\"), as transcribed at https://www.felixcloutier.com/x86/psraw:psrad:psraq, retrieved 2026-10-09",
+   "reg": 4,
+   "form": "reg",
+   "imm": "b",
+   "iclass": "PSRAW"
+  },
+  {
+   "map": "0f",
+   "op": 211,
+   "mn": "psrlq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRLQ (opcode line \"NP 0F D3 /r PSRLQ mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/psrlw:psrld:psrlq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PSRLQ"
+  },
+  {
+   "map": "0f",
+   "op": 211,
+   "mn": "psrlq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRLQ (opcode line \"66 0F D3 /r PSRLQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/psrlw:psrld:psrlq, retrieved 2026-10-09",
+   "iclass": "PSRLQ"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "psrlq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRLQ (opcode line \"NP 0F 73 /2 ib PSRLQ mm, imm8\"), as transcribed at https://www.felixcloutier.com/x86/psrlw:psrld:psrlq, retrieved 2026-10-09",
+   "reg": 2,
+   "form": "reg",
+   "imm": "b",
+   "np": true,
+   "iclass": "PSRLQ"
+  },
+  {
+   "map": "0f",
+   "op": 115,
+   "mn": "psrlq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSRLQ (opcode line \"66 0F 73 /2 ib PSRLQ xmm1, imm8\"), as transcribed at https://www.felixcloutier.com/x86/psrlw:psrld:psrlq, retrieved 2026-10-09",
+   "reg": 2,
+   "form": "reg",
+   "imm": "b",
+   "iclass": "PSRLQ"
+  },
+  {
+   "map": "0f",
+   "op": 232,
+   "mn": "psubsb",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSUBSB (opcode line \"NP 0F E8 /r PSUBSB mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/psubsb:psubsw, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PSUBSB"
+  },
+  {
+   "map": "0f",
+   "op": 232,
+   "mn": "psubsb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSUBSB (opcode line \"66 0F E8 /r PSUBSB xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/psubsb:psubsw, retrieved 2026-10-09",
+   "iclass": "PSUBSB"
+  },
+  {
+   "map": "0f",
+   "op": 249,
+   "mn": "psubw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSUBW (opcode line \"NP 0F F9 /r PSUBW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/psubb:psubw:psubd, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PSUBW"
+  },
+  {
+   "map": "0f",
+   "op": 249,
+   "mn": "psubw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PSUBW (opcode line \"66 0F F9 /r PSUBW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/psubb:psubw:psubd, retrieved 2026-10-09",
+   "iclass": "PSUBW"
+  },
+  {
+   "map": "0f",
+   "op": 104,
+   "mn": "punpckhbw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKHBW (opcode line \"NP 0F 68 /r PUNPCKHBW mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/punpckhbw:punpckhwd:punpckhdq:punpckhqdq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PUNPCKHBW"
+  },
+  {
+   "map": "0f",
+   "op": 104,
+   "mn": "punpckhbw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKHBW (opcode line \"66 0F 68 /r PUNPCKHBW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/punpckhbw:punpckhwd:punpckhdq:punpckhqdq, retrieved 2026-10-09",
+   "iclass": "PUNPCKHBW"
+  },
+  {
+   "map": "0f",
+   "op": 106,
+   "mn": "punpckhdq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKHDQ (opcode line \"NP 0F 6A /r PUNPCKHDQ mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/punpckhbw:punpckhwd:punpckhdq:punpckhqdq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PUNPCKHDQ"
+  },
+  {
+   "map": "0f",
+   "op": 106,
+   "mn": "punpckhdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKHDQ (opcode line \"66 0F 6A /r PUNPCKHDQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/punpckhbw:punpckhwd:punpckhdq:punpckhqdq, retrieved 2026-10-09",
+   "iclass": "PUNPCKHDQ"
+  },
+  {
+   "map": "0f",
+   "op": 105,
+   "mn": "punpckhwd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKHWD (opcode line \"NP 0F 69 /r PUNPCKHWD mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/punpckhbw:punpckhwd:punpckhdq:punpckhqdq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PUNPCKHWD"
+  },
+  {
+   "map": "0f",
+   "op": 105,
+   "mn": "punpckhwd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKHWD (opcode line \"66 0F 69 /r PUNPCKHWD xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/punpckhbw:punpckhwd:punpckhdq:punpckhqdq, retrieved 2026-10-09",
+   "iclass": "PUNPCKHWD"
+  },
+  {
+   "map": "0f",
+   "op": 96,
+   "mn": "punpcklbw",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKLBW (opcode line \"NP 0F 60 /r PUNPCKLBW mm, mm/m32\"), as transcribed at https://www.felixcloutier.com/x86/punpcklbw:punpcklwd:punpckldq:punpcklqdq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PUNPCKLBW"
+  },
+  {
+   "map": "0f",
+   "op": 96,
+   "mn": "punpcklbw",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKLBW (opcode line \"66 0F 60 /r PUNPCKLBW xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/punpcklbw:punpcklwd:punpckldq:punpcklqdq, retrieved 2026-10-09",
+   "iclass": "PUNPCKLBW"
+  },
+  {
+   "map": "0f",
+   "op": 98,
+   "mn": "punpckldq",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKLDQ (opcode line \"NP 0F 62 /r PUNPCKLDQ mm, mm/m32\"), as transcribed at https://www.felixcloutier.com/x86/punpcklbw:punpcklwd:punpckldq:punpcklqdq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PUNPCKLDQ"
+  },
+  {
+   "map": "0f",
+   "op": 98,
+   "mn": "punpckldq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKLDQ (opcode line \"66 0F 62 /r PUNPCKLDQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/punpcklbw:punpcklwd:punpckldq:punpcklqdq, retrieved 2026-10-09",
+   "iclass": "PUNPCKLDQ"
+  },
+  {
+   "map": "0f",
+   "op": 97,
+   "mn": "punpcklwd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKLWD (opcode line \"NP 0F 61 /r PUNPCKLWD mm, mm/m32\"), as transcribed at https://www.felixcloutier.com/x86/punpcklbw:punpcklwd:punpckldq:punpcklqdq, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PUNPCKLWD"
+  },
+  {
+   "map": "0f",
+   "op": 97,
+   "mn": "punpcklwd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PUNPCKLWD (opcode line \"66 0F 61 /r PUNPCKLWD xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/punpcklbw:punpcklwd:punpckldq:punpcklqdq, retrieved 2026-10-09",
+   "iclass": "PUNPCKLWD"
+  },
+  {
+   "map": "0f",
+   "op": 239,
+   "mn": "pxor",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PXOR (opcode line \"NP 0F EF /r PXOR mm, mm/m64\"), as transcribed at https://www.felixcloutier.com/x86/pxor, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "PXOR"
+  },
+  {
+   "map": "0f",
+   "op": 239,
+   "mn": "pxor",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page PXOR (opcode line \"66 0F EF /r PXOR xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pxor, retrieved 2026-10-09",
+   "iclass": "PXOR"
+  },
+  {
+   "map": "0f",
+   "op": 83,
+   "mn": "rcpps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RCPPS (opcode line \"NP 0F 53 /r RCPPS xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/rcpps, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "RCPPS"
+  },
+  {
+   "map": "0f",
+   "op": 83,
+   "mn": "rcpss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RCPSS (opcode line \"F3 0F 53 /r RCPSS xmm1, xmm2/m32\"), as transcribed at https://www.felixcloutier.com/x86/rcpss, retrieved 2026-10-09",
+   "iclass": "RCPSS"
+  },
+  {
+   "map": "0f",
+   "op": 199,
+   "mn": "rdpid",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RDPID (opcode line \"F3 0F C7 /7 RDPID r64\"), as transcribed at https://www.felixcloutier.com/x86/rdpid, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "reg",
+   "iclass": "RDPID"
+  },
+  {
+   "map": "0f",
+   "op": 199,
+   "mn": "rdrand",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RDRAND (opcode line \"NFx 0F C7 /6 RDRAND r16\"), as transcribed at https://www.felixcloutier.com/x86/rdrand, retrieved 2026-10-09",
+   "reg": 6,
+   "form": "reg",
+   "w": 0,
+   "np": "nfx",
+   "iclass": "RDRAND"
+  },
+  {
+   "map": "0f",
+   "op": 199,
+   "mn": "rdrand",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RDRAND (opcode line \"NFx REX.W + 0F C7 /6 RDRAND r64\"), as transcribed at https://www.felixcloutier.com/x86/rdrand, retrieved 2026-10-09",
+   "reg": 6,
+   "form": "reg",
+   "w": 1,
+   "np": "nfx",
+   "iclass": "RDRAND"
+  },
+  {
+   "map": "0f",
+   "op": 199,
+   "mn": "rdseed",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RDSEED (opcode line \"NFx 0F C7 /7 RDSEED r16\"), as transcribed at https://www.felixcloutier.com/x86/rdseed, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "reg",
+   "w": 0,
+   "np": "nfx",
+   "iclass": "RDSEED"
+  },
+  {
+   "map": "0f",
+   "op": 199,
+   "mn": "rdseed",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RDSEED (opcode line \"NFx REX.W + 0F C7 /7 RDSEED r64\"), as transcribed at https://www.felixcloutier.com/x86/rdseed, retrieved 2026-10-09",
+   "reg": 7,
+   "form": "reg",
+   "w": 1,
+   "np": "nfx",
+   "iclass": "RDSEED"
+  },
+  {
+   "map": "1",
+   "op": 203,
+   "mn": "ret",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page RET (opcode line \"CB RET\"), as transcribed at https://www.felixcloutier.com/x86/ret, retrieved 2026-10-09",
+   "iclass": "RET_FAR"
+  },
+  {
+   "map": "1",
+   "op": 202,
+   "mn": "ret",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page RET (opcode line \"CA iw RET imm16\"), as transcribed at https://www.felixcloutier.com/x86/ret, retrieved 2026-10-09",
+   "imm": "w",
+   "iclass": "RET_FAR"
+  },
+  {
+   "map": "0f3a",
+   "op": 240,
+   "mn": "rorx",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RORX (opcode line \"VEX.LZ.F2.0F3A.W0 F0 /r ib RORX r32, r/m32, imm8\"), as transcribed at https://www.felixcloutier.com/x86/rorx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "imm": "b",
+   "vvvv": "1111",
+   "iclass": "RORX"
+  },
+  {
+   "map": "0f3a",
+   "op": 240,
+   "mn": "rorx",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RORX (opcode line \"VEX.LZ.F2.0F3A.W1 F0 /r ib RORX r64, r/m64, imm8\"), as transcribed at https://www.felixcloutier.com/x86/rorx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 0,
+   "imm": "b",
+   "vvvv": "1111",
+   "iclass": "RORX"
+  },
+  {
+   "map": "0f",
+   "op": 82,
+   "mn": "rsqrtps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RSQRTPS (opcode line \"NP 0F 52 /r RSQRTPS xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/rsqrtps, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "RSQRTPS"
+  },
+  {
+   "map": "0f",
+   "op": 82,
+   "mn": "rsqrtss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page RSQRTSS (opcode line \"F3 0F 52 /r RSQRTSS xmm1, xmm2/m32\"), as transcribed at https://www.felixcloutier.com/x86/rsqrtss, retrieved 2026-10-09",
+   "iclass": "RSQRTSS"
+  },
+  {
+   "map": "1",
+   "op": 158,
+   "mn": "sahf",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page SAHF (opcode line \"9E SAHF\"), as transcribed at https://www.felixcloutier.com/x86/sahf, retrieved 2026-10-09",
+   "iclass": "SAHF"
+  },
+  {
+   "map": "0f",
+   "op": 199,
+   "mn": "senduipi",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SENDUIPI (opcode line \"F3 0F C7 /6 SENDUIPI reg\"), as transcribed at https://www.felixcloutier.com/x86/senduipi, retrieved 2026-10-09",
+   "reg": 6,
+   "form": "reg",
+   "iclass": "SENDUIPI"
+  },
+  {
+   "map": "0f38",
+   "op": 201,
+   "mn": "sha1msg1",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA1MSG1 (opcode line \"NP 0F 38 C9 /r SHA1MSG1 xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/sha1msg1, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "SHA1MSG1"
+  },
+  {
+   "map": "0f38",
+   "op": 202,
+   "mn": "sha1msg2",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA1MSG2 (opcode line \"NP 0F 38 CA /r SHA1MSG2 xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/sha1msg2, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "SHA1MSG2"
+  },
+  {
+   "map": "0f38",
+   "op": 200,
+   "mn": "sha1nexte",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA1NEXTE (opcode line \"NP 0F 38 C8 /r SHA1NEXTE xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/sha1nexte, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "SHA1NEXTE"
+  },
+  {
+   "map": "0f3a",
+   "op": 204,
+   "mn": "sha1rnds4",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA1RNDS4 (opcode line \"NP 0F 3A CC /r ib SHA1RNDS4 xmm1, xmm2/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/sha1rnds4, retrieved 2026-10-09",
+   "imm": "b",
+   "np": true,
+   "iclass": "SHA1RNDS4"
+  },
+  {
+   "map": "0f38",
+   "op": 204,
+   "mn": "sha256msg1",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA256MSG1 (opcode line \"NP 0F 38 CC /r SHA256MSG1 xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/sha256msg1, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "SHA256MSG1"
+  },
+  {
+   "map": "0f38",
+   "op": 205,
+   "mn": "sha256msg2",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA256MSG2 (opcode line \"NP 0F 38 CD /r SHA256MSG2 xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/sha256msg2, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "SHA256MSG2"
+  },
+  {
+   "map": "0f38",
+   "op": 203,
+   "mn": "sha256rnds2",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHA256RNDS2 (opcode line \"NP 0F 38 CB /r SHA256RNDS2 xmm1, xmm2/m128, <XMM0>\"), as transcribed at https://www.felixcloutier.com/x86/sha256rnds2, retrieved 2026-10-09",
+   "np": true,
+   "iclass": "SHA256RNDS2"
+  },
+  {
+   "map": "0f38",
+   "op": 247,
+   "mn": "shlx",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHLX (opcode line \"VEX.LZ.66.0F38.W0 F7 /r SHLX r32a, r/m32, r32b\"), as transcribed at https://www.felixcloutier.com/x86/sarx:shlx:shrx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "SHLX"
+  },
+  {
+   "map": "0f38",
+   "op": 247,
+   "mn": "shlx",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHLX (opcode line \"VEX.LZ.66.0F38.W1 F7 /r SHLX r64a, r/m64, r64b\"), as transcribed at https://www.felixcloutier.com/x86/sarx:shlx:shrx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 0,
+   "iclass": "SHLX"
+  },
+  {
+   "map": "0f38",
+   "op": 247,
+   "mn": "shrx",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHRX (opcode line \"VEX.LZ.F2.0F38.W0 F7 /r SHRX r32a, r/m32, r32b\"), as transcribed at https://www.felixcloutier.com/x86/sarx:shlx:shrx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "SHRX"
+  },
+  {
+   "map": "0f38",
+   "op": 247,
+   "mn": "shrx",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SHRX (opcode line \"VEX.LZ.F2.0F38.W1 F7 /r SHRX r64a, r/m64, r64b\"), as transcribed at https://www.felixcloutier.com/x86/sarx:shlx:shrx, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 0,
+   "iclass": "SHRX"
+  },
+  {
+   "map": "0f",
+   "op": 0,
+   "mn": "sldt",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page SLDT (opcode line \"0F 00 /0 SLDT r/m16\"), as transcribed at https://www.felixcloutier.com/x86/sldt, retrieved 2026-10-09",
+   "reg": 0,
+   "iclass": "SLDT"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "stmxcsr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page STMXCSR (opcode line \"NP 0F AE /3 STMXCSR m32\"), as transcribed at https://www.felixcloutier.com/x86/stmxcsr, retrieved 2026-10-09",
+   "reg": 3,
+   "form": "mem",
+   "np": true,
+   "iclass": "STMXCSR"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "tpause",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page TPAUSE (opcode line \"66 0F AE /6 TPAUSE r32, <edx>, <eax>\"), as transcribed at https://www.felixcloutier.com/x86/tpause, retrieved 2026-10-09",
+   "reg": 6,
+   "form": "reg",
+   "iclass": "TPAUSE"
+  },
+  {
+   "map": "0f",
+   "op": 255,
+   "mn": "ud0",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page UD0 (opcode line \"0F FF /r UD0 r32, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/ud, retrieved 2026-10-09; decoded without a ModR/M byte as XED does (the SDM page's footnote on older processors)",
+   "iclass": "UD0"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "umonitor",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page UMONITOR (opcode line \"F3 0F AE /6 UMONITOR r16 /r32 /r64\"), as transcribed at https://www.felixcloutier.com/x86/umonitor, retrieved 2026-10-09",
+   "reg": 6,
+   "form": "reg",
+   "iclass": "UMONITOR"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "umwait",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page UMWAIT (opcode line \"F2 0F AE /6 UMWAIT r32, <edx>, <eax>\"), as transcribed at https://www.felixcloutier.com/x86/umwait, retrieved 2026-10-09",
+   "reg": 6,
+   "form": "reg",
+   "iclass": "UMWAIT"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "vaddpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VADDPD (opcode line \"VEX.128.66.0F.WIG 58 /r VADDPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/addpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VADDPD"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "vaddpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VADDPD (opcode line \"VEX.256.66.0F.WIG 58 /r VADDPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/addpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VADDPD"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "vaddps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VADDPS (opcode line \"VEX.128.0F.WIG 58 /r VADDPS xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/addps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VADDPS"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "vaddps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VADDPS (opcode line \"VEX.256.0F.WIG 58 /r VADDPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/addps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VADDPS"
+  },
+  {
+   "map": "0f",
+   "op": 88,
+   "mn": "vaddss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VADDSS (opcode line \"VEX.LIG.F3.0F.WIG 58 /r VADDSS xmm1,xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/addss, retrieved 2026-10-09",
+   "vex": true,
+   "iclass": "VADDSS"
+  },
+  {
+   "map": "0f",
+   "op": 85,
+   "mn": "vandnpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VANDNPD (opcode line \"VEX.128.66.0F 55 /r VANDNPD xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/andnpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VANDNPD"
+  },
+  {
+   "map": "0f",
+   "op": 85,
+   "mn": "vandnpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VANDNPD (opcode line \"VEX.256.66.0F 55 /r VANDNPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/andnpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VANDNPD"
+  },
+  {
+   "map": "0f",
+   "op": 85,
+   "mn": "vandnps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VANDNPS (opcode line \"VEX.128.0F 55 /r VANDNPS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/andnps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VANDNPS"
+  },
+  {
+   "map": "0f",
+   "op": 85,
+   "mn": "vandnps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VANDNPS (opcode line \"VEX.256.0F 55 /r VANDNPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/andnps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VANDNPS"
+  },
+  {
+   "map": "0f38",
+   "op": 26,
+   "mn": "vbroadcastf128",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VBROADCASTF128 (opcode line \"VEX.256.66.0F38.W0 1A /r VBROADCASTF128 ymm1, m128\"), as transcribed at https://www.felixcloutier.com/x86/vbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "w": 0,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VBROADCASTF128"
+  },
+  {
+   "map": "0f38",
+   "op": 24,
+   "mn": "vbroadcastss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VBROADCASTSS (opcode line \"VEX.128.66.0F38.W0 18 /r VBROADCASTSS xmm1, m32\"), as transcribed at https://www.felixcloutier.com/x86/vbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "w": 0,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VBROADCASTSS"
+  },
+  {
+   "map": "0f38",
+   "op": 24,
+   "mn": "vbroadcastss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VBROADCASTSS (opcode line \"VEX.256.66.0F38.W0 18 /r VBROADCASTSS ymm1, m32\"), as transcribed at https://www.felixcloutier.com/x86/vbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "w": 0,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VBROADCASTSS"
+  },
+  {
+   "map": "0f38",
+   "op": 24,
+   "mn": "vbroadcastss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VBROADCASTSS (opcode line \"VEX.128.66.0F38.W0 18 /r VBROADCASTSS xmm1, xmm2\"), as transcribed at https://www.felixcloutier.com/x86/vbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "w": 0,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VBROADCASTSS"
+  },
+  {
+   "map": "0f38",
+   "op": 24,
+   "mn": "vbroadcastss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VBROADCASTSS (opcode line \"VEX.256.66.0F38.W0 18 /r VBROADCASTSS ymm1, xmm2\"), as transcribed at https://www.felixcloutier.com/x86/vbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "w": 0,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VBROADCASTSS"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "vcmpps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCMPPS (opcode line \"VEX.128.0F.WIG C2 /r ib VCMPPS xmm1, xmm2, xmm3/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "imm": "b",
+   "iclass": "VCMPPS"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "vcmpps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCMPPS (opcode line \"VEX.256.0F.WIG C2 /r ib VCMPPS ymm1, ymm2, ymm3/m256, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "imm": "b",
+   "iclass": "VCMPPS"
+  },
+  {
+   "map": "0f",
+   "op": 194,
+   "mn": "vcmpsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCMPSD (opcode line \"VEX.LIG.F2.0F.WIG C2 /r ib VCMPSD xmm1, xmm2, xmm3/m64, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpsd, retrieved 2026-10-09",
+   "vex": true,
+   "imm": "b",
+   "iclass": "VCMPSD"
+  },
+  {
+   "map": "0f",
+   "op": 47,
+   "mn": "vcomiss",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCOMISS (opcode line \"VEX.LIG.0F.WIG 2F /r VCOMISS xmm1, xmm2/m32\"), as transcribed at https://www.felixcloutier.com/x86/comiss, retrieved 2026-10-09",
+   "vex": true,
+   "vvvv": "1111",
+   "iclass": "VCOMISS"
+  },
+  {
+   "map": "0f",
+   "op": 91,
+   "mn": "vcvtdq2ps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTDQ2PS (opcode line \"VEX.128.0F.WIG 5B /r VCVTDQ2PS xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvtdq2ps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTDQ2PS"
+  },
+  {
+   "map": "0f",
+   "op": 91,
+   "mn": "vcvtdq2ps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTDQ2PS (opcode line \"VEX.256.0F.WIG 5B /r VCVTDQ2PS ymm1, ymm2/m256\"), as transcribed at https://www.felixcloutier.com/x86/cvtdq2ps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTDQ2PS"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "vcvtpd2dq",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTPD2DQ (opcode line \"VEX.128.F2.0F.WIG E6 /r VCVTPD2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvtpd2dq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTPD2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "vcvtpd2dq",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTPD2DQ (opcode line \"VEX.256.F2.0F.WIG E6 /r VCVTPD2DQ xmm1, ymm2/m256\"), as transcribed at https://www.felixcloutier.com/x86/cvtpd2dq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTPD2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 90,
+   "mn": "vcvtps2pd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTPS2PD (opcode line \"VEX.128.0F.WIG 5A /r VCVTPS2PD xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/cvtps2pd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTPS2PD"
+  },
+  {
+   "map": "0f",
+   "op": 90,
+   "mn": "vcvtps2pd",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTPS2PD (opcode line \"VEX.256.0F.WIG 5A /r VCVTPS2PD ymm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvtps2pd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTPS2PD"
+  },
+  {
+   "map": "0f",
+   "op": 90,
+   "mn": "vcvtsd2ss",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTSD2SS (opcode line \"VEX.LIG.F2.0F.WIG 5A /r VCVTSD2SS xmm1,xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/cvtsd2ss, retrieved 2026-10-09",
+   "vex": true,
+   "iclass": "VCVTSD2SS"
+  },
+  {
+   "map": "0f",
+   "op": 42,
+   "mn": "vcvtsi2ss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTSI2SS (opcode line \"VEX.LIG.F3.0F.W0 2A /r VCVTSI2SS xmm1, xmm2, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/cvtsi2ss, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "iclass": "VCVTSI2SS"
+  },
+  {
+   "map": "0f",
+   "op": 42,
+   "mn": "vcvtsi2ss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTSI2SS (opcode line \"VEX.LIG.F3.0F.W1 2A /r VCVTSI2SS xmm1, xmm2, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/cvtsi2ss, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "iclass": "VCVTSI2SS"
+  },
+  {
+   "map": "0f",
+   "op": 90,
+   "mn": "vcvtss2sd",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTSS2SD (opcode line \"VEX.LIG.F3.0F.WIG 5A /r VCVTSS2SD xmm1, xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/cvtss2sd, retrieved 2026-10-09",
+   "vex": true,
+   "iclass": "VCVTSS2SD"
+  },
+  {
+   "map": "0f",
+   "op": 45,
+   "mn": "vcvtss2si",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTSS2SI (opcode line \"VEX.LIG.F3.0F.W0 2D /r VCVTSS2SI r32, xmm1/m32\"), as transcribed at https://www.felixcloutier.com/x86/cvtss2si, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTSS2SI"
+  },
+  {
+   "map": "0f",
+   "op": 45,
+   "mn": "vcvtss2si",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTSS2SI (opcode line \"VEX.LIG.F3.0F.W1 2D /r VCVTSS2SI r64, xmm1/m32\"), as transcribed at https://www.felixcloutier.com/x86/cvtss2si, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTSS2SI"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "vcvttpd2dq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTTPD2DQ (opcode line \"VEX.128.66.0F.WIG E6 /r VCVTTPD2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvttpd2dq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTTPD2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 230,
+   "mn": "vcvttpd2dq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTTPD2DQ (opcode line \"VEX.256.66.0F.WIG E6 /r VCVTTPD2DQ xmm1, ymm2/m256\"), as transcribed at https://www.felixcloutier.com/x86/cvttpd2dq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTTPD2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 91,
+   "mn": "vcvttps2dq",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTTPS2DQ (opcode line \"VEX.128.F3.0F.WIG 5B /r VCVTTPS2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvttps2dq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTTPS2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 91,
+   "mn": "vcvttps2dq",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTTPS2DQ (opcode line \"VEX.256.F3.0F.WIG 5B /r VCVTTPS2DQ ymm1, ymm2/m256\"), as transcribed at https://www.felixcloutier.com/x86/cvttps2dq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTTPS2DQ"
+  },
+  {
+   "map": "0f",
+   "op": 44,
+   "mn": "vcvttsd2si",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTTSD2SI (opcode line \"VEX.LIG.F2.0F.W0 2C /r VCVTTSD2SI r32, xmm1/m64\"), as transcribed at https://www.felixcloutier.com/x86/cvttsd2si, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "vvvv": "1111",
+   "iclass": "VCVTTSD2SI"
+  },
+  {
+   "map": "0f",
+   "op": 44,
+   "mn": "vcvttsd2si",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VCVTTSD2SI (opcode line \"VEX.LIG.F2.0F.W1 2C /r VCVTTSD2SI r64, xmm1/m64\"), as transcribed at https://www.felixcloutier.com/x86/cvttsd2si, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "vvvv": "1111",
+   "iclass": "VCVTTSD2SI"
+  },
+  {
+   "map": "0f",
+   "op": 94,
+   "mn": "vdivss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VDIVSS (opcode line \"VEX.LIG.F3.0F.WIG 5E /r VDIVSS xmm1, xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/divss, retrieved 2026-10-09",
+   "vex": true,
+   "iclass": "VDIVSS"
+  },
+  {
+   "map": "0f3a",
+   "op": 25,
+   "mn": "vextractf128",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VEXTRACTF128 (opcode line \"VEX.256.66.0F3A.W0 19 /r ib VEXTRACTF128 xmm1/m128, ymm2, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vextractf128:vextractf32x4:vextractf64x2:vextractf32x8:vextractf64x4, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "imm": "b",
+   "vvvv": "1111",
+   "iclass": "VEXTRACTF128"
+  },
+  {
+   "map": "0f3a",
+   "op": 57,
+   "mn": "vextracti128",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VEXTRACTI128 (opcode line \"VEX.256.66.0F3A.W0 39 /r ib VEXTRACTI128 xmm1/m128, ymm2, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vextracti128:vextracti32x4:vextracti64x2:vextracti32x8:vextracti64x4, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "imm": "b",
+   "vvvv": "1111",
+   "iclass": "VEXTRACTI128"
+  },
+  {
+   "map": "0f38",
+   "op": 152,
+   "mn": "vfmadd132pd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD132PD (opcode line \"VEX.128.66.0F38.W1 98 /r VFMADD132PD xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132pd:vfmadd213pd:vfmadd231pd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 0,
+   "iclass": "VFMADD132PD"
+  },
+  {
+   "map": "0f38",
+   "op": 152,
+   "mn": "vfmadd132pd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD132PD (opcode line \"VEX.256.66.0F38.W1 98 /r VFMADD132PD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132pd:vfmadd213pd:vfmadd231pd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "l": 1,
+   "iclass": "VFMADD132PD"
+  },
+  {
+   "map": "0f38",
+   "op": 153,
+   "mn": "vfmadd132sd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD132SD (opcode line \"VEX.LIG.66.0F38.W1 99 /r VFMADD132SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132sd:vfmadd213sd:vfmadd231sd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "iclass": "VFMADD132SD"
+  },
+  {
+   "map": "0f38",
+   "op": 169,
+   "mn": "vfmadd213ss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD213SS (opcode line \"VEX.LIG.66.0F38.W0 A9 /r VFMADD213SS xmm1, xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132ss:vfmadd213ss:vfmadd231ss, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "iclass": "VFMADD213SS"
+  },
+  {
+   "map": "0f38",
+   "op": 184,
+   "mn": "vfmadd231ps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD231PS (opcode line \"VEX.128.66.0F38.W0 B8 /r VFMADD231PS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132ps:vfmadd213ps:vfmadd231ps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "VFMADD231PS"
+  },
+  {
+   "map": "0f38",
+   "op": 184,
+   "mn": "vfmadd231ps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD231PS (opcode line \"VEX.256.66.0F38.0 B8 /r VFMADD231PS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132ps:vfmadd213ps:vfmadd231ps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "iclass": "VFMADD231PS"
+  },
+  {
+   "map": "0f38",
+   "op": 185,
+   "mn": "vfmadd231ss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMADD231SS (opcode line \"VEX.LIG.66.0F38.W0 B9 /r VFMADD231SS xmm1, xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132ss:vfmadd213ss:vfmadd231ss, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "iclass": "VFMADD231SS"
+  },
+  {
+   "map": "0f38",
+   "op": 155,
+   "mn": "vfmsub132sd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMSUB132SD (opcode line \"VEX.LIG.66.0F38.W1 9B /r VFMSUB132SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfmsub132sd:vfmsub213sd:vfmsub231sd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "iclass": "VFMSUB132SD"
+  },
+  {
+   "map": "0f38",
+   "op": 171,
+   "mn": "vfmsub213ss",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFMSUB213SS (opcode line \"VEX.LIG.66.0F38.W0 AB /r VFMSUB213SS xmm1, xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/vfmsub132ss:vfmsub213ss:vfmsub231ss, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "iclass": "VFMSUB213SS"
+  },
+  {
+   "map": "0f38",
+   "op": 157,
+   "mn": "vfnmadd132sd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFNMADD132SD (opcode line \"VEX.LIG.66.0F38.W1 9D /r VFNMADD132SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132sd:vfnmadd213sd:vfnmadd231sd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "iclass": "VFNMADD132SD"
+  },
+  {
+   "map": "0f38",
+   "op": 173,
+   "mn": "vfnmadd213sd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFNMADD213SD (opcode line \"VEX.LIG.66.0F38.W1 AD /r VFNMADD213SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132sd:vfnmadd213sd:vfnmadd231sd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "iclass": "VFNMADD213SD"
+  },
+  {
+   "map": "0f38",
+   "op": 188,
+   "mn": "vfnmadd231ps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFNMADD231PS (opcode line \"VEX.128.66.0F38.W0 BC /r VFNMADD231PS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132ps:vfnmadd213ps:vfnmadd231ps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "VFNMADD231PS"
+  },
+  {
+   "map": "0f38",
+   "op": 188,
+   "mn": "vfnmadd231ps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFNMADD231PS (opcode line \"VEX.256.66.0F38.0 BC /r VFNMADD231PS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132ps:vfnmadd213ps:vfnmadd231ps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "iclass": "VFNMADD231PS"
+  },
+  {
+   "map": "0f38",
+   "op": 189,
+   "mn": "vfnmadd231sd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VFNMADD231SD (opcode line \"VEX.LIG.66.0F38.W1 BD /r VFNMADD231SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132sd:vfnmadd213sd:vfnmadd231sd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 1,
+   "iclass": "VFNMADD231SD"
+  },
+  {
+   "map": "0f",
+   "op": 124,
+   "mn": "vhaddpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VHADDPD (opcode line \"VEX.128.66.0F.WIG 7C /r VHADDPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/haddpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VHADDPD"
+  },
+  {
+   "map": "0f",
+   "op": 124,
+   "mn": "vhaddpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VHADDPD (opcode line \"VEX.256.66.0F.WIG 7C /r VHADDPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/haddpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VHADDPD"
+  },
+  {
+   "map": "0f3a",
+   "op": 24,
+   "mn": "vinsertf128",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VINSERTF128 (opcode line \"VEX.256.66.0F3A.W0 18 /r ib VINSERTF128 ymm1, ymm2, xmm3/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vinsertf128:vinsertf32x4:vinsertf64x2:vinsertf32x8:vinsertf64x4, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "imm": "b",
+   "iclass": "VINSERTF128"
+  },
+  {
+   "map": "0f3a",
+   "op": 56,
+   "mn": "vinserti128",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VINSERTI128 (opcode line \"VEX.256.66.0F3A.W0 38 /r ib VINSERTI128 ymm1, ymm2, xmm3/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vinserti128:vinserti32x4:vinserti64x2:vinserti32x8:vinserti64x4, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "imm": "b",
+   "iclass": "VINSERTI128"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "vldmxcsr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VLDMXCSR (opcode line \"VEX.LZ.0F.WIG AE /2 VLDMXCSR m32\"), as transcribed at https://www.felixcloutier.com/x86/ldmxcsr, retrieved 2026-10-09",
+   "vex": true,
+   "reg": 2,
+   "form": "mem",
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VLDMXCSR"
+  },
+  {
+   "map": "0f",
+   "op": 95,
+   "mn": "vmaxps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMAXPS (opcode line \"VEX.128.0F.WIG 5F /r VMAXPS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/maxps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VMAXPS"
+  },
+  {
+   "map": "0f",
+   "op": 95,
+   "mn": "vmaxps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMAXPS (opcode line \"VEX.256.0F.WIG 5F /r VMAXPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/maxps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VMAXPS"
+  },
+  {
+   "map": "0f",
+   "op": 93,
+   "mn": "vminps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMINPS (opcode line \"VEX.128.0F.WIG 5D /r VMINPS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/minps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VMINPS"
+  },
+  {
+   "map": "0f",
+   "op": 93,
+   "mn": "vminps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMINPS (opcode line \"VEX.256.0F.WIG 5D /r VMINPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/minps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VMINPS"
+  },
+  {
+   "map": "0f",
+   "op": 22,
+   "mn": "vmovlhps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVLHPS (opcode line \"VEX.128.0F.WIG 16 /r VMOVLHPS xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movlhps, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "l": 0,
+   "iclass": "VMOVLHPS"
+  },
+  {
+   "map": "0f",
+   "op": 231,
+   "mn": "vmovntdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVNTDQ (opcode line \"VEX.128.66.0F.WIG E7 /r VMOVNTDQ m128, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movntdq, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VMOVNTDQ"
+  },
+  {
+   "map": "0f",
+   "op": 231,
+   "mn": "vmovntdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVNTDQ (opcode line \"VEX.256.66.0F.WIG E7 /r VMOVNTDQ m256, ymm1\"), as transcribed at https://www.felixcloutier.com/x86/movntdq, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VMOVNTDQ"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "vmovsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSD (opcode line \"VEX.LIG.F2.0F.WIG 10 /r VMOVSD xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movsd, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "iclass": "VMOVSD"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "vmovsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSD (opcode line \"VEX.LIG.F2.0F.WIG 10 /r VMOVSD xmm1, m64\"), as transcribed at https://www.felixcloutier.com/x86/movsd, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "vvvv": "1111",
+   "iclass": "VMOVSD"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "vmovsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSD (opcode line \"VEX.LIG.F2.0F.WIG 11 /r VMOVSD xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movsd, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "iclass": "VMOVSD"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "vmovsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSD (opcode line \"VEX.LIG.F2.0F.WIG 11 /r VMOVSD m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movsd, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "vvvv": "1111",
+   "iclass": "VMOVSD"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "vmovss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSS (opcode line \"VEX.LIG.F3.0F.WIG 10 /r VMOVSS xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movss, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "iclass": "VMOVSS"
+  },
+  {
+   "map": "0f",
+   "op": 16,
+   "mn": "vmovss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSS (opcode line \"VEX.LIG.F3.0F.WIG 10 /r VMOVSS xmm1, m32\"), as transcribed at https://www.felixcloutier.com/x86/movss, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "vvvv": "1111",
+   "iclass": "VMOVSS"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "vmovss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSS (opcode line \"VEX.LIG.F3.0F.WIG 11 /r VMOVSS xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movss, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "iclass": "VMOVSS"
+  },
+  {
+   "map": "0f",
+   "op": 17,
+   "mn": "vmovss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMOVSS (opcode line \"VEX.LIG.F3.0F.WIG 11 /r VMOVSS m32, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movss, retrieved 2026-10-09",
+   "vex": true,
+   "form": "mem",
+   "vvvv": "1111",
+   "iclass": "VMOVSS"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "vmulpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMULPD (opcode line \"VEX.128.66.0F.WIG 59 /r VMULPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/mulpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VMULPD"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "vmulpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMULPD (opcode line \"VEX.256.66.0F.WIG 59 /r VMULPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/mulpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VMULPD"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "vmulps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMULPS (opcode line \"VEX.128.0F.WIG 59 /r VMULPS xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/mulps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VMULPS"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "vmulps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMULPS (opcode line \"VEX.256.0F.WIG 59 /r VMULPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/mulps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VMULPS"
+  },
+  {
+   "map": "0f",
+   "op": 89,
+   "mn": "vmulss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VMULSS (opcode line \"VEX.LIG.F3.0F.WIG 59 /r VMULSS xmm1,xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/mulss, retrieved 2026-10-09",
+   "vex": true,
+   "iclass": "VMULSS"
+  },
+  {
+   "map": "0f",
+   "op": 86,
+   "mn": "vorpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VORPD (opcode line \"VEX.128.66.0F 56 /r VORPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/orpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VORPD"
+  },
+  {
+   "map": "0f",
+   "op": 86,
+   "mn": "vorpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VORPD (opcode line \"VEX.256.66.0F 56 /r VORPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/orpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VORPD"
+  },
+  {
+   "map": "0f",
+   "op": 86,
+   "mn": "vorps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VORPS (opcode line \"VEX.128.0F 56 /r VORPS xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/orps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VORPS"
+  },
+  {
+   "map": "0f",
+   "op": 86,
+   "mn": "vorps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VORPS (opcode line \"VEX.256.0F 56 /r VORPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/orps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VORPS"
+  },
+  {
+   "map": "0f3a",
+   "op": 2,
+   "mn": "vpblendd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPBLENDD (opcode line \"VEX.128.66.0F3A.W0 02 /r ib VPBLENDD xmm1, xmm2, xmm3/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vpblendd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "imm": "b",
+   "iclass": "VPBLENDD"
+  },
+  {
+   "map": "0f3a",
+   "op": 2,
+   "mn": "vpblendd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPBLENDD (opcode line \"VEX.256.66.0F3A.W0 02 /r ib VPBLENDD ymm1, ymm2, ymm3/m256, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vpblendd, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "imm": "b",
+   "iclass": "VPBLENDD"
+  },
+  {
+   "map": "0f38",
+   "op": 88,
+   "mn": "vpbroadcastd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPBROADCASTD (opcode line \"VEX.128.66.0F38.W0 58 /r VPBROADCASTD xmm1, xmm2/m32\"), as transcribed at https://www.felixcloutier.com/x86/vpbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VPBROADCASTD"
+  },
+  {
+   "map": "0f38",
+   "op": 88,
+   "mn": "vpbroadcastd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPBROADCASTD (opcode line \"VEX.256.66.0F38.W0 58 /r VPBROADCASTD ymm1, xmm2/m32\"), as transcribed at https://www.felixcloutier.com/x86/vpbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VPBROADCASTD"
+  },
+  {
+   "map": "0f38",
+   "op": 89,
+   "mn": "vpbroadcastq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPBROADCASTQ (opcode line \"VEX.128.66.0F38.W0 59 /r VPBROADCASTQ xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/vpbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VPBROADCASTQ"
+  },
+  {
+   "map": "0f38",
+   "op": 89,
+   "mn": "vpbroadcastq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPBROADCASTQ (opcode line \"VEX.256.66.0F38.W0 59 /r VPBROADCASTQ ymm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/vpbroadcast, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VPBROADCASTQ"
+  },
+  {
+   "map": "0f38",
+   "op": 41,
+   "mn": "vpcmpeqq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPCMPEQQ (opcode line \"VEX.128.66.0F38.WIG 29 /r VPCMPEQQ xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/pcmpeqq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VPCMPEQQ"
+  },
+  {
+   "map": "0f38",
+   "op": 41,
+   "mn": "vpcmpeqq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPCMPEQQ (opcode line \"VEX.256.66.0F38.WIG 29 /r VPCMPEQQ ymm1, ymm2, ymm3 /m256\"), as transcribed at https://www.felixcloutier.com/x86/pcmpeqq, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VPCMPEQQ"
+  },
+  {
+   "map": "0f38",
+   "op": 54,
+   "mn": "vpermd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPERMD (opcode line \"VEX.256.66.0F38.W0 36 /r VPERMD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/vpermd:vpermw, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "iclass": "VPERMD"
+  },
+  {
+   "map": "0f38",
+   "op": 12,
+   "mn": "vpermilps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPERMILPS (opcode line \"VEX.128.66.0F38.W0 0C /r VPERMILPS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/vpermilps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "iclass": "VPERMILPS"
+  },
+  {
+   "map": "0f3a",
+   "op": 4,
+   "mn": "vpermilps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPERMILPS (opcode line \"VEX.128.66.0F3A.W0 04 /r ib VPERMILPS xmm1, xmm2/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vpermilps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 0,
+   "imm": "b",
+   "vvvv": "1111",
+   "iclass": "VPERMILPS"
+  },
+  {
+   "map": "0f38",
+   "op": 12,
+   "mn": "vpermilps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPERMILPS (opcode line \"VEX.256.66.0F38.W0 0C /r VPERMILPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/vpermilps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "iclass": "VPERMILPS"
+  },
+  {
+   "map": "0f3a",
+   "op": 4,
+   "mn": "vpermilps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPERMILPS (opcode line \"VEX.256.66.0F3A.W0 04 /r ib VPERMILPS ymm1, ymm2/m256, imm8\"), as transcribed at https://www.felixcloutier.com/x86/vpermilps, retrieved 2026-10-09",
+   "vex": true,
+   "w": 0,
+   "l": 1,
+   "imm": "b",
+   "vvvv": "1111",
+   "iclass": "VPERMILPS"
+  },
+  {
+   "map": "0f",
+   "op": 215,
+   "mn": "vpmovmskb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPMOVMSKB (opcode line \"VEX.128.66.0F.WIG D7 /r VPMOVMSKB reg, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/pmovmskb, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VPMOVMSKB"
+  },
+  {
+   "map": "0f",
+   "op": 215,
+   "mn": "vpmovmskb",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPMOVMSKB (opcode line \"VEX.256.66.0F.WIG D7 /r VPMOVMSKB reg, ymm1\"), as transcribed at https://www.felixcloutier.com/x86/pmovmskb, retrieved 2026-10-09",
+   "vex": true,
+   "form": "reg",
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VPMOVMSKB"
+  },
+  {
+   "map": "0f38",
+   "op": 37,
+   "mn": "vpmovsxdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPMOVSXDQ (opcode line \"VEX.128.66.0F38.WIG 25 /r VPMOVSXDQ xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/pmovsx, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VPMOVSXDQ"
+  },
+  {
+   "map": "0f38",
+   "op": 37,
+   "mn": "vpmovsxdq",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VPMOVSXDQ (opcode line \"VEX.256.66.0F38.WIG 25 /r VPMOVSXDQ ymm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/pmovsx, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VPMOVSXDQ"
+  },
+  {
+   "map": "0f",
+   "op": 83,
+   "mn": "vrcpps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VRCPPS (opcode line \"VEX.128.0F.WIG 53 /r VRCPPS xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/rcpps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VRCPPS"
+  },
+  {
+   "map": "0f",
+   "op": 83,
+   "mn": "vrcpps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VRCPPS (opcode line \"VEX.256.0F.WIG 53 /r VRCPPS ymm1, ymm2/m256\"), as transcribed at https://www.felixcloutier.com/x86/rcpps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VRCPPS"
+  },
+  {
+   "map": "0f3a",
+   "op": 11,
+   "mn": "vroundsd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VROUNDSD (opcode line \"VEX.LIG.66.0F3A.WIG 0B /r ib VROUNDSD xmm1, xmm2, xmm3/m64, imm8\"), as transcribed at https://www.felixcloutier.com/x86/roundsd, retrieved 2026-10-09",
+   "vex": true,
+   "imm": "b",
+   "iclass": "VROUNDSD"
+  },
+  {
+   "map": "0f",
+   "op": 82,
+   "mn": "vrsqrtps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VRSQRTPS (opcode line \"VEX.128.0F.WIG 52 /r VRSQRTPS xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/rsqrtps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VRSQRTPS"
+  },
+  {
+   "map": "0f",
+   "op": 82,
+   "mn": "vrsqrtps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VRSQRTPS (opcode line \"VEX.256.0F.WIG 52 /r VRSQRTPS ymm1, ymm2/m256\"), as transcribed at https://www.felixcloutier.com/x86/rsqrtps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "vvvv": "1111",
+   "iclass": "VRSQRTPS"
+  },
+  {
+   "map": "0f",
+   "op": 198,
+   "mn": "vshufps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VSHUFPS (opcode line \"VEX.128.0F.WIG C6 /r ib VSHUFPS xmm1, xmm2, xmm3/m128, imm8\"), as transcribed at https://www.felixcloutier.com/x86/shufps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "imm": "b",
+   "iclass": "VSHUFPS"
+  },
+  {
+   "map": "0f",
+   "op": 198,
+   "mn": "vshufps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VSHUFPS (opcode line \"VEX.256.0F.WIG C6 /r ib VSHUFPS ymm1, ymm2, ymm3/m256, imm8\"), as transcribed at https://www.felixcloutier.com/x86/shufps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "imm": "b",
+   "iclass": "VSHUFPS"
+  },
+  {
+   "map": "0f",
+   "op": 174,
+   "mn": "vstmxcsr",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VSTMXCSR (opcode line \"VEX.LZ.0F.WIG AE /3 VSTMXCSR m32\"), as transcribed at https://www.felixcloutier.com/x86/stmxcsr, retrieved 2026-10-09",
+   "vex": true,
+   "reg": 3,
+   "form": "mem",
+   "l": 0,
+   "vvvv": "1111",
+   "iclass": "VSTMXCSR"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "vsubps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VSUBPS (opcode line \"VEX.128.0F.WIG 5C /r VSUBPS xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/subps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VSUBPS"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "vsubps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VSUBPS (opcode line \"VEX.256.0F.WIG 5C /r VSUBPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/subps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VSUBPS"
+  },
+  {
+   "map": "0f",
+   "op": 92,
+   "mn": "vsubss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VSUBSS (opcode line \"VEX.LIG.F3.0F.WIG 5C /r VSUBSS xmm1,xmm2, xmm3/m32\"), as transcribed at https://www.felixcloutier.com/x86/subss, retrieved 2026-10-09",
+   "vex": true,
+   "iclass": "VSUBSS"
+  },
+  {
+   "map": "0f",
+   "op": 46,
+   "mn": "vucomisd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUCOMISD (opcode line \"VEX.LIG.66.0F.WIG 2E /r VUCOMISD xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/ucomisd, retrieved 2026-10-09",
+   "vex": true,
+   "vvvv": "1111",
+   "iclass": "VUCOMISD"
+  },
+  {
+   "map": "0f",
+   "op": 46,
+   "mn": "vucomiss",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUCOMISS (opcode line \"VEX.LIG.0F.WIG 2E /r VUCOMISS xmm1, xmm2/m32\"), as transcribed at https://www.felixcloutier.com/x86/ucomiss, retrieved 2026-10-09",
+   "vex": true,
+   "vvvv": "1111",
+   "iclass": "VUCOMISS"
+  },
+  {
+   "map": "0f",
+   "op": 21,
+   "mn": "vunpckhps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUNPCKHPS (opcode line \"VEX.128.0F.WIG 15 /r VUNPCKHPS xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/unpckhps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VUNPCKHPS"
+  },
+  {
+   "map": "0f",
+   "op": 21,
+   "mn": "vunpckhps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUNPCKHPS (opcode line \"VEX.256.0F.WIG 15 /r VUNPCKHPS ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/unpckhps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VUNPCKHPS"
+  },
+  {
+   "map": "0f",
+   "op": 20,
+   "mn": "vunpcklpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUNPCKLPD (opcode line \"VEX.128.66.0F.WIG 14 /r VUNPCKLPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/unpcklpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VUNPCKLPD"
+  },
+  {
+   "map": "0f",
+   "op": 20,
+   "mn": "vunpcklpd",
+   "pfx": "66",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUNPCKLPD (opcode line \"VEX.256.66.0F.WIG 14 /r VUNPCKLPD ymm1,ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/unpcklpd, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VUNPCKLPD"
+  },
+  {
+   "map": "0f",
+   "op": 20,
+   "mn": "vunpcklps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUNPCKLPS (opcode line \"VEX.128.0F.WIG 14 /r VUNPCKLPS xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/unpcklps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 0,
+   "iclass": "VUNPCKLPS"
+  },
+  {
+   "map": "0f",
+   "op": 20,
+   "mn": "vunpcklps",
+   "pfx": "none",
+   "modrm": true,
+   "src": "Intel SDM Vol 2 instruction page VUNPCKLPS (opcode line \"VEX.256.0F.WIG 14 /r VUNPCKLPS ymm1,ymm2,ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/unpcklps, retrieved 2026-10-09",
+   "vex": true,
+   "l": 1,
+   "iclass": "VUNPCKLPS"
+  },
+  {
+   "map": "1",
+   "op": 215,
+   "mn": "xlat",
+   "pfx": "none",
+   "modrm": false,
+   "src": "Intel SDM Vol 2 instruction page XLAT (opcode line \"D7 XLAT m8\"), as transcribed at https://www.felixcloutier.com/x86/xlat:xlatb, retrieved 2026-10-09",
+   "iclass": "XLAT"
+  },
+  {
+   "map": "0f",
+   "op": 14,
+   "mn": "femms",
+   "pfx": "none",
+   "modrm": false,
+   "src": "AMD 3DNow! FEMMS, opcode 0F 0E (AMD64 Architecture Programmer's Manual Vol 5; not retrieved for this row: fields from the opcode as AMD documents it, confirmed by XED in scripts/generated_differential.py)",
+   "iclass": "FEMMS"
+  },
+  {
+   "map": "0f3a",
+   "op": 104,
+   "mn": "vfmaddps",
+   "pfx": "66",
+   "modrm": true,
+   "src": "AMD FMA4 VFMADDPS, VEX map 0F3A opcode 68 /r /is4, pp 66 (AMD64 Architecture Programmer's Manual Vol 6; not retrieved for this row: fields from the opcode as AMD documents it, confirmed by XED in scripts/generated_differential.py)",
+   "vex": true,
+   "imm": "b",
+   "iclass": "VFMADDPS"
+  },
+  {
+   "map": "0f38",
+   "op": 220,
+   "mn": "aesenc128kl",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel Key Locker AESENC128KL, opcode F3 0F 38 DC /r (Intel Key Locker Specification; not in the SDM; not retrieved for this row: fields from the opcode as Intel documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "mem",
+   "iclass": "AESENC128KL"
+  },
+  {
+   "map": "0f38",
+   "op": 220,
+   "mn": "loadiwkey",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel Key Locker LOADIWKEY, opcode F3 0F 38 DC /r (Intel Key Locker Specification; not in the SDM; not retrieved for this row: fields from the opcode as Intel documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "reg",
+   "iclass": "LOADIWKEY"
+  },
+  {
+   "map": "0f38",
+   "op": 221,
+   "mn": "aesdec128kl",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel Key Locker AESDEC128KL, opcode F3 0F 38 DD /r (Intel Key Locker Specification; not in the SDM; not retrieved for this row: fields from the opcode as Intel documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "mem",
+   "iclass": "AESDEC128KL"
+  },
+  {
+   "map": "0f38",
+   "op": 222,
+   "mn": "aesenc256kl",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel Key Locker AESENC256KL, opcode F3 0F 38 DE /r (Intel Key Locker Specification; not in the SDM; not retrieved for this row: fields from the opcode as Intel documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "mem",
+   "iclass": "AESENC256KL"
+  },
+  {
+   "map": "0f38",
+   "op": 223,
+   "mn": "aesdec256kl",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "Intel Key Locker AESDEC256KL, opcode F3 0F 38 DF /r (Intel Key Locker Specification; not in the SDM; not retrieved for this row: fields from the opcode as Intel documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "mem",
+   "iclass": "AESDEC256KL"
+  },
+  {
+   "map": "0f",
+   "op": 43,
+   "mn": "movntss",
+   "pfx": "f3",
+   "modrm": true,
+   "src": "AMD SSE4a MOVNTSS m32, xmm, opcode F3 0F 2B /r (AMD64 Architecture Programmer's Manual Vol 4; not retrieved for this row: fields from the opcode as AMD documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "mem",
+   "iclass": "MOVNTSS"
+  },
+  {
+   "map": "0f",
+   "op": 43,
+   "mn": "movntsd",
+   "pfx": "f2",
+   "modrm": true,
+   "src": "AMD SSE4a MOVNTSD m64, xmm, opcode F2 0F 2B /r (AMD64 Architecture Programmer's Manual Vol 4; not retrieved for this row: fields from the opcode as AMD documents it, confirmed by XED in scripts/generated_differential.py)",
+   "form": "mem",
+   "iclass": "MOVNTSD"
   }
  ],
- "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033)",
+ "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv",
  "identity": "iclass: XED instruction-class naming (github.com/intelxed/xed), assigned per row by rule; corrections recorded as spec revisions with XED as evidence. Fusion: LOCK prefix -> <ICLASS>_LOCK; REP -> REP_<ICLASS>; REPE -> REPE_<ICLASS>; REPNE -> REPNE_<ICLASS>.",
  "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08.",
  "validity": "Rows may carry `lock` (LOCK allowed on the memory form), `vvvv` ('1111' when the operand is unused), `l` (required VEX.L), `form`. An encoding outside these raises InvalidEncoding: the guest observes #UD (v0.2 section 5.1). Strict mandatory prefix: in the 0F/0F38/0F3A maps, an opcode whose rows include any mandatory-prefix row is an SSE-family opcode; a 66/F2/F3 prefix with no matching row means the bytes are a different instruction or invalid, never the unprefixed row. On opcodes with only unprefixed rows, 66 stays operand size."
