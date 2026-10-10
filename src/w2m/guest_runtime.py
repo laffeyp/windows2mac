@@ -92,10 +92,12 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
             raise BuildError(f"{name}: no such guest runtime file")
         texts[name] = text
     header = (SOURCE / "runtime.h").read_text()
+    from w2m.code_pages import c_header as code_page_header
     from w2m.cpuid import c_header
     cpuid_table = c_header()
+    code_page_table = code_page_header()
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
-    key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header, cpuid_table,
+    key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header, cpuid_table, code_page_table,
                                     " ".join(CFLAGS), " ".join(dflags), f"{base_va:x}"]).encode()).hexdigest()
     out = CACHE / f"{key}.bin"
     if not out.exists():
@@ -103,6 +105,7 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
         work = CACHE / key
         work.mkdir(exist_ok=True)
         (work / "cpuid_table.h").write_text(cpuid_table)
+        (work / "code_page_tables.h").write_text(code_page_table)
         objs = []
         for name, text in sorted(texts.items()):
             src = work / name

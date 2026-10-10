@@ -138,7 +138,16 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "SetStdHandle": ("k32_SetStdHandle", True), "GetFileType": ("k32_GetFileType", True),
             "GetConsoleMode": ("k32_GetConsoleMode", True), "GetConsoleCP": ("k32_GetConsoleCP", True),
             "WriteConsoleW": ("k32_WriteConsoleW", True), "FlushFileBuffers": ("k32_FlushFileBuffers", True),
-            "GetCommandLineW": ("k32_GetCommandLineW", True), "GetCommandLineA": ("k32_GetCommandLineA", True)}
+            "GetCommandLineW": ("k32_GetCommandLineW", True), "GetCommandLineA": ("k32_GetCommandLineA", True),
+            "GetACP": ("k32_GetACP", True),
+            "GetOEMCP": ("k32_GetOEMCP", True),
+            "IsValidCodePage": ("k32_IsValidCodePage", True),
+            "GetCPInfo": ("k32_GetCPInfo", True),
+            "MultiByteToWideChar": ("k32_MultiByteToWideChar", True),
+            "WideCharToMultiByte": ("k32_WideCharToMultiByte", True),
+            "GetStringTypeW": ("k32_GetStringTypeW", True),
+            "LCMapStringW": ("k32_LCMapStringW", True),
+            "LCMapStringEx": ("k32_LCMapStringEx", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py

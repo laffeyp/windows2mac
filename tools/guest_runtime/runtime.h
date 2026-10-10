@@ -216,6 +216,15 @@ struct w2m_exception_area {
 #define W2M_API_FlushFileBuffers 53
 #define W2M_API_GetCommandLineW 54
 #define W2M_API_GetCommandLineA 55
+#define W2M_API_GetACP 56
+#define W2M_API_GetOEMCP 57
+#define W2M_API_IsValidCodePage 58
+#define W2M_API_GetCPInfo 59
+#define W2M_API_MultiByteToWideChar 60
+#define W2M_API_WideCharToMultiByte 61
+#define W2M_API_GetStringTypeW 62
+#define W2M_API_LCMapStringW 63
+#define W2M_API_LCMapStringEx 64
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);

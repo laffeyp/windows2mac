@@ -1,4 +1,52 @@
 {
+ "code_pages": {
+  "candidate_sha256": "sha256:1e962fe15073fb66364efad7c8aaaa0fa237b04abeae04d493751a944c8ecd3a",
+  "divergence": {
+   "38043225701": null,
+   "38043227313": null,
+   "38043228963": null,
+   "38043230505": null,
+   "38043293167": null,
+   "38043294602": null,
+   "38043296172": null,
+   "38043297420": null,
+   "38043378848": null,
+   "38043380766": null,
+   "38043382875": null,
+   "38043384686": null,
+   "38043442334": null,
+   "38043444161": null,
+   "38043445987": null,
+   "38043448236": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 16,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "code_pages",
+  "record": "store/runs/family-code_pages-1791626968508517000",
+  "verdicts": {
+   "38043225701": "conforms",
+   "38043227313": "conforms",
+   "38043228963": "conforms",
+   "38043230505": "conforms",
+   "38043293167": "conforms",
+   "38043294602": "conforms",
+   "38043296172": "conforms",
+   "38043297420": "conforms",
+   "38043378848": "conforms",
+   "38043380766": "conforms",
+   "38043382875": "conforms",
+   "38043384686": "conforms",
+   "38043442334": "conforms",
+   "38043444161": "conforms",
+   "38043445987": "conforms",
+   "38043448236": "conforms"
+  }
+ },
  "console": {
   "candidate_sha256": "sha256:146b476654725ae4ba4bef55bc36b5b5c10d0ee7e6b27a731e83a92da6b53d07",
   "divergence": {

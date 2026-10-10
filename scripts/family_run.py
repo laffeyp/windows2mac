@@ -13,6 +13,7 @@ Usage: uv run python scripts/family_run.py <family> --contract | --run | --plant
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import sys
@@ -53,7 +54,7 @@ class Run:
 class Plant:
     old: str              # text of the guest C file, present exactly once
     new: str
-    reach: tuple[str, ...]  # the rows it changes, named before it runs
+    reach: tuple[str, ...]  # the rows it changes, named before it runs (fnmatch patterns allowed)
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,11 @@ def console_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     the title is the module's path."""
     return [{k: v for k, v in r.items() if not (r.get("s") == "startup_info.child.title" and k == "length")}
             for r in printed]
+
+
+def code_page_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The best-fit rows share one name; each is keyed by its UTF-16 unit."""
+    return [{**r, "s": f"bestfit.{r['u']:04x}"} if r.get("s") == "bestfit" else r for r in printed]
 
 
 FAMILIES: dict[str, Family] = {
@@ -315,6 +321,50 @@ FAMILIES: dict[str, Family] = {
                                            "realloc.in_place_only_grow")),
                 "zero_flag_ignored": Plant("    if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);", "",
                                            ("alloc.zero_memory_after_dirty_free",))}),
+    "code_pages": Family(
+        name="code_pages",
+        contract_id="windows.code_pages.ansi_1252",
+        version="0.1.0",
+        summary=("GetACP, GetOEMCP, IsValidCodePage, GetCPInfo, MultiByteToWideChar, WideCharToMultiByte, "
+                 "GetStringTypeW and LCMapStringW answer as Windows does with ANSI code page 1252: every byte's "
+                 "character, type and case, best fit into 1252, and UTF-8 with Windows's rule for malformed input."),
+        probe="code_pages", guest_file="code_pages.c",
+        runs={
+              "38043225701": Run("windows-2025", "41a21702e0b1221714f5a14316f411d69970d7febef9837c879943514ace910b", "code_pages-1791626252-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38043227313": Run("windows-2022", "ba6093588e24a272274818fbf0391490897e7e4bf224859ad123b65bcb8179fb", "code_pages-1791626252-1", "AMD EPYC 7763 64-Core Processor"),
+              "38043228963": Run("windows-2025", "05c9676dc734a6f070ab9dcb49f596149be9695652e02991d59165e50fc8238e", "code_pages-1791626252-2", "AMD EPYC 9V74 80-Core Processor"),
+              "38043230505": Run("windows-2022", "37c57ae86ef7f369d3e524e23dc049208e839f194930f3a2c6e33fcb18cd5986", "code_pages-1791626252-3", "AMD EPYC 7763 64-Core Processor"),
+              "38043293167": Run("windows-2025", "c21b5b4c918cff9a51e8e4b2e2e0216328936c89c1900645a8e731377920e40b", "code_pages-1791626326-0", "AMD EPYC 7763 64-Core Processor"),
+              "38043294602": Run("windows-2022", "65be44ec24c28c50af187b11a3c2dd9cae1a1363c7d057320a58a2d64cf56531", "code_pages-1791626326-1", "AMD EPYC 9V74 80-Core Processor"),
+              "38043296172": Run("windows-2025", "d56766303006e73f0f83635a753c141efcf2a74b176ad9f564c768a876cc2f72", "code_pages-1791626326-2", "AMD EPYC 7763 64-Core Processor"),
+              "38043297420": Run("windows-2022", "da1c3fb886c954bcd0a89ca706c279bc1d62a2d4bd30ce059311425836d78b47", "code_pages-1791626326-3", "AMD EPYC 7763 64-Core Processor"),
+              "38043378848": Run("windows-2025", "ed4a550f6f9221d7c450db23190e60ffb312dde21ecf282fa1c9f3ca01b40ae5", "code_pages-1791626416-0", "AMD EPYC 7763 64-Core Processor"),
+              "38043380766": Run("windows-2022", "3a7f8c7172fb18d1450fa0c32b01836246c5b21c045a4a25f639108f787ccbfb", "code_pages-1791626416-1", "AMD EPYC 9V45 96-Core Processor"),
+              "38043382875": Run("windows-2025", "f33dc6b8d8585dc19bb5c9e79cef000d12216c955e660a26304ddc544856d9d2", "code_pages-1791626416-2", "AMD EPYC 7763 64-Core Processor"),
+              "38043384686": Run("windows-2022", "935656ca40b18f2a0d88775e8343d5f793c110ef33572ed4de02bc315ed92c52", "code_pages-1791626416-3", "AMD EPYC 7763 64-Core Processor"),
+              "38043442334": Run("windows-2025", "3abc1dda8bd487b482edf712053378c0e9261509132a1e4c4fed0b57ce757cab", "code_pages-1791626472-0", "AMD EPYC 7763 64-Core Processor"),
+              "38043444161": Run("windows-2022", "192a0193f82793ec087362117d2a941713e66f621ad33db257c61f647c6ae769", "code_pages-1791626472-1", "AMD EPYC 9V45 96-Core Processor"),
+              "38043445987": Run("windows-2025", "7fab6a8cd044ff50178627a246c8826ffe5cec0b9e40961b1ca3f792b5cf1e20", "code_pages-1791626472-2", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38043448236": Run("windows-2022", "a327c26be301ea1c7b4b6a5864ff37dc6b6a6a5808781f748eed82fbe99ebea6", "code_pages-1791626472-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-multibytetowidechar", "api/stringapiset/nf-stringapiset-multibytetowidechar", "2024-02-22",
+                       "MB_ERR_INVALID_CHARS: Fail if an invalid input character is encountered. ... "
+                       "ERROR_NO_UNICODE_TRANSLATION. Invalid Unicode was found in a string."),),
+        open_questions=(
+            "Malformed UTF-8 follows the Unicode Standard's Table 3-7 except after E0, ED, F0 and F4: a second byte in "
+            "80..BF outside the table's range is taken into the U+FFFD (3,072 swept inputs). Whether Windows documents "
+            "this rule is not established.",
+            "GetStringTypeW and LCMapStringW are observed for code page 1252's 256 characters only; w2m stops on any "
+            "other unit, on LCMapStringW size queries and on locales other than the user default and invariant.",
+            "The rows do not record the last error after GetStringTypeW and LCMapStringW; w2m leaves it."),
+        derive=code_page_rows,
+        plants={"whatwg_maximal_subpart": Plant(
+                    "        if (k == 1 && (s[*i] < lo || s[*i] > hi)) { (*i)++; return MALFORMED; }   /* taken: the rows */",
+                    "        if (k == 1 && (s[*i] < lo || s[*i] > hi)) return MALFORMED;",
+                    ("m2w.utf8.surrogate_encoded", "u8.e0.80*", "u8.e0.8f*", "u8.e0.90*", "u8.e0.9f*", "u8.ed.a0*",
+                     "u8.ed.bf*", "u8.f0.80*", "u8.f0.8f*", "u8.f4.90*", "u8.f4.9f*", "u8.f4.a0*", "u8.f4.bf*")),
+                "no_best_fit": Plant("            if (b < 0) b = best_fit(c);\n", "            (void)best_fit;\n", ("bestfit.*",))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
@@ -419,6 +469,13 @@ def unequal_rows(f: Family, out: bytes) -> list[str]:
     assert isinstance(c.acceptance, ExactRows)
     got = {r.get("s"): r for r in f.rows(parse(out))}
     return [r["s"] for r in c.acceptance.rows if got.get(r["s"]) != r]
+
+
+def named_reach(f: Family, p: Plant) -> list[str]:
+    """The contract rows a plant's reach names, its patterns expanded."""
+    c = contract(f)
+    assert isinstance(c.acceptance, ExactRows)
+    return [r["s"] for r in c.acceptance.rows if any(fnmatch.fnmatchcase(r["s"], pat) for pat in p.reach)]
 
 
 def planted_sources(f: Family, name: str) -> dict[str, str]:
@@ -557,8 +614,10 @@ def main(argv: list[str]) -> int:
         binary = next(iter(f.runs.values())).binary
         for name, p in f.plants.items():
             out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
-            rows = unequal_rows(f, out)
-            print(f"{name}: unequal {rows} ({stop}); named reach {list(p.reach)}")
+            rows, named = unequal_rows(f, out), named_reach(f, p)
+            verdict = "as named" if rows == named else f"NOT as named: named {named}"
+            shown = rows if len(rows) <= 20 else [*rows[:20], f"... {len(rows) - 20} more"]
+            print(f"{name}: {len(rows)} unequal rows {shown} ({stop}); {len(named)} named; {verdict}")
     return 0
 
 

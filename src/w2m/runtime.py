@@ -355,7 +355,7 @@ class Runtime:
             return
         if ic == "PSRLQ":
             count = imm if imm is not None else self._xread(src, 16) & _mask(64)
-            x[dst[1]] = 0 if count > 63 else pack([l >> count for l in lanes(a, 64)], 64)
+            x[dst[1]] = 0 if count > 63 else pack([lane >> count for lane in lanes(a, 64)], 64)
             return
         v = self._xread(src, 16)
         if ic == "PSHUFD":

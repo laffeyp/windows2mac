@@ -14,6 +14,10 @@
  *     units out, and whether MB_ERR_INVALID_CHARS refuses it
  *   - WideCharToMultiByte(1252) of every UTF-16 unit 0080..FFFF that is not the ANSI table's own
  *     character: those that do not become the default character with used_default set (best fit)
+ * The launcher's C runtime calls these in batched forms (a scratch run of the launcher, 2026-10-10):
+ * MultiByteToWideChar(1252, MB_PRECOMPOSED) on all 256 bytes after a size query, GetStringTypeW on the
+ * 256 units, LCMapStringEx(NULL locale, LCMAP_LOWERCASE then LCMAP_UPPERCASE) after a size query.
+ * Rows "forms.*" give each form's return and last error, and whether its output equals the per-byte rows.
  */
 #include <windows.h>
 
@@ -103,6 +107,9 @@ void start(void) {
     cpinfo("cpinfo.12345", 12345);
 
     /* every byte of the ANSI code page */
+    static WCHAR units[256];
+    static WORD types[256];
+    static WCHAR uppers[256], lowers[256];
     for (unsigned b = 0; b < 256; b++) {
         char c = (char)b;
         WCHAR u = 0;
@@ -114,9 +121,57 @@ void start(void) {
         int rl = LCMapStringW(LOCALE_USER_DEFAULT, LCMAP_LOWERCASE, &u, 1, &lo_user, 1);
         int iu = LCMapStringW(LOCALE_INVARIANT, LCMAP_UPPERCASE, &u, 1, &up_inv, 1);
         int il = LCMapStringW(LOCALE_INVARIANT, LCMAP_LOWERCASE, &u, 1, &lo_inv, 1);
+        units[b] = u; types[b] = t1; uppers[b] = up_user; lowers[b] = lo_user;
         rowx("acp.", b); field("ret", r); field("u", u); field("ctype1", okt ? t1 : -1);
         field("upper_user", ru == 1 ? up_user : -1); field("lower_user", rl == 1 ? lo_user : -1);
         field("upper_invariant", iu == 1 ? up_inv : -1); field("lower_invariant", il == 1 ? lo_inv : -1); end();
+    }
+
+    /* the launcher's batched forms */
+    {
+        static char all[256];
+        static WCHAR w[256], mapped[256];
+        static WORD t[256];
+        for (unsigned b = 0; b < 256; b++) all[b] = (char)b;
+        SetLastError(SENTINEL);
+        int r = MultiByteToWideChar(1252, MB_PRECOMPOSED, all, 256, NULL, 0);
+        err = GetLastError();
+        row("forms.m2w.precomposed.size"); field("ret", r); field("err", err); end();
+        SetLastError(SENTINEL);
+        r = MultiByteToWideChar(1252, MB_PRECOMPOSED, all, 256, w, 256);
+        err = GetLastError();
+        int same = 1;
+        for (unsigned b = 0; b < 256; b++) same &= w[b] == units[b];
+        row("forms.m2w.precomposed"); field("ret", r); field("err", err); field("same_as_per_byte", same); end();
+        SetLastError(SENTINEL);
+        BOOL ok = GetStringTypeW(CT_CTYPE1, units, 256, t);
+        err = GetLastError();
+        same = 1;
+        for (unsigned b = 0; b < 256; b++) same &= t[b] == types[b];
+        row("forms.get_string_type.all"); field("ret", ok != 0); field("err", err); field("same_as_per_byte", same); end();
+        static const DWORD maps[] = {LCMAP_LOWERCASE, LCMAP_UPPERCASE};
+        static const char *const size_names[] = {"forms.lcmap_ex.lower.size", "forms.lcmap_ex.upper.size"};
+        static const char *const names2[] = {"forms.lcmap_ex.lower", "forms.lcmap_ex.upper"};
+        for (int m = 0; m < 2; m++) {
+            SetLastError(SENTINEL);
+            r = LCMapStringEx(NULL, maps[m], units, 256, NULL, 0, NULL, NULL, 0);
+            err = GetLastError();
+            row(size_names[m]); field("ret", r); field("err", err); end();
+            SetLastError(SENTINEL);
+            r = LCMapStringEx(NULL, maps[m], units, 256, mapped, 256, NULL, NULL, 0);
+            err = GetLastError();
+            same = 1;
+            for (unsigned b = 0; b < 256; b++) same &= mapped[b] == (m ? uppers[b] : lowers[b]);
+            row(names2[m]); field("ret", r); field("err", err); field("same_as_per_byte", same); end();
+        }
+        SetLastError(SENTINEL);
+        r = LCMapStringW(LOCALE_USER_DEFAULT, LCMAP_UPPERCASE, units, 256, mapped, 256);
+        err = GetLastError();
+        row("forms.lcmap_w.upper"); field("ret", r); field("err", err); end();
+        SetLastError(SENTINEL);
+        ok = GetStringTypeW(CT_CTYPE1, units, 1, t);
+        err = GetLastError();
+        row("forms.get_string_type.one"); field("ret", ok != 0); field("err", err); end();
     }
 
     /* MultiByteToWideChar */
