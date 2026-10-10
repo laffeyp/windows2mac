@@ -6,6 +6,7 @@
  * RemoveDirectoryW and names its files by absolute path ("C:\w2m\app\Data\boot.config", look-ahead 2026-10-10).
  * A runner's working directory is not w2m's, so every path printed has the working directory's prefix replaced
  * by "<cwd>" and the drive's root ("D:\") by "<root>", and the drive letter by "<d>": the rows hold on any machine.
+ * Absolute names avoid C:\w2m\app, w2m's working directory, so they print alike on both.
  * Rows: each call's return, last error (after SetLastError(0xDEAD)) and text, and GetFullPathNameW's file part as
  * its distance back from the end of the result (minus the file part's length), or null.
  */
@@ -110,8 +111,8 @@ void start(void) {
         {"slashes", L"x/y/a.txt"}, {"doubled", L"x\\\\y\\a.txt"}, {"trailing_dot", L"a.txt."}, {"trailing_dots_spaces", L"a.txt. . "},
         {"inner_trailing_dot", L"x.\\a.txt"}, {"trailing_backslash", L"x\\"}, {"dot", L"."}, {"dotdot_alone", L".."},
         {"rooted", L"\\a.txt"}, {"rooted_dotdot", L"\\..\\..\\a.txt"}, {"drive_relative", L"?:a.txt"},
-        {"absolute", L"?:\\w2m\\app\\Data\\boot.config"}, {"absolute_dotdot", L"?:\\w2m\\app\\..\\x"},
-        {"absolute_lower", L"?:\\W2M\\app"}, {"other_drive", L"Q:\\x"}, {"other_drive_relative", L"Q:x"},
+        {"absolute", L"?:\\w2m_probe\\app\\Data\\boot.config"}, {"absolute_dotdot", L"?:\\w2m_probe\\app\\..\\x"},
+        {"absolute_lower", L"?:\\W2M_PROBE\\app"}, {"other_drive", L"Q:\\x"}, {"other_drive_relative", L"Q:x"},
         {"device_prefix", L"\\\\?\\?:\\x\\..\\y"}, {"unc", L"\\\\server\\share\\x\\..\\y"}, {"empty", L""},
         {"spaces_only", L"   "}, {"wildcard", L"x\\*.txt"}, {"device_name", L"x\\CON"},
     };
