@@ -67,6 +67,15 @@ def _set_flags_from_fcmp(a: Assembler) -> None:
 
 SSE2_INT_LOWERED = {"MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PSRLDQ",
                     "PSLLDQ", "PUNPCKLBW", "PCMPEQB", "PSHUFD", "PMOVMSKB", "CVTDQ2PD"}
+# Sprint 046 (third block): one NEON three-same instruction each, d = op(d, source): (name, lane size)
+LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "PADDQ": ("add", 3), "PADDW": ("add", 1),
+                "PSUBW": ("sub", 1), "PCMPEQD": ("cmeq", 2), "PCMPGTD": ("cmgt", 2), "PSUBUSB": ("uqsub", 0),
+                "PSUBSB": ("sqsub", 0), "PADDSB": ("sqadd", 0), "PADDSW": ("sqadd", 1), "PMAXUB": ("umax", 0),
+                "PMULLW": ("mul", 1), "PUNPCKHBW": ("zip2", 0), "PUNPCKHDQ": ("zip2", 2), "PUNPCKHWD": ("zip2", 1),
+                "PUNPCKLWD": ("zip1", 1)}
+SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
+          "PSRAW": (1, "arith"), "PSLLQ": (3, "left")}
+SSE2_INT_LOWERED |= {'PADDSB', 'PACKUSWB', 'PUNPCKHDQ', 'PMAXUB', 'PSUBSB', 'PSRAW', 'PADDQ', 'PCMPEQD', 'PSHUFLW', 'PSUBUSB', 'PSRLW', 'MOVHPS', 'PUNPCKHBW', 'PUNPCKHWD', 'PUNPCKLWD', 'PANDN', 'PADDW', 'PADDSW', 'PSUBW', 'PUNPCKLQDQ', 'PSHUFHW', 'PMULLW', 'PINSRW', 'UNPCKLPD', 'PCMPGTD', 'PSLLQ'}
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
@@ -129,27 +138,53 @@ def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of:
             a.emit(a64.umov_s(16, v, lane), a64.lsri(16, 16, 31))
             a.emit(a64.eor(rd, rd, 16, a64.LSL, lane))            # the bits do not overlap: EOR is OR
         return
-    if ic in ("PSRLD", "PSLLD", "PSRAD") and imm is not None:  # by imm8: past 31, zero (logical) or the sign
-        n = min(imm, 32)
-        if ic == "PSRAD":
+    if ic in SHIFTS and imm is not None:                         # by imm8: past the lane, zero (logical) or the sign
+        size, kind = SHIFTS[ic]
+        bits = 8 << size
+        n = min(imm, bits)
+        if kind == "arith":
             if n:
-                a.emit(a64.sshr_4s(d, d, n))
-        elif n > 31:
+                a.emit(a64.shift_right(d, d, n, size, True))
+        elif n >= bits:
             a.emit(a64.movi_zero(d))
         elif n:
-            a.emit(a64.ushr_4s(d, d, n) if ic == "PSRLD" else a64.shl_4s(d, d, n))
+            a.emit(a64.shift_right(d, d, n, size, False) if kind == "right" else a64.shift_left(d, d, n, size))
         return
-    if ic in ("PSRLD", "PSLLD", "PSRAD"):                       # by the source's low 64 bits, clamped to 32
+    if ic in SHIFTS:                                             # by the source's low 64 bits, clamped to the lane's bits
+        size, kind = SHIFTS[ic]
+        bits = 8 << size
         v = _sse_src(a, src, 16, reg_of)
         small = a.label()
-        a.emit(a64.umov_d(16, v, 0), a64.cmpi(16, 32))
+        a.emit(a64.umov_d(16, v, 0), a64.cmpi(16, bits))
         a.branch(lambda off: a64.bcond("ls", off), small)
-        a.emit(a64.movz(16, 32))
+        a.emit(a64.movz(16, bits))
         a.bind(small)
-        if ic != "PSLLD":
+        if kind != "left":
             a.emit(a64.sub(16, a64.ZR, 16))                      # a negative count shifts right
-        a.emit(a64.dup_4s(30, 16))
-        a.emit((a64.sshl_4s if ic == "PSRAD" else a64.ushl_4s)(d, d, 30))
+        a.emit(a64.dup_gpr(30, 16, size))                        # the shift count is the lane's low byte
+        a.emit(a64.three_same("sshl" if kind == "arith" else "ushl", d, d, 30, size))
+        return
+    if ic == "PINSRW":                                           # the source's low word into word imm & 7
+        assert imm is not None
+        if src[0] == "m":
+            a.emit(a64.ldr(2, 16, reg_of(src[1]), 0))
+            a.emit(a64.ins_h(d, imm & 7, 16))
+        else:
+            a.emit(a64.ins_h(d, imm & 7, int(src[1])))
+        return
+    if ic == "MOVHPS":                                           # the high quadword from or to memory
+        if dst[0] == "x":
+            a.emit(a64.ldr(8, 16, reg_of(src[1]), 0), a64.ins_d(d, 1, 16))
+        else:
+            a.emit(a64.umov_d(16, int(src[1]), 1), a64.str_(8, 16, reg_of(dst[1]), 0))
+        return
+    if ic in ("PSHUFLW", "PSHUFHW"):                             # four words permuted by imm; the other four kept
+        assert imm is not None
+        v = _sse_src(a, src, 16, reg_of, scratch=31)
+        a.emit(a64.mov_v(30, v), a64.mov_v(d, 30))
+        base = 0 if ic == "PSHUFLW" else 4
+        for lane in range(4):
+            a.emit(a64.ins_h_element(d, base + lane, 30, base + (imm >> (2 * lane) & 3)))
         return
     if ic == "SHUFPS":                                           # words 0, 1 from the destination; 2, 3 from the source
         assert imm is not None
@@ -190,6 +225,13 @@ def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of:
         a.emit(a64.zip2_4s(d, d, v))
     elif ic == "PADDD":
         a.emit(a64.add_v(d, d, v, 2))
+    elif ic in LANE_LOWERED:
+        name, size = LANE_LOWERED[ic]
+        a.emit(a64.three_same(name, d, d, v, size))
+    elif ic == "PANDN":
+        a.emit(a64.bic_v(d, v, d))
+    elif ic == "PACKUSWB":                                       # low half from the destination, high from the source
+        a.emit(a64.sqxtun(30, d, False), a64.sqxtun(30, v, True), a64.mov_v(d, 30))
     else:
         raise CompileError(f"sse {ic}")
 

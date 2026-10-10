@@ -49,6 +49,26 @@ def _parity(v: int) -> bool:
     return bin(v & 0xFF).count("1") % 2 == 0
 
 
+def _signed(v: int, w: int) -> int:
+    return v - (1 << w) if v >> (w - 1) else v
+
+
+# Sprint 046: the third SSE block's lane-by-lane classes: (lane bits, f(dest lane, source lane, bits))
+LANE_ARITH: dict[str, tuple[int, Callable[[int, int, int], int]]] = {
+    "PADDW": (16, lambda p, q, w: p + q), "PADDQ": (64, lambda p, q, w: p + q), "PSUBW": (16, lambda p, q, w: p - q),
+    "PCMPEQD": (32, lambda p, q, w: _mask(w) if p == q else 0),
+    "PCMPGTD": (32, lambda p, q, w: _mask(w) if _signed(p, w) > _signed(q, w) else 0),
+    "PSUBUSB": (8, lambda p, q, w: max(p - q, 0)), "PMAXUB": (8, lambda p, q, w: max(p, q)),
+    "PADDSB": (8, lambda p, q, w: max(-(1 << (w - 1)), min((1 << (w - 1)) - 1, _signed(p, w) + _signed(q, w)))),
+    "PADDSW": (16, lambda p, q, w: max(-(1 << (w - 1)), min((1 << (w - 1)) - 1, _signed(p, w) + _signed(q, w)))),
+    "PSUBSB": (8, lambda p, q, w: max(-(1 << (w - 1)), min((1 << (w - 1)) - 1, _signed(p, w) - _signed(q, w)))),
+    "PMULLW": (16, lambda p, q, w: p * q),
+}
+# interleaves: (lane bits, from the high half)
+INTERLEAVE = {"PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
+              "PUNPCKHWD": (16, True), "PUNPCKLWD": (16, False)}
+
+
 class Runtime:
     def __init__(self, loaded: Loaded, tid: int = 4,
                  clock: Callable[[], int] = monotonic_count) -> None:
@@ -364,6 +384,18 @@ class Runtime:
         def pack(ls: list[int], w: int) -> int:
             return sum((n & _mask(w)) << (w * i) for i, n in enumerate(ls))
 
+        if ic == "PINSRW":                                       # the source's low word into word imm & 7
+            assert imm is not None
+            word = self._xread(src, 2) & 0xFFFF
+            lane = imm & 7
+            x[dst[1]] = x[dst[1]] & ~(0xFFFF << 16 * lane) & _mask(128) | word << 16 * lane
+            return
+        if ic == "MOVHPS":                                       # the high quadword from or to memory
+            if dst[0] == "x":
+                x[dst[1]] = x[dst[1]] & _mask(64) | self._xread(src, 8) << 64
+            else:
+                self._xwrite(dst, x[src[1]] >> 64, 8)
+            return
         if ic == "MOVMSKPS":
             v = x[src[1]]
             self._wr(dst[1], dst[2], False, sum(((v >> (32 * i + 31)) & 1) << i for i in range(4)))
@@ -383,6 +415,15 @@ class Runtime:
             assert imm is not None
             n = min(imm, 16)
             x[dst[1]] = (a >> (8 * n) if ic == "PSRLDQ" else a << (8 * n)) & _mask(128)
+            return
+        if ic in ("PSRLW", "PSRAW", "PSLLQ"):
+            count = imm if imm is not None else self._xread(src, 16) & _mask(64)
+            w = 64 if ic == "PSLLQ" else 16
+            if ic == "PSRAW":
+                signed = [v - (1 << 16) if v >> 15 else v for v in lanes(a, 16)]
+                x[dst[1]] = pack([v >> min(count, 15) for v in signed], 16)
+            else:
+                x[dst[1]] = 0 if count >= w else pack([v >> count if ic == "PSRLW" else v << count for v in lanes(a, w)], w)
             return
         if ic in ("PSRLD", "PSLLD", "PSRAD"):
             count = imm if imm is not None else self._xread(src, 16) & _mask(64)
@@ -429,6 +470,28 @@ class Runtime:
             x[dst[1]] = pack([aw[base], vw[base], aw[base + 1], vw[base + 1]], 32)
         elif ic == "PADDD":
             x[dst[1]] = pack([p + q for p, q in zip(lanes(a, 32), lanes(v, 32))], 32)
+        elif ic in LANE_ARITH:
+            w, f = LANE_ARITH[ic]
+            x[dst[1]] = pack([f(p, q, w) for p, q in zip(lanes(a, w), lanes(v, w))], w)
+        elif ic in INTERLEAVE:
+            w, high = INTERLEAVE[ic]
+            al, vl = lanes(a, w), lanes(v, w)
+            half = 64 // w
+            base = half if high else 0
+            x[dst[1]] = pack([e for i in range(half) for e in (al[base + i], vl[base + i])], w)
+        elif ic == "PANDN":
+            x[dst[1]] = ~a & v & _mask(128)
+        elif ic == "PACKUSWB":                                    # signed words to unsigned bytes, saturated
+            def sat(word: int) -> int:
+                s = word - (1 << 16) if word >> 15 else word
+                return max(0, min(255, s))
+            x[dst[1]] = pack([sat(word) for word in lanes(a, 16) + lanes(v, 16)], 8)
+        elif ic in ("PSHUFLW", "PSHUFHW"):
+            assert imm is not None
+            words = lanes(v, 16)
+            base = 0 if ic == "PSHUFLW" else 4
+            moved = [words[base + ((imm >> (2 * i)) & 3)] for i in range(4)]
+            x[dst[1]] = pack(moved + words[4:] if ic == "PSHUFLW" else words[:4] + moved, 16)
         else:
             raise LiftError(f"sse {ic}")
 

@@ -1,0 +1,8 @@
+"""PSHUFLW (Intel SDM Vol 2, PSHUFLW; Sprint 046)."""
+
+from w2m.rules import _sse
+
+ICLASSES = ("PSHUFLW",)
+SHARED = ("_sse",)
+rule = _sse.int_rule
+lower = _sse.lower

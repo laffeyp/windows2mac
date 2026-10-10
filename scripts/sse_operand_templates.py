@@ -66,7 +66,32 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           ("PSLLD", "66", 0xF2, None): "V,Wdq", ("PSLLD", "66", 0x72, 6): "Wdq,Ib", ("PSRAD", "66", 0xE2, None): "V,Wdq",
           ("PSRAD", "66", 0x72, 4): "Wdq,Ib", ("MOVMSKPS", "none", 0x50, None): "Gd,Wdq",
           # CMPXCHG8B m64 / CMPXCHG16B m128 (REX.W): the row names both by operand size
-          ("CMPXCHG8B", "none", 0xC7, 1): "Mqdq"}
+          ("CMPXCHG8B", "none", 0xC7, 1): "Mqdq",
+          # Sprint 046: the third SSE block, the SSE2 integer classes UnityPlayer.dll reaches most (census 2026-10-10);
+          # MOVHPS's two rows are memory only (W reads memory there), PINSRW's source is r32/m16 (Ew: its low word)
+          ("PUNPCKLQDQ", "66", 0x6C, None): "V,Wdq",
+          ("PADDQ", "66", 0xD4, None): "V,Wdq",
+          ("PCMPGTD", "66", 0x66, None): "V,Wdq",
+          ("PCMPEQD", "66", 0x76, None): "V,Wdq",
+          ("PANDN", "66", 0xDF, None): "V,Wdq",
+          ("PSUBUSB", "66", 0xD8, None): "V,Wdq",
+          ("PMAXUB", "66", 0xDE, None): "V,Wdq",
+          ("UNPCKLPD", "66", 0x14, None): "V,Wdq",
+          ("PACKUSWB", "66", 0x67, None): "V,Wdq",
+          ("PADDSB", "66", 0xEC, None): "V,Wdq",
+          ("PADDSW", "66", 0xED, None): "V,Wdq",
+          ("PADDW", "66", 0xFD, None): "V,Wdq",
+          ("PMULLW", "66", 0xD5, None): "V,Wdq",
+          ("PSUBSB", "66", 0xE8, None): "V,Wdq",
+          ("PSUBW", "66", 0xF9, None): "V,Wdq",
+          ("PUNPCKHBW", "66", 0x68, None): "V,Wdq",
+          ("PUNPCKHDQ", "66", 0x6A, None): "V,Wdq",
+          ("PUNPCKHWD", "66", 0x69, None): "V,Wdq",
+          ("PUNPCKLWD", "66", 0x61, None): "V,Wdq",
+          ("PSLLQ", "66", 0x73, 6): "Wdq,Ib", ("PSLLQ", "66", 0xF3, None): "V,Wdq", ("PSRLW", "66", 0x71, 2): "Wdq,Ib",
+          ("PSRLW", "66", 0xD1, None): "V,Wdq", ("PSRAW", "66", 0x71, 4): "Wdq,Ib", ("PSRAW", "66", 0xE1, None): "V,Wdq",
+          ("PSHUFLW", "f2", 0x70, None): "V,Wdq,Ib", ("PSHUFHW", "f3", 0x70, None): "V,Wdq,Ib",
+          ("PINSRW", "66", 0xC4, None): "V,Ew,Ib", ("MOVHPS", "none", 0x16, None): "V,Wq", ("MOVHPS", "none", 0x17, None): "Wq,V"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -192,6 +217,9 @@ def main(argv: list[str]) -> int:
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
+        elif spec["version"] == "0.7.4":
+            spec["version"] = "0.7.5"
+            spec["revision"] += "; 0.7.5 (2026-10-10): operand templates for the third SSE block (Sprint 046)"
         elif spec["version"] == "0.7.3":
             spec["version"] = "0.7.4"
             spec["revision"] += "; 0.7.4 (2026-10-10): CMPXCHG8B/16B's template Mqdq (Sprint 046)"

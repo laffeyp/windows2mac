@@ -525,6 +525,59 @@ def umov_s(rd: int, vn: int, lane: int) -> int:
     return 0x0E003C00 | ((lane << 3) | 0b100) << 16 | vn << 5 | rd
 
 
+# Sprint 046: the third SSE block. NEON three-same instructions on a whole register (Q=1), by lane size
+# (0 bytes, 1 halfwords, 2 words, 3 doublewords).
+THREE_SAME = {"add": 0x4E208400, "sub": 0x6E208400, "cmeq": 0x6E208C00, "cmgt": 0x4E203400, "uqsub": 0x6E202C00,
+              "sqsub": 0x4E202C00, "sqadd": 0x4E200C00, "umax": 0x6E206400, "mul": 0x4E209C00,
+              "zip1": 0x4E003800, "zip2": 0x4E007800, "ushl": 0x6E204400, "sshl": 0x4E204400}
+
+
+def three_same(name: str, vd: int, vn: int, vm: int, size: int) -> int:
+    """<name> Vd.<T>, Vn.<T>, Vm.<T> for T = 16B, 8H, 4S, 2D by size 0-3."""
+    _v(vd, vn, vm)
+    return THREE_SAME[name] | size << 22 | vm << 16 | vn << 5 | vd
+
+
+def shift_right(vd: int, vn: int, shift: int, size: int, signed: bool) -> int:
+    """USHR or SSHR Vd.<T>, Vn.<T>, #shift (1 to the lane's bits) for size 1-3."""
+    _v(vd, vn)
+    bits = 8 << size
+    assert 1 <= shift <= bits and size >= 1
+    return (0x4F000400 if signed else 0x6F000400) | (2 * bits - shift) << 16 | vn << 5 | vd
+
+
+def shift_left(vd: int, vn: int, shift: int, size: int) -> int:
+    """SHL Vd.<T>, Vn.<T>, #shift (0 to the lane's bits - 1) for size 1-3."""
+    _v(vd, vn)
+    bits = 8 << size
+    assert 0 <= shift < bits and size >= 1
+    return 0x4F005400 | (bits + shift) << 16 | vn << 5 | vd
+
+
+def dup_gpr(vd: int, rn: int, size: int) -> int:
+    """DUP Vd.<T>, Wn (sizes 0-2) or Xn (size 3)."""
+    _v(vd, rn)
+    return 0x4E000C00 | (1 << size) << 16 | rn << 5 | vd
+
+
+def sqxtun(vd: int, vn: int, upper: bool) -> int:
+    """SQXTUN Vd.8B, Vn.8H (upper: SQXTUN2 Vd.16B): halfwords to unsigned bytes, saturated."""
+    _v(vd, vn)
+    return (0x6E212800 if upper else 0x2E212800) | vn << 5 | vd
+
+
+def ins_h_element(vd: int, lane: int, vn: int, src_lane: int) -> int:
+    """INS Vd.H[lane], Vn.H[src_lane]."""
+    _v(vd, vn)
+    return 0x6E000400 | ((lane << 2) | 0b10) << 16 | (src_lane << 1) << 11 | vn << 5 | vd
+
+
+def ins_h(vd: int, lane: int, rn: int) -> int:
+    """INS Vd.H[lane], Wn."""
+    _v(vd, rn)
+    return 0x4E001C00 | ((lane << 2) | 0b10) << 16 | rn << 5 | vd
+
+
 def dmb_ishst() -> int:
     """DMB ISHST: earlier stores before later stores (SFENCE)."""
     return 0xD5033ABF
