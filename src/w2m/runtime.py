@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from w2m import x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
@@ -114,19 +115,21 @@ class Runtime:
         res = r & m
         f = self.th.flags
         if kind == "mul":                                         # SDM MUL: SF ZF AF PF undefined
-            f.update(C=res != 0, O=res != 0, Z=None, S=None, P=None)
+            f.update(C=res != 0, O=res != 0, Z=None, S=None, P=None, A=None)
             return
         if kind == "shr":
             cnt = b & (0x3F if bits == 64 else 0x1F)
             if cnt == 0:
                 return                                            # flags unaffected
             f.update(C=bool((a >> (cnt - 1)) & 1), Z=res == 0, S=bool(res & sign), P=_parity(res),
-                     O=bool(a & sign) if cnt == 1 else None)
+                     O=bool(a & sign) if cnt == 1 else None, A=None)       # SDM SHR: AF undefined
             return
         f.update(Z=res == 0, S=bool(res & sign), P=_parity(res))
         if kind == "logic":
-            f.update(C=False, O=False)
-        elif kind in ("add", "inc"):
+            f.update(C=False, O=False, A=None)                    # SDM AND/OR/XOR/TEST: AF undefined
+            return
+        f["A"] = bool((a ^ b ^ res) & 0x10)                       # carry out of bit 3 (SDM Vol 1 3.4.3.1)
+        if kind in ("add", "inc"):
             o = bool(~(a ^ b) & (a ^ res) & sign)
             f["O"] = o
             if kind == "add":
@@ -136,8 +139,114 @@ class Runtime:
             if kind == "sub":
                 f["C"] = (a & m) < (b & m)
 
+    # SSE ---------------------------------------------------------------------------------------
+    def _xread(self, loc: Op, nbytes: int) -> int:
+        if loc[0] == "x":
+            return self.th.xmm[loc[1]] & _mask(8 * nbytes)
+        if loc[0] == "r":
+            return self._rd(loc[1], loc[2], loc[3])
+        return int.from_bytes(self.mem.read(self._t[loc[1]], nbytes), "little")
+
+    def _sse(self, ic: str, dst: Op, src: Op, align: int) -> None:
+        """One legacy-SSE instruction: every read and every fault check before any write."""
+        th = self.th
+        for loc in (dst, src):
+            if loc[0] == "m" and align and self._t[loc[1]] % align:
+                raise GuestFault(f"#GP: {ic} memory operand at 0x{self._t[loc[1]]:x} not {align}-byte aligned")
+        msize = next((loc[2] for loc in (dst, src) if loc[0] == "m"), 16)
+        x = th.xmm
+        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD"):
+            v = self._xread(src, 16)
+            self._xwrite(dst, v, 16)
+        elif ic in ("MOVSS", "MOVSD_XMM"):
+            n = 4 if ic == "MOVSS" else 8
+            v = self._xread(src, n)
+            if dst[0] == "x" and src[0] == "x":
+                x[dst[1]] = x[dst[1]] & ~_mask(8 * n) & _mask(128) | v        # register form merges
+            else:
+                self._xwrite(dst, v, n)                                       # load zeroes the rest
+        elif ic in ("MOVD", "MOVQ"):
+            n = 4 if ic == "MOVD" else 8
+            if src[0] == "r":
+                n = src[2] // 8
+            elif dst[0] == "r":
+                n = dst[2] // 8
+            v = self._xread(src, n)
+            self._xwrite(dst, v, n)                                           # to XMM: zero-extended
+        elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD"):
+            a, c = x[dst[1]], self._xread(src, 16)
+            x[dst[1]] = a ^ c if ic.startswith("XOR") else a & c
+        elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"):
+            v = self._xread(src, msize if src[0] == "m" else 16)
+            out, th.mxcsr = self._fp(lambda: fp.execute(ic, x[dst[1]], v, th.mxcsr))
+            x[dst[1]] = out
+        elif ic in ("CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI"):
+            f = fp.F32 if "SS" in ic else fp.F64
+            v = self._xread(src, f.bits // 8)
+            env = fp.Env(th.mxcsr)
+            r = fp.to_int(f, v, dst[2], ic.startswith("CVTT"), env)
+            self._fp_check(env)
+            self._wr(dst[1], dst[2], False, r)
+        elif ic in ("CVTSI2SS", "CVTSI2SD"):
+            f = fp.F32 if ic.endswith("SS") else fp.F64
+            bits = src[2] if src[0] == "r" else 8 * src[2]
+            v = self._xread(src, bits // 8)
+            env = fp.Env(th.mxcsr)
+            r = fp.from_int(f, v, bits, env)
+            self._fp_check(env)
+            x[dst[1]] = x[dst[1]] & ~_mask(f.bits) & _mask(128) | r
+        elif ic in ("CVTSS2SD", "CVTSD2SS"):
+            s_f, d_f = (fp.F32, fp.F64) if ic == "CVTSS2SD" else (fp.F64, fp.F32)
+            v = self._xread(src, s_f.bits // 8)
+            env = fp.Env(th.mxcsr)
+            r = fp.convert(s_f, d_f, v, env)
+            self._fp_check(env)
+            x[dst[1]] = x[dst[1]] & ~_mask(d_f.bits) & _mask(128) | r
+        elif ic in ("UCOMISS", "UCOMISD", "COMISS", "COMISD"):
+            f = fp.F32 if ic.endswith("SS") else fp.F64
+            a, c = x[dst[1]] & _mask(f.bits), self._xread(src, f.bits // 8)
+            env = fp.Env(th.mxcsr)
+            z, p, cf = fp.compare(f, a, c, env, signal_qnan=ic.startswith("COMI"))
+            self._fp_check(env)
+            th.flags.update(Z=z, P=p, C=cf, O=False, S=False, A=False)
+        else:
+            raise LiftError(f"sse {ic}")
+
+    def _xwrite(self, loc: Op, v: int, nbytes: int) -> None:
+        if loc[0] == "x":
+            self.th.xmm[loc[1]] = v & _mask(8 * nbytes)
+        elif loc[0] == "r":
+            self._wr(loc[1], loc[2], loc[3], v)
+        else:
+            self.mem.write(self._t[loc[1]], (v & _mask(8 * nbytes)).to_bytes(nbytes, "little"))
+
+    def _fp(self, run: Callable[[], tuple[int, int]]) -> tuple[int, int]:
+        try:
+            return run()
+        except fp.SimdFault as e:
+            self.th.mxcsr |= e.flags                          # flags at an unmasked fault (oracle)
+            raise
+
+    def _fp_check(self, env: fp.Env) -> None:
+        self.th.mxcsr |= env.flags
+        env.check()
+
     # execution -------------------------------------------------------------------------------
     def _exec(self, ins: Lifted) -> None:
+        """Run one instruction; on a fault, every register returns to its value before it (the
+        instruction's single memory store is all-or-nothing in Memory.write)."""
+        th = self.th
+        saved = (list(th.regs), dict(th.flags), list(th.xmm), th.mxcsr, th.df)
+        try:
+            self._exec_ops(ins)
+        except (GuestFault, fp.SimdFault):
+            mxcsr = th.mxcsr
+            th.regs, th.flags, th.xmm, th.mxcsr, th.df = saved
+            th.mxcsr = mxcsr                                  # MXCSR flags a fault sets survive it
+            th.rip = ins.address
+            raise
+
+    def _exec_ops(self, ins: Lifted) -> None:
         t: dict[int, int] = {}
         self._t = t
         nxt = ins.address + ins.length
@@ -183,6 +292,10 @@ class Runtime:
                 self._set_flags(kind, t[a], t[b], t[r], bits)
             elif k == "set":
                 self._store(op[2], int(self._cond(op[1])))
+            elif k == "df":
+                self.th.df = bool(op[1])
+            elif k == "sse":
+                self._sse(op[1], op[2], op[3], op[4])
             elif k == "br":
                 if self._cond(op[1]):
                     self.th.rip = t[op[2]]
@@ -216,7 +329,7 @@ class Runtime:
                 if not self.step():
                     stop = "ExitProcess"
                     break
-        except (LiftError, GuestFault, UndefinedFlag, Unimplemented, HandlerFailed) as e:
+        except (LiftError, GuestFault, UndefinedFlag, Unimplemented, HandlerFailed, fp.SimdFault) as e:
             stop = f"{type(e).__name__}: {e}"
         return Result(self.exit_code, bytes(self.kernel.out), self.steps, len(self.seen),
                       self.calls, stop)

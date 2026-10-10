@@ -1,6 +1,6 @@
 {
  "spec_id": "x86_64.decode",
- "version": "0.7.0",
+ "version": "0.7.1",
  "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
  "prefixes": {
   "legacy": [
@@ -3441,7 +3441,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVUPS"
+   "iclass": "MOVUPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3450,7 +3452,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVUPD"
+   "iclass": "MOVUPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3459,7 +3463,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVSS"
+   "iclass": "MOVSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3468,7 +3474,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVSD_XMM"
+   "iclass": "MOVSD_XMM",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3477,7 +3485,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVUPS"
+   "iclass": "MOVUPS",
+   "ops": "Wdq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3486,7 +3496,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVUPD"
+   "iclass": "MOVUPD",
+   "ops": "Wdq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3495,7 +3507,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVSS"
+   "iclass": "MOVSS",
+   "ops": "Wd,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3504,7 +3518,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVSD_XMM"
+   "iclass": "MOVSD_XMM",
+   "ops": "Wq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3513,7 +3529,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVAPS"
+   "iclass": "MOVAPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3522,7 +3540,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVAPD"
+   "iclass": "MOVAPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3531,7 +3551,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVAPS"
+   "iclass": "MOVAPS",
+   "ops": "Wdq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3540,7 +3562,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MOVAPD"
+   "iclass": "MOVAPD",
+   "ops": "Wdq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3549,7 +3573,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTTSS2SI"
+   "iclass": "CVTTSS2SI",
+   "ops": "Gy,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3558,7 +3584,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTTSD2SI"
+   "iclass": "CVTTSD2SI",
+   "ops": "Gy,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3567,7 +3595,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "UCOMISS"
+   "iclass": "UCOMISS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3576,7 +3606,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "UCOMISD"
+   "iclass": "UCOMISD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3585,7 +3617,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "COMISS"
+   "iclass": "COMISS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3594,7 +3628,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "COMISD"
+   "iclass": "COMISD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3955,7 +3991,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ANDPS"
+   "iclass": "ANDPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3964,7 +4002,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ANDPD"
+   "iclass": "ANDPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -3991,7 +4031,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "XORPS"
+   "iclass": "XORPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4000,7 +4042,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "XORPD"
+   "iclass": "XORPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4009,7 +4053,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ADDPS"
+   "iclass": "ADDPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4018,7 +4064,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ADDPD"
+   "iclass": "ADDPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4027,7 +4075,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ADDSS"
+   "iclass": "ADDSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4036,7 +4086,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ADDSD"
+   "iclass": "ADDSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4045,7 +4097,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MULPS"
+   "iclass": "MULPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4054,7 +4108,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MULPD"
+   "iclass": "MULPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4063,7 +4119,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MULSS"
+   "iclass": "MULSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4072,7 +4130,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MULSD"
+   "iclass": "MULSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4081,7 +4141,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SUBPS"
+   "iclass": "SUBPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4090,7 +4152,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SUBPD"
+   "iclass": "SUBPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4099,7 +4163,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SUBSS"
+   "iclass": "SUBSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4108,7 +4174,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SUBSD"
+   "iclass": "SUBSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4117,7 +4185,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "DIVPS"
+   "iclass": "DIVPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4126,7 +4196,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "DIVPD"
+   "iclass": "DIVPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4135,7 +4207,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "DIVSS"
+   "iclass": "DIVSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4144,7 +4218,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "DIVSD"
+   "iclass": "DIVSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4153,7 +4229,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SQRTPS"
+   "iclass": "SQRTPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4162,7 +4240,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SQRTPD"
+   "iclass": "SQRTPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4171,7 +4251,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SQRTSS"
+   "iclass": "SQRTSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -4180,7 +4262,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "SQRTSD"
+   "iclass": "SQRTSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6061,7 +6145,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTSS2SD"
+   "iclass": "CVTSS2SD",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6070,7 +6156,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTSD2SS"
+   "iclass": "CVTSD2SS",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6106,7 +6194,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MINPS"
+   "iclass": "MINPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6115,7 +6205,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MINPD"
+   "iclass": "MINPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6124,7 +6216,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MINSS"
+   "iclass": "MINSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6133,7 +6227,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MINSD"
+   "iclass": "MINSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6142,7 +6238,9 @@
    "pfx": "none",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MAXPS"
+   "iclass": "MAXPS",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6151,7 +6249,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MAXPD"
+   "iclass": "MAXPD",
+   "ops": "V,Wdq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6160,7 +6260,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MAXSS"
+   "iclass": "MAXSS",
+   "ops": "V,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6169,7 +6271,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "MAXSD"
+   "iclass": "MAXSD",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6178,7 +6282,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTSI2SS"
+   "iclass": "CVTSI2SS",
+   "ops": "V,Ey",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6187,7 +6293,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTSI2SD"
+   "iclass": "CVTSI2SD",
+   "ops": "V,Ey",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6196,7 +6304,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTSS2SI"
+   "iclass": "CVTSS2SI",
+   "ops": "Gy,Wd",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -6205,7 +6315,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "CVTSD2SI"
+   "iclass": "CVTSD2SI",
+   "ops": "Gy,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -9391,7 +9503,7 @@
    "mn": "mov",
    "pfx": "none",
    "modrm": true,
-   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 20 /r MOV r64, CR0–CR7\"), as transcribed at https://www.felixcloutier.com/x86/mov-1, retrieved 2026-10-09",
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 20 /r MOV r64, CR0\u2013CR7\"), as transcribed at https://www.felixcloutier.com/x86/mov-1, retrieved 2026-10-09",
    "form": "reg",
    "iclass": "MOV_CR",
    "reg_valid": [
@@ -9408,7 +9520,7 @@
    "mn": "mov",
    "pfx": "none",
    "modrm": true,
-   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 22 /r MOV CR0–CR7, r64\"), as transcribed at https://www.felixcloutier.com/x86/mov-1, retrieved 2026-10-09",
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 22 /r MOV CR0\u2013CR7, r64\"), as transcribed at https://www.felixcloutier.com/x86/mov-1, retrieved 2026-10-09",
    "form": "reg",
    "iclass": "MOV_CR",
    "reg_valid": [
@@ -9425,7 +9537,7 @@
    "mn": "mov",
    "pfx": "none",
    "modrm": true,
-   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 21 /r MOV r64, DR0–DR7\"), as transcribed at https://www.felixcloutier.com/x86/mov-2, retrieved 2026-10-09",
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 21 /r MOV r64, DR0\u2013DR7\"), as transcribed at https://www.felixcloutier.com/x86/mov-2, retrieved 2026-10-09",
    "form": "reg",
    "iclass": "MOV_DR",
    "reg_valid": [
@@ -9445,7 +9557,7 @@
    "mn": "mov",
    "pfx": "none",
    "modrm": true,
-   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 23 /r MOV DR0–DR7, r64\"), as transcribed at https://www.felixcloutier.com/x86/mov-2, retrieved 2026-10-09",
+   "src": "Intel SDM Vol 2 instruction page MOV (opcode line \"0F 23 /r MOV DR0\u2013DR7, r64\"), as transcribed at https://www.felixcloutier.com/x86/mov-2, retrieved 2026-10-09",
    "form": "reg",
    "iclass": "MOV_DR",
    "reg_valid": [
@@ -9533,7 +9645,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page MOVD (opcode line \"66 0F 6E /r MOVD xmm, r/m32\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
    "w": 0,
-   "iclass": "MOVD"
+   "iclass": "MOVD",
+   "ops": "V,Ed",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -9543,7 +9657,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page MOVD (opcode line \"66 0F 7E /r MOVD r/m32, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
    "w": 0,
-   "iclass": "MOVD"
+   "iclass": "MOVD",
+   "ops": "Ed,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -9751,7 +9867,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"66 REX.W 0F 6E /r MOVQ xmm, r/m64\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
    "w": 1,
-   "iclass": "MOVQ"
+   "iclass": "MOVQ",
+   "ops": "V,Eq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -9761,7 +9879,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"66 REX.W 0F 7E /r MOVQ r/m64, xmm\"), as transcribed at https://www.felixcloutier.com/x86/movd:movq, retrieved 2026-10-09",
    "w": 1,
-   "iclass": "MOVQ"
+   "iclass": "MOVQ",
+   "ops": "Eq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -9790,7 +9910,9 @@
    "pfx": "f3",
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"F3 0F 7E /r MOVQ xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/movq, retrieved 2026-10-09",
-   "iclass": "MOVQ"
+   "iclass": "MOVQ",
+   "ops": "V,Wq",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -9799,7 +9921,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page MOVQ (opcode line \"66 0F D6 /r MOVQ xmm2/m64, xmm1\"), as transcribed at https://www.felixcloutier.com/x86/movq, retrieved 2026-10-09",
-   "iclass": "MOVQ"
+   "iclass": "MOVQ",
+   "ops": "Wq,V",
+   "src_ops": "SDM Vol 2 instruction page Opcode/Instruction and Op/En columns (felixcloutier transcription, retrieved 2026-10-09); notation Vol 2D Table A-1: V, W, G, E"
   },
   {
    "map": "0f",
@@ -12295,7 +12419,7 @@
    "iclass": "MOVNTSD"
   }
  ],
- "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv",
+ "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv; 0.7.1 (2026-10-09): operand templates for the legacy-SSE rows the model lifts (V, W, G, E with d, q, dq, y; scripts/sse_operand_templates.py; Sprint 039)",
  "identity": "iclass: XED instruction-class naming (github.com/intelxed/xed), assigned per row by rule; corrections recorded as spec revisions with XED as evidence. Fusion: LOCK prefix -> <ICLASS>_LOCK; REP -> REP_<ICLASS>; REPE -> REPE_<ICLASS>; REPNE -> REPNE_<ICLASS>.",
  "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08.",
  "validity": "Rows may carry `lock` (LOCK allowed on the memory form), `vvvv` ('1111' when the operand is unused), `l` (required VEX.L), `form`. An encoding outside these raises InvalidEncoding: the guest observes #UD (v0.2 section 5.1). Strict mandatory prefix: in the 0F/0F38/0F3A maps, an opcode whose rows include any mandatory-prefix row is an SSE-family opcode; a 66/F2/F3 prefix with no matching row means the bytes are a different instruction or invalid, never the unprefixed row. On opcodes with only unprefixed rows, 66 stays operand size."

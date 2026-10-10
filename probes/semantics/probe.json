@@ -1,5 +1,6 @@
 {
  "cflags": "-O1 -Wall -Werror -D_CRT_SECURE_NO_WARNINGS",
  "libs": "-lkernel32",
- "mode": "file"
+ "mode": "file",
+ "generate": "scripts/semantics_differential.py --cases"
 }

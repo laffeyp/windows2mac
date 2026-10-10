@@ -41,8 +41,11 @@ class Thread:
     tid: int
     regs: list[int] = field(default_factory=lambda: [0] * 16)
     rip: int = 0
-    flags: dict[str, bool | None] = field(default_factory=lambda: dict.fromkeys("CZSOP"))
+    flags: dict[str, bool | None] = field(default_factory=lambda: dict.fromkeys("CZSOPA"))
     last_error: int = 0
+    xmm: list[int] = field(default_factory=lambda: [0] * 16)           # 128-bit values (Sprint 039)
+    mxcsr: int = 0x1F80                                               # reset value, SDM Vol 1 10.2.3
+    df: bool = False
 
 
 class Kernel32:

@@ -13,6 +13,11 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("flags", kind, a, b, r, bits)  kind: add sub logic inc dec shr mul (SDM Vol 2 flag tables)
   ("br", cond, t)                 cond: always or an SDM condition code (Vol 1 B.1)
   ("set", cond, loc)              SETcc
+  ("df", 0|1)                     CLD, STD
+  ("sse", iclass, dst, src, align)  one legacy-SSE instruction (Sprint 039): dst and src are locs,
+                                  ("x", index) for an XMM register; align 16 when a memory operand
+                                  must be 16-byte aligned (#GP otherwise); the runtime computes it
+                                  with x86fp, after every read and before any write
 Semantics follow Intel SDM Vol 2 instruction pages; a 32-bit register write zero-extends to 64
 bits and 8/16-bit writes keep the other bits (SDM Vol 1 3.4.1.1).
 """
@@ -20,7 +25,7 @@ bits and 8/16-bit writes keep the other bits (SDM Vol 1 3.4.1.1).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from w2m.x86dec import Decoded, decode
 from w2m.x86ops import GPR8_LEGACY, GPR8_REX, GPR16, GPR32, GPR64, operands
@@ -39,6 +44,12 @@ for _i, _n in enumerate(GPR8_LEGACY[4:]):
 RSP, RAX, RDX = 4, 0, 2
 CC = {"O": "o", "NO": "no", "B": "b", "NB": "nb", "Z": "z", "NZ": "nz", "BE": "be", "NBE": "nbe",
       "S": "s", "NS": "ns", "P": "p", "NP": "np", "L": "l", "NL": "nl", "LE": "le", "NLE": "nle"}
+SSE_ALIGNED = {"MOVAPS", "MOVAPD", "XORPS", "XORPD", "ANDPS", "ANDPD"} | {
+    f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") for t in ("PS", "PD")}
+SSE = SSE_ALIGNED | {"MOVUPS", "MOVUPD", "MOVSS", "MOVSD_XMM", "MOVD", "MOVQ"} | {
+    f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") for t in ("SS", "SD")} | {
+    "CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI", "CVTSI2SS", "CVTSI2SD", "CVTSS2SD", "CVTSD2SS",
+    "UCOMISS", "UCOMISD", "COMISS", "COMISD"}
 ALU = {"ADD": "add", "SUB": "sub", "AND": "and", "OR": "or", "XOR": "xor", "CMP": "sub", "TEST": "and"}
 
 Op = tuple[Any, ...]
@@ -72,6 +83,8 @@ class _OpBuilder:
 def _operand(b: _OpBuilder, s: str, next_ip: int, width_hint: int | None = None) -> tuple[str, object, int]:
     """Parse one xedshim-format operand; return (kind, loc-or-temp, bits)."""
     p = s.split(":")
+    if p[0] == "R" and p[1].startswith("XMM"):
+        return "loc", ("x", int(p[1][3:])), 128
     if p[0] == "R":
         idx, bits, hi = REG[p[1]]
         return "loc", ("r", idx, bits, hi), bits
@@ -145,11 +158,18 @@ def lift(code: bytes, address: int) -> Lifted:
         # lifting this as a plain address would read the wrong memory (Sprint 037)
         raise LiftError(f"FS/GS-relative memory operand at 0x{address:x} ({code[:d.length].hex()}): "
                         "segment bases are not modeled")
-    if not ops and ic not in ("NOP", "RET_NEAR"):
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD"):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     if ic == "NOP":
         pass
+    elif ic in ("CLD", "STD"):
+        b.emit("df", int(ic == "STD"))
+    elif ic in SSE:
+        sse_dst = cast(tuple[Any, ...], _operand(b, ops[0], nxt)[1])
+        sse_src = cast(tuple[Any, ...], _operand(b, ops[1], nxt)[1])
+        has_memory = sse_dst[0] == "m" or sse_src[0] == "m"
+        b.emit("sse", ic, sse_dst, sse_src, 16 if has_memory and ic in SSE_ALIGNED else 0)
     elif ic == "RET_NEAR" and not ops:
         b.emit("br", "always", _pop(b))
     elif ic in ("MOV", "MOVZX", "MOVSXD", "LEA"):

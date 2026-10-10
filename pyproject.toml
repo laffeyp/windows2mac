@@ -42,3 +42,8 @@ files = ["src/w2m"]
 module = "capstone.*"
 ignore_missing_imports = true
 
+[dependency-groups]
+dev = [
+    "numpy>=2.5.3",
+]
+

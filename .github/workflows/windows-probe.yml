@@ -2,7 +2,8 @@
 # Windows, runs it `repeat` times, and uploads the guest traces and role maps for ingest on the Mac.
 # Dispatch: gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id> [-f repeat=N]
 # Probe CLI: <probe>.exe <execution_id> <trace_path> <roles_path>; mode stdout: no arguments;
-# mode file: <probe>.exe probes/<probe>/cases.bin out/result-<i>.bin
+# mode file: <probe>.exe probes/<probe>/cases.bin out/result-<i>.bin (cases.bin built on the runner when
+# probe.json names a `generate` command; its sha256 lands in out/cases.sha256)
 name: windows-probe
 
 on:
@@ -28,6 +29,24 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - name: config
+        id: cfg
+        shell: pwsh
+        run: |
+          # probes/<probe>/probe.json `generate` (Sprint 039): a command that writes the input file on
+          # the runner, so a large derived file is built from the seeded generator, not committed
+          $cfg = "probes/${{ inputs.probe }}/probe.json"
+          $gen = ""
+          if (Test-Path $cfg) { $c = Get-Content $cfg -Raw | ConvertFrom-Json; if ($c.generate) { $gen = $c.generate } }
+          "generate=$gen" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        if: steps.cfg.outputs.generate != ''
+      - name: generate
+        if: steps.cfg.outputs.generate != ''
+        shell: pwsh
+        run: |
+          uv run --no-dev python ${{ steps.cfg.outputs.generate }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: build
         shell: pwsh
         run: |
@@ -55,6 +74,7 @@ jobs:
             if ($mode -eq "file") {
               # mode file (Sprint 037): probes/<probe>/cases.bin in, a result file out
               ./probe.exe "probes/${{ inputs.probe }}/cases.bin" "out/result-$i.bin"
+              (Get-FileHash -Algorithm SHA256 "probes/${{ inputs.probe }}/cases.bin").Hash.ToLower() | Out-File -Encoding ascii -NoNewline out/cases.sha256
             } elseif ($mode -eq "stdout") {
               # mode stdout: the probe writes its own trace body; cmd keeps the bytes unchanged
               cmd /c "probe.exe > out\body-$i.jsonl"

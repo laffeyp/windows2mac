@@ -1,23 +1,31 @@
 """semantics_differential.py — the lifter judged by a real x86 CPU, one instruction at a time
-(Sprint 037).
+(Sprint 037; floating-point state and faults, Sprint 039).
 
   --cases [--out probes/semantics/cases.bin]   write the case file probes/semantics/semantics.c
-                                                runs on the windows-2025 runner
+                                                runs on the windows-2025 runner (format 2)
   --judge <run dir> [--record]                 compare the runner's result files with
                                                 runtime.Runtime on the same cases
 
-Cases: every encgen encoding (spec 0.7.0, seeded) that w2m decodes and lifts, except
+Cases: every encgen encoding (spec 0.7.1, seeded) that w2m decodes and lifts, except
 control-flow rows, RIP-relative and absolute memory forms (their addresses are not placeable);
 plus fixed control-flow encodings whose both paths are observable: Jcc rel8 +14 (all 16
-conditions), JMP rel8 +14, CALL rel32 +14, RET to a planted address. Each runs from STATES
-random states: 16 GPRs from width and sign boundaries and uniform bits; CF, PF, ZF, SF, OF
-random, the other flags 0; random data and stack windows. A memory operand's base register is
-set so the effective address falls in the data window (index 0); RSP lies in the stack window.
+conditions), JMP rel8 +14, CALL rel32 +14, RET to a planted address. Each runs from STATES random
+states (SSE_STATES for legacy-SSE classes): 16 GPRs from width and sign boundaries and uniform
+bits; CF, PF, AF, ZF, SF, OF, DF random; MXCSR with random rounding, DAZ, FTZ and sticky flags,
+every exception masked in most states; XMM lanes from floating-point boundaries and uniform bits;
+random data and stack windows. A memory operand's base register is set so the effective address
+falls in the data window (index 0); RSP lies in the stack window. Each encoding with a memory
+operand also gets one fault case: the access straddles the end of the data page at 0x3000_1000,
+whose next page is unmapped, so the CPU faults and nothing of the access may be committed.
 
 The reference is the CPU's result file; the model is runtime.Runtime stepping lift.py's
 operations once from the same state at the same addresses. Compared: the path (RIP), all 16
 GPRs, every flag the model defines after the step (a flag the model marks undefined is not
-compared: the SDM leaves it undefined), and both windows.
+compared: the SDM leaves it undefined), DF, MXCSR, XMM0-15, the three windows; for a fault, the
+fault code, the faulting RIP and the whole state at the fault.
+
+Format 1 (Sprint 037's case file, now store/probe-runs/semantics-037-cases.bin) is read by
+read_cases_format1 and judged by judge_format1.
 """
 
 from __future__ import annotations
@@ -31,7 +39,7 @@ import sys
 import time
 from collections import Counter
 from collections.abc import AsyncIterator, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -41,25 +49,49 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from w2m import VOCAB_VERSION, events  # noqa: E402
+from w2m import x86fp as fp  # noqa: E402
 from w2m.encgen import SPEC, cases as encgen_cases  # noqa: E402
 from w2m.kernel32 import M64  # noqa: E402
-from w2m.lift import LiftError, Lifted, lift  # noqa: E402
-from w2m.loader import Loaded, Memory  # noqa: E402
+from w2m.lift import SSE, LiftError, Lifted, lift  # noqa: E402
+from w2m.loader import GuestFault, Loaded, Memory  # noqa: E402
 from w2m.runtime import Runtime  # noqa: E402
 from w2m.x86dec import DecodeError, decode  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
+from w2m.x86ops import operands  # noqa: E402
 
 CODE_VA, DATA_VA, STACK_VA = 0x2000_0000, 0x3000_0000, 0x4000_0000
 DATA_OFF, STACK_OFF, WINDOW, CODE_BYTES = 0x40, 0x87C0, 64, 32
+EDGE_OFF, EDGE = 0xFE0, 32                              # the last 32 bytes of the data page
+PAGE_END = DATA_VA + 0x1000
 STACK_SIZE = 0x10000
 RET_TARGET = CODE_VA + 0x100
 STATES = 4
+SSE_STATES = 8
 CONTROL_STATES = 16
-FLAG_BITS = {"C": 0, "P": 2, "Z": 6, "S": 7, "O": 11}
-CASE_SIZE = 8 + CODE_BYTES + 8 * 16 + 8 + WINDOW + WINDOW
-RESULT_SIZE = 8 * 16 + 8 + 8 + 8 + WINDOW + WINDOW
-EDGE = (0, 1, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, 0x7FFF_FFFF, 0x8000_0000, 0xFFFF_FFFF,
-        0x7FFF_FFFF_FFFF_FFFF, 0x8000_0000_0000_0000, M64)
+FLAG_BITS = {"C": 0, "P": 2, "A": 4, "Z": 6, "S": 7, "O": 11}
+DF_BIT = 10
+CASE_SIZE = 8 + CODE_BYTES + 8 * 16 + 8 + 8 + 16 * 16 + WINDOW + WINDOW + EDGE
+RESULT_SIZE = 8 * 16 + 8 * 5 + 16 * 16 + WINDOW + WINDOW + EDGE
+CASE_SIZE_1 = 8 + CODE_BYTES + 8 * 16 + 8 + WINDOW + WINDOW
+RESULT_SIZE_1 = 8 * 16 + 8 + 8 + 8 + WINDOW + WINDOW
+EDGE_VALUES = (0, 1, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, 0x7FFF_FFFF, 0x8000_0000, 0xFFFF_FFFF,
+               0x7FFF_FFFF_FFFF_FFFF, 0x8000_0000_0000_0000, M64)
+# Windows exception codes (ntstatus.h): an access violation, which Windows also reports for #GP on
+# a misaligned SSE operand; and STATUS_FLOAT_MULTIPLE_TRAPS for #XM
+ACCESS_VIOLATION, FLOAT_MULTIPLE_TRAPS = 0xC000_0005, 0xC000_02B5
+F32_EDGES = (0, 0x8000_0000, 1, 0x007F_FFFF, 0x0080_0000, 0x0080_0001, 0x7F7F_FFFF, 0xFF7F_FFFF,
+             0x7F80_0000, 0xFF80_0000, 0x7FC0_0000, 0xFFC0_0000, 0x7F80_0001, 0x7FA0_0000, 0xFFC1_2345,
+             0x3F80_0000, 0xBF80_0000, 0x3F00_0000, 0x3FC0_0000, 0x4020_0000, 0xBFC0_0000, 0x3F7F_FFFE,
+             0x4F00_0000, 0xCF00_0000, 0x4EFF_FFFF, 0xCF00_0001, 0x5F00_0000, 0xDF00_0000, 0x5EFF_FFFF,
+             0x3EAA_AAAB, 0x0C00_0000, 0x7200_0000)
+F64_EDGES = (0, 0x8000_0000_0000_0000, 1, 0x000F_FFFF_FFFF_FFFF, 0x0010_0000_0000_0000,
+             0x0010_0000_0000_0001, 0x7FEF_FFFF_FFFF_FFFF, 0x7FF0_0000_0000_0000, 0xFFF0_0000_0000_0000,
+             0x7FF8_0000_0000_0000, 0xFFF8_0000_0000_0000, 0x7FF0_0000_0000_0001, 0x7FF4_0000_0000_0000,
+             0x3FF0_0000_0000_0000, 0xBFF0_0000_0000_0000, 0x3FE0_0000_0000_0000, 0x3FF8_0000_0000_0000,
+             0x4004_0000_0000_0000, 0x3FEF_FFFF_FFFF_FFFF, 0x41E0_0000_0000_0000, 0xC1E0_0000_0000_0000,
+             0x41DF_FFFF_FFC0_0000, 0x41DF_FFFF_FFE0_0000, 0xC1E0_0000_0020_0000, 0x43E0_0000_0000_0000,
+             0xC3E0_0000_0000_0000, 0x43DF_FFFF_FFFF_FFFF, 0x3FD5_5555_5555_5555, 0x47EF_FFFF_E000_0000,
+             0x47EF_FFFF_F000_0000, 0x36A0_0000_0000_0000, 0x3690_0000_0000_0000, 0x3810_0000_0000_0000)
 
 
 @dataclass
@@ -70,12 +102,16 @@ class Case:
     data: bytes
     stack: bytes
     label: str                    # iclass, for grouping
+    mxcsr: int = fp.MXCSR_DEFAULT
+    xmm: list[int] = field(default_factory=lambda: [0] * 16)
+    edge: bytes = bytes(EDGE)
+    kind: int = 0                 # 0 ordinary, 1 fault placement
 
 
 def _value(rng: random.Random) -> int:
     r = rng.random()
     if r < 0.4:
-        v = rng.choice(EDGE)
+        v = rng.choice(EDGE_VALUES)
     elif r < 0.7:
         v = rng.getrandbits(rng.choice((8, 16, 32)))
     else:
@@ -83,16 +119,46 @@ def _value(rng: random.Random) -> int:
     return v ^ (rng.getrandbits(64) & 0xFFFF_FFFF_0000_0000 if rng.random() < 0.2 else 0)
 
 
-def _state(rng: random.Random) -> tuple[list[int], int, bytes, bytes]:
+def _fp_lane(rng: random.Random, f: fp.Fmt) -> int:
+    r = rng.random()
+    if r < 0.5:
+        return rng.choice(F32_EDGES if f is fp.F32 else F64_EDGES)
+    if r < 0.85:                                  # an ordinary number near 1: rounding is exercised
+        e = f.bias + rng.randrange(-30, 31)
+        return rng.getrandbits(1) << (f.bits - 1) | e << f.mbits | rng.getrandbits(f.mbits)
+    return rng.getrandbits(f.bits)
+
+
+def _xmm(rng: random.Random) -> int:
+    f = fp.F32 if rng.getrandbits(1) else fp.F64
+    return fp.join([_fp_lane(rng, f) for _ in range(128 // f.bits)], f.bits)
+
+
+def _mxcsr(rng: random.Random) -> int:
+    v = rng.getrandbits(2) << 13
+    v |= fp.DAZ if rng.random() < 0.25 else 0
+    v |= fp.FTZ if rng.random() < 0.25 else 0
+    v |= rng.getrandbits(6) if rng.random() < 0.5 else 0
+    v |= (0x3F if rng.random() < 0.8 else rng.getrandbits(6)) << fp.MASK_SHIFT
+    return v
+
+
+def _state(rng: random.Random, sse: bool) -> Case:
     regs = [_value(rng) for _ in range(16)]
     regs[4] = STACK_VA + STACK_OFF + 0x20 + 8 * rng.randrange(4)      # push and pop stay inside the window
     rflags = 0x2 | sum(1 << b for b in FLAG_BITS.values() if rng.getrandbits(1))
-    return regs, rflags, rng.randbytes(WINDOW), rng.randbytes(WINDOW)
+    rflags |= rng.getrandbits(1) << DF_BIT
+    if sse:
+        data = b"".join(_xmm(rng).to_bytes(16, "little") for _ in range(WINDOW // 16))
+    else:
+        data = rng.randbytes(WINDOW)
+    return Case(b"", regs, rflags, data, rng.randbytes(WINDOW), "", _mxcsr(rng),
+                [_xmm(rng) for _ in range(16)], rng.randbytes(EDGE))
 
 
-def _place(ins: Lifted, regs: list[int], rng: random.Random) -> bool:
-    """Point each memory operand into the data window. False for forms whose address is not
-    placeable (RIP-relative and absolute)."""
+def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = None) -> bool:
+    """Point each memory operand into the data window (or at `target_of(size)`). False for forms
+    whose address is not placeable (RIP-relative and absolute)."""
     for op in ins.ops:
         if op[0] != "addr":
             continue
@@ -100,21 +166,30 @@ def _place(ins: Lifted, regs: list[int], rng: random.Random) -> bool:
         if base is None:
             return False
         mask = M64 if abits == 64 else 0xFFFF_FFFF
-        target = DATA_VA + DATA_OFF + 8 * rng.randrange(6)             # 16-byte operands stay inside
+        target = target_of() if target_of else DATA_VA + DATA_OFF + 8 * rng.randrange(6)
         if index is not None and index != base:
             regs[index] = 0
         if index == base:                                            # [r + r*scale]: solve r*(1+scale)
-            target = next((DATA_VA + DATA_OFF + t for t in range(41)
-                           if ((DATA_VA + DATA_OFF + t - disp) & mask) % (1 + scale) == 0), None)
-            if target is None:
+            lo = target - 40 if target_of else DATA_VA + DATA_OFF
+            hit = next((t for t in range(lo, lo + 41) if ((t - disp) & mask) % (1 + scale) == 0
+                        and (not target_of or t == target)), None)
+            if hit is None:
                 return False
-            regs[base] = ((target - disp) & mask) // (1 + scale)
+            regs[base] = ((hit - disp) & mask) // (1 + scale)
             continue
         value = (target - disp) & mask
         if abits == 32:
             value |= rng.getrandbits(32) << 32                    # the CPU truncates; so must the model
         regs[base] = value
     return True
+
+
+def _memory_size(raw: bytes) -> int | None:
+    d = decode(raw)
+    if d.fields is None or not d.fields.ops:
+        return None
+    sizes = [int(o.split(":")[6]) for o in operands(d.fields) if o.startswith("M:")]
+    return sizes[0] if sizes else None
 
 
 def _control_flow() -> Iterator[tuple[bytes, str]]:
@@ -125,7 +200,7 @@ def _control_flow() -> Iterator[tuple[bytes, str]]:
     yield bytes([0xC3]), "RET_NEAR"
 
 
-def build_cases(seed: int = 2026_10_09) -> tuple[list[Case], Counter[str]]:
+def build_cases(seed: int = 2026_10_09_39) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     out: list[Case] = []
     skipped: Counter[str] = Counter()
@@ -139,39 +214,73 @@ def build_cases(seed: int = 2026_10_09) -> tuple[list[Case], Counter[str]]:
         if any(op[0] == "br" for op in ins.ops):
             skipped["control flow (fixed encodings instead)"] += 1
             continue
-        for _ in range(STATES):
-            regs, rflags, data, stack = _state(rng)
-            if not _place(ins, regs, rng):
+        raw = c.raw[:d.length]
+        sse = d.iclass in SSE
+        placeable = True
+        for _ in range(SSE_STATES if sse else STATES):
+            s = _state(rng, sse)
+            if not _place(ins, s.regs, rng):
                 skipped["address not placeable (RIP-relative or absolute)"] += 1
+                placeable = False
                 break
-            out.append(Case(c.raw[:d.length], regs, rflags, data, stack, d.iclass))
+            s.code, s.label = raw, d.iclass
+            out.append(s)
+        size = _memory_size(raw)
+        if placeable and size is not None:
+            s = _state(rng, sse)
+            target = PAGE_END - rng.randrange(1, size) if size > 1 else PAGE_END
+            if _place(ins, s.regs, rng, lambda target=target: target):
+                s.code, s.label, s.kind = raw, d.iclass, 1
+                out.append(s)
+            else:
+                skipped["fault placement not solvable ([r + r*scale])"] += 1
     for code, label in _control_flow():
         for _ in range(CONTROL_STATES):
-            regs, rflags, data, stack = _state(rng)
+            s = _state(rng, False)
             if label == "RET_NEAR":
-                off = regs[4] - (STACK_VA + STACK_OFF)
-                stack = stack[:off] + RET_TARGET.to_bytes(8, "little") + stack[off + 8:]
-            out.append(Case(code, regs, rflags, data, stack, label))
+                off = s.regs[4] - (STACK_VA + STACK_OFF)
+                s.stack = s.stack[:off] + RET_TARGET.to_bytes(8, "little") + s.stack[off + 8:]
+            s.code, s.label = code, label
+            out.append(s)
     return out, skipped
 
 
 def write_cases(cases: list[Case], path: Path) -> None:
     with path.open("wb") as f:
-        f.write(b"W2MS" + struct.pack("<II", 1, len(cases)))
+        f.write(b"W2MS" + struct.pack("<II", 2, len(cases)))
         for c in cases:
-            f.write(bytes([len(c.code), 0]) + bytes(6) + c.code.ljust(CODE_BYTES, b"\0"))
-            f.write(struct.pack("<16QQ", *c.regs, c.rflags) + c.data + c.stack)
+            f.write(bytes([len(c.code), c.kind]) + bytes(6) + c.code.ljust(CODE_BYTES, b"\0"))
+            f.write(struct.pack("<16QQQ", *c.regs, c.rflags, c.mxcsr))
+            f.write(b"".join(x.to_bytes(16, "little") for x in c.xmm) + c.data + c.stack + c.edge)
 
 
 def read_cases(path: Path) -> list[Case]:
+    raw = path.read_bytes()
+    assert raw[:4] == b"W2MS" and struct.unpack_from("<I", raw, 4)[0] == 2
+    count = struct.unpack_from("<I", raw, 8)[0]
+    out = []
+    for n in range(count):
+        p = 12 + n * CASE_SIZE
+        code = raw[p + 8:p + 8 + raw[p]]
+        q = p + 8 + CODE_BYTES
+        regs = list(struct.unpack_from("<16Q", raw, q))
+        rflags, mxcsr = struct.unpack_from("<QQ", raw, q + 128)
+        q += 144
+        xmm = [int.from_bytes(raw[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
+        q += 256
+        out.append(Case(code, regs, rflags, raw[q:q + WINDOW], raw[q + WINDOW:q + 2 * WINDOW], "", mxcsr, xmm,
+                        raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], raw[p + 1]))
+    return out
+
+
+def read_cases_format1(path: Path) -> list[Case]:
     raw = path.read_bytes()
     assert raw[:4] == b"W2MS" and struct.unpack_from("<I", raw, 4)[0] == 1
     count = struct.unpack_from("<I", raw, 8)[0]
     out = []
     for n in range(count):
-        p = 12 + n * CASE_SIZE
-        length = raw[p]
-        code = raw[p + 8:p + 8 + length]
+        p = 12 + n * CASE_SIZE_1
+        code = raw[p + 8:p + 8 + raw[p]]
         regs = list(struct.unpack_from("<16Q", raw, p + 8 + CODE_BYTES))
         rflags = struct.unpack_from("<Q", raw, p + 8 + CODE_BYTES + 128)[0]
         q = p + 8 + CODE_BYTES + 136
@@ -187,6 +296,10 @@ class Result:
     fault: int
     data: bytes
     stack: bytes
+    fault_rip: int = 0
+    mxcsr: int = fp.MXCSR_DEFAULT
+    xmm: list[int] = field(default_factory=lambda: [0] * 16)
+    edge: bytes = bytes(EDGE)
 
 
 def read_results(path: Path) -> list[Result]:
@@ -194,48 +307,123 @@ def read_results(path: Path) -> list[Result]:
     out = []
     for p in range(0, len(raw), RESULT_SIZE):
         regs = list(struct.unpack_from("<16Q", raw, p))
+        rflags, marker, fault, fault_rip, mxcsr = struct.unpack_from("<5Q", raw, p + 128)
+        q = p + 168
+        xmm = [int.from_bytes(raw[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
+        q += 256
+        out.append(Result(regs, rflags, marker, fault, raw[q:q + WINDOW], raw[q + WINDOW:q + 2 * WINDOW],
+                          fault_rip, mxcsr, xmm, raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE]))
+    return out
+
+
+def read_results_format1(path: Path) -> list[Result]:
+    raw = path.read_bytes()
+    out = []
+    for p in range(0, len(raw), RESULT_SIZE_1):
+        regs = list(struct.unpack_from("<16Q", raw, p))
         rflags, marker, fault = struct.unpack_from("<QQQ", raw, p + 128)
         out.append(Result(regs, rflags, marker, fault, raw[p + 152:p + 152 + WINDOW],
                           raw[p + 152 + WINDOW:p + 152 + 2 * WINDOW]))
     return out
 
 
-def model(c: Case) -> tuple[Runtime | None, str]:
-    """runtime.Runtime after one step of `c`, or None with the reason it stopped."""
+@dataclass
+class ModelRun:
+    rt: Runtime
+    fault: int                    # 0, or the Windows exception code the model's stop stands for
+    why: str
+
+
+def model(c: Case) -> ModelRun | str:
+    """runtime.Runtime after one step of `c`; a string when the model stopped for a reason that
+    is not a guest fault (an unlifted instruction, an undefined flag read)."""
     mem = Memory()
     code = mem.map(CODE_VA, 0x1000, "code")
     code.data[:len(c.code)] = c.code
     data = mem.map(DATA_VA, 0x1000, "data")
     data.data[DATA_OFF:DATA_OFF + WINDOW] = c.data
+    data.data[EDGE_OFF:EDGE_OFF + EDGE] = c.edge
     stack = mem.map(STACK_VA, STACK_SIZE, "stack")
     stack.data[STACK_OFF:STACK_OFF + WINDOW] = c.stack
     rt = Runtime(Loaded(None, mem, CODE_VA, {}, STACK_VA + STACK_SIZE))   # type: ignore[arg-type]
-    rt.th.regs = list(c.regs)
-    rt.th.rip = CODE_VA
-    rt.th.flags = {f: bool(c.rflags >> b & 1) for f, b in FLAG_BITS.items()}
+    th = rt.th
+    th.regs = list(c.regs)
+    th.rip = CODE_VA
+    th.flags = {f: bool(c.rflags >> b & 1) for f, b in FLAG_BITS.items()}
+    th.df = bool(c.rflags >> DF_BIT & 1)
+    th.mxcsr = c.mxcsr
+    th.xmm = list(c.xmm)
     try:
         rt.step()
+    except GuestFault as e:
+        return ModelRun(rt, ACCESS_VIOLATION, str(e))
+    except fp.SimdFault as e:
+        return ModelRun(rt, FLOAT_MULTIPLE_TRAPS, str(e))
     except Exception as e:                                       # the model's stop is a result
-        return None, f"{type(e).__name__}: {e}"
-    return rt, ""
+        return f"{type(e).__name__}: {e}"
+    return ModelRun(rt, 0, "")
 
 
 def judge(c: Case, r: Result, label: str) -> list[tuple[str, str]]:
-    """(class, detail) for every field where the model differs from the CPU."""
+    """(class, detail) for every field where the model differs from the CPU (format 2)."""
+    m = model(c)
+    if isinstance(m, str):
+        return [(f"{label} model stopped", m)]
+    rt, th = m.rt, m.rt.th
+    diffs = []
+    if r.marker == 2 or m.fault:
+        if r.marker != 2:
+            return [(f"{label} model fault", f"model 0x{m.fault:x} ({m.why}); cpu completed")]
+        if not m.fault:
+            return [(f"{label} cpu fault", f"cpu exception 0x{r.fault:x}; model completed")]
+        if m.fault != r.fault:
+            diffs.append((f"{label} fault code", f"model 0x{m.fault:x} ({m.why}), cpu 0x{r.fault:x}"))
+        if r.fault_rip != th.rip:
+            diffs.append((f"{label} fault rip", f"model 0x{th.rip:x}, cpu 0x{r.fault_rip:x}"))
+    else:
+        paths = {CODE_VA + len(c.code): 0, CODE_VA + len(c.code) + 14: 1, RET_TARGET: 1}
+        if paths.get(th.rip) != r.marker:
+            diffs.append((f"{label} rip", f"model 0x{th.rip:x}, cpu path {r.marker}"))
+    for i in range(16):
+        if th.regs[i] != r.regs[i]:
+            diffs.append((f"{label} r{i}", f"model 0x{th.regs[i]:x}, cpu 0x{r.regs[i]:x}"))
+    for f, b in FLAG_BITS.items():
+        mv = th.flags.get(f)
+        if mv is not None and mv != bool(r.rflags >> b & 1):
+            diffs.append((f"{label} {f}F", f"model {int(mv)}, cpu {r.rflags >> b & 1}"))
+    if th.df != bool(r.rflags >> DF_BIT & 1):
+        diffs.append((f"{label} DF", f"model {int(th.df)}, cpu {r.rflags >> DF_BIT & 1}"))
+    if th.mxcsr != r.mxcsr:
+        diffs.append((f"{label} MXCSR", f"model 0x{th.mxcsr:x}, cpu 0x{r.mxcsr:x} (in 0x{c.mxcsr:x})"))
+    for i in range(16):
+        if th.xmm[i] != r.xmm[i]:
+            diffs.append((f"{label} xmm{i}", f"model {th.xmm[i]:032x}, cpu {r.xmm[i]:032x}"))
+    if rt.mem.read(DATA_VA + DATA_OFF, WINDOW) != r.data:
+        diffs.append((f"{label} data", "data window differs"))
+    if rt.mem.read(STACK_VA + STACK_OFF, WINDOW) != r.stack:
+        diffs.append((f"{label} stack", "stack window differs"))
+    if rt.mem.read(DATA_VA + EDGE_OFF, EDGE) != r.edge:
+        diffs.append((f"{label} edge", "edge window differs"))
+    return diffs
+
+
+def judge_format1(c: Case, r: Result, label: str) -> list[tuple[str, str]]:
+    """Sprint 037's comparison over its format-1 files, with AF now compared where defined."""
     if r.marker == 2:
         return [(f"{label} cpu fault", f"exception 0x{r.fault:x}")]
-    rt, why = model(c)
-    if rt is None:
-        return [(f"{label} model stopped", why)]
+    m = model(c)
+    if isinstance(m, str) or m.fault:
+        return [(f"{label} model stopped", m if isinstance(m, str) else m.why)]
+    rt, th = m.rt, m.rt.th
     diffs = []
     paths = {CODE_VA + len(c.code): 0, CODE_VA + len(c.code) + 14: 1, RET_TARGET: 1}
-    if paths.get(rt.th.rip) != r.marker:
-        diffs.append((f"{label} rip", f"model 0x{rt.th.rip:x}, cpu path {r.marker}"))
+    if paths.get(th.rip) != r.marker:
+        diffs.append((f"{label} rip", f"model 0x{th.rip:x}, cpu path {r.marker}"))
     for i in range(16):
-        if rt.th.regs[i] != r.regs[i]:
-            diffs.append((f"{label} r{i}", f"model 0x{rt.th.regs[i]:x}, cpu 0x{r.regs[i]:x}"))
+        if th.regs[i] != r.regs[i]:
+            diffs.append((f"{label} r{i}", f"model 0x{th.regs[i]:x}, cpu 0x{r.regs[i]:x}"))
     for f, b in FLAG_BITS.items():
-        mv = rt.th.flags[f]
+        mv = th.flags.get(f)
         if mv is not None and mv != bool(r.rflags >> b & 1):
             diffs.append((f"{label} {f}F", f"model {int(mv)}, cpu {r.rflags >> b & 1}"))
     if rt.mem.read(DATA_VA + DATA_OFF, WINDOW) != r.data:
@@ -257,8 +445,8 @@ def main(argv: list[str]) -> int:
         cs, skipped = build_cases()
         write_cases(cs, a.out)
         labels = Counter(c.label for c in cs)
-        print(f"{len(cs)} cases over {len(labels)} iclasses -> {a.out} "
-              f"({a.out.stat().st_size} bytes); skipped {dict(skipped)}")
+        print(f"{len(cs)} cases over {len(labels)} iclasses ({sum(c.kind for c in cs)} fault placements) -> "
+              f"{a.out} ({a.out.stat().st_size} bytes); skipped {dict(skipped)}")
         return 0
     if a.judge:
         return judge_run(a)
@@ -270,28 +458,36 @@ def judge_run(a: argparse.Namespace) -> int:
     t0 = time.monotonic()
     built, _ = build_cases()
     stored = read_cases(a.out)
-    assert [(c.code, c.regs, c.rflags) for c in built] == [(c.code, c.regs, c.rflags) for c in stored], \
+    assert [(c.code, c.regs, c.rflags, c.xmm, c.mxcsr) for c in built] == \
+        [(c.code, c.regs, c.rflags, c.xmm, c.mxcsr) for c in stored], \
         "probes/semantics/cases.bin is not what --cases builds now"
+    sha = "sha256:" + hashlib.sha256(a.out.read_bytes()).hexdigest()
+    ran = a.judge / "cases.sha256"
+    assert not ran.exists() or "sha256:" + ran.read_text().strip() == sha, \
+        f"the runner ran a case file other than this one ({sha})"
     profile = (a.judge / "profile.txt").read_text().strip()
+    cpu = (a.judge / "cpu.txt").read_text().strip() if (a.judge / "cpu.txt").exists() else "unknown CPU"
     result_files = sorted(a.judge.glob("result-*.bin"))
     runs = [read_results(p) for p in result_files]
     assert all(len(r) == len(built) for r in runs), "result count differs from case count"
-    unstable = sum(1 for i in range(len(built))
-                   if len({(x[i].regs[j], x[i].rflags, x[i].marker) for x in runs for j in range(16)}) >
-                   len({(runs[0][i].regs[j], runs[0][i].rflags, runs[0][i].marker) for j in range(16)}))
+
+    def key(x: Result) -> tuple[Any, ...]:
+        return (tuple(x.regs), x.rflags, x.marker, x.fault, x.mxcsr, tuple(x.xmm), x.data, x.stack, x.edge)
+    unstable = sum(1 for i in range(len(built)) if len({key(x[i]) for x in runs}) > 1)
     classes: Counter[str] = Counter()
     example: dict[str, str] = {}
+    faults = Counter(f"0x{r.fault:x}" for r in runs[0] if r.marker == 2)
     for i, (c, r) in enumerate(zip(built, runs[0], strict=True)):
         for k, detail in judge(c, r, c.label):
             classes[k] += 1
             example.setdefault(k, f"case {i}: {c.code.hex()} {detail}")
-    print(f"cases {len(built)} over {len({c.label for c in built})} iclasses; runs {len(runs)} on {profile}; "
-          f"cases whose CPU result differs between runs {unstable}; classes {len(classes)}; "
-          f"{time.monotonic() - t0:.0f} s")
-    for k, n in classes.most_common(40):
+    print(f"cases {len(built)} over {len({c.label for c in built})} iclasses; runs {len(runs)} on {cpu} ({profile}); "
+          f"cpu faults {dict(faults)}; cases whose CPU result differs between runs {unstable}; "
+          f"classes {len(classes)}; {time.monotonic() - t0:.0f} s")
+    for k, n in classes.most_common(60):
         print(f"  {n:6} {k}: {example[k]}")
     if a.record:
-        record(a, profile, len(built), classes, example, time.monotonic() - t0)
+        record(a, f"{cpu}; {profile}", len(built), classes, example, time.monotonic() - t0)
     return 0
 
 
@@ -314,7 +510,7 @@ def record(a: argparse.Namespace, profile: str, total: int, classes: Counter[str
             comparison_id=cmp_id, contract_id="x86.semantics", contract_version=SPEC_VERSION,
             relation="exact", reference_ref=profile, target_execution_id=a.judge.name,
             verdict="discrepancy" if classes else "conforms",
-            rule_ref=f"{total} single-instruction cases, probes/semantics/cases.bin, {SPEC}"))
+            rule_ref=f"{total} single-instruction cases, probes/semantics/cases.bin format 2, {SPEC}"))
         for i, (k, n) in enumerate(classes.most_common(), 1):
             raw = bytes.fromhex(example[k].split()[2])
             digest = hashlib.sha256(raw).hexdigest()
@@ -331,7 +527,7 @@ def record(a: argparse.Namespace, profile: str, total: int, classes: Counter[str
                 reference_conforms=True,
                 grounds=("the decode spec calls these bytes an instruction and this CPU faults on them: "
                          "the contract lacks this CPU's rule" if fault else
-                         "the runner's CPU executed the instruction; lift.py's operations disagree")))
+                         "the runner's CPU executed the instruction; the model's semantics disagree")))
         yield events.validate(events.SESSION_COMPLETED(
             outcome="completed_with_discrepancies" if classes else "completed",
             discrepancy_count=len(classes), accepted_count=0, elapsed_seconds=round(elapsed, 3)))

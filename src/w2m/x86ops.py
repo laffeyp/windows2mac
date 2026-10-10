@@ -17,7 +17,8 @@ GPR32 = ["EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI"] + [f"R{n}D" for
 GPR16 = ["AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI"] + [f"R{n}W" for n in range(8, 16)]
 GPR8_REX = ["AL", "CL", "DL", "BL", "SPL", "BPL", "SIL", "DIL"] + [f"R{n}B" for n in range(8, 16)]
 GPR8_LEGACY = ["AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"]
-SIZE = {"b": 8, "w": 16, "d": 32, "q": 64}
+SIZE = {"b": 8, "w": 16, "d": 32, "q": 64, "dq": 128}
+XMM = [f"XMM{n}" for n in range(16)]
 SEG = {0x64: "FS", 0x65: "GS"}
 
 
@@ -34,6 +35,8 @@ def _reg(n: int, bits: int, rex: int) -> str:
 def _bits(letter: str, f: Fields) -> int:
     if letter == "z":
         return 16 if f.opsize == 16 else 32
+    if letter == "y":                          # d, or q with REX.W (a 66 mandatory prefix does not narrow it)
+        return 64 if f.rex >> 3 & 1 else 32
     return f.opsize if letter == "v" else SIZE[letter]
 
 
@@ -66,7 +69,16 @@ def operands(f: Fields) -> tuple[str, ...]:
         raise OperandError("row has no operand template")
     out: list[str] = []
     for t in f.ops.split(","):
-        if t[0] == "E":
+        if t == "V":                           # XMM register from ModRM.reg (Sprint 039)
+            assert f.modrm is not None
+            out.append("R:" + XMM[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])
+        elif t[0] == "W":                      # XMM register or memory of SIZE[t[1:]] bits from ModRM.r/m
+            assert f.modrm is not None
+            if f.modrm >> 6 == 3:
+                out.append("R:" + XMM[(f.modrm & 7) | (f.rex & 1) << 3])
+            else:
+                out.append(_mem(f, SIZE[t[1:]] // 8))
+        elif t[0] == "E":
             bits = _bits(t[1], f)
             assert f.modrm is not None
             if f.modrm >> 6 == 3:

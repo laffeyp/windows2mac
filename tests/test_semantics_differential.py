@@ -20,23 +20,28 @@ AMD = ROOT / "store" / "probe-runs" / "38001569019" / "result-1.every10.bin"
 INTEL = ROOT / "store" / "probe-runs" / "38001673879" / "result-1.every10.bin"
 
 
+CASES_037 = ROOT / "store" / "probe-runs" / "semantics-037-cases.bin"
+
+
 def _classes(results: Path = AMD, limit: int | None = None) -> dict[str, int]:
-    cases = sd.read_cases(ROOT / "probes" / "semantics" / "cases.bin")[::10]
-    built = sd.build_cases()[0][::10]
+    """Sprint 037's format-1 cases against its stored results; AF is compared since Sprint 039."""
     out: dict[str, int] = {}
-    for c, b, r in zip(cases, built, sd.read_results(results), strict=True):
-        if limit is not None and b.label not in ("SUB", "CMP"):
+    cases = sd.read_cases_format1(CASES_037)[::10]
+    for c, r in zip(cases, sd.read_results_format1(results), strict=True):
+        label = sd.decode(c.code).iclass if c.code[0] not in range(0x70, 0x80) else "Jcc"
+        if limit is not None and label not in ("SUB", "CMP"):
             continue
-        for k, _ in sd.judge(c, r, b.label):
+        for k, _ in sd.judge_format1(c, r, label):
             out[k] = out.get(k, 0) + 1
     return out
 
 
-def test_case_file_is_what_the_generator_builds() -> None:
+def test_case_file_round_trips(tmp_path: Path) -> None:
     built, _ = sd.build_cases()
-    stored = sd.read_cases(ROOT / "probes" / "semantics" / "cases.bin")
-    assert [(c.code, c.regs, c.rflags, c.data, c.stack) for c in built] == \
-        [(c.code, c.regs, c.rflags, c.data, c.stack) for c in stored]
+    sd.write_cases(built[::50], tmp_path / "cases.bin")
+    stored = sd.read_cases(tmp_path / "cases.bin")
+    assert [(c.code, c.regs, c.rflags, c.mxcsr, c.xmm, c.data, c.stack, c.edge, c.kind) for c in built[::50]] == \
+        [(c.code, c.regs, c.rflags, c.mxcsr, c.xmm, c.data, c.stack, c.edge, c.kind) for c in stored]
 
 
 def test_intel_cpu_and_model_agree_on_every_case() -> None:
