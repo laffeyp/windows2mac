@@ -28,19 +28,18 @@ static void field(const char *k, unsigned long long v) { put(",\""); put(k); put
 static void flag(const char *k, int v) { put(",\""); put(k); put(v ? "\":true" : "\":false"); }
 static void end(void) { put("}\n"); }
 
-static void probe(const char *name, get2_fn get2, get2_fn get1, DWORD index) {
+/* get1 is FlsGetValue (fls) or TlsGetValue, called directly: an import reached only through a function
+ * pointer is invisible to the reference traversal (tests/test_x86ref.py) */
+static void probe(const char *name, get2_fn get2, int fls, DWORD index) {
     SetLastError(SENTINEL);
     PVOID v2 = get2(index);
     DWORD e2 = GetLastError();
     SetLastError(SENTINEL);
-    PVOID v1 = get1(index);
+    PVOID v1 = fls ? FlsGetValue(index) : TlsGetValue(index);
     DWORD e1 = GetLastError();
     row(name); field("value2", (unsigned long long)v2); field("err2", e2); field("value1", (unsigned long long)v1);
     field("err1", e1); end();
 }
-
-static PVOID WINAPI fls_get(DWORD i) { return FlsGetValue(i); }
-static PVOID WINAPI tls_get(DWORD i) { return TlsGetValue(i); }
 
 void start(void) {
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll"), kb = GetModuleHandleW(L"kernelbase.dll");
@@ -49,19 +48,19 @@ void start(void) {
     flag("kernel32_tls2", GetProcAddress(k32, "TlsGetValue2") != 0); flag("kernelbase_tls2", tls2 != 0); end();
     if (fls2) {
         DWORD i = FlsAlloc(NULL);
-        probe("fls2.unset", fls2, fls_get, i);
+        probe("fls2.unset", fls2, 1, i);
         FlsSetValue(i, (PVOID)42);
-        probe("fls2.set", fls2, fls_get, i);
+        probe("fls2.set", fls2, 1, i);
         FlsFree(i);
-        probe("fls2.freed", fls2, fls_get, i);
+        probe("fls2.freed", fls2, 1, i);
     }
     if (tls2) {
         DWORD i = TlsAlloc();
-        probe("tls2.unset", tls2, tls_get, i);
+        probe("tls2.unset", tls2, 0, i);
         TlsSetValue(i, (PVOID)43);
-        probe("tls2.set", tls2, tls_get, i);
+        probe("tls2.set", tls2, 0, i);
         TlsFree(i);
-        probe("tls2.freed", tls2, tls_get, i);
+        probe("tls2.freed", tls2, 0, i);
     }
     DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);

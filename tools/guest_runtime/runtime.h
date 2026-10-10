@@ -11,6 +11,8 @@
 typedef unsigned long long u64;
 typedef unsigned int u32;
 typedef unsigned char u8;
+typedef long long s64;
+typedef int s32;
 
 /* TEB fields the runtime reads or writes (winternl.h and the Sprint 034 observations). */
 struct w2m_teb {
@@ -257,6 +259,21 @@ struct w2m_exception_area {
 #define W2M_API_VirtualFree 92
 #define W2M_API_VirtualProtect 93
 #define W2M_API_VirtualQuery 94
+#define W2M_API_CreateSemaphoreExW 95
+#define W2M_API_CreateEventW 96
+#define W2M_API_CreateEventA 97
+#define W2M_API_CreateEventExW 98
+#define W2M_API_CreateMutexA 99
+#define W2M_API_SetEvent 100
+#define W2M_API_ResetEvent 101
+#define W2M_API_ReleaseSemaphore 102
+#define W2M_API_ReleaseMutex 103
+#define W2M_API_WaitForSingleObject 104
+#define W2M_API_WaitForSingleObjectEx 105
+#define W2M_API_WaitForMultipleObjects 106
+#define W2M_API_Sleep 107
+#define W2M_API_FlsGetValue2 108
+#define W2M_API_TlsGetValue2 109
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -267,6 +284,7 @@ void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtim
 int w2m_file_is_open(u64 handle);                                       /* file.c */
 u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */
 void w2m_heap_release(u64 api, u64 p);                                  /* heap.c: give it back */
+int w2m_object_close(u64 handle);                                       /* sync_objects.c: CloseHandle on an object */
 u64 w2m_counter_now(void);                                              /* process.c: the 10 MHz counter */
 u64 w2m_filetime_now(void);                                             /* process.c: the system time */
 u64 w2m_filetime_start(void);                                           /* process.c: its first reading */

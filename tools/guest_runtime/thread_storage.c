@@ -111,12 +111,26 @@ u64 k32_FlsAlloc(u64 callback) {
 
 u64 k32_FlsGetValue(u64 index) {
     index = (u32)index;
-    if (!fls_thread_data || index >= FLS_INDICES || !fls_used[index]) {
+    if (!fls_thread_data || index >= FLS_INDICES) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_FlsGetValue, index, 0);
     }
-    set_error(0);
+    set_error(0);                                  /* a freed index too: NULL, error 0 (row fls2.freed, Server 2025) */
     return w2m_logged(W2M_API_FlsGetValue, index, fls_value[index]);
+}
+
+/* FlsGetValue2 and TlsGetValue2 (Server 2025 exports them, 2022 does not): the same values as FlsGetValue
+ * and TlsGetValue, the last error left in every case (contracts/windows.thread_storage.get2). */
+u64 k32_FlsGetValue2(u64 index) {
+    index = (u32)index;
+    u64 v = fls_thread_data && index < FLS_INDICES ? fls_value[index] : 0;
+    return w2m_logged(W2M_API_FlsGetValue2, index, v);
+}
+
+u64 k32_TlsGetValue2(u64 index) {
+    index = (u32)index;
+    u64 *slot = index < TLS_INDICES ? tls_slot(index) : 0;
+    return w2m_logged(W2M_API_TlsGetValue2, index, slot ? *slot : 0);
 }
 
 u64 k32_FlsSetValue(u64 index, u64 value) {

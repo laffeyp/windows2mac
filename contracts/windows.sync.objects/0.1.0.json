@@ -1,0 +1,215 @@
+{
+ "contract_id": "windows.sync.objects",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "Unnamed semaphores, events and mutexes on one thread: creation (last error 0), zero-timeout waits, release past the maximum (298), release when not owner (288), waits on several, CloseHandle twice and a wait on a closed handle (6).",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/sync_objects/sync_objects.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "semaphore.create",
+    "non_null": true,
+    "multiple_of_4": true,
+    "err": 0
+   },
+   {
+    "s": "semaphore.wait_available",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "semaphore.wait_empty",
+    "ret": 258,
+    "err": 57005
+   },
+   {
+    "s": "semaphore.release",
+    "ret": 1,
+    "err": 57005,
+    "previous": 0
+   },
+   {
+    "s": "semaphore.release_past_max",
+    "ret": 0,
+    "err": 298,
+    "previous_untouched": true
+   },
+   {
+    "s": "semaphore.wait_after_release",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "event.manual.create",
+    "non_null": true,
+    "multiple_of_4": true,
+    "err": 0
+   },
+   {
+    "s": "event.manual.wait_unset",
+    "ret": 258,
+    "err": 57005
+   },
+   {
+    "s": "event.manual.set",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "event.manual.wait_set",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "event.manual.wait_set_again",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "event.manual.reset",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "event.manual.wait_reset",
+    "ret": 258,
+    "err": 57005
+   },
+   {
+    "s": "event.auto.create_set",
+    "non_null": true,
+    "multiple_of_4": true,
+    "err": 0
+   },
+   {
+    "s": "event.auto.wait_set",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "event.auto.wait_consumed",
+    "ret": 258,
+    "err": 57005
+   },
+   {
+    "s": "mutex.create",
+    "non_null": true,
+    "multiple_of_4": true,
+    "err": 0
+   },
+   {
+    "s": "mutex.wait_free",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "mutex.wait_owned_recursive",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "mutex.release_once",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "mutex.release_twice",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "mutex.release_unowned",
+    "ret": 0,
+    "err": 288
+   },
+   {
+    "s": "handles.distinct",
+    "value": true
+   },
+   {
+    "s": "wait_multiple.any",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "wait_multiple.all",
+    "ret": 258,
+    "err": 57005
+   },
+   {
+    "s": "wait_ex.set",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.mutex",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "close.again",
+    "ret": 0,
+    "err": 6
+   },
+   {
+    "s": "wait.closed",
+    "ret": 4294967295,
+    "err": 6
+   },
+   {
+    "s": "sleep.zero",
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38051398628: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6; run 38051400336: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c; run 38051401855: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6; run 38051403311: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "sync_objects-1791634627-0-1",
+    "sync_objects-1791634627-0-2",
+    "sync_objects-1791634627-1-1",
+    "sync_objects-1791634627-1-2",
+    "sync_objects-1791634627-2-1",
+    "sync_objects-1791634627-2-2",
+    "sync_objects-1791634627-3-1",
+    "sync_objects-1791634627-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-releasesemaphore",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-releasesemaphore (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "If the specified amount would cause the semaphore's count to exceed the maximum count that was specified when the semaphore was created, the count is not changed and the function returns FALSE."
+  }
+ ],
+ "open_questions": [
+  "One thread: a finite wait on an unsignaled object returns WAIT_TIMEOUT at once in w2m (no thread can signal it); INFINITE waits, named objects and initially owned mutexes stop the run (Sprint 047)."
+ ],
+ "sections": {
+  "probe": "probes/sync_objects (Sprint 044)",
+  "implementation": "tools/guest_runtime/sync_objects.c",
+  "rows": "scripts/family_run.py sync_objects",
+  "excluded": "none"
+ }
+}

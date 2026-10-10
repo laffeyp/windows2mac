@@ -183,6 +183,7 @@ int w2m_file_is_open(u64 handle) { return file_of(handle) != 0; }
 u64 k32_CloseHandle(u64 handle) {
     struct open_file *f = file_of(handle);
     if (!f) {
+        if (w2m_object_close(handle)) return w2m_logged(W2M_API_CloseHandle, handle, 1);   /* sync_objects.c */
         set_error(ERROR_INVALID_HANDLE);
         return w2m_logged(W2M_API_CloseHandle, handle, 0);
     }

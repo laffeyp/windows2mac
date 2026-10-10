@@ -705,6 +705,34 @@ FAMILIES: dict[str, Family] = {
                 "old_unwritten_on_failure": Plant("    *(u32 *)old = (u32)second;                     /* written on failure too (row protect.reserved_page) */\n    if (!ok) set_error((u32)(second >> 32));",
                                                   "    if (ok) *(u32 *)old = (u32)second;\n    if (!ok) set_error((u32)(second >> 32));",
                                                   ("protect.reserved_page",))}),
+    "sync_objects": Family(
+        name="sync_objects",
+        contract_id="windows.sync.objects",
+        version="0.1.0",
+        summary=("Unnamed semaphores, events and mutexes on one thread: creation (last error 0), zero-timeout waits, "
+                 "release past the maximum (298), release when not owner (288), waits on several, CloseHandle twice "
+                 "and a wait on a closed handle (6)."),
+        probe="sync_objects", guest_file="sync_objects.c",
+        runs={
+              "38051398628": Run("windows-2025", "a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6", "sync_objects-1791634627-0", "AMD EPYC 7763 64-Core Processor"),
+              "38051400336": Run("windows-2022", "530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c", "sync_objects-1791634627-1", "AMD EPYC 7763 64-Core Processor"),
+              "38051401855": Run("windows-2025", "a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6", "sync_objects-1791634627-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38051403311": Run("windows-2022", "530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c", "sync_objects-1791634627-3", "AMD EPYC 9V45 96-Core Processor"),
+
+        },
+        documented=(
+            documented("ms-releasesemaphore", "api/synchapi/nf-synchapi-releasesemaphore", "2024-02-22",
+                       "If the specified amount would cause the semaphore's count to exceed the maximum count that "
+                       "was specified when the semaphore was created, the count is not changed and the function "
+                       "returns FALSE."),),
+        open_questions=(
+            "One thread: a finite wait on an unsignaled object returns WAIT_TIMEOUT at once in w2m (no thread can "
+            "signal it); INFINITE waits, named objects and initially owned mutexes stop the run (Sprint 047).",),
+        plants={"auto_event_stays_set": Plant("    else if (o->kind != EVENT_MANUAL) o->count--;",
+                                              "    else if (o->kind == SEMAPHORE) o->count--;", ("event.auto.wait_consumed",)),
+                "create_leaves_error": Plant("            set_error(0);                              /* rows *.create: err 0 */\n",
+                                             "", ("semaphore.create", "event.manual.create", "event.auto.create_set",
+                                                  "mutex.create"))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",

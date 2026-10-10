@@ -185,7 +185,22 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "VirtualAlloc": ("k32_VirtualAlloc", True),
             "VirtualFree": ("k32_VirtualFree", True),
             "VirtualProtect": ("k32_VirtualProtect", True),
-            "VirtualQuery": ("k32_VirtualQuery", True)}
+            "VirtualQuery": ("k32_VirtualQuery", True),
+            "CreateSemaphoreExW": ("k32_CreateSemaphoreExW", True),
+            "CreateEventW": ("k32_CreateEventW", True),
+            "CreateEventA": ("k32_CreateEventA", True),
+            "CreateEventExW": ("k32_CreateEventExW", True),
+            "CreateMutexA": ("k32_CreateMutexA", True),
+            "SetEvent": ("k32_SetEvent", True),
+            "ResetEvent": ("k32_ResetEvent", True),
+            "ReleaseSemaphore": ("k32_ReleaseSemaphore", True),
+            "ReleaseMutex": ("k32_ReleaseMutex", True),
+            "WaitForSingleObject": ("k32_WaitForSingleObject", True),
+            "WaitForSingleObjectEx": ("k32_WaitForSingleObjectEx", True),
+            "WaitForMultipleObjects": ("k32_WaitForMultipleObjects", True),
+            "Sleep": ("k32_Sleep", False),
+            "FlsGetValue2": ("k32_FlsGetValue2", True),
+            "TlsGetValue2": ("k32_TlsGetValue2", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
