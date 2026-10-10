@@ -1,0 +1,615 @@
+Redirecting stderr to '/Users/peterlaffey/Library/Application Support/Steam/logs/stderr.txt'
+Logging directory: '/Users/peterlaffey/Library/Application Support/Steam/logs'
+[  0%] Checking for available updates...
+[----] Verifying installation...
+Steam Console Client (c) Valve Corporation - version 1788292693
+-- type 'quit' to exit --
+Loading Steam API...OK
+
+Connecting anonymously to Steam Public...OK
+Waiting for client config...OK
+Waiting for user info...OK
+AppID : 409720, change number : 39649501/0, last change : Sat Oct  3 19:50:51 2026 
+"409720"
+{
+	"common"
+	{
+		"name"		"BioShock 2 Remastered"
+		"type"		"Game"
+		"clienticon"		"b5f128e9d55d35dd0c8f27dd7dded8a9b22e8087"
+		"clienttga"		"a06cda7de50e815bbe3a16b827e1080357af2302"
+		"icon"		"97527a02b36f8ac4aba21005c2d953cc908a08e1"
+		"oslist"		"windows,macos"
+		"osarch"		"64"
+		"eulas"
+		{
+			"0"
+			{
+				"id"		"409720_eula_0"
+				"name"		"BioShock 2 Remastered EULA"
+				"url"		"http://store.steampowered.com//eula/409720_eula_0"
+			}
+		}
+		"logo"		"34c3f591cf4cb28711d7f33f73dee0f09cdb94a4"
+		"logo_small"		"34c3f591cf4cb28711d7f33f73dee0f09cdb94a4_thumb"
+		"ReleaseState"		"released"
+		"languages"
+		{
+			"english"		"1"
+			"german"		"1"
+			"french"		"1"
+			"italian"		"1"
+			"spanish"		"1"
+			"schinese"		"1"
+			"japanese"		"1"
+		}
+		"name_localized"
+		{
+			"japanese"		"バイオショック 2 リマスター"
+			"schinese"		"生化奇兵2 重制版"
+			"tchinese"		"生化奇兵2 重製版"
+			"koreana"		"바이오쇼크 2 리마스터"
+		}
+		"osextended"		"macos64,macosnotarized"
+		"content_descriptors"
+		{
+			"0"		"5"
+		}
+		"steam_deck_compatibility"
+		{
+			"category"		"2"
+			"steamos_compatibility"		"2"
+			"steam_machine_compatibility"		"2"
+			"test_timestamp"		"1733270400"
+			"tested_build_id"		"8552776"
+			"tests"
+			{
+				"0"
+				{
+					"display"		"3"
+					"token"		"#SteamDeckVerified_TestResult_TextInputDoesNotAutomaticallyInvokesKeyboard"
+				}
+				"1"
+				{
+					"display"		"3"
+					"token"		"#SteamDeckVerified_TestResult_InterfaceTextIsNotLegible"
+				}
+				"2"
+				{
+					"display"		"4"
+					"token"		"#SteamDeckVerified_TestResult_DefaultControllerConfigFullyFunctional"
+				}
+				"3"
+				{
+					"display"		"4"
+					"token"		"#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice"
+				}
+				"4"
+				{
+					"display"		"4"
+					"token"		"#SteamDeckVerified_TestResult_DefaultConfigurationIsPerformant"
+				}
+				"5"
+				{
+					"display"		"1"
+					"token"		"#SteamDeckVerified_TestResult_ExternalControllersNotSupportedPrimaryPlayer"
+				}
+			}
+			"steam_machine_tests"
+			{
+				"0"
+				{
+					"display"		"3"
+					"token"		"#SteamMachine_TestResult_TextInputDoesNotAutomaticallyInvokesKeyboard"
+				}
+				"1"
+				{
+					"display"		"4"
+					"token"		"#SteamMachine_TestResult_DefaultControllerConfigFullyFunctional"
+				}
+				"2"
+				{
+					"display"		"4"
+					"token"		"#SteamMachine_TestResult_ControllerGlyphsMatchDevice"
+				}
+				"3"
+				{
+					"display"		"4"
+					"token"		"#SteamMachine_TestResult_DefaultConfigurationIsPerformant"
+				}
+			}
+			"steamos_tests"
+			{
+				"0"
+				{
+					"display"		"3"
+					"token"		"#SteamOS_TestResult_GameStartupFunctional"
+				}
+				"1"
+				{
+					"display"		"1"
+					"token"		"#SteamOS_TestResult_TextInputDoesNotAutomaticallyInvokesKeyboard"
+				}
+				"2"
+				{
+					"display"		"1"
+					"token"		"#SteamOS_TestResult_ExternalControllersNotSupportedPrimaryPlayer"
+				}
+			}
+			"configuration"
+			{
+				"supported_input"		"gamepad"
+				"requires_manual_keyboard_invoke"		"1"
+				"requires_non_controller_launcher_nav"		"0"
+				"primary_player_is_controller_slot_0"		"1"
+				"non_deck_display_glyphs"		"0"
+				"small_text"		"1"
+				"requires_internet_for_setup"		"0"
+				"requires_internet_for_singleplayer"		"0"
+				"recommended_runtime"		"proton-9.0-3RC"
+				"requires_h264"		"0"
+				"requires_voice_files"		"0"
+				"gamescope_frame_limiter_not_supported"		"0"
+				"hdr_support"		"0"
+				"requires_proton_soundfonts"		"0"
+				"proton_compat_config"		"noesync,nofsync,"
+			}
+		}
+		"metacritic_name"		"BioShock™ 2 Remaster"
+		"controller_support"		"full"
+		"small_capsule"
+		{
+			"english"		"capsule_231x87.jpg"
+		}
+		"header_image"
+		{
+			"english"		"header.jpg"
+		}
+		"library_assets"
+		{
+			"library_capsule"		"en"
+			"library_hero"		"en"
+			"library_logo"		"en"
+			"logo_position"
+			{
+				"pinned_position"		"BottomLeft"
+				"width_pct"		"51.166861143523924"
+				"height_pct"		"94.07504155782475"
+			}
+		}
+		"library_assets_full"
+		{
+			"library_capsule"
+			{
+				"image"
+				{
+					"english"		"library_600x900.jpg"
+				}
+				"image2x"
+				{
+					"english"		"library_600x900_2x.jpg"
+				}
+			}
+			"library_hero"
+			{
+				"image"
+				{
+					"english"		"library_hero.jpg"
+				}
+				"image2x"
+				{
+					"english"		"library_hero_2x.jpg"
+				}
+			}
+			"library_logo"
+			{
+				"image"
+				{
+					"english"		"logo.png"
+				}
+				"image2x"
+				{
+					"english"		"logo_2x.png"
+				}
+				"logo_position"
+				{
+					"pinned_position"		"BottomLeft"
+					"width_pct"		"51.166861143523924"
+					"height_pct"		"94.07504155782475"
+				}
+			}
+		}
+		"store_asset_mtime"		"1568740513"
+		"associations"
+		{
+			"0"
+			{
+				"type"		"developer"
+				"name"		"2K Marin"
+			}
+			"1"
+			{
+				"type"		"developer"
+				"name"		"2K China"
+			}
+			"2"
+			{
+				"type"		"developer"
+				"name"		"Digital Extremes"
+			}
+			"3"
+			{
+				"type"		"developer"
+				"name"		"2K Australia"
+			}
+			"4"
+			{
+				"type"		"developer"
+				"name"		"Blind Squirrel"
+			}
+			"5"
+			{
+				"type"		"developer"
+				"name"		"Feral Interactive (Mac)"
+			}
+			"6"
+			{
+				"type"		"publisher"
+				"name"		"2K"
+			}
+			"7"
+			{
+				"type"		"publisher"
+				"name"		"Feral Interactive (Mac)"
+			}
+			"8"
+			{
+				"type"		"franchise"
+				"name"		"BioShock"
+			}
+		}
+		"primary_genre"		"1"
+		"genres"
+		{
+			"0"		"1"
+			"1"		"3"
+		}
+		"category"
+		{
+			"category_2"		"1"
+			"category_22"		"1"
+			"category_28"		"1"
+			"category_23"		"1"
+			"category_29"		"1"
+			"category_62"		"1"
+		}
+		"supported_languages"
+		{
+			"english"
+			{
+				"supported"		"true"
+				"full_audio"		"true"
+				"subtitles"		"true"
+			}
+			"french"
+			{
+				"supported"		"true"
+				"full_audio"		"true"
+				"subtitles"		"true"
+			}
+			"italian"
+			{
+				"supported"		"true"
+				"full_audio"		"true"
+				"subtitles"		"true"
+			}
+			"german"
+			{
+				"supported"		"true"
+				"full_audio"		"true"
+				"subtitles"		"true"
+			}
+			"spanish"
+			{
+				"supported"		"true"
+				"full_audio"		"true"
+				"subtitles"		"true"
+			}
+			"japanese"
+			{
+				"supported"		"true"
+				"subtitles"		"true"
+			}
+			"schinese"
+			{
+				"supported"		"true"
+				"subtitles"		"true"
+			}
+		}
+		"steam_release_date"		"1473976800"
+		"community_visible_stats"		"1"
+		"community_hub_visible"		"1"
+		"gameid"		"409720"
+		"content_descriptors_including_dlc"
+		{
+			"0"		"5"
+		}
+		"store_tags"
+		{
+			"0"		"1663"
+			"1"		"19"
+			"2"		"4182"
+			"3"		"1742"
+			"4"		"4166"
+			"5"		"1667"
+			"6"		"3839"
+			"7"		"1774"
+			"8"		"5030"
+			"9"		"3942"
+			"10"		"122"
+			"11"		"1777"
+			"12"		"9157"
+			"13"		"21"
+			"14"		"4342"
+			"15"		"1756"
+			"16"		"4598"
+			"17"		"9204"
+			"18"		"5708"
+			"19"		"3859"
+		}
+		"review_score"		"6"
+		"review_percentage"		"72"
+	}
+	"extended"
+	{
+		"developer"		"2K Marin"
+		"publisher"		"2K"
+		"homepage"		"http://www.bioshockgame.com/"
+		"listofdlc"		"525720"
+		"DLCAvailableOnStore"		"1"
+	}
+	"config"
+	{
+		"contenttype"		"3"
+		"installdir"		"BioShock 2 Remastered"
+		"launch"
+		{
+			"0"
+			{
+				"executable"		"Build\\Final\\Bioshock2HD.exe"
+				"workingdir"		"Build\\Final"
+				"type"		"default"
+				"config"
+				{
+					"oslist"		"windows"
+				}
+			}
+			"1"
+			{
+				"executable"		"Build\\FinalWithLogging\\Bioshock2HD.exe"
+				"workingdir"		"Build\\FinalWithLogging"
+				"type"		"default"
+				"config"
+				{
+					"oslist"		"windows"
+					"BetaKey"		"2k_qa_fwl"
+				}
+			}
+			"2"
+			{
+				"executable"		"Build\\FinalWithLogging\\Bioshock2HD.exe"
+				"workingdir"		"Build\\FinalWithLogging"
+				"description"		"Final With Logging configuration"
+				"type"		"default"
+				"config"
+				{
+					"oslist"		"windows"
+					"BetaKey"		"bsg_qa_latest_fwl"
+				}
+			}
+			"3"
+			{
+				"executable"		"Build\\Final\\Bioshock2HD.exe"
+				"workingdir"		"Build\\Final"
+				"type"		"default"
+				"config"
+				{
+					"oslist"		"windows"
+					"BetaKey"		"bsg_qa_latest"
+				}
+			}
+			"4"
+			{
+				"executable"		"Build\\Final\\Bioshock2HD.exe"
+				"workingdir"		"Build\\Final"
+				"type"		"default"
+				"config"
+				{
+					"oslist"		"windows"
+					"BetaKey"		"2k_qa"
+				}
+			}
+			"5"
+			{
+				"executable"		"BioShock 2 Remastered.app"
+				"type"		"default"
+				"config"
+				{
+					"oslist"		"macos"
+				}
+			}
+			"6"
+			{
+				"executable"		"2KLauncher\\LauncherPatcher.exe"
+				"workingdir"		"Build\\Final"
+				"config"
+				{
+					"oslist"		"windows"
+					"BetaKey"		"qatest1"
+				}
+				"description_loc"
+				{
+					"english"		"Launch With 2KLauncher"
+				}
+				"description"		"Launch With 2KLauncher"
+			}
+			"7"
+			{
+				"executable"		"2KLauncher\\LauncherPatcher.exe"
+				"workingdir"		"Build\\Final"
+				"config"
+				{
+					"oslist"		"windows"
+					"BetaKey"		"newtest"
+				}
+				"description_loc"
+				{
+					"english"		"Launch With 2KLauncher"
+				}
+				"description"		"Launch With 2KLauncher"
+			}
+		}
+		"steamcontrollertemplateindex"		"2"
+	}
+	"depots"
+	{
+		"baselanguages"		"english,german,french,italian,spanish,schinese,japanese"
+		"228983"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"depotfromapp"		"228980"
+			"sharedinstall"		"1"
+		}
+		"228984"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"depotfromapp"		"228980"
+			"sharedinstall"		"1"
+		}
+		"228988"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"depotfromapp"		"228980"
+			"sharedinstall"		"1"
+		}
+		"228990"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"depotfromapp"		"228980"
+			"sharedinstall"		"1"
+		}
+		"409721"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"1322567444167388333"
+					"size"		"21417322317"
+					"download"		"11890916816"
+				}
+			}
+		}
+		"409722"
+		{
+			"config"
+			{
+				"oslist"		"macos"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"6673445807032681387"
+					"size"		"116718045"
+					"download"		"54517888"
+				}
+			}
+		}
+		"409723"
+		{
+			"config"
+			{
+				"oslist"		"macos"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"4228266964534757187"
+					"size"		"20307277317"
+					"download"		"11451302512"
+				}
+			}
+		}
+		"1523211"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"5488617169383930545"
+					"size"		"80"
+					"download"		"128"
+				}
+			}
+			"depotfromapp"		"1523210"
+		}
+		"branches"
+		{
+			"public"
+			{
+				"buildid"		"8552776"
+				"timeupdated"		"1661968250"
+				"timebuildupdated"		"1649871635"
+			}
+		}
+		"privatebranches"		"1"
+	}
+	"ufs"
+	{
+		"quota"		"536870912"
+		"maxnumfiles"		"128"
+		"savefiles"
+		{
+			"0"
+			{
+				"root"		"WinMyDocuments"
+				"path"		"BioshockHD/BioShock2/SaveGames"
+				"pattern"		"*.bsb"
+			}
+		}
+		"rootoverrides"
+		{
+			"0"
+			{
+				"root"		"WinMyDocuments"
+				"os"		"MacOS"
+				"oscompare"		"="
+				"useinstead"		"MacAppSupport"
+				"addpath"		"Feral Interactive/BioShock 2 Remastered/VFS/User/AppData/Roaming"
+			}
+		}
+	}
+}
+Unloading Steam API...OK

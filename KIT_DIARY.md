@@ -205,3 +205,11 @@
 
 **Kit change suggested:** a check that flags producers yielding more than N events with no trigger between them, and a review question: "which tagged decisions in this sprint exist only as prose?"
 
+### 2026-10-09 — Three small errors of the same kind
+
+**What happened:** In one evening: (1) the roadmap and an external review both planned to emit `BRIDGE_CALL_UNMAPPED` for a missing Windows service, a tag the vocabulary defines for Steam interfaces; reading its payload before writing the emitter caught it. (2) A depot resolver written as a regex returned shared redistributable depots instead of the game's own; a parser for the format fixed it. (3) A capture file stored as an asset of the game's release broke the game workflow, which downloaded every asset of that release. Each time, a name or a container was trusted for what it seemed to hold, not for what its definition says it holds.
+
+**Finding (#20):** read the definition, not the name: a tag's note and payload, a file format's grammar, a container's full contents. A release, a directory or a tag that serves one purpose should hold only that purpose's members, or its consumers should read an explicit list (as `release.json` now does).
+
+**Kit change suggested:** the signal-contract checklist asks "for each tag emitted, quote its note"; a sprint that adds an emitter cannot close without it.
+
