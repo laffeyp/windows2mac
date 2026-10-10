@@ -1,0 +1,64 @@
+{
+ "model": "ollama:kimi-k2.7-code:cloud",
+ "prompt_sha256": "sha256:6f29e6bc3b2e6456e346f87878b48459d14f0ef2f38ae6a4231801c303c70fa2",
+ "prompt_chars": 46820,
+ "attempts": [
+  {
+   "outcome": "build_error",
+   "detail": "file.c: /Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:115:9: error: use of undeclared identifier 'u16'\n  115 |         u16 c = p[2 * i] | ((u16)p[2 * i + 1] << 8);\n      |         ^~~\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:116:13: error: use of undeclared identifier 'c'\n  116 |         if (c == 0)\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:118:13: error: use of undeclared identifier 'c'\n  118 |         if (c == '\\\\' || c == '/')\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:118:26: error: use of undeclared identifier 'c'\n  118 |         if (c == '\\\\' || c == '/')\n      |                          ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:119:13: error: use of undeclared identifier 'c'\n  119 |             c = '/';\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:120:18: error: use of undeclared identifier 'c'\n  120 |         else if (c >= 'A' && c <= 'Z')\n      |                  ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:120:30: error: use of undeclared identifier 'c'\n  120 |         else if (c >= 'A' && c <= 'Z')\n      |                              ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:121:13: error: use of undeclared identifier 'c'\n  121 |             c = c - 'A' + 'a';\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:121:17: error: use of undeclared identifier 'c'\n  121 |             c = c - 'A' + 'a';\n      |                 ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:122:18: error: use of undeclared identifier 'c'\n  122 |         else if (c > 0x7f)\n      |                  ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:124:18: error: use of undeclared identifier 'c'\n  124 |         else if (c == ':' || c == 0)\n      |                  ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:124:30: error: use of undeclared identifier 'c'\n  124 |         else if (c == ':' || c == 0)\n      |                              ^\n/Users/peterlaffey/port/build/guest_runtime/550b24c1f690a81894291511d0b23273e02932193d4204c7147bb28dcadfefd4/file.c:126:26: error: use of undeclared identifier 'c'\n  126 |         buf[j++] = (ch",
+   "attempt": 1,
+   "source_sha256": "sha256:ddfae0bb3dcd848ee9d13bcd39569a2c3d8c03f349f2d0b82ed37f5107fb8cab",
+   "source": "store/runs/file-generation/kimi-k2.7-code-cloud/attempt-1.c",
+   "prompt_tokens": 15089,
+   "completion_tokens": 4111,
+   "model_wall_ms": 25804,
+   "tokens_estimated": false,
+   "seconds": 26.6,
+   "unequal_rows": [],
+   "unequal_row_count": 0
+  },
+  {
+   "outcome": "build_error",
+   "detail": "file.c: /Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:58:30: error: unknown type name 'u16'\n   58 | static u64 host_lookup(const u16 *name, u64 chars, u64 *file_id);\n      |                              ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:59:28: error: unknown type name 'u16'\n   59 | static u64 host_open(const u16 *name, u64 chars, int create, u64 *file_id);\n      |                            ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:65:30: error: unknown type name 'u16'\n   65 | static u64 host_unlink(const u16 *name, u64 chars);\n      |                              ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:66:26: error: unknown type name 'u16'\n   66 | static int path_ok(const u16 *name, u64 chars, char *out, u64 *out_len);\n      |                          ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:116:9: error: unused variable 'depth' [-Werror,-Wunused-variable]\n  116 |     u64 depth = 0;\n      |         ^~~~~\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:380:10: error: use of undeclared identifier 's64'; did you mean 'u64'?\n  380 |     if ((s64)fd < 0) {\n      |          ^~~\n/Users/peterlaffey/port/tools/guest_runtime/runtime.h:11:28: note: 'u64' declared here\n   11 | typedef unsigned long long u64;\n      |                            ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:400:19: error: use of undeclared identifier 'ERROR_TOO_MANY_OPEN_FILES'\n  400 |         set_error(ERROR_TOO_MANY_OPEN_FILES);\n      |                   ^~~~~~~~~~~~~~~~~~~~~~~~~\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:498:10: error: use of undeclared identifier 's64'; did you mean 'u64'?\n  498 |     if ((s64)n < 0) {\n      |          ^~~\n/Users/peterlaffey/port/tools/guest_runtime/runtime.h:11:28: note: 'u64' declared here\n   11 | typedef unsigned long long u64;\n      |                            ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:520:5: error: unknown type name 's64'; did you mean 'u64'?\n  520 |     s64 dist = (s64)distance;\n      |     ^~~\n      |     u64\n/Users/peterlaffey/port/tools/guest_runtime/runtime.h:11:28: note: 'u64' declared here\n   11 | typedef unsigned long long u64;\n      |                            ^\n/Users/peterlaffey/port/build/guest_runtime/2584ff5e6cd7ae66ff7a6e3dded567d3ba8af183629a5e35d9bab217597bb9a0/file.c:520:17: error: use of undeclared identifier 's64'; did you mean 'u64'?\n ",
+   "attempt": 2,
+   "source_sha256": "sha256:7f9513d28b0bb04ee5f0d380f30e7f063a66998988ce1cb101cfcfc45e98489f",
+   "source": "store/runs/file-generation/kimi-k2.7-code-cloud/attempt-2.c",
+   "prompt_tokens": 16201,
+   "completion_tokens": 4735,
+   "model_wall_ms": 30270,
+   "tokens_estimated": false,
+   "seconds": 31.1,
+   "unequal_rows": [],
+   "unequal_row_count": 0
+  },
+  {
+   "outcome": "build_error",
+   "detail": "file.c: /Users/peterlaffey/port/build/guest_runtime/f5635418c6d2c43d02367aaabbfa42cd5e4f52057dca63c7f406a856dea6cb2c/file.c:306:9: error: variable 'created' set but not used [-Werror,-Wunused-but-set-variable]\n  306 |     int created = 0;\n      |         ^\n1 error generated.",
+   "attempt": 3,
+   "source_sha256": "sha256:3e52a56c6c148db202e26e8067d6724fc4600743951c22dda15c81e2ba156360",
+   "source": "store/runs/file-generation/kimi-k2.7-code-cloud/attempt-3.c",
+   "prompt_tokens": 16178,
+   "completion_tokens": 5432,
+   "model_wall_ms": 31855,
+   "tokens_estimated": false,
+   "seconds": 32.5,
+   "unequal_rows": [],
+   "unequal_row_count": 0
+  },
+  {
+   "outcome": "build_error",
+   "detail": "file.c: /Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:128:26: error: unknown type name 'u16'\n  128 | static u64 utf16_to_path(u16 *src, u64 chars, char *dst, u64 dst_size)\n      |                          ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:133:9: error: use of undeclared identifier 'u16'\n  133 |         u16 c = src[i];\n      |         ^~~\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:134:13: error: use of undeclared identifier 'c'\n  134 |         if (c == 0)\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:136:13: error: use of undeclared identifier 'c'\n  136 |         if (c > 0x7f)\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:138:13: error: use of undeclared identifier 'c'\n  138 |         if (c == '\\\\' || c == '/') {\n      |             ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:138:26: error: use of undeclared identifier 'c'\n  138 |         if (c == '\\\\' || c == '/') {\n      |                          ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:151:26: error: use of undeclared identifier 'c'\n  151 |         dst[j++] = (char)c;\n      |                          ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:187:9: error: unused variable 'starts_with_dot' [-Werror,-Wunused-variable]\n  187 |     int starts_with_dot = 0;\n      |         ^~~~~~~~~~~~~~~\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:338:31: error: use of undeclared identifier 'u16'\n  338 |     path_len = utf16_to_path((u16 *)name, 0x7fffffffull, path, sizeof(path));\n      |                               ^~~\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:338:36: error: expected expression\n  338 |     path_len = utf16_to_path((u16 *)name, 0x7fffffffull, path, sizeof(path));\n      |                                    ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:407:10: error: use of undeclared identifier 's64'; did you mean 'u64'?\n  407 |     if ((s64)fd < 0) {\n      |          ^~~\n/Users/peterlaffey/port/tools/guest_runtime/runtime.h:11:28: note: 'u64' declared here\n   11 | typedef unsigned long long u64;\n      |                            ^\n/Users/peterlaffey/port/build/guest_runtime/4499273216bea0fe75016ca7a094682ec17a2d2bd381c63318f03e6bb7aa4897/file.c:408:33: er",
+   "attempt": 4,
+   "source_sha256": "sha256:bd81faaf49d559551205b624b5a486af052b8a4b8a4f92da308493854ee9060f",
+   "source": "store/runs/file-generation/kimi-k2.7-code-cloud/attempt-4.c",
+   "prompt_tokens": 15196,
+   "completion_tokens": 5327,
+   "model_wall_ms": 39793,
+   "tokens_estimated": false,
+   "seconds": 40.8,
+   "unequal_rows": [],
+   "unequal_row_count": 0
+  }
+ ],
+ "outcome": "build_error"
+}

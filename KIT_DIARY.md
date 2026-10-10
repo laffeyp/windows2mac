@@ -241,3 +241,19 @@
 **Finding (#25):** where the reference and the manual's wording disagree, the reference decides, and the rule cites the run (CMPXCHG, run 38029980267). Where the manual leaves a flag undefined and the CPU happens to produce a value, the manual decides what the model may promise (SHR CF).
 
 **Kit change suggested:** generated-code helpers declare the registers they clobber; the compiler checks no live value sits in them across a call.
+
+### 2026-10-10 — Sprint 042: a record that said "accepted" twice
+
+**What happened:** Sprint 041's item runs fired the decision trigger on every COMPARISON_COMPLETED whose predicate held. Both judges had filled the shared state before the trigger was evaluated, so the predicate held for both comparisons and every one of the 139 class records carried two CANDIDATE_ACCEPTED events for one candidate. The index test checked each class's verdicts, its rule's sha256 and its causal chain, and passed all 139. The defect surfaced only when Sprint 042's CreateFileW run printed its event counts. The trigger is now `Once()` and every class was rerun: 141 records, one decision each.
+
+**Finding (#26):** a test that reads a record must count the events the topology promises, not only find them. "Exactly one decision per candidate" is part of the signal contract; a check that looks for the event's presence passes a record that says it twice.
+
+**Kit change suggested:** the signal contract states each event's multiplicity per run (one SESSION_INIT, one decision per candidate, one SESSION_COMPLETED), and the grading test asserts those counts.
+
+### 2026-10-10 — Sprint 042: Windows's documentation and Windows
+
+**What happened:** The CreateFileW probe ran on Server 2025 and Server 2022 and printed the same 188 rows. Three of them disagree with, or go beyond, Microsoft Learn: DeleteFileW of a file open with FILE_SHARE_DELETE removed the name at once (POSIX delete), where the page leads with "marks a file for deletion on close" and later opens failing with ERROR_ACCESS_DENIED; "name." and "name " opened "name", where Naming Files only says not to create such names; a seek before the start failed with 131, a code the SetFilePointerEx page never names. The sharing table, by contrast, matched the documented rule on all 144 pairs.
+
+**Finding (#27):** for an operating-system function, the documentation is a hypothesis about the function, and the probe's rows are the reference, as the CPU is for an instruction (#25). The contract keeps both: documented evidence quoted, observed rows as acceptance, and each disagreement written into its open questions so it is not rediscovered.
+
+**Kit change suggested:** a contract built from observation lists each documented statement the observation contradicts or extends.
