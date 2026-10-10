@@ -143,6 +143,12 @@ void start(void) {
     err = GetLastError();
     row("fls.free.no_callback"); field("ret", ok != 0); field("err", err); field("callbacks", callbacks); end();
 
+    {   /* the callback runs in the program's code: everything so far is written first, so an
+           implementation that cannot run it yet loses only the last row */
+        DWORD w;
+        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &w, NULL);
+        n = 0;
+    }
     SetLastError(SENTINEL);
     ok = FlsFree(f1);
     err = GetLastError();
