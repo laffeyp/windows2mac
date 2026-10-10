@@ -634,12 +634,12 @@ def model(c: Case) -> ModelRun | str:
 
 
 def undefined_memory(c: Case) -> str | None:
-    """Why a case cannot be judged, or None. BT, BTS and BTR with a register offset address a bit
+    """Why a case cannot be judged, or None. BT, BTS, BTR and BTC with a register offset address a bit
     string: the operand they touch may lie outside the windows a case defines (the data window, the
     page edge, the stack window), where the runner's page holds bytes the case never set (case set
     044: 3 such cases differed in CF). Those cases are set aside, counted, not judged."""
     from w2m.lift import REG
-    if c.label not in ("BT", "BTS", "BTR"):
+    if c.label not in ("BT", "BTS", "BTR", "BTC"):              # BTC: Sprint 047 (one AMD case read outside)
         return None
     d = decode(c.code)
     o = operands(d.fields) if d.fields is not None and d.fields.ops else []
