@@ -123,7 +123,13 @@ jobs:
             }
           }
           $sw.Stop()
-          if (-not $done) { Stop-Process -Id $p.Id -Force; $code = $null } else { $code = $p.ExitCode }
+          # Stop-Process returns before the process is gone; the capture and log stay open until it is,
+          # and the game's own children (UnityCrashHandler64) hold handles too (run 38006671518 failed
+          # hashing a file still in use). Stop everything started from the game folder and wait for it.
+          if (-not $done) { Stop-Process -Id $p.Id -Force; [void]$p.WaitForExit(30000); $code = $null } else { $code = $p.ExitCode }
+          Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($env:GAME_DIR) } | ForEach-Object {
+            Stop-Process -Id $_.Id -Force; [void]$_.WaitForExit(30000)
+          }
           $exit = if ($null -eq $code) { "null" } else { "$code" }
           "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds)}" | Out-File -Encoding ascii -NoNewline out/exec.json
           Get-Content out/exec.json
