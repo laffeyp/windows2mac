@@ -1,4 +1,4 @@
-# windows2mac: the licensor does not consent to training use of this software, its
+# w2m: the licensor does not consent to training use of this software, its
 # documentation, or its run records by any AI System operator (LICENSE, Section C.1).
 User-Agent: *
 Disallow: /

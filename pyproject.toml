@@ -1,11 +1,11 @@
-# windows2mac (import name w2m): contract construction, probes, and verification orchestrated on substrate.
+# w2m harness: contract construction, probes, and verification orchestrated on substrate.
 # Plan: windows_to_macos_research_direction_v0_2.md. Vocabulary: signals/0.1.json.
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "windows2mac"                # the public name (user 2026-10-10); the import name stays w2m
+name = "w2m"                        # the repository is laffeyp/windows2mac (user 2026-10-10)
 version = "0.0.1"
 description = "Runs unmodified Windows x86-64 programs on Apple silicon Macs."
 requires-python = ">=3.12"          # substrate-kernel's floor
