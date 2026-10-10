@@ -18,10 +18,10 @@ Decoder exit criterion (d) (WORKING_AGREEMENT, re-pointed at this profile 2026-1
 spec row the game's code uses is XED-confirmed in specs/x86_decode_confirmations.json. Each agreed
 position names its row (Decoded.row); the report lists used rows without a confirmation.
 
---record writes a substrate run as generated_differential.py does: SESSION_INIT,
-COMPARISON_COMPLETED (contract x86.decode, relation exact, reference XED), then per disagreement
-class DISCREPANCY_REPORTED and DISCREPANCY_ROUTED (length_differs -> implementation_repair; every
-other class -> contract_revision), then SESSION_COMPLETED.
+--record writes one causal differential run (src/w2m/differential.py, Sprint 043) whose units are
+the ways the decoder can disagree with XED here: length, iclass, ours_gap, xed_refused. Each unit's
+comparison causes its acceptance or its report (length_differs -> implementation_repair; every
+other unit -> contract_revision); an acceptance resolves what an earlier run left open.
 
 Usage: uv run python scripts/game_code_differential.py <native_dir> <capture.bin> --game <name>
        [--json out.json] [--record] [--runs runs] [--store store]
@@ -30,27 +30,21 @@ Usage: uv run python scripts/game_code_differential.py <native_dir> <capture.bin
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
 import sys
 import time
 from collections import Counter
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-import msgspec
-from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
 
-from w2m import VOCAB_VERSION, events
 from w2m.jit_capture import Region, cpu_features, parse as parse_capture
 from w2m.pe import PeError, parse
 from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86dec_tables import SPEC_VERSION
 from w2m.x86ref import walk
 from w2m.xedref import XedResult, decode_many
-from w2m.record import producer
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIRMATIONS = ROOT / "specs" / "x86_decode_confirmations.json"
@@ -190,66 +184,47 @@ def main(argv: list[str]) -> int:
             "kinds": [{"outcome": k[0], "xed": k[1], "ours": k[2], "lengths": k[3], "count": n,
                        "example": t.example[k]} for k, n in t.kinds.most_common()]}, indent=1) + "\n")
     if a.record:
-        record(a, t, total, len(t.rows), len(unconfirmed), time.monotonic() - t0)
+        print(json.dumps(record(a, t, total, len(t.rows), len(unconfirmed)), indent=1))
     return 0
 
 
-def record(a: argparse.Namespace, t: Tally, total: int, used: int, unconfirmed: int,
-           elapsed: float) -> None:
-    """One substrate run holding this differential's verdict and its routed discrepancies."""
-    run_id = f"gamediff-{time.time_ns()}"
-    ours = f"w2m-x86dec-spec-{SPEC_VERSION}"
-    progs = a.store / "programs"
-    progs.mkdir(parents=True, exist_ok=True)
-    classes = t.kinds.most_common()
+UNITS = ("length_differs", "iclass_differs", "ours_gap", "xed_refused")
 
-    async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
-        yield events.validate(events.SESSION_INIT(
-            vocab_version=VOCAB_VERSION, profile=ours, contract_version=SPEC_VERSION,
-            harness_version="0.0.1", purpose="conformance"))
-        cmp_id = f"cmp-{run_id}"
-        yield events.validate(events.COMPARISON_COMPLETED(
-            comparison_id=cmp_id, contract_id="x86.decode", contract_version=SPEC_VERSION,
-            relation="exact", reference_ref=XED_PROFILE, target_execution_id=run_id,
-            verdict="discrepancy" if classes else "conforms",
-            rule_ref=f"{a.game}: {total} positions (native traversal and Mono-generated regions); "
-                     f"rows used {used}, unconfirmed {unconfirmed}"))
-        for i, (k, n) in enumerate(classes, 1):
-            raw = bytes.fromhex(t.example[k])
-            digest = hashlib.sha256(raw).hexdigest()
-            (progs / f"{digest}.bin").write_bytes(raw)
-            did = f"{run_id}-d{i}"
-            yield events.validate(events.DISCREPANCY_REPORTED(
-                discrepancy_id=did, contract_id="x86.decode", contract_version=SPEC_VERSION,
-                mismatch_class="exact", minimized_program_sha256=f"sha256:{digest}",
-                initial_state_sha256=EMPTY,
-                first_divergence=f"{k[0]}: xed={k[1] or '-'} ours={k[2] or '-'}"
-                                 f"{' lengths ' + k[3] if k[3] else ''}; {n} positions",
-                reference_profile_id=XED_PROFILE, destination_profile_id=ours,
-                comparison_id=cmp_id))
-            impl = k[0] == "length_differs"
-            yield events.validate(events.DISCREPANCY_ROUTED(
-                discrepancy_id=did,
-                repair_path="implementation_repair" if impl else "contract_revision",
-                reference_conforms=impl,
-                grounds=("spec row fields agree with XED; the decoder's length routine is wrong"
-                         if impl else "the spec lacks the row or rule XED applies "
-                                      "(Decision 2026-10-08: XED judges)")))
-        yield events.validate(events.SESSION_COMPLETED(
-            outcome="completed_with_discrepancies" if classes else "completed",
-            discrepancy_count=len(classes), accepted_count=0, elapsed_seconds=round(elapsed, 3)))
 
-    def topology(b: TopologyBuilder) -> None:
-        b.baseline(spec_version=SPEC_VERSION, reference=XED_PROFILE, game=a.game, positions=total)
-        b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: producer(harness))
-        b.initial("comparator", input=None)
-        b.termination(threshold_count("substrate.ProducerCompleted", 1))
+def record(a: argparse.Namespace, t: Tally, total: int, used: int, unconfirmed: int) -> dict[str, Any]:
+    """One causal differential run (Sprint 043): a unit per way the decoder can disagree with XED
+    on the game's code (UNITS), accepted when no position shows it; length_differs routes to
+    implementation_repair, the others to contract_revision."""
+    from w2m import differential
 
-    result = asyncio.run(Runtime(a.runs / run_id).run(topology))
-    kinds = Counter(e["kind"] for e in read_record(result.record_root)
-                    if not e["kind"].startswith("substrate."))
-    print(f"record {result.record_root}: {dict(kinds)}")
+    per_unit: dict[str, list[tuple[tuple[str, str, str, str], int]]] = {u: [] for u in UNITS}
+    for k, n in t.kinds.most_common():
+        per_unit[k[0]].append((k, n))
+    rule = (f"{a.game}: {total} positions (native traversal and Mono-generated regions); "
+            f"rows used {used}, unconfirmed {unconfirmed}")
+
+    def judge_unit(unit: str) -> differential.Verdict:
+        found = per_unit[unit]
+        if not found:
+            return differential.Verdict("conforms", rule_ref=rule)
+        lines = tuple(f"xed={k[1] or '-'} ours={k[2] or '-'}{' lengths ' + k[3] if k[3] else ''}; {n} positions; "
+                      f"{t.example[k]}" for k, n in found)
+        impl = unit == "length_differs"
+        return differential.Verdict(
+            "discrepancy", lines, rule, "implementation_repair" if impl else "contract_revision",
+            "spec row fields agree with XED; the decoder's length routine is wrong" if impl else
+            "the spec lacks the row or rule XED applies (Decision 2026-10-08: XED judges)",
+            program=bytes.fromhex(t.example[found[0][0]]))
+
+    from w2m.encgen import SPEC
+    return differential.run(differential.Differential(
+        name=f"decoder-game-{a.game}", profile=XED_PROFILE, purpose="conformance",
+        contract_id=lambda unit: "x86.decode", contract_version=SPEC_VERSION, relation="exact",
+        implementation=f"w2m decoder, spec {SPEC_VERSION}",
+        implementation_sha256="sha256:" + hashlib.sha256(SPEC.read_bytes()).hexdigest(),
+        generator_ref="hand (agent-authored) and the Intel SDM rows", reference_ref=XED_PROFILE,
+        target_execution_id=f"x86dec-spec-{SPEC_VERSION}-{a.game}", units=UNITS, compare=judge_unit,
+        baseline={"game": a.game, "positions": total}, programs=a.store / "programs"), a.runs)
 
 
 if __name__ == "__main__":

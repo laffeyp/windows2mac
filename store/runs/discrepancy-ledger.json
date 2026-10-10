@@ -1,0 +1,32 @@
+{
+ "decoder-game-hail-to-the-rainbow-1791619500387707000-ours_gap": {
+  "contract_id": "x86.decode",
+  "differential": "decoder-game-hail-to-the-rainbow",
+  "first_divergence": "ours_gap: xed=ADD ours=-; 2 positions; d54881c2f0feffff",
+  "repair_path": "contract_revision",
+  "reported_in": "decoder-game-hail-to-the-rainbow-1791619500387707000",
+  "resolved_in": null,
+  "resolving_ref": null,
+  "unit": "ours_gap"
+ },
+ "decoder-generated-1791619278582619000-iclass_differs": {
+  "contract_id": "x86.decode",
+  "differential": "decoder-generated",
+  "first_divergence": "iclass_differs: xed=PREFETCHIT1 ours=NOP; 42 cases; 664f0f1874bd4b [legacy extra=66 rex=4f mod=1 rm=4]",
+  "repair_path": "contract_revision",
+  "reported_in": "decoder-generated-1791619278582619000",
+  "resolved_in": null,
+  "resolving_ref": null,
+  "unit": "iclass_differs"
+ },
+ "decoder-generated-1791619278582619000-ours_accepts": {
+  "contract_id": "x86.decode",
+  "differential": "decoder-generated",
+  "first_divergence": "ours_accepts: xed=GENERAL_ERROR ours=VPBROADCASTW; 104 cases; c4a2f9791ddde82424a169 [vex w=1 l=0 vvvv=f mod=0 rm=5]",
+  "repair_path": "contract_revision",
+  "reported_in": "decoder-generated-1791619278582619000",
+  "resolved_in": null,
+  "resolving_ref": null,
+  "unit": "ours_accepts"
+ }
+}

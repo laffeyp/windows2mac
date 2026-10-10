@@ -31,24 +31,22 @@ read_cases_format1 and judged by judge_format1.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
+import json
 import random
 import struct
 import sys
 import time
 from collections import Counter
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import msgspec
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m import x86fp as fp  # noqa: E402
 from w2m.encgen import SPEC, cases as encgen_cases  # noqa: E402
 from w2m.kernel32 import M64  # noqa: E402
@@ -58,7 +56,6 @@ from w2m.runtime import Runtime  # noqa: E402
 from w2m.x86dec import DecodeError, decode  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 from w2m.x86ops import operands  # noqa: E402
-from w2m.record import producer  # noqa: E402
 
 CODE_VA, DATA_VA, STACK_VA = 0x2000_0000, 0x3000_0000, 0x4000_0000
 DATA_OFF, STACK_OFF, WINDOW, CODE_BYTES = 0x40, 0x87C0, 64, 32
@@ -558,61 +555,42 @@ def judge_run(a: argparse.Namespace) -> int:
     for k, n in classes.most_common(60):
         print(f"  {n:6} {k}: {example[k]}")
     if a.record:
-        record(a, f"{cpu}; {profile}", len(built), classes, example, time.monotonic() - t0)
+        print(json.dumps(record(a, f"{cpu}; {profile}", len(built), classes, example, [c.label for c in built]),
+                         indent=1))
     return 0
 
 
 def record(a: argparse.Namespace, profile: str, total: int, classes: Counter[str], example: dict[str, str],
-           elapsed: float) -> None:
-    from substrate.api import Runtime as SubstrateRuntime, read_record, threshold_count
+           labels: list[str]) -> dict[str, Any]:
+    """One causal differential run (Sprint 043): a unit per instruction class, its candidate the
+    class's rule (src/w2m/rules, sha256); the runner's CPU is the reference. A class whose only
+    differences are CPU faults on bytes the decode spec accepts routes to contract_revision."""
+    from w2m import differential
+    from w2m.rules import registry
 
-    run_id = f"semantics-{time.time_ns()}"
-    target = f"w2m-lift-spec-{SPEC_VERSION}"
-    empty = "sha256:" + hashlib.sha256(b"").hexdigest()
-    progs = ROOT / "store" / "programs"
-    progs.mkdir(parents=True, exist_ok=True)
+    grouped = differential.by_unit(labels, classes, example)
+    rules = registry()
+    whole = "sha256:" + hashlib.sha256("".join(sorted(r.sha256 for r in rules.values())).encode()).hexdigest()
 
-    async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
-        yield events.validate(events.SESSION_INIT(
-            vocab_version=VOCAB_VERSION, profile=target, contract_version=SPEC_VERSION,
-            harness_version="0.0.1", purpose="conformance"))
-        cmp_id = f"cmp-{run_id}"
-        yield events.validate(events.COMPARISON_COMPLETED(
-            comparison_id=cmp_id, contract_id="x86.semantics", contract_version=SPEC_VERSION,
-            relation="exact", reference_ref=profile, target_execution_id=a.judge.name,
-            verdict="discrepancy" if classes else "conforms",
-            rule_ref=f"{total} single-instruction cases, probes/semantics/cases.bin format 2, {SPEC}"))
-        for i, (k, n) in enumerate(classes.most_common(), 1):
-            raw = bytes.fromhex(example[k].split()[2])
-            digest = hashlib.sha256(raw).hexdigest()
-            (progs / f"{digest}.bin").write_bytes(raw)
-            did = f"{run_id}-d{i}"
-            yield events.validate(events.DISCREPANCY_REPORTED(
-                discrepancy_id=did, contract_id="x86.semantics", contract_version=SPEC_VERSION,
-                mismatch_class="exact", minimized_program_sha256=f"sha256:{digest}",
-                initial_state_sha256=empty, first_divergence=f"{k}: {n} cases; {example[k]}",
-                reference_profile_id=profile, destination_profile_id=target, comparison_id=cmp_id))
-            fault = k.endswith("cpu fault")
-            yield events.validate(events.DISCREPANCY_ROUTED(
-                discrepancy_id=did, repair_path="contract_revision" if fault else "implementation_repair",
-                reference_conforms=True,
-                grounds=("the decode spec calls these bytes an instruction and this CPU faults on them: "
-                         "the contract lacks this CPU's rule" if fault else
-                         "the runner's CPU executed the instruction; the model's semantics disagree")))
-        yield events.validate(events.SESSION_COMPLETED(
-            outcome="completed_with_discrepancies" if classes else "completed",
-            discrepancy_count=len(classes), accepted_count=0, elapsed_seconds=round(elapsed, 3)))
+    def judge_unit(unit: str) -> differential.Verdict:
+        lines = grouped[unit]
+        rule = f"{sum(1 for x in labels if x == unit)} cases of {unit} in {a.out.name}, {SPEC}"
+        if not lines:
+            return differential.Verdict("conforms", rule_ref=rule)
+        fault_only = all(" cpu fault:" in line for line in lines)
+        return differential.Verdict(
+            "discrepancy", lines, rule, "contract_revision" if fault_only else "implementation_repair",
+            "the decode spec calls these bytes an instruction and this CPU faults on them: the contract lacks "
+            "this CPU's rule" if fault_only else "the runner's CPU executed the instruction; the model's semantics disagree")
 
-    def topology(b: Any) -> None:
-        b.baseline(spec_version=SPEC_VERSION, reference=profile, cases=total)
-        b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: producer(harness))
-        b.initial("comparator", input=None)
-        b.termination(threshold_count("substrate.ProducerCompleted", 1))
-
-    result = asyncio.run(SubstrateRuntime(a.runs / run_id).run(topology))
-    kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
-    print(f"record {result.record_root}: {dict(kinds)}")
+    units = sorted(set(labels))
+    return differential.run(differential.Differential(
+        name=f"semantics-{a.set}", profile=profile, purpose="conformance",
+        contract_id=lambda unit: "x86.semantics", contract_version=SPEC_VERSION, relation="exact",
+        implementation=f"the model's rules (src/w2m/rules), lifter spec {SPEC_VERSION}", implementation_sha256=whole,
+        generator_ref="hand (agent-authored)", reference_ref=a.judge.name, target_execution_id=f"model-{a.judge.name}",
+        units=units, compare=judge_unit, baseline={"cases": total, "case_set": a.set},
+        unit_sha256=lambda unit: rules[unit].sha256 if unit in rules else whole), a.runs)
 
 
 if __name__ == "__main__":

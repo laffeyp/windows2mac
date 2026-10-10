@@ -22,18 +22,16 @@ Usage: uv run python scripts/vm_oracle.py <Intel run id> [--record] [--runs runs
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
+import json
 import struct
 import subprocess
 import sys
 import time
 from collections import Counter
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-import msgspec
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -41,14 +39,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import semantics_differential as sd  # noqa: E402
 
-from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.lift import LiftError, lift  # noqa: E402
 from w2m.loader import Loaded, Memory  # noqa: E402
 from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, compile_insn,  # noqa: E402
                             x86_flags)
 from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
-from w2m.record import producer  # noqa: E402
 
 RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042"}
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
@@ -256,6 +252,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--runs", type=Path, default=ROOT / "runs")
     ap.add_argument("--limit", type=int)
     a = ap.parse_args(argv)
+    if a.record and a.limit:
+        ap.error("--record judges every class; --limit runs a prefix of the compiled cases")
     t0 = time.monotonic()
     store = ROOT / "store" / "probe-runs" / a.run
     seed, class_set, locked, control = sd.CASE_SETS[a.set]
@@ -281,52 +279,41 @@ def main(argv: list[str]) -> int:
     print(f"not compiled by the VM: {sum(skipped.values())} cases in {len(by_class)} classes "
           f"(first: {', '.join(f'{c} {n}' for c, n in by_class.most_common(8))})")
     if a.record:
-        record(a, f"{cpu}; {profile}", judged, faults, classes, example, elapsed)
+        print(json.dumps(record(a, f"{cpu}; {profile}", judged, faults, classes, example,
+                                [c.label for c in cases],
+                                skipped), indent=1))
     return 1 if classes else 0
 
 
 def record(a: argparse.Namespace, profile: str, judged: int, faults: int, classes: Counter[str],
-           example: dict[str, str], elapsed: float) -> None:
-    from substrate.api import Runtime as SubstrateRuntime, read_record, threshold_count
+           example: dict[str, str], labels: list[str], skipped: Counter[str]) -> dict[str, Any]:
+    """One causal differential run (Sprint 043): a unit per instruction class, its candidate the
+    class's rule and lowering as the VM runs it; the Intel CPU under Windows is the reference."""
+    from w2m import differential
+    from w2m.rules import registry
 
-    run_id = f"vmoracle-{time.time_ns()}"
-    spec = "0.2.0"
-    empty = "sha256:" + hashlib.sha256(b"").hexdigest()
+    grouped = differential.by_unit(labels, classes, example)
+    not_compiled = Counter(k.split(":")[0] for k in skipped.elements())
+    rules = registry()
+    whole = "sha256:" + hashlib.sha256("".join(sorted(r.sha256 for r in rules.values())).encode()).hexdigest()
 
-    async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
-        yield events.validate(events.SESSION_INIT(
-            vocab_version=VOCAB_VERSION, profile=profile, contract_version=spec,
-            harness_version="0.0.1", purpose="conformance"))
-        cmp_id = f"cmp-{run_id}"
-        yield events.validate(events.COMPARISON_COMPLETED(
-            comparison_id=cmp_id, contract_id="w2m.guest_state.fault_context", contract_version=spec,
-            relation="exact", reference_ref=profile, target_execution_id=f"vm-oracle-{a.run}",
-            verdict="discrepancy" if classes else "conforms",
-            rule_ref=(f"scripts/vm_oracle.py: {judged} cases ({faults} faults) of semantics-{a.set} run {a.run}, "
-                      f"lifter spec {SPEC_VERSION}")))
-        for n, (k, count) in enumerate(classes.most_common(), 1):
-            did = f"{run_id}-d{n}"
-            yield events.validate(events.DISCREPANCY_REPORTED(
-                discrepancy_id=did, contract_id="w2m.guest_state.fault_context", contract_version=spec,
-                mismatch_class="exact", minimized_program_sha256=empty, initial_state_sha256=empty,
-                first_divergence=f"{k} ({count} cases): {example[k]}"[:500], reference_profile_id=profile,
-                destination_profile_id=f"w2m-vm-spec-{SPEC_VERSION}", comparison_id=cmp_id))
-            yield events.validate(events.DISCREPANCY_ROUTED(
-                discrepancy_id=did, repair_path="implementation_repair", reference_conforms=True,
-                grounds="the Intel CPU under Windows is the reference; the VM back end or guest runtime differs"))
-        yield events.validate(events.SESSION_COMPLETED(
-            outcome="completed_with_discrepancies" if classes else "completed",
-            discrepancy_count=len(classes), accepted_count=0, elapsed_seconds=round(elapsed, 3)))
+    def judge_unit(unit: str) -> differential.Verdict:
+        lines = grouped[unit]
+        rule = (f"{sum(1 for x in labels if x == unit)} cases of {unit} in semantics-{a.set} run {a.run}; "
+                f"{not_compiled[unit]} not compiled by the VM")
+        if not lines:
+            return differential.Verdict("conforms", rule_ref=rule)
+        return differential.Verdict("discrepancy", lines, rule, "implementation_repair",
+                                    "the Intel CPU under Windows is the reference; the VM back end or guest runtime differs")
 
-    def topology(b: Any) -> None:
-        b.baseline(run=a.run, judged=judged, faults=faults, lifter_spec=SPEC_VERSION)
-        b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1, factory=lambda: producer(harness))
-        b.initial("comparator", input=None)
-        b.termination(threshold_count("substrate.ProducerCompleted", 1))
-
-    result = asyncio.run(SubstrateRuntime(a.runs / run_id).run(topology))
-    kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
-    print(f"record {result.record_root}: {dict(kinds)}")
+    return differential.run(differential.Differential(
+        name=f"vm-oracle-{a.set}", profile=profile, purpose="conformance",
+        contract_id=lambda unit: "w2m.guest_state.fault_context", contract_version="0.2.0", relation="exact",
+        implementation=f"the managed VM back end and guest runtime, lifter spec {SPEC_VERSION}",
+        implementation_sha256=whole, generator_ref="hand (agent-authored)", reference_ref=a.run,
+        target_execution_id=f"vm-oracle-{a.run}", units=sorted(set(labels)), compare=judge_unit,
+        baseline={"run": a.run, "judged": judged, "faults": faults},
+        unit_sha256=lambda unit: rules[unit].sha256 if unit in rules else whole), a.runs)
 
 
 if __name__ == "__main__":
