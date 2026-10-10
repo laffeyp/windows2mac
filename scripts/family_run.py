@@ -70,6 +70,7 @@ class Family:
     derive: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] = lambda printed: printed
     plants: dict[str, Plant] = field(default_factory=dict)
     excluded: dict[str, str] = field(default_factory=dict)    # row -> why the runners may differ on it
+    expected_stop: str | None = None      # the stop an excluded row causes in w2m (a prefix of the stop text)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The contract's rows from a probe's printed rows: derived, then the excluded rows dropped."""
@@ -262,6 +263,7 @@ FAMILIES: dict[str, Family] = {
         excluded={"fls.free.with_callback": "FlsFree runs the index's callback in the program's code; w2m cannot yet "
                   "call into guest code from the runtime and stops there (Sprint 047, with threads, whose exits run "
                   "FLS callbacks too). The probe writes its other rows first."},
+        expected_stop="Unimplemented: FlsFree",
         plants={"tls_get_keeps_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_TlsGetValue",
                                              "    return w2m_logged(W2M_API_TlsGetValue",
                                              ("tls.get.fresh", "tls.get.after_set", "tls.get.reused")),
@@ -371,7 +373,8 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
             out, stop, _ = run_in_vm(r.binary, sources)
             cmp = compare_exact_rows(c, derived_output(f, out), f"cmp-{cand}-{run}", f"{r.execution}-1",
                                      f"managed_vm-{cand}-{run}")
-            if stop != "ExitProcess" and cmp.verdict == "conforms":
+            expected = f.expected_stop is not None and stop.startswith(f.expected_stop)
+            if stop != "ExitProcess" and not expected and cmp.verdict == "conforms":
                 cmp = msgspec.structs.replace(cmp, verdict="discrepancy", first_divergence=f"run stopped: {stop}")
             state["verdicts"][run] = cmp.verdict
             state["divergence"][run] = cmp.first_divergence or (stop if stop != "ExitProcess" else None)
