@@ -70,7 +70,9 @@ jobs:
           # probe.json `source` (Sprint 041): build another probe's harness against this probe's inputs
           $src = "probes/${{ inputs.probe }}/${{ inputs.probe }}.c"
           if ((Test-Path $cfg) -and $c.source) { $src = $c.source }
-          clang @flags -o probe.exe $src @libs
+          # /Brepro (Sprint 044): the linker writes a content hash where it wrote the time and a random PDB
+          # signature, so one source on one runner image builds one binary (16 runs had made 16 binaries)
+          clang @flags "-Wl,/Brepro" -o probe.exe $src @libs
       - name: run
         shell: pwsh
         run: |
