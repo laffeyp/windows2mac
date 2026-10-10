@@ -59,6 +59,7 @@ IPA_BASE = 0x1000_0000
 MONITOR_VA = 0x7F00_0000_0000
 PAGE = 0x1000
 BLOCK = 0x20_0000                   # a level-2 block (2 MB) in the 4 KB granule (Arm ARM D8.3)
+GIGA_BLOCK = 0x4000_0000            # a level-1 block (1 GB) in the same granule
 HEAP_VA = 0x0000_0002_0000_0000     # the process heap's arena (heap.c), above the image and the stack
 HEAP_SIZE = 0x1000_0000             # 256 MB, sparse in the VM's memory file
 # monitor layout (offsets into the shared file and from MONITOR_VA)
@@ -214,7 +215,8 @@ HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
 HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY = 19, 20, 21, 22   # virtual_memory.py
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
-VIRTUAL_SIZE = 0x1_0000_0000        # 4 GB
+VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
+                                    # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 TLS_TAKEN = 16                      # the TLS index besides 0 a fresh Windows process holds: set from the rows
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
@@ -225,7 +227,7 @@ SYS_REG_ID = {"SCTLR_EL1": 0xC080, "CPACR_EL1": 0xC082, "TTBR0_EL1": 0xC100, "TC
 CPACR_FPEN = 3 << 20                         # FP/SIMD at EL1 and EL0 not trapped (Arm ARM D19 CPACR_EL1.FPEN)
 PAGE_ATTRIBUTES = (3 << 8) | (1 << 10)                 # AttrIndx 0 (MAIR byte 0 = 0xFF, Normal WB), ISH, AF
 SCTLR = 0x30D01805                          # M, C, I; alignment checks off (Sprint 012 value)
-TCR = 16 | (1 << 8) | (1 << 10) | (3 << 12) | (1 << 23) | (1 << 32)   # T0SZ 16, WB, ISH, EPD1, IPS 36
+TCR = 16 | (1 << 8) | (1 << 10) | (3 << 12) | (1 << 23) | (2 << 32)   # T0SZ 16, WB, ISH, EPD1, IPS 40 (vm_monitor.c)
 CPSR_EL1H = 0x3C5
 
 TEMP_REGS = (18, 25, 26, 27, 29, 30)
@@ -919,6 +921,12 @@ def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -
         return new
 
     for va, ipa, size in maps:
+        if va % GIGA_BLOCK == 0 and ipa % GIGA_BLOCK == 0 and size % GIGA_BLOCK == 0:   # 1 GB blocks at level 1
+            for p in range(0, size, GIGA_BLOCK):
+                v = va + p
+                off = table_at(TRANSLATION_TABLES, (v >> 39) & 0x1FF)
+                struct.pack_into("<Q", mm, off + 8 * ((v >> 30) & 0x1FF), (ipa + p) | PAGE_ATTRIBUTES | 0x1)
+            continue
         if va % BLOCK == 0 and ipa % BLOCK == 0 and size % BLOCK == 0:     # 2 MB blocks at level 2
             for p in range(0, size, BLOCK):
                 v = va + p
@@ -997,7 +1005,7 @@ class VM:
             size += _round_up(len(r.data))
         heap_off = _round_up(size, BLOCK)                 # the process heap: 2 MB aligned, mapped in blocks
         size = heap_off + HEAP_SIZE
-        virtual_off = _round_up(size, BLOCK)              # the VirtualAlloc arena: likewise, sparse
+        virtual_off = _round_up(IPA_BASE + size, GIGA_BLOCK) - IPA_BASE   # the VirtualAlloc arena: its IPA 1 GB aligned for 1 GB blocks; sparse
         size = virtual_off + VIRTUAL_SIZE
         self.size = _round_up(size, 0x4000)
         fd, self.path = tempfile.mkstemp(prefix="w2m-vm-")
@@ -1526,7 +1534,8 @@ class VM:
             on_dispatch: Callable[[VM, list[int]], None] | None = None,
             on_exception: Callable[[VM, dict[str, int]], bool] | None = None,
             interrupt_every_ms: int | None = None,
-            on_boundary: Callable[[VM, list[int], int], None] | None = None) -> Result:
+            on_boundary: Callable[[VM, list[int], int], None] | None = None,
+            on_unimplemented: Callable[[VM, list[int], str], bool] | None = None) -> Result:
         """Run until the guest exits or stops. `on_dispatch` sees (and may rewrite) the register
         snapshot at each dispatch miss; x[17] is the x86 address about to run. An unhandled
         guest exception ends the process, as on Windows; `on_exception` sees its records and, by
@@ -1536,7 +1545,11 @@ class VM:
         it is. The forward rule (specs/guest_state.json 0.2.0): the host does not reconstruct
         state there; it lowers the block-entry stop point and resumes the vCPU unchanged, so the
         vCPU stops at the next block entry, a guest instruction boundary where the state is exact.
-        `on_boundary(vm, x, guest_rip)` sees that state; the run then goes on."""
+        `on_boundary(vm, x, guest_rip)` sees that state; the run then goes on.
+
+        `on_unimplemented(vm, x, import_name)` sees a call to an import w2m lacks; by returning True it
+        has the guest return from the call with the state it left in x (a look-ahead map of what a
+        program calls next, scripts/frontier_lookahead.py; never a judged run)."""
         proc = subprocess.Popen([str(build_monitor()), self.path, f"{IPA_BASE:x}", f"{self.size:x}"],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         assert proc.stdin and proc.stdout
@@ -1627,7 +1640,12 @@ class VM:
                 elif imm == 9:
                     name = self.ld.thunks.get(x[17], hex(x[17]))
                     # the call's return address is at the guest RSP (the bridge has not popped it)
-                    self.unimplemented = (name, int.from_bytes(self.mem.read(x[4], 8), "little"))
+                    ret = int.from_bytes(self.mem.read(x[4], 8), "little")
+                    if on_unimplemented is not None and on_unimplemented(self, x, name):
+                        x[17], x[4] = ret, x[4] + 8           # ret, with x[RAX] as the hook left it
+                        pc = self.miss_va
+                        continue
+                    self.unimplemented = (name, ret)
                     raise Unimplemented(f"import {name}")
                 elif imm == 2:
                     ec = e.esr >> 26 & 0x3F

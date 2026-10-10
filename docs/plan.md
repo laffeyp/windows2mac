@@ -14,7 +14,7 @@ Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 
 | Finding | What it asks | Sprint |
 |---|---|---|
-| N1 vCPU cap of 64 | M:N scheduling; measure the game's threads | Decision done; measured 038; scheduler 047 (it needs a threaded program w2m can run, which needs 045's C runtime functions) |
+| N1 vCPU cap of 64 | M:N scheduling; measure the game's threads | Decision done; measured 038; scheduler in the exceptions-and-threads sprint (it needs a threaded program w2m can run, which needs 045's C runtime functions) |
 | N2 reconstruction rule | commit after the last fault point; run forward on asynchronous stops | Spec done (guest_state 0.2.0); oracle fault cases 039; built 040, judged on 039's Windows fault records |
 | N3 AF, DF | in the state and the oracle | Spec done; oracle 039; built 040 |
 | N4 SSE vs AArch64 | oracle with XMM and FP boundaries; FPCR.AH probe | 039; SSE rules through the pool 041 |
@@ -53,7 +53,8 @@ Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 |---|---|---|
 | **045 — the transport** (run when a measured call rate needs it; review 2026-10-10 D5; waiting 2026-10-10: 17 host requests over the launcher's start-up, BLACKBOARD) | The text pipe between Python and the VM monitor replaced by shared-memory rings; host requests batched. | The round trip measured before and after (27 µs today); lockstep and the oracle unchanged. |
 | **046 — several images** (closing 2026-10-10, CI not yet green: DllMain returns, the launcher enters UnityMain, UnityPlayer stops at `SHELL32.dll!CommandLineToArgvW` after 403,044 instructions) | Loading `UnityPlayer.dll`, `mono-2.0-bdwgc.dll` and the rest: relocations, imports between images, TLS callbacks, DllMain, the PEB loader list. | Each native file's DllMain runs to its return; the loader list matches the runner's; the launcher enters `UnityMain` (moved from 045, review 2026-10-10 D3). |
-| **047 — exceptions and threads** | VEH dispatch to guest handlers over the CONTEXT built in 040, SEH unwinding, C++ exceptions; the M:N scheduler (moved from 040) with waits, events and suspension. | Sprint 028's event contract and Sprint 034's own probe (the C runtime and all) conform under w2m: the vectored handler's CONTEXT and write-back, GetThreadContext and SetThreadContext on a suspended thread. |
+| **047 — UnityMain's start-up** (opened 2026-10-10; exceptions and threads move to the sprint whose frontier needs them) | The arena past 4 GB, SSE4.2 string classes, SHELL32's CommandLineToArgvW, the families the frontier meets. | The frontier passes PCMPISTRI at 0x18140b914 and CommandLineToArgvW, every service on the way judged. |
+| **— exceptions and threads** (was 047) | VEH dispatch to guest handlers over the CONTEXT built in 040, SEH unwinding, C++ exceptions; the M:N scheduler (moved from 040) with waits, events and suspension. | Sprint 028's event contract and Sprint 034's own probe (the C runtime and all) conform under w2m: the vectored handler's CONTEXT and write-back, GetThreadContext and SetThreadContext on a suspended thread. |
 | **048 — memory and files** | VirtualAlloc/Protect at 4 KB, file mapping, file I/O over the 15.6 GB of assets. | The game reads its first asset bundle; page-protection faults match the runner. |
 | **049 — the Mono JIT region** | Write detection on RWX regions, invalidation and retranslation, `TRANSLATION_INVALIDATED`. | Mono's first managed method runs; a rewritten call site is retranslated, never stale. |
 | **050 — milestone A** | The game under w2m in batch mode. | Its `unity.log` matches the runner's 168 lines. |

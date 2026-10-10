@@ -125,7 +125,9 @@ int main(int argc, char **argv) {
     }
     hv_vm_config_t cfg = hv_vm_config_create();
     hv_return_t r;
-    if ((r = hv_vm_config_set_ipa_granule(cfg, HV_IPA_GRANULE_4KB)) || (r = hv_vm_create(cfg)) ||
+    /* 40-bit IPA (1 TB; TCR.IPS 2 in vm_backend.py): the VirtualAlloc arena is 512 GB of sparse file */
+    if ((r = hv_vm_config_set_ipa_granule(cfg, HV_IPA_GRANULE_4KB)) || (r = hv_vm_config_set_ipa_size(cfg, 40)) ||
+        (r = hv_vm_create(cfg)) ||
         (r = hv_vm_map(mem, ipa, size, HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC))) {
         fprintf(stderr, "vm setup failed: hv_return 0x%x\n", r);
         return 1;
