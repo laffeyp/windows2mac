@@ -287,6 +287,13 @@ struct w2m_exception_area {
 #define W2M_API_CommandLineToArgvW 118   /* SHELL32 (Sprint 047) */
 #define W2M_API_LocalFree 119
 #define W2M_API_BCryptGenRandom 120   /* bcrypt (Sprint 047) */
+#define W2M_API_GetLogicalProcessorInformationEx 121
+#define W2M_API_GetLogicalProcessorInformation 122
+#define W2M_API_GetActiveProcessorCount 123
+#define W2M_API_GetCurrentProcess 124
+#define W2M_API_GetProcessAffinityMask 125
+#define W2M_API_SetThreadAffinityMask 126
+#define W2M_API_GetNumaHighestNodeNumber 127
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);

@@ -214,7 +214,8 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "SystemTimeToFileTime": ("k32_SystemTimeToFileTime", True),
             "FileTimeToSystemTime": ("k32_FileTimeToSystemTime", True),
             "GetErrorMode": ("k32_GetErrorMode", True),
-            "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True)}
+            "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True),
+            "GetLogicalProcessorInformationEx": ("k32_GetLogicalProcessorInformationEx", True), "GetLogicalProcessorInformation": ("k32_GetLogicalProcessorInformation", True), "GetActiveProcessorCount": ("k32_GetActiveProcessorCount", True), "GetCurrentProcess": ("k32_GetCurrentProcess", True), "GetProcessAffinityMask": ("k32_GetProcessAffinityMask", True), "SetThreadAffinityMask": ("k32_SetThreadAffinityMask", True), "GetNumaHighestNodeNumber": ("k32_GetNumaHighestNodeNumber", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
 DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
                 "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047

@@ -61,7 +61,7 @@
    "SESSION_INIT": 1
   },
   "family": "command_line_args",
-  "record": "store/runs/family-command_line_args-1791666048150257000",
+  "record": "store/runs/family-command_line_args-1791667047709182000",
   "verdicts": {
    "38084317468": "conforms",
    "38084319695": "conforms"
@@ -248,7 +248,7 @@
   }
  },
  "generate_random": {
-  "candidate_sha256": "sha256:c965189a9db3bab34f336eec48ce4846f7e54ab974f09e3e89b8faade7c9ce4b",
+  "candidate_sha256": "sha256:8956dd2bcfcbb3a04f590d62c7eb2de9db9ca0cde5015aa4d7848f90bc9c678b",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -261,7 +261,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791666530050278000",
+  "record": "store/runs/family-generate_random-1791667048760216000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -300,7 +300,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:0ccb2e9126f4b285087ace752934aa72a6842bc5b08457f99dede1e1d96e03b5",
+  "candidate_sha256": "sha256:aaa133f08c0f014a5357ae8a9855e84089bf250617eb4e22cff3e673a3156149",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -327,7 +327,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791666043045250000",
+  "record": "store/runs/family-loader-1791667037452598000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -449,6 +449,30 @@
    "38041805183": "conforms"
   }
  },
+ "processor_topology": {
+  "candidate_sha256": "sha256:4f461447fa141d5c70d128fe56179c8b4f08521a3a12d08cba411910d4454c42",
+  "divergence": {
+   "38086761220": null,
+   "38086763271": null,
+   "38086765021": null,
+   "38086767249": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 4,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "processor_topology",
+  "record": "store/runs/family-processor_topology-1791667018643702000",
+  "verdicts": {
+   "38086761220": "conforms",
+   "38086763271": "conforms",
+   "38086765021": "conforms",
+   "38086767249": "conforms"
+  }
+ },
  "slim_locks": {
   "candidate_sha256": "sha256:4148ccd9bfb024f08eb6f8dc34a99b6923460c0f958432c0e5b9e5f08861b12a",
   "divergence": {
@@ -474,7 +498,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:d592176ebd9133b583cd0d937e4ce7f761c92022971e0d97a4e7739fa62263e4",
+  "candidate_sha256": "sha256:bb293a33a726d81857fa23a765e99ddfe92c3d86456c25312343b8cef72a0bd4",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -501,7 +525,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791666045692750000",
+  "record": "store/runs/family-static_tls-1791667042351648000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -738,7 +762,7 @@
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:d841110fca06026cb58f3d1b552f6057267017778c192a8c10662d439771e901",
+  "candidate_sha256": "sha256:b5d3af3b8a5e9aee63fb0efeab0aa22f508f88031bcf21e42ee8116a856d8c15",
   "divergence": {
    "38050561886": null,
    "38050563770": null,
@@ -761,7 +785,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791666044308127000",
+  "record": "store/runs/family-virtual_memory-1791667040086757000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

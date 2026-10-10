@@ -260,6 +260,21 @@ def time_family(start: str, summary: str) -> Family:
         plants=plants)
 
 
+def topology_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Processor topology (Sprint 047): `smt` is the runner's hardware (every runner's cores run two threads;
+    w2m's one processor has one core and no SMT) and `modules` and `size_other` in the RelationAll row are the OS's (Server 2025
+    lists a processor module, 2022 does not; relationship 7 is excluded below), so both fields are dropped."""
+    out = []
+    for r in printed:
+        r = dict(r)
+        r.pop("smt", None)
+        if r.get("s") == "ex.query.65535":
+            r.pop("modules", None)
+            r.pop("size_other", None)                 # the module entry's size, 48, on 2025 only
+        out.append(r)
+    return out
+
+
 FAMILIES: dict[str, Family] = {
     "loader": Family(
         name="loader",
@@ -958,6 +973,43 @@ FAMILIES: dict[str, Family] = {
                 "    else if (!handle) status = STATUS_INVALID_HANDLE;",
                 "    else if (!handle) status = STATUS_INVALID_PARAMETER;",
                 ("null_handle.no_flags",))}),
+    "processor_topology": Family(
+        name="processor_topology",
+        contract_id="windows.system.processor_topology",
+        version="0.1.0",
+        summary=("GetLogicalProcessorInformationEx over every relationship (sizes, errors, entry sizes 48, 56 and 80, masks "
+                 "as the active processors), the classic call's 32-byte entries, GetActiveProcessorCount, "
+                 "GetProcessAffinityMask, SetThreadAffinityMask, GetNumaHighestNodeNumber and GetCurrentProcess; the rows "
+                 "agree on Intel Xeon 8573C and 6973P and AMD EPYC 7763 and differ only by OS, in relationship 7."),
+        probe="processor_topology", guest_file="topology.c",
+        runs={
+              "38086761220": Run("windows-2025", "08fd4d30db6ca50556d9543ce274921c6a447adf1c3b4f0682477953b119dc75", "processor_topology-1791666778-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38086763271": Run("windows-2022", "08e3d2c9420d640bff4a643fe57eefbbde28da5e2933e5348c5a1b3a792c5f72", "processor_topology-1791666778-1", "AMD EPYC 7763 64-Core Processor"),
+              "38086765021": Run("windows-2025", "08fd4d30db6ca50556d9543ce274921c6a447adf1c3b4f0682477953b119dc75", "processor_topology-1791666778-2", "AMD EPYC 7763 64-Core Processor"),
+              "38086767249": Run("windows-2022", "08e3d2c9420d640bff4a643fe57eefbbde28da5e2933e5348c5a1b3a792c5f72", "processor_topology-1791666778-3", "Intel(R) Xeon(R) 6973P-C"),
+        },
+        documented=(
+            documented("ms-getlogicalprocessorinformationex", "api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformationex",
+                       "2023-02-27",
+                       "If the buffer is not large enough to contain all of the data, the function fails, GetLastError "
+                       "returns ERROR_INSUFFICIENT_BUFFER, and ReturnedLength is set to the buffer length required to "
+                       "contain all of the data."),),
+        open_questions=(
+            "The machine is w2m's choice where the rows give relations: one processor, one core without SMT, the "
+            "i3-6100's caches of the guest CPUID profile. A game that sizes its thread pool from these sees one core.",
+            "Relationship 7 (processor module) exists on Server 2025 and fails with error 31 on 2022; w2m answers as "
+            "2025 does."),
+        derive=topology_rows,
+        excluded={"ex.size_query.7": "Server 2022 fails it with ERROR_GEN_FAILURE (31); 2025 answers",
+                  "ex.short_buffer.7": "Server 2022 has no relationship 7",
+                  "ex.query.7": "Server 2022 has no relationship 7"},
+        plants={
+            "short_buffer_leaves_length": Plant(
+                "    if (!buffer || *(u32 *)length < need) {\n        *(u32 *)length = need;\n        set_error(ERROR_INSUFFICIENT_BUFFER);\n        return w2m_logged(W2M_API_GetLogicalProcessorInformationEx",
+                "    if (!buffer || *(u32 *)length < need) {\n        set_error(ERROR_INSUFFICIENT_BUFFER);\n        return w2m_logged(W2M_API_GetLogicalProcessorInformationEx",
+                ("ex.size_query.*", "ex.short_buffer.*", "ex.query.*")),
+            "cache_entry_48": Plant("    return 56;\n}", "    return 48;\n}", ("ex.query.2", "ex.query.65535")),
+            "zero_mask_accepted": Plant("    if (!mask || (mask & ~1ull)) {", "    if (mask & ~1ull) {", ("thread_affinity.zero",))}),
 }
 
 
@@ -1210,8 +1262,12 @@ def main(argv: list[str]) -> int:
         f.contract_path.parent.mkdir(parents=True, exist_ok=True)
         f.contract_path.write_text(json.dumps(build_contract(f), indent=1) + "\n")
         print(f"{f.contract_path.relative_to(ROOT)}: {len(contract(f).acceptance.rows)} rows")  # type: ignore[union-attr]
+    failed = False
     if a.run:
         s = item_run(f, a.runs)
+        # accepted means the record says so (KIT_DIARY #34): every run conforms and CANDIDATE_ACCEPTED was written
+        failed |= not (s["verdicts"] and all(v == "conforms" for v in s["verdicts"].values())
+                       and s["events"].get("CANDIDATE_ACCEPTED") == 1)
         index = a.runs / "family-runs.json"
         done = json.loads(index.read_text()) if index.exists() else {}
         done[f.name] = s
@@ -1227,9 +1283,10 @@ def main(argv: list[str]) -> int:
                 out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
             rows, named = unequal_rows(f, out), named_reach(f, p)
             verdict = "as named" if rows == named else f"NOT as named: named {named}"
+            failed |= rows != named
             shown = rows if len(rows) <= 20 else [*rows[:20], f"... {len(rows) - 20} more"]
             print(f"{name}: {len(rows)} unequal rows {shown} ({stop}); {len(named)} named; {verdict}")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
