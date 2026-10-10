@@ -1,0 +1,5 @@
+{"s":"tls.index","value":1}
+{"s":"tls.array","set":true,"slot_holds_block":true}
+{"s":"tls.values","counter":41,"zeros_zero":true}
+{"s":"tls.write","counter_after":42,"template_unchanged":true}
+{"s":"tls.directory","callbacks_empty":true,"zero_fill":0,"index_address_in_image":true}

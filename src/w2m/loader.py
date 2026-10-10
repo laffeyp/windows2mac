@@ -240,26 +240,36 @@ def load(data: bytes, dlls: Callable[[str], bytes | None] | None = None, name: s
 
 
 def _static_tls(mem: Memory, images: list[Image]) -> int:
-    """Each image with a TLS directory gets the next index in load order, written at its AddressOfIndex
-    (PE Format, The TLS Section: "The loader assigns the value of the TLS index to the place that was
-    indicated by the Address of Index field"); the thread's block for it is a copy of the template, after
-    relocation, and SizeOfZeroFill zero bytes. The array of block pointers is TEB.ThreadLocalStoragePointer."""
-    with_tls = [i for i in images if i.pe.tls is not None]
-    if not with_tls:
+    """Index 0 is the program's, whether or not it has a TLS directory (a program without one importing
+    a DLL with one: the DLL's index is 1 on every runner, contracts/windows.loader.static_tls); each DLL
+    with a TLS directory gets the next index in load order, written at its AddressOfIndex (PE Format, The
+    TLS Section: "The loader assigns the value of the TLS index to the place that was indicated by the
+    Address of Index field"). The thread's block for an image copies its template, after relocation, and
+    SizeOfZeroFill zero bytes; the program's slot is NULL when it has no TLS. The array of block pointers
+    is TEB.ThreadLocalStoragePointer."""
+    if all(i.pe.tls is None for i in images):
         return 0
-    blocks: list[bytes] = []
-    for index, image in enumerate(with_tls):
-        assert image.pe.tls is not None
+    program, dlls = images[0], [i for i in images[1:] if i.pe.tls is not None]
+    blocks: list[bytes | None] = [None]
+    for index, image in enumerate([program, *dlls]):
+        if image.pe.tls is None:
+            continue
         start, end, index_va, zero_fill = (v - image.pe.image_base + image.base if k < 3 else v
                                            for k, v in enumerate(image.pe.tls))
         region = _region(mem, image.base)
         region.data[index_va - image.base:index_va - image.base + 4] = index.to_bytes(4, "little")
-        blocks.append(bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill))
+        block = bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill)
+        if index == 0:
+            blocks[0] = block
+        else:
+            blocks.append(block)
     array_size = (8 * len(blocks) + 15) & ~15
-    size = array_size + sum((len(b) + 15) & ~15 for b in blocks)
+    size = array_size + sum((len(b) + 15) & ~15 for b in blocks if b is not None)
     tls = mem.map(TLS_VA, (size + 0xFFF) & ~0xFFF, "tls")
     at = array_size
     for index, block in enumerate(blocks):
+        if block is None:
+            continue                                   # the program's slot, when it has no TLS
         tls.data[8 * index:8 * index + 8] = (TLS_VA + at).to_bytes(8, "little")
         tls.data[at:at + len(block)] = block
         at += (len(block) + 15) & ~15
