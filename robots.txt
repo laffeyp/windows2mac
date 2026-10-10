@@ -1,4 +1,4 @@
-# windows2mac: the licensor does not consent to training use (LICENSE, Section C).
+# w2m: the licensor does not consent to training use (LICENSE, Section C).
 User-agent: GPTBot
 Disallow: /
 
