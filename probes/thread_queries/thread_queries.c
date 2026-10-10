@@ -1,8 +1,8 @@
 /* thread_queries.c — GetCurrentThread, GetThreadTimes, GetThreadPriority (Sprint 046, family "thread queries").
  *
  * No C runtime. UnityPlayer.dll's DllMain calls GetCurrentThread and GetThreadTimes (scratch run of the
- * launcher, 2026-10-10). Times differ between runs, so they are printed as relations: creation before now
- * and within ten minutes of it, exit time zero, kernel and user time each under ten seconds.
+ * launcher, 2026-10-10). Times differ between runs, so they are printed as relations: creation within a
+ * second after now or ten minutes before it, exit time zero, kernel and user time each under ten seconds.
  */
 #include <windows.h>
 
@@ -41,9 +41,11 @@ void start(void) {
     BOOL ok = GetThreadTimes(t, &c, &e, &k, &u);
     DWORD err = GetLastError();
     GetSystemTimeAsFileTime(&now);
-    const unsigned long long ten_minutes = 6000000000ull, ten_seconds = 100000000ull;
+    const unsigned long long ten_minutes = 6000000000ull, ten_seconds = 100000000ull, one_second = 10000000ull;
     row("times.current"); field("ret", ok != 0); field("err", err);
-    flag("created_before_now", ft(c) <= ft(now)); flag("created_within_ten_minutes", ft(now) - ft(c) < ten_minutes);
+    /* the creation time may read later than GetSystemTimeAsFileTime just after it (Server 2022, 6 of 8
+       executions, 2026-10-10): the relation is a window around now, not an order */
+    flag("created_near_now", ft(c) <= ft(now) + one_second && (ft(c) > ft(now) || ft(now) - ft(c) < ten_minutes));
     flag("exit_zero", ft(e) == 0); flag("kernel_under_ten_seconds", ft(k) < ten_seconds);
     flag("user_under_ten_seconds", ft(u) < ten_seconds); end();
 
