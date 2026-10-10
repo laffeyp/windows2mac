@@ -26,7 +26,7 @@ bits and 8/16-bit writes keep the other bits (SDM Vol 1 3.4.1.1).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from w2m.x86dec import Decoded, decode
 from w2m.x86ops import GPR8_LEGACY, GPR8_REX, GPR16, GPR32, GPR64, operands
@@ -197,111 +197,10 @@ def lift(code: bytes, address: int) -> Lifted:
     if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID"):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
-    if ic == "NOP":
-        pass
-    elif ic in ("CLD", "STD"):
-        b.emit("df", int(ic == "STD"))
-    elif ic == "CPUID":
-        b.emit("cpuid")                                # EAX, EBX, ECX, EDX from the guest profile
-    elif ic in SSE:
-        sse_dst = cast(tuple[Any, ...], _operand(b, ops[0], nxt)[1])
-        sse_src = cast(tuple[Any, ...], _operand(b, ops[1], nxt)[1])
-        has_memory = sse_dst[0] == "m" or sse_src[0] == "m"
-        b.emit("sse", ic, sse_dst, sse_src, 16 if has_memory and ic in SSE_ALIGNED else 0)
-    elif ic == "RET_NEAR" and not ops:
-        b.emit("br", "always", _pop(b))
-    elif ic in ("MOV", "MOVZX", "MOVSXD", "LEA"):
-        dk, dst, dbits = _operand(b, ops[0], nxt)
-        sk, src, sbits = _operand(b, ops[1], nxt, dbits)
-        v = src if sk in ("addr", "imm") else _val(b, sk, src)
-        if ic == "MOVSXD" and sbits == 32 and dbits == 64:
-            w = b.t()
-            b.emit("alu", w, "sext32", v, v, 64)
-            v = w
-        elif ic == "MOVSXD" and sbits != dbits:
-            raise LiftError(f"MOVSXD {sbits}->{dbits}")
-        b.emit("st", dst, v)
-    elif ic in ALU:
-        dk, dst, bits = _operand(b, ops[0], nxt)
-        sk, src, _ = _operand(b, ops[1], nxt, bits)
-        a, c, r = _val(b, dk, dst), _val(b, sk, src), b.t()
-        b.emit("alu", r, ALU[ic], a, c, bits)
-        if ic not in ("CMP", "TEST"):
-            b.emit("st", dst, r)                              # store before flags: the commit rule
-        b.emit("flags", "logic" if ALU[ic] in ("and", "or", "xor") else ALU[ic], a, c, r, bits)
-    elif ic in ("INC", "DEC"):
-        dk, dst, bits = _operand(b, ops[0], nxt)
-        a, one, r = _val(b, dk, dst), b.t(), b.t()
-        b.emit("imm", one, 1)
-        b.emit("alu", r, "add" if ic == "INC" else "sub", a, one, bits)
-        b.emit("st", dst, r)
-        b.emit("flags", ic.lower(), a, one, r, bits)
-    elif ic == "SHR":
-        dk, dst, bits = _operand(b, ops[0], nxt)
-        sk, src, _ = _operand(b, ops[1], nxt)
-        a, r = _val(b, dk, dst), b.t()
-        cnt = _val(b, sk, src)
-        b.emit("alu", r, "shr", a, cnt, bits)
-        b.emit("st", dst, r)
-        b.emit("flags", "shr", a, cnt, r, bits)
-    elif ic == "MUL":
-        sk, src, bits = _operand(b, ops[0], nxt)
-        if bits != 64:
-            raise LiftError(f"MUL r/m{bits}")
-        a, c, lo, hi = b.t(), _val(b, sk, src), b.t(), b.t()
-        b.emit("ld", a, ("r", RAX, 64, False))
-        b.emit("alu", lo, "mul_lo", a, c, 64)
-        b.emit("alu", hi, "mul_hi", a, c, 64)
-        b.emit("flags", "mul", a, c, hi, 64)
-        b.emit("st", ("r", RAX, 64, False), lo)
-        b.emit("st", ("r", RDX, 64, False), hi)
-    elif ic.startswith("SET") and ic[3:] in CC:
-        _, dst, _ = _operand(b, ops[0], nxt)
-        b.emit("set", CC[ic[3:]], dst)
-    elif ic.startswith("J") and ic[1:] in CC:
-        _, t, _ = _operand(b, ops[0], nxt)
-        b.emit("br", CC[ic[1:]], t)
-    elif ic in ("JMP", "CALL_NEAR"):
-        k, x, _ = _operand(b, ops[0], nxt)
-        target = _val(b, k, x)
-        if ic == "CALL_NEAR":
-            ret = b.t()
-            b.emit("imm", ret, nxt)
-            _push(b, ret)
-        b.emit("br", "always", target)
-    elif ic == "PUSH":
-        # operand size 64 by default, 16 with 66 (SDM PUSH: "decrements the stack pointer by 2"
-        # for a 16-bit operand); the semantics oracle found a 66 PUSH lifted as 8 bytes (Sprint 037)
-        size = 2 if f is not None and f.opsize == 16 else 8
-        k, x, bits = _operand(b, ops[0], nxt, 8 * size)
-        if bits not in (8, 16, 32, 64) or (k == "loc" and bits != 8 * size):
-            raise LiftError(f"PUSH {bits}-bit")
-        _push(b, _val(b, k, x), size)
-    elif ic == "POP":
-        _, pop_dst, bits = _operand(b, ops[0], nxt)
-        dst = cast(tuple[Any, ...], pop_dst)
-        if bits not in (16, 64):
-            raise LiftError(f"POP {bits}-bit")
-        size = bits // 8                                       # 66 POP: RSP += 2
-        if dst[0] == "m":
-            # SDM POP: "If the ESP register is used as a base register for addressing a
-            # destination operand in memory, the POP instruction computes the effective address
-            # of the operand after it increments the ESP register." The address was computed from
-            # the old RSP; the new one is `size` higher.
-            for i, op in enumerate(b.ops):
-                if op[0] == "addr" and op[1] == dst[1] and op[2] == RSP:
-                    b.ops[i] = op[:5] + (op[5] + size,) + op[6:]
-        sp, step, nsp, v = b.t(), b.t(), b.t(), b.t()
-        b.emit("ld", sp, ("r", RSP, 64, False))
-        b.emit("ld", v, ("m", sp, size))
-        b.emit("imm", step, size)
-        b.emit("alu", nsp, "add", sp, step, 64)
-        if dst[0] == "m":
-            b.emit("st", dst, v)                               # the store before RSP moves: the commit rule
-            b.emit("st", ("r", RSP, 64, False), nsp)
-        else:
-            b.emit("st", ("r", RSP, 64, False), nsp)           # POP RSP: the popped value wins (SDM)
-            b.emit("st", dst, v)
-    else:
+    from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)
+
+    found = registry().get(ic)
+    if found is None:
         raise LiftError(f"no lifting rule for {ic} at 0x{address:x}")
+    found.rule(Ctx(b, ic, f, ops, nxt, address))
     return Lifted(address, d.length, ic, tuple(b.ops))
