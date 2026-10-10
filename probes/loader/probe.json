@@ -1,0 +1,11 @@
+{
+ "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:start -Wl,/subsystem:console",
+ "libs": "-lkernel32",
+ "mode": "stdout",
+ "dll": {
+  "name": "loader_dll",
+  "source": "probes/loader/loader_dll.c",
+  "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:dll_main",
+  "libs": "-lkernel32"
+ }
+}

@@ -70,6 +70,13 @@ jobs:
           # probe.json `source` (Sprint 041): build another probe's harness against this probe's inputs
           $src = "probes/${{ inputs.probe }}/${{ inputs.probe }}.c"
           if ((Test-Path $cfg) -and $c.source) { $src = $c.source }
+          # probe.json `dll` (Sprint 046): a DLL the probe imports, built first; the exe links its import library
+          if ((Test-Path $cfg) -and $c.dll) {
+            $d = $c.dll
+            clang ($d.cflags -split " ") -shared "-Wl,/Brepro" "-Wl,/implib:$($d.name).lib" -o "$($d.name).dll" $d.source ($d.libs -split " ")
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $libs += "$($d.name).lib"
+          }
           # /Brepro (Sprint 044): the linker writes a content hash where it wrote the time and a random PDB
           # signature, so one source on one runner image builds one binary (16 runs had made 16 binaries)
           clang @flags "-Wl,/Brepro" -o probe.exe $src @libs
@@ -79,6 +86,12 @@ jobs:
           New-Item -ItemType Directory -Force out | Out-Null
           (Get-FileHash -Algorithm SHA256 probe.exe).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out/probe.sha256
           Copy-Item probe.exe out/probe.exe
+          $cfg = "probes/${{ inputs.probe }}/probe.json"
+          if ((Test-Path $cfg) -and (Get-Content $cfg -Raw | ConvertFrom-Json).dll) {
+            $dn = (Get-Content $cfg -Raw | ConvertFrom-Json).dll.name
+            Copy-Item "$dn.dll" "out/$dn.dll"
+            (Get-FileHash -Algorithm SHA256 "$dn.dll").Hash.ToLower() | Out-File -Encoding ascii -NoNewline out/dll.sha256
+          }
           $mode = "args"
           $cfg = "probes/${{ inputs.probe }}/probe.json"
           if (Test-Path $cfg) { $mode = (Get-Content $cfg -Raw | ConvertFrom-Json).mode }
