@@ -115,6 +115,7 @@
 - **2026-10-10 agent-resolved** — LOCK-prefixed instructions are lowered as LDAXR/STLXR retry loops. The commit rule (no guest effect before the last memory access) makes a retry repeat only temporaries. A misaligned LOCK operand, which an exclusive cannot take, runs in the model through the slow path: atomic while one vCPU runs, not across several. That case (an x86 split lock) is judged when Sprint 047 runs threads on more than one vCPU. Grounds: Arm ARM (exclusives require natural alignment); Intel SDM Vol 3A 9.1.2.2 (locked operations); Sprint 041 run 38029980267. Revisit if: a game executes a misaligned LOCK operation.
 - **2026-10-10 user** — Sprint 042 reframed ("yeah for sure. good", chat 2026-10-10, answering the proposal): from "the generation bet" (a local model writes CreateFileW unattended) to the Windows-function pipeline proven on CreateFileW — a no-CRT runner probe records what Windows does across dispositions, sharing modes and errors; a contract is built from those records; the guest runtime gets a file-system bridge to the Mac; an implementation (written by the agent) is judged by the contract in the VM; then, as a measurement only, whether a model produces a passing body inside that pipeline. Reason given: what milestone A needs is every Windows function the game calls with a contract built from Windows behavior, a judge, and an implementation that passes; who writes the implementation is secondary, and the candidate harness of Sprint 031 (loop-free, pointer-free C) cannot express CreateFileW.
 - **2026-10-10 user** — model generation inside 042 uses cloud models only ("we'll pretty much have to use cloud models only for this. Local models won't be able to do it… that's why it can't be framed on the model itself", chat 2026-10-10). The local qwen2.5-coder:7b step is dropped; the measurement runs on a cloud model, and no sprint outcome depends on it.
+- **2026-10-10 user** — substrate is used from its clone, not from PyPI ("clone the repo. Open up another branch... Nothing blocks anything. It's just that you cannot push to main", chat 2026-10-10, after the agent offered to wait for a kernel release). `./substrate` is on branch `w2m` (from main 3c0542a), installed editable through `tool.uv.sources`; pulling main into the branch picks up new kernel work; nothing is pushed to main. The measurement of Sprint 042 runs in substrate's session topology (user: "it's just like a real model harness loop"), not in a loop of w2m's own.
 
 ## Built
 
@@ -163,6 +164,8 @@
 
 - **2026-10-09** — Sprint 040 (guest state built) closed. `src/w2m/lift.py` (commit rule and `commit_order`; POP [m] order and RSP-based destination), `src/w2m/vm_backend.py` (lazy AF, DF, reconstruction table in guest memory, EL1 exception entry, translation flush, forward rule on asynchronous stops, CPUID through the runtime), `tools/guest_runtime/` (state block, EXCEPTION_RECORD and CONTEXT, `w2m_exception`, `w2m_cpuid`), `src/w2m/cpuid.py`, `specs/guest_cpuid.json` 0.1.0, `scripts/vm_oracle.py`, `tests/test_vm_state.py`, `store/probe-runs/38011862284/result-1.faults.bin`; `CLASSES_039` in `scripts/semantics_differential.py`. Dual contract: signal pass (two COMPARISON_COMPLETED conforms); artifact pass (gates.sh 0, 269 tests). Observation: pass — the guest runtime builds Windows's CONTEXT and exception record for all 1,916 compilable fault cases on two Intel CPUs, 20,448 completed cases agree with AF and DF; three planted faults caught; 763 asynchronous stops, all at block starts, count exact.
 - **2026-10-10** — Sprint 041 (instruction classes as item runs) closed. `src/w2m/rules/` (92 modules, 140 iclasses; SSE lowering and the integer rules with their class), `scripts/class_run.py` (item runs, pool), VM vector state and SSE (`vm_monitor` vget/vset, FPCR from MXCSR, slow path), LOCK as exclusive loops, case set 041 (`probes/semantics_041/`, release `semantics-041`), `store/probe-runs/38029980267/`. Dual contract: signal pass; artifact pass (gates.sh 0, 280 tests). Observation: pass — the VM agrees with Intel on every case of sets 039 (39,708) and 041 (13,243), XMM, MXCSR and faults included; 139 classes accepted on their own records; four planted faults caught.
+- **2026-10-10** — Sprint 042 (the Windows-function pipeline, on CreateFileW) closed. `probes/create_file/` (188 rows, Server 2025 run 38031352273 and Server 2022 run 38031354036), `contracts/windows.file.create_file.dispositions_sharing/0.1.0.json` (acceptance `exact_rows`, relation `exact`), `ExactRows` and `compare_exact_rows`, `tools/guest_runtime/file.c`, `src/w2m/file_bridge.py`, `build_runtime()`, `scripts/file_run.py` (item run, plants), `tests/test_create_file.py`, NEG rule and case set 042 (release `semantics-042`, run 38031723882), `Once()` decision triggers (141 classes rerun), service ring 10,922 records, `scripts/measure_file_generation.py` (session topology; kimi-k2.7-code:cloud accepted in one turn, 46 model calls), substrate from `./substrate` branch `w2m`. Dual contract: signal pass; artifact pass (gates 0, 306 tests, 441 records replay); observation pass.
+
 ## Deferred
 
 - **2026-10-03 (Agent)** — Steam acquisition (`w2m steam install`) and the lsteamclient-style Steam bridge. Re-visit when the v0 slice launches a locally supplied game directory. *(Withdrawn 2026-10-03 by the v0.2 user decision: §4.2 makes the bridge a first-class subsystem and §12.1 puts acquisition inside the product slice.)*
@@ -201,6 +204,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 042 (2026-10-10, closed)
+- **Scope:** one Windows function end to end: probe, contract from Windows's rows, file-system bridge, runtime implementation, judge; a cloud model measured inside it.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the runners printed 188 rows that became the contract; the item run's two comparisons ran each runner binary in the VM over file.c and the decision followed both; in the session, each model call caused one tool call and the seventh judge's item run accepted.
+  - *Observation 1 (documentation as hypothesis):* POSIX delete, trailing-name stripping, error 131 came from the rows. Disposition: resolved-here; KIT_DIARY #27.
+  - *Observation 2 (decided twice):* every 041 class record held two CANDIDATE_ACCEPTED. Disposition: resolved-here (`Once()`, counts tested); KIT_DIARY #26.
+  - *Observation 3 (the model as a tester):* a missing service and a NUL in a path crashed the judge. Disposition: resolved-here, with tests.
+- **Closed:** clean.
 
 ### Sprint 041 (2026-10-10, closed)
 - **Scope:** the instruction class as the unit of work: rules per class, item runs, the VM's SSE, the next block by frequency.
@@ -283,13 +295,4 @@
   - *Observation 4 (why rows are unconfirmed):* two missing validity rules (LEA mod=3; F2/F3 over 66). Disposition: deferred to Sprint 036 (decoder), first items.
 - **Closed:** clean.
 
-### Sprint 032 (2026-10-09, closed)
-- **Scope:** last-error contract 0.2.0 judged on values chosen at run time.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the runner built last_error_values.exe; each run read QueryPerformanceCounter, chose three table entries, and made three SetLastError/GetLastError pairs, writing each SetLastError's true args_sha256 from the table. The comparator hashed `SetLastError(<returned value>)` for each GetLastError line and matched it against the preceding SetLastError line. Windows, the model and the VM conformed; a planted constant failed at the first read and the model repaired it.
-  - *Observation 1 (the lockstep harness had a blind path):* a kernel32 return to an already-compiled block ran that block before the next check, so lockstep reported the VM one instruction ahead. The skeleton never returned to an address twice. Disposition: resolved-here; regression test fails at step 4,404 without the fix.
-  - *Observation 2 (the loop rejected one candidate three times):* the guard's trigger read shared state that the runner had already filled for all three runs. Disposition: resolved-here; the trigger records each failure from its event.
-  - *Observation 3 (what 0.2.0 still allows):* a candidate that ignores its argument passes one pair with probability at most 1/256; three pairs with consecutive values different make that negligible, and the table is not in the prompt. Disposition: recorded in the contract's open questions.
-- **Closed:** clean.
-
-Older entries (Sprints 000-031): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-032): `docs/sprint-tail-archive.md`.

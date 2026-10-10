@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 032 (2026-10-09, closed)
+- **Scope:** last-error contract 0.2.0 judged on values chosen at run time.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the runner built last_error_values.exe; each run read QueryPerformanceCounter, chose three table entries, and made three SetLastError/GetLastError pairs, writing each SetLastError's true args_sha256 from the table. The comparator hashed `SetLastError(<returned value>)` for each GetLastError line and matched it against the preceding SetLastError line. Windows, the model and the VM conformed; a planted constant failed at the first read and the model repaired it.
+  - *Observation 1 (the lockstep harness had a blind path):* a kernel32 return to an already-compiled block ran that block before the next check, so lockstep reported the VM one instruction ahead. The skeleton never returned to an address twice. Disposition: resolved-here; regression test fails at step 4,404 without the fix.
+  - *Observation 2 (the loop rejected one candidate three times):* the guard's trigger read shared state that the runner had already filled for all three runs. Disposition: resolved-here; the trigger records each failure from its event.
+  - *Observation 3 (what 0.2.0 still allows):* a candidate that ignores its argument passes one pair with probability at most 1/256; three pairs with consecutive values different make that negligible, and the table is not in the prompt. Disposition: recorded in the contract's open questions.
+- **Closed:** clean.
+
 ### Sprint 031 (2026-10-08, closed)
 - **Scope:** the candidate loop run for real on `windows.thread.last_error.set_get@0.1.0`.
 - **Rubber Duck Pass:**

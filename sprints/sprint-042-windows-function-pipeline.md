@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 042
-status: open
+status: closed
 phase: 4
 pass_kind: functional
 ---
@@ -65,3 +65,13 @@ Milestone A needs every Windows function the game calls to have a contract built
 ## done criteria
 
 CreateFileW and its companions run in the VM as Windows runs them on every recorded scenario, judged by a contract made from Windows's output. The pipeline (probe, contract, bridge, runtime implementation, judge) is the template for the next Windows function.
+
+## observed
+
+- **Windows recorded:** 188 rows from Server 2025 build 26100 (run 38031352273) and Server 2022 build 20348 (run 38031354036), two executions each, equal byte for byte; the two images built different binaries (sha256 798e17f6…, 92685e0b…). Windows follows the documented sharing rule on all 144 pairs. Beyond or against Microsoft Learn: POSIX delete while open (both builds), trailing dot and space stripped, ERROR_NEGATIVE_SEEK 131; a successful CreateFileW sets the last-error code to 0 or 183, while DeleteFileW, ReadFile, WriteFile and SetFilePointerEx leave it untouched.
+- **The VM equals Windows:** both runner binaries print all 188 rows in the VM, 0.14 s each; the item run (`store/runs/file-createfilew-*`, index `store/runs/file-runs.json`) accepts file.c once.
+- **Planted faults**, reach named first: sharing without the reverse check changed exactly 35 share rows; ERROR_ALREADY_EXISTS dropped changed the 2 named rows; trailing dot kept changed the 2 named rows; case-sensitive names stopped the run at `name.case.create_new` (an O_EXCL on a name APFS already holds), as its reach said.
+- **Correction to this card:** `rows_equal` would have been a new EnumRelation value, a vocabulary change. The event says `exact` (v0.2 §3, exact value: error codes); `exact_rows` names the acceptance form in the contract file only.
+- **On the way:** NEG was the one instruction class the probe needed and the lifter lacked; case set 042 (618 cases) agrees with a Xeon 8573C in the model and the VM, and NEG and NEG_LOCK are accepted classes. Every Sprint 041 class record held two CANDIDATE_ACCEPTED events (KIT_DIARY #26); the trigger is `Once()`, all 141 classes reran with one decision each. The service ring grew to 10,922 records.
+- **The measurement** (cloud model, user decision 2026-10-10): in substrate's session topology (substrate cloned, branch `w2m`, main 3c0542a), kimi-k2.7-code:cloud wrote a file.c the item run accepted, in one turn: 46 model calls, 45 tool calls (7 judges), 2,697,424 prompt and 35,069 completion tokens. An earlier hand loop (commit 55247f6) passed on attempt 5 once its retries carried the model's own code. The model's code exposed two w2m defects, fixed with tests: a runtime missing a service built and failed later with KeyError; a path with a NUL raised ValueError out of the run.
+- Gates: `scripts/gates.sh` 0 (306 tests; 441 records replay).
