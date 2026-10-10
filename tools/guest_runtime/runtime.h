@@ -208,6 +208,14 @@ struct w2m_exception_area {
 #define W2M_API_HeapFree 45
 #define W2M_API_HeapSize 46
 #define W2M_API_HeapReAlloc 47
+#define W2M_API_SetStdHandle 48
+#define W2M_API_GetFileType 49
+#define W2M_API_GetConsoleMode 50
+#define W2M_API_GetConsoleCP 51
+#define W2M_API_WriteConsoleW 52
+#define W2M_API_FlushFileBuffers 53
+#define W2M_API_GetCommandLineW 54
+#define W2M_API_GetCommandLineA 55
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -215,6 +223,11 @@ u64 w2m_logged(u64 api, u64 arg0, u64 ret);
 void w2m_unimplemented(u64 api, u64 detail);
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written);   /* file.c: WriteFile on a file handle */
 void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtime.c: the guest CPUID profile */
+int w2m_file_is_open(u64 handle);                                       /* file.c */
+
+/* Monitor data word: the process's start (console.c): 0 a console program with redirected standard
+ * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */
+#define W2M_START_MODE_OFF 0x68
 
 /* Monitor data word: 0, the counter is the guest's CNTVCT_EL0; 1, the host's clock (lockstep, where
  * model and VM must read the same count). src/w2m/vm_backend.py CLOCK_MODE. */

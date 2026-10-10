@@ -1,4 +1,28 @@
 {
+ "console": {
+  "candidate_sha256": "sha256:146b476654725ae4ba4bef55bc36b5b5c10d0ee7e6b27a731e83a92da6b53d07",
+  "divergence": {
+   "38041313080": null,
+   "38041315490": null,
+   "38041317837": null,
+   "38041320429": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 4,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "console",
+  "record": "store/runs/family-console-1791624517758673000",
+  "verdicts": {
+   "38041313080": "conforms",
+   "38041315490": "conforms",
+   "38041317837": "conforms",
+   "38041320429": "conforms"
+  }
+ },
  "critical_sections": {
   "candidate_sha256": "sha256:24a0b43197cd427eb58b353259181d13d76fca19b6c55909d87a14d0d55a81d1",
   "divergence": {
@@ -17,7 +41,7 @@
    "SESSION_INIT": 1
   },
   "family": "critical_sections",
-  "record": "store/runs/family-critical_sections-1791622937505837000",
+  "record": "store/runs/family-critical_sections-1791624512057584000",
   "verdicts": {
    "38039748482": "conforms",
    "38039751056": "conforms",
@@ -47,7 +71,7 @@
    "SESSION_INIT": 1
   },
   "family": "heap",
-  "record": "store/runs/family-heap-1791624236029468000",
+  "record": "store/runs/family-heap-1791624515032191000",
   "verdicts": {
    "38041103334": "conforms",
    "38041105720": "conforms",
@@ -77,7 +101,7 @@
    "SESSION_INIT": 1
   },
   "family": "modules",
-  "record": "store/runs/family-modules-1791622752119193000",
+  "record": "store/runs/family-modules-1791624497358277000",
   "verdicts": {
    "38039204088": "conforms",
    "38039205782": "conforms",
@@ -88,13 +112,13 @@
   }
  },
  "process_queries": {
-  "candidate_sha256": "sha256:eaa2221a53e4a40e2c300f3b849b3182a75a81304140653d75dd9468b2110854",
+  "candidate_sha256": "sha256:82a5a7b38c481f940168b103efe567f477f99ce79fba5489226b18e340654eb2",
   "divergence": {
    "38037899422": null,
    "38037900735": null,
    "38037902222": null,
-   "38037903596": "row time.counter_tracks_time: within_25_percent reference True, target False",
-   "38038027558": null
+   "38037903596": null,
+   "38038027558": "row time.counter_tracks_time: within_25_percent reference True, target False"
   },
   "events": {
    "CANDIDATE_GENERATED": 1,
@@ -106,13 +130,13 @@
    "SESSION_INIT": 1
   },
   "family": "process_queries",
-  "record": "store/runs/family-process_queries-1791622778782803000",
+  "record": "store/runs/family-process_queries-1791624489367856000",
   "verdicts": {
    "38037899422": "conforms",
    "38037900735": "conforms",
    "38037902222": "conforms",
-   "38037903596": "discrepancy",
-   "38038027558": "conforms"
+   "38037903596": "conforms",
+   "38038027558": "discrepancy"
   }
  },
  "thread_storage": {
@@ -135,7 +159,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_storage",
-  "record": "store/runs/family-thread_storage-1791623772335672000",
+  "record": "store/runs/family-thread_storage-1791624512813286000",
   "verdicts": {
    "38040526466": "conforms",
    "38040528813": "conforms",

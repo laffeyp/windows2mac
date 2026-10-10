@@ -71,6 +71,9 @@ class Family:
     plants: dict[str, Plant] = field(default_factory=dict)
     excluded: dict[str, str] = field(default_factory=dict)    # row -> why the runners may differ on it
     expected_stop: str | None = None      # the stop an excluded row causes in w2m (a prefix of the stop text)
+    gui: bool = False                     # the Steam-like start: no standard handles (console.c)
+    arguments: str = ""                   # after the quoted module path on the command line
+    output_file: str | None = None        # rows come from this file the probe writes, not standard output
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The contract's rows from a probe's printed rows: derived, then the excluded rows dropped."""
@@ -110,6 +113,13 @@ def process_query_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         else:
             rows.append(r)
     return rows
+
+
+def console_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The title's length is the runner's path length (D:\\a\\w2m\\w2m\\probe.exe); the row keeps only that
+    the title is the module's path."""
+    return [{k: v for k, v in r.items() if not (r.get("s") == "startup_info.child.title" and k == "length")}
+            for r in printed]
 
 
 FAMILIES: dict[str, Family] = {
@@ -308,6 +318,37 @@ FAMILIES: dict[str, Family] = {
                                            "realloc.in_place_only_grow")),
                 "zero_flag_ignored": Plant("    if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);", "",
                                            ("alloc.zero_memory_after_dirty_free",))}),
+    "console": Family(
+        name="console",
+        contract_id="windows.console.gui_start",
+        version="0.1.0",
+        summary=("A GUI process started without handles (as Steam starts the game) gets NULL standard handles, "
+                 "no console, and Windows's answers from GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, "
+                 "GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW and GetCommandLineW."),
+        probe="console", guest_file="console.c",
+        runs={
+              "38041313080": Run("windows-2025", "b5d610d864cb7a1a7a5c09fd5aec8e2d39291b5831c765f283911c97ec205e5d", "console-1791624304-0", "AMD EPYC 7763 64-Core Processor"),
+              "38041315490": Run("windows-2022", "39a6cda432228ad4f72af4aa44f85ca5bfe508397108df9cf3676ba3d3fe8cff", "console-1791624304-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38041317837": Run("windows-2025", "9cafe66a6c848f58271ae1ce9c5152c8daa8c683d8935402830d778d64c7ed41", "console-1791624304-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38041320429": Run("windows-2022", "fd3d5c379120837747c1f35ebfd8540ab1f93308ab20f3c305fc3a760c09aabb", "console-1791624304-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "The rows come from a child the probe starts with no inherited handles and an empty STARTUPINFO; that "
+            "Steam starts the game the same way is the BLACKBOARD's assumption of 2026-10-10 (revisit with Steam in "
+            "the local VM).",
+            "GetStartupInfoW leaves hStdInput, hStdOutput and hStdError unwritten when the start passed no handles: "
+            "the probe's fill survives (row startup_info.child.values).",
+            "The title's length is the runner's path and is dropped from the rows; the title being the module path is kept."),
+        derive=console_rows, gui=True, arguments="child", output_file="w2m-console-child.jsonl",
+        plants={"write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
+                                                   "    set_error(87);\n    return w2m_logged(api, arg, 0);",
+                                                   # no_console serves GetConsoleMode too: the std rows' console_mode_err
+                                                   ("std.input", "std.output", "std.error", "console_cp",
+                                                    "write_console.no_console")),
+                "file_type_null_no_error": Plant("    if (handle == 0 || handle == ~0ull) {\n        set_error(ERROR_INVALID_HANDLE);",
+                                                 "    if (handle == 0 || handle == ~0ull) {",
+                                                 ("std.input", "std.output", "std.error"))}),
 }
 
 
@@ -349,20 +390,27 @@ def contract(f: Family) -> Contract:
     return load_contract(f.contract_path)
 
 
-def run_in_vm(binary: str, sources: dict[str, str] | None = None) -> tuple[bytes, str, float]:
-    """A runner's probe binary in the managed VM with a fresh file-system root; (stdout, stop, seconds)."""
+def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | None = None) -> tuple[bytes, str, float]:
+    """A runner's probe binary in the managed VM with a fresh file-system root, started as `f` says;
+    (its rows' bytes: standard output, or f.output_file; the stop; seconds)."""
     from w2m.vm_backend import VM
     t0 = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="w2m-family-") as d:
         files = FileBridge(Path(d))
+        line = None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}'
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes()), files=files,
-                runtime_sources=sources, image_name="probe.exe")      # the runner ran it as probe.exe
+                runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
+                gui=f is not None and f.gui, command_line=line)
         try:
             r = vm.run(max_steps=1 << 40, timeout_ms=60_000)    # the clock probes spin until time advances
         finally:
             vm.close()
             files.close_all()
-    return r.stdout, r.stop, time.monotonic() - t0
+        out = r.stdout
+        if f is not None and f.output_file is not None:
+            written = Path(d) / f.output_file
+            out = written.read_bytes() if written.exists() else b""
+    return out, r.stop, time.monotonic() - t0
 
 
 def derived_output(f: Family, out: bytes) -> bytes:
@@ -409,7 +457,7 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
     def judge(run: str) -> Callable[[Any], AsyncIterator[msgspec.Struct]]:
         async def go(_inp: dict[str, Any]) -> AsyncIterator[msgspec.Struct]:
             r = f.runs[run]
-            out, stop, _ = run_in_vm(r.binary, sources)
+            out, stop, _ = run_in_vm(r.binary, sources, f)
             cmp = compare_exact_rows(c, derived_output(f, out), f"cmp-{cand}-{run}", f"{r.execution}-1",
                                      f"managed_vm-{cand}-{run}")
             expected = f.expected_stop is not None and stop.startswith(f.expected_stop)
@@ -511,7 +559,7 @@ def main(argv: list[str]) -> int:
     if a.plants:
         binary = next(iter(f.runs.values())).binary
         for name, p in f.plants.items():
-            out, stop, _ = run_in_vm(binary, planted_sources(f, name))
+            out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
             rows = unequal_rows(f, out)
             print(f"{name}: unequal {rows} ({stop}); named reach {list(p.reach)}")
     return 0

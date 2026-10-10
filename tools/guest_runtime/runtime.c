@@ -66,10 +66,6 @@ u64 k32_GetLastError(void) {
     return w2m_logged(W2M_API_GetLastError, 0, w2m_get_last_error());
 }
 
-u64 k32_GetStdHandle(u64 which) {
-    if ((u32)which != STD_OUTPUT_HANDLE) w2m_unimplemented(W2M_API_GetStdHandle, (u32)which);
-    return w2m_logged(W2M_API_GetStdHandle, (u32)which, STDOUT_HANDLE);
-}
 
 /* WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped):
  * "sets this value to zero before doing any work"; nonzero (TRUE) on success. */

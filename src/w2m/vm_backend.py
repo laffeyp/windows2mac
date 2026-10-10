@@ -67,6 +67,7 @@ DF_BYTE = 0x38                      # MONITOR_DATA + this: DF (0 or 1)
 RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the reconstruction table
 MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits and the flags not yet in FPSR
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
+START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
@@ -98,7 +99,8 @@ EXCEPTION_MAGIC = 0x7832774E4F495445
 KERNEL32_IMAGE_OFF = EXCEPTION_OFF + 0x1000     # synthetic module images, one page each (modules.py)
 KERNELBASE_IMAGE_OFF = KERNEL32_IMAGE_OFF + 0x1000
 TLS_EXPANSION_OFF = KERNELBASE_IMAGE_OFF + 0x1000   # TEB.TlsExpansionSlots' array: 1024 values (thread_storage.c)
-PROCESS_SIZE = TLS_EXPANSION_OFF + 0x2000
+COMMAND_LINE_OFF = TLS_EXPANSION_OFF + 0x2000    # the command line, UTF-16 with a NUL (console.c)
+PROCESS_SIZE = COMMAND_LINE_OFF + 0x1000
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -132,7 +134,11 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "FlsSetValue": ("k32_FlsSetValue", True), "FlsFree": ("k32_FlsFree", True),
             "GetProcessHeap": ("k32_GetProcessHeap", True), "HeapAlloc": ("k32_HeapAlloc", True),
             "HeapFree": ("k32_HeapFree", True), "HeapSize": ("k32_HeapSize", True),
-            "HeapReAlloc": ("k32_HeapReAlloc", True)}
+            "HeapReAlloc": ("k32_HeapReAlloc", True),
+            "SetStdHandle": ("k32_SetStdHandle", True), "GetFileType": ("k32_GetFileType", True),
+            "GetConsoleMode": ("k32_GetConsoleMode", True), "GetConsoleCP": ("k32_GetConsoleCP", True),
+            "WriteConsoleW": ("k32_WriteConsoleW", True), "FlushFileBuffers": ("k32_FlushFileBuffers", True),
+            "GetCommandLineW": ("k32_GetCommandLineW", True), "GetCommandLineA": ("k32_GetCommandLineA", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
@@ -457,6 +463,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_STATE_VA": PROCESS_VA + STATE_OFF, "W2M_EXCEPTION_VA": PROCESS_VA + EXCEPTION_OFF,
         "W2M_TLS_EXPANSION_VA": PROCESS_VA + TLS_EXPANSION_OFF, "W2M_TLS_TAKEN": TLS_TAKEN,
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
+        "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -845,12 +852,15 @@ class VM:
     def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False,
                  clock: Callable[[], int] | None = None, last_error_source: str | None = None,
                  files: FileBridge | None = None, file_source: str | None = None,
-                 runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe") -> None:
+                 runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe",
+                 gui: bool = False, command_line: str | None = None) -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
         self.clock = clock if clock is not None else monotonic_count   # a given clock is served by the host
         self.clock_from_host = clock is not None
+        self.gui = gui                     # the Steam-like start: no standard handles (console.c)
+        self.command_line = command_line if command_line is not None else f'"C:\\w2m\\app\\{image_name}"'
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
@@ -917,6 +927,11 @@ class VM:
     def _init_process(self, tid: int) -> None:
         """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode."""
         struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE, 1 if self.clock_from_host else 0)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + START_MODE, 1 if self.gui else 0)
+        line = self.command_line.encode("utf-16-le") + b"\0\0"
+        if len(line) > 0x1000:
+            raise CompileError(f"command line of {len(line)} bytes: the page holds 4096")
+        self.mm[self._process(COMMAND_LINE_OFF):self._process(COMMAND_LINE_OFF) + len(line)] = line
         teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)

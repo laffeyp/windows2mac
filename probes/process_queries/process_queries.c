@@ -160,15 +160,21 @@ static void times(void) {
     flag("advances", cn > c0);
     end();
 
-    /* Over one advance of the system time, the counter's elapsed seconds agree within 25%. */
-    unsigned long long a = filetime(), b = a;
-    while (b - a < 200000ull) b = filetime();             /* at least 20 ms of system time */
-    unsigned long long ca = counter();
-    unsigned long long a2 = filetime(), b2 = a2;
-    while (b2 - a2 < 500000ull) b2 = filetime();          /* 50 ms */
-    unsigned long long cb = counter();
-    unsigned long long counted = (cb - ca) * 10000000ull / (unsigned long long)f.QuadPart;  /* 100 ns units */
-    unsigned long long timed = b2 - a2;
+    /* Over one advance of the system time, the counter's elapsed seconds agree within 25%. The window
+       runs twice and the second is kept: the first execution of new code may stall (a translator
+       compiles it), and a stall between the counter's read and the clock's would sit in one window
+       only (w2m failed 4 of 30 runs on the first window alone, with a monotonic counter). */
+    unsigned long long counted = 0, timed = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        unsigned long long a = filetime(), b = a;
+        while (b - a < 200000ull) b = filetime();         /* at least 20 ms of system time */
+        unsigned long long ca = counter();
+        unsigned long long a2 = filetime(), b2 = a2;
+        while (b2 - a2 < 500000ull) b2 = filetime();      /* 50 ms */
+        unsigned long long cb = counter();
+        counted = (cb - ca) * 10000000ull / (unsigned long long)f.QuadPart;  /* 100 ns units */
+        timed = b2 - a2;
+    }
     row("time.counter_tracks_time");
     flag("within_25_percent", counted * 4 >= timed * 3 && counted * 4 <= timed * 5);
     end();

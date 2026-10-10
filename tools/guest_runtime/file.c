@@ -176,6 +176,9 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
     return w2m_logged(W2M_API_CreateFileW, name, HANDLE_BASE + 4 * (u64)slot);
 }
 
+/* A handle CreateFileW gave out and CloseHandle has not closed (console.c's GetFileType). */
+int w2m_file_is_open(u64 handle) { return file_of(handle) != 0; }
+
 /* "Closes an open object handle." Nonzero on success. */
 u64 k32_CloseHandle(u64 handle) {
     struct open_file *f = file_of(handle);

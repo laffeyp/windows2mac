@@ -1,0 +1,141 @@
+{
+ "contract_id": "windows.console.gui_start",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A GUI process started without handles (as Steam starts the game) gets NULL standard handles, no console, and Windows's answers from GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW and GetCommandLineW.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/console/console.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "std.input",
+    "null": true,
+    "invalid": false,
+    "err": 57005,
+    "file_type": 0,
+    "file_type_err": 6,
+    "console_mode_ret": 0,
+    "console_mode_err": 6
+   },
+   {
+    "s": "std.output",
+    "null": true,
+    "invalid": false,
+    "err": 57005,
+    "file_type": 0,
+    "file_type_err": 6,
+    "console_mode_ret": 0,
+    "console_mode_err": 6
+   },
+   {
+    "s": "std.error",
+    "null": true,
+    "invalid": false,
+    "err": 57005,
+    "file_type": 0,
+    "file_type_err": 6,
+    "console_mode_ret": 0,
+    "console_mode_err": 6
+   },
+   {
+    "s": "console_cp",
+    "value": 0,
+    "err": 6
+   },
+   {
+    "s": "write_console.no_console",
+    "ret": 0,
+    "written": 77,
+    "err": 6
+   },
+   {
+    "s": "set_std_handle",
+    "ret": 1,
+    "err": 57005,
+    "get_returns_it": true,
+    "file_type_disk": 1,
+    "file_type_err": 57005
+   },
+   {
+    "s": "flush_file_buffers.disk",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "startup_info.child",
+    "cb": 104,
+    "flags": 0,
+    "show_window": 0,
+    "std_input_null": false,
+    "std_output_null": false,
+    "reserved_null": false,
+    "desktop_null": false,
+    "title_null": false
+   },
+   {
+    "s": "startup_info.child.values",
+    "std_input": "0xa5a5a5a5a5a5a5a5",
+    "std_output": "0xa5a5a5a5a5a5a5a5",
+    "std_error": "0xa5a5a5a5a5a5a5a5",
+    "reserved": "",
+    "desktop": "winsta0\\default",
+    "x": 0,
+    "y": 0,
+    "cb_reserved2": 0,
+    "reserved2_null": true
+   },
+   {
+    "s": "startup_info.child.title",
+    "is_module_path": true
+   },
+   {
+    "s": "command_line.child",
+    "quoted_module_path_then_child": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38041313080: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b5d610d864cb7a1a7a5c09fd5aec8e2d39291b5831c765f283911c97ec205e5d; run 38041315490: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:39a6cda432228ad4f72af4aa44f85ca5bfe508397108df9cf3676ba3d3fe8cff; run 38041317837: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:9cafe66a6c848f58271ae1ce9c5152c8daa8c683d8935402830d778d64c7ed41; run 38041320429: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:fd3d5c379120837747c1f35ebfd8540ab1f93308ab20f3c305fc3a760c09aabb",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "console-1791624304-0-1",
+    "console-1791624304-0-2",
+    "console-1791624304-1-1",
+    "console-1791624304-1-2",
+    "console-1791624304-2-1",
+    "console-1791624304-2-2",
+    "console-1791624304-3-1",
+    "console-1791624304-3-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "The rows come from a child the probe starts with no inherited handles and an empty STARTUPINFO; that Steam starts the game the same way is the BLACKBOARD's assumption of 2026-10-10 (revisit with Steam in the local VM).",
+  "GetStartupInfoW leaves hStdInput, hStdOutput and hStdError unwritten when the start passed no handles: the probe's fill survives (row startup_info.child.values).",
+  "The title's length is the runner's path and is dropped from the rows; the title being the module path is kept."
+ ],
+ "sections": {
+  "probe": "probes/console (Sprint 044)",
+  "implementation": "tools/guest_runtime/console.c",
+  "rows": "scripts/family_run.py console",
+  "excluded": "none"
+ }
+}

@@ -122,16 +122,24 @@ u64 k32_InitializeSListHead(u64 head) {
 }
 
 static const unsigned short empty_string[1];
+static const unsigned short desktop[] = {'w', 'i', 'n', 's', 't', 'a', '0', '\\', 'd', 'e', 'f', 'a', 'u', 'l', 't', 0};
+static unsigned short title[520];
 
 /* "Retrieves the contents of the STARTUPINFO structure that was specified when the calling process
- * was created." The rows fix cb 104, lpReserved non-null, lpReserved2 null, cbReserved2 0; what
- * lpReserved points to was not observed, and here it is an empty string. Every other field is
- * zero: no window, no flags, no standard handles passed. */
+ * was created." The rows (contracts windows.process.queries, windows.console.gui_start) fix: cb 104,
+ * lpReserved an empty string, lpDesktop "winsta0\default", lpTitle the module's path, every count,
+ * flag and position 0, lpReserved2 NULL, and hStdInput, hStdOutput, hStdError not written at all
+ * when the start passed no handles (STARTF_USESTDHANDLES clear: the caller's bytes stay). */
 u64 k32_GetStartupInfoW(u64 si) {
     u8 *b = (u8 *)si;
-    for (int i = 0; i < 104; i++) b[i] = 0;
-    *(u32 *)si = 104;                                          /* cb */
-    *(u64 *)(si + 8) = (u64)empty_string;                      /* lpReserved */
+    for (int i = 0; i < 80; i++) b[i] = 0;                /* through wShowWindow, cbReserved2, lpReserved2 */
+    *(u32 *)si = 104;                                      /* cb */
+    *(u64 *)(si + 8) = (u64)empty_string;                  /* lpReserved */
+    *(u64 *)(si + 16) = (u64)desktop;                      /* lpDesktop */
+    u64 image = *(const volatile u64 *)(W2M_PEB_VA + 0x10);
+    u64 n = w2m_host(W2M_HOST_MODULE_PATH, image, (u64)title, 519, 0, 0);
+    title[n < 519 ? n : 519] = 0;
+    *(u64 *)(si + 24) = (u64)title;                        /* lpTitle */
     return w2m_logged(W2M_API_GetStartupInfoW, si, 0);
 }
 

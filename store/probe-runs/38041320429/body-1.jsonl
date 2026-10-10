@@ -1,0 +1,11 @@
+{"s":"std.input","null":true,"invalid":false,"err":57005,"file_type":0,"file_type_err":6,"console_mode_ret":0,"console_mode_err":6}
+{"s":"std.output","null":true,"invalid":false,"err":57005,"file_type":0,"file_type_err":6,"console_mode_ret":0,"console_mode_err":6}
+{"s":"std.error","null":true,"invalid":false,"err":57005,"file_type":0,"file_type_err":6,"console_mode_ret":0,"console_mode_err":6}
+{"s":"console_cp","value":0,"err":6}
+{"s":"write_console.no_console","ret":0,"written":77,"err":6}
+{"s":"set_std_handle","ret":1,"err":57005,"get_returns_it":true,"file_type_disk":1,"file_type_err":57005}
+{"s":"flush_file_buffers.disk","ret":1,"err":57005}
+{"s":"startup_info.child","cb":104,"flags":0,"show_window":0,"std_input_null":false,"std_output_null":false,"reserved_null":false,"desktop_null":false,"title_null":false}
+{"s":"startup_info.child.values","std_input":"0xa5a5a5a5a5a5a5a5","std_output":"0xa5a5a5a5a5a5a5a5","std_error":"0xa5a5a5a5a5a5a5a5","reserved":"","desktop":"winsta0\\default","x":0,"y":0,"cb_reserved2":0,"reserved2_null":true}
+{"s":"startup_info.child.title","length":22,"is_module_path":true}
+{"s":"command_line.child","quoted_module_path_then_child":true}
