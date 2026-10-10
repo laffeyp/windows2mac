@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 046
-status: open (closing; CI on the closing commit not yet green)
+status: closed (CI run 38084406263 success on dab6274, 2026-10-10)
 phase: 5
 pass_kind: functional
 ---

@@ -214,7 +214,7 @@
 
 ## Sprint tail
 
-### Sprint 046 (2026-10-10, closing: CI not yet green)
+### Sprint 046 (2026-10-10, closed: CI run 38084406263 success on dab6274)
 - **Scope:** load UnityPlayer.dll, run its DllMain, enter UnityMain.
 - **Rubber Duck Pass:**
   - *Sequence narration:* stop, stub-list what follows, probe on the runners, answer the rows, plant, accept, move.
