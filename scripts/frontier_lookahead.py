@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.lift import RAX  # noqa: E402
 from w2m.vm_backend import VM  # noqa: E402
@@ -34,8 +35,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--limit", type=int, default=5_000, help="stop after this many returned calls")
     a = ap.parse_args(argv)
     here = a.exe.resolve().parent
+    files = FileBridge(here, read_only=True)          # C:\\w2m\\app, read-only (Sprint 048)
     vm = VM(load(a.exe.read_bytes(), lambda n: (here / n).read_bytes() if (here / n).is_file() else None,
-                 a.exe.name), image_name=a.exe.name, gui=True)
+                 a.exe.name), image_name=a.exe.name, gui=True, files=files)
     counts: Counter[str] = Counter()
     first: dict[str, int] = {}
 
@@ -51,6 +53,7 @@ def main(argv: list[str]) -> int:
         r = vm.run(max_steps=a.max_steps, timeout_ms=120_000, on_unimplemented=returned)
     finally:
         vm.close()
+        files.close_all()
     for name, ret in first.items():
         print(f"{counts[name]:>7}  {name}  0x{ret:x}")
     print(f"stop after {r.instructions_executed:,} instructions: {r.stop}")

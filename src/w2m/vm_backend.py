@@ -44,7 +44,7 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
-from w2m.file_bridge import FILE_LOOKUP, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
+from w2m.file_bridge import FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
 from w2m.virtual_memory import VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
@@ -216,7 +216,8 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetErrorMode": ("k32_GetErrorMode", True),
             "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True),
             "GetLogicalProcessorInformationEx": ("k32_GetLogicalProcessorInformationEx", True), "GetLogicalProcessorInformation": ("k32_GetLogicalProcessorInformation", True), "GetActiveProcessorCount": ("k32_GetActiveProcessorCount", True), "GetCurrentProcess": ("k32_GetCurrentProcess", True), "GetProcessAffinityMask": ("k32_GetProcessAffinityMask", True), "SetThreadAffinityMask": ("k32_SetThreadAffinityMask", True), "GetNumaHighestNodeNumber": ("k32_GetNumaHighestNodeNumber", True),
-            "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True)}
+            "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True),
+            "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
 DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
                 "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047
@@ -1223,7 +1224,7 @@ class VM:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
-        if FILE_LOOKUP <= op <= FILE_UNLINK or op == FILE_STAT:
+        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR):
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
             result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))

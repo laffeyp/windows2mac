@@ -275,6 +275,23 @@ def topology_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def paths_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Paths (Sprint 048): the file part of "." and ".." is the length of the working directory's own last name,
+    the machine's (a runner's "windows2mac", w2m's "app"), so it is dropped; the drive after "\\\\?\\" is the
+    machine's letter (D: on the runners, C: in w2m) and is written <d>."""
+    out = []
+    for r in printed:
+        r = dict(r)
+        if r.get("s") in ("full.dot", "full.dotdot_alone"):
+            r.pop("part_from_end", None)
+        for k in ("in", "out"):
+            v = r.get(k)
+            if isinstance(v, str) and v.startswith("\\\\?\\") and v[5:6] == ":":
+                r[k] = v[:4] + "<d>" + v[5:]
+        out.append(r)
+    return out
+
+
 FAMILIES: dict[str, Family] = {
     "loader": Family(
         name="loader",
@@ -1042,6 +1059,42 @@ FAMILIES: dict[str, Family] = {
                                           ("ex.empty", "plain.empty")),
             "wildcard_looked_up": Plant("        if (s[n] == '*' || s[n] == '?') return ERROR_INVALID_NAME;", "        ;",
                                         ("ex.wildcard", "plain.wildcard"))}),
+    "paths": Family(
+        name="paths",
+        contract_id="windows.file.paths",
+        version="0.1.0",
+        summary=("GetCurrentDirectoryW, GetFullPathNameW over 26 names (relative, rooted, drive-relative, other drives, "
+                 "\\\\?\\, UNC, dots, slashes, blanks, wildcards), SetCurrentDirectoryW, CreateDirectoryW and "
+                 "RemoveDirectoryW with their errors; paths printed against <cwd>, <parent> and <root>."),
+        probe="paths", guest_file="paths.c",
+        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/file.c"),
+        runs={
+              "38090281974": Run("windows-2025", "a720b00e8a38dcb0482217ade8c02b84281782fa011fafcd9f8fa613ef59bdd1", "paths-1791670095-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38090284442": Run("windows-2022", "22e3d64701297ce3aa758740cfd378a143b49475321683ed7bfbf2d4e29ba2a4", "paths-1791670095-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getfullpathnamew", "api/fileapi/nf-fileapi-getfullpathnamew", "2018-12-05",
+                       "GetFullPathName merges the name of the current drive and directory with a specified file name "
+                       "to determine the full path and file name of a specified file. ... This function does not verify "
+                       "that the resulting path and file name are valid, or that they see an existing file on the "
+                       "associated volume."),),
+        open_questions=(
+            "\"x\\CON\": a device (\\\\.\\CON) on Server 2022, an ordinary name on 2025; excluded, and w2m answers as 2025.",
+            "Each drive's own working directory (\"Q:x\" while on C:) is not modelled; the rows show Q:\\x, as for a "
+            "drive never visited."),
+        derive=paths_rows,
+        excluded={"full.device_name": "Server 2022 maps x\\CON to the device \\\\.\\CON; 2025 does not"},
+        plants={
+            "inner_dots_kept": Plant(
+                "        while (len && (in[start + len - 1] == '.' || in[start + len - 1] == ' ')) len--;",
+                "        while (!in[i] && len && (in[start + len - 1] == '.' || in[start + len - 1] == ' ')) len--;",
+                ("full.inner_trailing_dot",)),
+            "dotdot_past_root": Plant(
+                "            if (n > root) {                             /* drop the last \"component\\\" */",
+                "            if (n > 0) {                                /* drop the last \"component\\\" */",
+                ("full.rooted_dotdot",)),
+            "working_directory_removed": Plant(
+                "    if (same(scratch, working())) {", "    if (same(scratch, working()) && 0) {", ("dir.remove_cwd",))}),
 }
 
 

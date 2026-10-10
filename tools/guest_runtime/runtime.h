@@ -296,6 +296,11 @@ struct w2m_exception_area {
 #define W2M_API_GetNumaHighestNodeNumber 127
 #define W2M_API_GetFileAttributesExW 128
 #define W2M_API_GetFileAttributesW 129
+#define W2M_API_GetFullPathNameW 130
+#define W2M_API_GetCurrentDirectoryW 131
+#define W2M_API_SetCurrentDirectoryW 132
+#define W2M_API_CreateDirectoryW 133
+#define W2M_API_RemoveDirectoryW 134
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -322,7 +327,7 @@ u64 w2m_unhandled_exception_filter(void);                               /* excep
 
 /* Host file primitives (src/w2m/file_bridge.py). */
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,
-       W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24 };   /* FILE_STAT: Sprint 047 (file_attributes.c) */
+       W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR };   /* 24: Sprint 047; 25, 26: 048 */
 
 /* The contract surface a candidate may implement (contracts/windows.thread.last_error.set_get).
  * The default is tools/guest_runtime/last_error.c. */

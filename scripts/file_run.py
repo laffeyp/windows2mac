@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import tempfile
 import time
@@ -171,8 +172,12 @@ PLANTS: dict[str, tuple[str, str, str]] = {
     "already_exists_dropped": (
         "? ERROR_ALREADY_EXISTS : 0", "? 0 : 0",
         "2 rows: disp.create_always.existing, disp.open_always.existing"),
-    "trailing_dot_kept": (
-        "    if (!dots)\n        while", "    if (!dots && 0)\n        while",
+    "trailing_dot_kept": (                    # Sprint 048: the stripping is paths.c's; the plant puts the character back
+        "    for (u64 k = 0; k <= n; k++) path[k] = full[k];\n    return n;",
+        "    for (u64 k = 0; k <= n; k++) path[k] = full[k];\n"
+        "    { const unsigned short *s = (const unsigned short *)name; u64 l = 0; while (s[l]) l++;\n"
+        "      int dots = s[0] == '.' && (l == 1 || (l == 2 && s[1] == '.'));\n"
+        "      if (!dots && (s[l - 1] == '.' || s[l - 1] == ' ')) { path[n++] = s[l - 1]; path[n] = 0; } }\n    return n;",
         "2 rows: name.trailing_dot, name.trailing_space"),
 }
 
@@ -307,9 +312,12 @@ def main(argv: list[str]) -> int:
         CONTRACT.parent.mkdir(parents=True, exist_ok=True)
         CONTRACT.write_text(json.dumps(build_contract(), indent=1) + "\n")
         print(f"{CONTRACT.relative_to(ROOT)}: {len(contract().acceptance.rows)} rows")  # type: ignore[union-attr]
+    failed = False
     if a.run:
         s = item_run(a.runs)
-        s["record"] = str(Path(s["record"]).relative_to(ROOT))
+        # accepted means the record says so (KIT_DIARY #34, #35): every runner conforms and CANDIDATE_ACCEPTED was written
+        failed |= not (s["verdicts"] and all(v == "conforms" for v in s["verdicts"].values())
+                       and s["events"].get("CANDIDATE_ACCEPTED") == 1)
         (a.runs / "file-runs.json").write_text(json.dumps([s], indent=1) + "\n")
         print(json.dumps(s, indent=1))
     if a.plants:
@@ -318,11 +326,15 @@ def main(argv: list[str]) -> int:
         for name in PLANTS:
             out, stop, _ = run_in_vm(binary, planted_source(name))
             rows = unequal_rows(c, out)
-            print(f"{name}: {len(rows)} rows unequal ({stop}); named reach: {PLANTS[name][2]}; first {rows[:3]}")
+            named = int(re.match(r"(\d+)", PLANTS[name][2]).group(1))    # type: ignore[union-attr]  # the reach's count
+            failed |= len(rows) != named
+            print(f"{name}: {len(rows)} rows unequal ({stop}); named reach: {PLANTS[name][2]}; "
+                  f"{'as named' if len(rows) == named else 'NOT as named'}; first {rows[:3]}")
         out, stop, _ = run_in_vm(binary, bridge=CaseSensitiveBridge)
         rows = unequal_rows(c, out)
         print(f"case_sensitive_names: {len(rows)} rows unequal ({stop}); first {rows[:3]}")
-    return 0
+        failed |= not rows                               # a case-sensitive file system must change some row
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

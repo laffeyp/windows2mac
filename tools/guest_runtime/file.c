@@ -82,24 +82,26 @@ static struct open_file *file_of(u64 handle) {
     return &files[slot];
 }
 
-/* Copy the name into `path`, Win32-normalized: the last component loses trailing dots and spaces
- * unless it is "." or ".." (Microsoft Learn, Naming Files). Returns the length in characters. */
+u64 w2m_full_path(const unsigned short *in, unsigned short *out, long *part);   /* paths.c (Sprint 048) */
+
+/* The name made full into `path` as GetFullPathNameW makes it (paths.c: the working directory C:\w2m\app,
+ * "." and "..", every component's trailing dots and spaces); before Sprint 048 the last component lost its
+ * trailing dots and spaces and the name stayed relative. Returns the length in characters. */
 static u64 normalize(u64 name) {
-    const unsigned short *s = (const unsigned short *)name;
-    u64 n = 0;
-    while (s[n]) {
-        if (n == MAX_PATH_CHARS) w2m_unimplemented(W2M_API_CreateFileW, n);
-        path[n] = s[n];
-        n++;
-    }
-    u64 start = n;
-    while (start && path[start - 1] != '\\' && path[start - 1] != '/') start--;
-    u64 len = n - start;
-    int dots = (len == 1 && path[start] == '.') || (len == 2 && path[start] == '.' && path[start + 1] == '.');
-    if (!dots)
-        while (n > start && (path[n - 1] == '.' || path[n - 1] == ' ')) n--;
-    path[n] = 0;
+    static unsigned short full[1024];
+    long part;
+    if (!*(const unsigned short *)name) return 0;       /* the empty name: callers answer ERROR_PATH_NOT_FOUND (name.empty) */
+    u64 n = w2m_full_path((const unsigned short *)name, full, &part);
+    if (!n || n > MAX_PATH_CHARS) w2m_unimplemented(W2M_API_CreateFileW, n);    /* blanks only, or too long: not in the rows */
+    for (u64 k = 0; k <= n; k++) path[k] = full[k];
     return n;
+}
+
+/* For paths.c (Sprint 048): FILE_STAT on a full path. */
+u64 w2m_file_stat_full(const unsigned short *full, u64 out) {
+    u64 n = 0;
+    while (full[n]) n++;
+    return w2m_host(W2M_FILE_STAT, (u64)full, n, out, 0, 0);
 }
 
 static u64 lookup(u64 chars, u64 *id) {
