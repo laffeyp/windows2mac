@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 046
-status: closed
+status: open (closing; CI on the closing commit not yet green)
 phase: 5
 pass_kind: functional
 ---
@@ -62,3 +62,4 @@ The launcher calls `UnityMain` and UnityPlayer.dll's code runs in w2m, its DllMa
 - **Planted faults:** two named reaches were wrong and are recorded: a static-TLS plant (indices from 0) named one row and faulted the run; a February-29 plant named February 31, which stays invalid, while later dates moved. A host plant's patch leaked into the next plant until importers were repointed.
 - **Lost runner rounds and their causes:** the Windows SDK and mingw's headers differ (`small` twice, a union in IMAGE_TLS_DIRECTORY64, GetVersionExW's deprecation; the gate now defines `small` and `hyper`); `_fltused` without the C runtime; a hand-made TLS directory faulted on Windows while w2m ran it (replaced by the static C runtime's); an import used only through a function pointer is invisible to the reference traversal (probe revised, runs replaced); a shell chain committed a probe whose local compile had failed; a cancel loop killed another dispatcher's runs; one transient `gh` failure ended a search (gh calls now retried).
 - Gates and CI: see the closing commit.
+- **Correction (2026-10-10, after c7d4803):** the card was marked closed on local gates while CI was red. CI failed on every push from 3d091e3 (11:28) to c7d4803 (42 runs across main and the sprint branches; the last two GitHub refused to start): the three tests in `tests/test_loader_images.py` read the game's depot, which CI does not have, and `W2M_REQUIRE_REFERENCES=1` turns their skip into a failure. The tests now load MSVC-built probe binaries from `store/binaries` (loader_dll.dll for binding and the refused load; static_tls_dll.dll, 780 DIR64 sites, for relocation at two bases). UnityPlayer's 44,285 sites were checked locally only. CI run 38053699604 on c7d4803 did not start: GitHub refused the job for the account's billing or spending limit. The sprint closes on the first green CI run.

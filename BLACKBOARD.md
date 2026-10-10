@@ -213,13 +213,14 @@
 
 ## Sprint tail
 
-### Sprint 046 (2026-10-10, closed)
+### Sprint 046 (2026-10-10, closing: CI not yet green)
 - **Scope:** load UnityPlayer.dll, run its DllMain, enter UnityMain.
 - **Rubber Duck Pass:**
   - *Sequence narration:* stop, stub-list what follows, probe on the runners, answer the rows, plant, accept, move.
   - *Observation 1 (SDK against mingw):* five runner rounds lost to header and link differences. Disposition: the gate defines `small` and `hyper`; KIT_DIARY #31.
   - *Observation 2 (results per CPU model):* RCPPS and RSQRTPS differ by vendor. Disposition: Intel's tables measured on two generations; KIT_DIARY #32.
   - *Observation 3 (two wrong reaches):* recorded on the card.
+  - *Observation 4 (closed on red CI):* 40 CI runs failed on depot-reading tests while local gates passed. Disposition: tests moved to stored probe binaries; KIT_DIARY #33; close waits on green CI, which GitHub's billing block stops.
 - **Closed:** clean.
 
 ### Sprint 044 (2026-10-10, closed)

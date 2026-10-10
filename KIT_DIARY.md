@@ -297,3 +297,11 @@
 **Finding (#32):** where the architecture leaves a result to the implementation, the reference is a CPU model, not a vendor; the evidence must name the model and show which other models agree before the rows stand for more than one.
 
 **Kit change suggested:** every contract whose rows come from implementation-defined behavior names the models it was observed on and the ones it was not.
+
+### 2026-10-10 — Sprint 046: closed on red CI, again
+
+**What happened:** Review 2026-10-10 D1 found sprints closed on local gates while CI was red, and the rule "close on green CI of the closing commit" was adopted. Sprint 046 then broke it: three loader tests read the game's depot, which exists only on the developer's machine, and CI failed on 40 runs in 80 minutes. Nobody read a CI conclusion until the closing run, which GitHub refused for billing, and that refusal was reported as the only obstacle.
+
+**Finding (#33):** a rule that is checked only at the close is checked too late, and a blocked check hides the failures behind it. A test that reads an input CI cannot have is a local test whatever its marker says; the inputs belong in the repository (here, the probe binaries already in `store/binaries`).
+
+**Kit change suggested:** read the CI conclusion of each push before the next push, and before reporting a blocked run as the only obstacle, read the last run that did start.
