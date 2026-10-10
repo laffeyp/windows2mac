@@ -283,6 +283,11 @@ CLASSES_044C = frozenset(("ADC", "BSF", "BSR"))
 CLASSES_044D = frozenset(("MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PSRLDQ",
                           "PSLLDQ", "PUNPCKLBW", "PCMPEQB", "PSHUFD", "PMOVMSKB", "CVTDQ2PD", "STMXCSR", "LDMXCSR",
                           "SFENCE", "PREFETCHNTA"))
+# Sprint 044 (fifth block): RET imm16 (C2 iw), where the launcher stops after its code pages (frontier
+# 2026-10-10, 17,914 instructions). RET_NEAR's C3 form is set 039's; this set holds only C2, at immediates
+# that tell a zero-extended count from a sign-extended one (8000, FFFF) and odd counts from aligned ones.
+CLASSES_044E = frozenset(("RET_NEAR",))
+RET_IMMEDIATES = (0, 1, 2, 3, 8, 0x10, 0x18, 0x20, 0x28, 0x100, 0x7FF8, 0x7FFF, 0x8000, 0x8008, 0xFFF8, 0xFFFF)
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -291,7 +296,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "044": (2026_10_10_44, CLASSES_044, (), False),
     "044b": (2026_10_10_441, CLASSES_044B, (), False),
     "044c": (2026_10_10_442, CLASSES_044C, (), False),
-    "044d": (2026_10_10_443, CLASSES_044D, (), False)}
+    "044d": (2026_10_10_443, CLASSES_044D, (), False),
+    "044e": (2026_10_10_444, CLASSES_044E, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -359,6 +365,14 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             else:
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
     out.extend(_strings(classes, rng))                         # only sets with REP classes (044b on)
+    if "RET_NEAR" in classes and not control_flow:              # 044e: RET imm16 (039 holds C3)
+        for imm in RET_IMMEDIATES:
+            for _ in range(CONTROL_STATES):
+                s = _state(rng, False)
+                off = s.regs[4] - (STACK_VA + STACK_OFF)
+                s.stack = s.stack[:off] + RET_TARGET.to_bytes(8, "little") + s.stack[off + 8:]
+                s.code, s.label = bytes([0xC2]) + imm.to_bytes(2, "little"), "RET_NEAR"
+                out.append(s)
     for code, label in _control_flow() if control_flow else []:
         for _ in range(CONTROL_STATES):
             s = _state(rng, False)

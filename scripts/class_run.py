@@ -67,20 +67,25 @@ def _built(case_set: str) -> list[sd.Case]:
     return sd.cached_cases(case_set)
 
 
-def case_set_of(iclass: str) -> str:
-    """The case set that covers `iclass` (each class is in exactly one)."""
+def case_sets_of(iclass: str) -> list[str]:
+    """The case sets that cover `iclass`, oldest first: one, or more where a later set adds a form of the
+    class (RET_NEAR imm16 in 044e, after 039's C3)."""
     found = [k for k in sd.CASE_SETS if iclass in {iclass_of(c) for c in _built(k)}]
-    if len(found) != 1:
-        raise KeyError(f"{iclass}: covered by case sets {found}")
-    return found[0]
+    if not found:
+        raise KeyError(f"{iclass}: no case set covers it")
+    return found
 
 
-def cases_for(iclass: str) -> tuple[str, list[sd.Case], list[sd.Result]]:
-    case_set = case_set_of(iclass)
-    built = _built(case_set)
-    results = sd.read_results(vm_oracle.result_file(REFERENCES[case_set], case_set))
-    keep = [i for i, c in enumerate(built) if iclass_of(c) == iclass]
-    return case_set, [built[i] for i in keep], [results[i] for i in keep]
+def cases_for(iclass: str) -> tuple[list[str], list[sd.Case], list[sd.Result]]:
+    """The class's cases and their CPU results from every set that covers it."""
+    sets, cases, results = case_sets_of(iclass), [], []
+    for case_set in sets:
+        built = _built(case_set)
+        ran = sd.read_results(vm_oracle.result_file(REFERENCES[case_set], case_set))
+        keep = [i for i, c in enumerate(built) if iclass_of(c) == iclass]
+        cases += [built[i] for i in keep]
+        results += [ran[i] for i in keep]
+    return sets, cases, results
 
 
 def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> Counter[str]:
@@ -98,10 +103,12 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
     from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
     rule = registry()[iclass]
-    case_set, cases, results = cases_for(iclass)
-    reference_run, version = REFERENCES[case_set], CASE_FILE_VERSIONS[case_set]
-    store = (ROOT / "store" / "probe-runs" / reference_run)
-    reference = f"{(store / 'cpu.txt').read_text().strip()}; {(store / 'profile.txt').read_text().strip()}"
+    sets, cases, results = cases_for(iclass)
+    case_set = "+".join(sets)
+    reference_run, version = "+".join(REFERENCES[k] for k in sets), CASE_FILE_VERSIONS[sets[-1]]
+    stores = [ROOT / "store" / "probe-runs" / REFERENCES[k] for k in sets]
+    reference = " + ".join(f"{(st / 'cpu.txt').read_text().strip()}; {(st / 'profile.txt').read_text().strip()}"
+                           for st in stores)
     cid = contract_id(iclass)
     run_id = f"class-{iclass.lower()}-{time.time_ns()}"
     cand = f"rule-{rule.module}-{rule.sha256[7:19]}"
@@ -135,7 +142,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
             first = next(iter(diffs.most_common(1)), None)
             yield events.validate(events.COMPARISON_COMPLETED(
                 comparison_id=f"cmp-{cand}-{executor}", contract_id=cid, contract_version=version,
-                relation="exact", reference_ref=f"semantics-{case_set} run {reference_run}",
+                relation="exact", reference_ref=" + ".join(f"semantics-{k} run {REFERENCES[k]}" for k in sets),
                 target_execution_id=f"{executor}-{cand}", verdict=verdict,
                 rule_ref=f"{len(cases)} cases of {iclass}; candidate {inp['candidate_id']}",
                 first_divergence=f"{first[0]} ({first[1]} cases)" if first else None))
