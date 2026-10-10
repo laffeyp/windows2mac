@@ -1,0 +1,10 @@
+{"s":"system_rng.16","status":0,"err":57005,"changed":true,"tail_kept":true}
+{"s":"system_rng.1","status":0,"err":57005,"changed":true,"tail_kept":true}
+{"s":"system_rng.0","status":0,"err":57005,"changed":false,"tail_kept":true}
+{"s":"system_rng.null_buffer","status":3221225485,"err":57005,"changed":false,"tail_kept":true}
+{"s":"system_rng.null_buffer_0","status":3221225485,"err":57005,"changed":false,"tail_kept":true}
+{"s":"null_handle.no_flags","status":3221225480,"err":57005,"changed":false,"tail_kept":true}
+{"s":"system_rng.entropy_flag","status":0,"err":57005,"changed":true,"tail_kept":true}
+{"s":"system_rng.unknown_flag","status":3221225485,"err":57005,"changed":false,"tail_kept":true}
+{"s":"bad_handle.system_rng","status":3221225485,"err":57005,"changed":false,"tail_kept":true}
+{"s":"bytes","two_draws_differ":true,"status_64k":0,"values_in_64k":256,"no_value_over_400_in_64k":true,"tail_kept_64k":true}

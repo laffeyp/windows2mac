@@ -929,6 +929,35 @@ FAMILIES: dict[str, Family] = {
             "success_leaves_error": Plant(
                 "    w2m_set_last_error(0);                               /* every row: the last error is 0 after success */\n",
                 "", ("input.*",))}),
+    "generate_random": Family(
+        name="generate_random",
+        contract_id="windows.bcrypt.gen_random",
+        version="0.1.0",
+        summary=("bcrypt's BCryptGenRandom: a NULL handle with BCRYPT_USE_SYSTEM_PREFERRED_RNG succeeds (length 0 too; the "
+                 "entropy-in-buffer flag beside it accepted); a NULL buffer, another flag bit or a handle with the system "
+                 "flag is STATUS_INVALID_PARAMETER; a NULL handle without it STATUS_INVALID_HANDLE; bytes past the length "
+                 "kept; the last error untouched; two draws differ and 64 KB hold every byte value."),
+        probe="generate_random", guest_file="bcrypt.c", host_files=("src/w2m/vm_backend.py",),
+        runs={
+              "38085850021": Run("windows-2025", "4fb5e3ac666bfe211b8fdd30d94a94c9617ec850291c646c439b676aa6d64934", "generate_random-1791665930-0", "AMD EPYC 7763 64-Core Processor"),
+              "38085852392": Run("windows-2022", "306d0d2ade5c08a2ed7dad9f327f09d978792cc1e545256790701bd3089a363f", "generate_random-1791665930-1", "AMD EPYC 7763 64-Core Processor")},
+        documented=(
+            documented("ms-bcryptgenrandom", "api/bcrypt/nf-bcrypt-bcryptgenrandom", "2018-12-05",
+                       "BCRYPT_USE_SYSTEM_PREFERRED_RNG ... Use the system-preferred random number generator algorithm. "
+                       "The hAlgorithm parameter must be NULL. ... STATUS_INVALID_HANDLE: The handle in the hAlgorithm "
+                       "parameter is not valid. STATUS_INVALID_PARAMETER: One or more parameters are not valid."),),
+        open_questions=(
+            "An algorithm handle from BCryptOpenAlgorithmProvider is not probed; the game passes NULL with the system flag.",
+            "The page does not say that a NULL buffer with length 0 fails or that the last error is untouched; the rows do."),
+        plants={
+            "null_buffer_with_zero_length_succeeds": Plant(
+                "    if (status == STATUS_SUCCESS && !buffer) status = STATUS_INVALID_PARAMETER;",
+                "    if (status == STATUS_SUCCESS && !buffer && length) status = STATUS_INVALID_PARAMETER;",
+                ("system_rng.null_buffer_0",)),
+            "handle_check_swapped": Plant(
+                "    else if (!handle) status = STATUS_INVALID_HANDLE;",
+                "    else if (!handle) status = STATUS_INVALID_PARAMETER;",
+                ("null_handle.no_flags",))}),
 }
 
 

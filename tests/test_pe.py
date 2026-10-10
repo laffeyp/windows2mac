@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BINARIES = sorted((ROOT / "store" / "binaries").glob("*.exe"))
 PROBE_DLLS = {json.loads(p.read_text())["dll"]["name"] + ".dll" for p in (ROOT / "probes").glob("*/probe.json")
               if "dll" in json.loads(p.read_text())}
+SYSTEM_DLLS = {"SHELL32.dll", "bcrypt.dll"}       # system DLLs a family probes (command_line_args, generate_random)
 OBJDUMP = shutil.which("llvm-objdump") or (
     subprocess.run(["xcrun", "--find", "llvm-objdump"], capture_output=True, text=True).stdout.strip()
     if shutil.which("xcrun") else "")
@@ -74,8 +75,8 @@ def test_structure(path: Path) -> None:
     if img.function_starts:                        # CRT-linked probes (hello, event_auto_reset): .pdata
         assert "WaitForSingleObject" in img.imports["KERNEL32.dll"]
     else:                                          # no-CRT probes (Sprint 029): kernel32, and a DLL the
-        assert set(img.imports) - {"KERNEL32.dll", "SHELL32.dll"} <= PROBE_DLLS   # probe builds (Sprint 046), or
-                                                     # SHELL32 (command_line_args, Sprint 047); DIR64
+        assert set(img.imports) - {"KERNEL32.dll"} - SYSTEM_DLLS <= PROBE_DLLS   # probe builds (Sprint 046), or
+                                                     # a system DLL a family probes (Sprint 047); DIR64
                                                      # entries appear with static pointer tables
                                                      # (create_file: 12), unused at the preferred base
 

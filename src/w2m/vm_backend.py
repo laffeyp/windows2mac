@@ -216,11 +216,13 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetErrorMode": ("k32_GetErrorMode", True),
             "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
-DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)}}   # Sprint 047
+DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
+                "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
 HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY = 19, 20, 21, 22   # virtual_memory.py
+HOST_RANDOM = 23                    # a0 bytes of the host's CSPRNG (os.urandom) at guest address a1 (bcrypt.c)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -1233,6 +1235,9 @@ class VM:
             return False
         elif op == HOST_CLOCK:
             result = self.clock() & M64
+        elif op == HOST_RANDOM:
+            self.mem.write(a1, os.urandom(a0))
+            result = a0
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
         elif op in (HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY):

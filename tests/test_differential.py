@@ -19,7 +19,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from substrate.api import read_record, trace_ancestry
+from substrate.api import read_first_envelope, read_record, trace_ancestry
 
 from w2m import differential
 
@@ -40,7 +40,9 @@ def _events(rec: str) -> list[dict[str, Any]]:
     return list(read_record(rec))
 
 
-def _chain(rec: str, e: dict[str, Any]) -> list[str]:
+def _chain(rec: Any, e: dict[str, Any]) -> list[str]:
+    """`rec`: a record root, or its events already read (trace_ancestry reloads a root on every call: 308 calls
+    took 22 s of this file's 23 s, 2026-10-10)."""
     return [x.kind for x in trace_ancestry(rec, e["producer"]["instance"])]
 
 
@@ -99,8 +101,10 @@ def _differential_records() -> list[Path]:
     for root in sorted(STORE.iterdir()):
         if root.is_dir():
             try:
-                first = next(read_record(root))
+                first = read_first_envelope(root)    # one CRC-checked line per record, not its whole segment
             except Exception:  # noqa: BLE001 — not a record
+                continue
+            if first is None:
                 continue
             if (first.get("payload") or {}).get("baseline", {}).get("differential"):
                 out.append(root)
@@ -131,4 +135,4 @@ def test_every_stored_differential_record_is_causal_with_its_multiplicities() ->
                     "DISCREPANCY_ROUTED": ["router", "acceptance", "comparator", "implementation", "harness"],
                     "DISCREPANCY_RESOLVED": ["resolver", "acceptance", "comparator", "implementation", "harness"]}
             if e["kind"] in want:
-                assert _chain(str(rec), e) == want[e["kind"]], (rec.name, e["kind"])
+                assert _chain(evs, e) == want[e["kind"]], (rec.name, e["kind"])

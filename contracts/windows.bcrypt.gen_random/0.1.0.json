@@ -1,0 +1,129 @@
+{
+ "contract_id": "windows.bcrypt.gen_random",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "bcrypt's BCryptGenRandom: a NULL handle with BCRYPT_USE_SYSTEM_PREFERRED_RNG succeeds (length 0 too; the entropy-in-buffer flag beside it accepted); a NULL buffer, another flag bit or a handle with the system flag is STATUS_INVALID_PARAMETER; a NULL handle without it STATUS_INVALID_HANDLE; bytes past the length kept; the last error untouched; two draws differ and 64 KB hold every byte value.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/generate_random/generate_random.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "system_rng.16",
+    "status": 0,
+    "err": 57005,
+    "changed": true,
+    "tail_kept": true
+   },
+   {
+    "s": "system_rng.1",
+    "status": 0,
+    "err": 57005,
+    "changed": true,
+    "tail_kept": true
+   },
+   {
+    "s": "system_rng.0",
+    "status": 0,
+    "err": 57005,
+    "changed": false,
+    "tail_kept": true
+   },
+   {
+    "s": "system_rng.null_buffer",
+    "status": 3221225485,
+    "err": 57005,
+    "changed": false,
+    "tail_kept": true
+   },
+   {
+    "s": "system_rng.null_buffer_0",
+    "status": 3221225485,
+    "err": 57005,
+    "changed": false,
+    "tail_kept": true
+   },
+   {
+    "s": "null_handle.no_flags",
+    "status": 3221225480,
+    "err": 57005,
+    "changed": false,
+    "tail_kept": true
+   },
+   {
+    "s": "system_rng.entropy_flag",
+    "status": 0,
+    "err": 57005,
+    "changed": true,
+    "tail_kept": true
+   },
+   {
+    "s": "system_rng.unknown_flag",
+    "status": 3221225485,
+    "err": 57005,
+    "changed": false,
+    "tail_kept": true
+   },
+   {
+    "s": "bad_handle.system_rng",
+    "status": 3221225485,
+    "err": 57005,
+    "changed": false,
+    "tail_kept": true
+   },
+   {
+    "s": "bytes",
+    "two_draws_differ": true,
+    "status_64k": 0,
+    "values_in_64k": 256,
+    "no_value_over_400_in_64k": true,
+    "tail_kept_64k": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38085850021: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:4fb5e3ac666bfe211b8fdd30d94a94c9617ec850291c646c439b676aa6d64934; run 38085852392: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:306d0d2ade5c08a2ed7dad9f327f09d978792cc1e545256790701bd3089a363f",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "generate_random-1791665930-0-1",
+    "generate_random-1791665930-0-2",
+    "generate_random-1791665930-1-1",
+    "generate_random-1791665930-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-bcryptgenrandom",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "BCRYPT_USE_SYSTEM_PREFERRED_RNG ... Use the system-preferred random number generator algorithm. The hAlgorithm parameter must be NULL. ... STATUS_INVALID_HANDLE: The handle in the hAlgorithm parameter is not valid. STATUS_INVALID_PARAMETER: One or more parameters are not valid."
+  }
+ ],
+ "open_questions": [
+  "An algorithm handle from BCryptOpenAlgorithmProvider is not probed; the game passes NULL with the system flag.",
+  "The page does not say that a NULL buffer with length 0 fails or that the last error is untouched; the rows do."
+ ],
+ "sections": {
+  "probe": "probes/generate_random (Sprint 044)",
+  "implementation": "tools/guest_runtime/bcrypt.c",
+  "rows": "scripts/family_run.py generate_random",
+  "excluded": "none"
+ }
+}

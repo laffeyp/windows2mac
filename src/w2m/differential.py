@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
+from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_first_envelope, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
 from w2m.record import Purpose, producer, run_with_provenance
@@ -104,8 +104,10 @@ def rebuild_ledger(runs: Path) -> dict[str, dict[str, Any]]:
         if not root.is_dir():
             continue
         try:
-            first = next(read_record(root))
-        except (StopIteration, Exception):  # noqa: BLE001 — not a record
+            first = read_first_envelope(root)        # one CRC-checked line, not the whole segment (4,031 records)
+        except Exception:  # noqa: BLE001 — not a record
+            continue
+        if first is None:
             continue
         diff = (first.get("payload") or {}).get("baseline", {}).get("differential")
         if diff:

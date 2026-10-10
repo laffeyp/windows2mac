@@ -40,7 +40,7 @@ enum { W2M_HOST_WRITE = 1, W2M_HOST_EXIT = 2, W2M_HOST_CLOCK = 3, W2M_HOST_UNIMP
        W2M_HOST_RUNTIME_FAULT = 5, W2M_HOST_FILETIME = 14,     /* 6-13: the file primitives below */
        W2M_HOST_MODULE = 15, W2M_HOST_PROC = 16, W2M_HOST_MODULE_PATH = 17, W2M_HOST_MODULE_AT = 18,
        W2M_HOST_VIRTUAL_ALLOC = 19, W2M_HOST_VIRTUAL_FREE = 20, W2M_HOST_VIRTUAL_PROTECT = 21,   /* virtual_memory.py */
-       W2M_HOST_VIRTUAL_QUERY = 22 };
+       W2M_HOST_VIRTUAL_QUERY = 22, W2M_HOST_RANDOM = 23 };          /* 23: random bytes (bcrypt.c; Sprint 047) */
 struct w2m_transport {
     u64 op;
     u64 arg[6];
@@ -286,6 +286,7 @@ struct w2m_exception_area {
 #define W2M_API_SetErrorMode 117
 #define W2M_API_CommandLineToArgvW 118   /* SHELL32 (Sprint 047) */
 #define W2M_API_LocalFree 119
+#define W2M_API_BCryptGenRandom 120   /* bcrypt (Sprint 047) */
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
