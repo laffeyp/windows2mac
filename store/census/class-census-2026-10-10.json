@@ -1,0 +1,3584 @@
+[
+ {
+  "file": "Hail to the Rainbow.exe",
+  "reachable_instructions": 10588,
+  "undecoded": 0,
+  "classes": 124,
+  "lifted": 101,
+  "partly_lifted": 0,
+  "missing": 23,
+  "by_class": {
+   "MOV": {
+    "instances": 3150,
+    "lifted": 3150,
+    "refusals": {}
+   },
+   "CALL_NEAR": {
+    "instances": 839,
+    "lifted": 839,
+    "refusals": {}
+   },
+   "CMP": {
+    "instances": 583,
+    "lifted": 583,
+    "refusals": {}
+   },
+   "LEA": {
+    "instances": 583,
+    "lifted": 583,
+    "refusals": {}
+   },
+   "JZ": {
+    "instances": 564,
+    "lifted": 564,
+    "refusals": {}
+   },
+   "TEST": {
+    "instances": 510,
+    "lifted": 510,
+    "refusals": {}
+   },
+   "ADD": {
+    "instances": 424,
+    "lifted": 424,
+    "refusals": {}
+   },
+   "XOR": {
+    "instances": 400,
+    "lifted": 400,
+    "refusals": {}
+   },
+   "SUB": {
+    "instances": 382,
+    "lifted": 382,
+    "refusals": {}
+   },
+   "JMP": {
+    "instances": 374,
+    "lifted": 374,
+    "refusals": {}
+   },
+   "JNZ": {
+    "instances": 358,
+    "lifted": 358,
+    "refusals": {}
+   },
+   "POP": {
+    "instances": 288,
+    "lifted": 288,
+    "refusals": {}
+   },
+   "RET_NEAR": {
+    "instances": 285,
+    "lifted": 285,
+    "refusals": {}
+   },
+   "PUSH": {
+    "instances": 282,
+    "lifted": 282,
+    "refusals": {}
+   },
+   "AND": {
+    "instances": 215,
+    "lifted": 215,
+    "refusals": {}
+   },
+   "OR": {
+    "instances": 117,
+    "lifted": 117,
+    "refusals": {}
+   },
+   "MOVUPS": {
+    "instances": 107,
+    "lifted": 107,
+    "refusals": {}
+   },
+   "MOVZX": {
+    "instances": 83,
+    "lifted": 83,
+    "refusals": {}
+   },
+   "INC": {
+    "instances": 75,
+    "lifted": 75,
+    "refusals": {}
+   },
+   "JB": {
+    "instances": 55,
+    "lifted": 55,
+    "refusals": {}
+   },
+   "NOP": {
+    "instances": 52,
+    "lifted": 52,
+    "refusals": {}
+   },
+   "JNB": {
+    "instances": 52,
+    "lifted": 52,
+    "refusals": {}
+   },
+   "MOVSD_XMM": {
+    "instances": 44,
+    "lifted": 44,
+    "refusals": {}
+   },
+   "JNBE": {
+    "instances": 43,
+    "lifted": 43,
+    "refusals": {}
+   },
+   "MOVSXD": {
+    "instances": 39,
+    "lifted": 39,
+    "refusals": {}
+   },
+   "ROR": {
+    "instances": 39,
+    "lifted": 39,
+    "refusals": {}
+   },
+   "SHL": {
+    "instances": 37,
+    "lifted": 37,
+    "refusals": {}
+   },
+   "MOVAPS": {
+    "instances": 37,
+    "lifted": 37,
+    "refusals": {}
+   },
+   "SHR": {
+    "instances": 36,
+    "lifted": 36,
+    "refusals": {}
+   },
+   "JBE": {
+    "instances": 32,
+    "lifted": 32,
+    "refusals": {}
+   },
+   "SAR": {
+    "instances": 31,
+    "lifted": 31,
+    "refusals": {}
+   },
+   "MULSD": {
+    "instances": 24,
+    "lifted": 24,
+    "refusals": {}
+   },
+   "DEC": {
+    "instances": 21,
+    "lifted": 21,
+    "refusals": {}
+   },
+   "BT": {
+    "instances": 21,
+    "lifted": 21,
+    "refusals": {}
+   },
+   "SBB": {
+    "instances": 17,
+    "lifted": 17,
+    "refusals": {}
+   },
+   "INT3": {
+    "instances": 17,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INT3": 17
+    }
+   },
+   "ADDSD": {
+    "instances": 17,
+    "lifted": 17,
+    "refusals": {}
+   },
+   "VMULSD": {
+    "instances": 15,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMULSD": 15
+    }
+   },
+   "XCHG": {
+    "instances": 14,
+    "lifted": 14,
+    "refusals": {}
+   },
+   "NOT": {
+    "instances": 14,
+    "lifted": 14,
+    "refusals": {}
+   },
+   "MOVAPD": {
+    "instances": 14,
+    "lifted": 14,
+    "refusals": {}
+   },
+   "SETZ": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "INC_LOCK": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "CMOVZ": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "JS": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "JLE": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "CMOVNBE": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "IMUL": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "NEG": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "VADDSD": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VADDSD": 9
+    }
+   },
+   "CMOVNZ": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "SETNZ": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "BTR": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "VMOVSD": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVSD": 8
+    }
+   },
+   "MOVNTPS": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "XADD_LOCK": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "ADD_LOCK": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "JL": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "SUBSD": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "VPAND": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPAND": 7
+    }
+   },
+   "MOVQ": {
+    "instances": 6,
+    "lifted": 6,
+    "refusals": {}
+   },
+   "VSUBSD": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VSUBSD": 6
+    }
+   },
+   "INT": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for INT": 5
+    }
+   },
+   "VFMADD213SD": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD213SD": 5
+    }
+   },
+   "VMOVDQA": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVDQA": 5
+    }
+   },
+   "DIV": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "CPUID": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "MOVDQA": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "COMISD": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "VCOMISD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCOMISD": 4
+    }
+   },
+   "JNL": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "XORPS": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "PAND": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "POR": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VPOR": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPOR": 3
+    }
+   },
+   "VFMADD231SD": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD231SD": 3
+    }
+   },
+   "REP_STOSQ": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "BSWAP": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "STMXCSR": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "LDMXCSR": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "BTS": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "JNS": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "XGETBV": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "PSRLQ": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "ANDPD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CVTDQ2PD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VPSRLQ": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSRLQ": 2
+    }
+   },
+   "VMOVQ": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVQ": 2
+    }
+   },
+   "VCVTDQ2PD": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTDQ2PD": 2
+    }
+   },
+   "AND_LOCK": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "MOVDQU": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "REP_STOSW": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "JNLE": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CMOVNS": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CMOVNLE": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CMOVL": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "PREFETCHNTA": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CMOVBE": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CMOVB": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "ROL": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "PUNPCKLBW": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "REP_STOSB": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "PSUBQ": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "XORPD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "DIVSD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "PSUBD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VPSUBQ": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSUBQ": 1
+    }
+   },
+   "VPXOR": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPXOR": 1
+    }
+   },
+   "VPSLLQ": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSLLQ": 1
+    }
+   },
+   "VPADDQ": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPADDQ": 1
+    }
+   },
+   "VFMSUB213SD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMSUB213SD": 1
+    }
+   },
+   "VDIVSD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VDIVSD": 1
+    }
+   },
+   "VMOVAPD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVAPD": 1
+    }
+   },
+   "VPSUBD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSUBD": 1
+    }
+   },
+   "CMOVNB": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "OR_LOCK": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "SETBE": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CMOVS": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CDQE": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CDQ": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "MOVSX": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "REP_MOVSB": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "SFENCE": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CMPXCHG_LOCK": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   }
+  }
+ },
+ {
+  "file": "UnityPlayer.dll",
+  "reachable_instructions": 4879842,
+  "undecoded": 0,
+  "classes": 460,
+  "lifted": 163,
+  "partly_lifted": 6,
+  "missing": 291,
+  "by_class": {
+   "MOV": {
+    "instances": 1597006,
+    "lifted": 1596993,
+    "refusals": {
+     "no operand template for MOV": 13
+    }
+   },
+   "LEA": {
+    "instances": 402218,
+    "lifted": 402218,
+    "refusals": {}
+   },
+   "CALL_NEAR": {
+    "instances": 318057,
+    "lifted": 318057,
+    "refusals": {}
+   },
+   "MOVAPS": {
+    "instances": 207567,
+    "lifted": 207567,
+    "refusals": {}
+   },
+   "CMP": {
+    "instances": 183274,
+    "lifted": 183274,
+    "refusals": {}
+   },
+   "TEST": {
+    "instances": 158292,
+    "lifted": 158292,
+    "refusals": {}
+   },
+   "ADD": {
+    "instances": 156798,
+    "lifted": 156798,
+    "refusals": {}
+   },
+   "JZ": {
+    "instances": 155153,
+    "lifted": 155153,
+    "refusals": {}
+   },
+   "MOVSS": {
+    "instances": 128992,
+    "lifted": 128992,
+    "refusals": {}
+   },
+   "XOR": {
+    "instances": 119262,
+    "lifted": 119262,
+    "refusals": {}
+   },
+   "POP": {
+    "instances": 101509,
+    "lifted": 101509,
+    "refusals": {}
+   },
+   "JNZ": {
+    "instances": 94866,
+    "lifted": 94866,
+    "refusals": {}
+   },
+   "SUB": {
+    "instances": 88475,
+    "lifted": 88475,
+    "refusals": {}
+   },
+   "JMP": {
+    "instances": 85788,
+    "lifted": 85788,
+    "refusals": {}
+   },
+   "PUSH": {
+    "instances": 85003,
+    "lifted": 85003,
+    "refusals": {}
+   },
+   "RET_NEAR": {
+    "instances": 60827,
+    "lifted": 60827,
+    "refusals": {}
+   },
+   "MOVUPS": {
+    "instances": 58131,
+    "lifted": 58131,
+    "refusals": {}
+   },
+   "MULSS": {
+    "instances": 57389,
+    "lifted": 57389,
+    "refusals": {}
+   },
+   "MOVZX": {
+    "instances": 50487,
+    "lifted": 50487,
+    "refusals": {}
+   },
+   "MULPS": {
+    "instances": 39204,
+    "lifted": 39204,
+    "refusals": {}
+   },
+   "ADDSS": {
+    "instances": 35594,
+    "lifted": 35594,
+    "refusals": {}
+   },
+   "NOP": {
+    "instances": 34783,
+    "lifted": 34783,
+    "refusals": {}
+   },
+   "INC": {
+    "instances": 32061,
+    "lifted": 32061,
+    "refusals": {}
+   },
+   "MOVDQA": {
+    "instances": 31595,
+    "lifted": 31595,
+    "refusals": {}
+   },
+   "AND": {
+    "instances": 27769,
+    "lifted": 27769,
+    "refusals": {}
+   },
+   "MOVSXD": {
+    "instances": 27466,
+    "lifted": 27466,
+    "refusals": {}
+   },
+   "SHR": {
+    "instances": 27073,
+    "lifted": 27073,
+    "refusals": {}
+   },
+   "ADDPS": {
+    "instances": 24497,
+    "lifted": 24497,
+    "refusals": {}
+   },
+   "SHUFPS": {
+    "instances": 23568,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHUFPS": 23568
+    }
+   },
+   "SHL": {
+    "instances": 21752,
+    "lifted": 21752,
+    "refusals": {}
+   },
+   "MOVSD_XMM": {
+    "instances": 20152,
+    "lifted": 20152,
+    "refusals": {}
+   },
+   "SUBSS": {
+    "instances": 19800,
+    "lifted": 19800,
+    "refusals": {}
+   },
+   "JB": {
+    "instances": 18232,
+    "lifted": 18232,
+    "refusals": {}
+   },
+   "JBE": {
+    "instances": 17721,
+    "lifted": 17721,
+    "refusals": {}
+   },
+   "XORPS": {
+    "instances": 16798,
+    "lifted": 16798,
+    "refusals": {}
+   },
+   "OR": {
+    "instances": 16213,
+    "lifted": 16213,
+    "refusals": {}
+   },
+   "JNB": {
+    "instances": 15046,
+    "lifted": 15046,
+    "refusals": {}
+   },
+   "IMUL": {
+    "instances": 14474,
+    "lifted": 14474,
+    "refusals": {}
+   },
+   "JNBE": {
+    "instances": 13594,
+    "lifted": 13594,
+    "refusals": {}
+   },
+   "PSHUFD": {
+    "instances": 13154,
+    "lifted": 13154,
+    "refusals": {}
+   },
+   "COMISS": {
+    "instances": 12551,
+    "lifted": 12551,
+    "refusals": {}
+   },
+   "JL": {
+    "instances": 11098,
+    "lifted": 11098,
+    "refusals": {}
+   },
+   "SUBPS": {
+    "instances": 10990,
+    "lifted": 10990,
+    "refusals": {}
+   },
+   "JLE": {
+    "instances": 9574,
+    "lifted": 9574,
+    "refusals": {}
+   },
+   "PXOR": {
+    "instances": 9439,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PXOR": 9439
+    }
+   },
+   "ANDPS": {
+    "instances": 9327,
+    "lifted": 9327,
+    "refusals": {}
+   },
+   "SAR": {
+    "instances": 8638,
+    "lifted": 8638,
+    "refusals": {}
+   },
+   "DEC": {
+    "instances": 7488,
+    "lifted": 7488,
+    "refusals": {}
+   },
+   "CMOVNZ": {
+    "instances": 6574,
+    "lifted": 6574,
+    "refusals": {}
+   },
+   "MOVD": {
+    "instances": 6540,
+    "lifted": 6507,
+    "refusals": {
+     "no operand template for MOVD": 33
+    }
+   },
+   "CMOVZ": {
+    "instances": 6302,
+    "lifted": 6302,
+    "refusals": {}
+   },
+   "INT3": {
+    "instances": 6196,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INT3": 6196
+    }
+   },
+   "UNPCKLPS": {
+    "instances": 6125,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for UNPCKLPS": 6125
+    }
+   },
+   "CVTDQ2PS": {
+    "instances": 5863,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTDQ2PS": 5863
+    }
+   },
+   "JNL": {
+    "instances": 5369,
+    "lifted": 5369,
+    "refusals": {}
+   },
+   "CMPPS": {
+    "instances": 4757,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPPS": 4757
+    }
+   },
+   "MOVDQU": {
+    "instances": 4369,
+    "lifted": 4369,
+    "refusals": {}
+   },
+   "DIVSS": {
+    "instances": 4136,
+    "lifted": 4136,
+    "refusals": {}
+   },
+   "JS": {
+    "instances": 3814,
+    "lifted": 3814,
+    "refusals": {}
+   },
+   "ORPS": {
+    "instances": 3657,
+    "lifted": 3657,
+    "refusals": {}
+   },
+   "PSRLD": {
+    "instances": 3645,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSRLD": 3645
+    }
+   },
+   "JNLE": {
+    "instances": 3531,
+    "lifted": 3531,
+    "refusals": {}
+   },
+   "PAND": {
+    "instances": 3501,
+    "lifted": 3501,
+    "refusals": {}
+   },
+   "ANDNPS": {
+    "instances": 3456,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for ANDNPS": 3456
+    }
+   },
+   "NOT": {
+    "instances": 3411,
+    "lifted": 3411,
+    "refusals": {}
+   },
+   "JNS": {
+    "instances": 3113,
+    "lifted": 3113,
+    "refusals": {}
+   },
+   "UCOMISS": {
+    "instances": 3070,
+    "lifted": 3070,
+    "refusals": {}
+   },
+   "MOVSX": {
+    "instances": 2922,
+    "lifted": 2922,
+    "refusals": {}
+   },
+   "MULSD": {
+    "instances": 2898,
+    "lifted": 2898,
+    "refusals": {}
+   },
+   "PADDD": {
+    "instances": 2886,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDD": 2886
+    }
+   },
+   "SUBSD": {
+    "instances": 2843,
+    "lifted": 2843,
+    "refusals": {}
+   },
+   "VPXOR": {
+    "instances": 2582,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPXOR": 2582
+    }
+   },
+   "MINSS": {
+    "instances": 2444,
+    "lifted": 2444,
+    "refusals": {}
+   },
+   "PSLLD": {
+    "instances": 2336,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSLLD": 2336
+    }
+   },
+   "SETNZ": {
+    "instances": 2208,
+    "lifted": 2208,
+    "refusals": {}
+   },
+   "ROL": {
+    "instances": 2197,
+    "lifted": 2197,
+    "refusals": {}
+   },
+   "CVTTSS2SI": {
+    "instances": 2102,
+    "lifted": 2102,
+    "refusals": {}
+   },
+   "JP": {
+    "instances": 2088,
+    "lifted": 2088,
+    "refusals": {}
+   },
+   "ADDSD": {
+    "instances": 2065,
+    "lifted": 2065,
+    "refusals": {}
+   },
+   "BTR": {
+    "instances": 1957,
+    "lifted": 1957,
+    "refusals": {}
+   },
+   "NEG": {
+    "instances": 1911,
+    "lifted": 1911,
+    "refusals": {}
+   },
+   "MOVQ": {
+    "instances": 1889,
+    "lifted": 1734,
+    "refusals": {
+     "no operand template for MOVQ": 155
+    }
+   },
+   "ROR": {
+    "instances": 1779,
+    "lifted": 1779,
+    "refusals": {}
+   },
+   "MAXSS": {
+    "instances": 1753,
+    "lifted": 1753,
+    "refusals": {}
+   },
+   "MAXPS": {
+    "instances": 1736,
+    "lifted": 1736,
+    "refusals": {}
+   },
+   "CMOVB": {
+    "instances": 1735,
+    "lifted": 1735,
+    "refusals": {}
+   },
+   "MINPS": {
+    "instances": 1667,
+    "lifted": 1667,
+    "refusals": {}
+   },
+   "VPADDD": {
+    "instances": 1635,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPADDD": 1635
+    }
+   },
+   "SETZ": {
+    "instances": 1598,
+    "lifted": 1598,
+    "refusals": {}
+   },
+   "MOVLHPS": {
+    "instances": 1516,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVLHPS": 1516
+    }
+   },
+   "CDQE": {
+    "instances": 1468,
+    "lifted": 1468,
+    "refusals": {}
+   },
+   "CVTSI2SS": {
+    "instances": 1458,
+    "lifted": 1458,
+    "refusals": {}
+   },
+   "MOVMSKPS": {
+    "instances": 1442,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVMSKPS": 1442
+    }
+   },
+   "BT": {
+    "instances": 1418,
+    "lifted": 1418,
+    "refusals": {}
+   },
+   "PSRAD": {
+    "instances": 1394,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSRAD": 1394
+    }
+   },
+   "CMOVNBE": {
+    "instances": 1384,
+    "lifted": 1384,
+    "refusals": {}
+   },
+   "CDQ": {
+    "instances": 1382,
+    "lifted": 1382,
+    "refusals": {}
+   },
+   "PSRLDQ": {
+    "instances": 1300,
+    "lifted": 1300,
+    "refusals": {}
+   },
+   "POR": {
+    "instances": 1223,
+    "lifted": 1223,
+    "refusals": {}
+   },
+   "CMOVNLE": {
+    "instances": 1194,
+    "lifted": 1194,
+    "refusals": {}
+   },
+   "VPSRLD": {
+    "instances": 1194,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSRLD": 1194
+    }
+   },
+   "BTS": {
+    "instances": 1189,
+    "lifted": 1189,
+    "refusals": {}
+   },
+   "UNPCKHPS": {
+    "instances": 1189,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for UNPCKHPS": 1189
+    }
+   },
+   "COMISD": {
+    "instances": 1167,
+    "lifted": 1167,
+    "refusals": {}
+   },
+   "DIVPS": {
+    "instances": 1164,
+    "lifted": 1164,
+    "refusals": {}
+   },
+   "ADC": {
+    "instances": 1163,
+    "lifted": 1163,
+    "refusals": {}
+   },
+   "DIV": {
+    "instances": 1161,
+    "lifted": 1161,
+    "refusals": {}
+   },
+   "MUL": {
+    "instances": 1114,
+    "lifted": 740,
+    "refusals": {
+     "MUL r/m32": 374
+    }
+   },
+   "RORX": {
+    "instances": 1088,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RORX": 1088
+    }
+   },
+   "XADD_LOCK": {
+    "instances": 1005,
+    "lifted": 1005,
+    "refusals": {}
+   },
+   "CMOVNB": {
+    "instances": 990,
+    "lifted": 990,
+    "refusals": {}
+   },
+   "CVTPS2PD": {
+    "instances": 960,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPS2PD": 960
+    }
+   },
+   "SETB": {
+    "instances": 930,
+    "lifted": 930,
+    "refusals": {}
+   },
+   "PUNPCKLDQ": {
+    "instances": 929,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKLDQ": 929
+    }
+   },
+   "VPSLLD": {
+    "instances": 924,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSLLD": 924
+    }
+   },
+   "VMOVDQU": {
+    "instances": 915,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVDQU": 915
+    }
+   },
+   "CMOVL": {
+    "instances": 873,
+    "lifted": 873,
+    "refusals": {}
+   },
+   "SETNBE": {
+    "instances": 859,
+    "lifted": 859,
+    "refusals": {}
+   },
+   "MOVHLPS": {
+    "instances": 844,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVHLPS": 844
+    }
+   },
+   "SHRD": {
+    "instances": 776,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for SHRD": 776
+    }
+   },
+   "CVTPD2PS": {
+    "instances": 775,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPD2PS": 775
+    }
+   },
+   "CVTPS2DQ": {
+    "instances": 753,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPS2DQ": 753
+    }
+   },
+   "SBB": {
+    "instances": 704,
+    "lifted": 704,
+    "refusals": {}
+   },
+   "IDIV": {
+    "instances": 589,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for IDIV": 589
+    }
+   },
+   "PANDN": {
+    "instances": 589,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PANDN": 589
+    }
+   },
+   "CMOVBE": {
+    "instances": 576,
+    "lifted": 576,
+    "refusals": {}
+   },
+   "SQRTPS": {
+    "instances": 554,
+    "lifted": 554,
+    "refusals": {}
+   },
+   "VMOVDQA": {
+    "instances": 550,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVDQA": 550
+    }
+   },
+   "VPOR": {
+    "instances": 547,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPOR": 547
+    }
+   },
+   "PREFETCHNTA": {
+    "instances": 539,
+    "lifted": 539,
+    "refusals": {}
+   },
+   "CMOVNL": {
+    "instances": 519,
+    "lifted": 519,
+    "refusals": {}
+   },
+   "BSWAP": {
+    "instances": 500,
+    "lifted": 500,
+    "refusals": {}
+   },
+   "AESENC": {
+    "instances": 495,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for AESENC": 495
+    }
+   },
+   "CMPXCHG_LOCK": {
+    "instances": 483,
+    "lifted": 483,
+    "refusals": {}
+   },
+   "SQRTSS": {
+    "instances": 468,
+    "lifted": 468,
+    "refusals": {}
+   },
+   "CVTSI2SD": {
+    "instances": 455,
+    "lifted": 455,
+    "refusals": {}
+   },
+   "PCMPGTD": {
+    "instances": 445,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPGTD": 445
+    }
+   },
+   "DIVSD": {
+    "instances": 438,
+    "lifted": 438,
+    "refusals": {}
+   },
+   "RSQRTPS": {
+    "instances": 432,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RSQRTPS": 432
+    }
+   },
+   "SETL": {
+    "instances": 423,
+    "lifted": 423,
+    "refusals": {}
+   },
+   "RCPPS": {
+    "instances": 423,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RCPPS": 423
+    }
+   },
+   "VPAND": {
+    "instances": 392,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPAND": 392
+    }
+   },
+   "CMOVLE": {
+    "instances": 385,
+    "lifted": 385,
+    "refusals": {}
+   },
+   "PUNPCKLBW": {
+    "instances": 379,
+    "lifted": 360,
+    "refusals": {
+     "no operand template for PUNPCKLBW": 19
+    }
+   },
+   "VMOVUPS": {
+    "instances": 356,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVUPS": 356
+    }
+   },
+   "CVTSS2SD": {
+    "instances": 352,
+    "lifted": 352,
+    "refusals": {}
+   },
+   "PADDW": {
+    "instances": 351,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDW": 351
+    }
+   },
+   "CVTTSD2SI": {
+    "instances": 349,
+    "lifted": 349,
+    "refusals": {}
+   },
+   "VAESENC": {
+    "instances": 344,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VAESENC": 344
+    }
+   },
+   "VPADDQ": {
+    "instances": 335,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPADDQ": 335
+    }
+   },
+   "MOVNTPS": {
+    "instances": 309,
+    "lifted": 309,
+    "refusals": {}
+   },
+   "AESDEC": {
+    "instances": 291,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for AESDEC": 291
+    }
+   },
+   "INC_LOCK": {
+    "instances": 289,
+    "lifted": 289,
+    "refusals": {}
+   },
+   "UCOMISD": {
+    "instances": 283,
+    "lifted": 283,
+    "refusals": {}
+   },
+   "CVTTPS2DQ": {
+    "instances": 279,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTTPS2DQ": 279
+    }
+   },
+   "ADCX": {
+    "instances": 260,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for ADCX": 260
+    }
+   },
+   "CMOVNS": {
+    "instances": 256,
+    "lifted": 256,
+    "refusals": {}
+   },
+   "PUNPCKLWD": {
+    "instances": 254,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKLWD": 254
+    }
+   },
+   "VMOVD": {
+    "instances": 251,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVD": 251
+    }
+   },
+   "PSUBD": {
+    "instances": 250,
+    "lifted": 250,
+    "refusals": {}
+   },
+   "MOVAPD": {
+    "instances": 247,
+    "lifted": 247,
+    "refusals": {}
+   },
+   "SETNB": {
+    "instances": 246,
+    "lifted": 246,
+    "refusals": {}
+   },
+   "PSHUFB": {
+    "instances": 244,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSHUFB": 244
+    }
+   },
+   "SETNLE": {
+    "instances": 242,
+    "lifted": 242,
+    "refusals": {}
+   },
+   "MULX": {
+    "instances": 240,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MULX": 240
+    }
+   },
+   "PCMPEQD": {
+    "instances": 237,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPEQD": 237
+    }
+   },
+   "PSUBUSB": {
+    "instances": 236,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSUBUSB": 236
+    }
+   },
+   "PMULLW": {
+    "instances": 235,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMULLW": 235
+    }
+   },
+   "VPSRLQ": {
+    "instances": 229,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSRLQ": 229
+    }
+   },
+   "PREFETCHT0": {
+    "instances": 222,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PREFETCHT0": 222
+    }
+   },
+   "VPSHUFB": {
+    "instances": 211,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSHUFB": 211
+    }
+   },
+   "CMOVO": {
+    "instances": 209,
+    "lifted": 209,
+    "refusals": {}
+   },
+   "REP_STOSD": {
+    "instances": 206,
+    "lifted": 206,
+    "refusals": {}
+   },
+   "XCHG": {
+    "instances": 205,
+    "lifted": 205,
+    "refusals": {}
+   },
+   "PSRLW": {
+    "instances": 204,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSRLW": 204
+    }
+   },
+   "ADOX": {
+    "instances": 203,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for ADOX": 203
+    }
+   },
+   "SHLD": {
+    "instances": 198,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for SHLD": 198
+    }
+   },
+   "VPINSRD": {
+    "instances": 192,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPINSRD": 192
+    }
+   },
+   "CMOVS": {
+    "instances": 185,
+    "lifted": 185,
+    "refusals": {}
+   },
+   "PSLLDQ": {
+    "instances": 181,
+    "lifted": 181,
+    "refusals": {}
+   },
+   "ANDN": {
+    "instances": 172,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for ANDN": 172
+    }
+   },
+   "PUNPCKHBW": {
+    "instances": 171,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKHBW": 171
+    }
+   },
+   "BSF": {
+    "instances": 159,
+    "lifted": 159,
+    "refusals": {}
+   },
+   "VPMULUDQ": {
+    "instances": 159,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPMULUDQ": 159
+    }
+   },
+   "VPALIGNR": {
+    "instances": 152,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPALIGNR": 152
+    }
+   },
+   "VMOVAPS": {
+    "instances": 150,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVAPS": 150
+    }
+   },
+   "LDMXCSR": {
+    "instances": 147,
+    "lifted": 147,
+    "refusals": {}
+   },
+   "SETBE": {
+    "instances": 146,
+    "lifted": 146,
+    "refusals": {}
+   },
+   "VPCLMULQDQ": {
+    "instances": 142,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPCLMULQDQ": 142
+    }
+   },
+   "PSRAW": {
+    "instances": 139,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSRAW": 139
+    }
+   },
+   "CVTSD2SS": {
+    "instances": 136,
+    "lifted": 136,
+    "refusals": {}
+   },
+   "CVTDQ2PD": {
+    "instances": 130,
+    "lifted": 130,
+    "refusals": {}
+   },
+   "CQO": {
+    "instances": 128,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CQO": 128
+    }
+   },
+   "SHA256RNDS2": {
+    "instances": 128,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA256RNDS2": 128
+    }
+   },
+   "SUBPD": {
+    "instances": 127,
+    "lifted": 127,
+    "refusals": {}
+   },
+   "PSRLQ": {
+    "instances": 122,
+    "lifted": 117,
+    "refusals": {
+     "no operand template for PSRLQ": 5
+    }
+   },
+   "PSLLQ": {
+    "instances": 121,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSLLQ": 121
+    }
+   },
+   "VMULSD": {
+    "instances": 120,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMULSD": 120
+    }
+   },
+   "PACKUSWB": {
+    "instances": 120,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PACKUSWB": 120
+    }
+   },
+   "VFMADDPS": {
+    "instances": 120,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADDPS": 120
+    }
+   },
+   "PADDSW": {
+    "instances": 120,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDSW": 120
+    }
+   },
+   "PADDSB": {
+    "instances": 110,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDSB": 110
+    }
+   },
+   "DEC_LOCK": {
+    "instances": 109,
+    "lifted": 109,
+    "refusals": {}
+   },
+   "MULPD": {
+    "instances": 109,
+    "lifted": 109,
+    "refusals": {}
+   },
+   "VAESDEC": {
+    "instances": 104,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VAESDEC": 104
+    }
+   },
+   "VPANDN": {
+    "instances": 104,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPANDN": 104
+    }
+   },
+   "OR_LOCK": {
+    "instances": 103,
+    "lifted": 103,
+    "refusals": {}
+   },
+   "BSR": {
+    "instances": 101,
+    "lifted": 101,
+    "refusals": {}
+   },
+   "VFMADD213SD": {
+    "instances": 97,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD213SD": 97
+    }
+   },
+   "VPUNPCKLDQ": {
+    "instances": 97,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPUNPCKLDQ": 97
+    }
+   },
+   "PUNPCKHWD": {
+    "instances": 95,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKHWD": 95
+    }
+   },
+   "PINSRW": {
+    "instances": 94,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PINSRW": 94
+    }
+   },
+   "PADDQ": {
+    "instances": 91,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDQ": 91
+    }
+   },
+   "ADDPD": {
+    "instances": 90,
+    "lifted": 90,
+    "refusals": {}
+   },
+   "VMULPS": {
+    "instances": 89,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMULPS": 89
+    }
+   },
+   "PUNPCKLQDQ": {
+    "instances": 83,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKLQDQ": 83
+    }
+   },
+   "VMOVSD": {
+    "instances": 82,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVSD": 82
+    }
+   },
+   "PUNPCKHDQ": {
+    "instances": 82,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKHDQ": 82
+    }
+   },
+   "PSUBW": {
+    "instances": 82,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSUBW": 82
+    }
+   },
+   "STMXCSR": {
+    "instances": 81,
+    "lifted": 81,
+    "refusals": {}
+   },
+   "SETNL": {
+    "instances": 81,
+    "lifted": 81,
+    "refusals": {}
+   },
+   "AESENCLAST": {
+    "instances": 81,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for AESENCLAST": 81
+    }
+   },
+   "SHA1RNDS4": {
+    "instances": 80,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA1RNDS4": 80
+    }
+   },
+   "SHA1NEXTE": {
+    "instances": 80,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA1NEXTE": 80
+    }
+   },
+   "SETNP": {
+    "instances": 80,
+    "lifted": 80,
+    "refusals": {}
+   },
+   "REP_STOSB": {
+    "instances": 79,
+    "lifted": 79,
+    "refusals": {}
+   },
+   "PSHUFLW": {
+    "instances": 78,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSHUFLW": 78
+    }
+   },
+   "CWDE": {
+    "instances": 77,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CWDE": 77
+    }
+   },
+   "PSADBW": {
+    "instances": 75,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSADBW": 75
+    }
+   },
+   "VPSLLQ": {
+    "instances": 74,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSLLQ": 74
+    }
+   },
+   "REP_STOSQ": {
+    "instances": 73,
+    "lifted": 73,
+    "refusals": {}
+   },
+   "VMOVQ": {
+    "instances": 71,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVQ": 71
+    }
+   },
+   "PSHUFHW": {
+    "instances": 69,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSHUFHW": 69
+    }
+   },
+   "VEXTRACTF128": {
+    "instances": 68,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VEXTRACTF128": 68
+    }
+   },
+   "PALIGNR": {
+    "instances": 67,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PALIGNR": 67
+    }
+   },
+   "PCMPEQB": {
+    "instances": 66,
+    "lifted": 66,
+    "refusals": {}
+   },
+   "PMAXUB": {
+    "instances": 66,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMAXUB": 66
+    }
+   },
+   "VADDSD": {
+    "instances": 64,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VADDSD": 64
+    }
+   },
+   "SHA1MSG1": {
+    "instances": 64,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA1MSG1": 64
+    }
+   },
+   "SHA1MSG2": {
+    "instances": 64,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA1MSG2": 64
+    }
+   },
+   "VSUBSD": {
+    "instances": 63,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VSUBSD": 63
+    }
+   },
+   "AESKEYGENASSIST": {
+    "instances": 62,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for AESKEYGENASSIST": 62
+    }
+   },
+   "PSUBSB": {
+    "instances": 62,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSUBSB": 62
+    }
+   },
+   "VZEROUPPER": {
+    "instances": 61,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VZEROUPPER": 61
+    }
+   },
+   "VPSHUFD": {
+    "instances": 61,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSHUFD": 61
+    }
+   },
+   "PCLMULQDQ": {
+    "instances": 58,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCLMULQDQ": 58
+    }
+   },
+   "VPERMILPS": {
+    "instances": 56,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPERMILPS": 56
+    }
+   },
+   "VINSERTI128": {
+    "instances": 56,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VINSERTI128": 56
+    }
+   },
+   "UNPCKLPD": {
+    "instances": 54,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for UNPCKLPD": 54
+    }
+   },
+   "VADDPS": {
+    "instances": 54,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VADDPS": 54
+    }
+   },
+   "CLD": {
+    "instances": 51,
+    "lifted": 51,
+    "refusals": {}
+   },
+   "MINSD": {
+    "instances": 51,
+    "lifted": 51,
+    "refusals": {}
+   },
+   "MOVHPS": {
+    "instances": 50,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVHPS": 50
+    }
+   },
+   "VMOVAPD": {
+    "instances": 49,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVAPD": 49
+    }
+   },
+   "SHA256MSG1": {
+    "instances": 48,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA256MSG1": 48
+    }
+   },
+   "SHA256MSG2": {
+    "instances": 48,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHA256MSG2": 48
+    }
+   },
+   "AESDECLAST": {
+    "instances": 48,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for AESDECLAST": 48
+    }
+   },
+   "VPERMQ": {
+    "instances": 46,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPERMQ": 46
+    }
+   },
+   "VAESENCLAST": {
+    "instances": 46,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VAESENCLAST": 46
+    }
+   },
+   "PACKSSWB": {
+    "instances": 46,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PACKSSWB": 46
+    }
+   },
+   "PMADDUBSW": {
+    "instances": 46,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMADDUBSW": 46
+    }
+   },
+   "PACKSSDW": {
+    "instances": 45,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PACKSSDW": 45
+    }
+   },
+   "VPBLENDD": {
+    "instances": 44,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPBLENDD": 44
+    }
+   },
+   "REP_MOVSQ": {
+    "instances": 43,
+    "lifted": 43,
+    "refusals": {}
+   },
+   "VPSRLDQ": {
+    "instances": 42,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSRLDQ": 42
+    }
+   },
+   "PEXTRW": {
+    "instances": 42,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PEXTRW": 42
+    }
+   },
+   "VPSLLDQ": {
+    "instances": 38,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSLLDQ": 38
+    }
+   },
+   "PUNPCKHQDQ": {
+    "instances": 37,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUNPCKHQDQ": 37
+    }
+   },
+   "VPUNPCKHQDQ": {
+    "instances": 37,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPUNPCKHQDQ": 37
+    }
+   },
+   "PMOVMSKB": {
+    "instances": 36,
+    "lifted": 36,
+    "refusals": {}
+   },
+   "VINSERTF128": {
+    "instances": 36,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VINSERTF128": 36
+    }
+   },
+   "PMULHW": {
+    "instances": 36,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMULHW": 36
+    }
+   },
+   "PADDUSB": {
+    "instances": 36,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDUSB": 36
+    }
+   },
+   "SETS": {
+    "instances": 33,
+    "lifted": 33,
+    "refusals": {}
+   },
+   "MAXSD": {
+    "instances": 33,
+    "lifted": 33,
+    "refusals": {}
+   },
+   "VFMADD231SD": {
+    "instances": 32,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD231SD": 32
+    }
+   },
+   "VPROTQ": {
+    "instances": 32,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPROTQ": 32
+    }
+   },
+   "SETLE": {
+    "instances": 31,
+    "lifted": 31,
+    "refusals": {}
+   },
+   "SFENCE": {
+    "instances": 27,
+    "lifted": 27,
+    "refusals": {}
+   },
+   "VPBROADCASTQ": {
+    "instances": 27,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPBROADCASTQ": 27
+    }
+   },
+   "CPUID": {
+    "instances": 26,
+    "lifted": 26,
+    "refusals": {}
+   },
+   "REP_STOSW": {
+    "instances": 25,
+    "lifted": 25,
+    "refusals": {}
+   },
+   "CMPXCHG16B_LOCK": {
+    "instances": 25,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPXCHG16B_LOCK": 25
+    }
+   },
+   "VPROTD": {
+    "instances": 24,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPROTD": 24
+    }
+   },
+   "MOVLPS": {
+    "instances": 24,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVLPS": 24
+    }
+   },
+   "VSUBPS": {
+    "instances": 23,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VSUBPS": 23
+    }
+   },
+   "VPCMPEQD": {
+    "instances": 22,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPCMPEQD": 22
+    }
+   },
+   "VFMADD231PS": {
+    "instances": 22,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD231PS": 22
+    }
+   },
+   "PCMPGTB": {
+    "instances": 22,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPGTB": 22
+    }
+   },
+   "XORPD": {
+    "instances": 21,
+    "lifted": 21,
+    "refusals": {}
+   },
+   "INT1": {
+    "instances": 21,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INT1": 21
+    }
+   },
+   "ADD_LOCK": {
+    "instances": 20,
+    "lifted": 20,
+    "refusals": {}
+   },
+   "CLI": {
+    "instances": 19,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CLI": 19
+    }
+   },
+   "PUSHFQ": {
+    "instances": 18,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUSHFQ": 18
+    }
+   },
+   "MOVBE": {
+    "instances": 18,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVBE": 18
+    }
+   },
+   "PMADDWD": {
+    "instances": 18,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMADDWD": 18
+    }
+   },
+   "VCOMISD": {
+    "instances": 17,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCOMISD": 17
+    }
+   },
+   "ORPD": {
+    "instances": 17,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for ORPD": 17
+    }
+   },
+   "VPADDB": {
+    "instances": 17,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPADDB": 17
+    }
+   },
+   "VMULSS": {
+    "instances": 16,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMULSS": 16
+    }
+   },
+   "VUNPCKHPS": {
+    "instances": 16,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VUNPCKHPS": 16
+    }
+   },
+   "VUNPCKLPS": {
+    "instances": 16,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VUNPCKLPS": 16
+    }
+   },
+   "SETNS": {
+    "instances": 16,
+    "lifted": 16,
+    "refusals": {}
+   },
+   "CMPSS": {
+    "instances": 16,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPSS": 16
+    }
+   },
+   "ANDPD": {
+    "instances": 15,
+    "lifted": 15,
+    "refusals": {}
+   },
+   "POPFQ": {
+    "instances": 15,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for POPFQ": 15
+    }
+   },
+   "CVTTPD2DQ": {
+    "instances": 15,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTTPD2DQ": 15
+    }
+   },
+   "VADDSS": {
+    "instances": 15,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VADDSS": 15
+    }
+   },
+   "PREFETCHW": {
+    "instances": 14,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PREFETCHW": 14
+    }
+   },
+   "VCVTDQ2PD": {
+    "instances": 13,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTDQ2PD": 13
+    }
+   },
+   "VPSUBD": {
+    "instances": 13,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSUBD": 13
+    }
+   },
+   "AND_LOCK": {
+    "instances": 13,
+    "lifted": 13,
+    "refusals": {}
+   },
+   "VFNMADD231SD": {
+    "instances": 13,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFNMADD231SD": 13
+    }
+   },
+   "VANDPD": {
+    "instances": 13,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VANDPD": 13
+    }
+   },
+   "VXORPS": {
+    "instances": 13,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VXORPS": 13
+    }
+   },
+   "VDIVSD": {
+    "instances": 12,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VDIVSD": 12
+    }
+   },
+   "VXORPD": {
+    "instances": 12,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VXORPD": 12
+    }
+   },
+   "REP_MOVSB": {
+    "instances": 11,
+    "lifted": 11,
+    "refusals": {}
+   },
+   "PCMPEQW": {
+    "instances": 11,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPEQW": 11
+    }
+   },
+   "VANDPS": {
+    "instances": 11,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VANDPS": 11
+    }
+   },
+   "MOVHPD": {
+    "instances": 11,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVHPD": 11
+    }
+   },
+   "VFNMADD231PS": {
+    "instances": 11,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFNMADD231PS": 11
+    }
+   },
+   "DIVPD": {
+    "instances": 11,
+    "lifted": 11,
+    "refusals": {}
+   },
+   "PSUBQ": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "PCMPISTRI": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPISTRI": 10
+    }
+   },
+   "OUTSD": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUTSD": 10
+    }
+   },
+   "JO": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "VZEROALL": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VZEROALL": 10
+    }
+   },
+   "VORPD": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VORPD": 10
+    }
+   },
+   "PMAXUD": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMAXUD": 10
+    }
+   },
+   "VSUBSS": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VSUBSS": 9
+    }
+   },
+   "SHUFPD": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHUFPD": 9
+    }
+   },
+   "UNPCKHPD": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for UNPCKHPD": 9
+    }
+   },
+   "VPCMPGTD": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPCMPGTD": 9
+    }
+   },
+   "PAVGB": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PAVGB": 9
+    }
+   },
+   "INT": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for INT": 8
+    }
+   },
+   "VCOMISS": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCOMISS": 8
+    }
+   },
+   "VCVTDQ2PS": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTDQ2PS": 8
+    }
+   },
+   "VMOVSS": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMOVSS": 8
+    }
+   },
+   "VCVTSD2SS": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTSD2SS": 8
+    }
+   },
+   "VRCPPS": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VRCPPS": 8
+    }
+   },
+   "STC": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STC": 8
+    }
+   },
+   "PMOVSXDQ": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMOVSXDQ": 8
+    }
+   },
+   "SHLX": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHLX": 8
+    }
+   },
+   "SHRX": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SHRX": 8
+    }
+   },
+   "VAESDECLAST": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VAESDECLAST": 8
+    }
+   },
+   "PAUSE": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PAUSE": 7
+    }
+   },
+   "OUTSB": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUTSB": 7
+    }
+   },
+   "POPCNT": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for POPCNT": 7
+    }
+   },
+   "MOVNTDQ": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVNTDQ": 7
+    }
+   },
+   "VFMADD213SS": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD213SS": 6
+    }
+   },
+   "VUCOMISD": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VUCOMISD": 6
+    }
+   },
+   "RCR": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for RCR": 6
+    }
+   },
+   "VLDMXCSR": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VLDMXCSR": 6
+    }
+   },
+   "VBROADCASTF128": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VBROADCASTF128": 6
+    }
+   },
+   "VMAXPS": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMAXPS": 6
+    }
+   },
+   "VMINPS": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMINPS": 6
+    }
+   },
+   "VCVTTPS2DQ": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTTPS2DQ": 6
+    }
+   },
+   "PMAXUW": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMAXUW": 6
+    }
+   },
+   "LFENCE": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LFENCE": 5
+    }
+   },
+   "VFMSUB213SD": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMSUB213SD": 5
+    }
+   },
+   "INSB": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INSB": 5
+    }
+   },
+   "XGETBV": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "LOOPE": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOPE": 5
+    }
+   },
+   "VPSUBQ": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSUBQ": 4
+    }
+   },
+   "LOOP": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOP": 4
+    }
+   },
+   "VPERMD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPERMD": 4
+    }
+   },
+   "VFMADD132SD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD132SD": 4
+    }
+   },
+   "VCVTTPD2DQ": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTTPD2DQ": 4
+    }
+   },
+   "VFNMADD132SD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFNMADD132SD": 4
+    }
+   },
+   "VFMSUB213SS": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMSUB213SS": 4
+    }
+   },
+   "VCVTSS2SD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTSS2SD": 4
+    }
+   },
+   "CMPPD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPPD": 4
+    }
+   },
+   "VRSQRTPS": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VRSQRTPS": 4
+    }
+   },
+   "VCMPPS": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCMPPS": 4
+    }
+   },
+   "VANDNPS": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VANDNPS": 4
+    }
+   },
+   "FWAIT": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FWAIT": 4
+    }
+   },
+   "LOOPNE": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOPNE": 4
+    }
+   },
+   "VPINSRQ": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPINSRQ": 4
+    }
+   },
+   "AESIMC": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for AESIMC": 4
+    }
+   },
+   "PMULLD": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMULLD": 4
+    }
+   },
+   "CVTSD2SI": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "PSLLW": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PSLLW": 4
+    }
+   },
+   "REP_MOVSD": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "PMAXSW": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMAXSW": 4
+    }
+   },
+   "PREFETCHT2": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PREFETCHT2": 4
+    }
+   },
+   "MOVDQ2Q": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVDQ2Q": 4
+    }
+   },
+   "BTC": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for BTC": 4
+    }
+   },
+   "JNO": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "INSD": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INSD": 3
+    }
+   },
+   "VFMADD231SS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMADD231SS": 3
+    }
+   },
+   "CVTPD2DQ": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPD2DQ": 3
+    }
+   },
+   "VCVTPD2DQ": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTPD2DQ": 3
+    }
+   },
+   "VPMOVSXDQ": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPMOVSXDQ": 3
+    }
+   },
+   "VSHUFPS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VSHUFPS": 3
+    }
+   },
+   "CVTSS2SI": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VMULPD": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VMULPD": 3
+    }
+   },
+   "VORPS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VORPS": 3
+    }
+   },
+   "VSTMXCSR": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VSTMXCSR": 3
+    }
+   },
+   "VCVTSS2SI": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTSS2SI": 3
+    }
+   },
+   "VCVTSI2SS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTSI2SS": 3
+    }
+   },
+   "VUCOMISS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VUCOMISS": 3
+    }
+   },
+   "VPEXTRQ": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPEXTRQ": 3
+    }
+   },
+   "SAHF": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SAHF": 3
+    }
+   },
+   "CLC": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CLC": 3
+    }
+   },
+   "FEMMS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FEMMS": 3
+    }
+   },
+   "PINSRD": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PINSRD": 3
+    }
+   },
+   "PADDB": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PADDB": 3
+    }
+   },
+   "FIADD": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FIADD": 3
+    }
+   },
+   "VPMOVMSKB": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPMOVMSKB": 2
+    }
+   },
+   "VDIVSS": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VDIVSS": 2
+    }
+   },
+   "CMPSD_XMM": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPSD_XMM": 2
+    }
+   },
+   "VCMPSD": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCMPSD": 2
+    }
+   },
+   "SQRTSD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VFNMADD213SD": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFNMADD213SD": 2
+    }
+   },
+   "VPCMPEQQ": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPCMPEQQ": 2
+    }
+   },
+   "VANDNPD": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VANDNPD": 2
+    }
+   },
+   "VBROADCASTSS": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VBROADCASTSS": 2
+    }
+   },
+   "FISTP": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FISTP": 2
+    }
+   },
+   "PABSW": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PABSW": 2
+    }
+   },
+   "PCMPGTW": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPGTW": 2
+    }
+   },
+   "LEAVE": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LEAVE": 2
+    }
+   },
+   "PMINSD": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMINSD": 2
+    }
+   },
+   "PCMPEQQ": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PCMPEQQ": 2
+    }
+   },
+   "PMOVZXWD": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PMOVZXWD": 2
+    }
+   },
+   "XOR_LOCK": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VPCMPEQW": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPCMPEQW": 1
+    }
+   },
+   "VPCMPEQB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPCMPEQB": 1
+    }
+   },
+   "FNCLEX": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FNCLEX": 1
+    }
+   },
+   "FLDCW": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FLDCW": 1
+    }
+   },
+   "FNSTCW": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FNSTCW": 1
+    }
+   },
+   "RDRAND": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RDRAND": 1
+    }
+   },
+   "RDSEED": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RDSEED": 1
+    }
+   },
+   "JRCXZ": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for JRCXZ": 1
+    }
+   },
+   "VPBROADCASTD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPBROADCASTD": 1
+    }
+   },
+   "VEXTRACTI128": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VEXTRACTI128": 1
+    }
+   },
+   "VFMSUB132SD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VFMSUB132SD": 1
+    }
+   },
+   "VROUNDSD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VROUNDSD": 1
+    }
+   },
+   "VCVTTSD2SI": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTTSD2SI": 1
+    }
+   },
+   "VCVTPS2PD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VCVTPS2PD": 1
+    }
+   },
+   "VPSRAD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VPSRAD": 1
+    }
+   },
+   "VADDPD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VADDPD": 1
+    }
+   },
+   "VUNPCKLPD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for VUNPCKLPD": 1
+    }
+   },
+   "PINSRB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PINSRB": 1
+    }
+   },
+   "FIDIVR": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FIDIVR": 1
+    }
+   },
+   "FNSTSW": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FNSTSW": 1
+    }
+   },
+   "STI": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STI": 1
+    }
+   },
+   "RET_FAR": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RET_FAR": 1
+    }
+   },
+   "FADD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FADD": 1
+    }
+   },
+   "UD2": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for UD2": 1
+    }
+   },
+   "OUTSW": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUTSW": 1
+    }
+   },
+   "OUT": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUT": 1
+    }
+   },
+   "SCASB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SCASB": 1
+    }
+   },
+   "MOVSB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVSB": 1
+    }
+   },
+   "LODSB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LODSB": 1
+    }
+   },
+   "STD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "RCPSS": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RCPSS": 1
+    }
+   },
+   "XLAT": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for XLAT": 1
+    }
+   },
+   "EMMS": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for EMMS": 1
+    }
+   },
+   "SCASD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SCASD": 1
+    }
+   }
+  }
+ }
+]
