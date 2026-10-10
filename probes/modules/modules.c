@@ -129,7 +129,7 @@ void start(void) {
     static WCHAR small[4];
     for (int i = 0; i < 4; i++) small[i] = 0x7777;
     SetLastError(SENTINEL);
-    DWORD slen = GetModuleFileNameW(NULL, small, 4);
+    DWORD slen = GetModuleFileNameW(NULL, short_buffer, 4);
     err = GetLastError();
     row("file_name.small_buffer"); field("ret", slen); flag("terminated", small[3] == 0);
     flag("prefix_kept", small[0] == path[0] && small[1] == path[1] && small[2] == path[2]); field("err", err); end();
