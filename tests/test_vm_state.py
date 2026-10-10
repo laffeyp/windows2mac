@@ -297,3 +297,35 @@ def test_vm_agrees_with_windows_on_every_041_fault() -> None:
     diffs, example, skipped, judged, faults = vm_oracle.run_cases(cases, results)
     assert diffs == {}, [example[k] for k in diffs][:5]
     assert not skipped and judged == faults == 2195
+
+
+@pytest.mark.hvf
+def test_xgetbv_is_undefined_under_the_profile() -> None:
+    """XGETBV raises #UD while CR4.OSXSAVE is clear (SDM XGETBV), and the guest profile's
+    CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json): the model and the VM both end the process
+    with STATUS_ILLEGAL_INSTRUCTION at the instruction (Sprint 044). The runners' CPUs set OSXSAVE, so
+    the CPU cannot judge this class; the profile does, as for CPUID."""
+    from w2m.loader import GuestFault, Loaded, Memory
+    from w2m.runtime import STATUS_ILLEGAL_INSTRUCTION, Runtime
+    from w2m.vm_backend import VM
+
+    code_va, stack_va = 0x2000_0000, 0x4000_0000
+
+    def memory() -> Memory:
+        mem = Memory()
+        mem.map(code_va, 0x1000, "code").data[:3] = b"\x0f\x01\xd0"      # xgetbv
+        mem.map(stack_va, 0x10000, "stack")
+        return mem
+
+    rt = Runtime(Loaded(None, memory(), code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
+    with pytest.raises(GuestFault) as e:
+        rt.step()
+    assert e.value.code == STATUS_ILLEGAL_INSTRUCTION and rt.th.rip == code_va
+    vm = VM(Loaded(None, memory(), code_va, {}, stack_va + 0x10000))       # type: ignore[arg-type]
+    try:
+        r = vm.run(max_steps=100)
+        exc = vm.exception()
+    finally:
+        vm.close()
+    assert r.stop.startswith("UnhandledException 0xc000001d at x86 0x20000000"), r.stop
+    assert exc is not None and exc["code"] == STATUS_ILLEGAL_INSTRUCTION and exc["rip"] == code_va
