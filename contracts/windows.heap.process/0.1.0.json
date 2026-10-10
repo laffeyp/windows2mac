@@ -1,0 +1,134 @@
+{
+ "contract_id": "windows.heap.process",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetProcessHeap, HeapAlloc, HeapFree, HeapSize and HeapReAlloc on the process heap answer as Windows does: the handle is PEB.ProcessHeap, blocks are 16-byte aligned with their exact size, zeroing and reallocation keep their promises, and failures return NULL with ERROR_NOT_ENOUGH_MEMORY.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/heap/heap.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "process_heap",
+    "nonzero": true,
+    "equals_peb_process_heap": true,
+    "same_twice": true,
+    "err": 57005
+   },
+   {
+    "s": "alloc.sizes",
+    "all_nonzero": true,
+    "aligned_16": true,
+    "distinct": true,
+    "err": 57005
+   },
+   {
+    "s": "size.matches_request",
+    "all": true
+   },
+   {
+    "s": "alloc.zero_memory",
+    "zeroed": true
+   },
+   {
+    "s": "alloc.zero_bytes",
+    "nonzero": true,
+    "size": 0,
+    "err": 57005
+   },
+   {
+    "s": "alloc.too_large",
+    "null": true,
+    "err": 8
+   },
+   {
+    "s": "realloc.grow",
+    "nonzero": true,
+    "kept_contents": true,
+    "size": 100000,
+    "err": 57005
+   },
+   {
+    "s": "realloc.grow_zero",
+    "kept_contents": true,
+    "new_bytes_zeroed": true,
+    "err": 57005
+   },
+   {
+    "s": "realloc.shrink",
+    "kept_contents": true,
+    "size": 16,
+    "err": 57005
+   },
+   {
+    "s": "realloc.in_place_only_grow",
+    "null": true,
+    "err": 8,
+    "old_size_kept": 16
+   },
+   {
+    "s": "free",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "free.null",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "alloc.after_frees",
+    "aligned_16": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38040864736: windows-2025, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:38c8574d348d5d900fbf24ad1546d4dbd8772d6f9a9af5ccdc964ea03d6d706e; run 38040866595: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:cdd51d3d7615d2da5df59c1f0f49b81e5f6f01ed7a224204ec74bf564aed780f; run 38040868097: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:48adf0825a3ee8c73e31dab819bab113800bf33035414536cf90891e48ae293f; run 38040870043: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:52652cd8134c6cdc19210278612344d78672a460adbf04b439b616721932a83f",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "heap-1791623844-0-1",
+    "heap-1791623844-0-2",
+    "heap-1791623844-1-1",
+    "heap-1791623844-1-2",
+    "heap-1791623844-2-1",
+    "heap-1791623844-2-2",
+    "heap-1791623844-3-1",
+    "heap-1791623844-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-heapalloc",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapalloc (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "If the function fails and you have not specified HEAP_GENERATE_EXCEPTIONS, the return value is NULL. ... If the function fails, it does not call SetLastError. ... The alignment of memory returned by HeapAlloc is MEMORY_ALLOCATION_ALIGNMENT in WinNT.h"
+  }
+ ],
+ "open_questions": [
+  "The page says a failing HeapAlloc does not call SetLastError; on every run a 2^46-byte request and an in-place-only grow leave ERROR_NOT_ENOUGH_MEMORY (8). The rows follow the observation.",
+  "w2m's arena is 256 MB (src/w2m/vm_backend.py HEAP_SIZE); a request Windows would grant that it cannot hold stops the run rather than answering no memory."
+ ],
+ "sections": {
+  "probe": "probes/heap (Sprint 044)",
+  "implementation": "tools/guest_runtime/heap.c",
+  "rows": "scripts/family_run.py heap",
+  "excluded": "none"
+ }
+}

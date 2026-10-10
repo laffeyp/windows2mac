@@ -57,6 +57,9 @@ MONITOR_BINARY = ROOT / "build" / "vm_monitor"
 IPA_BASE = 0x1000_0000
 MONITOR_VA = 0x7F00_0000_0000
 PAGE = 0x1000
+BLOCK = 0x20_0000                   # a level-2 block (2 MB) in the 4 KB granule (Arm ARM D8.3)
+HEAP_VA = 0x0000_0002_0000_0000     # the process heap's arena (heap.c), above the image and the stack
+HEAP_SIZE = 0x1000_0000             # 256 MB, sparse in the VM's memory file
 # monitor layout (offsets into the shared file and from MONITOR_VA)
 MONITOR_DATA = 0x00000              # [0] instructions executed, [8] limit, [16] dispatch table VA
 AF_OPERANDS = 0x20                  # MONITOR_DATA + this: the last ADD/SUB/INC/DEC's a, b, r (lazy AF)
@@ -126,7 +129,10 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "TlsAlloc": ("k32_TlsAlloc", True), "TlsGetValue": ("k32_TlsGetValue", True),
             "TlsSetValue": ("k32_TlsSetValue", True), "TlsFree": ("k32_TlsFree", True),
             "FlsAlloc": ("k32_FlsAlloc", True), "FlsGetValue": ("k32_FlsGetValue", True),
-            "FlsSetValue": ("k32_FlsSetValue", True), "FlsFree": ("k32_FlsFree", True)}
+            "FlsSetValue": ("k32_FlsSetValue", True), "FlsFree": ("k32_FlsFree", True),
+            "GetProcessHeap": ("k32_GetProcessHeap", True), "HeapAlloc": ("k32_HeapAlloc", True),
+            "HeapFree": ("k32_HeapFree", True), "HeapSize": ("k32_HeapSize", True),
+            "HeapReAlloc": ("k32_HeapReAlloc", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
@@ -450,6 +456,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_TRANSPORT_VA": PROCESS_VA + TRANSPORT_OFF, "W2M_RING_VA": PROCESS_VA + RING_OFF,
         "W2M_STATE_VA": PROCESS_VA + STATE_OFF, "W2M_EXCEPTION_VA": PROCESS_VA + EXCEPTION_OFF,
         "W2M_TLS_EXPANSION_VA": PROCESS_VA + TLS_EXPANSION_OFF, "W2M_TLS_TAKEN": TLS_TAKEN,
+        "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -784,6 +791,14 @@ def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -
         return new
 
     for va, ipa, size in maps:
+        if va % BLOCK == 0 and ipa % BLOCK == 0 and size % BLOCK == 0:     # 2 MB blocks at level 2
+            for p in range(0, size, BLOCK):
+                v = va + p
+                off = TRANSLATION_TABLES
+                for level in (0, 1):
+                    off = table_at(off, (v >> (39 - 9 * level)) & 0x1FF)
+                struct.pack_into("<Q", mm, off + 8 * ((v >> 21) & 0x1FF), (ipa + p) | PAGE_ATTRIBUTES | 0x1)
+            continue
         for p in range(0, size, PAGE):
             v = va + p
             off = TRANSLATION_TABLES
@@ -846,6 +861,8 @@ class VM:
         for r in regions:
             placed.append((r, size))
             size += _round_up(len(r.data))
+        heap_off = _round_up(size, BLOCK)                 # the process heap: 2 MB aligned, mapped in blocks
+        size = heap_off + HEAP_SIZE
         self.size = _round_up(size, 0x4000)
         fd, self.path = tempfile.mkstemp(prefix="w2m-vm-")
         os.ftruncate(fd, self.size)
@@ -857,6 +874,7 @@ class VM:
             n = len(r.data)
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
+        self.mem.regions.append(Region(HEAP_VA, view[heap_off:heap_off + HEAP_SIZE], "heap"))   # sparse: no copy
         self.runtime = build_runtime(last_error_source, file_source, runtime_sources)
         _RUNTIME_SYMBOLS.clear()
         _RUNTIME_SYMBOLS.update(self.runtime.symbols)
@@ -868,6 +886,7 @@ class VM:
         self._init_process(tid)
         maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE), (PROCESS_VA, IPA_BASE + MONITOR_SIZE, PROCESS_SIZE)]
         maps += [(r.base, IPA_BASE + off, _round_up(len(r.data))) for r, off in placed]
+        maps += [(HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE)]
         self.ttbr = _write_translation_tables(self.mm, maps)
         self.code_cursor = CODE_CACHE
         self.blocks: dict[int, int] = {}                 # x86 address -> code VA
@@ -906,6 +925,7 @@ class VM:
             struct.pack_into("<Q", self.mm, t + field_off, value)
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
+        struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x30, HEAP_VA)     # PEB.ProcessHeap (heap.c)
         st = self._process(STATE_OFF)                   # thread-start defaults (spec, observed on Windows)
         struct.pack_into("<I", self.mm, st + 152, 0x1F80)
         struct.pack_into("<H", self.mm, st + 156, 0x27F)

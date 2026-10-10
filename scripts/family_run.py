@@ -269,6 +269,38 @@ FAMILIES: dict[str, Family] = {
                                              ("tls.get.fresh", "tls.get.after_set", "tls.get.reused")),
                 "tls_index_16_free": Plant("    tls_used[W2M_TLS_TAKEN] = 1;", "",
                                            ("tls.alloc.many", "tls.alloc.many.indices"))}),
+    "heap": Family(
+        name="heap",
+        contract_id="windows.heap.process",
+        version="0.1.0",
+        summary=("GetProcessHeap, HeapAlloc, HeapFree, HeapSize and HeapReAlloc on the process heap answer as "
+                 "Windows does: the handle is PEB.ProcessHeap, blocks are 16-byte aligned with their exact size, "
+                 "zeroing and reallocation keep their promises, and failures return NULL with ERROR_NOT_ENOUGH_MEMORY."),
+        probe="heap", guest_file="heap.c",
+        runs={
+              "38040864736": Run("windows-2025", "38c8574d348d5d900fbf24ad1546d4dbd8772d6f9a9af5ccdc964ea03d6d706e", "heap-1791623844-0", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38040866595": Run("windows-2022", "cdd51d3d7615d2da5df59c1f0f49b81e5f6f01ed7a224204ec74bf564aed780f", "heap-1791623844-1", "AMD EPYC 7763 64-Core Processor"),
+              "38040868097": Run("windows-2025", "48adf0825a3ee8c73e31dab819bab113800bf33035414536cf90891e48ae293f", "heap-1791623844-2", "AMD EPYC 7763 64-Core Processor"),
+              "38040870043": Run("windows-2022", "52652cd8134c6cdc19210278612344d78672a460adbf04b439b616721932a83f", "heap-1791623844-3", "AMD EPYC 9V74 80-Core Processor"),
+        },
+        documented=(
+            documented("ms-heapalloc", "api/heapapi/nf-heapapi-heapalloc", "2024-02-22",
+                       "If the function fails and you have not specified HEAP_GENERATE_EXCEPTIONS, the return value is "
+                       "NULL. ... If the function fails, it does not call SetLastError. ... The alignment of memory "
+                       "returned by HeapAlloc is MEMORY_ALLOCATION_ALIGNMENT in WinNT.h"),),
+        open_questions=(
+            "The page says a failing HeapAlloc does not call SetLastError; on every run a 2^46-byte request and an "
+            "in-place-only grow leave ERROR_NOT_ENOUGH_MEMORY (8). The rows follow the observation.",
+            "w2m's arena is 256 MB (src/w2m/vm_backend.py HEAP_SIZE); a request Windows would grant that it cannot "
+            "hold stops the run rather than answering no memory."),
+        # (first plants: unaligned blocks tripped heap.c's own pointer check and stopped the run; an ignored
+        # HEAP_ZERO_MEMORY changed nothing on a fresh, zero arena: a blind spot the probe now covers with a
+        # dirty, freed block. Both named reaches were wrong; recorded in Sprint 044's card.)
+        plants={"size_is_capacity": Plant("header_of(W2M_API_HeapSize, p)->size_and_magic_check",
+                                          "header_of(W2M_API_HeapSize, p)->capacity",
+                                          ("size.matches_request", "alloc.zero_bytes")),
+                "zero_flag_ignored": Plant("    if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);", "",
+                                           ("alloc.zero_memory_after_dirty_free",))}),
 }
 
 

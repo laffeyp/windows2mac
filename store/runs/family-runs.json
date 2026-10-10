@@ -27,6 +27,30 @@
    "38039759979": "conforms"
   }
  },
+ "heap": {
+  "candidate_sha256": "sha256:3b6b2b794d2c34e0cc3d3f73c1cbbf6133b7283168f0d8f80a0b8667c6ed138c",
+  "divergence": {
+   "38040864736": null,
+   "38040866595": null,
+   "38040868097": null,
+   "38040870043": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 4,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "heap",
+  "record": "store/runs/family-heap-1791624059068196000",
+  "verdicts": {
+   "38040864736": "conforms",
+   "38040866595": "conforms",
+   "38040868097": "conforms",
+   "38040870043": "conforms"
+  }
+ },
  "modules": {
   "candidate_sha256": "sha256:17e0a690b814488f4ee91189633f8060cd99e39ecd1d07959dd30e0253af16fd",
   "divergence": {

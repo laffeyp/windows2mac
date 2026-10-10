@@ -1,0 +1,13 @@
+{"s":"process_heap","nonzero":true,"equals_peb_process_heap":true,"same_twice":true,"err":57005}
+{"s":"alloc.sizes","all_nonzero":true,"aligned_16":true,"distinct":true,"err":57005}
+{"s":"size.matches_request","all":true}
+{"s":"alloc.zero_memory","zeroed":true}
+{"s":"alloc.zero_bytes","nonzero":true,"size":0,"err":57005}
+{"s":"alloc.too_large","null":true,"err":8}
+{"s":"realloc.grow","nonzero":true,"kept_contents":true,"size":100000,"err":57005}
+{"s":"realloc.grow_zero","kept_contents":true,"new_bytes_zeroed":true,"err":57005}
+{"s":"realloc.shrink","kept_contents":true,"size":16,"err":57005}
+{"s":"realloc.in_place_only_grow","null":true,"err":8,"old_size_kept":16}
+{"s":"free","ret":1,"err":57005}
+{"s":"free.null","ret":1,"err":57005}
+{"s":"alloc.after_frees","aligned_16":true}

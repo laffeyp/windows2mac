@@ -66,6 +66,13 @@ void start(void) {
 
     unsigned char *z = HeapAlloc(h, HEAP_ZERO_MEMORY, 4096);
     row("alloc.zero_memory"); flag("zeroed", z && all_bytes(z, 4096, 0)); end();
+    /* zeroing on memory that held data: a fresh heap is zero anyway, so only a block made dirty and
+       freed shows whether HEAP_ZERO_MEMORY did anything (a planted fault was invisible without it) */
+    unsigned char *dirty = HeapAlloc(h, 0, 4096);
+    fill(dirty, 4096, 0xFF);
+    HeapFree(h, 0, dirty);
+    unsigned char *z2 = HeapAlloc(h, HEAP_ZERO_MEMORY, 4096);
+    row("alloc.zero_memory_after_dirty_free"); flag("zeroed", z2 && all_bytes(z2, 4096, 0)); end();
 
     SetLastError(SENTINEL);
     void *e = HeapAlloc(h, 0, 0);
