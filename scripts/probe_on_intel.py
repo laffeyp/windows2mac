@@ -10,7 +10,7 @@ runner images in --runners), waits for every job of the batch, downloads each to
 build/probe-runs/<run id>/, reads cpu.txt, and stops after the first batch that holds an Intel
 run, up to --batches batches. Every run's CPU is printed and kept; none is discarded.
 
-Usage: uv run python scripts/probe_on_intel.py <probe> [--repeat 3] [--batch 6] [--batches 4]
+Usage: uv run python scripts/probe_on_intel.py <probe> [--repeat 3] [--batch 6] [--batches 4] [--cpu intel]
        [--runners windows-2025,windows-2022] [--ref main]
 Exit 0 with each Intel run's directory on the last lines; 1 when no batch reached Intel.
 """
@@ -73,6 +73,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--batches", type=int, default=4)
     ap.add_argument("--runners", default="windows-2025,windows-2022")
     ap.add_argument("--ref", default="main")
+    ap.add_argument("--cpu", default="intel",
+                    help="a substring the CPU's name must hold to end the search (Sprint 046: 8370C, 6973P)")
     a = ap.parse_args(argv)
     runners = a.runners.split(",")
     for n in range(1, a.batches + 1):
@@ -83,7 +85,7 @@ def main(argv: list[str]) -> int:
             conclusion, cpu, where = collect(run)
             results.append((conclusion, cpu))
             print(f"batch {n}: run {run} {conclusion}; {cpu}", flush=True)
-            if conclusion == "success" and where is not None and "intel" in cpu.lower():
+            if conclusion == "success" and where is not None and a.cpu.lower() in cpu.lower():
                 intel.append(where)
         if intel:
             for where in intel:
