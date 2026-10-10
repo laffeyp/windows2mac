@@ -14,14 +14,15 @@ from __future__ import annotations
 import json
 from functools import cache
 from pathlib import Path
+from typing import Any, cast
 
 SPEC = Path(__file__).resolve().parents[2] / "specs" / "approximations.json"
 DEFAULT_NAN = 0xFFC00000
 
 
 @cache
-def _tables() -> dict:
-    return json.loads(SPEC.read_text())
+def _tables() -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(SPEC.read_text()))
 
 
 def _special(x: int, rsqrt: bool) -> int | None:

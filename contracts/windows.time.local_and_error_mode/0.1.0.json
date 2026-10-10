@@ -1,0 +1,148 @@
+{
+ "contract_id": "windows.time.local_and_error_mode",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "Local time on a UTC machine, the time zone (TIME_ZONE_ID_UNKNOWN, zero biases, error 0), exact SYSTEMTIME and FILETIME conversions and their invalid inputs (87), and the error mode a process inherits from the runner's cmd (0x8003) and sets.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/time_and_error_mode/time_and_error_mode.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "local_time",
+    "err": 57005,
+    "equals_system_within_a_second": true,
+    "within_the_reads": true
+   },
+   {
+    "s": "time_zone",
+    "ret": 0,
+    "err": 0,
+    "bias": 0,
+    "standard_bias": 0,
+    "daylight_bias": 0,
+    "standard_month": 0,
+    "daylight_month": 0
+   },
+   {
+    "s": "system_to_file.fixed",
+    "ret": 1,
+    "err": 57005,
+    "filetime": 134361135301250000
+   },
+   {
+    "s": "file_to_system.fixed",
+    "ret": 1,
+    "err": 57005,
+    "year": 2026,
+    "month": 10,
+    "day_of_week": 6,
+    "day": 10,
+    "hour": 13,
+    "minute": 45,
+    "second": 30,
+    "ms": 125
+   },
+   {
+    "s": "system_to_file.month_13",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "system_to_file.february_31",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "file_to_system.huge",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "file_to_system.zero",
+    "ret": 1,
+    "err": 57005,
+    "year": 1601,
+    "month": 1,
+    "day_of_week": 1,
+    "day": 1,
+    "hour": 0,
+    "minute": 0,
+    "second": 0,
+    "ms": 0
+   },
+   {
+    "s": "error_mode.inherited_from_cmd",
+    "value": 32771,
+    "err": 57005
+   },
+   {
+    "s": "error_mode.set",
+    "returns_previous": true,
+    "err": 57005,
+    "now": 3
+   },
+   {
+    "s": "error_mode.set_open_file",
+    "now": 32768
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38053043702: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186; run 38053047590: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957; run 38053049693: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186; run 38053053337: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957; run 38053109812: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186; run 38053112133: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957; run 38053114329: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186; run 38053116643: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "time_and_error_mode-1791636241-0-1",
+    "time_and_error_mode-1791636241-0-2",
+    "time_and_error_mode-1791636241-1-1",
+    "time_and_error_mode-1791636241-1-2",
+    "time_and_error_mode-1791636241-2-1",
+    "time_and_error_mode-1791636241-2-2",
+    "time_and_error_mode-1791636241-3-1",
+    "time_and_error_mode-1791636241-3-2",
+    "time_and_error_mode-1791636304-0-1",
+    "time_and_error_mode-1791636304-0-2",
+    "time_and_error_mode-1791636304-1-1",
+    "time_and_error_mode-1791636304-1-2",
+    "time_and_error_mode-1791636304-2-1",
+    "time_and_error_mode-1791636304-2-2",
+    "time_and_error_mode-1791636304-3-1",
+    "time_and_error_mode-1791636304-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-seterrormode",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-seterrormode (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Each process has an associated error mode ... A child process inherits the error mode of its parent process."
+  }
+ ],
+ "open_questions": [
+  "The runners keep UTC and w2m does too; a player's machine has its own zone. The zone's names are not in the rows.",
+  "Steam's error mode, which the game inherits, is not observed; w2m's GUI start uses 0, as the child of a parent that set 0."
+ ],
+ "sections": {
+  "probe": "probes/time_and_error_mode (Sprint 044)",
+  "implementation": "tools/guest_runtime/time_and_error_mode.c",
+  "rows": "scripts/family_run.py time_and_error_mode",
+  "excluded": "none"
+ }
+}

@@ -397,11 +397,11 @@ class Runtime:
                 self._xwrite(dst, x[src[1]] >> 64, 8)
             return
         if ic in ("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"):         # the reference CPU's tables (approximate.py)
-            f = approximate.rcp if ic.startswith("RCP") else approximate.rsqrt
+            table_fn = approximate.rcp if ic.startswith("RCP") else approximate.rsqrt
             if ic.endswith("PS"):
-                x[dst[1]] = pack([f(w) for w in lanes(self._xread(src, 16), 32)], 32)
+                x[dst[1]] = pack([table_fn(w) for w in lanes(self._xread(src, 16), 32)], 32)
             else:
-                x[dst[1]] = x[dst[1]] & ~_mask(32) & _mask(128) | f(self._xread(src, 4) & _mask(32))
+                x[dst[1]] = x[dst[1]] & ~_mask(32) & _mask(128) | table_fn(self._xread(src, 4) & _mask(32))
             return
         if ic == "MOVMSKPS":
             v = x[src[1]]

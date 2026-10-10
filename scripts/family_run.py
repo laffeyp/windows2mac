@@ -208,6 +208,56 @@ def virtual_memory_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+TIME_RUNS = {
+              "38053043702": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-0", "AMD EPYC 7763 64-Core Processor"),
+              "38053047590": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-1", "AMD EPYC 9V74 80-Core Processor"),
+              "38053049693": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-2", "AMD EPYC 9V74 80-Core Processor"),
+              "38053053337": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-3", "AMD EPYC 9V74 80-Core Processor"),
+              "38053109812": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636304-0", "AMD EPYC 7763 64-Core Processor"),
+              "38053112133": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636304-1", "AMD EPYC 9V45 96-Core Processor"),
+              "38053114329": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636304-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38053116643": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636304-3", "AMD EPYC 7763 64-Core Processor"),
+
+}
+
+
+def time_rows(start: str) -> Callable[[list[dict[str, Any]]], list[dict[str, Any]]]:
+    """The probe's parent prints its rows, then its child's one row; w2m runs each alone (it serves no
+    CreateProcessW), so the parent's family drops the child's row and the child's keeps only it."""
+    def derive(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [r for r in printed if (r.get("s") == "error_mode.child_inherited") == (start == "child")]
+    return derive
+
+
+def time_family(start: str, summary: str) -> Family:
+    child = start == "child"
+    plants: dict[str, Plant] = {} if child else {
+        # named first as system_to_file.february_31; February 31 stays invalid with 29 days, and every date after
+        # February of a common year moves instead (recorded in Sprint 046's card)
+        "february_29_always": Plant("    return days[m - 1] + (m == 2 && leap(y));",
+                                    "    return days[m - 1] + (m == 2);", ("system_to_file.fixed", "file_to_system.fixed")),
+        "time_zone_leaves_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_GetTimeZoneInformation",
+                                        "    return w2m_logged(W2M_API_GetTimeZoneInformation", ("time_zone",))}
+    return Family(
+        name="time_and_error_mode" + ("_child" if child else ""),
+        contract_id="windows.time.error_mode_child" if child else "windows.time.local_and_error_mode",
+        version="0.1.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
+        runs=TIME_RUNS,
+        documented=(
+            documented("ms-seterrormode", "api/errhandlingapi/nf-errhandlingapi-seterrormode", "2024-02-22",
+                       "Each process has an associated error mode ... A child process inherits the error mode of its "
+                       "parent process."),),
+        open_questions=(
+            "The runners keep UTC and w2m does too; a player's machine has its own zone. The zone's names are not in "
+            "the rows.",
+            "Steam's error mode, which the game inherits, is not observed; w2m's GUI start uses 0, as the child of a "
+            "parent that set 0."),
+        derive=time_rows(start),
+        expected_stop=None if child else "Unimplemented: import KERNEL32.dll!CreateProcessW",
+        gui=child, arguments="child" if child else "", output_file="w2m-error-mode-child.jsonl" if child else None,
+        plants=plants)
+
+
 FAMILIES: dict[str, Family] = {
     "loader": Family(
         name="loader",
@@ -803,6 +853,12 @@ FAMILIES: dict[str, Family] = {
         plants={"template_not_copied": Plant("        block = bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill)",
                                             "        block = bytes(end - start) + bytes(zero_fill)",
                                             ("tls.values", "tls.write"), host="w2m.loader")}),
+    "time_and_error_mode": time_family("parent", (
+        "Local time on a UTC machine, the time zone (TIME_ZONE_ID_UNKNOWN, zero biases, error 0), exact SYSTEMTIME "
+        "and FILETIME conversions and their invalid inputs (87), and the error mode a process inherits from the "
+        "runner's cmd (0x8003) and sets.")),
+    "time_and_error_mode_child": time_family("child", (
+        "The error mode of a child whose parent set 0 and passed no flag: 0 (the Steam-like start).")),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",

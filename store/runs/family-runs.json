@@ -27,7 +27,7 @@
    "SESSION_INIT": 1
   },
   "family": "code_pages",
-  "record": "store/runs/family-code_pages-1791635759126286000",
+  "record": "store/runs/family-code_pages-1791636540623816000",
   "verdicts": {
    "38044061149": "conforms",
    "38044062619": "conforms",
@@ -63,7 +63,7 @@
    "SESSION_INIT": 1
   },
   "family": "console",
-  "record": "store/runs/family-console-1791635768526513000",
+  "record": "store/runs/family-console-1791636551190887000",
   "verdicts": {
    "38046095100": "conforms",
    "38046096985": "conforms",
@@ -89,7 +89,7 @@
    "SESSION_INIT": 1
   },
   "family": "critical_sections",
-  "record": "store/runs/family-critical_sections-1791635757222143000",
+  "record": "store/runs/family-critical_sections-1791636538638947000",
   "verdicts": {
    "38039748482": "conforms",
    "38039751056": "conforms",
@@ -123,7 +123,7 @@
    "SESSION_INIT": 1
   },
   "family": "environment_empty",
-  "record": "store/runs/family-environment_empty-1791635754741448000",
+  "record": "store/runs/family-environment_empty-1791636536151083000",
   "verdicts": {
    "38044699077": "conforms",
    "38044700976": "conforms",
@@ -163,7 +163,7 @@
    "SESSION_INIT": 1
   },
   "family": "environment_set",
-  "record": "store/runs/family-environment_set-1791635754093968000",
+  "record": "store/runs/family-environment_set-1791636535505397000",
   "verdicts": {
    "38044699077": "conforms",
    "38044700976": "conforms",
@@ -207,7 +207,7 @@
    "SESSION_INIT": 1
   },
   "family": "exception_filter",
-  "record": "store/runs/family-exception_filter-1791635761727397000",
+  "record": "store/runs/family-exception_filter-1791636543228956000",
   "verdicts": {
    "38045461436": "conforms",
    "38045463327": "conforms",
@@ -247,7 +247,7 @@
    "SESSION_INIT": 1
   },
   "family": "heap",
-  "record": "store/runs/family-heap-1791635758276570000",
+  "record": "store/runs/family-heap-1791636539771263000",
   "verdicts": {
    "38041103334": "conforms",
    "38041105720": "conforms",
@@ -260,7 +260,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:a46ed82ce9fbd54868643ef79e955859fbdb76a171ec0ebb967a65990757b2e8",
+  "candidate_sha256": "sha256:5e7585dabf8b7dea86d28bb88f8e28dc09fd830bb9dbd154e792a1065e7ecf9d",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -287,7 +287,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791635753080880000",
+  "record": "store/runs/family-loader-1791636534490187000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -325,7 +325,7 @@
    "SESSION_INIT": 1
   },
   "family": "modules",
-  "record": "store/runs/family-modules-1791635756490224000",
+  "record": "store/runs/family-modules-1791636537906667000",
   "verdicts": {
    "38039204088": "conforms",
    "38039205782": "conforms",
@@ -363,7 +363,7 @@
    "SESSION_INIT": 1
   },
   "family": "pointer_encoding",
-  "record": "store/runs/family-pointer_encoding-1791635762218004000",
+  "record": "store/runs/family-pointer_encoding-1791636543726269000",
   "verdicts": {
    "38048676507": "conforms",
    "38048678695": "conforms",
@@ -400,7 +400,7 @@
    "SESSION_INIT": 1
   },
   "family": "process_queries",
-  "record": "store/runs/family-process_queries-1791635755350287000",
+  "record": "store/runs/family-process_queries-1791636536766397000",
   "verdicts": {
    "38041796227": "conforms",
    "38041797992": "conforms",
@@ -425,7 +425,7 @@
    "SESSION_INIT": 1
   },
   "family": "slim_locks",
-  "record": "store/runs/family-slim_locks-1791635762840269000",
+  "record": "store/runs/family-slim_locks-1791636544341939000",
   "verdicts": {
    "38048676516": "conforms",
    "38048679185": "conforms",
@@ -434,7 +434,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:9e5f766f57bad3ed810ba45d5f99f9c19a1c28afbad041d6c849b3fa1f46d2b3",
+  "candidate_sha256": "sha256:34e29af83a5135d144ef10ff0404d32d1b0f8c44ed59106569d2f27e64761798",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -461,7 +461,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791635766570623000",
+  "record": "store/runs/family-static_tls-1791636548032600000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -501,7 +501,7 @@
    "SESSION_INIT": 1
   },
   "family": "storage_get2",
-  "record": "store/runs/family-storage_get2-1791635766163768000",
+  "record": "store/runs/family-storage_get2-1791636547624145000",
   "verdicts": {
    "38051903385": "conforms",
    "38051906733": "conforms",
@@ -529,7 +529,7 @@
    "SESSION_INIT": 1
   },
   "family": "sync_objects",
-  "record": "store/runs/family-sync_objects-1791635765842174000",
+  "record": "store/runs/family-sync_objects-1791636547305099000",
   "verdicts": {
    "38051398628": "conforms",
    "38051400336": "conforms",
@@ -561,7 +561,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_info",
-  "record": "store/runs/family-system_info-1791635763510459000",
+  "record": "store/runs/family-system_info-1791636545007959000",
   "verdicts": {
    "38049865817": "conforms",
    "38049867401": "conforms",
@@ -593,7 +593,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_queries",
-  "record": "store/runs/family-thread_queries-1791635763228233000",
+  "record": "store/runs/family-thread_queries-1791636544728886000",
   "verdicts": {
    "38048923955": "conforms",
    "38048925932": "conforms",
@@ -621,7 +621,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_storage",
-  "record": "store/runs/family-thread_storage-1791635757569029000",
+  "record": "store/runs/family-thread_storage-1791636538987878000",
   "verdicts": {
    "38040526466": "conforms",
    "38040528813": "conforms",
@@ -633,8 +633,72 @@
    "38040604585": "conforms"
   }
  },
+ "time_and_error_mode": {
+  "candidate_sha256": "sha256:9286d7a6e134e409e98dad5e8684c30dffa70ef951e28ce3e96760f705c209f3",
+  "divergence": {
+   "38053043702": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053047590": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053049693": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053053337": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053109812": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053112133": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053114329": "Unimplemented: import KERNEL32.dll!CreateProcessW",
+   "38053116643": "Unimplemented: import KERNEL32.dll!CreateProcessW"
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 8,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "time_and_error_mode",
+  "record": "store/runs/family-time_and_error_mode-1791636549992585000",
+  "verdicts": {
+   "38053043702": "conforms",
+   "38053047590": "conforms",
+   "38053049693": "conforms",
+   "38053053337": "conforms",
+   "38053109812": "conforms",
+   "38053112133": "conforms",
+   "38053114329": "conforms",
+   "38053116643": "conforms"
+  }
+ },
+ "time_and_error_mode_child": {
+  "candidate_sha256": "sha256:9286d7a6e134e409e98dad5e8684c30dffa70ef951e28ce3e96760f705c209f3",
+  "divergence": {
+   "38053043702": null,
+   "38053047590": null,
+   "38053049693": null,
+   "38053053337": null,
+   "38053109812": null,
+   "38053112133": null,
+   "38053114329": null,
+   "38053116643": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 8,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "time_and_error_mode_child",
+  "record": "store/runs/family-time_and_error_mode_child-1791636550873917000",
+  "verdicts": {
+   "38053043702": "conforms",
+   "38053047590": "conforms",
+   "38053049693": "conforms",
+   "38053053337": "conforms",
+   "38053109812": "conforms",
+   "38053112133": "conforms",
+   "38053114329": "conforms",
+   "38053116643": "conforms"
+  }
+ },
  "virtual_memory": {
-  "candidate_sha256": "sha256:f38e2835e0ec73ac0fbd61dcd78019872c249c4e6680a45ec9e3a92c50c20e95",
+  "candidate_sha256": "sha256:c11bf49f9d375483d2c61e194707aa882f63570cc17243bab365b60e67f6267b",
   "divergence": {
    "38050561886": null,
    "38050563770": null,
@@ -657,7 +721,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791635764786288000",
+  "record": "store/runs/family-virtual_memory-1791636546261153000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

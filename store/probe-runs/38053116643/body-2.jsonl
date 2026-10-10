@@ -1,0 +1,12 @@
+{"s":"local_time","err":57005,"equals_system_within_a_second":true,"within_the_reads":true}
+{"s":"time_zone","ret":0,"err":0,"bias":0,"standard_bias":0,"daylight_bias":0,"standard_month":0,"daylight_month":0}
+{"s":"system_to_file.fixed","ret":1,"err":57005,"filetime":134361135301250000}
+{"s":"file_to_system.fixed","ret":1,"err":57005,"year":2026,"month":10,"day_of_week":6,"day":10,"hour":13,"minute":45,"second":30,"ms":125}
+{"s":"system_to_file.month_13","ret":0,"err":87}
+{"s":"system_to_file.february_31","ret":0,"err":87}
+{"s":"file_to_system.huge","ret":0,"err":87}
+{"s":"file_to_system.zero","ret":1,"err":57005,"year":1601,"month":1,"day_of_week":1,"day":1,"hour":0,"minute":0,"second":0,"ms":0}
+{"s":"error_mode.inherited_from_cmd","value":32771,"err":57005}
+{"s":"error_mode.set","returns_previous":true,"err":57005,"now":3}
+{"s":"error_mode.set_open_file","now":32768}
+{"s":"error_mode.child_inherited","value":0,"err":57005}
