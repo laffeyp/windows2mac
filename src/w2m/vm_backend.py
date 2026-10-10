@@ -217,7 +217,8 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True),
             "GetLogicalProcessorInformationEx": ("k32_GetLogicalProcessorInformationEx", True), "GetLogicalProcessorInformation": ("k32_GetLogicalProcessorInformation", True), "GetActiveProcessorCount": ("k32_GetActiveProcessorCount", True), "GetCurrentProcess": ("k32_GetCurrentProcess", True), "GetProcessAffinityMask": ("k32_GetProcessAffinityMask", True), "SetThreadAffinityMask": ("k32_SetThreadAffinityMask", True), "GetNumaHighestNodeNumber": ("k32_GetNumaHighestNodeNumber", True),
             "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True),
-            "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True)}
+            "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True),
+            "GetHandleInformation": ("k32_GetHandleInformation", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
 DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
                 "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047

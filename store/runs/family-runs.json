@@ -248,7 +248,7 @@
   }
  },
  "file_attributes": {
-  "candidate_sha256": "sha256:2023240f31f7b084fab9c0407d4c8c6c6962915ad6c4fbfd938e0313ef94ef07",
+  "candidate_sha256": "sha256:3d3d479b2d4905e04b0ab7a25d58226466f5b926fd4a6bac8263ba6ebd84b2b3",
   "divergence": {
    "38087355443": null,
    "38087357359": null
@@ -261,14 +261,34 @@
    "SESSION_INIT": 1
   },
   "family": "file_attributes",
-  "record": "store/runs/family-file_attributes-1791669342897224000",
+  "record": "store/runs/family-file_attributes-1791672119685216000",
   "verdicts": {
    "38087355443": "conforms",
    "38087357359": "conforms"
   }
  },
+ "file_security": {
+  "candidate_sha256": "sha256:1598482fb4aee3b32b4b430ca80d8c97d42586cc9d154db765a75dab35730173",
+  "divergence": {
+   "38090863707": null,
+   "38090865352": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "file_security",
+  "record": "store/runs/family-file_security-1791672111579116000",
+  "verdicts": {
+   "38090863707": "conforms",
+   "38090865352": "conforms"
+  }
+ },
  "generate_random": {
-  "candidate_sha256": "sha256:000dacfa494904f20f473209b327f67fe2faca9d08f4a5563e4e785b0d7d11fb",
+  "candidate_sha256": "sha256:85dd32d549ca7151032bbfc569e5c9514e7e48b53780adeee53d369779508b5b",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -281,7 +301,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791669339328032000",
+  "record": "store/runs/family-generate_random-1791670824140211000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -320,7 +340,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:34a2e4b32271915e69b7384eb73d4af5262e72bd570ea97a4b385d0e6a364612",
+  "candidate_sha256": "sha256:072a410b40f171ecb46c0b5d5bc28e3b1c758b3d4441964e79b29981ce9156e3",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -347,7 +367,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791669251868213000",
+  "record": "store/runs/family-loader-1791670776711788000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -396,7 +416,7 @@
   }
  },
  "paths": {
-  "candidate_sha256": "sha256:7fa5535db1c5b7e18a90d2564e1a53460cd1e59168a3633bb7896495ac04d2d9",
+  "candidate_sha256": "sha256:0295caa330abf04e03925412d1ae32da66c2bae8f6a0b0556901758ffad6f7ae",
   "divergence": {
    "38090281974": null,
    "38090284442": null
@@ -409,7 +429,7 @@
    "SESSION_INIT": 1
   },
   "family": "paths",
-  "record": "store/runs/family-paths-1791670162385548000",
+  "record": "store/runs/family-paths-1791672122838660000",
   "verdicts": {
    "38090281974": "conforms",
    "38090284442": "conforms"
@@ -538,7 +558,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:af02829bf004c51bbe0499e8cf108cfb865bf9d9d08046b5ed03fc9b0e957e4e",
+  "candidate_sha256": "sha256:3ab92c3b6a738ad4f1cc311e23e5a3d43ebfaa4b2dcd27b15cd22f9340a27a06",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -565,7 +585,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791669297218002000",
+  "record": "store/runs/family-static_tls-1791670804124722000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -802,7 +822,7 @@
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:1daca1161bedef27cb40f8f236ff8e1d51ac7e5828cbf541af80c032f5345473",
+  "candidate_sha256": "sha256:f1a0f1fa8c06de3094741935a4ebd7fb807e0940e83f1f9c8325a2ac35ff07af",
   "divergence": {
    "38050561886": null,
    "38050563770": null,
@@ -825,7 +845,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791669273682020000",
+  "record": "store/runs/family-virtual_memory-1791670789309387000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

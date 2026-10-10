@@ -64,7 +64,7 @@ struct open_file {
     u32 used;
     u32 access;
     u32 share;
-    u32 pad;
+    u32 inherit;                   /* SECURITY_ATTRIBUTES.bInheritHandle != 0 (Sprint 048; HANDLE_FLAG_INHERIT) */
     u64 fd;                        /* the host bridge's descriptor */
     u64 id;                        /* the host file id: handles on one file share it */
     long long pos;
@@ -141,7 +141,11 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
         w2m_unimplemented(W2M_API_CreateFileW, desired);
     if (share & ~(u64)(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE))
         w2m_unimplemented(W2M_API_CreateFileW, share);
-    if (security || template_file || (flags != 0 && flags != FILE_ATTRIBUTE_NORMAL))
+    /* SECURITY_ATTRIBUTES (contracts/windows.file.security, Sprint 048): nLength is not checked (0, 12 and 1000 all
+     * open); a descriptor is not in the rows; bInheritHandle sets the handle's inherit flag when nonzero */
+    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);
+    u32 inherit = security ? *(u32 *)(security + 16) != 0 : 0;
+    if (template_file || (flags != 0 && flags != FILE_ATTRIBUTE_NORMAL))
         w2m_unimplemented(W2M_API_CreateFileW, flags);
 
     u32 access = access_of((u32)desired);
@@ -180,6 +184,7 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
     f->used = 1;
     f->access = access;
     f->share = (u32)share;
+    f->inherit = inherit;
     f->fd = fd;
     f->id = id;
     f->pos = 0;
@@ -261,6 +266,15 @@ u64 k32_ReadFile(u64 handle, u64 buffer, u64 count, u64 read, u64 rsp) {
     f->pos += (long long)done;
     *(u32 *)read = (u32)done;
     return w2m_logged(W2M_API_ReadFile, handle, 1);
+}
+
+/* GetHandleInformation on a file handle (Sprint 048, contracts/windows.file.security): HANDLE_FLAG_INHERIT (1) as
+ * CreateFileW's SECURITY_ATTRIBUTES set it; other handles are not in the rows. */
+u64 k32_GetHandleInformation(u64 handle, u64 flags) {
+    struct open_file *f = file_of(handle);
+    if (!f) w2m_unimplemented(W2M_API_GetHandleInformation, handle);
+    *(u32 *)flags = f->inherit;
+    return w2m_logged(W2M_API_GetHandleInformation, handle, 1);
 }
 
 /* SetFilePointerEx(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod): nonzero on success; a

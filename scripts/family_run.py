@@ -1095,6 +1095,34 @@ FAMILIES: dict[str, Family] = {
                 ("full.rooted_dotdot",)),
             "working_directory_removed": Plant(
                 "    if (same(scratch, working())) {", "    if (same(scratch, working()) && 0) {", ("dir.remove_cwd",))}),
+    "file_security": Family(
+        name="file_security",
+        contract_id="windows.file.security",
+        version="0.1.0",
+        summary=("CreateFileW with SECURITY_ATTRIBUTES and no descriptor: nLength unchecked (0, 12, 1000 open), "
+                 "bInheritHandle nonzero sets HANDLE_FLAG_INHERIT (GetHandleInformation), the open's result and error "
+                 "as with no attributes."),
+        probe="file_security", guest_file="file.c", host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/paths.c"),
+        runs={
+              "38090863707": Run("windows-2025", "54f99a38848d08f519159a5e922708481f6859da345febe832e457e753c46364", "file_security-1791670645-0", "AMD EPYC 7763 64-Core Processor"),
+              "38090865352": Run("windows-2022", "30a17799849fecb415ae48da8d6a5ca42c71478579f4b263c9b007c5f245d8e8", "file_security-1791670645-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-createfilew", "api/fileapi/nf-fileapi-createfilew", "2022-08-16",
+                       "lpSecurityAttributes ... If this parameter is NULL, the handle returned by CreateFile cannot be "
+                       "inherited by any child processes the application may create and the file or device associated "
+                       "with the returned handle gets a default security descriptor."),),
+        open_questions=(
+            "A security descriptor is not probed; w2m stops on one by name.",
+            "Inheritance matters only to a child process; w2m creates none yet (CreateProcessW stops by name)."),
+        plants={
+            "inherit_ignored": Plant("    u32 inherit = security ? *(u32 *)(security + 16) != 0 : 0;", "    u32 inherit = 0;",
+                                     ("inherit.existing", "length_*.existing", "inherit_2.existing")),
+            "length_checked": Plant(
+                "    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);",
+                "    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);\n"
+                "    if (security && *(u32 *)security != 24) { set_error(87); return w2m_logged(W2M_API_CreateFileW, name, INVALID_HANDLE_VALUE); }",
+                ("length_*",))}),
 }
 
 
