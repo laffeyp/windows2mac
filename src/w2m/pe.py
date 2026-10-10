@@ -59,6 +59,7 @@ class PeImage:
     delay_imports: dict[str, tuple[str, ...]] = field(default_factory=dict)  # bound on first call
     exports: tuple[tuple[str, int], ...] = ()                  # (name, rva)
     tls_callbacks: tuple[int, ...] = ()                         # RVAs
+    tls: tuple[int, int, int, int] | None = None                 # TLS directory: template start, end, index (VAs), zero fill
     iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name" (incl. delay)
     function_starts: tuple[int, ...] = ()                       # .pdata RUNTIME_FUNCTION.BeginAddress
 
@@ -238,8 +239,11 @@ def parse(data: bytes) -> PeImage:
             exports.append((r.cstr(_rva_to_offset(sections, nrva)), frva))
 
     callbacks: list[int] = []
+    tls = None
     rva, size = d(DIR_TLS)
     if rva:
+        start_va, end_va, index_va, _, zero_fill = r.u("<QQQQI", _rva_to_offset(sections, rva))
+        tls = (start_va, end_va, index_va, zero_fill)
         (cb_va,) = r.u("<Q", _rva_to_offset(sections, rva) + 24)
         if cb_va:
             off = _rva_to_offset(sections, cb_va - image_base)
@@ -265,5 +269,5 @@ def parse(data: bytes) -> PeImage:
                    size_of_image=size_of_image, subsystem=subsystem, dll_characteristics=dllchars,
                    sections=sections, imports=imports, relocations=relocs,
                    relocation_sites=tuple(sites), delay_imports=delay,
-                   exports=tuple(exports), tls_callbacks=tuple(callbacks), iat=iat,
+                   exports=tuple(exports), tls_callbacks=tuple(callbacks), tls=tls, iat=iat,
                    function_starts=tuple(starts))

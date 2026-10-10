@@ -143,6 +143,12 @@ def udiv(rd: int, rn: int, rm: int) -> int:
     return 0x9AC00800 | rm << 16 | rn << 5 | rd
 
 
+def sdiv(rd: int, rn: int, rm: int) -> int:
+    """SDIV Xd, Xn, Xm: signed, toward zero."""
+    _r(rd, rn, rm)
+    return 0x9AC00C00 | rm << 16 | rn << 5 | rd
+
+
 def msub(rd: int, rn: int, rm: int, ra: int) -> int:
     """MSUB Xd, Xn, Xm, Xa: Xa - Xn * Xm (the remainder after UDIV)."""
     _r(rd, rn, rm, ra)

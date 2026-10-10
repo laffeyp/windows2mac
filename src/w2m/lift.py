@@ -36,7 +36,8 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("fence",)                      SFENCE: earlier stores before later ones
   ("ud",)                         an instruction the guest profile makes undefined (#UD): XGETBV, since
                                   the profile's CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json)
-  ("div", bits, t)                DIV r/m (unsigned): RDX:RAX (DX:AX, EDX:EAX; AX for 8 bits) by t; quotient
+  ("div", bits, t[, signed])      DIV r/m (unsigned), IDIV with signed True (Sprint 046): RDX:RAX (DX:AX, EDX:EAX;
+                                  AX for 8 bits) by t; quotient
                                   to RAX/EAX/AX/AL, remainder to RDX/EDX/DX/AH; every flag undefined;
                                   a zero divisor faults STATUS_INTEGER_DIVIDE_BY_ZERO, a quotient too wide
                                   STATUS_INTEGER_OVERFLOW (SDM DIV #DE; ntstatus.h), before any write
@@ -236,7 +237,8 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "SFENCE", "XGETBV", *REP_STRING):
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "XGETBV",
+                              *REP_STRING):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)

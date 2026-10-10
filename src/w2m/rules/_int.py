@@ -108,6 +108,25 @@ def cdqe(ctx: Ctx) -> None:
     b.emit("st", ("r", RAX, 64, False), r)
 
 
+def cqo(ctx: Ctx) -> None:
+    """CQO: RDX = every bit RAX's sign (SDM CWD/CDQ/CQO; Sprint 046)."""
+    b = ctx.b
+    v, n, r = b.t(), b.t(), b.t()
+    b.emit("ld", v, ("r", RAX, 64, False))
+    b.emit("imm", n, 63)
+    b.emit("alu", r, "sar", v, n, 64)
+    b.emit("st", ("r", RDX, 64, False), r)
+
+
+def cwde(ctx: Ctx) -> None:
+    """CWDE: EAX = sign-extended AX; the 32-bit write zero-extends RAX (SDM CBW/CWDE/CDQE; Sprint 046)."""
+    b = ctx.b
+    v, r = b.t(), b.t()
+    b.emit("ld", v, ("r", RAX, 16, False))
+    b.emit("alu", r, "sext16", v, v, 32)
+    b.emit("st", ("r", RAX, 32, False), r)
+
+
 def cdq(ctx: Ctx) -> None:
     """CDQ: EDX = every bit EAX's sign (SDM CWD/CDQ/CQO); a 32-bit write zero-extends RDX."""
     b = ctx.b
@@ -267,6 +286,13 @@ def div(ctx: Ctx) -> None:
     b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
     sk, src, bits = _operand(b, ops[0], nxt)
     b.emit("div", bits, _val(b, sk, src))
+
+
+def idiv(ctx: Ctx) -> None:
+    """IDIV r/m (signed; SDM IDIV; Sprint 046)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    sk, src, bits = _operand(b, ops[0], nxt)
+    b.emit("div", bits, _val(b, sk, src), True)
 
 
 def shr(ctx: Ctx) -> None:

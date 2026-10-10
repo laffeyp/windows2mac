@@ -1,0 +1,7 @@
+{
+ "cflags": "-O1 -Wall -Werror -D_CRT_SECURE_NO_WARNINGS",
+ "libs": "-lkernel32",
+ "mode": "file",
+ "source": "probes/semantics/semantics.c",
+ "generate": "scripts/semantics_differential.py --cases --set 046b --out probes/semantics_046b/cases.bin"
+}

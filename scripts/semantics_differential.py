@@ -292,6 +292,9 @@ RET_IMMEDIATES = (0, 1, 2, 3, 8, 0x10, 0x18, 0x20, 0x28, 0x100, 0x7FF8, 0x7FFF, 
 # floating-point exception (census 2026-10-10; SHUFPS stops UnityPlayer's start-up at 152,691 instructions)
 CLASSES_046 = frozenset(("SHUFPS", "PXOR", "ANDNPS", "UNPCKLPS", "UNPCKHPS", "MOVHLPS", "MOVLHPS", "PUNPCKLDQ", "PADDD",
                          "PSRLD", "PSLLD", "PSRAD", "MOVMSKPS"))
+# Sprint 046 (second block): CQO, where UnityPlayer's start-up stops after its system queries (173,624
+# instructions with GetNativeSystemInfo stubbed), CWDE beside it, and IDIV
+CLASSES_046B = frozenset(("CQO", "CWDE", "IDIV"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -302,7 +305,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "044c": (2026_10_10_442, CLASSES_044C, (), False),
     "044d": (2026_10_10_443, CLASSES_044D, (), False),
     "044e": (2026_10_10_444, CLASSES_044E, (), False),
-    "046": (2026_10_10_46, CLASSES_046, (), False)}
+    "046": (2026_10_10_46, CLASSES_046, (), False),
+    "046b": (2026_10_10_461, CLASSES_046B, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:

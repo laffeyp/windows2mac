@@ -29,6 +29,7 @@ from w2m.pe import PeImage, parse
 THUNK_BASE = 0x7FFE_0000_0000          # host entry points live here, 16 bytes apart
 DLL_BASE = 0x7FF8_0000_0000            # the DLLs w2m loads, in load order
 LOADER_STUB = 0x7FFD_0000_0000         # the entry stub that runs DllMains, then the program's entry
+TLS_VA = 0x7FFC_0000_0000              # the thread's static TLS: the pointer array, then each module's block
 DLL_PROCESS_ATTACH = 1
 HEAP_VA, HEAP_SIZE = 0x2_0000_0000, 0x1000_0000   # the VM's process heap (vm_backend.HEAP_VA, HEAP_SIZE)
 MONITOR_VA = 0x7F00_0000_0000                     # the VM's monitor and process areas (vm_backend)
@@ -117,6 +118,7 @@ class Loaded:
     image_entry: int = 0                 # the program's own entry point
     init_order: list[Image] = field(default_factory=list)   # DLLs whose entry runs, in the order it runs
     dependency_order: list[Image] = field(default_factory=list)   # every DLL, dependencies first (PEB init list)
+    tls_array: int = 0                   # TEB.ThreadLocalStoragePointer: 0 when no image has static TLS
 
 
 def _map_image(mem: Memory, data: bytes, img: PeImage, base: int, name: str) -> None:
@@ -140,7 +142,7 @@ def _map_image(mem: Memory, data: bytes, img: PeImage, base: int, name: str) -> 
 
 
 def _free(mem: Memory, base: int, size: int) -> bool:
-    reserved = [(THUNK_BASE, 1 << 32), (LOADER_STUB, 1 << 32), (STACK_TOP - STACK_SIZE, STACK_SIZE),
+    reserved = [(THUNK_BASE, 1 << 32), (LOADER_STUB, 1 << 32), (TLS_VA, 1 << 32), (STACK_TOP - STACK_SIZE, STACK_SIZE),
                 (HEAP_VA, HEAP_SIZE), (MONITOR_VA, 1 << 36)]
     taken = [(r.base, len(r.data)) for r in mem.regions] + reserved
     return all(base + size <= b or b + n <= base for b, n in taken)
@@ -225,6 +227,7 @@ def load(data: bytes, dlls: Callable[[str], bytes | None] | None = None, name: s
                     raise LoadError(f"{image.name} imports {target}, which {supplier.name} does not export")
                 va = export
             region.data[slot:slot + 8] = va.to_bytes(8, "little")
+    tls_array = _static_tls(mem, images)
     starting = [d for d in order if d.entry is not None]
     entry = program.entry or 0
     if starting:
@@ -233,4 +236,31 @@ def load(data: bytes, dlls: Callable[[str], bytes | None] | None = None, name: s
         entry = LOADER_STUB
     mem.map(THUNK_BASE, 16 * max(len(thunks), 1), "thunks")
     mem.map(STACK_TOP - STACK_SIZE, STACK_SIZE, "stack")
-    return Loaded(img, mem, entry, thunks, STACK_TOP, images, program.entry or 0, starting, order)
+    return Loaded(img, mem, entry, thunks, STACK_TOP, images, program.entry or 0, starting, order, tls_array)
+
+
+def _static_tls(mem: Memory, images: list[Image]) -> int:
+    """Each image with a TLS directory gets the next index in load order, written at its AddressOfIndex
+    (PE Format, The TLS Section: "The loader assigns the value of the TLS index to the place that was
+    indicated by the Address of Index field"); the thread's block for it is a copy of the template, after
+    relocation, and SizeOfZeroFill zero bytes. The array of block pointers is TEB.ThreadLocalStoragePointer."""
+    with_tls = [i for i in images if i.pe.tls is not None]
+    if not with_tls:
+        return 0
+    blocks: list[bytes] = []
+    for index, image in enumerate(with_tls):
+        assert image.pe.tls is not None
+        start, end, index_va, zero_fill = (v - image.pe.image_base + image.base if k < 3 else v
+                                           for k, v in enumerate(image.pe.tls))
+        region = _region(mem, image.base)
+        region.data[index_va - image.base:index_va - image.base + 4] = index.to_bytes(4, "little")
+        blocks.append(bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill))
+    array_size = (8 * len(blocks) + 15) & ~15
+    size = array_size + sum((len(b) + 15) & ~15 for b in blocks)
+    tls = mem.map(TLS_VA, (size + 0xFFF) & ~0xFFF, "tls")
+    at = array_size
+    for index, block in enumerate(blocks):
+        tls.data[8 * index:8 * index + 8] = (TLS_VA + at).to_bytes(8, "little")
+        tls.data[at:at + len(block)] = block
+        at += (len(block) + 15) & ~15
+    return TLS_VA

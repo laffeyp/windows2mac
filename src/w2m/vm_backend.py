@@ -729,9 +729,21 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             # includes a zero divisor; those, a 64-bit dividend with RDX != 0 (no 128/64 divide here)
             # and the 8- and 16-bit forms run in the model (hvc #11), which raises #DE as Windows does.
             # Every check comes before any write (commit rule). Flags: all undefined.
-            _, bits, src = op
+            _, bits, src, *signed = op
             rs, fast, done = reg_of(src), a.label(), a.label()
-            if bits == 64:
+            if signed and signed[0]:
+                # IDIV (Sprint 046): fast only for a 64-bit dividend that is RAX sign-extended and a divisor
+                # neither 0 nor -1 (INT64_MIN / -1 overflows); the rest, every 8-, 16- and 32-bit form
+                # included, runs in the model
+                if bits == 64:
+                    a.emit(a64.sbfx(16, RAX, 63, 1), a64.cmp(16, RDX))
+                    a.branch(lambda off: a64.bcond("ne", off), done)
+                    a.branch(lambda off: a64.cbz(rs, off), done)
+                    a.emit(a64.addi(16, rs, 1))
+                    a.branch(lambda off: a64.cbz(16, off), done)
+                    a.emit(a64.sdiv(16, RAX, rs), a64.msub(RDX, 16, rs, RAX), a64.mov(RAX, 16))
+                    a.branch(a64.b, fast)
+            elif bits == 64:
                 a.branch(lambda off: a64.cbnz(RDX, off), done)
                 a.branch(lambda off: a64.cbz(rs, off), done)
                 a.emit(a64.udiv(16, RAX, rs), a64.msub(RDX, 16, rs, RAX), a64.mov(RAX, 16))
@@ -985,7 +997,7 @@ class VM:
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)
         for field_off, value in ((0x08, self.ld.stack_top), (0x10, stack.base), (0x30, teb),
-                                 (0x40, PROCESS_ID), (0x48, tid), (0x60, peb)):
+                                 (0x40, PROCESS_ID), (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)

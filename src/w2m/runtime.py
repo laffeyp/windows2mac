@@ -232,18 +232,31 @@ class Runtime:
                 seen = None
         return STATUS_INTEGER_OVERFLOW if seen else STATUS_INTEGER_DIVIDE_BY_ZERO
 
-    def _div(self, bits: int, divisor: int) -> None:
-        """DIV (SDM DIV): faults before any write; every flag undefined afterwards."""
+    def _div(self, bits: int, divisor: int, signed: bool = False) -> None:
+        """DIV and IDIV (SDM DIV, IDIV): faults before any write; every flag undefined afterwards. IDIV's
+        quotient truncates toward zero and its remainder takes the dividend's sign; a quotient outside
+        the signed range (INT_MIN / -1 among them) is #DE, as a zero divisor is."""
         m = _mask(bits)
         divisor &= m
         if bits == 8:
             dividend = self._rd(RAX, 16, False)
         else:
             dividend = self._rd(RDX, bits, False) << bits | self._rd(RAX, bits, False)
-        q, rem = divmod(dividend, divisor) if divisor else (0, 0)
-        if divisor == 0 or q > m:
-            why = "by zero" if divisor == 0 else f"quotient 0x{q:x} wider than {bits} bits"
-            raise GuestFault(f"#DE: DIV {why} at 0x{self.th.rip:x}", self._windows_divide_status())
+        if signed:
+            sd = dividend - (1 << 2 * bits) if dividend >> (2 * bits - 1) else dividend
+            sv = divisor - (1 << bits) if divisor >> (bits - 1) else divisor
+            q = abs(sd) // abs(sv) * (1 if (sd < 0) == (sv < 0) else -1) if sv else 0
+            rem = sd - q * sv if sv else 0
+            overflow = not -(1 << (bits - 1)) <= q < 1 << (bits - 1)
+        else:
+            q, rem = divmod(dividend, divisor) if divisor else (0, 0)
+            overflow = q > m
+        if divisor == 0 or overflow:
+            why = "by zero" if divisor == 0 else f"quotient {q:#x} outside {bits} bits"
+            raise GuestFault(f"#DE: {'IDIV' if signed else 'DIV'} {why} at 0x{self.th.rip:x}",
+                             self._windows_divide_status())
+        q &= m
+        rem &= m
         if bits == 8:
             self._wr(RAX, 8, False, q)
             self._wr(RAX, 8, True, rem)
@@ -462,7 +475,7 @@ class Runtime:
                 v += self.th.regs[index] * scale if index is not None else 0
                 t[d] = v & _mask(abits)
             elif k == "div":
-                self._div(op[1], t[op[2]])
+                self._div(op[1], t[op[2]], bool(op[3]) if len(op) > 3 else False)
             elif k == "rep":
                 self._rep(op[1], op[2])
             elif k == "mxcsr":
