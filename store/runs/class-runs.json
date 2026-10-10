@@ -1,0 +1,1821 @@
+[
+ {
+  "iclass": "ADD",
+  "record": "store/runs/class-add-1791612065270671000",
+  "rule_sha256": "sha256:28825c60d1ba6c3f13740a437970368ebf98bc2621e9aab6aac1e192f469229f",
+  "cases": 1374,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "ADDPD",
+  "record": "store/runs/class-addpd-1791612065501560000",
+  "rule_sha256": "sha256:5cf7c59b9fe09da8bf5eb6481a547e49d01b04ae0b91ce0a3611a3bd64531c66",
+  "cases": 227,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "ADDPS",
+  "record": "store/runs/class-addps-1791612065394671000",
+  "rule_sha256": "sha256:ca1ae25774750a5e1957336e37fafaab96d04293c219488dcb5c41dde7b65549",
+  "cases": 156,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "ADDSD",
+  "record": "store/runs/class-addsd-1791612065343810000",
+  "rule_sha256": "sha256:49aab618112ca123cbb34dc905caeb8430f660f324d4c97730eac0d60c4e7d49",
+  "cases": 359,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "ADDSS",
+  "record": "store/runs/class-addss-1791612065289681000",
+  "rule_sha256": "sha256:959fd86b3a956101d5cb135631c3dc502190d228f0c4f2c064b1ae6b898d3899",
+  "cases": 343,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "AND",
+  "record": "store/runs/class-and-1791612065409201000",
+  "rule_sha256": "sha256:b5aa6c5e2080a31ad7aa53f2a0a88a662c081c593072fcf4d90ebdb7cb4cb5a4",
+  "cases": 1347,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "ANDPD",
+  "record": "store/runs/class-andpd-1791612065340100000",
+  "rule_sha256": "sha256:4e303bc1342c7e62dc0d0ee51db786d5afabeaba9bdf4af2a27da00a3d63ca62",
+  "cases": 244,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "ANDPS",
+  "record": "store/runs/class-andps-1791612065566365000",
+  "rule_sha256": "sha256:b2bae189dad4e0a9a89feae3913c08c7192a0aef550eea168deef3e09e4cd7ea",
+  "cases": 138,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CALL_NEAR",
+  "record": "store/runs/class-call_near-1791612071046780000",
+  "rule_sha256": "sha256:7c427ba04c672fffd524b448664cd0a5279ef6215e401c73fd5c676da1990ea8",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CLD",
+  "record": "store/runs/class-cld-1791612071123961000",
+  "rule_sha256": "sha256:2e327378849d41c31855f964a139b8e1c3577e2c3fe8f8d6dd365c26216ad6e6",
+  "cases": 172,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CMP",
+  "record": "store/runs/class-cmp-1791612071307628000",
+  "rule_sha256": "sha256:05b9169e0502a89ebde4c75dc4f72453c04b88fe4d2fa918a3a32eae7a327a8f",
+  "cases": 1317,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "COMISD",
+  "record": "store/runs/class-comisd-1791612071402963000",
+  "rule_sha256": "sha256:b2757bb716c22357e661815ab2a08f024b7bd87ff1a29c2d97d126a06fee1ce5",
+  "cases": 330,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "COMISS",
+  "record": "store/runs/class-comiss-1791612072304135000",
+  "rule_sha256": "sha256:9de9747f7dd29b38615f05e42faeb443d9208a7557763975d4bcd73815e53a71",
+  "cases": 105,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTSD2SI",
+  "record": "store/runs/class-cvtsd2si-1791612072323896000",
+  "rule_sha256": "sha256:44e4c1085fec81df888329859e90af3279a0c383c2bce8b2c5461c1bd16c0af3",
+  "cases": 247,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTSD2SS",
+  "record": "store/runs/class-cvtsd2ss-1791612075601675000",
+  "rule_sha256": "sha256:865339445423b7f529bc4355059f3a67cb1f6f1804aff96b0dc46129f756be73",
+  "cases": 413,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTSI2SD",
+  "record": "store/runs/class-cvtsi2sd-1791612076239233000",
+  "rule_sha256": "sha256:1c8deb05f4485f97aa34674c47ec34c89a9872bf8e0d16336abd1652ab32c9ac",
+  "cases": 233,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTSI2SS",
+  "record": "store/runs/class-cvtsi2ss-1791612076220585000",
+  "rule_sha256": "sha256:3d9d13ae214dff4d2292bce0846c2b56dde7f530373699116afb8a74849b1d8f",
+  "cases": 362,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTSS2SD",
+  "record": "store/runs/class-cvtss2sd-1791612076450348000",
+  "rule_sha256": "sha256:2a6e2338832a1e852286073b71322b11b2f7d93e8f383faed9551306a3462766",
+  "cases": 396,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTSS2SI",
+  "record": "store/runs/class-cvtss2si-1791612077340478000",
+  "rule_sha256": "sha256:3de1aa42b2c8d433833d87fedf39e20391673ac95bd103eeba11b58789db192b",
+  "cases": 272,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTTSD2SI",
+  "record": "store/runs/class-cvttsd2si-1791612077852270000",
+  "rule_sha256": "sha256:da3a3808f5f4f71cf794351dbd667e7e8bb87601e2858c5c29f23d6d79c184f2",
+  "cases": 279,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTTSS2SI",
+  "record": "store/runs/class-cvttss2si-1791612079499557000",
+  "rule_sha256": "sha256:22b94c5071dc8475667f74e86252f280d53b876d36e27d1fc791db9ca2d4ecfd",
+  "cases": 257,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "DEC",
+  "record": "store/runs/class-dec-1791612081905476000",
+  "rule_sha256": "sha256:eb549a2b07fad382b469f1cf5b1bbda1d10b961ff0bfacc6dee0e3375ccacc98",
+  "cases": 316,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "DIVPD",
+  "record": "store/runs/class-divpd-1791612082636949000",
+  "rule_sha256": "sha256:689e2d71634a98a196c74c89c97da7bce565c271bbdfb754c5fcc3075b277453",
+  "cases": 306,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "DIVPS",
+  "record": "store/runs/class-divps-1791612082783480000",
+  "rule_sha256": "sha256:4be877aafdf168501afe165f6286356e919fc5384127f100e0b61ec7ea3cdf78",
+  "cases": 102,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "DIVSD",
+  "record": "store/runs/class-divsd-1791612083481733000",
+  "rule_sha256": "sha256:608c66aebc4b8645ae16158b0dfd8a544bd0bf9cd0416e5aa6d10a27b573957d",
+  "cases": 347,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "DIVSS",
+  "record": "store/runs/class-divss-1791612083803679000",
+  "rule_sha256": "sha256:8b1853cdafef13e607c1c03552abee149c3acfc7912057deddadc2a6f8ffdeaa",
+  "cases": 426,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "INC",
+  "record": "store/runs/class-inc-1791612084537376000",
+  "rule_sha256": "sha256:e5848cba2d2bb5b0a6f10bfacc0a915e511254b1ddd05c07d81f154e6ddd1042",
+  "cases": 285,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JB",
+  "record": "store/runs/class-jb-1791612176466992000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JBE",
+  "record": "store/runs/class-jbe-1791612176423312000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JL",
+  "record": "store/runs/class-jl-1791612181424311000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JLE",
+  "record": "store/runs/class-jle-1791612181467561000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JMP",
+  "record": "store/runs/class-jmp-1791612085322860000",
+  "rule_sha256": "sha256:bd6703a6fcb9f9854a9c66b82e860079eea33b178391ad6ffa9008bc9f09fb42",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNB",
+  "record": "store/runs/class-jnb-1791612176431279000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNBE",
+  "record": "store/runs/class-jnbe-1791612176452245000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNL",
+  "record": "store/runs/class-jnl-1791612181437882000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNLE",
+  "record": "store/runs/class-jnle-1791612181490231000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNO",
+  "record": "store/runs/class-jno-1791612176430084000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNP",
+  "record": "store/runs/class-jnp-1791612181436477000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNS",
+  "record": "store/runs/class-jns-1791612181485615000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JNZ",
+  "record": "store/runs/class-jnz-1791612176455132000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JO",
+  "record": "store/runs/class-jo-1791612176418942000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JP",
+  "record": "store/runs/class-jp-1791612181426022000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JS",
+  "record": "store/runs/class-js-1791612181405039000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "JZ",
+  "record": "store/runs/class-jz-1791612176479854000",
+  "rule_sha256": "sha256:5dca5f710dfeff5ca16c19f2d65a63e015b5a15ab25c4884804887073ef3c37d",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "LEA",
+  "record": "store/runs/class-lea-1791612086036525000",
+  "rule_sha256": "sha256:82d85dfebbcc1e95b0006e73713580cc08cf77ec473fb43e040b56a681ad6c17",
+  "cases": 108,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MAXPD",
+  "record": "store/runs/class-maxpd-1791612088338479000",
+  "rule_sha256": "sha256:35c01f314d5dc218bc0f51dbcf2297de18f012777b6d8c84c2a521ac683e2a48",
+  "cases": 341,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MAXPS",
+  "record": "store/runs/class-maxps-1791612089238253000",
+  "rule_sha256": "sha256:8876fa2cdd677b6136e4752891a00286a510597ab241d27975293472f89d44e8",
+  "cases": 130,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MAXSD",
+  "record": "store/runs/class-maxsd-1791612089361484000",
+  "rule_sha256": "sha256:5bb200e206717adb5139e293d8432cbc84a5e085e24b413a5c9611bf0e968a07",
+  "cases": 359,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MAXSS",
+  "record": "store/runs/class-maxss-1791612090847179000",
+  "rule_sha256": "sha256:87281d28cbb4db214cac1acf4dcc1c037ea8aee0c150a056e2a4b2af2567564b",
+  "cases": 339,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MINPD",
+  "record": "store/runs/class-minpd-1791612091169807000",
+  "rule_sha256": "sha256:d329e8145e4523d43426ce3d7d3feb44d575b2bd54c21dbf22db0d9debdb792a",
+  "cases": 330,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MINPS",
+  "record": "store/runs/class-minps-1791612091893759000",
+  "rule_sha256": "sha256:6b2b4d1d642fe616c47fb6f729f9b023bfbbaeab055152e0f103cd25131d275b",
+  "cases": 103,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MINSD",
+  "record": "store/runs/class-minsd-1791612091805701000",
+  "rule_sha256": "sha256:7fd72609489c26f405bc34fa61b4c3f815518dc87cd85e7d9666796a230100f4",
+  "cases": 405,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MINSS",
+  "record": "store/runs/class-minss-1791612091937843000",
+  "rule_sha256": "sha256:3e8019fd62c4fe1b607e72bac933bf5006c3bc135c2534dc159c01378ea25dc4",
+  "cases": 349,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOV",
+  "record": "store/runs/class-mov-1791612094813319000",
+  "rule_sha256": "sha256:0c4ff0f9f0f600a3761b61ee75f0bd5dc88d7a97f6c592017532275c834c69b1",
+  "cases": 3390,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVAPD",
+  "record": "store/runs/class-movapd-1791612095391683000",
+  "rule_sha256": "sha256:7266956c3c9b57bf266eae3564c462f9ee384e0ad2bf3aecffa52240e0b3ca44",
+  "cases": 661,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVAPS",
+  "record": "store/runs/class-movaps-1791612096138145000",
+  "rule_sha256": "sha256:1e3668ef132e0875b19335e06e2222c227f8185c4f018943123a37095492262a",
+  "cases": 269,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVD",
+  "record": "store/runs/class-movd-1791612097338910000",
+  "rule_sha256": "sha256:4f25fb002a248b29f16af906b7f7821f1244db8522419fa7cd4801184f812bca",
+  "cases": 528,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVQ",
+  "record": "store/runs/class-movq-1791612097983650000",
+  "rule_sha256": "sha256:4c7b79ca677e1ad151948353534345a35d41d060a016a7ffec68cc4c3b0e7b12",
+  "cases": 1245,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVSD_XMM",
+  "record": "store/runs/class-movsd_xmm-1791612098080389000",
+  "rule_sha256": "sha256:58fac257983b5a07c9ff1d22bf7d6afa130741f4189c7256b5e5791cc2fa4abc",
+  "cases": 787,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVSS",
+  "record": "store/runs/class-movss-1791612099554676000",
+  "rule_sha256": "sha256:f0cf0b02adf80cefe8521266d0e3b0139b743a38c3541a3274117b297ea8f3f0",
+  "cases": 612,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVSXD",
+  "record": "store/runs/class-movsxd-1791612099612489000",
+  "rule_sha256": "sha256:62b0ae9ed4e9714a0a75ed2eea1f1c6d6d527e8f9aed5c44f1d0529bcf569d26",
+  "cases": 142,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVUPD",
+  "record": "store/runs/class-movupd-1791612101893874000",
+  "rule_sha256": "sha256:1cbe9349656b72e97353c3ffa739009eb37bf2979166805f1b7c40672b276119",
+  "cases": 550,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVUPS",
+  "record": "store/runs/class-movups-1791612102734651000",
+  "rule_sha256": "sha256:930d02cda303787cd34eb79273d4cdc974461907835111cbf07494f1fa09d200",
+  "cases": 260,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MOVZX",
+  "record": "store/runs/class-movzx-1791612104726864000",
+  "rule_sha256": "sha256:1f9b6a3aae29b3ee712752e7c01772836513ea85044953a3cfdf8747bfa2b483",
+  "cases": 334,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MUL",
+  "record": "store/runs/class-mul-1791612104987880000",
+  "rule_sha256": "sha256:3f2be02030c5916e5d90e55ecb929ac62035b56c94cf09569945f38ee68b3a3d",
+  "cases": 37,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MULPD",
+  "record": "store/runs/class-mulpd-1791612107689646000",
+  "rule_sha256": "sha256:fb4b245ce270e5fef9d9303092b20798f81f60136533d4e7c6d2ef8100ffa09c",
+  "cases": 332,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MULPS",
+  "record": "store/runs/class-mulps-1791612108131867000",
+  "rule_sha256": "sha256:e84e6cdb9af7b26f27c55d42c241d2ca4bc381ae5f52ff1bad4d83f2474d0db4",
+  "cases": 148,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MULSD",
+  "record": "store/runs/class-mulsd-1791612108863126000",
+  "rule_sha256": "sha256:37ac980770a0064efc16471acd4189a7f7adbf7914b2eb349d67eca83ae17995",
+  "cases": 423,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MULSS",
+  "record": "store/runs/class-mulss-1791612109255734000",
+  "rule_sha256": "sha256:296607f5e9b649066e65ec964fe7be163895bf84648a9d5e73dd7571e0ee8f9c",
+  "cases": 392,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "NOP",
+  "record": "store/runs/class-nop-1791612110067610000",
+  "rule_sha256": "sha256:e969ca605f3390df9353373cb832e267cdf1ef53f63b3a069ba231b3f1c87526",
+  "cases": 1204,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "OR",
+  "record": "store/runs/class-or-1791612110069435000",
+  "rule_sha256": "sha256:3bdf795392016fc9f5d2462a1028492ffa00cdf352e8dd557e52a44dac182178",
+  "cases": 1391,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "POP",
+  "record": "store/runs/class-pop-1791612110496379000",
+  "rule_sha256": "sha256:77c54a573381592aaa68b7f7d8a83f01039ca47a3e2b7c4c415f62a1b458fe14",
+  "cases": 1377,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PUSH",
+  "record": "store/runs/class-push-1791612111619198000",
+  "rule_sha256": "sha256:3722cb3edd158a6a29b492cbdd40a19dd136731b4d1d41e9e586e859e2e2dbb2",
+  "cases": 1714,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "RET_NEAR",
+  "record": "store/runs/class-ret_near-1791612113322019000",
+  "rule_sha256": "sha256:5f8cdb8d549f97109ece788edc82a974f8947d781dda0b6718b0226890ff3833",
+  "cases": 16,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETB",
+  "record": "store/runs/class-setb-1791612113530682000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 148,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETBE",
+  "record": "store/runs/class-setbe-1791612115629140000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 166,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETL",
+  "record": "store/runs/class-setl-1791612115791310000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 136,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETLE",
+  "record": "store/runs/class-setle-1791612118350766000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 155,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNB",
+  "record": "store/runs/class-setnb-1791612119010102000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 149,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNBE",
+  "record": "store/runs/class-setnbe-1791612119987028000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 140,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNL",
+  "record": "store/runs/class-setnl-1791612121566702000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 165,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNLE",
+  "record": "store/runs/class-setnle-1791612121394728000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 146,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNO",
+  "record": "store/runs/class-setno-1791612122395873000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 171,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNP",
+  "record": "store/runs/class-setnp-1791612123436786000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 146,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNS",
+  "record": "store/runs/class-setns-1791612124553028000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 186,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETNZ",
+  "record": "store/runs/class-setnz-1791612124983167000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 162,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETO",
+  "record": "store/runs/class-seto-1791612125154470000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 144,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETP",
+  "record": "store/runs/class-setp-1791612125806989000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 179,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETS",
+  "record": "store/runs/class-sets-1791612127123587000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 149,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SETZ",
+  "record": "store/runs/class-setz-1791612127012642000",
+  "rule_sha256": "sha256:d10f0f1b14c50eb16895a53e9f66144a8fdc69138c9215a95c923257bc89b00f",
+  "cases": 172,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SHR",
+  "record": "store/runs/class-shr-1791612127848199000",
+  "rule_sha256": "sha256:38e2c578715cb733abe4b41f435b5a14c9fe72ec9df8d3b59ac04555a791507e",
+  "cases": 976,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SQRTPD",
+  "record": "store/runs/class-sqrtpd-1791612131078917000",
+  "rule_sha256": "sha256:7e3bad0606b3b1eac5ac3c0f4e484b18b38ef735c0a1776eecc737e0e48cb731",
+  "cases": 323,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SQRTPS",
+  "record": "store/runs/class-sqrtps-1791612131873264000",
+  "rule_sha256": "sha256:6e45edeb68013513139246a92a7b62cc66504ddd49d21cad0ddf2255a08983a9",
+  "cases": 96,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SQRTSD",
+  "record": "store/runs/class-sqrtsd-1791612132075522000",
+  "rule_sha256": "sha256:878778f0e4a799d25e28fbe80b7a4f4de4792bcf92e15c90300828f12f318151",
+  "cases": 398,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SQRTSS",
+  "record": "store/runs/class-sqrtss-1791612132268767000",
+  "rule_sha256": "sha256:e0691185b5bb9f7915108dec1ac44aaf570e257e3ae150a0def5bf87f1f57846",
+  "cases": 403,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "STD",
+  "record": "store/runs/class-std-1791612132268475000",
+  "rule_sha256": "sha256:81e1f14fc6d3297d34adc54636e403689f8b71fbc7083d687fdcbb0b8d5f4a22",
+  "cases": 160,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SUB",
+  "record": "store/runs/class-sub-1791612133446715000",
+  "rule_sha256": "sha256:94dd5f1f49f247a3e8dcba810d8344e71fcd366dbec4c8b8b6aaeffcf0427077",
+  "cases": 1363,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SUBPD",
+  "record": "store/runs/class-subpd-1791612133647165000",
+  "rule_sha256": "sha256:d2837bbd629000a44701e7e872c4a4f723abb79cbc411f780990f4285658de95",
+  "cases": 215,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SUBPS",
+  "record": "store/runs/class-subps-1791612134881085000",
+  "rule_sha256": "sha256:1a0ab711213b2975ca740fb4baf47e3d0c1d72004800430aafcf3187fef27733",
+  "cases": 130,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SUBSD",
+  "record": "store/runs/class-subsd-1791612136652849000",
+  "rule_sha256": "sha256:f29c8c5b6c83c4b9537a2d822aeb1ec07ee425581276107f7295ec430dbd4ca2",
+  "cases": 422,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "SUBSS",
+  "record": "store/runs/class-subss-1791612136875512000",
+  "rule_sha256": "sha256:55f64da13cf809c94d18dfc1d49509bb07a1ffe43a624b5a1a0834f05e21a221",
+  "cases": 415,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "TEST",
+  "record": "store/runs/class-test-1791612137539724000",
+  "rule_sha256": "sha256:1be44888a9f5257e30fbbe1fa1cbf57d3d9f330bade573ed6e0968dc387d05be",
+  "cases": 1235,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "UCOMISD",
+  "record": "store/runs/class-ucomisd-1791612139111365000",
+  "rule_sha256": "sha256:40aa568da91347ed1de12267fd3cad57e7c032cf90e682c85cdad7fb55df1a47",
+  "cases": 322,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "UCOMISS",
+  "record": "store/runs/class-ucomiss-1791612139282856000",
+  "rule_sha256": "sha256:ed04656d6e260241577d7878d69e0e7951b5f3b4ee1644155d8bdb2dbc20c9cd",
+  "cases": 131,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "XOR",
+  "record": "store/runs/class-xor-1791612139420559000",
+  "rule_sha256": "sha256:339518304a5f21779eac469f21a078cf56539ad79fe61ca673b59482150ac2d6",
+  "cases": 1304,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "XORPD",
+  "record": "store/runs/class-xorpd-1791612140953202000",
+  "rule_sha256": "sha256:9c8484061fb7e7aa99d4e26f6ea7201b6485f051a36c4ff1c402289629e47166",
+  "cases": 278,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "XORPS",
+  "record": "store/runs/class-xorps-1791612144975624000",
+  "rule_sha256": "sha256:a57560fc23452d24410f1477c2daed7ff726f13e5f3fe078f8fbae797c66afa5",
+  "cases": 106,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 2,
+   "SESSION_COMPLETED": 1
+  }
+ }
+]
