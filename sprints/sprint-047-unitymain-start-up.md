@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 047
-status: open
+status: closing (CI on the closing commit)
 phase: 5
 pass_kind: functional
 ---
@@ -55,3 +55,14 @@ Sprint 046 left the frontier inside UnityMain at `SHELL32.dll!CommandLineToArgvW
 The frontier's stop lies past PCMPISTRI at 0x18140b914 and past CommandLineToArgvW, with every service and class on the way judged against Windows and an Intel CPU.
 
 ## observed
+
+- **The frontier moved** from 403,044 instructions (`SHELL32.dll!CommandLineToArgvW`) to 2,522,889 (`store/runs/frontier-643a6283510c-1791667653042496000`). It stops at the game's first file call, `GetFileAttributesExW("C:\\w2m\\app\\Data\\...")`: the frontier gives the VM no file-system root, and the bridge refuses absolute paths. Every service before the stop has a family judged against Windows.
+- **The look-ahead** (`scripts/frontier_lookahead.py`; `on_unimplemented` in `VM.run`) listed the stops ahead from the program's own path: the 4 GB arena, PCMPISTRI, UNPCKHPD, MUL r/m32, LFENCE, BTC, the full reconstruction table, then CommandLineToArgvW, BCryptGenRandom, GetLogicalProcessorInformationEx and GetFileAttributesExW.
+- **Capacity:** the VirtualAlloc arena from 4 GB to 512 GB (1 GB level-1 blocks over a sparse file, 40-bit IPA); the code cache from 4 to 64 MB and the reconstruction table from 65,536 to 4 Mi entries.
+- **Instruction classes, set 047** (3,104 cases): PCMPISTRI (constructed over all 128 control bytes), PCMPISTRI64, UNPCKHPD, MUL r/m8-32, BTC, LFENCE, MFENCE. The model equals Rosetta 2 on 153,600 string compares, three AMD runs, and the Intel Xeon 8573C (run 38084067002) on all 3,093 judged cases; the VM equals the 8573C on all; a planted equal-each fault named 170 cases and 170 differ. 237 classes accepted.
+- **Families accepted, each on its own record:** command line arguments (SHELL32, 26 rows), generate random (bcrypt, the host's CSPRNG), processor topology (seven functions, four runners on two Intel and one AMD model), file attributes (two functions, a new bridge primitive). Windows against expectation: CommandLineToArgvW takes quotes in the program name literally and sets the last error to 0 on success; BCryptGenRandom never touches the last error and fails a NULL buffer even at length 0; relationship 7 exists on Server 2025 and fails with error 31 on 2022; a file named with a trailing backslash is ERROR_DIRECTORY on 2025 and ERROR_INVALID_NAME on 2022; a directory's size is 4096.
+- **Defects found and fixed:** CI red on 40 runs from 3d091e3 (depot-reading loader tests; then a class-run test over 30 s on a cold runner; then gitignored case files); `class_run` counted a crashed VM judge as accepted and a single-class run truncated the index (KIT_DIARY #34); `family_run` returned 0 on discrepancies and on plants that missed their reach; a BTC case read memory outside its windows; the Mac's float birth time came out after the access time; record scans read every record whole (`read_first_envelope` now) and the causal test reloaded each record 308 times.
+- **The repository** went public as `laffeyp/windows2mac` under substrate's licensing (user, 2026-10-10); Actions for public repositories cost nothing; Sprint 046 closed on CI run 38084406263.
+- **Feasibility review:** verified; C2 and C3 rejected by the user; F1 and F3 are the next sprint's first work.
+- Gates and CI: see the closing commit.
+

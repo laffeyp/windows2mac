@@ -176,6 +176,7 @@
 - **2026-10-10** — Sprint 043 (causality in every record) closed. `src/w2m/differential.py` (one topology: candidate → comparison → decision → route → resolution; `rebuild_ledger`), `store/runs/discrepancy-ledger.json`, six differentials moved onto it and the decoder differential recording for the first time, `tests/test_differential.py`. Nine causal records; 3 discrepancies open, all decoder gaps routed contract_revision. Dual contract: signal pass; artifact pass (gates 0, 312 tests, 451 records); observation pass.
 - **2026-10-10** — Sprint 044 (the launcher's C runtime surface, by family) closed. Eleven families accepted on their own records, each a no-CRT runner probe, a contract from its rows, guest C in `tools/guest_runtime/` and an item run: process queries, modules, critical sections, thread storage, heap, console 0.2.0, code pages 0.2.0, environment (set and empty blocks), exception filter; `scripts/family_run.py` (families, fnmatch plant reaches), `src/w2m/modules.py`, `src/w2m/code_pages.py` (tables from runner rows), VM: GS-relative operands, guest counter, start and clock modes, heap arena, environment block, host requests by op; case sets 044 to 044e (releases semantics-044 to semantics-044e), 183 classes accepted; `scripts/class_census.py`; `scripts/model_family.py` (kimi-k2.7-code wrote an accepted environment.c); probe builds reproducible (`/Brepro`). Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — the frontier stops at `UnityPlayer.dll!UnityMain` after 19,084 instructions with every service before it judged against Windows.
 - **2026-10-10** — Sprint 046 (several images) closed. The loader maps UnityPlayer.dll (preferred base or relocated), binds imports between images, runs DllMain before the program's entry, writes PEB.Ldr and static TLS; ten families (loader, static TLS, pointer encoding, thread queries, slim locks, system information, virtual memory, sync objects, storage get2, time and error mode); case sets 046 to 046e; RCPPS and RSQRTPS from Intel's measured tables. Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — DllMain returns, the launcher enters UnityMain, and UnityPlayer stops at `SHELL32.dll!CommandLineToArgvW` after 403,044 instructions with every service before it judged.
+- **2026-10-10** — Sprint 047 (UnityMain's start-up) closed. The look-ahead; the arena at 512 GB, the code cache at 64 MB and the reconstruction table at 4 Mi entries; set 047 (PCMPISTRI, UNPCKHPD, narrow MUL, BTC, LFENCE, MFENCE) on the Xeon 8573C, release semantics-047, 237 classes; families command line arguments, generate random, processor topology, file attributes (25 in all); acceptance read from the record in class_run and family_run. Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — the frontier runs 2,522,889 instructions and stops at the first file call on an absolute path, every service before it judged.
 
 ## Deferred
 
@@ -216,6 +217,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 047 (2026-10-10, closing: CI on the closing commit)
+- **Scope:** UnityMain's start-up, stop by stop.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* look ahead, take each need in order, probe, contract, guest code, item run, plants, frontier.
+  - *Observation 1 (tools that reported success the record did not hold):* class_run and family_run. Disposition: both read the record; KIT_DIARY #34, #35.
+  - *Observation 2 (host resolution):* the Mac's float birth time. Disposition: exact from libc; KIT_DIARY #36.
+  - *Observation 3 (OS versions):* Server 2025 and 2022 differ on two rows. Disposition: excluded; w2m answers as 2025.
 
 ### Sprint 046 (2026-10-10, closed: CI run 38084406263 success on dab6274)
 - **Scope:** load UnityPlayer.dll, run its DllMain, enter UnityMain.

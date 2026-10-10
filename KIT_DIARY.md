@@ -313,3 +313,19 @@
 **Finding (#34):** a summary must read the decision from the record, not infer it from what is present; absence is a result. A tool that writes a shared index from a partial run must merge, not replace.
 
 **Kit change suggested:** every tool that prints an acceptance count derives it from the record's decision event, and its test plants a judge failure.
+
+### 2026-10-10 — Sprint 047: an exit status that said nothing
+
+**What happened:** `family_run.py --run` and `--plants` returned 0 whatever the verdict and whatever a plant changed. Loops written as `family_run ... || echo FAIL` reported nothing on eleven reruns; the index test caught what mattered. The processor-topology family's first run, a build error, printed empty verdicts and exited 0.
+
+**Finding (#35):** a tool's exit status is part of its contract; a tool that prints a verdict must exit by it, or every script and loop above it inherits a false success.
+
+**Kit change suggested:** a test for each run tool that plants a failure and checks the exit status.
+
+### 2026-10-10 — Sprint 047: a host fact coarser than the guest's unit
+
+**What happened:** the file-attributes family failed one row on one run: creation time after access time. Python 3.12 gives a Mac file's birth time only as float seconds, about 120 ns off at this date; FILETIME counts 100 ns. The bridge now reads st_birthtimespec from libc and checks the layout against os.stat.
+
+**Finding (#36):** a value carried from the host to the guest must keep the guest's resolution end to end; a relation the guest documents (creation no later than access) breaks when one side is rounded.
+
+**Kit change suggested:** for each host value a contract compares, name its host resolution beside the guest's.
