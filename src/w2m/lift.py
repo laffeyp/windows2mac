@@ -26,6 +26,11 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   alu ops (Sprint 044): sext8 sext16 (sign-extend the low 8 or 16 bits), bswap (byte order, 32 or 64
   bits), sbb (a - b - CF; reads CF, which must be defined); flags kinds sbb (SDM SBB) and bt (SDM BT:
   CF the bit, OF SF AF PF undefined, ZF unchanged)
+  ("rep", kind, size)              REP STOS / REP MOVS (SDM; Vol 1 7.3.9): while RCX != 0, store AL/AX/EAX/RAX
+                                  (stos) or the element at [RSI] (movs) to [RDI], step RDI (and RSI) by
+                                  size, down when DF is set, and decrement RCX; interruptible, so a fault
+                                  leaves the registers at the faulting iteration and RIP at the
+                                  instruction (the one exception to the commit rule)
   ("div", bits, t)                DIV r/m (unsigned): RDX:RAX (DX:AX, EDX:EAX; AX for 8 bits) by t; quotient
                                   to RAX/EAX/AX/AL, remainder to RDX/EDX/DX/AH; every flag undefined;
                                   a zero divisor faults STATUS_INTEGER_DIVIDE_BY_ZERO, a quotient too wide
@@ -58,6 +63,9 @@ for _i, _n in enumerate(GPR8_REX):
 for _i, _n in enumerate(GPR8_LEGACY[4:]):
     REG[_n] = (_i, 8, True)                  # AH, CH, DH, BH: bits 8-15 of registers 0-3
 RSP, RAX, RDX = 4, 0, 2
+RCX, RSI, RDI = 1, 6, 7
+# REP STOS and REP MOVS (Sprint 044): iclass -> (kind, element bytes)
+REP_STRING = {f"REP_{k}{s}": (k.lower(), n) for k in ("STOS", "MOVS") for s, n in (("B", 1), ("W", 2), ("D", 4), ("Q", 8))}
 CC = {"O": "o", "NO": "no", "B": "b", "NB": "nb", "Z": "z", "NZ": "nz", "BE": "be", "NBE": "nbe",
       "S": "s", "NS": "ns", "P": "p", "NP": "np", "L": "l", "NL": "nl", "LE": "le", "NLE": "nle"}
 SSE_ALIGNED = {"MOVAPS", "MOVAPD", "XORPS", "XORPD", "ANDPS", "ANDPD"} | {
@@ -208,7 +216,7 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE"):
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", *REP_STRING):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)

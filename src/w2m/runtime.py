@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from w2m import cpuid
 from w2m import x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
-from w2m.lift import RAX, RDX, Lifted, LiftError, Op, lift
+from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
 
 STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero divisor
@@ -177,6 +177,21 @@ class Runtime:
             if kind == "sub":
                 f["C"] = (a & m) < (b & m)
 
+    def _rep(self, kind: str, size: int) -> None:
+        """REP STOS / REP MOVS, one element at a time: a fault leaves RCX, RSI and RDI at the
+        faulting iteration (SDM Vol 1 7.3.9; the instruction is interruptible)."""
+        regs, step = self.th.regs, -size if self.th.df else size
+        while regs[RCX]:
+            if kind == "movs":
+                value = self.mem.read(regs[RSI], size)
+            else:
+                value = (regs[RAX] & _mask(8 * size)).to_bytes(size, "little")
+            self.mem.write(regs[RDI], value)
+            regs[RDI] = (regs[RDI] + step) & M64
+            if kind == "movs":
+                regs[RSI] = (regs[RSI] + step) & M64
+            regs[RCX] -= 1
+
     def _div(self, bits: int, divisor: int) -> None:
         """DIV (SDM DIV): faults before any write; every flag undefined afterwards."""
         m = _mask(bits)
@@ -327,6 +342,8 @@ class Runtime:
                 t[d] = v & _mask(abits)
             elif k == "div":
                 self._div(op[1], t[op[2]])
+            elif k == "rep":
+                self._rep(op[1], op[2])
             elif k == "ld":
                 t[op[1]] = self._load(op[2], t)
             elif k == "st":

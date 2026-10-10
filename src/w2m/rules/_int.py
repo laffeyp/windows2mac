@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
-from w2m.lift import ALU, CC, RAX, RDX, RSP, LiftError, _operand, _pop, _push, _val
+from w2m.lift import ALU, CC, RAX, RDX, REP_STRING, RSP, LiftError, _operand, _pop, _push, _val
 from w2m.rules import Ctx
 
 
@@ -192,6 +192,15 @@ def bit_test(ctx: Ctx) -> None:
             b.emit("alu", value, "or", value, sel, bits)
         b.emit("st", dst, value)
     b.emit("flags", "bt", cf, cf, cf, bits)
+
+
+def rep_string(ctx: Ctx) -> None:
+    """REP STOS and REP MOVS with 64-bit addresses (SDM STOS, MOVS, REP)."""
+    f = ctx.f
+    if f is not None and 0x67 in f.prefixes:
+        raise LiftError(f"{ctx.ic} with 32-bit addresses at 0x{ctx.address:x}")
+    kind, size = REP_STRING[ctx.ic]
+    ctx.b.emit("rep", kind, size)
 
 
 def div(ctx: Ctx) -> None:

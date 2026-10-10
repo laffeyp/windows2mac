@@ -43,7 +43,7 @@ from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
-from w2m.lift import RAX, RDX, Lifted, LiftError, Op, lift
+from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded, Memory, Region
 from w2m.runtime import Result
 
@@ -605,6 +605,24 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
+        elif k == "rep":
+            # REP STOS / MOVS: the guest's RCX, RSI, RDI live in x1, x6, x7 and change once per element,
+            # so a fault on an element leaves them at that iteration and the reconstruction table
+            # gives the instruction's address (SDM Vol 1 7.3.9: the instruction is interruptible).
+            _, kind, size = op
+            loop, end = a.label(), a.label()
+            a.emit(a64.ldr(1, 16, 28, DF_BYTE), a64.movz(17, size))
+            a.branch(lambda off: a64.cbz(16, off), loop)
+            a.emit(a64.sub(17, a64.ZR, 17))                    # DF: step down
+            a.bind(loop)
+            a.branch(lambda off: a64.cbz(RCX, off), end)
+            if kind == "movs":
+                a.emit(a64.ldr(size, 16, RSI, 0), a64.str_(size, 16, RDI, 0), a64.add(RSI, RSI, 17))
+            else:
+                a.emit(a64.str_(size, RAX, RDI, 0))
+            a.emit(a64.add(RDI, RDI, 17), a64.subi(RCX, RCX, 1))
+            a.branch(a64.b, loop)
+            a.bind(end)
         elif k == "div":
             # DIV: the quotient overflows exactly when the dividend's high half >= the divisor, which
             # includes a zero divisor; those, a 64-bit dividend with RDX != 0 (no 128/64 divide here)
