@@ -161,7 +161,6 @@ void start(void) {
         DeleteFileW(ROWS);
     }
 
-    DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);
 }
