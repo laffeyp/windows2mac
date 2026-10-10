@@ -77,8 +77,10 @@ def main(argv: list[str]) -> int:
     for n in range(1, a.batches + 1):
         runs = dispatch_batch(a.probe, a.repeat, a.ref, runners, a.batch)
         intel = []
+        results: list[tuple[str, str]] = []
         for run in runs:
             conclusion, cpu, where = collect(run)
+            results.append((conclusion, cpu))
             print(f"batch {n}: run {run} {conclusion}; {cpu}", flush=True)
             if conclusion == "success" and where is not None and "intel" in cpu.lower():
                 intel.append(where)
@@ -86,6 +88,9 @@ def main(argv: list[str]) -> int:
             for where in intel:
                 print(where)
             return 0
+        if not any(c == "success" for c, _ in results):
+            print(f"batch {n}: every run failed; the probe or the workflow is broken, not the CPU draw", flush=True)
+            return 2
     return 1
 
 
