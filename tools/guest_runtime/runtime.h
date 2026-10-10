@@ -33,14 +33,17 @@ static inline struct w2m_teb *w2m_teb(void) { return (struct w2m_teb *)W2M_TEB_V
 
 /* Host transport: the runtime fills a request, executes hvc #8, and reads the result. */
 enum { W2M_HOST_WRITE = 1, W2M_HOST_EXIT = 2, W2M_HOST_CLOCK = 3, W2M_HOST_UNIMPLEMENTED = 4,
-       W2M_HOST_RUNTIME_FAULT = 5 };
+       W2M_HOST_RUNTIME_FAULT = 5, W2M_HOST_FILETIME = 14 };   /* 6-13: the file primitives below */
 struct w2m_transport {
     u64 op;
     u64 arg[6];
     u64 result;
 };
 
-/* Ring buffer: one record per service call, drained by the host after the run. */
+/* Ring buffer: one record per service call, in order, for the first `capacity` calls; `per_api`
+ * counts every call by API id, past capacity too (Sprint 044: the hot services make millions of
+ * calls, and the totals must stay exact). The host reads both after the run, without an exit. */
+#define W2M_RING_APIS 64
 struct w2m_ring_record {
     u64 api;
     u64 arg0;
@@ -49,6 +52,7 @@ struct w2m_ring_record {
 struct w2m_ring {
     u64 count;                       /* records written, including any dropped past capacity */
     u64 capacity;
+    u64 per_api[W2M_RING_APIS];      /* calls per W2M_API_* id */
     struct w2m_ring_record rec[];
 };
 
@@ -170,12 +174,24 @@ struct w2m_exception_area {
 #define W2M_API_DeleteFileW 12
 #define W2M_API_ReadFile 13
 #define W2M_API_SetFilePointerEx 14
+#define W2M_API_GetSystemTimeAsFileTime 15
+#define W2M_API_GetCurrentProcessId 16
+#define W2M_API_QueryPerformanceFrequency 17
+#define W2M_API_IsProcessorFeaturePresent 18
+#define W2M_API_InitializeSListHead 19
+#define W2M_API_GetStartupInfoW 20
+#define W2M_API_IsDebuggerPresent 21
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
 u64 w2m_logged(u64 api, u64 arg0, u64 ret);
 void w2m_unimplemented(u64 api, u64 detail);
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written);   /* file.c: WriteFile on a file handle */
+void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtime.c: the guest CPUID profile */
+
+/* Monitor data word: 0, the counter is the guest's CNTVCT_EL0; 1, the host's clock (lockstep, where
+ * model and VM must read the same count). src/w2m/vm_backend.py CLOCK_MODE. */
+#define W2M_CLOCK_MODE_OFF 0x60
 
 /* Host file primitives (src/w2m/file_bridge.py). */
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,

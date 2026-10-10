@@ -78,35 +78,40 @@ def _parse(data: bytes) -> tuple[list[tuple[int, bytes]], dict[str, int]]:
 
 
 def build(base_va: int, defines: dict[str, int], last_error_source: str | None = None,
-          file_source: str | None = None) -> Image:
-    """Compile runtime.c, file.c and the last-error pair (the default file, or `last_error_source`, a
-    candidate's C) and link them at `base_va`. `file_source` replaces file.c (Sprint 042: a planted
-    fault or a model's implementation)."""
-    runtime = (SOURCE / "runtime.c").read_text()
+          file_source: str | None = None, sources: dict[str, str] | None = None) -> Image:
+    """Compile every .c file of tools/guest_runtime/ and link them at `base_va`. `sources` replaces
+    files by name (a planted fault, a model's draft: Sprints 042, 044); `last_error_source` (a
+    candidate's last-error pair, which has no includes) and `file_source` are its older spellings."""
+    texts = {p.name: p.read_text() for p in sorted(SOURCE.glob("*.c"))}
+    if last_error_source is not None:
+        texts["last_error.c"] = '#include "runtime.h"\n' + last_error_source
+    if file_source is not None:
+        texts["file.c"] = file_source
+    for name, text in (sources or {}).items():
+        if name not in texts:
+            raise BuildError(f"{name}: no such guest runtime file")
+        texts[name] = text
     header = (SOURCE / "runtime.h").read_text()
-    last_error = ('#include "runtime.h"\n' + last_error_source if last_error_source is not None
-                  else (SOURCE / "last_error.c").read_text())          # a candidate has no includes
     from w2m.cpuid import c_header
     cpuid_table = c_header()
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
-    file_c = file_source if file_source is not None else (SOURCE / "file.c").read_text()
-    key = hashlib.sha256("\0".join([runtime, header, last_error, file_c, cpuid_table, " ".join(CFLAGS), " ".join(dflags),
-                                    f"{base_va:x}"]).encode()).hexdigest()
+    key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header, cpuid_table,
+                                    " ".join(CFLAGS), " ".join(dflags), f"{base_va:x}"]).encode()).hexdigest()
     out = CACHE / f"{key}.bin"
     if not out.exists():
         CACHE.mkdir(parents=True, exist_ok=True)
         work = CACHE / key
         work.mkdir(exist_ok=True)
-        (work / "last_error.c").write_text(last_error)
         (work / "cpuid_table.h").write_text(cpuid_table)
-        (work / "file.c").write_text(file_c)
         objs = []
-        for src in (SOURCE / "runtime.c", work / "file.c", work / "last_error.c"):
+        for name, text in sorted(texts.items()):
+            src = work / name
+            src.write_text(text)
             obj = work / (src.stem + ".o")
             r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{work}", "-c", str(src), "-o", str(obj)],
                                capture_output=True, text=True)
             if r.returncode:
-                raise BuildError(f"{src.name}: {r.stderr.strip()}")
+                raise BuildError(f"{name}: {r.stderr.strip()}")
             objs.append(str(obj))
         r = subprocess.run(["ld", "-arch", "arm64", "-preload", "-e", "_w2m_image_entry",
                             "-segaddr", "__TEXT", f"0x{base_va:x}", "-o", str(out), *objs],

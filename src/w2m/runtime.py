@@ -8,7 +8,7 @@ against, one instruction at a time (`step`).
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from w2m import cpuid
 from w2m import x86fp as fp
@@ -31,6 +31,8 @@ class Result:
     distinct_addresses: int
     calls: list[str]
     stop: str
+    calls_total: dict[str, int] = field(default_factory=dict)   # every call by service (VM: past the ring too)
+    calls_dropped: int = 0                                       # calls the ring could not record in order
 
 
 def _mask(bits: int) -> int:
@@ -285,7 +287,9 @@ class Runtime:
             if k == "imm":
                 t[op[1]] = op[2] & M64
             elif k == "addr":
-                _, d, base, index, scale, disp, abits = op
+                _, d, base, index, scale, disp, abits, seg = op
+                if seg is not None:            # the model has no TEB; the VM serves gs: (Sprint 044)
+                    raise HandlerFailed(f"{seg}-relative access at 0x{ins.address:x}: the model has no TEB")
                 v = disp + (self.th.regs[base] if base is not None else 0)
                 v += self.th.regs[index] * scale if index is not None else 0
                 t[d] = v & _mask(abits)

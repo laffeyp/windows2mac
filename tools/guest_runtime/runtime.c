@@ -40,6 +40,7 @@ void w2m_unimplemented(u64 api, u64 detail) {
 
 u64 w2m_logged(u64 api, u64 arg0, u64 ret) {
     struct w2m_ring *r = (struct w2m_ring *)W2M_RING_VA;
+    if (api < W2M_RING_APIS) r->per_api[api]++;
     if (r->count < r->capacity) {
         r->rec[r->count].api = api;
         r->rec[r->count].arg0 = arg0;
@@ -91,22 +92,14 @@ u64 k32_ExitProcess(u64 code) {
     for (;;) {}
 }
 
-/* "Retrieves the current value of the performance counter"; nonzero on success. */
-u64 k32_QueryPerformanceCounter(u64 out) {
-    if (out == 0) w2m_unimplemented(W2M_API_QueryPerformanceCounter, 0);
-    *(u64 *)out = host_call(W2M_HOST_CLOCK, 0, 0);
-    return w2m_logged(W2M_API_QueryPerformanceCounter, out, 1);
-}
-
 /* ---- CPUID (Sprint 040) -------------------------------------------------------------------- */
 
 /* Entered from translated code at a CPUID with the guest GPRs in the state block. The guest
  * profile is specs/guest_cpuid.json (generated into cpuid_table.h); an input above the maximum
  * basic or extended leaf returns the highest basic leaf (SDM CPUID); 32-bit results zero-extend. */
-void w2m_cpuid(void) {
-    struct w2m_state *st = (struct w2m_state *)W2M_STATE_VA;
-    u32 leaf = (u32)st->gpr[0], sub = (u32)st->gpr[1], a = 0, b = 0, c = 0, d = 0;
-    w2m_logged(W2M_API_Cpuid, (u64)leaf | (u64)sub << 32, 0);
+/* The guest profile's answer for CPUID(leaf, sub) into r: EAX EBX ECX EDX. */
+void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]) {
+    u32 a = 0, b = 0, c = 0, d = 0;
     if (leaf > W2M_CPUID_MAX_EXTENDED || (leaf > W2M_CPUID_MAX_BASIC && leaf < 0x80000000u))
         leaf = W2M_CPUID_MAX_BASIC;
     int found = 0, leaf_known = 0;
@@ -127,10 +120,18 @@ void w2m_cpuid(void) {
                 c = w2m_cpuid_table[i].ecx; d = w2m_cpuid_table[i].edx;
             }
     }
-    st->gpr[0] = a;
-    st->gpr[3] = b;
-    st->gpr[1] = c;
-    st->gpr[2] = d;
+    r[0] = a; r[1] = b; r[2] = c; r[3] = d;
+}
+
+void w2m_cpuid(void) {
+    struct w2m_state *st = (struct w2m_state *)W2M_STATE_VA;
+    u32 leaf = (u32)st->gpr[0], sub = (u32)st->gpr[1], r[4];
+    w2m_logged(W2M_API_Cpuid, (u64)leaf | (u64)sub << 32, 0);
+    w2m_cpuid_query(leaf, sub, r);
+    st->gpr[0] = r[0];
+    st->gpr[3] = r[1];
+    st->gpr[1] = r[2];
+    st->gpr[2] = r[3];
 }
 
 /* ---- exceptions (Sprint 040) ------------------------------------------------------------- */

@@ -6,7 +6,8 @@ temporaries. The operations are target-independent: `runtime.py` executes them o
 (profile `model`); an AArch64 back end for the Hypervisor.framework VM consumes the same list.
 
 Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr, bytes)):
-  ("addr", t, base, index, scale, disp, abits)   effective address; base/index are register
+  ("addr", t, base, index, scale, disp, abits, seg)   effective address (plus the GS base when seg is
+                                                "GS": the thread's TEB, Sprint 044); base/index are register
                                                   indices, "rip" resolved at lift time, or None
   ("imm", t, value)        ("ld", t, loc)        ("st", loc, t)
   ("alu", t, op, a, b, bits)      op: add sub and or xor shr mul_lo mul_hi sext32
@@ -100,11 +101,14 @@ def _operand(b: _OpBuilder, s: str, next_ip: int, width_hint: int | None = None)
         base, index, scale, disp = (p[2], p[3], p[4], p[5]) if p[0] == "M" else (p[1], p[2], p[3], p[4])
         t = b.t()
         abits = 32 if base.startswith("E") or (base == "INVALID" and index.startswith("E")) else 64
+        seg = p[1] if p[0] == "M" and p[1] in ("FS", "GS") else None
+        if seg == "FS":                    # Windows x64 user code reaches the TEB through GS (Sprint 044)
+            raise LiftError(f"FS-relative memory operand {s}: the FS base is not modeled")
         if base in ("RIP", "EIP"):
-            b.emit("addr", t, None, None, 1, next_ip + int(disp), abits)
+            b.emit("addr", t, None, None, 1, next_ip + int(disp), abits, seg)
         else:
             b.emit("addr", t, None if base == "INVALID" else REG[base][0],
-                   None if index == "INVALID" else REG[index][0], int(scale), int(disp), abits)
+                   None if index == "INVALID" else REG[index][0], int(scale), int(disp), abits, seg)
         if p[0] == "A":
             return "addr", t, abits
         return "loc", ("m", t, int(p[6])), int(p[6]) * 8
@@ -197,12 +201,6 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if f is not None and (0x64 in f.prefixes or 0x65 in f.prefixes) and any(o[0] in "MA" for o in ops):
-        # FS/GS add a segment base (GS = the TEB on Windows x64; Mono reads gs:[0x1480 + key*8]);
-        # the model holds no segment bases yet (specs/guest_state.json fs_base/gs_base), so
-        # lifting this as a plain address would read the wrong memory (Sprint 037)
-        raise LiftError(f"FS/GS-relative memory operand at 0x{address:x} ({code[:d.length].hex()}): "
-                        "segment bases are not modeled")
     if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID"):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")

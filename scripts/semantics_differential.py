@@ -160,7 +160,7 @@ def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = No
     for op in ins.ops:
         if op[0] != "addr":
             continue
-        _, _, base, index, scale, disp, abits = op
+        _, _, base, index, scale, disp, abits, _seg = op
         if base is None:
             return False
         mask = M64 if abits == 64 else 0xFFFF_FFFF
@@ -267,6 +267,14 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             continue
         if d.iclass not in classes:
             skipped["not in this case file's class set"] += 1
+            continue
+        if d.fields is not None and d.fields.ops and (0x64 in d.fields.prefixes or 0x65 in d.fields.prefixes) and \
+                any(o[0] in "MA" for o in operands(d.fields)):
+            # an FS/GS override with a memory or address operand: the lifter refused these before Sprint 044
+            # and lifts them since (GS adds the TEB; LEA ignores the segment); never placeable here (the
+            # runner's GS base is its TEB). The same rule as the old refusal keeps the frozen case files
+            # what the runners ran (KIT_DIARY #23)
+            skipped["segment-relative operand (not placeable)"] += 1
             continue
         if any(op[0] == "br" for op in ins.ops):
             skipped["control flow (fixed encodings instead)"] += 1

@@ -31,6 +31,7 @@ import os
 import struct
 import subprocess
 import tempfile
+import time
 from bisect import bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -60,6 +61,8 @@ AF_OPERANDS = 0x20                  # MONITOR_DATA + this: the last ADD/SUB/INC/
 DF_BYTE = 0x38                      # MONITOR_DATA + this: DF (0 or 1)
 RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the reconstruction table
 MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits and the flags not yet in FPSR
+STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
+CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
@@ -83,6 +86,8 @@ MONITOR_SIZE = RECON_TABLE + 16 * RECON_ENTRIES
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
 RING_SIZE = 0x40000                 # 10,922 records; Sprint 042 probe makes 1,275 calls (shared-memory rings: Sprint 044)
+RING_APIS = 64                      # per-API call counters after the ring's count and capacity (runtime.h)
+RING_HEADER = 16 + 8 * RING_APIS
 EXCEPTION_OFF = RING_OFF + RING_SIZE             # the last unhandled exception: record and CONTEXT (runtime.h)
 EXCEPTION_MAGIC = 0x7832774E4F495445
 PROCESS_SIZE = EXCEPTION_OFF + 0x1000
@@ -94,8 +99,18 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "QueryPerformanceCounter": ("k32_QueryPerformanceCounter", True),
             "CreateFileW": ("k32_CreateFileW", True), "CloseHandle": ("k32_CloseHandle", True),
             "DeleteFileW": ("k32_DeleteFileW", True), "ReadFile": ("k32_ReadFile", True),
-            "SetFilePointerEx": ("k32_SetFilePointerEx", True)}
+            "SetFilePointerEx": ("k32_SetFilePointerEx", True),
+            "GetSystemTimeAsFileTime": ("k32_GetSystemTimeAsFileTime", False),
+            "GetCurrentProcessId": ("k32_GetCurrentProcessId", True),
+            "QueryPerformanceFrequency": ("k32_QueryPerformanceFrequency", True),
+            "IsProcessorFeaturePresent": ("k32_IsProcessorFeaturePresent", True),
+            "InitializeSListHead": ("k32_InitializeSListHead", False),
+            "GetStartupInfoW": ("k32_GetStartupInfoW", False),
+            "IsDebuggerPresent": ("k32_IsDebuggerPresent", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
+HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
+FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
+PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
 SYS_REG_ID = {"SCTLR_EL1": 0xC080, "CPACR_EL1": 0xC082, "TTBR0_EL1": 0xC100, "TCR_EL1": 0xC102,
@@ -416,10 +431,11 @@ def mxcsr_flags_from_fpsr(fpsr: int) -> int:
 _RUNTIME_SYMBOLS: dict[str, int] = {}
 
 
-def build_runtime(last_error_source: str | None = None, file_source: str | None = None) -> guest_runtime.Image:
+def build_runtime(last_error_source: str | None = None, file_source: str | None = None,
+                  sources: dict[str, str] | None = None) -> guest_runtime.Image:
     """The guest runtime image, refused if it lacks a service SERVICES names (a candidate file.c or
     last_error.c that left one out builds and links, since a preload image resolves nothing)."""
-    image = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(), last_error_source, file_source)
+    image = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(), last_error_source, file_source, sources)
     missing = sorted(sym for sym, _ in SERVICES.values() if sym not in image.symbols)
     if missing:
         raise guest_runtime.BuildError(f"the guest runtime does not define {', '.join(missing)}")
@@ -471,7 +487,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         if k == "imm":
             a.emit(a64.mov_imm(reg_of(op[1]), op[2]))
         elif k == "addr":
-            _, d, base, index, scale, disp, abits = op
+            _, d, base, index, scale, disp, abits, seg = op
             rd = reg_of(d)
             a.emit(a64.mov_imm(rd, disp & M64))
             if base is not None:
@@ -479,6 +495,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             if index is not None:
                 a.emit(a64.add(rd, rd, index, a64.LSL, scale.bit_length() - 1))
             _mask(a, rd, abits)
+            if seg == "GS":                    # + the thread's GS base: state block gs_base (the TEB)
+                a.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF + STATE_GS_BASE), a64.ldr(8, 16, 16, 0), a64.add(rd, rd, 16))
         elif k == "ld":
             rt, loc = reg_of(op[1]), op[2]
             if loc[0] == "r":
@@ -699,12 +717,14 @@ class VM:
     """
 
     def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False,
-                 clock: Callable[[], int] = monotonic_count, last_error_source: str | None = None,
-                 files: FileBridge | None = None, file_source: str | None = None) -> None:
+                 clock: Callable[[], int] | None = None, last_error_source: str | None = None,
+                 files: FileBridge | None = None, file_source: str | None = None,
+                 runtime_sources: dict[str, str] | None = None) -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
-        self.clock = clock
+        self.clock = clock if clock is not None else monotonic_count   # a given clock is served by the host
+        self.clock_from_host = clock is not None
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
@@ -726,7 +746,7 @@ class VM:
             n = len(r.data)
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
-        self.runtime = build_runtime(last_error_source, file_source)
+        self.runtime = build_runtime(last_error_source, file_source, runtime_sources)
         _RUNTIME_SYMBOLS.clear()
         _RUNTIME_SYMBOLS.update(self.runtime.symbols)
         if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
@@ -764,12 +784,13 @@ class VM:
         return MONITOR_SIZE + off
 
     def _init_process(self, tid: int) -> None:
-        """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header."""
+        """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode."""
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE, 1 if self.clock_from_host else 0)
         teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)
         for field_off, value in ((0x08, self.ld.stack_top), (0x10, stack.base), (0x30, teb),
-                                 (0x40, 1), (0x48, tid), (0x60, peb)):
+                                 (0x40, PROCESS_ID), (0x48, tid), (0x60, peb)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
@@ -777,7 +798,7 @@ class VM:
         struct.pack_into("<I", self.mm, st + 152, 0x1F80)
         struct.pack_into("<H", self.mm, st + 156, 0x27F)
         struct.pack_into("<QQQ", self.mm, st + 176, teb, teb, 0)
-        struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - 16) // 24)
+        struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - RING_HEADER) // 24)
 
     def _bridge(self, import_name: str) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
@@ -831,6 +852,8 @@ class VM:
             return False
         elif op == HOST_CLOCK:
             result = self.clock() & M64
+        elif op == HOST_FILETIME:
+            result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
         elif op == HOST_RUNTIME_FAULT:
             raise CompileError(f"guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} "
                                f"(EC 0x{a1 >> 26 & 0x3F:x}), not in translated code or not a data abort")
@@ -843,13 +866,21 @@ class VM:
         return True
 
     def calls(self) -> list[str]:
-        """The service calls the guest runtime logged, in order."""
+        """The service calls the guest runtime logged, in order: the first `capacity` of them."""
         count, capacity = struct.unpack_from("<QQ", self.mm, self._process(RING_OFF))
-        if count > capacity:
-            raise CompileError(f"service ring overflowed: {count} calls, capacity {capacity}")
         names = guest_runtime.api_ids()
-        return [names[struct.unpack_from("<Q", self.mm, self._process(RING_OFF) + 16 + 24 * i)[0]]
-                for i in range(count)]
+        base = self._process(RING_OFF) + RING_HEADER
+        return [names[struct.unpack_from("<Q", self.mm, base + 24 * i)[0]] for i in range(min(count, capacity))]
+
+    def calls_total(self) -> dict[str, int]:
+        """Every service call by name, counted in the guest (exact past the ring's capacity)."""
+        names = guest_runtime.api_ids()
+        per = struct.unpack_from(f"<{RING_APIS}Q", self.mm, self._process(RING_OFF) + 16)
+        return {names.get(i, f"api {i}"): n for i, n in enumerate(per) if n}
+
+    def calls_dropped(self) -> int:
+        count, capacity = struct.unpack_from("<QQ", self.mm, self._process(RING_OFF))
+        return max(0, int(count) - int(capacity))
 
     def exception(self) -> dict[str, int] | None:
         """The last unhandled exception the guest runtime recorded: the EXCEPTION_RECORD and the
@@ -1219,7 +1250,8 @@ class VM:
             proc.wait(timeout=10)
         executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
         self.final = x
-        return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop)
+        return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop,
+                      self.calls_total(), self.calls_dropped())
 
     def close(self) -> None:
         for r in self.mem.regions:

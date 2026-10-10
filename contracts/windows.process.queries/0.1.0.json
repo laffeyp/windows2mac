@@ -1,0 +1,226 @@
+{
+ "contract_id": "windows.process.queries",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetSystemTimeAsFileTime, GetCurrentProcessId, GetCurrentThreadId, QueryPerformanceCounter, QueryPerformanceFrequency, IsProcessorFeaturePresent, InitializeSListHead, GetStartupInfoW and IsDebuggerPresent answer as Windows does: fixed values exactly, machine-dependent values by the relations every Windows machine observed holds.",
+ "applicability": "windows-2022 (AMD EPYC 7763); windows-2022 (AMD EPYC 9V74); windows-2022 (Intel Xeon Platinum 8370C); windows-2025 (AMD EPYC 7763); windows-2025 (AMD EPYC 9V74)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/process_queries/process_queries.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "ids.process",
+    "nonzero": true,
+    "multiple_of_4": true,
+    "equals_teb": true
+   },
+   {
+    "s": "ids.thread",
+    "nonzero": true,
+    "multiple_of_4": true,
+    "equals_teb": true,
+    "differs_from_process": true
+   },
+   {
+    "s": "time.filetime",
+    "after_2026": true,
+    "before_2100": true,
+    "nondecreasing": true,
+    "advances": true
+   },
+   {
+    "s": "time.qpf",
+    "ret": 1,
+    "frequency": 10000000
+   },
+   {
+    "s": "time.qpc",
+    "ret": 1,
+    "nondecreasing": true,
+    "advances": true
+   },
+   {
+    "s": "time.counter_tracks_time",
+    "within_25_percent": true
+   },
+   {
+    "s": "ipfp.0",
+    "value": 0
+   },
+   {
+    "s": "ipfp.1",
+    "value": 0
+   },
+   {
+    "s": "ipfp.2",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.3",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.6",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.7",
+    "value": 0
+   },
+   {
+    "s": "ipfp.8",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.9",
+    "value": 1
+   },
+   {
+    "s": "ipfp.10",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.12",
+    "value": 1
+   },
+   {
+    "s": "ipfp.13",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.14",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.15",
+    "value": 0
+   },
+   {
+    "s": "ipfp.16",
+    "value": 0
+   },
+   {
+    "s": "ipfp.17",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.20",
+    "value": 0
+   },
+   {
+    "s": "ipfp.22",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.23",
+    "value": 1
+   },
+   {
+    "s": "ipfp.36",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.37",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.38",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.39",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.40",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.41",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.61",
+    "equals_cpuid": true
+   },
+   {
+    "s": "ipfp.89",
+    "equals_cpuid": true
+   },
+   {
+    "s": "slist.initialize",
+    "all_zero": true
+   },
+   {
+    "s": "startup.info",
+    "cb": 104,
+    "reserved_null": false,
+    "reserved2_null": true,
+    "cb_reserved2": 0
+   },
+   {
+    "s": "debugger.present",
+    "value": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38037899422: windows-2025, AMD EPYC 7763, probe sha256:7bddfdfb38be9ebb35220a9a9df48dc0f3e6453158cb613db62b337680caea99; run 38037900735: windows-2022, AMD EPYC 7763, probe sha256:d59934c1891538e6f2768682fa34e034a9d494acf546babd422ff294d4beee9c; run 38037902222: windows-2025, AMD EPYC 9V74, probe sha256:c703c133a5a032adc6d13b8579bc11584de037354ccd7e23e8ce1cbf6d76bad2; run 38037903596: windows-2022, AMD EPYC 9V74, probe sha256:552490a3ed425d2f5d6ff271dea0823312fa003843907eb0ce8100d07010c970; run 38038027558: windows-2022, Intel Xeon Platinum 8370C, probe sha256:c816bb72de67ec46cb89bb91868742818027e65ea4fcc194a2215b4a04b8fecc",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "process_queries-1791620805-0-1",
+    "process_queries-1791620805-0-2",
+    "process_queries-1791620806-1-1",
+    "process_queries-1791620806-1-2",
+    "process_queries-1791620808-2-1",
+    "process_queries-1791620808-2-2",
+    "process_queries-1791620809-3-1",
+    "process_queries-1791620809-3-2",
+    "process_queries-1791620943-3-1",
+    "process_queries-1791620943-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-isprocessorfeaturepresent",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent (page updated 2025-12-18; retrieved 2026-10-10)",
+   "quote": "If the feature is supported, the return value is a nonzero value. If the feature is not supported, the return value is zero. ... Support for PF_ARM_SVE_INSTRUCTIONS_AVAILABLE through PF_MOVDIR64B_INSTRUCTION_AVAILABLE ... were added in the Windows SDK (26100) and are supported by Windows 11, version 24H2 and Windows Server 2025 or later."
+  },
+  {
+   "evidence_id": "ms-queryperformancefrequency",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/profileapi/nf-profileapi-queryperformancefrequency (page updated 2025-11-21; retrieved 2026-10-10)",
+   "quote": "The frequency of the performance counter is fixed at system boot and is consistent across all processors. ... On systems that run Windows XP or later, the function will always succeed when given valid parameters and will thus never return zero."
+  }
+ ],
+ "open_questions": [
+  "The rows for IsProcessorFeaturePresent are relations where a CPUID bit names the feature: on Windows the runner CPU's bit, in w2m the guest CPUID profile's (specs/guest_cpuid.json). The PF-to-CPUID-bit table is the agent's reading of the Intel SDM CPUID tables; 25 of 26 rows agree with Windows on five machines.",
+  "GetStartupInfoW's lpReserved is non-null under the runner's cmd; what it points to is not observed. A process started by Steam may differ.",
+  "Excluded rows: see `sections.excluded`."
+ ],
+ "sections": {
+  "probe": "probes/process_queries (Sprint 044)",
+  "implementation": "tools/guest_runtime/process.c",
+  "rows": "scripts/family_run.py process_queries",
+  "excluded": "ipfp.21: PF_VIRT_FIRMWARE_ENABLED: 1 on the four AMD machines, 0 on the Intel 8370C; a property of the host machine. w2m answers 0: the guest is offered no virtualization.; ipfp.60: PF_BMI2_INSTRUCTIONS_AVAILABLE: Server 2022 answers 0 on CPUs with BMI2, Server 2025 follows CPUID; Microsoft Learn: supported from Windows 11 24H2 and Server 2025. w2m answers as Server 2025."
+ }
+}

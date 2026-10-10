@@ -1,0 +1,30 @@
+{
+ "process_queries": {
+  "candidate_sha256": "sha256:083ca926a777dd968571bd3e109354095197ab3aa9b5aa3d4995ebde3e1eea26",
+  "divergence": {
+   "38037899422": "row ids.process: missing (0 rows printed, 35 expected)",
+   "38037900735": "row ids.process: missing (0 rows printed, 35 expected)",
+   "38037902222": "row ids.process: missing (0 rows printed, 35 expected)",
+   "38037903596": "row ids.process: missing (0 rows printed, 35 expected)",
+   "38038027558": "row ids.process: missing (0 rows printed, 35 expected)"
+  },
+  "events": {
+   "CANDIDATE_GENERATED": 1,
+   "CANDIDATE_REJECTED": 1,
+   "COMPARISON_COMPLETED": 5,
+   "DISCREPANCY_REPORTED": 1,
+   "DISCREPANCY_ROUTED": 1,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "process_queries",
+  "record": "store/runs/family-process_queries-1791621239307425000",
+  "verdicts": {
+   "38037899422": "discrepancy",
+   "38037900735": "discrepancy",
+   "38037902222": "discrepancy",
+   "38037903596": "discrepancy",
+   "38038027558": "discrepancy"
+  }
+ }
+}
