@@ -219,7 +219,7 @@
 
 ## Sprint tail
 
-### Sprint 047 (2026-10-10, closing: CI on the closing commit)
+### Sprint 047 (2026-10-10, closed: CI run 38088432347 success on 0f889e5)
 - **Scope:** UnityMain's start-up, stop by stop.
 - **Rubber Duck Pass:**
   - *Sequence narration:* look ahead, take each need in order, probe, contract, guest code, item run, plants, frontier.

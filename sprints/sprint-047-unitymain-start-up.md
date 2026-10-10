@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 047
-status: closing (CI on the closing commit)
+status: closed (CI run 38088432347 success on 0f889e5, 2026-10-10)
 phase: 5
 pass_kind: functional
 ---
@@ -64,5 +64,5 @@ The frontier's stop lies past PCMPISTRI at 0x18140b914 and past CommandLineToArg
 - **Defects found and fixed:** CI red on 40 runs from 3d091e3 (depot-reading loader tests; then a class-run test over 30 s on a cold runner; then gitignored case files); `class_run` counted a crashed VM judge as accepted and a single-class run truncated the index (KIT_DIARY #34); `family_run` returned 0 on discrepancies and on plants that missed their reach; a BTC case read memory outside its windows; the Mac's float birth time came out after the access time; record scans read every record whole (`read_first_envelope` now) and the causal test reloaded each record 308 times.
 - **The repository** went public as `laffeyp/windows2mac` under substrate's licensing (user, 2026-10-10); Actions for public repositories cost nothing; Sprint 046 closed on CI run 38084406263.
 - **Feasibility review:** verified; C2 and C3 rejected by the user; F1 and F3 are the next sprint's first work.
-- Gates and CI: see the closing commit.
+- Gates and CI: CI run 38087819989 on 5ac2a1e failed on seven class-index entries that named records by this Mac's absolute path; 0f889e5 fixed them and added a test; CI run 38088432347 on 0f889e5 succeeded.
 
