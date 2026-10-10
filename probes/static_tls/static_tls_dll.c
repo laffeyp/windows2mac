@@ -6,14 +6,27 @@
 
 ULONG _tls_index = 0xA5A5A5A5u;
 
-__attribute__((section(".tls"))) char _tls_start = 0;
-__attribute__((section(".tls$ZZZ"))) char _tls_end = 0;
+/* The runner's clang targets MSVC: the sections as tlssup.c declares them (a section attribute there put the
+ * template in .rdata and the first run faulted). The attribute form is for the local mingw syntax check. */
+#ifdef _MSC_VER
+#pragma section(".tls", read, write)
+#pragma section(".tls$ZZZ", read, write)
+#pragma section(".CRT$XLA", read)
+#pragma section(".CRT$XLZ", read)
+#pragma section(".rdata$T", read)
+#define ALLOCATE(s) __declspec(allocate(s))
+#else
+#define ALLOCATE(s) __attribute__((section(s)))
+#endif
 
-__attribute__((section(".CRT$XLA"), used)) PIMAGE_TLS_CALLBACK __xl_a = 0;
-__attribute__((section(".CRT$XLZ"), used)) PIMAGE_TLS_CALLBACK __xl_z = 0;
+ALLOCATE(".tls") char _tls_start = 0;
+ALLOCATE(".tls$ZZZ") char _tls_end = 0;
+
+ALLOCATE(".CRT$XLA") PIMAGE_TLS_CALLBACK __xl_a = 0;
+ALLOCATE(".CRT$XLZ") PIMAGE_TLS_CALLBACK __xl_z = 0;
 
 /* designated: the Windows SDK's IMAGE_TLS_DIRECTORY64 puts Characteristics in a union, mingw's does not */
-const IMAGE_TLS_DIRECTORY64 _tls_used = {.StartAddressOfRawData = (ULONGLONG)&_tls_start,
+ALLOCATE(".rdata$T") const IMAGE_TLS_DIRECTORY64 _tls_used = {.StartAddressOfRawData = (ULONGLONG)&_tls_start,
                                          .EndAddressOfRawData = (ULONGLONG)&_tls_end,
                                          .AddressOfIndex = (ULONGLONG)&_tls_index,
                                          .AddressOfCallBacks = (ULONGLONG)(&__xl_a + 1), .SizeOfZeroFill = 0};
