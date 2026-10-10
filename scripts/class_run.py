@@ -59,14 +59,21 @@ def contract_id(iclass: str) -> str:
 
 
 def iclass_of(c: sd.Case) -> str:
-    """The case's iclass: its label, except the control-flow cases labelled by condition code
-    (Jcc_0 ... Jcc_f), which decode to JO ... JNLE."""
+    """The case's iclass: its label (the decoded iclass, `_built`); a generator's control-flow cases are
+    labelled by condition code (Jcc_0 ... Jcc_f) and decode to JO ... JNLE."""
     return decode(c.code).iclass if c.label.startswith("Jcc_") else c.label
 
 
 @cache
+@cache
 def _built(case_set: str) -> list[sd.Case]:
-    return sd.cached_cases(case_set)
+    """The cases the runners ran: the committed case file, each labelled by its decoded iclass. Reading them
+    takes 0.2 s for every set; building them from the generator took over 30 s on a CI runner with no cache
+    (run 38083478948). The two agree case for case (code, registers, label) on all 78,608 (2026-10-10)."""
+    cases = sd.read_cases(sd.case_file(case_set))
+    for c in cases:
+        c.label = decode(c.code).iclass
+    return cases
 
 
 def case_sets_of(iclass: str) -> list[str]:

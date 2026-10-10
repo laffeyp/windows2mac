@@ -489,6 +489,11 @@ _CASE_INPUTS = ("scripts/semantics_differential.py", "src/w2m/encgen.py", "specs
 
 
 @functools.cache
+def case_file(case_set: str) -> Path:
+    """The committed case file the runners ran for `case_set` (set 039's sits in probes/semantics)."""
+    return ROOT / "probes" / ("semantics" if case_set == "039" else f"semantics_{case_set}") / "cases.bin"
+
+
 def cached_cases(case_set: str) -> list[Case]:
     """build_cases for `case_set`, cached on disk under build/case-cache/ by the sha256 of everything the
     build reads (this script, the encoding generator, the decode spec, the decoder, the operand parser,
