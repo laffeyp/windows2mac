@@ -1065,6 +1065,9 @@ class VM:
                                f"(EC 0x{a1 >> 26 & 0x3F:x}), not in translated code or not a data abort")
         elif op == HOST_UNIMPLEMENTED:
             name = guest_runtime.api_ids().get(a0, f"api {a0}")
+            # the bridge saved the guest's GPRs in the state block; RSP (slot 4) holds the call's return address
+            rsp = struct.unpack_from("<Q", self.mm, self._process(STATE_OFF) + 8 * 4)[0]
+            self.unimplemented = (f"{name} argument form 0x{a1:x}", int.from_bytes(self.mem.read(rsp, 8), "little"))
             raise Unimplemented(f"{name} argument form 0x{a1:x}")
         else:
             raise CompileError(f"guest runtime: unknown host request {op}")
