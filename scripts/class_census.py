@@ -47,7 +47,7 @@ def census(path: Path) -> dict[str, Any]:
             lifted[d.iclass] += 1
         except LiftError as e:
             refusals[d.iclass][str(e).split(" at ")[0]] += 1
-    classes = {ic: {"instances": n, "lifted": lifted[ic],
+    classes: dict[str, dict[str, Any]] = {ic: {"instances": n, "lifted": lifted[ic],
                     "refusals": dict(refusals[ic].most_common(3))} for ic, n in instances.most_common()}
     return {"file": path.name, "reachable_instructions": len(reach.insns), "undecoded": undecoded,
             "classes": len(classes),

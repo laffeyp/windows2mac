@@ -2,6 +2,14 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 034 (2026-10-09, closed)
+- **Scope:** CONTEXT, TEB, PEB and fault/suspend behavior measured on the runner; the guest state spec judged against it.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the runner built the probe, which printed header offsets, read its own TEB through gs: against the APIs, faulted under a first vectored handler with known registers and resumed it by rewriting CONTEXT, and suspended a spinning thread to read and change its registers; the checker compared the spec's 62 fields with three runs and recorded the verdict.
+  - *Observation 1 (a clean check needs a failing control):* four planted spec faults are each caught with the exact field and value. Disposition: resolved-here (tests).
+  - *Observation 2 (values written from memory):* SegCs 0x33 and SegGs 0x2B were not read by the probe. Disposition: marked unobserved in the spec; the next probe revision reads them.
+- **Closed:** clean.
+
 ### Sprint 033 (2026-10-09, closed)
 - **Scope:** Hail to the Rainbow's native and Mono-generated code, captured on the Windows runner and judged against XED.
 - **Rubber Duck Pass:**

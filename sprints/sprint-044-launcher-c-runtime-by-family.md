@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 044
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -52,3 +52,16 @@ The launcher `Hail to the Rainbow.exe` runs 13 instructions under w2m and stops 
 ## done criteria
 
 The launcher's C runtime start-up completes under w2m, and every function it called is judged against Windows on its own family's record.
+
+## observed
+
+- **The frontier moved** from 13 instructions (stop `GetSystemTimeAsFileTime`) to 19,084: the launcher's C runtime start-up completes in w2m and the run stops at the import `UnityPlayer.dll!UnityMain` (SERVICE_UNIMPLEMENTED, guest address 0x1400011F2). On the way it stopped at, in order: GetSystemTimeAsFileTime, the module calls, the critical sections, TLS and FLS, the heap, the standard handles, GetACP, MultiByteToWideChar's MB_PRECOMPOSED form, LCMapStringEx (reached through GetProcAddress, not the imported LCMapStringW), RET imm16, GetEnvironmentStringsW, SetUnhandledExceptionFilter.
+- **Families accepted, each on its own record** (runner rows on Server 2025 and 2022, AMD EPYC 7763, 9V45, 9V74 and Intel Xeon 8370C, 8573C; every run's two executions and every runner agreed): process queries; modules; critical sections; thread storage; heap; console 0.2.0 (GUI start without handles; GetCommandLineA added at the close); code pages 0.2.0 (3,827 rows: code page 1252 per byte, 452 best-fit units, 3,072 malformed UTF-8 inputs, the launcher's batched forms); environment, as two families over one probe (a set block, an empty block); exception filter. Every service the launcher calls before UnityMain has rows in a family (checked against the call counts of the frontier run).
+- **Windows against its pages:** malformed UTF-8 follows the Unicode Standard's Table 3-7 except that after E0, ED, F0 or F4 an out-of-range continuation byte joins the U+FFFD (WHATWG leaves it; the plant of WHATWG's rule changes the 37 rows named); HeapAlloc's failure sets ERROR_NOT_ENOUGH_MEMORY though its page says it does not; IsValidCodePage(CP_ACP) is FALSE; an empty environment block comes back as two NULs.
+- **Planted faults:** one or more per family, reach named first. Three named reaches were wrong and are recorded here: a critical-section plant (LockCount kept on the last Leave) named 3 rows and stopped the run; a heap plant (unaligned blocks) stopped the run on heap.c's own check; the heap's size-is-capacity plant named 2 rows and changed 4. A heap plant that ignored HEAP_ZERO_MEMORY changed nothing on a fresh, zero arena: a blind spot, closed by a probe row that zeroes a dirty, freed block. Reaches may be fnmatch patterns (452 best-fit rows).
+- **Instruction classes:** sets 044 (11 integer classes), 044b (REP STOS/MOVS), 044c (ADC, BSF, BSR), 044d (the SSE2 integer block, MXCSR access, SFENCE, PREFETCHNTA; 5,149 cases) and 044e (RET imm16, 256 cases), each judged on an Intel runner by the model and the VM with no difference; releases semantics-044 to semantics-044e; 183 of 183 classes accepted (163 at the sprint's middle). XGETBV is judged by the guest profile (#UD; the runners set OSXSAVE). A class may span sets (RET_NEAR: 039's C3, 044e's C2).
+- **Hot services:** over the process-queries probe, 100,005 QueryPerformanceCounter calls make no host exit (four exits in all: the wall clock once, the module path, the rows, the exit); over the thread-storage probe, TlsGetValue makes none (`tests/test_hot_services.py`). Over the frontier run the host serves 17 requests, 1 system time and 16 module lookups.
+- **The model family (D7):** kimi-k2.7-code:cloud in substrate's session topology wrote environment.c; both environment item runs accepted it (16 model calls, 316,810 prompt and 1,288 completion tokens, 2 judgments; `store/runs/model-family-environment-kimi-k2.7-code-cloud-1791629810134921000.json`). Where the rows are silent it differs from the agent's file (an empty block's second unit unwritten; NULL from a full arena and NULL arguments pass).
+- **Census:** launcher 124 classes reached, 101 lifted, 23 missing (VEX forms behind AVX, INT3, INT); UnityPlayer.dll 460 reached, 163 lifted, 6 partly, 291 missing, SHUFPS (23,568), PXOR (9,439) and INT3 (6,196) first (`store/census/class-census-2026-10-10.json`).
+- **Defects found and fixed:** a timing row of process queries failed 4 of 30 runs (a translation stall inside the measured window; the window now runs twice); the ring's per-API counters silently skipped ids 64 and above; a refused argument form ended the frontier as a fault, not SERVICE_UNIMPLEMENTED; runner binaries were not reproducible (16 runs, up to 16 binaries; `/Brepro` now gives one per image); a committed lint error (E741) left CI red until found; one dispatch built an uncompiled probe edit's predecessor and was cancelled. At the close the heap family's acceptance was stale (heap.c changed after its item run); every family reran on the final runtime, all accepted, and `tests/test_family_runs.py` now holds each acceptance to its file's sha256.
+- Gates and CI: see the closing commit.

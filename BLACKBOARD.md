@@ -168,6 +168,7 @@
 - **2026-10-10** — Sprint 041 (instruction classes as item runs) closed. `src/w2m/rules/` (92 modules, 140 iclasses; SSE lowering and the integer rules with their class), `scripts/class_run.py` (item runs, pool), VM vector state and SSE (`vm_monitor` vget/vset, FPCR from MXCSR, slow path), LOCK as exclusive loops, case set 041 (`probes/semantics_041/`, release `semantics-041`), `store/probe-runs/38029980267/`. Dual contract: signal pass; artifact pass (gates.sh 0, 280 tests). Observation: pass — the VM agrees with Intel on every case of sets 039 (39,708) and 041 (13,243), XMM, MXCSR and faults included; 139 classes accepted on their own records; four planted faults caught.
 - **2026-10-10** — Sprint 042 (the Windows-function pipeline, on CreateFileW) closed. `probes/create_file/` (188 rows, Server 2025 run 38031352273 and Server 2022 run 38031354036), `contracts/windows.file.create_file.dispositions_sharing/0.1.0.json` (acceptance `exact_rows`, relation `exact`), `ExactRows` and `compare_exact_rows`, `tools/guest_runtime/file.c`, `src/w2m/file_bridge.py`, `build_runtime()`, `scripts/file_run.py` (item run, plants), `tests/test_create_file.py`, NEG rule and case set 042 (release `semantics-042`, run 38031723882), `Once()` decision triggers (141 classes rerun), service ring 10,922 records, `scripts/measure_file_generation.py` (session topology; kimi-k2.7-code:cloud accepted in one turn, 46 model calls), substrate from `./substrate` branch `w2m`. Dual contract: signal pass; artifact pass (gates 0, 306 tests, 441 records replay); observation pass.
 - **2026-10-10** — Sprint 043 (causality in every record) closed. `src/w2m/differential.py` (one topology: candidate → comparison → decision → route → resolution; `rebuild_ledger`), `store/runs/discrepancy-ledger.json`, six differentials moved onto it and the decoder differential recording for the first time, `tests/test_differential.py`. Nine causal records; 3 discrepancies open, all decoder gaps routed contract_revision. Dual contract: signal pass; artifact pass (gates 0, 312 tests, 451 records); observation pass.
+- **2026-10-10** — Sprint 044 (the launcher's C runtime surface, by family) closed. Eleven families accepted on their own records, each a no-CRT runner probe, a contract from its rows, guest C in `tools/guest_runtime/` and an item run: process queries, modules, critical sections, thread storage, heap, console 0.2.0, code pages 0.2.0, environment (set and empty blocks), exception filter; `scripts/family_run.py` (families, fnmatch plant reaches), `src/w2m/modules.py`, `src/w2m/code_pages.py` (tables from runner rows), VM: GS-relative operands, guest counter, start and clock modes, heap arena, environment block, host requests by op; case sets 044 to 044e (releases semantics-044 to semantics-044e), 183 classes accepted; `scripts/class_census.py`; `scripts/model_family.py` (kimi-k2.7-code wrote an accepted environment.c); probe builds reproducible (`/Brepro`). Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — the frontier stops at `UnityPlayer.dll!UnityMain` after 19,084 instructions with every service before it judged against Windows.
 
 ## Deferred
 
@@ -208,6 +209,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 044 (2026-10-10, closed)
+- **Scope:** the launcher's C runtime start-up, family by family, until the stop is `UnityPlayer.dll!UnityMain`.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the frontier stops at a service; a scratch run with logged refusals shows the forms start-up uses; a no-CRT probe records Windows's answers on 4 to 16 runners; the rows become a contract; guest C answers them; planted faults with named reaches; the item run accepts on every runner binary; the frontier moves to the next stop.
+  - *Observation 1 (three wrong reaches and a blind spot):* two plants stopped the run, one changed 4 rows for 2 named; HEAP_ZERO_MEMORY ignored on a zero arena changed nothing. Disposition: recorded on the card; the probe covers a dirty block.
+  - *Observation 2 (silent counters and statuses):* ids above 63 went uncounted; argument-form stops read as faults. Disposition: resolved-here, each with a test that fails without the fix.
+  - *Observation 3 (the model's file):* accepted, and different from the agent's wherever the rows are silent. Disposition: recorded; KIT_DIARY #29.
+- **Closed:** clean.
 
 ### Sprint 043 (2026-10-10, closed)
 - **Scope:** every differential as a causal topology; discrepancies resolved across runs.
@@ -290,12 +300,4 @@
   - *Observation 3 (C changes what admission must police):* the signature now carries the parameter rule; division moved from "may raise" to "refused", because an x86 host traps where AArch64 does not. Disposition: resolved-here, with tests.
 - **Closed:** clean.
 
-### Sprint 034 (2026-10-09, closed)
-- **Scope:** CONTEXT, TEB, PEB and fault/suspend behavior measured on the runner; the guest state spec judged against it.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the runner built the probe, which printed header offsets, read its own TEB through gs: against the APIs, faulted under a first vectored handler with known registers and resumed it by rewriting CONTEXT, and suspended a spinning thread to read and change its registers; the checker compared the spec's 62 fields with three runs and recorded the verdict.
-  - *Observation 1 (a clean check needs a failing control):* four planted spec faults are each caught with the exact field and value. Disposition: resolved-here (tests).
-  - *Observation 2 (values written from memory):* SegCs 0x33 and SegGs 0x2B were not read by the probe. Disposition: marked unobserved in the spec; the next probe revision reads them.
-- **Closed:** clean.
-
-Older entries (Sprints 000-033): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-034): `docs/sprint-tail-archive.md`.

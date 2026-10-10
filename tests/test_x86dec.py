@@ -34,7 +34,7 @@ def disagreements(path: Path) -> tuple[int, Counter[tuple[str, ...]]]:
 @pytest.mark.parametrize("path", BINARIES, ids=lambda p: p.name[:12])
 def test_own_decoder_agrees_with_reference(path: Path) -> None:
     n, d = disagreements(path)
-    assert n > (20_000 if sum(map(len, parse(path.read_bytes()).imports.values())) > 20 else 200)
+    assert n > (20_000 if parse(path.read_bytes()).function_starts else 200)        # CRT-linked: has .pdata
     assert not d, d.most_common(10)
 
 

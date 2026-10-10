@@ -43,8 +43,10 @@ def llvm_insns(path: Path, image_base: int, end_rva: int) -> dict[int, tuple[str
 
 
 def floor(img: PeImage) -> int:
-    """CRT-linked probes reach > 20,000 instructions; the no-CRT skeleton (6 imports) 217."""
-    return 20_000 if sum(map(len, img.imports.values())) > 20 else 200
+    """CRT-linked probes reach > 20,000 instructions; the no-CRT skeleton 217. A CRT-linked binary is told
+    by its .pdata (448 and 451 function starts; every no-CRT probe has none), not by its import count:
+    the console probe has 21 imports and no C runtime (Sprint 044)."""
+    return 20_000 if img.function_starts else 200
 
 
 @pytest.mark.parametrize("path", BINARIES, ids=lambda p: p.name[:12])

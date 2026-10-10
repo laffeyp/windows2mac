@@ -265,3 +265,19 @@
 **Finding (#28):** a gate that runs only where it was written checks the writer's machine, not the project. The closing evidence is the CI run on the closing commit; the local gate is the fast loop before it. Any input the local run has and a fresh checkout lacks (a clone, a download, a cache) is a pin the CI must reproduce, checked by both.
 
 **Kit change suggested:** the dual contract's artifact pass names the CI run id of the closing commit and its conclusion.
+
+### 2026-10-10 — Sprint 044: the model passed the rows, and only the rows
+
+**What happened:** kimi-k2.7-code, in substrate's session topology, wrote `environment.c` for the two environment families. Both item runs accepted it after two judgments. Its file and the agent's agree on every row and differ everywhere the rows say nothing: for an empty block it allocates Windows's 4 bytes but writes one NUL, so the second unit is whatever the heap held; it answers a full arena with NULL and no last error; FreeEnvironmentStringsW(NULL) succeeds and lstrlenW(NULL) reads address 0. The agent's file stops the run on each of these, because no row says what Windows does.
+
+**Finding (#29):** an exact-rows contract specifies the rows and nothing between them. A candidate written to pass the judge fills the silent places with whatever passes; a candidate written to the contract's spirit refuses them. Both are accepted. The difference is visible only by reading the files side by side, so each family's silent places must be either probed (a row) or declared (the guest refuses, and a test shows the refusal).
+
+**Kit change suggested:** a family's contract lists its known silent places (inputs no row covers); the item run plants each and asserts the candidate refuses it rather than answering.
+
+### 2026-10-10 — Sprint 044: bounds that skip quietly
+
+**What happened:** the guest runtime counts each service call by API id, `if (api < W2M_RING_APIS) per_api[api]++`. The bound was 64. Sprint 044 added ids 64 to 68 (LCMapStringEx, the environment functions, SetUnhandledExceptionFilter); their calls ran, were served, and were never counted. The frontier's call counts looked complete. A coverage check that listed every launcher call against the probes found four services missing from the counts, though the launcher had called them. In the same sprint, a refused argument form ended the frontier as a "faulted" execution, because only the import path set the field that emits SERVICE_UNIMPLEMENTED.
+
+**Finding (#30):** a guard that skips silently when its bound is passed turns a growth into missing data with no error. The bound must be checked where the ids are made (a test: every id below it), and a stop must report what stopped it on every path that can stop, not on the first path written.
+
+**Kit change suggested:** every fixed-size table indexed by a growing enumeration has a test holding the enumeration under the bound; every exit path of a run is enumerated in one place that maps it to its signal.
