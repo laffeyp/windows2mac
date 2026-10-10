@@ -5,7 +5,7 @@
  "dll": {
   "name": "static_tls_dll",
   "source": "probes/static_tls/static_tls_dll.c",
-  "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:dll_main",
+  "cflags": "-O1 -Wall -Werror -fms-runtime-lib=static",
   "libs": "-lkernel32"
  }
 }
