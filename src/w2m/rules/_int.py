@@ -24,9 +24,20 @@ def cpuid(ctx: Ctx) -> None:
 
 
 def ret_near(ctx: Ctx) -> None:
-    if ctx.ops:
-        raise LiftError(f"RET_NEAR imm16 at 0x{ctx.address:x}")
-    ctx.b.emit("br", "always", _pop(ctx.b))
+    """RET, and RET imm16: in 64-bit mode RSP <- RSP + 8 + imm16, the count zero-extended (SDM RET)."""
+    b = ctx.b
+    if not ctx.ops:
+        b.emit("br", "always", _pop(b))
+        return
+    _, count, _ = _operand(b, ctx.ops[0], ctx.nxt)
+    sp, target, eight, popped, nsp = b.t(), b.t(), b.t(), b.t(), b.t()
+    b.emit("ld", sp, ("r", RSP, 64, False))
+    b.emit("ld", target, ("m", sp, 8))
+    b.emit("imm", eight, 8)
+    b.emit("alu", popped, "add", sp, eight, 64)
+    b.emit("alu", nsp, "add", popped, count, 64)
+    b.emit("st", ("r", RSP, 64, False), nsp)
+    b.emit("br", "always", target)
 
 
 def move(ctx: Ctx) -> None:

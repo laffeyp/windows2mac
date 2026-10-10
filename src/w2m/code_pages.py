@@ -13,13 +13,14 @@ from __future__ import annotations
 import json
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SOURCE_RUN = "38043445987"
+SOURCE_RUN = "38044229348"
 
 
 @cache
-def rows() -> tuple[dict, ...]:
+def rows() -> tuple[dict[str, Any], ...]:
     path = ROOT / "store" / "probe-runs" / SOURCE_RUN / "body-1.jsonl"
     return tuple(json.loads(line) for line in path.read_text().splitlines() if line.strip())
 
@@ -33,7 +34,9 @@ def tables() -> tuple[list[int], list[int], list[int], list[int], list[tuple[int
         assert (r["upper_user"], r["lower_user"]) == (r["upper_invariant"], r["lower_invariant"])
     best = sorted((r["u"], r["byte"]) for r in rows() if r["s"] == "bestfit")
     assert all(r["ret"] == 1 and r["used_default"] == 0 for r in rows() if r["s"] == "bestfit")
-    col = lambda k: [by_byte[b][k] for b in range(256)]    # noqa: E731
+
+    def col(k: str) -> list[int]:
+        return [by_byte[b][k] for b in range(256)]
     return col("u"), col("ctype1"), col("upper_user"), col("lower_user"), best
 
 
