@@ -57,7 +57,10 @@ MONITOR_DATA = 0x00000              # [0] instructions executed, [8] limit, [16]
 AF_OPERANDS = 0x20                  # MONITOR_DATA + this: the last ADD/SUB/INC/DEC's a, b, r (lazy AF)
 DF_BYTE = 0x38                      # MONITOR_DATA + this: DF (0 or 1)
 RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the reconstruction table
-SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry)
+MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits and the flags not yet in FPSR
+SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
+                                    # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
+SAVE_VECTORS = 0x200
 VECTORS = 0x01000               # vector table, 16 slots of 0x80
 DISPATCHER = 0x01800
 EXCEPTION_ENTRY = 0x01C00           # EL1 synchronous-exception path into the guest runtime
@@ -90,8 +93,9 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
-SYS_REG_ID = {"SCTLR_EL1": 0xC080, "TTBR0_EL1": 0xC100, "TCR_EL1": 0xC102, "MAIR_EL1": 0xC510,
-       "VBAR_EL1": 0xC600}
+SYS_REG_ID = {"SCTLR_EL1": 0xC080, "CPACR_EL1": 0xC082, "TTBR0_EL1": 0xC100, "TCR_EL1": 0xC102,
+              "MAIR_EL1": 0xC510, "VBAR_EL1": 0xC600}
+CPACR_FPEN = 3 << 20                         # FP/SIMD at EL1 and EL0 not trapped (Arm ARM D19 CPACR_EL1.FPEN)
 PAGE_ATTRIBUTES = (3 << 8) | (1 << 10)                 # AttrIndx 0 (MAIR byte 0 = 0xFF, Normal WB), ISH, AF
 SCTLR = 0x30D01805                          # M, C, I; alignment checks off (Sprint 012 value)
 TCR = 16 | (1 << 8) | (1 << 10) | (3 << 12) | (1 << 23) | (1 << 32)   # T0SZ 16, WB, ISH, EPD1, IPS 36
@@ -281,6 +285,8 @@ def _eval_condition(a: Assembler, cc: str) -> None:
 
 def _temps_read(op: Op) -> list[int]:
     k = op[0]
+    if k == "sse":
+        return [loc[1] for loc in (op[2], op[3]) if loc[0] == "m"]
     if k == "ld":
         return [op[2][1]] if op[2][0] == "m" else []
     if k == "st":
@@ -309,6 +315,168 @@ def runtime_defines() -> dict[str, int]:
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
+
+
+# ---- SSE (Sprint 041) ---------------------------------------------------------------------------
+# XMM i is V i. V30 and V31 are scratch. MXCSR is at MONITOR_DATA + MXCSR_OFF, and FPCR follows it
+# (fpcr_for): AH=1 for x86's NaN, MIN/MAX, tininess and denormal-input behavior (Sprint 039 probe),
+# FIZ for DAZ, FZ for FTZ, RMode for RC. FPSR's cumulative flags are MXCSR's exception flags
+# (FPSR_TO_MXCSR); `VM.mxcsr()` folds them in. An instruction that can raise an SIMD exception
+# leaves the fast path when MXCSR unmasks any (hvc #10): the host executes it with x86fp.
+
+FP_CLASSES = {f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") for t in ("SS", "SD", "PS", "PD")} | {
+    "CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI", "CVTSI2SS", "CVTSI2SD", "CVTSS2SD", "CVTSD2SS",
+    "UCOMISS", "UCOMISD", "COMISS", "COMISD"}
+FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, MXCSR bit): IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE
+HVC_SLOW_SSE = 10
+CVT_INDEFINITE = True        # False exists only so a test can show the CPU catches the missing fix-up
+
+
+def fpcr_for(mxcsr: int) -> int:
+    """FPCR for an MXCSR: AH always; FIZ = DAZ (bit 6); FZ = FTZ (bit 15); RMode from RC (bits 13-14:
+    00 nearest, 01 down, 10 up, 11 toward zero; FPCR RMode 00 RN, 01 RP, 10 RM, 11 RZ)."""
+    rc = mxcsr >> 13 & 3
+    rmode = {0: 0, 1: 2, 2: 1, 3: 3}[rc]
+    return 1 << 1 | (mxcsr >> 6 & 1) | (mxcsr >> 15 & 1) << 24 | rmode << 22
+
+
+def mxcsr_flags_from_fpsr(fpsr: int) -> int:
+    return sum(1 << m for f, m in FPSR_TO_MXCSR if fpsr >> f & 1)
+
+
+def _sse_src(a: Assembler, loc: Op, size: int, reg_of: Callable[[int], int], scratch: int = 31) -> int:
+    """The V register holding a source operand: an XMM register, or `scratch` loaded from memory."""
+    if loc[0] == "x":
+        return int(loc[1])
+    a.emit(a64.ldr_v(size, scratch, reg_of(loc[1])))
+    return scratch
+
+
+def _check_alignment(a: Assembler, rt: int) -> None:
+    """#GP on a misaligned 16-byte operand: Windows reports it as an access violation at the
+    instruction. A load from address 0 (never mapped) raises it through the same exception path,
+    before the instruction changes anything."""
+    ok = a.label()
+    a.emit(a64.ubfx(16, rt, 0, 4))
+    a.branch(lambda off: a64.cbz(16, off), ok)
+    a.emit(a64.movz(16, 0), a64.ldr(8, 16, 16, 0))
+    a.bind(ok)
+
+
+def _set_flags_from_fcmp(a: Assembler) -> None:
+    """(U)COMIS[SD]: FCMP gives NZCV 0011 unordered, 1000 less, 0110 equal, 0010 greater; x86 wants
+    ZF PF CF 111, 001, 100, 000 and OF SF AF cleared (SDM COMISS)."""
+    a.emit(a64.cset(REG_PF, "vs"), a64.cset(REG_CF, "lt"), a64.cset(REG_ZF, "eq"),
+           a64.orr(REG_ZF, REG_ZF, REG_PF), a64.mov(REG_OF, a64.ZR), a64.mov(REG_SF, a64.ZR),
+           a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, a64.ZR, 28, AF_OPERANDS + 16))
+    _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
+
+
+def _compile_sse(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[Op, int], None]) -> None:
+    _, ic, dst, src, align = op
+    for loc in (dst, src):
+        if loc[0] == "m" and align:
+            _check_alignment(a, reg_of(loc[1]))
+    if ic in FP_CLASSES:                                         # fast path only when MXCSR masks all six
+        fast = a.label()
+        a.emit(a64.ldr(4, 16, 28, MXCSR_OFF), a64.ubfx(16, 16, 7, 6), a64.cmpi(16, 0x3F))
+        a.branch(lambda off: a64.bcond("eq", off), fast)
+        a.emit(a64.hvc(HVC_SLOW_SSE))
+        a.bind(fast)
+    if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD"):
+        if dst[0] == "x" and src[0] == "x":
+            a.emit(a64.mov_v(dst[1], src[1]))
+        elif dst[0] == "x":
+            a.emit(a64.ldr_v(16, dst[1], reg_of(src[1])))
+        else:
+            a.emit(a64.str_v(16, src[1], reg_of(dst[1])))
+    elif ic in ("MOVSS", "MOVSD_XMM"):
+        n = 4 if ic == "MOVSS" else 8
+        if dst[0] == "x" and src[0] == "x":
+            a.emit(a64.ins_lane0(n, dst[1], src[1]))             # register form merges
+        elif dst[0] == "x":
+            a.emit(a64.ldr_v(n, dst[1], reg_of(src[1])))         # load zeroes the rest
+        else:
+            a.emit(a64.str_v(n, src[1], reg_of(dst[1])))
+    elif ic in ("MOVD", "MOVQ"):
+        if src[0] == "r":
+            n = src[2] // 8
+            a.emit(a64.mov(16, src[1]) if n == 8 else a64.mov32(16, src[1]), a64.fmov_to_v(n, dst[1], 16))
+        elif dst[0] == "r":
+            n = dst[2] // 8
+            a.emit(a64.fmov_from_v(n, 16, src[1]))
+            store(dst, 16)
+        elif dst[0] == "x" and src[0] == "m":
+            a.emit(a64.ldr_v(4 if ic == "MOVD" else 8, dst[1], reg_of(src[1])))
+        elif dst[0] == "m":
+            a.emit(a64.str_v(4 if ic == "MOVD" else 8, src[1], reg_of(dst[1])))
+        else:                                                    # MOVQ xmm, xmm: low 64 bits, the rest zeroed
+            a.emit(a64.fmov_from_v(8, 16, src[1]), a64.fmov_to_v(8, dst[1], 16))
+    elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD"):
+        v = _sse_src(a, src, 16, reg_of)
+        a.emit((a64.eor_v if ic.startswith("XOR") else a64.and_v)(dst[1], dst[1], v))
+    elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
+        kind, form = ic[:-2].lower(), ic[-2:]
+        n = 4 if form in ("SS", "PS") else 8
+        if form in ("SS", "SD"):
+            v = _sse_src(a, src, n, reg_of)
+            if kind == "sqrt":
+                a.emit(a64.fsqrt_scalar(n, 30, v))
+            else:
+                a.emit(a64.fp_scalar(kind, n, 30, dst[1], v))
+            a.emit(a64.ins_lane0(n, dst[1], 30))
+        else:
+            v = _sse_src(a, src, 16, reg_of)
+            a.emit(a64.fsqrt_vector(n, dst[1], v) if kind == "sqrt" else a64.fp_vector(kind, n, dst[1], dst[1], v))
+    elif ic in ("CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI"):
+        # x86 reports only IE and PE here (SDM CVTTSS2SI: Invalid, Precision), and only IE when the
+        # result is the integer indefinite (Intel runs, Sprint 041). FRINTX, FCVTZS and the range
+        # check can set IDC, and FRINTX sets IXC before an invalid conversion, so FPSR is rebuilt from
+        # its value before the instruction (in x18: the only temporary of this instruction, a memory
+        # source's address, is dead once the source is loaded).
+        n = 4 if "SS" in ic else 8
+        bits = dst[2]
+        v = _sse_src(a, src, n, reg_of)
+        a.emit(a64.mrs(18, a64.FPSR))
+        if not ic.startswith("CVTT"):                            # round in MXCSR's mode first
+            a.emit(a64.frintx(n, 30, v))
+            v = 30
+        a.emit(a64.fcvtzs(bits, n, 16, v))
+        # the integer indefinite 1 << (bits-1) on NaN or input >= 2^(bits-1) (SDM CVTTSS2SI); FCVTZS
+        # saturates and gives 0 for NaN, which FPCR.AH does not change (Sprint 039 probe)
+        bound = {(4, 32): 0x4F00_0000, (4, 64): 0x5F00_0000, (8, 32): 0x41E0_0000_0000_0000,
+                 (8, 64): 0x43E0_0000_0000_0000}[(n, bits)]
+        ok, done = a.label(), a.label()
+        breg = 31 if v != 31 else 30
+        a.emit(a64.mov_imm(17, bound), a64.fmov_to_v(n, breg, 17), a64.fcmp(n, v, breg))
+        a.branch(lambda off: a64.bcond("mi" if CVT_INDEFINITE else "al", off), ok)
+        a.emit(a64.mov_imm(16, 1 << (bits - 1)), a64.movz(17, 1), a64.orr(18, 18, 17), a64.msr(a64.FPSR, 18))
+        a.branch(a64.b, done)
+        a.bind(ok)                                               # in range: IDC as it was before
+        a.emit(a64.mrs(17, a64.FPSR), a64.ubfx(18, 18, 7, 1), a64.bfi(17, 18, 7, 1), a64.msr(a64.FPSR, 17))
+        a.bind(done)
+        store(dst, 16)
+    elif ic in ("CVTSI2SS", "CVTSI2SD"):
+        n = 4 if ic.endswith("SS") else 8
+        bits = src[2] if src[0] == "r" else 8 * src[2]
+        if src[0] == "r":
+            a.emit(a64.mov(16, src[1]) if bits == 64 else a64.mov32(16, src[1]))
+        else:
+            a.emit(a64.ldr(bits // 8, 16, reg_of(src[1])))
+        if bits == 32:
+            a.emit(a64.sxtw(16, 16))
+        a.emit(a64.scvtf(n, 64, 30, 16), a64.ins_lane0(n, dst[1], 30))
+    elif ic in ("CVTSS2SD", "CVTSD2SS"):
+        sn, dn = (4, 8) if ic == "CVTSS2SD" else (8, 4)
+        v = _sse_src(a, src, sn, reg_of)
+        a.emit(a64.fcvt(dn, sn, 30, v), a64.ins_lane0(dn, dst[1], 30))
+    elif ic in ("UCOMISS", "UCOMISD", "COMISS", "COMISD"):
+        n = 4 if ic.endswith("SS") else 8
+        v = _sse_src(a, src, n, reg_of)
+        a.emit(a64.fcmp(n, dst[1], v, signal=ic.startswith("COMI")))
+        _set_flags_from_fcmp(a)
+    else:
+        raise CompileError(f"sse {ic}")
 
 
 _RUNTIME_SYMBOLS: dict[str, int] = {}
@@ -409,6 +577,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "set":
             _eval_condition(a, op[1])
             store(op[2], 16)
+        elif k == "sse":
+            _compile_sse(a, op, reg_of, store)
         elif k == "cpuid":                                      # the guest runtime answers from the profile
             state = PROCESS_VA + STATE_OFF
             a.emit(a64.mov_imm(16, state))
@@ -535,6 +705,7 @@ class VM:
         self.addrs: set[int] = set()                     # x86 instructions compiled into blocks
         self.pc_map: list[tuple[int, int]] = []           # (code VA, x86 address), sorted
         self.translations: list[tuple[int, int, Discovery]] = []   # (guest start, guest end, discovery)
+        self.slow_sse = 0                                # SSE instructions run by x86fp (MXCSR unmasked)
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name) for thunk, name in loaded.thunks.items()}
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
@@ -656,6 +827,8 @@ class VM:
         out["rip"] = struct.unpack_from("<Q", self.mm, c + 248)[0]
         out["fltsave_control_word"] = struct.unpack_from("<H", self.mm, c + 256)[0]
         out["fltsave_mxcsr"] = struct.unpack_from("<I", self.mm, c + 256 + 24)[0]
+        for i in range(16):
+            out[f"xmm{i}"] = int.from_bytes(self.mm[c + 256 + 160 + 16 * i:c + 256 + 176 + 16 * i], "little")
         return out
 
     def clear_exception(self) -> None:
@@ -663,6 +836,24 @@ class VM:
         that goes on past an exception starts a new process's worth of calls)."""
         struct.pack_into("<Q", self.mm, self._process(EXCEPTION_OFF), 0)
         struct.pack_into("<Q", self.mm, self._process(RING_OFF), 0)
+
+    def vectors(self) -> tuple[list[int], int, int]:
+        """XMM0-15 (as 128-bit integers), FPCR and FPSR of the stopped vCPU (during `run`)."""
+        r = self._cmd("vget")
+        return [int(q, 16) for q in r[1:17]], int(r[17], 16), int(r[18], 16)
+
+    def set_vectors(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
+        self._cmd("vset " + " ".join(f"{q:032x}" for q in xmm) + f" {fpcr:x} {fpsr:x}")
+
+    def mxcsr(self) -> int:
+        """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
+        stored = struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]
+        return int(stored) | mxcsr_flags_from_fpsr(self.vectors()[2])
+
+    def set_mxcsr(self, mxcsr: int, xmm: list[int] | None = None) -> None:
+        """Store MXCSR, set FPCR from it and clear FPSR (its flags now live in the stored MXCSR)."""
+        struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, mxcsr & 0xFFFF)
+        self.set_vectors(xmm if xmm is not None else self.vectors()[0], fpcr_for(mxcsr), 0)
 
     def af(self) -> bool:
         """AF from the lazy operands: bit 4 of a ^ b ^ r."""
@@ -708,6 +899,51 @@ class VM:
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
 
+    def _slow_sse(self, x: list[int], rip: int) -> int:
+        """Execute the SSE instruction at `rip` with x86fp (MXCSR unmasks an exception): the guest's
+        registers, flags, XMM and MXCSR go into the model, one step runs on the VM's memory, and the
+        result comes back. A fault the model raises is raised in the guest through the guest
+        runtime's exception path. Returns the PC to resume at."""
+        from w2m import x86fp as fp
+        from w2m.loader import GuestFault, Loaded
+        from w2m.runtime import Runtime
+
+        self.slow_sse += 1
+        xmm, fpcr, fpsr = self.vectors()
+        mx = int(struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]) | mxcsr_flags_from_fpsr(fpsr)
+        rt = Runtime(Loaded(None, self.mem, rip, {}, 0))       # type: ignore[arg-type]
+        th = rt.th
+        th.regs, th.rip, th.xmm, th.mxcsr, th.df = list(x[:16]), rip, list(xmm), mx, self.df()
+        th.flags = x86_flags(x, self)
+        try:
+            rt.step()
+        except (fp.SimdFault, GuestFault) as e:
+            code = fp.xm_status(th.mxcsr) if isinstance(e, fp.SimdFault) else 0xC000_0005
+            struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
+            self.set_vectors(xmm, fpcr, 0)
+            return self._raise_in_guest(x, xmm, code, rip)
+        x[:16] = th.regs
+        for f in "CZSOP":
+            if th.flags[f] is not None:
+                x[FLAG_REG[f]] = int(bool(th.flags[f]))
+        x[REG_UNDEFINED_FLAGS] = sum(1 << FLAG_BIT[f] for f in "CZSOPA" if th.flags[f] is None)
+        self.set_af_df(bool(th.flags["A"]), th.df)
+        struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
+        self.set_vectors(th.xmm, fpcr, 0)
+        x[17] = th.rip
+        return self.miss_va                                    # dispatch the next instruction
+
+    def _raise_in_guest(self, x: list[int], xmm: list[int], code: int, rip: int) -> int:
+        """Have the guest runtime raise exception `code` at `rip` with the state in `x` and `xmm`:
+        fill the save area as the EL1 vector would, and enter the runtime's exception call."""
+        save = MONITOR_DATA + SAVE_AREA
+        for i in range(31):
+            struct.pack_into("<Q", self.mm, save + 8 * i, x[i])
+        struct.pack_into("<QQ", self.mm, save + 0x118, code, rip)
+        for i, q in enumerate(xmm):
+            self.mm[save + SAVE_VECTORS + 16 * i:save + SAVE_VECTORS + 16 * i + 16] = q.to_bytes(16, "little")
+        return self.exception_call_va
+
     def _write_exception_entry(self) -> None:
         """Save x0-x30, ESR, FAR and ELR in the monitor data page, leave exception state (ERET to
         the continuation, EL1h, interrupts masked), take the runtime stack and call
@@ -719,11 +955,14 @@ class VM:
             e.emit(a64.stp(i, i + 1, 16, 8 * i))
         e.emit(a64.str_(8, 30, 16, 8 * 30))
         e.emit(a64.mrs(0, a64.ESR_EL1), a64.mrs(1, a64.FAR_EL1), a64.mrs(2, a64.ELR_EL1),
-               a64.stp(0, 1, 16, 0x100), a64.str_(8, 2, 16, 0x110))
+               a64.stp(0, 1, 16, 0x100), a64.str_(8, 2, 16, 0x110), a64.stp(31, 31, 16, 0x118))
+        for i in range(0, 16, 2):                                # XMM0-15 for the CONTEXT
+            e.emit(a64.stp_q(i, i + 1, 16, SAVE_VECTORS + 16 * i))
         cont = e.here() + 4 * 8                         # four words of MOV, MSR, MOVZ, MSR, ERET below
         e.emit(a64.movz(17, cont & 0xFFFF), *(a64.movk(17, cont >> 16 * h & 0xFFFF, h) for h in (1, 2, 3)),
                a64.msr(a64.ELR_EL1, 17), a64.movz(17, CPSR_EL1H), a64.msr(a64.SPSR_EL1, 17), a64.ERET)
         assert e.here() == cont
+        self.exception_call_va = cont
         e.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
                a64.mov_imm(16, self.runtime.symbols["w2m_exception"]), a64.blr(16), a64.hvc(2))
         words = e.finish()
@@ -821,7 +1060,12 @@ class VM:
 
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)
         forced_stop = False
-        for name, v in (("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
+        self._cmd = cmd
+        if struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0] == 0:
+            struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
+        cmd(f"vset {' '.join('0' * 32 for _ in range(16))} "
+            f"{fpcr_for(struct.unpack_from('<I', self.mm, MONITOR_DATA + MXCSR_OFF)[0]):x} 0")
+        for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
                         ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
             cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
         x = [0] * 31
@@ -901,6 +1145,8 @@ class VM:
                     else:
                         stop = f"VmExit: EL1 exception EC 0x{ec:x} at x86 0x{self.x86_address_at(e.elr):x}"
                     break
+                elif imm == HVC_SLOW_SSE:
+                    pc = self._slow_sse(x, where)
                 elif imm == 4 and forced_stop:
                     forced_stop = False
                     struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)

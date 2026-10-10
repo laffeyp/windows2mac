@@ -137,6 +137,7 @@ CLI strings: lowercase first word in errors, no exclamation marks, no emoji, abs
 ## Sprint cadence policy
 
 - **Observation contracts state an outcome (2026-10-09, review progress K4):** a bound, an expected value, or a planted fault the check must catch. "Whatever the record shows" is not an observation contract.
+- **A planted fault names its reach (2026-10-09, KIT_DIARY #21, #22):** the card states the fault, the field it changes, and how many reference cases change that field, counted before the card is executed. A plant with no reference case that shows it is a blind spot, recorded as such, never a test. A reference generator's inputs are frozen per run and must not depend on the code it judges (#23).
 - **Hard rule 6 override (2026-10-09, BLACKBOARD Decision; settles KIT_DIARY H3):** a sprint holds one concept, one observation contract and one verdict. Its file count is recorded, not capped; a card over 10 files names why it is not two sprints. Two failed attempts at a sprint over 10 files split it.
 - **Phase 0 (Vocabulary Session):** `signals/0.1.json` + rationale covering evidence, contracts, probes, code validity, discrepancies, repair vs revision, backends, artifacts, and the product lifecycle (v0.2 §3, §5.1, §11, §12, §14).
 - **Phase 1 (Contract construction and harness):** the contract format with evidence categories (v0.2 §11.1-11.2); substrate topologies for probe, model check, candidate, comparison, and reduction (§11.4); first probes on the Windows reference profile.

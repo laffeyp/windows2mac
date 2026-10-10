@@ -191,11 +191,26 @@ static void context_from_state(struct w2m_context *c, const struct w2m_state *st
  * no vectored handler yet (Sprint 047), the exception is unhandled and the process ends with the
  * exception code. Anything else, or a fault outside translated code, is a runtime fault the host
  * reports. */
+/* MXCSR's exception flags from FPSR's cumulative bits: IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE. */
+static u32 mxcsr_now(void) {
+    u64 fpsr;
+    __asm__ volatile("mrs %0, S3_3_C4_C4_1" : "=r"(fpsr));     /* FPSR, by encoding: -mgeneral-regs-only rejects the name */
+    u32 m = *(const volatile u32 *)(W2M_MONITOR_DATA_VA + 0x50);
+    if (fpsr & 1) m |= 1;
+    if (fpsr & 2) m |= 4;
+    if (fpsr & 4) m |= 8;
+    if (fpsr & 8) m |= 16;
+    if (fpsr & 16) m |= 32;
+    if (fpsr & 128) m |= 2;
+    return m;
+}
+
 void w2m_exception(void) {
     const struct w2m_save_area *s = (const struct w2m_save_area *)W2M_SAVE_VA;
     u64 ec = s->esr >> 26 & 0x3F;
-    u64 rip = (s->elr >= W2M_CODE_START && s->elr < W2M_CODE_END) ? guest_rip_at(s->elr) : 0;
-    if (ec != 0x25 || rip == 0) {
+    u64 rip = s->sw_code ? s->sw_rip
+            : (s->elr >= W2M_CODE_START && s->elr < W2M_CODE_END) ? guest_rip_at(s->elr) : 0;
+    if (!s->sw_code && (ec != 0x25 || rip == 0)) {
         host_call(W2M_HOST_RUNTIME_FAULT, s->elr, s->esr);
         for (;;) {}
     }
@@ -211,16 +226,23 @@ void w2m_exception(void) {
     st->af_operands[1] = af[1];
     st->af_operands[2] = af[2];
     st->df = (u8)df;
+    st->mxcsr = mxcsr_now();
+    for (int i = 0; i < 16; i++)
+        for (int j = 0; j < 16; j++) st->xmm[i][j] = s->q[i][j];
 
     struct w2m_exception_area *e = (struct w2m_exception_area *)W2M_EXCEPTION_VA;
     struct w2m_exception_record *r = &e->record;
     u8 *rb = (u8 *)r;
     for (u64 i = 0; i < sizeof *r; i++) rb[i] = 0;
-    r->code = 0xC0000005u;                             /* STATUS_ACCESS_VIOLATION */
     r->address = rip;
-    r->number_parameters = 2;
-    r->information[0] = s->esr >> 6 & 1;              /* ESR ISS WnR: 0 read, 1 write */
-    r->information[1] = s->far;
+    if (s->sw_code) {                                  /* an SIMD exception: STATUS_FLOAT_* (Sprint 039) */
+        r->code = (u32)s->sw_code;
+    } else {
+        r->code = 0xC0000005u;                         /* STATUS_ACCESS_VIOLATION */
+        r->number_parameters = 2;
+        r->information[0] = s->esr >> 6 & 1;          /* ESR ISS WnR: 0 read, 1 write */
+        r->information[1] = s->far;
+    }
     context_from_state(&e->context, st);
     e->magic = W2M_EXCEPTION_MAGIC;
     logged(W2M_API_Exception, r->code, rip);

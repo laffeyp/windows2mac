@@ -136,7 +136,13 @@ struct w2m_save_area {
     u64 x[31];
     u64 pad;
     u64 esr, far, elr;               /* 0x100 */
+    u64 sw_code, sw_rip;             /* 0x118: an exception the host raised (an unmasked SIMD exception
+                                        found by the slow path), or 0 for a hardware exception */
+    u8 pad2[0x200 - 0x128];
+    u8 q[16][16];                    /* 0x200: V0-V15, which hold XMM0-15 */
 };
+_Static_assert(__builtin_offsetof(struct w2m_save_area, sw_code) == 0x118, "save.sw_code");
+_Static_assert(__builtin_offsetof(struct w2m_save_area, q) == 0x200, "save.q");
 
 /* Where the runtime leaves an exception it could not hand to a handler: the record and the
  * CONTEXT it built, for the host to read (Sprint 040; VEH dispatch is Sprint 047). */

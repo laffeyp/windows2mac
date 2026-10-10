@@ -58,11 +58,12 @@ def _faults(labels: set[str] | None = None) -> tuple[list[sd.Case], list[sd.Resu
 
 @pytest.mark.hvf
 def test_vm_builds_windows_context_for_every_fault_case() -> None:
+    """Every 039 fault, SSE included since Sprint 041: CONTEXT with XMM and MXCSR as Windows gave it."""
     cases, results = _faults()
     assert len(cases) == 5485
-    classes, example, _skipped, judged, faults = vm_oracle.run_cases(cases, results)
+    classes, example, skipped, judged, faults = vm_oracle.run_cases(cases, results)
     assert classes == {}, [example[k] for k in classes][:5]
-    assert judged == faults > 1900
+    assert not skipped and judged == faults == 5485
 
 
 def _subset(run: str, labels: set[str] | None = None, faults_only: bool = False
@@ -234,3 +235,52 @@ def test_cpuid_profile_is_the_same_in_model_vm_and_table() -> None:
     assert vm_out == want
     assert calls.count("Cpuid") == len(inputs)
     assert want[inputs.index((0x40000000, 0))] == cpuid.lookup(7, 0)      # above max basic: highest basic leaf
+
+
+def _sse_subset(labels: set[str]) -> tuple[list[sd.Case], list[sd.Result]]:
+    """Every 039 case of these classes, with the Xeon 8573C's full results (release semantics-039)."""
+    built = _built_039()
+    results = sd.read_results(vm_oracle.result_file(INTEL[0]))
+    keep = [i for i, c in enumerate(built) if c.label in labels]
+    return [built[i] for i in keep], [results[i] for i in keep]
+
+
+@pytest.mark.hvf
+def test_planted_missing_indefinite_fixup_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FCVTZS alone saturates to 0x7FFFFFFF and gives 0 for NaN; x86 gives 0x80000000. Reach: the 37
+    register-source CVTT* cases of 039 whose input is NaN, infinite or out of range."""
+    monkeypatch.setattr(vm_backend, "CVT_INDEFINITE", False)
+    cases, results = _sse_subset({"CVTTSS2SI", "CVTTSD2SI"})
+    classes, _, _, _, _ = vm_oracle.run_cases(cases, results)
+    assert any(" r" in k and "fault" not in k for k in classes), classes
+
+
+@pytest.mark.hvf
+def test_planted_fpcr_ah_zero_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FPCR.AH=0: FMIN/FMAX return the NaN instead of the second source. Reach: 117 cases."""
+    original = vm_backend.fpcr_for
+    monkeypatch.setattr(vm_backend, "fpcr_for", lambda mxcsr: original(mxcsr) & ~2)
+    cases, results = _sse_subset({f"{op}{t}" for op in ("MIN", "MAX") for t in ("SS", "SD", "PS", "PD")})
+    classes, _, _, _, _ = vm_oracle.run_cases(cases, results)
+    assert any("xmm" in k for k in classes), classes
+
+
+@pytest.mark.hvf
+def test_planted_idc_not_mapped_to_de_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FPSR.IDC not read as MXCSR.DE. Reach: 105 arithmetic cases with a denormal lane, DAZ clear."""
+    monkeypatch.setattr(vm_backend, "FPSR_TO_MXCSR", tuple(m for m in vm_backend.FPSR_TO_MXCSR if m[0] != 7))
+    cases, results = _sse_subset({f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV") for t in ("SS", "SD", "PS", "PD")})
+    classes, _, _, _, _ = vm_oracle.run_cases(cases, results)
+    assert any(k.endswith("MXCSR") for k in classes), classes
+
+
+@pytest.mark.hvf
+def test_unmasked_exceptions_take_the_slow_path() -> None:
+    """MXCSR states that unmask an exception run on x86fp; the count is on the record, and the
+    results still agree with the CPU (covered by the full runs above)."""
+    cases, results = _sse_subset({"ADDSS", "DIVSD", "CVTTSS2SI"})
+    slow: list[int] = []
+    classes, _, _, judged, _ = vm_oracle.run_cases(cases, results, slow=slow)
+    unmasked = sum(1 for c in cases if c.mxcsr >> 7 & 0x3F != 0x3F)
+    assert classes == {} and judged == len(cases)
+    assert slow[0] == unmasked > 0

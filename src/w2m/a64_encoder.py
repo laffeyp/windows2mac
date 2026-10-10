@@ -227,6 +227,147 @@ def hvc(imm16: int) -> int:
     return 0xD4000002 | (imm16 & 0xFFFF) << 5
 
 
+# ---- SIMD and floating point (Sprint 041) ----------------------------------------------------
+# Registers are V0-V31; `size` is 4 (single) or 8 (double); scalar forms act on the low element.
+
+_FTYPE = {4: 0, 8: 1}
+
+
+def _v(*regs: int) -> None:
+    _r(*regs)
+
+
+def ldr_v(size: int, vt: int, rn: int, offset: int = 0) -> int:
+    """LDR St/Dt/Qt, [Xn, #offset] (unsigned offset, scaled); the rest of Vt is zeroed."""
+    _v(vt, rn)
+    assert offset % size == 0 and 0 <= offset // size < 4096
+    base = {4: 0xBD400000, 8: 0xFD400000, 16: 0x3DC00000}[size]
+    return base | (offset // size) << 10 | rn << 5 | vt
+
+
+def str_v(size: int, vt: int, rn: int, offset: int = 0) -> int:
+    """STR St/Dt/Qt, [Xn, #offset]."""
+    _v(vt, rn)
+    assert offset % size == 0 and 0 <= offset // size < 4096
+    base = {4: 0xBD000000, 8: 0xFD000000, 16: 0x3D800000}[size]
+    return base | (offset // size) << 10 | rn << 5 | vt
+
+
+def stp_q(vt: int, vt2: int, rn: int, offset: int = 0) -> int:
+    """STP Qt, Qt2, [Xn, #offset] (signed offset, scaled by 16)."""
+    _v(vt, vt2, rn)
+    assert offset % 16 == 0 and -64 <= offset // 16 < 64
+    return 0xAD000000 | ((offset // 16) & 0x7F) << 15 | vt2 << 10 | rn << 5 | vt
+
+
+def ldp_q(vt: int, vt2: int, rn: int, offset: int = 0) -> int:
+    _v(vt, vt2, rn)
+    assert offset % 16 == 0 and -64 <= offset // 16 < 64
+    return 0xAD400000 | ((offset // 16) & 0x7F) << 15 | vt2 << 10 | rn << 5 | vt
+
+
+def mov_v(vd: int, vn: int) -> int:
+    """MOV Vd.16B, Vn.16B (ORR)."""
+    _v(vd, vn)
+    return 0x4EA01C00 | vn << 16 | vn << 5 | vd
+
+
+def ins_lane0(size: int, vd: int, vn: int) -> int:
+    """INS Vd.S[0], Vn.S[0] or Vd.D[0], Vn.D[0]: the low element; the rest of Vd kept."""
+    _v(vd, vn)
+    return {4: 0x6E040400, 8: 0x6E080400}[size] | vn << 5 | vd
+
+
+def eor_v(vd: int, vn: int, vm: int) -> int:
+    _v(vd, vn, vm)
+    return 0x6E201C00 | vm << 16 | vn << 5 | vd
+
+
+def and_v(vd: int, vn: int, vm: int) -> int:
+    _v(vd, vn, vm)
+    return 0x4E201C00 | vm << 16 | vn << 5 | vd
+
+
+def fmov_to_v(size: int, vd: int, rn: int) -> int:
+    """FMOV Sd, Wn / Dd, Xn: the rest of Vd zeroed."""
+    _v(vd, rn)
+    return {4: 0x1E270000, 8: 0x9E670000}[size] | rn << 5 | vd
+
+
+def fmov_from_v(size: int, rd: int, vn: int) -> int:
+    """FMOV Wd, Sn / Xd, Dn."""
+    _v(rd, vn)
+    return {4: 0x1E260000, 8: 0x9E660000}[size] | vn << 5 | rd
+
+
+_FP2 = {"add": 0x1E202800, "sub": 0x1E203800, "mul": 0x1E200800, "div": 0x1E201800,
+        "min": 0x1E205800, "max": 0x1E204800}
+
+
+def fp_scalar(op: str, size: int, vd: int, vn: int, vm: int) -> int:
+    """FADD/FSUB/FMUL/FDIV/FMIN/FMAX Sd|Dd, Sn|Dn, Sm|Dm."""
+    _v(vd, vn, vm)
+    return _FP2[op] | _FTYPE[size] << 22 | vm << 16 | vn << 5 | vd
+
+
+_FPV = {"add": 0x4E20D400, "sub": 0x4EA0D400, "mul": 0x6E20DC00, "div": 0x6E20FC00,
+        "min": 0x4EA0F400, "max": 0x4E20F400}
+
+
+def fp_vector(op: str, size: int, vd: int, vn: int, vm: int) -> int:
+    """FADD/... Vd.4S|2D, Vn, Vm."""
+    _v(vd, vn, vm)
+    return _FPV[op] | (size == 8) << 22 | vm << 16 | vn << 5 | vd
+
+
+def fsqrt_scalar(size: int, vd: int, vn: int) -> int:
+    _v(vd, vn)
+    return 0x1E21C000 | _FTYPE[size] << 22 | vn << 5 | vd
+
+
+def fsqrt_vector(size: int, vd: int, vn: int) -> int:
+    _v(vd, vn)
+    return 0x6EA1F800 | (size == 8) << 22 | vn << 5 | vd
+
+
+def fcmp(size: int, vn: int, vm: int, signal: bool = False) -> int:
+    """FCMP (quiet) or FCMPE (signals on any NaN) Sn|Dn, Sm|Dm."""
+    _v(vn, vm)
+    return 0x1E202000 | _FTYPE[size] << 22 | vm << 16 | vn << 5 | (0x10 if signal else 0)
+
+
+def fcvtzs(bits: int, size: int, rd: int, vn: int) -> int:
+    """FCVTZS Wd|Xd, Sn|Dn (toward zero; saturates; NaN gives 0)."""
+    _v(rd, vn)
+    return 0x1E380000 | (bits == 64) << 31 | _FTYPE[size] << 22 | vn << 5 | rd
+
+
+def frintx(size: int, vd: int, vn: int) -> int:
+    """FRINTX Sd|Dd, Sn|Dn: round to integral in FPCR's mode, inexact signalled."""
+    _v(vd, vn)
+    return 0x1E274000 | _FTYPE[size] << 22 | vn << 5 | vd
+
+
+def scvtf(size: int, bits: int, vd: int, rn: int) -> int:
+    """SCVTF Sd|Dd, Wn|Xn (FPCR's rounding mode)."""
+    _v(vd, rn)
+    return 0x1E220000 | (bits == 64) << 31 | _FTYPE[size] << 22 | rn << 5 | vd
+
+
+def fcvt(dst_size: int, src_size: int, vd: int, vn: int) -> int:
+    """FCVT Dd, Sn or Sd, Dn."""
+    _v(vd, vn)
+    if (dst_size, src_size) == (8, 4):
+        return 0x1E22C000 | vn << 5 | vd
+    if (dst_size, src_size) == (4, 8):
+        return 0x1E624000 | vn << 5 | vd
+    raise ValueError((dst_size, src_size))
+
+
+FPCR = (3, 3, 4, 4, 0)
+FPSR = (3, 3, 4, 4, 1)
+
+
 # System registers as (op0, op1, CRn, CRm, op2), Arm ARM D19 (AArch64 system register encodings).
 ESR_EL1 = (3, 0, 5, 2, 0)
 FAR_EL1 = (3, 0, 6, 0, 0)

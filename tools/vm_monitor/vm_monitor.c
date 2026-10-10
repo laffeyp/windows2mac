@@ -12,6 +12,8 @@
  *       -> exit <kind> <syndrome> <pc> <cpsr> <esr_el1> <far_el1> <elr_el1> <x0> ... <x30>
  *          kind: hvc (EC 0x16; syndrome low 16 bits = immediate), exc (other EC), cancel
  *          (time limit reached), fail (hv_vcpu_run error; syndrome = hv_return_t)
+ *   vget                                -> v <q0> ... <q15> <fpcr> <fpsr>  (q as 32 hex digits, low byte last)
+ *   vset <q0> ... <q15> <fpcr> <fpsr>   -> ok   (Sprint 041: XMM i lives in V i)
  *   quit
  * VTIMER exits are masked and the run continues (the guest never enables the timer).
  */
@@ -136,7 +138,7 @@ int main(int argc, char **argv) {
     pthread_t wd;
     pthread_create(&wd, NULL, watchdog, NULL);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    char line[1024];
+    char line[4096];
     while (fgets(line, sizeof line, stdin)) {
         char *p = line;
         if (!strncmp(p, "sys ", 4)) {
@@ -151,6 +153,40 @@ int main(int argc, char **argv) {
             for (int i = 0; i <= 30; i++)
                 hv_vcpu_set_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), strtoull(p, &p, 16));
             printf("ok\n");
+        } else if (!strncmp(p, "vget", 4)) {
+            printf("v");
+            for (int i = 0; i < 16; i++) {
+                hv_simd_fp_uchar16_t q;
+                hv_vcpu_get_simd_fp_reg(vcpu, (hv_simd_fp_reg_t)(HV_SIMD_FP_REG_Q0 + i), &q);
+                unsigned char b[16];
+                memcpy(b, &q, 16);
+                printf(" ");
+                for (int k = 15; k >= 0; k--) printf("%02x", b[k]);
+            }
+            uint64_t fpcr = 0, fpsr = 0;
+            hv_vcpu_get_reg(vcpu, HV_REG_FPCR, &fpcr);
+            hv_vcpu_get_reg(vcpu, HV_REG_FPSR, &fpsr);
+            printf(" %llx %llx\n", (unsigned long long)fpcr, (unsigned long long)fpsr);
+        } else if (!strncmp(p, "vset ", 5)) {
+            p += 5;
+            int bad = 0;
+            for (int i = 0; i < 16 && !bad; i++) {
+                while (*p == ' ') p++;
+                unsigned char b[16];
+                for (int k = 15; k >= 0; k--) {
+                    unsigned v;
+                    if (sscanf(p, "%2x", &v) != 1) { bad = 1; break; }
+                    b[k] = (unsigned char)v;
+                    p += 2;
+                }
+                hv_simd_fp_uchar16_t q;
+                memcpy(&q, b, 16);
+                if (!bad) hv_vcpu_set_simd_fp_reg(vcpu, (hv_simd_fp_reg_t)(HV_SIMD_FP_REG_Q0 + i), q);
+            }
+            uint64_t fpcr = strtoull(p, &p, 16), fpsr = strtoull(p, &p, 16);
+            hv_return_t r1 = hv_vcpu_set_reg(vcpu, HV_REG_FPCR, fpcr), r2 = hv_vcpu_set_reg(vcpu, HV_REG_FPSR, fpsr);
+            if (bad || r1 || r2) printf("err vset %d %x %x\n", bad, r1, r2);
+            else printf("ok\n");
         } else if (!strncmp(p, "run ", 4)) {
             run(strtol(p + 4, NULL, 10), ex);
         } else if (!strncmp(p, "quit", 4)) {

@@ -13,9 +13,8 @@ The reference is the Windows result file of an Intel run (release semantics-039,
 run's results.sha256): for a fault, the exception code and the CONTEXT Windows gave its vectored
 handler (RIP, GPRs, EFlags); for a completed case, the GPRs, RFLAGS and the path taken; for both,
 the three memory windows. Compared: GPRs, RIP or path, CF PF AF ZF SF OF where w2m defines them,
-DF, IF and bit 1 at a fault, and the windows. XMM and MXCSR are not compared: the VM does not
-carry vector state until Sprint 041, and cases whose instruction the VM cannot compile are
-counted by class, not judged.
+DF, IF and bit 1 at a fault, XMM0-15 and MXCSR (Sprint 041), and the windows. Cases whose
+instruction the VM cannot compile are counted by class, not judged.
 
 Usage: uv run python scripts/vm_oracle.py <Intel run id> [--record] [--runs runs] [--limit N]
 """
@@ -121,6 +120,11 @@ def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory) -> l
             diffs.append((f"fault r{i}", f"vm 0x{exc[f'r{i}']:x}, cpu 0x{r.regs[i]:x}"))
     if (exc["eflags"] ^ r.rflags) & EFLAGS_FAULT_MASK:
         diffs.append(("fault eflags", f"vm 0x{exc['eflags']:x}, cpu 0x{r.rflags:x}"))
+    if exc["mxcsr"] != r.mxcsr:
+        diffs.append(("fault MXCSR", f"vm 0x{exc['mxcsr']:x}, cpu 0x{r.mxcsr:x} (in 0x{c.mxcsr:x})"))
+    for i in range(16):
+        if exc[f"xmm{i}"] != r.xmm[i]:
+            diffs.append((f"fault xmm{i}", f"vm {exc[f'xmm{i}']:032x}, cpu {r.xmm[i]:032x}"))
     diffs += windows(mem, r)
     return diffs
 
@@ -141,6 +145,13 @@ def judge_done(c: sd.Case, r: sd.Result, vm: VM, x: list[int], mem: Memory) -> l
             diffs.append((f"{f}F", f"vm {int(bool(vf[f]))}, cpu {r.rflags >> b & 1}"))
     if vm.df() != bool(r.rflags >> sd.DF_BIT & 1):
         diffs.append(("DF", f"vm {int(vm.df())}, cpu {r.rflags >> sd.DF_BIT & 1}"))
+    xmm, _fpcr, _fpsr = vm.vectors()
+    mx = vm.mxcsr()
+    if mx != r.mxcsr:
+        diffs.append(("MXCSR", f"vm 0x{mx:x}, cpu 0x{r.mxcsr:x} (in 0x{c.mxcsr:x})"))
+    for i in range(16):
+        if xmm[i] != r.xmm[i]:
+            diffs.append((f"xmm{i}", f"vm {xmm[i]:032x}, cpu {r.xmm[i]:032x}"))
     diffs += windows(mem, r)
     return diffs
 
@@ -156,8 +167,8 @@ def windows(mem: Memory, r: sd.Result) -> list[tuple[str, str]]:
     return out
 
 
-def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None = None
-              ) -> tuple[Counter[str], dict[str, str], Counter[str], int, int]:
+def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None = None,
+              slow: list[int] | None = None) -> tuple[Counter[str], dict[str, str], Counter[str], int, int]:
     """Judge every case the VM compiles. Returns (difference classes, an example per class,
     skipped by reason, cases judged, faults judged)."""
     mem = Memory()
@@ -210,6 +221,7 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
             x[FLAG_REG[f]] = c.rflags >> sd.FLAG_BITS[f] & 1
         x[24] = 0
         v.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1))
+        v.set_mxcsr(c.mxcsr, list(c.xmm))
 
     def on_dispatch(v: VM, x: list[int]) -> None:
         if state["current"] >= 0:
@@ -230,6 +242,8 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
         if r.stop != "stopped by on_dispatch":
             raise SystemExit(f"VM stopped at case {state['current']}: {r.stop}")
     finally:
+        if slow is not None:
+            slow.append(vm.slow_sse)
         vm.close()
     return classes, example, skipped, state["judged"], state["faults"]
 
