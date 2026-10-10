@@ -34,7 +34,9 @@ static inline struct w2m_teb *w2m_teb(void) { return (struct w2m_teb *)W2M_TEB_V
 /* Host transport: the runtime fills a request, executes hvc #8, and reads the result. */
 enum { W2M_HOST_WRITE = 1, W2M_HOST_EXIT = 2, W2M_HOST_CLOCK = 3, W2M_HOST_UNIMPLEMENTED = 4,
        W2M_HOST_RUNTIME_FAULT = 5, W2M_HOST_FILETIME = 14,     /* 6-13: the file primitives below */
-       W2M_HOST_MODULE = 15, W2M_HOST_PROC = 16, W2M_HOST_MODULE_PATH = 17, W2M_HOST_MODULE_AT = 18 };
+       W2M_HOST_MODULE = 15, W2M_HOST_PROC = 16, W2M_HOST_MODULE_PATH = 17, W2M_HOST_MODULE_AT = 18,
+       W2M_HOST_VIRTUAL_ALLOC = 19, W2M_HOST_VIRTUAL_FREE = 20, W2M_HOST_VIRTUAL_PROTECT = 21,   /* virtual_memory.py */
+       W2M_HOST_VIRTUAL_QUERY = 22 };
 struct w2m_transport {
     u64 op;
     u64 arg[6];
@@ -251,6 +253,10 @@ struct w2m_exception_area {
 #define W2M_API_GlobalMemoryStatusEx 88
 #define W2M_API_GetTickCount 89
 #define W2M_API_GetSystemDirectoryW 90
+#define W2M_API_VirtualAlloc 91
+#define W2M_API_VirtualFree 92
+#define W2M_API_VirtualProtect 93
+#define W2M_API_VirtualQuery 94
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);

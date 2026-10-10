@@ -44,6 +44,7 @@ from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
+from w2m.virtual_memory import VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import THUNK_BASE, GuestFault, Loaded, Memory, Region
@@ -179,10 +180,17 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetVersionExW": ("k32_GetVersionExW", True),
             "GlobalMemoryStatusEx": ("k32_GlobalMemoryStatusEx", True),
             "GetTickCount": ("k32_GetTickCount", True),
-            "GetSystemDirectoryW": ("k32_GetSystemDirectoryW", True)}
+            "GetSystemDirectoryW": ("k32_GetSystemDirectoryW", True),
+            "VirtualAlloc": ("k32_VirtualAlloc", True),
+            "VirtualFree": ("k32_VirtualFree", True),
+            "VirtualProtect": ("k32_VirtualProtect", True),
+            "VirtualQuery": ("k32_VirtualQuery", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
+HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY = 19, 20, 21, 22   # virtual_memory.py
+VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
+VIRTUAL_SIZE = 0x1_0000_0000        # 4 GB
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 TLS_TAKEN = 16                      # the TLS index besides 0 a fresh Windows process holds: set from the rows
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
@@ -934,6 +942,8 @@ class VM:
             size += _round_up(len(r.data))
         heap_off = _round_up(size, BLOCK)                 # the process heap: 2 MB aligned, mapped in blocks
         size = heap_off + HEAP_SIZE
+        virtual_off = _round_up(size, BLOCK)              # the VirtualAlloc arena: likewise, sparse
+        size = virtual_off + VIRTUAL_SIZE
         self.size = _round_up(size, 0x4000)
         fd, self.path = tempfile.mkstemp(prefix="w2m-vm-")
         os.ftruncate(fd, self.size)
@@ -946,6 +956,7 @@ class VM:
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
         self.mem.regions.append(Region(HEAP_VA, view[heap_off:heap_off + HEAP_SIZE], "heap"))   # sparse: no copy
+        self.mem.regions.append(Region(VIRTUAL_VA, view[virtual_off:virtual_off + VIRTUAL_SIZE], "virtual"))
         self.runtime = build_runtime(last_error_source, file_source, runtime_sources)
         _RUNTIME_SYMBOLS.clear()
         _RUNTIME_SYMBOLS.update(self.runtime.symbols)
@@ -957,7 +968,7 @@ class VM:
         self._init_process(tid)
         maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE), (PROCESS_VA, IPA_BASE + MONITOR_SIZE, PROCESS_SIZE)]
         maps += [(r.base, IPA_BASE + off, _round_up(len(r.data))) for r, off in placed]
-        maps += [(HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE)]
+        maps += [(HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE), (VIRTUAL_VA, IPA_BASE + virtual_off, VIRTUAL_SIZE)]
         self.ttbr = _write_translation_tables(self.mm, maps)
         self.code_cursor = CODE_CACHE
         self.blocks: dict[int, int] = {}                 # x86 address -> code VA
@@ -968,6 +979,11 @@ class VM:
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
+        self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
+                                     [(i.base, i.pe) for i in loaded.images] or
+                                     ([(loaded.image.image_base, loaded.image)] if loaded.image is not None else []),
+                                     read=lambda va, n: bytes(self.mem.read(va, n)))
+        self.virtual.snapshot()
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
 
     def flush_translations(self) -> None:
@@ -1148,6 +1164,11 @@ class VM:
             result = self.clock() & M64
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
+        elif op in (HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY):
+            a2, a3 = struct.unpack_from("<QQ", self.mm, t + 24)
+            result, second = self._virtual_request(op, a0, a1, a2, a3)
+            struct.pack_into("<QQ", self.mm, t + 48, second, result)
+            return True
         elif op in (HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT):
             a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
             result = self._module_request(op, a0, a1, a2)
@@ -1181,6 +1202,30 @@ class VM:
         if a2:
             view.write(a1, raw)
         return len(path)
+
+    def _zero(self, va: int, n: int) -> None:
+        self.mem.write(va, bytes(n))
+
+    def _virtual_request(self, op: int, a0: int, a1: int, a2: int, a3: int) -> tuple[int, int]:
+        """(result, second) for the guest's virtual_memory.c: second is the error code on failure, or
+        VirtualProtect's old protection on success."""
+        v = self.virtual
+        if op == HOST_VIRTUAL_ALLOC:
+            address, err = v.alloc(a0, a1, a2, a3)
+            return address, err
+        if op == HOST_VIRTUAL_FREE:
+            ok, err = v.free(a0, a1, a2)
+            return ok, err
+        if op == HOST_VIRTUAL_PROTECT:                    # second: the old protection, the error above it
+            ok, old, err = v.protect(a0, a1, a2)
+            return ok, old | err << 32
+        info = v.query(a0)                                # HOST_VIRTUAL_QUERY: a1 is the guest buffer
+        if info is None:
+            return 0, 87
+        raw = struct.pack("<QQIHHQIIIi", info.base, info.allocation_base, info.allocation_protect, 0, 0,
+                          info.region_size, info.state, info.protect, info.type, 0)
+        self.mem.write(a1, raw)
+        return len(raw), 0
 
     def calls(self) -> list[str]:
         """The service calls the guest runtime logged, in order: the first `capacity` of them."""

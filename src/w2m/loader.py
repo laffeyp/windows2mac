@@ -267,10 +267,10 @@ def _static_tls(mem: Memory, images: list[Image]) -> int:
     size = array_size + sum((len(b) + 15) & ~15 for b in blocks if b is not None)
     tls = mem.map(TLS_VA, (size + 0xFFF) & ~0xFFF, "tls")
     at = array_size
-    for index, block in enumerate(blocks):
-        if block is None:
+    for index, slot in enumerate(blocks):
+        if slot is None:
             continue                                   # the program's slot, when it has no TLS
         tls.data[8 * index:8 * index + 8] = (TLS_VA + at).to_bytes(8, "little")
-        tls.data[at:at + len(block)] = block
-        at += (len(block) + 15) & ~15
+        tls.data[at:at + len(slot)] = slot
+        at += (len(slot) + 15) & ~15
     return TLS_VA

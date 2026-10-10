@@ -197,6 +197,17 @@ def loader_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def virtual_memory_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A released region's size is the distance to the next allocation, which differs between executions on
+    Windows; the row keeps that it covers at least the reservation (0x1FFFF000 bytes)."""
+    out = []
+    for r in printed:
+        if r.get("s") == "query.released" and "region_size" in r:
+            r = {k: v for k, v in r.items() if k != "region_size"} | {"region_covers_reservation": r["region_size"] >= 0x1FFFF000}
+        out.append(r)
+    return out
+
+
 FAMILIES: dict[str, Family] = {
     "loader": Family(
         name="loader",
@@ -654,6 +665,46 @@ FAMILIES: dict[str, Family] = {
         plants={"two_processors_one_bit": Plant("    *(u32 *)(p + 32) = 1;", "    *(u32 *)(p + 32) = 2;",
                                                 ("native_system_info", "system_info")),
                 "version_build_off": Plant("    *(u32 *)(p + 12) = 9200;", "    *(u32 *)(p + 12) = 9600;", ("version_ex",))}),
+    "virtual_memory": Family(
+        name="virtual_memory",
+        contract_id="windows.memory.virtual",
+        version="0.1.0",
+        summary=("VirtualAlloc, VirtualFree, VirtualProtect and VirtualQuery on one thread: 64 KB-aligned reservations "
+                 "above 4 GB, zeroed commits, queries reporting the run of equal pages, the error codes (87, 50, 487), "
+                 "and an image's pages (headers read-only, code execute-read, data copy-on-write until written)."),
+        probe="virtual_memory", guest_file="virtual_memory.c",
+        runs={
+              "38050561886": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633783-0", "AMD EPYC 7763 64-Core Processor"),
+              "38050563770": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633783-1", "AMD EPYC 7763 64-Core Processor"),
+              "38050565681": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633783-2", "AMD EPYC 7763 64-Core Processor"),
+              "38050567245": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633783-3", "AMD EPYC 9V74 80-Core Processor"),
+              "38050618749": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633842-0", "AMD EPYC 7763 64-Core Processor"),
+              "38050620683": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633842-1", "AMD EPYC 7763 64-Core Processor"),
+              "38050622465": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633842-2", "AMD EPYC 7763 64-Core Processor"),
+              "38050624259": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633842-3", "AMD EPYC 7763 64-Core Processor"),
+              "38050676216": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633900-0", "AMD EPYC 7763 64-Core Processor"),
+              "38050678382": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633900-1", "AMD EPYC 7763 64-Core Processor"),
+              "38050680580": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633900-2", "AMD EPYC 7763 64-Core Processor"),
+              "38050682385": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633900-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-virtualquery", "api/memoryapi/nf-memoryapi-virtualquery", "2024-02-22",
+                       "The function determines the attributes of the first page in the region and then scans "
+                       "subsequent pages until it scans the entire range of pages or until it encounters a page with "
+                       "a nonmatching set of attributes."),),
+        open_questions=(
+            "Protections are recorded, not enforced: a store to a read-only page succeeds in w2m.",
+            "A released region's size runs to the next allocation and differs between executions; the row keeps that "
+            "it is at least the reservation.",
+            "A writable image page counts as written when its bytes differ from load; a write of the same bytes is "
+            "missed."),
+        derive=virtual_memory_rows, host_files=("src/w2m/virtual_memory.py", "src/w2m/vm_backend.py"),
+        plants={"bad_protect_parameter": Plant("            return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)",
+                                                "            return 0, ERROR_INVALID_PARAMETER",
+                                                ("alloc.bad_protect",), host="w2m.virtual_memory"),
+                "old_unwritten_on_failure": Plant("    *(u32 *)old = (u32)second;                     /* written on failure too (row protect.reserved_page) */\n    if (!ok) set_error((u32)(second >> 32));",
+                                                  "    if (ok) *(u32 *)old = (u32)second;\n    if (!ok) set_error((u32)(second >> 32));",
+                                                  ("protect.reserved_page",))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
@@ -787,16 +838,30 @@ def candidate_sha256(f: Family, sources: dict[str, str] | None = None) -> str:
 @contextlib.contextmanager
 def host_patched(module_name: str, old: str, new: str) -> Iterator[None]:
     """Run with a host module's source changed once (a planted fault in the loader's Python); restored after."""
+    import w2m.vm_backend  # noqa: F401  (the importers exist before the patch, so they can be repointed)
     module = importlib.import_module(module_name)
     source = Path(module.__file__ or "").read_text()
     assert source.count(old) == 1, f"plant: its target text is not in {module_name} exactly once"
     saved = dict(module.__dict__)
     exec(compile(source.replace(old, new), module.__file__ or module_name, "exec"), module.__dict__)  # noqa: S102
+    # a module that imported a name from this one (from w2m.virtual_memory import VirtualMemory) holds the old
+    # object: point it at the patched one, and back after (Sprint 046: a patch leaked into the next plant)
+    moved = {id(v): module.__dict__[k] for k, v in saved.items() if not k.startswith("__") and module.__dict__.get(k) is not v}
+    rebound: list[tuple[Any, str, Any]] = []
+    for name, other in list(sys.modules.items()):
+        if other is module or not name.startswith("w2m") or other is None:
+            continue
+        for k, v in list(vars(other).items()):
+            if id(v) in moved:
+                rebound.append((other, k, v))
+                setattr(other, k, moved[id(v)])
     try:
         yield
     finally:
         module.__dict__.clear()
         module.__dict__.update(saved)
+        for other, k, v in rebound:
+            setattr(other, k, v)
 
 
 def planted_sources(f: Family, name: str) -> dict[str, str]:
