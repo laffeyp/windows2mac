@@ -19,7 +19,7 @@ Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 | N3 AF, DF | in the state and the oracle | Spec done; oracle 039; built 040 |
 | N4 SSE vs AArch64 | oracle with XMM and FP boundaries; FPCR.AH probe | 039; SSE rules through the pool 041 |
 | N5 reference CPU and guest CPUID | a CPUID decision; the game's CPUID reads; Intel references | Decision done; reads measured 038; profile built 040; Intel-run rule 039 |
-| N6 transport round trip | measure; design graphics around a ring | Measured (≈27 µs); shared-memory transport 044; command ring in phase 6 |
+| N6 transport round trip | measure; design graphics around a ring | Measured 2026-10-10 (Sprint 048, `scripts/measure_exit.py`, three repeats): a raw exit resumed in C 685–769 ns; resumed over the monitor's text pipe from Python 10.3–10.5 µs. Decision 97's "≈27 µs" was lockstep (pipe, Python and a model step). Graphics: an asynchronous command ring with fences, no synchronous round trip per call (review 2026-10-10 F1); shared-memory transport when a measured rate needs it |
 | N7, N8, K2, K3, K4, S5 | record fixes, affirmation, plan home, outcome rule, replay gate | Done |
 | N9 startup-only capture | play-time capture | 038 |
 | K1, M3 tags without emitters | decisions on the signal plane | Backend done; acquisition, contract and probe tags 038; translation invalidation 049; the rest by first use. `BRIDGE_CALL_UNMAPPED` stays for Steam interface methods (phase 7); the frontier uses `SERVICE_UNIMPLEMENTED` (vocabulary 0.6) |
@@ -51,7 +51,7 @@ Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 
 | Sprint | Delivers | Judged by |
 |---|---|---|
-| **045 — the transport** (run when a measured call rate needs it; review 2026-10-10 D5; waiting 2026-10-10: 17 host requests over the launcher's start-up, BLACKBOARD) | The text pipe between Python and the VM monitor replaced by shared-memory rings; host requests batched. | The round trip measured before and after (27 µs today); lockstep and the oracle unchanged. |
+| **045 — the transport** (run when a measured call rate needs it; review 2026-10-10 D5; waiting 2026-10-10: 17 host requests over the launcher's start-up, BLACKBOARD) | The text pipe between Python and the VM monitor replaced by shared-memory rings; host requests batched. | The round trip measured before and after (10.4 µs over the pipe, 0.7 µs raw, Sprint 048); lockstep and the oracle unchanged. |
 | **046 — several images** (closed 2026-10-10 on CI run 38084406263: DllMain returns, the launcher enters UnityMain, UnityPlayer stops at `SHELL32.dll!CommandLineToArgvW` after 403,044 instructions) | Loading `UnityPlayer.dll`, `mono-2.0-bdwgc.dll` and the rest: relocations, imports between images, TLS callbacks, DllMain, the PEB loader list. | Each native file's DllMain runs to its return; the loader list matches the runner's; the launcher enters `UnityMain` (moved from 045, review 2026-10-10 D3). |
 | **047 — UnityMain's start-up** (closed 2026-10-10: the frontier runs 2,522,889 instructions and stops at the first file call on an absolute path) | The arena past 4 GB, SSE4.2 string classes, SHELL32's CommandLineToArgvW, the families the frontier meets. | The frontier passes PCMPISTRI at 0x18140b914 and CommandLineToArgvW, every service on the way judged. |
 | **048 — the guest's file namespace** (next) | Drive C: with the game's directory at C:\w2m\app; paths and directories (GetFullPathNameW, GetCurrentDirectoryW, CreateDirectoryW, FindFirstFileW); the review's F1 and F3 first. | The frontier reads the game's boot.config and globalgamemanagers. |
@@ -62,7 +62,7 @@ Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 
 ## Phase 6: milestone B, first frame
 
-A window and message loop over AppKit; DXGI to CAMetalLayer; the D3D11 device and context; DXBC to Metal (comparison subjects DXMT and D3DMetal); commands through a shared ring (one round trip ≈27 µs, about 600 per frame). Sprint cards are written when phase 5 closes, from the frontier's record.
+A window and message loop over AppKit; DXGI to CAMetalLayer; the D3D11 device and context; DXBC to Metal (comparison subjects DXMT and D3DMetal); commands through a shared, asynchronous ring with fences and no synchronous round trip per call (a raw exit costs about 0.7 µs, 10.4 µs over today's pipe; review 2026-10-10 F1). Sprint cards are written when phase 5 closes, from the frontier's record.
 
 ## Phase 7: milestone C, playable
 

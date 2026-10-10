@@ -1545,6 +1545,40 @@ class VM:
         return self.pc_map[i][1] if i >= 0 else 0
 
     # run -------------------------------------------------------------------------------------
+    def measure_exits(self, n: int = 100_000, through_pipe: int = 10_000) -> dict[str, float]:
+        """The cost of a VM exit (Sprint 048; review 2026-10-10 F1): guest code that loops on `hvc #0x7e` runs n exits
+        resumed by the monitor in C (`spin`), then `through_pipe` exits each resumed from here over the monitor's text
+        pipe, as every host request is today. Returns nanoseconds per exit for both."""
+        proc = subprocess.Popen([str(build_monitor()), self.path, f"{IPA_BASE:x}", f"{self.size:x}"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        assert proc.stdin and proc.stdout
+        pin, pout = proc.stdin, proc.stdout
+
+        def cmd(c: str) -> list[str]:
+            pin.write(c + "\n")
+            pin.flush()
+            return pout.readline().split()
+
+        try:
+            for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
+                            ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
+                cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
+            at = self.code_cursor
+            self._write_words(at, [a64.hvc(0x7E), a64.b(-4)])            # hvc #0x7e; b . - 4
+            cmd(f"set {MONITOR_VA + at:x} {CPSR_EL1H:x} " + " ".join("0" for _ in range(31)))
+            taken, ns = (int(v) for v in cmd(f"spin {n}")[1:3])
+            t0 = time.perf_counter_ns()
+            for _ in range(through_pipe):
+                reply = cmd("run 1000")
+                assert reply[0] == "exit" and reply[1] == "hvc", reply
+            pipe = (time.perf_counter_ns() - t0) / through_pipe
+        finally:
+            cmd("quit")
+            proc.wait(timeout=5)
+        if taken != n:
+            raise RuntimeError(f"spin took {taken} of {n} exits")
+        return {"raw_ns": ns / n, "pipe_ns": pipe}
+
     def run(self, max_steps: int = 1_000_000, timeout_ms: int = 10_000,
             on_dispatch: Callable[[VM, list[int]], None] | None = None,
             on_exception: Callable[[VM, dict[str, int]], bool] | None = None,
