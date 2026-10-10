@@ -29,7 +29,15 @@ OUT = ROOT / "build" / "probe-runs"
 
 
 def gh(*args: str) -> str:
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True, cwd=ROOT).stdout
+    """A gh call, tried three times: one dispatch in a batch failed transiently and took the search down
+    (Sprint 046); a third failure raises, with gh's message."""
+    for attempt in range(3):
+        r = subprocess.run(["gh", *args], capture_output=True, text=True, cwd=ROOT)
+        if r.returncode == 0:
+            return r.stdout
+        print(f"gh {args[0]} {args[1] if len(args) > 1 else ''}: attempt {attempt + 1} failed: {r.stderr.strip()[:200]}",
+              flush=True)
+    raise subprocess.CalledProcessError(r.returncode, ["gh", *args], r.stdout, r.stderr)
 
 
 def dispatch_batch(probe: str, repeat: int, ref: str, runners: list[str], size: int) -> list[int]:
