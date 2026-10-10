@@ -11,11 +11,12 @@ head=$(git -C substrate rev-parse HEAD)
 [ "$head" = "$pin" ] || { echo "gates: ./substrate is at $head, substrate.commit pins $pin"; exit 1; }
 [ -z "$(git -C substrate status --porcelain -- src pyproject.toml)" ] || { echo "gates: ./substrate has uncommitted kernel changes"; exit 1; }
 # every probe compiles against Windows headers (mingw-w64) before a runner sees it (Sprint 044: two
-# runner rounds lost to compile errors); skipped where the headers are absent (CI's Ubuntu)
+# runner rounds lost to compile errors); skipped where the headers are absent (CI's Ubuntu). The Windows
+# SDK's rpcndr.h defines small and hyper, mingw's does not: defined here too (Sprint 046, two rounds lost)
 win=/opt/homebrew/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/include
 if [ -d "$win" ]; then
   for c in $(grep -l "include <windows.h>" probes/*/*.c); do
-    clang --target=x86_64-w64-mingw32 -fsyntax-only -Wall -Werror -Wno-unknown-attributes -isystem "$win" "$c" \
+    clang --target=x86_64-w64-mingw32 -fsyntax-only -Wall -Werror -Wno-unknown-attributes -Dsmall=char -Dhyper=__int64 -isystem "$win" "$c" \
       || { echo "gates: $c does not compile for Windows"; exit 1; }
   done
 fi

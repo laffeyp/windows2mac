@@ -93,8 +93,8 @@ void start(void) {
     alloc("alloc.size_zero", NULL, 0, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, NULL);
     alloc("alloc.reserve_taken", r, 0x10000, MEM_RESERVE, PAGE_READWRITE, NULL);
     alloc("alloc.bad_protect", NULL, 0x1000, MEM_RESERVE | MEM_COMMIT, 0x12345, NULL);
-    unsigned char *small = alloc("alloc.small", NULL, 100, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, NULL);
-    query("query.small", small, small);
+    unsigned char *little_block = alloc("alloc.little_block", NULL, 100, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, NULL);
+    query("query.little_block", little_block, little_block);
     release("free.decommit", c, 0x10000, MEM_DECOMMIT);
     query("query.decommitted", c, r);
     release("free.release_with_size", r, 0x10000, MEM_RELEASE);
@@ -102,7 +102,7 @@ void start(void) {
     release("free.release", r, 0, MEM_RELEASE);
     query("query.released", r, NULL);
     release("free.release_again", r, 0, MEM_RELEASE);
-    release("free.small", small, 0, MEM_RELEASE);
+    release("free.little_block", little_block, 0, MEM_RELEASE);
     (void)c2;
 
     HMODULE self = GetModuleHandleW(NULL);
