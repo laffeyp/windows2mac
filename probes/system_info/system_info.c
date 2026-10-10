@@ -10,6 +10,9 @@
 
 #define SENTINEL 0xDEADu
 
+/* GetVersionExW is deprecated in the Windows SDK (not in mingw's headers); UnityPlayer calls it, so the probe does */
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 static char out[8192];
 static unsigned n;
 
