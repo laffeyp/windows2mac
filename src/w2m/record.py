@@ -10,16 +10,48 @@ dependency; a computation whose steps cause one another is a topology with trigg
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import time
 from collections import Counter
 from collections.abc import AsyncIterator, Callable, Iterable
+from functools import cache
 from pathlib import Path
 from typing import Any, Literal, cast
 
 import msgspec
-from substrate.api import Producer, Runtime, TopologyBuilder, read_record, threshold_count
+from substrate.api import Producer, Runtime, RunResult, TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _commit(repo: Path) -> str:
+    """HEAD of `repo`, with '-dirty' when tracked files differ from it."""
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True)
+    if head.returncode:
+        return "unknown"
+    dirty = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
+                           capture_output=True, text=True).stdout.strip()
+    return head.stdout.strip() + ("-dirty" if dirty else "")
+
+
+@cache
+def provenance() -> dict[str, str]:
+    """The code that writes a record (review 2026-10-10 D2): w2m's commit and the substrate clone's.
+    SESSION_INIT.harness_version is a semver by the vocabulary, so the commits go in the run's
+    baseline, which substrate writes into RunStarted."""
+    return {"w2m_commit": _commit(ROOT), "substrate_commit": _commit(ROOT / "substrate")}
+
+
+def run_with_provenance(root: Path, topology: Callable[[TopologyBuilder], None]) -> RunResult:
+    """Run `topology` at `root` with provenance() added to its baseline. Every w2m record is
+    written through here (tests/test_record_provenance.py)."""
+    def stamped(b: TopologyBuilder) -> None:
+        topology(b)
+        b.baseline(**provenance())
+    return asyncio.run(Runtime(root).run(stamped))
 
 
 def producer(fn: Callable[[Any], AsyncIterator[msgspec.Struct]]) -> Producer:
@@ -62,6 +94,6 @@ def one_step_run(root: Path, *, profile: str, contract_version: str, purpose: Pu
         b.initial("work", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(root).run(topology))
+    result = run_with_provenance(root, topology)
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
     return Path(result.record_root), kinds

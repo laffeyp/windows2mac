@@ -35,7 +35,6 @@ first reply is a repair from a structured discrepancy; generator_ref records the
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
 import sys
@@ -48,7 +47,7 @@ from typing import Any, Protocol, cast, get_args
 import msgspec
 from substrate.adapters import ModelUsage, call_responder_metered
 from substrate.api import (
-    PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count,
+    PerEvent, Subscription, TopologyBuilder, read_record, threshold_count,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,7 +61,7 @@ from w2m.contract import load_contract  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.runtime import Result, Runtime as ModelRuntime  # noqa: E402
 from w2m.trace import trace_ingester, trace_path  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 ACCEPTANCE_FILES = (ROOT / "src" / "w2m" / "compare.py", ROOT / "src" / "w2m" / "contract.py")
@@ -462,8 +461,7 @@ def run_loop(responder: Responder, generator_ref: str, *, contract: str, backend
                 acceptance_baseline={str(p): sha256_file(p) for p in (cpath, *ACCEPTANCE_FILES)},
                 generator_ref=generator_ref)
     root = runs_root / f"candidates-{time.time_ns()}"
-    result = asyncio.run(Runtime(root).run(
-        topology_for(s, responder, store, contracts, cid, cver)))
+    result = run_with_provenance(root, topology_for(s, responder, store, contracts, cid, cver))
     return Path(result.record_root)
 
 

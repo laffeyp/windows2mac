@@ -37,6 +37,11 @@ jobs:
           curl -sSfL -o /tmp/corpus.zip "$url"
           echo "$want  /tmp/corpus.zip" | sha256sum -c -
           mkdir -p corpus/python-3.14.8 && unzip -q /tmp/corpus.zip -d corpus/python-3.14.8
+      - name: substrate (substrate.commit; the local clone ./substrate on branch w2m, user 2026-10-10)
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/laffeyp/substrate.git substrate
+          git -C substrate checkout --quiet "$(cat substrate.commit)"
+          git -C substrate log --oneline -1
       - name: sync
         run: uv sync --all-extras
       - name: vocabulary

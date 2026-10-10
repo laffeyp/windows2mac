@@ -11,7 +11,6 @@ Exit 0 when EnTSO-on shows zero forbidden outcomes and ACTLR never drifts.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import math
 import subprocess
@@ -22,10 +21,10 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
+from substrate.api import TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
-from w2m.record import producer
+from w2m.record import producer, run_with_provenance
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "probes" / "mac_hv_litmus" / "mp_litmus.c"
@@ -96,7 +95,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"litmus-{time.time_ns()}").run(topology))
+    result = run_with_provenance(a.runs / f"litmus-{time.time_ns()}", topology)
     for e in read_record(result.record_root):
         if e["kind"] == "CAPABILITY_PROBED":
             print(f"{e['payload']['capability']:28} {e['payload']['outcome']:8} {e['payload']['detail']}")

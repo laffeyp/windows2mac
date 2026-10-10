@@ -109,6 +109,8 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 - `uv run mypy` — expected exit 0 (strict, `src/w2m`).
 - `uv run python scripts/check_replay.py` — expected exit 0 (every record under `store/runs/` replays at level 2).
 - `scripts/gates.sh` — runs every gate above fail-fast; expected last line `gates: all passed`. A sprint closes and commits only after it exits 0 (added Sprint 028).
+- **CI on the closing commit** (added 2026-10-10, review 2026-10-10 D1). A sprint is closed when the `ci` workflow run of its closing commit concludes `success` (`gh run watch <id> --exit-status`), not when the local gate passes: six pushes went red while every local gate passed (KIT_DIARY #28). The local gate first checks that `./substrate` is at `substrate.commit`, the commit CI clones.
+- **A Decision that names a sprint is quoted in that sprint's card** (added 2026-10-10, review 2026-10-10 §5): Decision 2026-10-09 "hot imports stay in the guest" named Sprint 040, and 040's card never mentioned it (review D4).
 
 - Windows tiebreak probe: `gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id>`, then `gh run watch <run-id> --exit-status`, `gh run download <run-id> -n trace-<id>`; ingest from `store/traces/<sha256>.jsonl`. Runner: `windows-2025` (Windows Server 2025 x64, LLVM 20.1.8). Private repo: uses the account's included Actions minutes.
 

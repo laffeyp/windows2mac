@@ -23,7 +23,6 @@ Usage: uv run python scripts/class_run.py <ICLASS> [--runs store/runs]
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import sys
 import time
@@ -44,7 +43,7 @@ import semantics_differential as sd  # noqa: E402
 import vm_oracle  # noqa: E402
 
 from w2m import VOCAB_VERSION, events  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 from w2m.rules import registry  # noqa: E402
 from w2m.x86dec import decode  # noqa: E402
 
@@ -95,7 +94,7 @@ def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> Counter[str]:
 
 def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored)") -> dict[str, Any]:
     """Judge one class in one substrate run; return its verdict summary."""
-    from substrate.api import Once, PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+    from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
     rule = registry()[iclass]
     case_set, cases, results = cases_for(iclass)
@@ -202,7 +201,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
                   starts="harness_close", policy=PerEvent(), input_builder=lambda c: None)
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(runs / run_id).run(topology))
+    result = run_with_provenance(runs / run_id, topology)
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
     return {"iclass": iclass, "record": str(result.record_root), "rule_sha256": rule.sha256, "cases": len(cases),
             "verdicts": dict(state["verdicts"]), "events": dict(kinds)}

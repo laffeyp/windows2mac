@@ -11,7 +11,6 @@ Exit 0 when every expected capability outcome is observed.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import subprocess
 import sys
@@ -21,10 +20,10 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
+from substrate.api import TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
-from w2m.record import producer
+from w2m.record import producer, run_with_provenance
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "probes" / "mac_hv_capability"
@@ -107,7 +106,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"capability-{time.time_ns()}").run(topology))
+    result = run_with_provenance(a.runs / f"capability-{time.time_ns()}", topology)
     expected = {"ipa_granule_4k": "present", "guest_tsoen": "present",
                 "guest_tsoen_context_switch": "present", "host_page_16k": "present",
                 "native_process_tso": "absent"}

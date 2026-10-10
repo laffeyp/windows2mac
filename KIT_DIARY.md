@@ -257,3 +257,11 @@
 **Finding (#27):** for an operating-system function, the documentation is a hypothesis about the function, and the probe's rows are the reference, as the CPU is for an instruction (#25). The contract keeps both: documented evidence quoted, observed rows as acceptance, and each disagreement written into its open questions so it is not rediscovered.
 
 **Kit change suggested:** a contract built from observation lists each documented statement the observation contradicts or extends.
+
+### 2026-10-10 — Six red pushes behind green gates
+
+**What happened:** Sprint 042 made substrate an editable path source pointing at `./substrate`, a directory `.gitignore` excludes. Every local gate passed; CI, on a fresh checkout without the clone, failed `uv sync` on six consecutive pushes (38033959901 through 38036178791), and an earlier push (a7061c1) had failed a test the next commit fixed. Sprints 042 closed and 043 opened on "gates 0". The deep-dive review found it by reading `gh run list`.
+
+**Finding (#28):** a gate that runs only where it was written checks the writer's machine, not the project. The closing evidence is the CI run on the closing commit; the local gate is the fast loop before it. Any input the local run has and a fresh checkout lacks (a clone, a download, a cache) is a pin the CI must reproduce, checked by both.
+
+**Kit change suggested:** the dual contract's artifact pass names the CI run id of the closing commit and its conclusion.

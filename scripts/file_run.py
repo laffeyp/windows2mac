@@ -21,7 +21,6 @@ Usage: uv run python scripts/file_run.py --contract       (re)build the contract
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
 import sys
@@ -43,7 +42,7 @@ from w2m.compare import compare_exact_rows  # noqa: E402
 from w2m.contract import Contract, ExactRows, load_contract  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.loader import load  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 
 CONTRACT_ID = "windows.file.create_file.dispositions_sharing"
 VERSION = "0.1.0"
@@ -195,7 +194,7 @@ class CaseSensitiveBridge(FileBridge):
 def item_run(runs: Path, file_source: str | None = None,
              generator_ref: str = "hand (agent-authored)") -> dict[str, Any]:
     """Judge file.c (or `file_source`) on its own substrate record; return its summary."""
-    from substrate.api import Once, PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+    from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
     c = contract()
     source = file_source if file_source is not None else FILE_C.read_text()
@@ -288,7 +287,7 @@ def item_run(runs: Path, file_source: str | None = None,
                   starts="harness_close", policy=PerEvent(), input_builder=lambda c: None)
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(runs / run_id).run(topology))
+    result = run_with_provenance(runs / run_id, topology)
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
     return {"record": str(result.record_root), "candidate_sha256": sha, "verdicts": dict(state["verdicts"]),
             "divergence": dict(state["divergence"]), "events": dict(kinds)}

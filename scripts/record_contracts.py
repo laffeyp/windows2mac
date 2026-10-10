@@ -19,7 +19,6 @@ Usage: uv run python scripts/record_contracts.py [--runs runs]
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 import time
 from collections.abc import AsyncIterator
@@ -27,13 +26,13 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+from substrate.api import PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.contract import Contract, ContractError, load_contract  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 
 CONTRACTS = ROOT / "contracts"
 STORE_RUNS = ROOT / "store" / "runs"
@@ -144,7 +143,7 @@ def main(argv: list[str]) -> int:
                   starts="closer", policy=PerEvent(), input_builder=lambda c: None)
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"contracts-{time.time_ns()}").run(topology))
+    result = run_with_provenance(a.runs / f"contracts-{time.time_ns()}", topology)
     from collections import Counter
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
     for e in read_record(result.record_root):

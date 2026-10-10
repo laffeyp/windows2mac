@@ -18,7 +18,6 @@ Usage: uv run python scripts/acquire_depot.py <app_id> <install_dir> [--user NAM
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import re
 import subprocess
@@ -29,12 +28,12 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+from substrate.api import PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 
 STEAMCMD = Path.home() / "w2m-tools" / "steamcmd" / "steamcmd.sh"
 
@@ -168,7 +167,7 @@ def main(argv: list[str]) -> int:
                   predicate=lambda c: True, starts="acquirer", policy=PerEvent(), input_builder=lambda c: None)
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"acquire-{a.app}-{time.time_ns()}").run(topology))
+    result = run_with_provenance(a.runs / f"acquire-{a.app}-{time.time_ns()}", topology)
     for e in read_record(result.record_root):
         if not e["kind"].startswith("substrate.") or e["kind"] == "substrate.ProducerFailed":
             print(e["kind"], {k: v for k, v in e["payload"].items() if k not in ("vocab_version", "harness_version")})

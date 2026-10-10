@@ -1439,17 +1439,16 @@ def record_translations(vm: VM, image_sha256: str, runs_root: Path, profile: str
     `runtime_transfer`; stage `execution`), then TRANSLATION_PUBLISHED for its guest range at code
     version 0, under the decoder spec version the lifter decodes with (Sprint 035; vocabulary 0.5).
     """
-    import asyncio
     import time
     from collections.abc import AsyncIterator
     from typing import Any
 
     import msgspec
-    from substrate.api import Runtime as SubstrateRuntime, threshold_count
+    from substrate.api import threshold_count
 
     from w2m import VOCAB_VERSION, events
     from w2m.x86dec_tables import SPEC_VERSION
-    from w2m.record import producer
+    from w2m.record import producer, run_with_provenance
 
     run_id = f"translations-{time.time_ns()}"
     blocks = list(vm.translations)
@@ -1477,5 +1476,5 @@ def record_translations(vm: VM, image_sha256: str, runs_root: Path, profile: str
         b.initial("translator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(SubstrateRuntime(runs_root / run_id).run(topology))
+    result = run_with_provenance(runs_root / run_id, topology)
     return Path(result.record_root)

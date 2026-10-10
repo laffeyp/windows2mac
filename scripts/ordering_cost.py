@@ -10,7 +10,6 @@ Usage: uv run python scripts/ordering_cost.py [--repeats 5] [--runs runs]
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import statistics
 import subprocess
@@ -21,10 +20,10 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
+from substrate.api import TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
-from w2m.record import producer
+from w2m.record import producer, run_with_provenance
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "probes" / "ordering_cost" / "ordering_cost.c"
@@ -111,7 +110,7 @@ def main(argv: list[str]) -> int:
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
-    result = asyncio.run(Runtime(a.runs / f"ordering-{time.time_ns()}").run(topology))
+    result = run_with_provenance(a.runs / f"ordering-{time.time_ns()}", topology)
     rec = {e["payload"]["variant"]: e["payload"]["value"]
            for e in read_record(result.record_root) if e["kind"] == "MEASUREMENT_RECORDED"}
     for set_name in SETS:

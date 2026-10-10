@@ -17,7 +17,6 @@ Usage: uv run python scripts/run_frontier.py <exe> [--runs runs] [--max-steps N]
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import sys
 import time
@@ -26,14 +25,14 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+from substrate.api import PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.vm_backend import VM  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 
@@ -94,7 +93,7 @@ def main(argv: list[str]) -> int:
                   predicate=lambda c: True, starts="closer", policy=PerEvent(), input_builder=lambda c: None)
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(a.runs / xid).run(topology))
+    result = run_with_provenance(a.runs / xid, topology)
     for e in read_record(result.record_root):
         if not e["kind"].startswith("substrate.") or e["kind"] in ("substrate.ProducerFailed",):
             print(e["kind"], {k: v for k, v in e["payload"].items() if k not in ("vocab_version", "harness_version")})

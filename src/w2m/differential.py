@@ -23,7 +23,6 @@ is that derivation, written after each run.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import time
@@ -34,10 +33,10 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import Once, PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
-from w2m.record import Purpose, producer
+from w2m.record import Purpose, producer, run_with_provenance
 
 EMPTY = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 LEDGER = "discrepancy-ledger.json"
@@ -266,7 +265,7 @@ def run(d: Differential, runs: Path) -> dict[str, Any]:
                   starts="harness_close", input_builder=lambda c: None, policy=Once())
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(runs / run_id).run(topology))
+    result = run_with_provenance(runs / run_id, topology)
     root = Path(result.record_root)
     kinds_seen = Counter(e["kind"] for e in read_record(root) if not e["kind"].startswith("substrate."))
     ledger_now = rebuild_ledger(runs)

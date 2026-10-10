@@ -21,7 +21,6 @@ Exit 0 when every comparison conforms; 1 otherwise.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
 import sys
@@ -32,14 +31,14 @@ from typing import Any
 
 import msgspec
 from substrate.api import (
-    PerEvent, Runtime, Subscription, TopologyBuilder, narration_summary,
+    PerEvent, Subscription, TopologyBuilder, narration_summary,
     quiescence, read_record,
 )
 
 from w2m import VOCAB_VERSION, events
 from w2m.compare import comparator
 from w2m.trace import trace_ingester, trace_path
-from w2m.record import producer
+from w2m.record import producer, run_with_provenance
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 
@@ -187,8 +186,7 @@ def main(argv: list[str]) -> int:
     else:
         probe_sha, items = load_dir(Path(a.src), a.store, a.run_id)
     root = a.runs / f"judge-{time.time_ns()}"
-    result = asyncio.run(Runtime(root).run(
-        topology_for(probe_sha, items, a.store, a.contracts, cid, cver)))
+    result = run_with_provenance(root, topology_for(probe_sha, items, a.store, a.contracts, cid, cver))
     verdicts = {e["payload"]["target_execution_id"]: e["payload"]
                 for e in read_record(result.record_root) if e["kind"] == "COMPARISON_COMPLETED"}
     ok = True

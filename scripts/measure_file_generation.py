@@ -24,7 +24,6 @@ Usage: uv run python scripts/measure_file_generation.py --model kimi-k2.7-code:c
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import re
 import shutil
@@ -48,7 +47,7 @@ from substrate.topologies.session.vocabulary import (  # noqa: E402
 from substrate.topologies.tool_loop.tools import Tool, full_suite  # noqa: E402
 from w2m import file_bridge, guest_runtime  # noqa: E402
 from w2m.contract import ExactRows  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 from w2m.vm_backend import build_runtime  # noqa: E402
 
 WORKSPACE_TOOLS = ("read_file", "list_dir", "grep", "edit_file", "write_file")
@@ -230,8 +229,7 @@ def main(argv: list[str]) -> int:
     where = a.runs / "file-generation" / session_id
     workspace(where)
     judged: list[dict[str, Any]] = []
-    result = asyncio.run(api.Runtime(a.runs / session_id).run(
-        measurement_topology(a.model, a.steps, where, a.runs, session_id, judged)))
+    result = run_with_provenance(a.runs / session_id, measurement_topology(a.model, a.steps, where, a.runs, session_id, judged))
     summary = summarize(Path(result.record_root), a.model, where)
     (a.runs / f"{session_id}.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps({k: v for k, v in summary.items() if k != "judgments"}, indent=1))

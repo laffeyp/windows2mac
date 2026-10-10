@@ -19,7 +19,6 @@ Usage: uv run python scripts/record_backend_selection.py [--runs runs]
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 from collections import Counter
 from collections.abc import AsyncIterator
@@ -27,12 +26,12 @@ from pathlib import Path
 from typing import Any
 
 import msgspec
-from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+from substrate.api import PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
-from w2m.record import producer  # noqa: E402
+from w2m.record import producer, run_with_provenance  # noqa: E402
 
 STORE = ROOT / "store" / "runs"
 EVIDENCE = ("capability-1791496383", "litmus-1791496387", "ordering-1791442786", "pagegeom-1791443163")
@@ -127,7 +126,7 @@ def main(argv: list[str]) -> int:
                   input_builder=lambda c: None)
         b.termination(threshold_count("SESSION_COMPLETED", 1))
 
-    result = asyncio.run(Runtime(a.runs / "backend-selection").run(topology))
+    result = run_with_provenance(a.runs / "backend-selection", topology)
     for e in read_record(result.record_root):
         if e["kind"] in ("BACKEND_EVALUATED", "BACKEND_SELECTED"):
             print(e["kind"], {k: e["payload"][k] for k in e["payload"] if k in ("backend", "conformance_pass_count", "objective_ref", "evaluation_ids")})
