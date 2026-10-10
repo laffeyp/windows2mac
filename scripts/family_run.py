@@ -892,6 +892,43 @@ FAMILIES: dict[str, Family] = {
                 "file_type_null_no_error": Plant("    if (handle == 0 || handle == ~0ull) {\n        set_error(ERROR_INVALID_HANDLE);",
                                                  "    if (handle == 0 || handle == ~0ull) {",
                                                  ("std.input", "std.output", "std.error"))}),
+    "command_line_args": Family(
+        name="command_line_args",
+        contract_id="windows.shell.command_line_to_argv",
+        version="0.1.0",
+        summary=("SHELL32's CommandLineToArgvW on 24 lines over both rule sets (the program name: quoted to the next "
+                 "quote, else to the first blank with quotes literal; later arguments: the backslash-quote rules and a "
+                 "doubled quote inside quotes), the empty line (the module's path), a NULL count pointer (NULL, error "
+                 "87); one LocalAlloc block, the strings after the pointer array and its NULL; LocalFree returns NULL; "
+                 "success sets the last error to 0."),
+        probe="command_line_args", guest_file="command_line_args.c",
+        runs={
+              "38084317468": Run("windows-2025", "05aab19d035c00a13cfb0216748ff247e743da60b2b9319d9bc787004601a77f", "command_line_args-1791664503-0", "AMD EPYC 7763 64-Core Processor"),
+              "38084319695": Run("windows-2022", "5e2d2107d657a04f095b2d27d26d204e35ef691662e8d233ede9d3205dc77787", "command_line_args-1791664503-1", "AMD EPYC 7763 64-Core Processor")},
+        documented=(
+            documented("ms-commandlinetoargvw", "api/shellapi/nf-shellapi-commandlinetoargvw", "2018-12-05",
+                       "2n backslashes followed by a quotation mark produce n backslashes followed by begin/end quote. "
+                       "... (2n) + 1 backslashes followed by a quotation mark again produce n backslashes followed by "
+                       "a quotation mark literal (\"). ... if lpCmdLine starts with any amount of whitespace, "
+                       "CommandLineToArgvW will consider the first argument to be an empty string. Excess whitespace "
+                       "at the end of lpCmdLine is ignored."),),
+        open_questions=(
+            "The page does not say that the program name takes quotes literally (input.09), that a doubled quote "
+            "inside quotes is one literal quote (input.06, input.15), or that success sets the last error to 0; the "
+            "rows do.",
+            "Only ASCII lines are probed; the game's command line is ASCII (w2m's GUI start)."),
+        plants={
+            "program_name_honours_quotes": Plant(
+                "        for (; *p && !blank(*p); p++) { if (out) out[n] = *p; n++; }",
+                "        for (int q = 0; *p && (q || !blank(*p)); p++) { if (*p == '\"') { q = !q; continue; } "
+                "if (out) out[n] = *p; n++; }",
+                ("input.09",)),
+            "doubled_quote_toggles": Plant(
+                "                if (quoted && p[1] == '\"') { if (out) out[n] = '\"'; n++; p += 2; continue; }\n", "",
+                ("input.06", "input.15")),
+            "success_leaves_error": Plant(
+                "    w2m_set_last_error(0);                               /* every row: the last error is 0 after success */\n",
+                "", ("input.*",))}),
 }
 
 

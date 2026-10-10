@@ -1,0 +1,26 @@
+{"s":"input.00","in":"prog a b c","non_null":1,"err":0,"argc":4,"args":["prog","a","b","c"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.01","in":"prog \"a b\" c","non_null":1,"err":0,"argc":3,"args":["prog","a b","c"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.02","in":"prog a\\b","non_null":1,"err":0,"argc":2,"args":["prog","a\\b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.03","in":"prog a\\\"b","non_null":1,"err":0,"argc":2,"args":["prog","a\"b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.04","in":"prog a\\\\\\\"b","non_null":1,"err":0,"argc":2,"args":["prog","a\\\"b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.05","in":"prog a\\\\\\\\\"b c\"","non_null":1,"err":0,"argc":2,"args":["prog","a\\\\b c"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.06","in":"prog \"a\"\"b\"","non_null":1,"err":0,"argc":2,"args":["prog","a\"b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.07","in":"prog \"unterminated","non_null":1,"err":0,"argc":2,"args":["prog","unterminated"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.08","in":"\"C:\\Program Files\\x.exe\" arg","non_null":1,"err":0,"argc":2,"args":["C:\\Program Files\\x.exe","arg"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.09","in":"C:\\a\\\"b c\" d","non_null":1,"err":0,"argc":2,"args":["C:\\a\\\"b","c d"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.10","in":"prog   ","non_null":1,"err":0,"argc":1,"args":["prog"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.11","in":"  prog a","non_null":1,"err":0,"argc":3,"args":["","prog","a"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.12","in":"prog\ta\tb","non_null":1,"err":0,"argc":3,"args":["prog","a","b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.13","in":"prog \"\"","non_null":1,"err":0,"argc":2,"args":["prog",""],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.14","in":"prog a\"\"b","non_null":1,"err":0,"argc":2,"args":["prog","ab"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.15","in":"prog \"\"\"a\"\"\"","non_null":1,"err":0,"argc":2,"args":["prog","\"a\""],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.16","in":"prog \\\\server\\share","non_null":1,"err":0,"argc":2,"args":["prog","\\\\server\\share"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.17","in":"prog \"a\\\"b\"","non_null":1,"err":0,"argc":2,"args":["prog","a\"b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.18","in":"prog \"\\\\\"","non_null":1,"err":0,"argc":2,"args":["prog","\\"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.19","in":"prog x \"y\"z","non_null":1,"err":0,"argc":3,"args":["prog","x","yz"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.20","in":"prog a\\\\\\\\","non_null":1,"err":0,"argc":2,"args":["prog","a\\\\\\\\"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.21","in":"\"prog\"x y","non_null":1,"err":0,"argc":3,"args":["prog","x","y"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.22","in":"prog \"a b\"c\" d","non_null":1,"err":0,"argc":2,"args":["prog","a bc d"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"input.23","in":"prog a \"\" b","non_null":1,"err":0,"argc":4,"args":["prog","a","","b"],"strings_after_array":true,"null_terminated_array":true,"local_free_null":true}
+{"s":"empty","non_null":1,"err":0,"argc":1,"arg0_is_module_path":true}
+{"s":"null_count","non_null":0,"err":87}

@@ -1,0 +1,414 @@
+{
+ "contract_id": "windows.shell.command_line_to_argv",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "SHELL32's CommandLineToArgvW on 24 lines over both rule sets (the program name: quoted to the next quote, else to the first blank with quotes literal; later arguments: the backslash-quote rules and a doubled quote inside quotes), the empty line (the module's path), a NULL count pointer (NULL, error 87); one LocalAlloc block, the strings after the pointer array and its NULL; LocalFree returns NULL; success sets the last error to 0.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/command_line_args/command_line_args.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "input.00",
+    "in": "prog a b c",
+    "non_null": 1,
+    "err": 0,
+    "argc": 4,
+    "args": [
+     "prog",
+     "a",
+     "b",
+     "c"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.01",
+    "in": "prog \"a b\" c",
+    "non_null": 1,
+    "err": 0,
+    "argc": 3,
+    "args": [
+     "prog",
+     "a b",
+     "c"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.02",
+    "in": "prog a\\b",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\\b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.03",
+    "in": "prog a\\\"b",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\"b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.04",
+    "in": "prog a\\\\\\\"b",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\\\"b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.05",
+    "in": "prog a\\\\\\\\\"b c\"",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\\\\b c"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.06",
+    "in": "prog \"a\"\"b\"",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\"b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.07",
+    "in": "prog \"unterminated",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "unterminated"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.08",
+    "in": "\"C:\\Program Files\\x.exe\" arg",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "C:\\Program Files\\x.exe",
+     "arg"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.09",
+    "in": "C:\\a\\\"b c\" d",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "C:\\a\\\"b",
+     "c d"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.10",
+    "in": "prog   ",
+    "non_null": 1,
+    "err": 0,
+    "argc": 1,
+    "args": [
+     "prog"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.11",
+    "in": "  prog a",
+    "non_null": 1,
+    "err": 0,
+    "argc": 3,
+    "args": [
+     "",
+     "prog",
+     "a"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.12",
+    "in": "prog\ta\tb",
+    "non_null": 1,
+    "err": 0,
+    "argc": 3,
+    "args": [
+     "prog",
+     "a",
+     "b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.13",
+    "in": "prog \"\"",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     ""
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.14",
+    "in": "prog a\"\"b",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "ab"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.15",
+    "in": "prog \"\"\"a\"\"\"",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "\"a\""
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.16",
+    "in": "prog \\\\server\\share",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "\\\\server\\share"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.17",
+    "in": "prog \"a\\\"b\"",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\"b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.18",
+    "in": "prog \"\\\\\"",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "\\"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.19",
+    "in": "prog x \"y\"z",
+    "non_null": 1,
+    "err": 0,
+    "argc": 3,
+    "args": [
+     "prog",
+     "x",
+     "yz"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.20",
+    "in": "prog a\\\\\\\\",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a\\\\\\\\"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.21",
+    "in": "\"prog\"x y",
+    "non_null": 1,
+    "err": 0,
+    "argc": 3,
+    "args": [
+     "prog",
+     "x",
+     "y"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.22",
+    "in": "prog \"a b\"c\" d",
+    "non_null": 1,
+    "err": 0,
+    "argc": 2,
+    "args": [
+     "prog",
+     "a bc d"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "input.23",
+    "in": "prog a \"\" b",
+    "non_null": 1,
+    "err": 0,
+    "argc": 4,
+    "args": [
+     "prog",
+     "a",
+     "",
+     "b"
+    ],
+    "strings_after_array": true,
+    "null_terminated_array": true,
+    "local_free_null": true
+   },
+   {
+    "s": "empty",
+    "non_null": 1,
+    "err": 0,
+    "argc": 1,
+    "arg0_is_module_path": true
+   },
+   {
+    "s": "null_count",
+    "non_null": 0,
+    "err": 87
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38084317468: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:05aab19d035c00a13cfb0216748ff247e743da60b2b9319d9bc787004601a77f; run 38084319695: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:5e2d2107d657a04f095b2d27d26d204e35ef691662e8d233ede9d3205dc77787",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "command_line_args-1791664503-0-1",
+    "command_line_args-1791664503-0-2",
+    "command_line_args-1791664503-1-1",
+    "command_line_args-1791664503-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-commandlinetoargvw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-commandlinetoargvw (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "2n backslashes followed by a quotation mark produce n backslashes followed by begin/end quote. ... (2n) + 1 backslashes followed by a quotation mark again produce n backslashes followed by a quotation mark literal (\"). ... if lpCmdLine starts with any amount of whitespace, CommandLineToArgvW will consider the first argument to be an empty string. Excess whitespace at the end of lpCmdLine is ignored."
+  }
+ ],
+ "open_questions": [
+  "The page does not say that the program name takes quotes literally (input.09), that a doubled quote inside quotes is one literal quote (input.06, input.15), or that success sets the last error to 0; the rows do.",
+  "Only ASCII lines are probed; the game's command line is ASCII (w2m's GUI start)."
+ ],
+ "sections": {
+  "probe": "probes/command_line_args (Sprint 044)",
+  "implementation": "tools/guest_runtime/command_line_args.c",
+  "rows": "scripts/family_run.py command_line_args",
+  "excluded": "none"
+ }
+}

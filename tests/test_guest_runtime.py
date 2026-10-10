@@ -29,7 +29,8 @@ def _skeleton() -> bytes:
 
 def test_api_ids_match_the_services() -> None:
     internal = {"Exception", "Cpuid"}                          # ring entries that are not kernel32 services
-    assert set(guest_runtime.api_ids().values()) - internal == set(vm_backend.SERVICES)
+    other_dlls = {fn for services in vm_backend.DLL_SERVICES.values() for fn in services}   # SHELL32 (Sprint 047)
+    assert set(guest_runtime.api_ids().values()) - internal == set(vm_backend.SERVICES) | other_dlls
 
 
 def test_every_api_id_has_a_call_counter() -> None:
