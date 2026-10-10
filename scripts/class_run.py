@@ -12,8 +12,8 @@ An item run is one substrate run whose events cause one another:
                                 the CPU is the reference)
     -> SESSION_COMPLETED
 
-The reference is a semantics case file and an Intel CPU's results for it (default: Sprint 039's
-cases, run 38011862284 on a Xeon Platinum 8573C). `--pool N` judges every class the case file
+The reference is the case set that covers the class and an Intel CPU's results for it (REFERENCES:
+Xeon Platinum 8573C runs of case sets 039 and 041). `--pool N` judges every class the case file
 covers in N processes, one run each.
 
 Usage: uv run python scripts/class_run.py <ICLASS> [--runs store/runs]
@@ -30,6 +30,7 @@ import time
 from collections import Counter
 from collections.abc import AsyncIterator
 from concurrent.futures import ProcessPoolExecutor
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -47,8 +48,9 @@ from w2m.record import producer  # noqa: E402
 from w2m.rules import registry  # noqa: E402
 from w2m.x86dec import decode  # noqa: E402
 
-REFERENCE_RUN = "38011862284"
-CASE_FILE_VERSION = "0.39.0"            # the semantics case file of Sprint 039 (CLASSES_039, its seed)
+# Each case set's reference: an Intel Xeon Platinum 8573C run of its case file
+REFERENCES = {"039": "38011862284", "041": "38029980267"}
+CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0"}     # the case set (its class list and seed)
 
 
 def contract_id(iclass: str) -> str:
@@ -61,11 +63,26 @@ def iclass_of(c: sd.Case) -> str:
     return decode(c.code).iclass if c.label.startswith("Jcc_") else c.label
 
 
-def cases_for(iclass: str) -> tuple[list[sd.Case], list[sd.Result]]:
-    built, _ = sd.build_cases()
-    results = sd.read_results(vm_oracle.result_file(REFERENCE_RUN))
+@cache
+def _built(case_set: str) -> list[sd.Case]:
+    seed, class_set, locked, control = sd.CASE_SETS[case_set]
+    return sd.build_cases(seed, class_set, locked, control)[0]
+
+
+def case_set_of(iclass: str) -> str:
+    """The case set that covers `iclass` (each class is in exactly one)."""
+    found = [k for k in sd.CASE_SETS if iclass in {iclass_of(c) for c in _built(k)}]
+    if len(found) != 1:
+        raise KeyError(f"{iclass}: covered by case sets {found}")
+    return found[0]
+
+
+def cases_for(iclass: str) -> tuple[str, list[sd.Case], list[sd.Result]]:
+    case_set = case_set_of(iclass)
+    built = _built(case_set)
+    results = sd.read_results(vm_oracle.result_file(REFERENCES[case_set], case_set))
     keep = [i for i, c in enumerate(built) if iclass_of(c) == iclass]
-    return [built[i] for i in keep], [results[i] for i in keep]
+    return case_set, [built[i] for i in keep], [results[i] for i in keep]
 
 
 def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> Counter[str]:
@@ -81,8 +98,9 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
     from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
 
     rule = registry()[iclass]
-    cases, results = cases_for(iclass)
-    store = (ROOT / "store" / "probe-runs" / REFERENCE_RUN)
+    case_set, cases, results = cases_for(iclass)
+    reference_run, version = REFERENCES[case_set], CASE_FILE_VERSIONS[case_set]
+    store = (ROOT / "store" / "probe-runs" / reference_run)
     reference = f"{(store / 'cpu.txt').read_text().strip()}; {(store / 'profile.txt').read_text().strip()}"
     cid = contract_id(iclass)
     run_id = f"class-{iclass.lower()}-{time.time_ns()}"
@@ -92,12 +110,12 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
 
     async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         yield events.validate(events.SESSION_INIT(
-            vocab_version=VOCAB_VERSION, profile=reference, contract_version=CASE_FILE_VERSION,
+            vocab_version=VOCAB_VERSION, profile=reference, contract_version=version,
             harness_version="0.0.1", purpose="conformance"))
 
     async def generator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         yield events.validate(events.CANDIDATE_GENERATED(
-            candidate_id=cand, contract_id=cid, contract_version=CASE_FILE_VERSION,
+            candidate_id=cand, contract_id=cid, contract_version=version,
             generator_ref=f"{generator_ref}: src/w2m/rules/{rule.module}.py", attempt=1,
             candidate_sha256=rule.sha256))
 
@@ -115,8 +133,8 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
             state["verdicts"][executor] = verdict
             first = next(iter(diffs.most_common(1)), None)
             yield events.validate(events.COMPARISON_COMPLETED(
-                comparison_id=f"cmp-{cand}-{executor}", contract_id=cid, contract_version=CASE_FILE_VERSION,
-                relation="exact", reference_ref=f"semantics-039 run {REFERENCE_RUN}",
+                comparison_id=f"cmp-{cand}-{executor}", contract_id=cid, contract_version=version,
+                relation="exact", reference_ref=f"semantics-{case_set} run {reference_run}",
                 target_execution_id=f"{executor}-{cand}", verdict=verdict,
                 rule_ref=f"{len(cases)} cases of {iclass}; candidate {inp['candidate_id']}",
                 first_divergence=f"{first[0]} ({first[1]} cases)" if first else None))
@@ -125,7 +143,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
     async def decide(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         if all(v == "conforms" for v in state["verdicts"].values()):
             yield events.validate(events.CANDIDATE_ACCEPTED(
-                candidate_id=cand, contract_id=cid, contract_version=CASE_FILE_VERSION,
+                candidate_id=cand, contract_id=cid, contract_version=version,
                 comparison_ids=tuple(f"cmp-{cand}-{e}" for e in ("model", "managed_vm"))))
             return
         empty = "sha256:" + "0" * 64
@@ -135,7 +153,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
                 n += 1
                 did = f"{run_id}-d{n}"
                 yield events.validate(events.DISCREPANCY_REPORTED(
-                    discrepancy_id=did, contract_id=cid, contract_version=CASE_FILE_VERSION,
+                    discrepancy_id=did, contract_id=cid, contract_version=version,
                     mismatch_class="exact", minimized_program_sha256=empty, initial_state_sha256=empty,
                     first_divergence=f"{executor}: {k} ({count} cases) {example.get(k, '')}"[:500],
                     reference_profile_id=reference, destination_profile_id=f"w2m-{executor}",
@@ -152,7 +170,8 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
             accepted_count=0 if bad else 1, elapsed_seconds=round(time.monotonic() - t0, 3)))
 
     def topology(b: TopologyBuilder) -> None:
-        b.baseline(iclass=iclass, rule_sha256=rule.sha256, reference_run=REFERENCE_RUN, cases=len(cases))
+        b.baseline(iclass=iclass, rule_sha256=rule.sha256, case_set=case_set, reference_run=reference_run,
+                   cases=len(cases))
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("rule_source", schemas=[events.CANDIDATE_GENERATED], schema_version=1,
                         factory=lambda: producer(generator))
@@ -190,8 +209,8 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
 
 
 def classes_in_case_file() -> list[str]:
-    built, _ = sd.build_cases()
-    return sorted({iclass_of(c) for c in built} & set(registry()))
+    """Every iclass with a rule that some case set covers."""
+    return sorted({iclass_of(c) for k in sd.CASE_SETS for c in _built(k)} & set(registry()))
 
 
 def main(argv: list[str]) -> int:

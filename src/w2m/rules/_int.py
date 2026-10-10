@@ -235,22 +235,25 @@ def xadd(ctx: Ctx) -> None:
 
 def cmpxchg(ctx: Ctx) -> None:
     """SDM CMPXCHG: compare the accumulator with DEST; equal: DEST = SRC; else the accumulator =
-    DEST. DEST is always written ("never produces a locked read without also producing a locked
-    write"); flags as CMP accumulator, DEST."""
+    DEST; flags as CMP accumulator, DEST. A memory DEST is always written ("never produces a locked
+    read without also producing a locked write"). A register DEST is written only when equal: on
+    Intel a 32-bit register DEST keeps its upper half when the values differ (12 cases of case set
+    041, Xeon Platinum 8573C run 38029980267), so there is no write to zero-extend it."""
     b = ctx.b
     dk, dst, bits = _operand(b, ctx.ops[0], ctx.nxt)
     sk, src, _ = _operand(b, ctx.ops[1], ctx.nxt)
     acc = ("r", RAX, bits, False)
     a, d, s = b.t(), _val(b, dk, dst), _val(b, sk, src)
     b.emit("ld", a, acc)
-    eq, one, ne, new, r = b.t(), b.t(), b.t(), b.t(), b.t()
-    b.emit("alu", eq, "eq", a, d, bits)
-    b.emit("imm", one, 1)
-    b.emit("alu", ne, "xor", eq, one, 64)
-    b.emit("sel", new, eq, s, d)
-    b.emit("alu", r, "sub", a, d, bits)
-    b.emit("st", dst, new)
-    b.emit("cst", ne, acc, d)
+    r = b.t()
+    b.emit("alu", r, "sub", a, d, bits)                    # nonzero exactly when they differ
+    if cast(tuple[Any, ...], dst)[0] == "m":
+        new = b.t()
+        b.emit("sel", new, r, d, s)                        # differ: DEST written back; equal: SRC
+        b.emit("st", dst, new)
+    else:
+        b.emit("cstz", r, dst, s)                          # equal: DEST = SRC
+    b.emit("cst", r, acc, d)                               # differ: the accumulator gets DEST
     b.emit("flags", "sub", a, d, r, bits)
 
 

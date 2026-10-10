@@ -142,6 +142,49 @@ def lsrv(rd: int, rn: int, rm: int) -> int:
     return 0x9AC02400 | rm << 16 | rn << 5 | rd
 
 
+def lslv(rd: int, rn: int, rm: int) -> int:
+    _r(rd, rn, rm)
+    return 0x9AC02000 | rm << 16 | rn << 5 | rd
+
+
+def asrv(rd: int, rn: int, rm: int) -> int:
+    _r(rd, rn, rm)
+    return 0x9AC02800 | rm << 16 | rn << 5 | rd
+
+
+def rorv(rd: int, rn: int, rm: int, bits: int = 64) -> int:
+    """ROR Xd, Xn, Xm, or Wd, Wn, Wm for bits=32 (rotates within 32 bits, zeroing the upper half)."""
+    _r(rd, rn, rm)
+    return (0x9AC02C00 if bits == 64 else 0x1AC02C00) | rm << 16 | rn << 5 | rd
+
+
+def sbfx(rd: int, rn: int, lsb: int, width: int) -> int:
+    """SBFX Xd, Xn, #lsb, #width: sign-extended bit field."""
+    _r(rd, rn)
+    assert 0 < width and lsb + width <= 64
+    return 0x93400000 | lsb << 16 | (lsb + width - 1) << 10 | rn << 5 | rd
+
+
+def smulh(rd: int, rn: int, rm: int) -> int:
+    _r(rd, rn, rm)
+    return 0x9B407C00 | rm << 16 | rn << 5 | rd
+
+
+_SZ = {1: 0, 2: 1, 4: 2, 8: 3}
+
+
+def ldaxr(size: int, rt: int, rn: int) -> int:
+    """LDAXRB/LDAXRH/LDAXR Wt/LDAXR Xt, [Xn]: load-acquire exclusive (natural alignment required)."""
+    _r(rt, rn)
+    return 0x085FFC00 | _SZ[size] << 30 | rn << 5 | rt
+
+
+def stlxr(size: int, rs: int, rt: int, rn: int) -> int:
+    """STLXRB/STLXRH/STLXR Ws, Wt|Xt, [Xn]: store-release exclusive; Ws = 0 on success."""
+    _r(rs, rt, rn)
+    return 0x0800FC00 | _SZ[size] << 30 | rs << 16 | rn << 5 | rt
+
+
 def mul(rd: int, rn: int, rm: int) -> int:
     _r(rd, rn, rm)
     return 0x9B007C00 | rm << 16 | rn << 5 | rd

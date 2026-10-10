@@ -34,6 +34,7 @@ import tempfile
 from bisect import bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Literal
 
@@ -202,22 +203,18 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         _mark_defined(a, U_CF | U_OF)
         _mark_undefined(a, U_ZF | U_SF | U_PF | U_AF)
         return
-    if kind == "shr":
-        done, undef_o, zsp = a.label(), a.label(), a.label()
-        a.emit(a64.ubfx(16, rb, 0, 6 if bits == 64 else 5))
-        a.branch(lambda off: a64.cbz(16, off), done)           # count 0: flags unaffected
-        a.emit(a64.subi(17, 16, 1), a64.lsrv(17, ra, 17), a64.ubfx(REG_CF, 17, 0, 1), a64.cmpi(16, 1))
-        a.branch(lambda off: a64.bcond("ne", off), undef_o)
-        a.emit(a64.ubfx(REG_OF, ra, bits - 1, 1))
-        _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF)
-        a.branch(a64.b, zsp)
-        a.bind(undef_o)
-        _mark_defined(a, U_CF | U_ZF | U_SF | U_PF)
-        _mark_undefined(a, U_OF)
-        a.bind(zsp)
-        _mark_undefined(a, U_AF)                               # SDM SHR: AF undefined (count > 0)
-        _set_zf_sf_pf(a, rr, bits)
-        a.bind(done)
+    if kind in ("shr", "shl", "sar", "rol", "ror"):
+        _shift_flags(a, kind, ra, rb, rr, bits)
+        return
+    if kind == "imul":                                         # SDM IMUL: CF=OF on truncation; SF ZF AF PF undefined
+        if bits < 64:
+            a.emit(a64.sbfx(16, ra, 0, bits), a64.sbfx(17, rb, 0, bits), a64.mul(16, 16, 17),
+                   a64.sbfx(17, 16, 0, bits))
+        else:
+            a.emit(a64.smulh(16, ra, rb), a64.sbfx(17, rr, 63, 1))
+        a.emit(a64.cmp(16, 17), a64.cset(REG_CF, "ne"), a64.mov(REG_OF, REG_CF))
+        _mark_defined(a, U_CF | U_OF)
+        _mark_undefined(a, U_ZF | U_SF | U_PF | U_AF)
         return
     if kind == "logic":
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
@@ -244,6 +241,67 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, AF_OPERANDS + 16))
         _mark_defined(a, U_AF)
     _set_zf_sf_pf(a, rr, bits)
+
+
+def _shift_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) -> None:
+    """runtime.Runtime._set_flags for SHR SHL SAR ROL ROR, compiled (SDM SAL/SAR/SHL/SHR and
+    RCL/RCR/ROL/ROR): a zero masked count changes nothing; CF is the last bit out (undefined for SHL
+    and SHR when the count >= the size); OF only for a 1-bit count; shifts set ZF SF PF and leave AF
+    undefined; rotates touch only CF and OF."""
+    done, of_undef, after_of = a.label(), a.label(), a.label()
+    a.emit(a64.ubfx(16, rb, 0, 6 if bits == 64 else 5))
+    a.branch(lambda off: a64.cbz(16, off), done)
+    if kind in ("rol", "ror"):
+        if kind == "rol":
+            a.emit(a64.ubfx(REG_CF, rr, 0, 1))
+        else:
+            a.emit(a64.ubfx(REG_CF, rr, bits - 1, 1))
+        _mark_defined(a, U_CF)                                 # (uses x16: re-read the count below)
+        a.emit(a64.ubfx(16, rb, 0, 6 if bits == 64 else 5), a64.cmpi(16, 1))
+        a.branch(lambda off: a64.bcond("ne", off), of_undef)
+        a.emit(a64.ubfx(16, rr, bits - 1, 1))
+        a.emit(a64.eor(REG_OF, 16, REG_CF) if kind == "rol" else a64.ubfx(17, rr, bits - 2, 1))
+        if kind == "ror":
+            a.emit(a64.eor(REG_OF, 16, 17))
+        _mark_defined(a, U_OF)
+        a.branch(a64.b, done)
+        a.bind(of_undef)
+        _mark_undefined(a, U_OF)
+        a.bind(done)
+        return
+    cf_undef = a.label()
+    if kind == "sar":                                          # CF from the sign-extended value, any count
+        a.emit(a64.sbfx(17, ra, 0, bits), a64.subi(16, 16, 1), a64.asrv(17, 17, 16), a64.addi(16, 16, 1),
+               a64.ubfx(REG_CF, 17, 0, 1))
+        _mark_defined(a, U_CF)
+    else:
+        a.emit(a64.cmpi(16, bits))
+        a.branch(lambda off: a64.bcond("hs", off), cf_undef)   # count >= size: CF undefined (SHL, SHR)
+        if kind == "shr":
+            a.emit(a64.subi(17, 16, 1), a64.lsrv(17, ra, 17))
+        else:                                                  # SHL: bit (size - count) of the operand
+            a.emit(a64.sub(17, a64.ZR, 16), a64.addi(17, 17, bits), a64.lsrv(17, ra, 17))
+        a.emit(a64.ubfx(REG_CF, 17, 0, 1))
+        _mark_defined(a, U_CF)
+    a.emit(a64.ubfx(16, rb, 0, 6 if bits == 64 else 5), a64.cmpi(16, 1))     # _mark_defined used x16
+    a.branch(lambda off: a64.bcond("ne", off), of_undef)
+    if kind == "shr":
+        a.emit(a64.ubfx(REG_OF, ra, bits - 1, 1))
+    elif kind == "shl":
+        a.emit(a64.ubfx(17, rr, bits - 1, 1), a64.eor(REG_OF, 17, REG_CF))
+    else:                                                      # SAR: OF cleared for a 1-bit shift
+        a.emit(a64.mov(REG_OF, a64.ZR))
+    _mark_defined(a, U_OF)
+    a.branch(a64.b, after_of)
+    a.bind(cf_undef)
+    _mark_undefined(a, U_CF)
+    a.bind(of_undef)
+    _mark_undefined(a, U_OF)
+    a.bind(after_of)
+    _mark_defined(a, U_ZF | U_SF | U_PF)
+    _mark_undefined(a, U_AF)
+    _set_zf_sf_pf(a, rr, bits)
+    a.bind(done)
 
 
 def _exit_if_undefined(a: Assembler, f: str) -> None:
@@ -299,11 +357,17 @@ def _temps_read(op: Op) -> list[int]:
         return [op[2]]
     if k == "set":
         return [op[2][1]] if op[2][0] == "m" else []
+    if k == "sel":
+        return [op[2], op[3], op[4]]
+    if k in ("cst", "cstz"):
+        return [op[1], op[3]] + ([op[2][1]] if op[2][0] == "m" else [])
+    if k == "cmov":
+        return [op[3]] + ([op[2][1]] if op[2][0] == "m" else [])
     return []
 
 
 def _temps_written(op: Op) -> list[int]:
-    return [op[1]] if op[0] in ("imm", "addr", "ld", "alu") else []
+    return [op[1]] if op[0] in ("imm", "addr", "ld", "alu", "sel") else []
 
 
 def runtime_defines() -> dict[str, int]:
@@ -329,6 +393,7 @@ FP_CLASSES = {f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "
     "UCOMISS", "UCOMISD", "COMISS", "COMISD"}
 FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, MXCSR bit): IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE
 HVC_SLOW_SSE = 10
+HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
 CVT_INDEFINITE = True        # False exists only so a test can show the CPU catches the missing fix-up
 
 
@@ -381,6 +446,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             a.emit(a64.str_(loc[2], rt, reg_of(loc[1])))
 
     ends = False
+    locked = ins.iclass.endswith("_LOCK")
+    lock_retry: list[int] = []
     for i, op in enumerate(ins.ops):
         for t in _temps_written(op):
             if not free:
@@ -410,8 +477,26 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
                     a.emit(a64.mov32(rt, idx))
                 else:
                     a.emit(a64.ubfx(rt, idx, 0, bits))
+            elif locked:
+                # LOCK: a load-exclusive / store-exclusive loop. The commit rule leaves no guest effect
+                # between the load and the store, so a failed store-exclusive repeats only temporaries.
+                # Exclusives need natural alignment; a misaligned operand runs in the model (hvc #11).
+                size, addr_reg = loc[2], reg_of(loc[1])
+                if size > 1:
+                    aligned = a.label()
+                    a.emit(a64.ubfx(16, addr_reg, 0, size.bit_length() - 1))
+                    a.branch(lambda off: a64.cbz(16, off), aligned)
+                    a.emit(a64.hvc(HVC_SLOW_STEP))
+                    a.bind(aligned)
+                retry = a.label()
+                a.bind(retry)
+                lock_retry.append(retry)
+                a.emit(a64.ldaxr(size, rt, addr_reg))
             else:
                 a.emit(a64.ldr(loc[2], rt, reg_of(loc[1])))
+        elif k == "st" and locked and op[1][0] == "m":
+            a.emit(a64.stlxr(op[1][2], 16, reg_of(op[2]), reg_of(op[1][1])))
+            a.branch(lambda off: a64.cbnz(16, off), lock_retry[-1])
         elif k == "st":
             store(op[1], reg_of(op[2]))
         elif k == "alu":
@@ -433,6 +518,31 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
                 a.emit(a64.umulh(rd, rx, ry))
             elif o == "sext32":
                 a.emit(a64.sxtw(rd, rx))
+            elif o in ("shl", "sar"):
+                a.emit(a64.ubfx(16, ry, 0, 6 if bits == 64 else 5))
+                if o == "shl":
+                    a.emit(a64.lslv(rd, rx, 16))
+                else:
+                    a.emit(a64.sbfx(17, rx, 0, bits), a64.asrv(rd, 17, 16))
+            elif o in ("rol", "ror"):
+                a.emit(a64.ubfx(16, ry, 0, 6 if bits == 64 else 5), a64.ubfx(16, 16, 0, bits.bit_length() - 1))
+                if bits in (32, 64):
+                    if o == "rol":
+                        a.emit(a64.sub(16, a64.ZR, 16))       # rotate left by k = right by -k
+                    a.emit(a64.rorv(rd, rx, 16, bits))
+                else:                                          # 8 and 16 bits: two shifts and an OR
+                    a.emit(a64.ubfx(17, rx, 0, bits))
+                    a.emit(a64.lslv(rd, 17, 16) if o == "rol" else a64.lsrv(rd, 17, 16))
+                    a.emit(a64.sub(16, a64.ZR, 16), a64.addi(16, 16, bits))
+                    a.emit(a64.lsrv(17, 17, 16) if o == "rol" else a64.lslv(17, 17, 16))
+                    a.emit(a64.orr(rd, rd, 17))
+            elif o in ("smul_lo", "smul_hi"):
+                if bits == 64:
+                    a.emit(a64.mul(rd, rx, ry) if o == "smul_lo" else a64.smulh(rd, rx, ry))
+                else:
+                    a.emit(a64.sbfx(16, rx, 0, bits), a64.sbfx(17, ry, 0, bits), a64.mul(rd, 16, 17))
+                    if o == "smul_hi":
+                        a.emit(a64.ubfx(rd, rd, bits, bits))
             else:
                 raise CompileError(f"alu {o}")
             _mask(a, rd, bits)
@@ -442,6 +552,27 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "set":
             _eval_condition(a, op[1])
             store(op[2], 16)
+        elif k == "sel":                                         # ("sel", t, c, x, y)
+            rd, end = reg_of(op[1]), a.label()
+            a.emit(a64.mov(rd, reg_of(op[4])))
+            a.branch(partial(a64.cbz, reg_of(op[2])), end)
+            a.emit(a64.mov(rd, reg_of(op[3])))
+            a.bind(end)
+        elif k in ("cst", "cstz"):                               # ("cst"|"cstz", c, loc, t)
+            end = a.label()
+            a.branch(partial(a64.cbz if k == "cst" else a64.cbnz, reg_of(op[1])), end)
+            store(op[2], reg_of(op[3]))
+            a.bind(end)
+        elif k == "cmov":                                        # ("cmov", cc, loc, t): SDM CMOVcc
+            other, end = a.label(), a.label()
+            _eval_condition(a, op[1])
+            a.branch(lambda off: a64.cbz(16, off), other)
+            store(op[2], reg_of(op[3]))
+            a.branch(a64.b, end)
+            a.bind(other)
+            if op[2][0] == "r" and op[2][2] == 32:              # a 32-bit destination is zero-extended anyway
+                a.emit(a64.mov32(op[2][1], op[2][1]))
+            a.bind(end)
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)
             from w2m.rules import registry
             lower = registry()[op[1]].lower
@@ -1014,7 +1145,7 @@ class VM:
                     else:
                         stop = f"VmExit: EL1 exception EC 0x{ec:x} at x86 0x{self.x86_address_at(e.elr):x}"
                     break
-                elif imm == HVC_SLOW_SSE:
+                elif imm in (HVC_SLOW_SSE, HVC_SLOW_STEP):
                     pc = self._slow_sse(x, where)
                 elif imm == 4 and forced_stop:
                     forced_stop = False

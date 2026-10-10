@@ -284,3 +284,16 @@ def test_unmasked_exceptions_take_the_slow_path() -> None:
     unmasked = sum(1 for c in cases if c.mxcsr >> 7 & 0x3F != 0x3F)
     assert classes == {} and judged == len(cases)
     assert slow[0] == unmasked > 0
+
+
+@pytest.mark.hvf
+def test_vm_agrees_with_windows_on_every_041_fault() -> None:
+    """Case set 041's 2,195 faults (store/probe-runs/38029980267/result-1.faults.bin) in the VM, LOCK
+    forms included, against the Xeon Platinum 8573C."""
+    seed, classes, locked, control = sd.CASE_SETS["041"]
+    built = sd.build_cases(seed, classes, locked, control)[0]
+    found = vm_oracle.read_fault_results(ROOT / "store" / "probe-runs" / "38029980267" / "result-1.faults.bin")
+    cases, results = [built[i] for i in sorted(found)], [found[i] for i in sorted(found)]
+    diffs, example, skipped, judged, faults = vm_oracle.run_cases(cases, results)
+    assert diffs == {}, [example[k] for k in diffs][:5]
+    assert not skipped and judged == faults == 2195

@@ -17,10 +17,11 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("cpuid",)                      CPUID: EAX, EBX, ECX, EDX from specs/guest_cpuid.json for EAX, ECX
   ("sel", t, c, x, y)             t = x if temporary c is nonzero, else y
   ("cst", c, loc, t)              store t to loc when temporary c is nonzero
+  ("cstz", c, loc, t)             store t to loc when temporary c is zero
   ("cmov", cond, loc, t)          CMOVcc: store when the condition holds; a 32-bit register destination
                                   is zero-extended either way (SDM CMOVcc, 64-bit mode)
   alu ops (Sprint 041): shl sar rol ror (count masked as the SDM says), smul_lo smul_hi (signed
-  product of `bits`-wide operands, low and high halves), eq
+  product of `bits`-wide operands, low and high halves)
   ("sse", iclass, dst, src, align)  one legacy-SSE instruction (Sprint 039): dst and src are locs,
                                   ("x", index) for an XMM register; align 16 when a memory operand
                                   must be 16-byte aligned (#GP otherwise); the runtime computes it
@@ -164,7 +165,7 @@ def commit_order(ins: Lifted) -> str | None:
             return "store"
         if op[0] == "set" and op[2][0] == "m":
             return "store"
-        if op[0] == "cst" and op[2][0] == "m":
+        if op[0] in ("cst", "cstz") and op[2][0] == "m":
             return "store"
         if op[0] == "sse" and (op[2][0] == "m" or op[3][0] == "m"):
             return "store" if op[2][0] == "m" else "load"
@@ -172,7 +173,7 @@ def commit_order(ins: Lifted) -> str | None:
 
     def effect(op: Op) -> bool:
         return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid") or (
-            op[0] in ("set", "cst") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m")
+            op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m")
 
     last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
     if last_access < 0:

@@ -8,6 +8,7 @@ state differential involved. Full result files are assets of the private release
 from __future__ import annotations
 
 import functools
+import hashlib
 import sys
 from pathlib import Path
 
@@ -176,3 +177,28 @@ def test_039_intel_cpus_and_model_agree_on_every_case(run: str) -> None:
 @pytest.mark.parametrize("run", ["38011255346", "38011704372"])   # EPYC 9V74, 9V45
 def test_039_other_amd_cpus_differ_only_on_0f0d_register_forms(run: str) -> None:
     assert list(_classes_039(ROOT / "store" / "probe-runs" / run)) == ["NOP cpu fault"]
+
+
+@functools.cache
+def _built_041() -> tuple[sd.Case, ...]:
+    seed, classes, locked, control = sd.CASE_SETS["041"]
+    return tuple(sd.build_cases(seed, classes, locked, control)[0])
+
+
+def test_041_runner_ran_the_case_file_this_generator_builds(tmp_path: Path) -> None:
+    out = tmp_path / "cases.bin"
+    sd.write_cases(list(_built_041()), out)
+    ran = (ROOT / "store" / "probe-runs" / "38029980267" / "cases.sha256").read_text().strip()
+    assert hashlib.sha256(out.read_bytes()).hexdigest() == ran
+
+
+def test_041_intel_cpu_and_model_agree_on_every_case() -> None:
+    """Sprint 041's block (IMUL, CMOVcc, shifts, rotates, XADD, CMPXCHG, LOCK forms) on a Xeon
+    Platinum 8573C (run 38029980267), every tenth case."""
+    built = _built_041()[::10]
+    results = sd.read_results(ROOT / "store" / "probe-runs" / "38029980267" / "result-1.every10.bin")
+    found: dict[str, int] = {}
+    for c, r in zip(built, results, strict=True):
+        for k, _ in sd.judge(c, r, c.label):
+            found[k] = found.get(k, 0) + 1
+    assert found == {}

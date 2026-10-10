@@ -328,8 +328,7 @@ class Runtime:
                     sx = (x & m) - (1 << bits) if x >> (bits - 1) & 1 else x & m
                     sy = (y & m) - (1 << bits) if y >> (bits - 1) & 1 else y & m
                     v = sx * sy if o == "smul_lo" else (sx * sy) >> bits
-                elif o == "eq":
-                    v = int((x & m) == (y & m))
+
                 else:
                     raise LiftError(f"alu {o}")
                 t[d] = v & m
@@ -342,8 +341,8 @@ class Runtime:
                 self.th.df = bool(op[1])
             elif k == "sel":                                      # ("sel", t, cond_t, x, y): cond ? x : y
                 t[op[1]] = t[op[3]] if t[op[2]] else t[op[4]]
-            elif k == "cst":                                      # ("cst", cond_t, loc, t): store when cond
-                if t[op[1]]:
+            elif k in ("cst", "cstz"):                            # store when cond is nonzero (cst) or zero (cstz)
+                if bool(t[op[1]]) == (k == "cst"):
                     self._store(op[2], t[op[3]])
             elif k == "cmov":                                     # ("cmov", cc, loc, t): SDM CMOVcc
                 if self._cond(op[1]):

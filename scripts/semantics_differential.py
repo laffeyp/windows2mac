@@ -496,14 +496,16 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", action="store_true")
     ap.add_argument("--set", default="039", choices=sorted(CASE_SETS))
-    ap.add_argument("--out", type=Path, default=ROOT / "probes" / "semantics" / "cases.bin")
+    ap.add_argument("--out", type=Path)
     ap.add_argument("--judge", type=Path)
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--runs", type=Path, default=ROOT / "runs")
     a = ap.parse_args(argv)
+    if a.out is None:
+        a.out = ROOT / "probes" / ("semantics" if a.set == "039" else f"semantics_{a.set}") / "cases.bin"
     if a.cases:
-        seed, classes, locked, control = CASE_SETS[a.set]
-        cs, skipped = build_cases(seed, classes, locked, control)
+        seed, class_set, locked, control = CASE_SETS[a.set]
+        cs, skipped = build_cases(seed, class_set, locked, control)
         write_cases(cs, a.out)
         labels = Counter(c.label for c in cs)
         print(f"{len(cs)} cases over {len(labels)} iclasses ({sum(c.kind for c in cs)} fault placements) -> "
@@ -517,7 +519,8 @@ def main(argv: list[str]) -> int:
 
 def judge_run(a: argparse.Namespace) -> int:
     t0 = time.monotonic()
-    built, _ = build_cases()
+    seed, class_set, locked, control = CASE_SETS[a.set]
+    built, _ = build_cases(seed, class_set, locked, control)
     stored = read_cases(a.out)
     assert [(c.code, c.regs, c.rflags, c.xmm, c.mxcsr) for c in built] == \
         [(c.code, c.regs, c.rflags, c.xmm, c.mxcsr) for c in stored], \

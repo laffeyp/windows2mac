@@ -50,18 +50,18 @@ from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 from w2m.record import producer  # noqa: E402
 
-RELEASE = "semantics-039"
+RELEASES = {"039": "semantics-039", "041": "semantics-041"}
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
 
 
-def result_file(run: str) -> Path:
-    """The run's first full result file, from the release, checked against results.sha256."""
+def result_file(run: str, case_set: str = "039") -> Path:
+    """The run's first full result file, from its case set's release, checked against results.sha256."""
     out = ROOT / "build" / "probe-runs" / run / "result-1.bin"
     want = next(line.split()[0].lower() for line in (ROOT / "store" / "probe-runs" / run / "results.sha256")
                 .read_text().splitlines() if line.strip().endswith("result-1.bin"))
     if not out.exists() or hashlib.sha256(out.read_bytes()).hexdigest() != want:
         out.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["gh", "release", "download", RELEASE, "-p", f"{run}-result-1.bin", "-O", str(out),
+        subprocess.run(["gh", "release", "download", RELEASES[case_set], "-p", f"{run}-result-1.bin", "-O", str(out),
                         "--clobber"], check=True, cwd=ROOT)
         got = hashlib.sha256(out.read_bytes()).hexdigest()
         if got != want:
@@ -251,21 +251,23 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
+    ap.add_argument("--set", default="039", choices=sorted(RELEASES))
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--runs", type=Path, default=ROOT / "runs")
     ap.add_argument("--limit", type=int)
     a = ap.parse_args(argv)
     t0 = time.monotonic()
     store = ROOT / "store" / "probe-runs" / a.run
-    cases, _ = sd.build_cases()
-    built = ROOT / "build" / "probe-runs" / "semantics-cases.bin"
+    seed, class_set, locked, control = sd.CASE_SETS[a.set]
+    cases, _ = sd.build_cases(seed, class_set, locked, control)
+    built = ROOT / "build" / "probe-runs" / f"semantics-{a.set}-cases.bin"
     built.parent.mkdir(parents=True, exist_ok=True)
     sd.write_cases(cases, built)
     sha = hashlib.sha256(built.read_bytes()).hexdigest()
     ran = (store / "cases.sha256").read_text().strip().split()[0].lower()
     if sha != ran:
         raise SystemExit(f"the cases built here (sha256 {sha}) are not the ones run {a.run} ran ({ran})")
-    results = sd.read_results(result_file(a.run))
+    results = sd.read_results(result_file(a.run, a.set))
     assert len(results) == len(cases), "result count differs from case count"
     cpu = (store / "cpu.txt").read_text().strip()
     profile = (store / "profile.txt").read_text().strip()
@@ -300,7 +302,7 @@ def record(a: argparse.Namespace, profile: str, judged: int, faults: int, classe
             comparison_id=cmp_id, contract_id="w2m.guest_state.fault_context", contract_version=spec,
             relation="exact", reference_ref=profile, target_execution_id=f"vm-oracle-{a.run}",
             verdict="discrepancy" if classes else "conforms",
-            rule_ref=(f"scripts/vm_oracle.py: {judged} cases ({faults} faults) of semantics-039 run {a.run}, "
+            rule_ref=(f"scripts/vm_oracle.py: {judged} cases ({faults} faults) of semantics-{a.set} run {a.run}, "
                       f"lifter spec {SPEC_VERSION}")))
         for n, (k, count) in enumerate(classes.most_common(), 1):
             did = f"{run_id}-d{n}"
