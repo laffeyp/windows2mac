@@ -48,20 +48,22 @@ static void relation(unsigned r) {
     SetLastError(SENTINEL);
     ok = GetLogicalProcessorInformationEx((LOGICAL_PROCESSOR_RELATIONSHIP)r, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buf, &len);
     err = GetLastError();
-    unsigned entries = 0, cores = 0, packages = 0, caches = 0, numa = 0, groups = 0, sizes_ok = 1, masks_ok = 1;
+    unsigned cores = 0, packages = 0, caches = 0, numa = 0, groups = 0, masks_ok = 1;
     unsigned core_bits = 0, package_bits = 0, numa_bits = 0, l1d = 0, l1i = 0, l2 = 0, l3 = 0, smt = 0;
-    unsigned group_ok = 1, max_groups = 0, active_groups = 0;
+    unsigned group_ok = 1, max_groups = 0, active_groups = 0, modules = 0, dies = 0;
+    unsigned size_core = 0, size_cache = 0, size_numa = 0, size_package = 0, size_group = 0, size_other = 0, sizes_agree = 1;
     for (DWORD off = 0; ok && off < len;) {
         PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX e = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(buf + off);
-        entries++;
         switch (e->Relationship) {
         case RelationProcessorCore:
             cores++; core_bits += bits(e->Processor.GroupMask[0].Mask); smt |= e->Processor.Flags == LTP_PC_SMT;
-            sizes_ok &= e->Size == 48; masks_ok &= e->Processor.GroupCount == 1 && e->Processor.GroupMask[0].Group == 0;
+            sizes_agree &= !size_core || size_core == e->Size; size_core = e->Size;
+            masks_ok &= e->Processor.GroupCount == 1 && e->Processor.GroupMask[0].Group == 0;
             break;
         case RelationProcessorPackage:
             packages++; package_bits += bits(e->Processor.GroupMask[0].Mask);
-            sizes_ok &= e->Size == 48; masks_ok &= e->Processor.GroupCount == 1;
+            sizes_agree &= !size_package || size_package == e->Size; size_package = e->Size;
+            masks_ok &= e->Processor.GroupCount == 1;
             break;
         case RelationCache:
             caches++;
@@ -69,34 +71,41 @@ static void relation(unsigned r) {
             if (e->Cache.Level == 1 && e->Cache.Type == CacheInstruction) l1i++;
             if (e->Cache.Level == 2) l2++;
             if (e->Cache.Level == 3) l3++;
-            sizes_ok &= e->Size == 48; masks_ok &= e->Cache.GroupCount <= 1 && e->Cache.LineSize == 64 && e->Cache.CacheSize != 0;
+            sizes_agree &= !size_cache || size_cache == e->Size; size_cache = e->Size;
+            masks_ok &= e->Cache.GroupCount <= 1 && e->Cache.LineSize == 64 && e->Cache.CacheSize != 0;
             break;
         case RelationNumaNode:
             numa++; numa_bits += bits(e->NumaNode.GroupMask.Mask);
-            sizes_ok &= e->Size == 48; masks_ok &= e->NumaNode.NodeNumber == 0;
+            sizes_agree &= !size_numa || size_numa == e->Size; size_numa = e->Size;
+            masks_ok &= e->NumaNode.NodeNumber == 0;
             break;
         case RelationGroup:
             groups++; max_groups = e->Group.MaximumGroupCount; active_groups = e->Group.ActiveGroupCount;
-            sizes_ok &= e->Size == 80;
+            size_group = e->Size;
             group_ok &= e->Group.GroupInfo[0].ActiveProcessorCount == active &&
                         bits(e->Group.GroupInfo[0].ActiveProcessorMask) == active &&
                         e->Group.GroupInfo[0].MaximumProcessorCount >= active;
             break;
-        default:
+        default:                                       /* 5 die, 7 module */
+            if (e->Relationship == 5) dies++;
+            if (e->Relationship == 7) modules++;
+            sizes_agree &= !size_other || size_other == e->Size; size_other = e->Size;
             break;
         }
         if (e->Size == 0) break;
         off += e->Size;
     }
     rowr("ex.query.", r); field("ret", ok != 0); field("err", err); flag("length_unchanged", len == need);
-    field("length_over_entries", entries ? need / entries : 0);
+   
     field("cores", cores ? 1 : 0); flag("core_bits_are_n", core_bits == (cores ? active : 0)); flag("smt", smt);
     flag("cores_le_n", cores <= active); field("packages", packages); flag("package_bits_are_n", package_bits == (packages ? active : 0));
     field("caches_present", caches != 0); field("l1d_present", l1d != 0); field("l1i_present", l1i != 0);
     field("l2_present", l2 != 0); field("l3_present", l3 != 0);
     field("numa_nodes", numa); flag("numa_bits_are_n", numa_bits == (numa ? active : 0));
     field("groups", groups); field("max_groups", max_groups); field("active_groups", active_groups); flag("group_ok", group_ok);
-    flag("sizes_ok", sizes_ok); flag("masks_ok", masks_ok);
+    field("dies", dies != 0); field("modules", modules != 0);
+    field("size_core", size_core); field("size_cache", size_cache); field("size_numa", size_numa); field("size_package", size_package);
+    field("size_group", size_group); field("size_other", size_other); flag("sizes_agree", sizes_agree); flag("masks_ok", masks_ok);
     end();
 }
 
