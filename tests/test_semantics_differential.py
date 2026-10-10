@@ -182,7 +182,7 @@ def test_039_other_amd_cpus_differ_only_on_0f0d_register_forms(run: str) -> None
 @functools.cache
 def _built_041() -> tuple[sd.Case, ...]:
     seed, classes, locked, control = sd.CASE_SETS["041"]
-    return tuple(sd.build_cases(seed, classes, locked, control)[0])
+    return tuple(sd.cached_cases("041"))
 
 
 def test_041_runner_ran_the_case_file_this_generator_builds(tmp_path: Path) -> None:

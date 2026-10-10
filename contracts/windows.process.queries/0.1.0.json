@@ -3,7 +3,7 @@
  "version": "0.1.0",
  "status": "accepted",
  "summary": "GetSystemTimeAsFileTime, GetCurrentProcessId, GetCurrentThreadId, QueryPerformanceCounter, QueryPerformanceFrequency, IsProcessorFeaturePresent, InitializeSListHead, GetStartupInfoW and IsDebuggerPresent answer as Windows does: fixed values exactly, machine-dependent values by the relations every Windows machine observed holds.",
- "applicability": "windows-2022 (AMD EPYC 7763); windows-2022 (AMD EPYC 9V74); windows-2022 (Intel Xeon Platinum 8370C); windows-2025 (AMD EPYC 7763); windows-2025 (AMD EPYC 9V74)",
+ "applicability": "windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz)",
  "roles": [
   "main"
  ],
@@ -182,19 +182,19 @@
   {
    "evidence_id": "runner-rows",
    "category": "observed",
-   "source_ref": "run 38037899422: windows-2025, AMD EPYC 7763, probe sha256:7bddfdfb38be9ebb35220a9a9df48dc0f3e6453158cb613db62b337680caea99; run 38037900735: windows-2022, AMD EPYC 7763, probe sha256:d59934c1891538e6f2768682fa34e034a9d494acf546babd422ff294d4beee9c; run 38037902222: windows-2025, AMD EPYC 9V74, probe sha256:c703c133a5a032adc6d13b8579bc11584de037354ccd7e23e8ce1cbf6d76bad2; run 38037903596: windows-2022, AMD EPYC 9V74, probe sha256:552490a3ed425d2f5d6ff271dea0823312fa003843907eb0ce8100d07010c970; run 38038027558: windows-2022, Intel Xeon Platinum 8370C, probe sha256:c816bb72de67ec46cb89bb91868742818027e65ea4fcc194a2215b4a04b8fecc",
+   "source_ref": "run 38041796227: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:39e501bce923469a19ac478de13b430949a8eb4719e2ca96a3785aba09468034; run 38041797992: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:7d7b1d3ff3e5a081473d9b629c7434893e7aa42042a7e0029d9edf75985f4c61; run 38041800459: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:9f874e107a0b22eb469d2fb7a80aef286c8060202f6d19bb644d815bd3d8f348; run 38041803105: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:211f7359ab2c0f1ec20e90467c863a345a9b66130dda3d37521ae19ea2133e91; run 38041805183: windows-2025, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:6693106bb1ace5cfc627e407d4832df41fd79689dfac1c86b97c3050d811e033",
    "applicability": "the builds and CPUs observed",
    "execution_ids": [
-    "process_queries-1791620805-0-1",
-    "process_queries-1791620805-0-2",
-    "process_queries-1791620806-1-1",
-    "process_queries-1791620806-1-2",
-    "process_queries-1791620808-2-1",
-    "process_queries-1791620808-2-2",
-    "process_queries-1791620809-3-1",
-    "process_queries-1791620809-3-2",
-    "process_queries-1791620943-3-1",
-    "process_queries-1791620943-3-2"
+    "process_queries-1791624794-0-1",
+    "process_queries-1791624794-0-2",
+    "process_queries-1791624794-1-1",
+    "process_queries-1791624794-1-2",
+    "process_queries-1791624794-2-1",
+    "process_queries-1791624794-2-2",
+    "process_queries-1791624794-3-1",
+    "process_queries-1791624794-3-2",
+    "process_queries-1791624794-4-1",
+    "process_queries-1791624794-4-2"
    ]
   },
   {

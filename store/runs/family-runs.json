@@ -114,29 +114,27 @@
  "process_queries": {
   "candidate_sha256": "sha256:82a5a7b38c481f940168b103efe567f477f99ce79fba5489226b18e340654eb2",
   "divergence": {
-   "38037899422": null,
-   "38037900735": null,
-   "38037902222": null,
-   "38037903596": null,
-   "38038027558": "row time.counter_tracks_time: within_25_percent reference True, target False"
+   "38041796227": null,
+   "38041797992": null,
+   "38041800459": null,
+   "38041803105": null,
+   "38041805183": null
   },
   "events": {
+   "CANDIDATE_ACCEPTED": 1,
    "CANDIDATE_GENERATED": 1,
-   "CANDIDATE_REJECTED": 1,
    "COMPARISON_COMPLETED": 5,
-   "DISCREPANCY_REPORTED": 1,
-   "DISCREPANCY_ROUTED": 1,
    "SESSION_COMPLETED": 1,
    "SESSION_INIT": 1
   },
   "family": "process_queries",
-  "record": "store/runs/family-process_queries-1791624489367856000",
+  "record": "store/runs/family-process_queries-1791624895762963000",
   "verdicts": {
-   "38037899422": "conforms",
-   "38037900735": "conforms",
-   "38037902222": "conforms",
-   "38037903596": "conforms",
-   "38038027558": "discrepancy"
+   "38041796227": "conforms",
+   "38041797992": "conforms",
+   "38041800459": "conforms",
+   "38041803105": "conforms",
+   "38041805183": "conforms"
   }
  },
  "thread_storage": {

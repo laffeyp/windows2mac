@@ -64,8 +64,7 @@ def iclass_of(c: sd.Case) -> str:
 
 @cache
 def _built(case_set: str) -> list[sd.Case]:
-    seed, class_set, locked, control = sd.CASE_SETS[case_set]
-    return sd.build_cases(seed, class_set, locked, control)[0]
+    return sd.cached_cases(case_set)
 
 
 def case_set_of(iclass: str) -> str:

@@ -132,16 +132,13 @@ FAMILIES: dict[str, Family] = {
                  "IsDebuggerPresent answer as Windows does: fixed values exactly, machine-dependent values by the "
                  "relations every Windows machine observed holds."),
         probe="process_queries", guest_file="process.c",
-        runs={"38037899422": Run("windows-2025", "7bddfdfb38be9ebb35220a9a9df48dc0f3e6453158cb613db62b337680caea99",
-                                 "process_queries-1791620805-0", "AMD EPYC 7763"),
-              "38037900735": Run("windows-2022", "d59934c1891538e6f2768682fa34e034a9d494acf546babd422ff294d4beee9c",
-                                 "process_queries-1791620806-1", "AMD EPYC 7763"),
-              "38037902222": Run("windows-2025", "c703c133a5a032adc6d13b8579bc11584de037354ccd7e23e8ce1cbf6d76bad2",
-                                 "process_queries-1791620808-2", "AMD EPYC 9V74"),
-              "38037903596": Run("windows-2022", "552490a3ed425d2f5d6ff271dea0823312fa003843907eb0ce8100d07010c970",
-                                 "process_queries-1791620809-3", "AMD EPYC 9V74"),
-              "38038027558": Run("windows-2022", "c816bb72de67ec46cb89bb91868742818027e65ea4fcc194a2215b4a04b8fecc",
-                                 "process_queries-1791620943-3", "Intel Xeon Platinum 8370C")},
+        runs={
+              "38041796227": Run("windows-2025", "39e501bce923469a19ac478de13b430949a8eb4719e2ca96a3785aba09468034", "process_queries-1791624794-0", "AMD EPYC 7763 64-Core Processor"),
+              "38041797992": Run("windows-2022", "7d7b1d3ff3e5a081473d9b629c7434893e7aa42042a7e0029d9edf75985f4c61", "process_queries-1791624794-1", "AMD EPYC 9V45 96-Core Processor"),
+              "38041800459": Run("windows-2025", "9f874e107a0b22eb469d2fb7a80aef286c8060202f6d19bb644d815bd3d8f348", "process_queries-1791624794-2", "AMD EPYC 7763 64-Core Processor"),
+              "38041803105": Run("windows-2022", "211f7359ab2c0f1ec20e90467c863a345a9b66130dda3d37521ae19ea2133e91", "process_queries-1791624794-3", "AMD EPYC 9V45 96-Core Processor"),
+              "38041805183": Run("windows-2025", "6693106bb1ace5cfc627e407d4832df41fd79689dfac1c86b97c3050d811e033", "process_queries-1791624794-4", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
         documented=(
             documented("ms-isprocessorfeaturepresent", "api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent",
                        "2025-12-18", "If the feature is supported, the return value is a nonzero value. If the feature is "

@@ -82,8 +82,7 @@ def test_every_rule_writes_each_temporary_once() -> None:
     import semantics_differential as sd
     twice: Counter[str] = Counter()
     for k in sd.CASE_SETS:
-        seed, classes, locked, control = sd.CASE_SETS[k]
-        for c in sd.build_cases(seed, classes, locked, control)[0]:
+        for c in sd.cached_cases(k):
             ins = lift(c.code + b"\x90" * 15, sd.CODE_VA)
             written = Counter(t for op in ins.ops for t in _temps_written(op))
             if any(n > 1 for n in written.values()):

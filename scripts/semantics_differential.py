@@ -31,6 +31,7 @@ read_cases_format1 and judged by judge_format1.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import random
@@ -361,6 +362,31 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             s.code, s.label = code, label
             out.append(s)
     return out, skipped
+
+
+_CASE_INPUTS = ("scripts/semantics_differential.py", "src/w2m/encgen.py", "specs/x86_decode.json", "src/w2m/lift.py",
+                "src/w2m/x86dec.py", "src/w2m/x86dec_tables.py", "src/w2m/x86ops.py")
+
+
+@functools.cache
+def cached_cases(case_set: str) -> list[Case]:
+    """build_cases for `case_set`, cached on disk under build/case-cache/ by the sha256 of everything the
+    build reads (this script, the encoding generator, the decode spec, the decoder, the operand parser,
+    the lifter and its rules) and in the process. A full build of the six sets took 17 s, and the gate
+    built them in several tests (Sprint 044)."""
+    import pickle
+    h = hashlib.sha256(repr(CASE_SETS[case_set]).encode())
+    for rel in (*_CASE_INPUTS, *sorted(str(p.relative_to(ROOT)) for p in (ROOT / "src" / "w2m" / "rules").glob("*.py"))):
+        h.update(rel.encode() + b"\0" + (ROOT / rel).read_bytes())
+    path = ROOT / "build" / "case-cache" / f"{case_set}-{h.hexdigest()[:24]}.pickle"
+    if path.exists():
+        cases: list[Case] = pickle.loads(path.read_bytes())
+        return cases
+    seed, classes, locked, control = CASE_SETS[case_set]
+    cases = build_cases(seed, classes, locked, control)[0]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(pickle.dumps(cases))
+    return cases
 
 
 def write_cases(cases: list[Case], path: Path) -> None:

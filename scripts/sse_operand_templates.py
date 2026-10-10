@@ -38,9 +38,25 @@ ICLASSES = {
        for t in ("SS", "SD", "PS", "PD")},
     **{c: c.lower() for c in ("CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI", "CVTSI2SS", "CVTSI2SD",
                               "CVTSS2SD", "CVTSD2SS", "UCOMISS", "UCOMISD", "COMISS", "COMISD")},
+    # Sprint 044: the SSE2 integer block the launcher's C runtime reaches
+    "MOVDQU": "movdqu:vmovdqu8:vmovdqu16:vmovdqu32:vmovdqu64", "MOVDQA": "movdqa:vmovdqa32:vmovdqa64",
+    "PAND": "pand", "POR": "por", "ORPS": "orps", "PSUBQ": "psubq", "PSUBD": "psubb:psubw:psubd",
+    "PSRLQ": "psrlw:psrld:psrlq", "PUNPCKLBW": "punpcklbw:punpcklwd:punpckldq:punpcklqdq",
+    "CVTDQ2PD": "cvtdq2pd", "MOVNTPS": "movntps", "PSRLDQ": "psrldq", "PSLLDQ": "pslldq",
+    "PCMPEQB": "pcmpeqb:pcmpeqw:pcmpeqd", "PMOVMSKB": "pmovmskb", "PSHUFD": "pshufd",
 }
 LINE = re.compile(r"^(NP |66 |F2 |F3 )?(REX\.W\s*\+?\s*)?0F ([0-9A-F]{2})\s*/r\s+([A-Z0-9]+)\s+(.*)$")
 MEM_SIZE = {"m32": "d", "m64": "q", "m128": "dq"}
+# Sprint 044: rows whose SDM line the transcription above cannot read (an immediate, a register-only or
+# memory-only ModRM.r/m operand), written from the SDM line each row cites: (iclass, prefix, opcode,
+# ModRM.reg or None) -> template. Wdq for an r/m that the SDM restricts to a register (mod 11) or to memory:
+# the decoder refuses the other form, so W reads only the allowed one.
+MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib", ("PSLLDQ", "66", 0x73, 7): "Wdq,Ib",
+          ("PSRLQ", "66", 0xD3, None): "V,Wdq", ("PUNPCKLBW", "66", 0x60, None): "V,Wdq",
+          ("PSHUFD", "66", 0x70, None): "V,Wdq,Ib", ("PMOVMSKB", "66", 0xD7, None): "Gd,Wdq",
+          ("MOVNTPS", "none", 0x2B, None): "Wdq,V", ("STMXCSR", "none", 0xAE, 3): "Ed", ("LDMXCSR", "none", 0xAE, 2): "Ed",
+          ("PREFETCHNTA", "none", 0x18, 0): "Mcl"}
+MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
 def _text(h: str) -> str:
@@ -135,8 +151,17 @@ def main(argv: list[str]) -> int:
                 lines_by_key.setdefault(key, []).append(ln)
     written = 0
     for e in spec["entries"]:
+        manual = MANUAL.get((e["iclass"], e["pfx"], e["op"], e.get("reg")))
+        if manual and e["map"] == "0f" and not e.get("vex") and not e.get("evex") and not e.get("ops"):
+            e["ops"] = manual
+            e["src_ops"] = f"written by hand from the row's SDM line ({e['src']}); notation Vol 2D Table A-1 (Sprint 044)"
+            written += 1
+            print(f"{e['iclass']:10} {e['pfx']:4} 0F {e['op']:02X} /{e.get('reg', 'r')} {e['ops']} (by hand)")
+            continue
         if e["map"] != "0f" or e.get("vex") or e.get("evex") or e["iclass"] not in ICLASSES or e.get("ops"):
             continue
+        if e["iclass"] in MMX_FORMS and e["pfx"] == "none":
+            continue                                  # the MMX forms (mm registers): not lifted
         if e["iclass"] in ("MOVD", "MOVQ") and e["pfx"] == "none":
             continue                                  # the MMX forms (mm registers): not lifted
         group = [ln for (pfx, op, ic, w), lns in lines_by_key.items() for ln in lns
@@ -152,9 +177,10 @@ def main(argv: list[str]) -> int:
         print(f"{e['iclass']:10} {e['pfx']:4} 0F {e['op']:02X} {'w' + str(e['w']) if 'w' in e else '  '} {e['ops']}")
     print(f"{written} rows")
     if a.write:
-        spec["version"] = "0.7.1"
-        spec["revision"] += ("; 0.7.1 (2026-10-09): operand templates for the legacy-SSE rows the model lifts "
-                             "(V, W, G, E with d, q, dq, y; scripts/sse_operand_templates.py; Sprint 039)")
+        if spec["version"] == "0.7.1":
+            spec["version"] = "0.7.2"
+            spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
+                                 "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
         SPEC.write_text(json.dumps(spec, indent=1) + "\n")
     return 0
 

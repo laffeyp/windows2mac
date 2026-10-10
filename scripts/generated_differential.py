@@ -88,7 +88,7 @@ def main(argv: list[str]) -> int:
                     theirs = ";".join(map(normalize, x.operands))
                     if mine != theirs:
                         op_diff[(x.iform, f"{theirs} | {mine}")] += 1
-                        per_row[c.row]["operand_differs"] += 1
+                        per_row.setdefault(c.row, Counter())["operand_differs"] += 1
                         op_ex.setdefault((x.iform, f"{theirs} | {mine}"), c.raw[:x.length].hex())
         elif not x.ok:
             assert ours is not None

@@ -92,6 +92,8 @@ def operands(f: Fields) -> tuple[str, ...]:
             out.append("R:" + _reg((f.opcode & 7) | (f.rex & 1) << 3, _bits(t[1], f), f.rex))
         elif t == "M":
             out.append(_mem(f, None))
+        elif t == "Mcl":                       # a cache line of memory, 64 bytes (PREFETCHh; XED, Sprint 044)
+            out.append(_mem(f, 64))
         elif t[0] == "I":
             out.append(f"I:{len(f.imm)}:{int.from_bytes(f.imm, 'little'):x}")
         elif t[0] == "J":

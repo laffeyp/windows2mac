@@ -257,7 +257,7 @@ def main(argv: list[str]) -> int:
     t0 = time.monotonic()
     store = ROOT / "store" / "probe-runs" / a.run
     seed, class_set, locked, control = sd.CASE_SETS[a.set]
-    cases, _ = sd.build_cases(seed, class_set, locked, control)
+    cases = sd.cached_cases(a.set)
     built = ROOT / "build" / "probe-runs" / f"semantics-{a.set}-cases.bin"
     built.parent.mkdir(parents=True, exist_ok=True)
     sd.write_cases(cases, built)
