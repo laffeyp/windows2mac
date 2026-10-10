@@ -90,3 +90,12 @@ def test_every_rule_writes_each_temporary_once() -> None:
         if any(n > 1 for n in written.values()):
             twice[ins.iclass] += 1
     assert twice == Counter()
+
+
+def test_every_index_names_its_records_relative_to_the_repository() -> None:
+    """An absolute record path exists on the machine that wrote it and nowhere else: CI run 38087819989 failed on seven
+    class entries written with an absolute --runs (Sprint 047)."""
+    for name in ("class-runs.json", "family-runs.json", "file-runs.json"):
+        index = json.loads((ROOT / "store" / "runs" / name).read_text())
+        entries = index if isinstance(index, list) else list(index.values())
+        assert [s["record"] for s in entries if Path(s["record"]).is_absolute()] == [], name

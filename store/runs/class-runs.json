@@ -273,7 +273,7 @@
  },
  {
   "iclass": "BTC",
-  "record": "/Users/peterlaffey/port/store/runs/class-btc-1791664382316525000",
+  "record": "store/runs/class-btc-1791668161882191000",
   "rule_sha256": "sha256:f4cb513f412a7324e6263b33075baca5446e3a154cf50afdf9d66739ff4ff21c",
   "cases": 323,
   "verdicts": {
@@ -1480,7 +1480,7 @@
  },
  {
   "iclass": "LFENCE",
-  "record": "/Users/peterlaffey/port/store/runs/class-lfence-1791664383193907000",
+  "record": "store/runs/class-lfence-1791668165418210000",
   "rule_sha256": "sha256:21bb2e5c0613a2be93aa832f6a9e249fde9d65fa011db0536cc0412460cfcf83",
   "cases": 92,
   "verdicts": {
@@ -1565,7 +1565,7 @@
  },
  {
   "iclass": "MFENCE",
-  "record": "/Users/peterlaffey/port/store/runs/class-mfence-1791664384042775000",
+  "record": "store/runs/class-mfence-1791668167348286000",
   "rule_sha256": "sha256:3b24f741e6832f973788bbe378de04e1e49e33677d5feb8da1173cbbd8db0c4a",
   "cases": 120,
   "verdicts": {
@@ -1973,7 +1973,7 @@
  },
  {
   "iclass": "MUL",
-  "record": "/Users/peterlaffey/port/store/runs/class-mul-1791664385012174000",
+  "record": "store/runs/class-mul-1791668169804798000",
   "rule_sha256": "sha256:965c1c4c1aef4b41101c32aa63294fc98a554d3213bd60f5283eede5c0445704",
   "cases": 348,
   "verdicts": {
@@ -2364,7 +2364,7 @@
  },
  {
   "iclass": "PCMPISTRI",
-  "record": "/Users/peterlaffey/port/store/runs/class-pcmpistri-1791664379434228000",
+  "record": "store/runs/class-pcmpistri-1791668172474643000",
   "rule_sha256": "sha256:fc92bacf35f037c97ed6b582699cb6675371b9af182eb69826e3081e80c35bd1",
   "cases": 1277,
   "verdicts": {
@@ -2381,7 +2381,7 @@
  },
  {
   "iclass": "PCMPISTRI64",
-  "record": "/Users/peterlaffey/port/store/runs/class-pcmpistri64-1791664380518781000",
+  "record": "store/runs/class-pcmpistri64-1791668176455032000",
   "rule_sha256": "sha256:fc92bacf35f037c97ed6b582699cb6675371b9af182eb69826e3081e80c35bd1",
   "cases": 713,
   "verdicts": {
@@ -3843,7 +3843,7 @@
  },
  {
   "iclass": "UNPCKHPD",
-  "record": "/Users/peterlaffey/port/store/runs/class-unpckhpd-1791664381489974000",
+  "record": "store/runs/class-unpckhpd-1791668178874725000",
   "rule_sha256": "sha256:788e43ea97bd1c2f8a0bc2637ba93e2cfc5986374c69cfe85f3c0f4305c9fd63",
   "cases": 268,
   "verdicts": {

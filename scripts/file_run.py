@@ -291,7 +291,8 @@ def item_run(runs: Path, file_source: str | None = None,
 
     result = run_with_provenance(runs / run_id, topology)
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
-    return {"record": str(result.record_root), "candidate_sha256": sha, "verdicts": dict(state["verdicts"]),
+    record = Path(result.record_root).resolve()       # relative to the repository, as family_run
+    return {"record": str(record.relative_to(ROOT) if record.is_relative_to(ROOT) else record), "candidate_sha256": sha, "verdicts": dict(state["verdicts"]),
             "divergence": dict(state["divergence"]), "events": dict(kinds)}
 
 

@@ -221,7 +221,8 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
 
     result = run_with_provenance(runs / run_id, topology)
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
-    return {"iclass": iclass, "record": str(result.record_root), "rule_sha256": rule.sha256, "cases": len(cases),
+    record = Path(result.record_root).resolve()       # relative to the repository, as family_run (CI run 38087819989)
+    return {"iclass": iclass, "record": str(record.relative_to(ROOT) if record.is_relative_to(ROOT) else record), "rule_sha256": rule.sha256, "cases": len(cases),
             "verdicts": dict(state["verdicts"]), "events": dict(kinds)}
 
 
