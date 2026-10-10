@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 046
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -51,3 +51,14 @@ The launcher runs to its call of `UnityPlayer.dll!UnityMain` (Sprint 044: 19,084
 ## done criteria
 
 The launcher calls `UnityMain` and UnityPlayer.dll's code runs in w2m, its DllMain and every service it called judged against Windows on a family's record.
+
+## observed
+
+- **The frontier moved** from 19,084 instructions (the call to `UnityPlayer.dll!UnityMain`, a stop) to 403,044: the loader maps UnityPlayer.dll, its DllMain runs its C runtime and its own start-up and returns, the launcher's WinMain calls UnityMain, and UnityPlayer's code stops at `SHELL32.dll!CommandLineToArgvW` (SERVICE_UNIMPLEMENTED, called from 0x180527460). Every one of the 54 services called on the way has rows in a family (checked against the frontier's call counts).
+- **The loader:** a DLL from the program's directory at its preferred base when free, else relocated (44,285 DIR64 sites, tested at two bases); imports bound to exports, a missing one refusing the load; DllMain(DLL_PROCESS_ATTACH, non-NULL) from an x86 stub before the program's entry; PEB.Ldr's three lists and a synthetic ntdll; static TLS (index 0 the program's, the first DLL's 1).
+- **Families accepted, each on its own record:** loader, static TLS (the DLL on the static C runtime, its start-up run to the end), pointer encoding, thread queries, slim locks, system information, virtual memory (an arena behind one host request per call), sync objects, storage get2 (Server 2025's rows), time and error mode (parent and child). Families may name host files and plant faults in host modules.
+- **Windows against expectation:** apphelp.dll joins the loader lists on a binary's first execution only; an ASLR DLL loaded at its preferred base on every runner; an image's writable pages read PAGE_WRITECOPY until written; a failed VirtualProtect still writes the old protection; FlsGetValue on a freed index answers NULL with error 0; Server 2022 lacks FlsGetValue2 and TlsGetValue2; a thread's creation time can read later than the system time on Server 2022; GetVersionExW says 6.2 build 9200 and product type 3 (Server) without a manifest; GetTimeZoneInformation sets error 0; the error mode under cmd is 0x8003.
+- **Instruction classes:** sets 046 (13 SSE classes), 046b (CQO, CWDE, IDIV; Windows's divide status rule holds for IDIV), 046c (CMPXCHG16B, constructed cases for the success path), 046d (26 SSE2 integer classes; a table-driven NEON lowering), 046e (RCPPS, RSQRTPS, RCPSS, RSQRTSS; 742 cases on the 8573C); 231 of 231 classes accepted. RCPPS and RSQRTPS: every CPU tabulated has the same shape (12 mantissa bits decide; exponents scale exactly), AMD EPYC 7763, 9V45 and 9V74 share one table set, Intel Xeon 8573C and 8370C another, bit for bit; w2m carries Intel's (`specs/approximations.json`) and runs these classes in the model (slow path, a performance debt). The Xeon 6973P was not drawn in 48 runners.
+- **Planted faults:** two named reaches were wrong and are recorded: a static-TLS plant (indices from 0) named one row and faulted the run; a February-29 plant named February 31, which stays invalid, while later dates moved. A host plant's patch leaked into the next plant until importers were repointed.
+- **Lost runner rounds and their causes:** the Windows SDK and mingw's headers differ (`small` twice, a union in IMAGE_TLS_DIRECTORY64, GetVersionExW's deprecation; the gate now defines `small` and `hyper`); `_fltused` without the C runtime; a hand-made TLS directory faulted on Windows while w2m ran it (replaced by the static C runtime's); an import used only through a function pointer is invisible to the reference traversal (probe revised, runs replaced); a shell chain committed a probe whose local compile had failed; a cancel loop killed another dispatcher's runs; one transient `gh` failure ended a search (gh calls now retried).
+- Gates and CI: see the closing commit.

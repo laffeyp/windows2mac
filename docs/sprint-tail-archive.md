@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 035 (2026-10-09, closed)
+- **Scope:** kernel32 for both probes as freestanding C in the VM; C candidates; translation on the signal plane.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the VM builds the runtime image with clang and `ld -preload`, copies it into the monitor area, writes the TEB and PEB at the spec's offsets, and points each import's dispatch entry at a bridge; a call saves the GPRs, enters the C service on the runtime stack, which reads or writes the TEB or asks the host through the transport page, and returns through RET's pop; the ring gives the host the call list; each compiled block is published on the signal plane.
+  - *Observation 1 (a timer measured the recorder):* the first VM times doubled because the translation record was written inside the timed call. Disposition: resolved-here; the direct split matches Sprint 032.
+  - *Observation 2 (a fixture caught store pollution):* re-judging under a new prefix doubled the reference executions. Disposition: resolved-here (ids reused for identical bodies; `--run-id` must be the GitHub run id).
+  - *Observation 3 (C changes what admission must police):* the signature now carries the parameter rule; division moved from "may raise" to "refused", because an x86 host traps where AArch64 does not. Disposition: resolved-here, with tests.
+- **Closed:** clean.
+
 ### Sprint 034 (2026-10-09, closed)
 - **Scope:** CONTEXT, TEB, PEB and fault/suspend behavior measured on the runner; the guest state spec judged against it.
 - **Rubber Duck Pass:**

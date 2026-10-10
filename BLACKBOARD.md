@@ -171,6 +171,7 @@
 - **2026-10-10** — Sprint 042 (the Windows-function pipeline, on CreateFileW) closed. `probes/create_file/` (188 rows, Server 2025 run 38031352273 and Server 2022 run 38031354036), `contracts/windows.file.create_file.dispositions_sharing/0.1.0.json` (acceptance `exact_rows`, relation `exact`), `ExactRows` and `compare_exact_rows`, `tools/guest_runtime/file.c`, `src/w2m/file_bridge.py`, `build_runtime()`, `scripts/file_run.py` (item run, plants), `tests/test_create_file.py`, NEG rule and case set 042 (release `semantics-042`, run 38031723882), `Once()` decision triggers (141 classes rerun), service ring 10,922 records, `scripts/measure_file_generation.py` (session topology; kimi-k2.7-code:cloud accepted in one turn, 46 model calls), substrate from `./substrate` branch `w2m`. Dual contract: signal pass; artifact pass (gates 0, 306 tests, 441 records replay); observation pass.
 - **2026-10-10** — Sprint 043 (causality in every record) closed. `src/w2m/differential.py` (one topology: candidate → comparison → decision → route → resolution; `rebuild_ledger`), `store/runs/discrepancy-ledger.json`, six differentials moved onto it and the decoder differential recording for the first time, `tests/test_differential.py`. Nine causal records; 3 discrepancies open, all decoder gaps routed contract_revision. Dual contract: signal pass; artifact pass (gates 0, 312 tests, 451 records); observation pass.
 - **2026-10-10** — Sprint 044 (the launcher's C runtime surface, by family) closed. Eleven families accepted on their own records, each a no-CRT runner probe, a contract from its rows, guest C in `tools/guest_runtime/` and an item run: process queries, modules, critical sections, thread storage, heap, console 0.2.0, code pages 0.2.0, environment (set and empty blocks), exception filter; `scripts/family_run.py` (families, fnmatch plant reaches), `src/w2m/modules.py`, `src/w2m/code_pages.py` (tables from runner rows), VM: GS-relative operands, guest counter, start and clock modes, heap arena, environment block, host requests by op; case sets 044 to 044e (releases semantics-044 to semantics-044e), 183 classes accepted; `scripts/class_census.py`; `scripts/model_family.py` (kimi-k2.7-code wrote an accepted environment.c); probe builds reproducible (`/Brepro`). Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — the frontier stops at `UnityPlayer.dll!UnityMain` after 19,084 instructions with every service before it judged against Windows.
+- **2026-10-10** — Sprint 046 (several images) closed. The loader maps UnityPlayer.dll (preferred base or relocated), binds imports between images, runs DllMain before the program's entry, writes PEB.Ldr and static TLS; ten families (loader, static TLS, pointer encoding, thread queries, slim locks, system information, virtual memory, sync objects, storage get2, time and error mode); case sets 046 to 046e; RCPPS and RSQRTPS from Intel's measured tables. Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — DllMain returns, the launcher enters UnityMain, and UnityPlayer stops at `SHELL32.dll!CommandLineToArgvW` after 403,044 instructions with every service before it judged.
 
 ## Deferred
 
@@ -211,6 +212,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 046 (2026-10-10, closed)
+- **Scope:** load UnityPlayer.dll, run its DllMain, enter UnityMain.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* stop, stub-list what follows, probe on the runners, answer the rows, plant, accept, move.
+  - *Observation 1 (SDK against mingw):* five runner rounds lost to header and link differences. Disposition: the gate defines `small` and `hyper`; KIT_DIARY #31.
+  - *Observation 2 (results per CPU model):* RCPPS and RSQRTPS differ by vendor. Disposition: Intel's tables measured on two generations; KIT_DIARY #32.
+  - *Observation 3 (two wrong reaches):* recorded on the card.
+- **Closed:** clean.
 
 ### Sprint 044 (2026-10-10, closed)
 - **Scope:** the launcher's C runtime start-up, family by family, until the stop is `UnityPlayer.dll!UnityMain`.
@@ -293,13 +303,4 @@
   - *Observation 3 (a script must reproduce the session):* the committed rebuild first differed from the step-by-step spec by one row, because request order decided which row won a key. Disposition: resolved-here; the rebuild now equals it row for row.
 - **Closed:** clean.
 
-### Sprint 035 (2026-10-09, closed)
-- **Scope:** kernel32 for both probes as freestanding C in the VM; C candidates; translation on the signal plane.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the VM builds the runtime image with clang and `ld -preload`, copies it into the monitor area, writes the TEB and PEB at the spec's offsets, and points each import's dispatch entry at a bridge; a call saves the GPRs, enters the C service on the runtime stack, which reads or writes the TEB or asks the host through the transport page, and returns through RET's pop; the ring gives the host the call list; each compiled block is published on the signal plane.
-  - *Observation 1 (a timer measured the recorder):* the first VM times doubled because the translation record was written inside the timed call. Disposition: resolved-here; the direct split matches Sprint 032.
-  - *Observation 2 (a fixture caught store pollution):* re-judging under a new prefix doubled the reference executions. Disposition: resolved-here (ids reused for identical bodies; `--run-id` must be the GitHub run id).
-  - *Observation 3 (C changes what admission must police):* the signature now carries the parameter rule; division moved from "may raise" to "refused", because an x86 host traps where AArch64 does not. Disposition: resolved-here, with tests.
-- **Closed:** clean.
-
-Older entries (Sprints 000-034): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035): `docs/sprint-tail-archive.md`.

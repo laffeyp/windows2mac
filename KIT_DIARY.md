@@ -281,3 +281,19 @@
 **Finding (#30):** a guard that skips silently when its bound is passed turns a growth into missing data with no error. The bound must be checked where the ids are made (a test: every id below it), and a stop must report what stopped it on every path that can stop, not on the first path written.
 
 **Kit change suggested:** every fixed-size table indexed by a growing enumeration has a test holding the enumeration under the bound; every exit path of a run is enumerated in one place that maps it to its signal.
+
+### 2026-10-10 — Sprint 046: the gate's headers are not the runner's
+
+**What happened:** the local gate compiles every probe against mingw-w64's Windows headers; the runners build with clang against Microsoft's Windows SDK. Five runner rounds failed on differences the gate could not see: rpcndr.h's `#define small char` (twice, in two probes), IMAGE_TLS_DIRECTORY64's Characteristics inside a union (-Wmissing-braces), GetVersionExW's deprecation (-Wdeprecated-declarations), and `_fltused`, which a no-CRT program using floats must define for MSVC's linker. Each round costs a dispatch and minutes; none of the five was a question about Windows.
+
+**Finding (#31):** a gate that stands in for a remote build is only as good as its likeness to that build. Where the two toolchains differ, the gate must either reproduce the remote's definitions (the gate now defines `small` and `hyper` as rpcndr.h does) or the remote must be the gate.
+
+**Kit change suggested:** for each class of remote-only failure, add the cheapest local reproduction to the gate the first time it costs a round, and record the class in the diary.
+
+### 2026-10-10 — Sprint 046: "Intel" is not a reference
+
+**What happened:** RCPPS and RSQRTPS are approximations the SDM bounds and leaves to the implementation. Measured exhaustively, every CPU's results have the same shape (the mantissa's top 12 bits decide; exponents scale exactly), but AMD's EPYC 7763, 9V45 and 9V74 share one table set and Intel's Xeon 8573C and 8370C another. A case set judged on "an Intel runner" would have been judged against whichever Intel model the draw gave; the dispatcher now waits for a named model (`--cpu`).
+
+**Finding (#32):** where the architecture leaves a result to the implementation, the reference is a CPU model, not a vendor; the evidence must name the model and show which other models agree before the rows stand for more than one.
+
+**Kit change suggested:** every contract whose rows come from implementation-defined behavior names the models it was observed on and the ones it was not.
