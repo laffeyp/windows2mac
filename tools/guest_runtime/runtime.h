@@ -274,6 +274,7 @@ struct w2m_exception_area {
 #define W2M_API_Sleep 107
 #define W2M_API_FlsGetValue2 108
 #define W2M_API_TlsGetValue2 109
+#define W2M_API_AreFileApisANSI 110
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);

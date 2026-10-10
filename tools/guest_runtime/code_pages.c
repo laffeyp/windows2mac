@@ -263,3 +263,7 @@ u64 k32_LCMapStringEx(u64 locale_name, u64 flags, u64 src, u64 len, u64 rsp) {
     for (int i = 0; i < n; i++) out[i] = map[table_index(W2M_API_LCMapStringEx, s[i])];
     return w2m_logged(W2M_API_LCMapStringEx, flags, (u64)n);
 }
+
+/* AreFileApisANSI: TRUE, the file functions use the ANSI code page (contracts/windows.loader.static_tls row
+ * file_apis_ansi; Microsoft Learn: the default until SetFileApisToOEM, which w2m does not serve). */
+u64 k32_AreFileApisANSI(void) { return w2m_logged(W2M_API_AreFileApisANSI, 0, 1); }

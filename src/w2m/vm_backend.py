@@ -200,7 +200,8 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "WaitForMultipleObjects": ("k32_WaitForMultipleObjects", True),
             "Sleep": ("k32_Sleep", False),
             "FlsGetValue2": ("k32_FlsGetValue2", True),
-            "TlsGetValue2": ("k32_TlsGetValue2", True)}
+            "TlsGetValue2": ("k32_TlsGetValue2", True),
+            "AreFileApisANSI": ("k32_AreFileApisANSI", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py

@@ -1,0 +1,116 @@
+{
+ "contract_id": "windows.loader.static_tls",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A program without TLS importing a DLL with static TLS (built on the static C runtime, as UnityPlayer.dll is): the DLL's TLS index is 1, TEB.ThreadLocalStoragePointer's slot holds the thread's copy of the template with its zero fill, a write stays in the copy; the DLL's C runtime start-up runs and AreFileApisANSI answers TRUE.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/static_tls/static_tls.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "tls.index",
+    "value": 1
+   },
+   {
+    "s": "tls.array",
+    "set": true,
+    "slot_holds_block": true
+   },
+   {
+    "s": "tls.values",
+    "counter": 41,
+    "zeros_zero": true
+   },
+   {
+    "s": "tls.write",
+    "counter_after": 42,
+    "template_unchanged": true
+   },
+   {
+    "s": "tls.directory",
+    "callbacks_empty": true,
+    "zero_fill": 0,
+    "index_address_in_image": true
+   },
+   {
+    "s": "file_apis_ansi",
+    "value": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38052225205: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052227164: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052228936: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052230688: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052283584: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052285625: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052287519: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052289305: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052338873: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052340301: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052341746: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052343190: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052401476: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052403044: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada; run 38052404525: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3; run 38052406160: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "static_tls-1791635442-0-1",
+    "static_tls-1791635442-0-2",
+    "static_tls-1791635442-1-1",
+    "static_tls-1791635442-1-2",
+    "static_tls-1791635442-2-1",
+    "static_tls-1791635442-2-2",
+    "static_tls-1791635442-3-1",
+    "static_tls-1791635442-3-2",
+    "static_tls-1791635498-0-1",
+    "static_tls-1791635498-0-2",
+    "static_tls-1791635498-1-1",
+    "static_tls-1791635498-1-2",
+    "static_tls-1791635498-2-1",
+    "static_tls-1791635498-2-2",
+    "static_tls-1791635498-3-1",
+    "static_tls-1791635498-3-2",
+    "static_tls-1791635553-0-1",
+    "static_tls-1791635553-0-2",
+    "static_tls-1791635553-1-1",
+    "static_tls-1791635553-1-2",
+    "static_tls-1791635553-2-1",
+    "static_tls-1791635553-2-2",
+    "static_tls-1791635553-3-1",
+    "static_tls-1791635553-3-2",
+    "static_tls-1791635614-0-1",
+    "static_tls-1791635614-0-2",
+    "static_tls-1791635614-1-1",
+    "static_tls-1791635614-1-2",
+    "static_tls-1791635614-2-1",
+    "static_tls-1791635614-2-2",
+    "static_tls-1791635614-3-1",
+    "static_tls-1791635614-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-pe-tls",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/../../windows/win32/debug/pe-format (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "The loader assigns the value of the TLS index to the place that was indicated by the Address of Index field."
+  }
+ ],
+ "open_questions": [
+  "Index 0 belongs to the program even without a TLS directory (the DLL's index is 1); what its slot holds is not observed (w2m: NULL).",
+  "Windows calls the DLL's entry with DLL_PROCESS_DETACH at ExitProcess; w2m does not yet, and no row reads it.",
+  "The console start's standard input and error answer NULL and its standard output FILE_TYPE_DISK in w2m, which the DLL's C runtime asks at start-up; the rows do not read them."
+ ],
+ "sections": {
+  "probe": "probes/static_tls (Sprint 044)",
+  "implementation": "tools/guest_runtime/code_pages.c",
+  "rows": "scripts/family_run.py static_tls",
+  "excluded": "none"
+ }
+}

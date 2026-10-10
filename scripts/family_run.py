@@ -760,6 +760,49 @@ FAMILIES: dict[str, Family] = {
         plants={"get2_sets_error": Plant("    return w2m_logged(W2M_API_FlsGetValue2, index, v);",
                                          "    set_error(0);\n    return w2m_logged(W2M_API_FlsGetValue2, index, v);",
                                          ("fls2.unset", "fls2.set", "fls2.freed"))}),
+    "static_tls": Family(
+        name="static_tls",
+        contract_id="windows.loader.static_tls",
+        version="0.1.0",
+        summary=("A program without TLS importing a DLL with static TLS (built on the static C runtime, as UnityPlayer.dll "
+                 "is): the DLL's TLS index is 1, TEB.ThreadLocalStoragePointer's slot holds the thread's copy of the "
+                 "template with its zero fill, a write stays in the copy; the DLL's C runtime start-up runs and "
+                 "AreFileApisANSI answers TRUE."),
+        probe="static_tls", guest_file="code_pages.c",
+        runs={
+              "38052225205": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635442-0", "AMD EPYC 7763 64-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052227164": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635442-1", "AMD EPYC 9V74 80-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052228936": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635442-2", "AMD EPYC 7763 64-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052230688": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635442-3", "AMD EPYC 7763 64-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052283584": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635498-0", "AMD EPYC 9V74 80-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052285625": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635498-1", "AMD EPYC 7763 64-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052287519": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635498-2", "AMD EPYC 7763 64-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052289305": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635498-3", "AMD EPYC 9V74 80-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052338873": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635553-0", "AMD EPYC 9V45 96-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052340301": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635553-1", "AMD EPYC 7763 64-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052341746": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635553-2", "AMD EPYC 7763 64-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052343190": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635553-3", "AMD EPYC 7763 64-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052401476": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635614-0", "AMD EPYC 7763 64-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052403044": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635614-1", "AMD EPYC 7763 64-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+              "38052404525": Run("windows-2025", "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3", "static_tls-1791635614-2", "AMD EPYC 7763 64-Core Processor", dll="f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5"),
+              "38052406160": Run("windows-2022", "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada", "static_tls-1791635614-3", "AMD EPYC 7763 64-Core Processor", dll="3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2"),
+        },
+        documented=(
+            documented("ms-pe-tls", "../../windows/win32/debug/pe-format", "2024-02-22",
+                       "The loader assigns the value of the TLS index to the place that was indicated by the Address "
+                       "of Index field."),),
+        open_questions=(
+            "Index 0 belongs to the program even without a TLS directory (the DLL's index is 1); what its slot holds "
+            "is not observed (w2m: NULL).",
+            "Windows calls the DLL's entry with DLL_PROCESS_DETACH at ExitProcess; w2m does not yet, and no row reads it.",
+            "The console start's standard input and error answer NULL and its standard output FILE_TYPE_DISK in w2m, "
+            "which the DLL's C runtime asks at start-up; the rows do not read them."),
+        dll_name="static_tls_dll.dll", host_files=("src/w2m/loader.py", "src/w2m/vm_backend.py"),
+        # (a first plant, indices from 0 with no program slot, was named for tls.index and faulted the run: the DLL's
+        # block moved to slot 0 while it read slot 1; recorded in Sprint 046's card, replaced by this one)
+        plants={"template_not_copied": Plant("        block = bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill)",
+                                            "        block = bytes(end - start) + bytes(zero_fill)",
+                                            ("tls.values", "tls.write"), host="w2m.loader")}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
