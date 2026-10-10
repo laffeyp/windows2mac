@@ -733,6 +733,33 @@ FAMILIES: dict[str, Family] = {
                 "create_leaves_error": Plant("            set_error(0);                              /* rows *.create: err 0 */\n",
                                              "", ("semaphore.create", "event.manual.create", "event.auto.create_set",
                                                   "mutex.create"))}),
+    "storage_get2": Family(
+        name="storage_get2",
+        contract_id="windows.thread_storage.get2",
+        version="0.1.0",
+        summary=("FlsGetValue2 and TlsGetValue2, which Server 2025 exports and 2022 does not: the values FlsGetValue and "
+                 "TlsGetValue give, with the last error left; FlsGetValue on a freed index answers NULL with error 0."),
+        probe="storage_get2", guest_file="thread_storage.c",
+        runs={
+              "38051903385": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635131-0", "AMD EPYC 7763 64-Core Processor"),
+              "38051906733": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635131-2", "AMD EPYC 9V74 80-Core Processor"),
+              "38051960386": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635187-0", "AMD EPYC 7763 64-Core Processor"),
+              "38051963773": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635187-2", "AMD EPYC 7763 64-Core Processor"),
+              "38052017832": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635244-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38052021003": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635244-2", "AMD EPYC 7763 64-Core Processor"),
+              "38052073638": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635300-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38052076917": Run("windows-2025", "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4", "storage_get2-1791635300-2", "AMD EPYC 9V74 80-Core Processor"),
+
+        },
+        documented=(
+            documented("ms-tlsgetvalue2", "api/processthreadsapi/nf-processthreadsapi-tlsgetvalue2", "2024-09-04",
+                       "This function is identical to TlsGetValue except that it doesn't set the thread's last error."),),
+        open_questions=(
+            "The runs are Server 2025's: Server 2022 exports neither function (its rows say so), and w2m's export list "
+            "is Server 2025's (specs/windows_exports.json). FlsGetValue2 has no Microsoft Learn page.",),
+        plants={"get2_sets_error": Plant("    return w2m_logged(W2M_API_FlsGetValue2, index, v);",
+                                         "    set_error(0);\n    return w2m_logged(W2M_API_FlsGetValue2, index, v);",
+                                         ("fls2.unset", "fls2.set", "fls2.freed"))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",

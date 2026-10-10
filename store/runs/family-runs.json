@@ -433,6 +433,38 @@
    "38048683615": "conforms"
   }
  },
+ "storage_get2": {
+  "candidate_sha256": "sha256:55f4e3c3e73b434ecbadd78f1aa32a47830454f869daef4346e6f69c3f57d063",
+  "divergence": {
+   "38051903385": null,
+   "38051906733": null,
+   "38051960386": null,
+   "38051963773": null,
+   "38052017832": null,
+   "38052021003": null,
+   "38052073638": null,
+   "38052076917": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 8,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "storage_get2",
+  "record": "store/runs/family-storage_get2-1791635460629856000",
+  "verdicts": {
+   "38051903385": "conforms",
+   "38051906733": "conforms",
+   "38051960386": "conforms",
+   "38051963773": "conforms",
+   "38052017832": "conforms",
+   "38052021003": "conforms",
+   "38052073638": "conforms",
+   "38052076917": "conforms"
+  }
+ },
  "sync_objects": {
   "candidate_sha256": "sha256:9ed5cbfb79d974c76363da59b4f9910cbed93eb50aa72d0751db35e205000520",
   "divergence": {

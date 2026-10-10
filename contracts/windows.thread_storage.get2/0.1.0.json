@@ -1,0 +1,118 @@
+{
+ "contract_id": "windows.thread_storage.get2",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "FlsGetValue2 and TlsGetValue2, which Server 2025 exports and 2022 does not: the values FlsGetValue and TlsGetValue give, with the last error left; FlsGetValue on a freed index answers NULL with error 0.",
+ "applicability": "windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/storage_get2/storage_get2.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "exports",
+    "kernel32_fls2": true,
+    "kernelbase_fls2": true,
+    "kernel32_tls2": true,
+    "kernelbase_tls2": true
+   },
+   {
+    "s": "fls2.unset",
+    "value2": 0,
+    "err2": 57005,
+    "value1": 0,
+    "err1": 87
+   },
+   {
+    "s": "fls2.set",
+    "value2": 42,
+    "err2": 57005,
+    "value1": 42,
+    "err1": 0
+   },
+   {
+    "s": "fls2.freed",
+    "value2": 0,
+    "err2": 57005,
+    "value1": 0,
+    "err1": 0
+   },
+   {
+    "s": "tls2.unset",
+    "value2": 0,
+    "err2": 57005,
+    "value1": 0,
+    "err1": 0
+   },
+   {
+    "s": "tls2.set",
+    "value2": 43,
+    "err2": 57005,
+    "value1": 43,
+    "err1": 0
+   },
+   {
+    "s": "tls2.freed",
+    "value2": 0,
+    "err2": 57005,
+    "value1": 0,
+    "err1": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38051903385: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38051906733: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38051960386: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38051963773: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38052017832: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38052021003: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38052073638: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4; run 38052076917: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "storage_get2-1791635131-0-1",
+    "storage_get2-1791635131-0-2",
+    "storage_get2-1791635131-2-1",
+    "storage_get2-1791635131-2-2",
+    "storage_get2-1791635187-0-1",
+    "storage_get2-1791635187-0-2",
+    "storage_get2-1791635187-2-1",
+    "storage_get2-1791635187-2-2",
+    "storage_get2-1791635244-0-1",
+    "storage_get2-1791635244-0-2",
+    "storage_get2-1791635244-2-1",
+    "storage_get2-1791635244-2-2",
+    "storage_get2-1791635300-0-1",
+    "storage_get2-1791635300-0-2",
+    "storage_get2-1791635300-2-1",
+    "storage_get2-1791635300-2-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-tlsgetvalue2",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-tlsgetvalue2 (page updated 2024-09-04; retrieved 2026-10-10)",
+   "quote": "This function is identical to TlsGetValue except that it doesn't set the thread's last error."
+  }
+ ],
+ "open_questions": [
+  "The runs are Server 2025's: Server 2022 exports neither function (its rows say so), and w2m's export list is Server 2025's (specs/windows_exports.json). FlsGetValue2 has no Microsoft Learn page."
+ ],
+ "sections": {
+  "probe": "probes/storage_get2 (Sprint 044)",
+  "implementation": "tools/guest_runtime/thread_storage.c",
+  "rows": "scripts/family_run.py storage_get2",
+  "excluded": "none"
+ }
+}
