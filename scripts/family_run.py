@@ -13,14 +13,16 @@ Usage: uv run python scripts/family_run.py <family> --contract | --run | --plant
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fnmatch
 import hashlib
+import importlib
 import json
 import sys
 import tempfile
 import time
 from collections import Counter
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -48,6 +50,7 @@ class Run:
     binary: str           # the probe binary the runner built and ran (sha256 hex)
     execution: str        # the workflow's execution id prefix
     cpu: str
+    dll: str | None = None    # the DLL the runner built beside the probe (sha256 hex; probe.json `dll`)
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,7 @@ class Plant:
     old: str              # text of the guest C file, present exactly once
     new: str
     reach: tuple[str, ...]  # the rows it changes, named before it runs (fnmatch patterns allowed)
+    host: str | None = None  # a host module (w2m.vm_backend) to patch instead of the family's guest file
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,8 @@ class Family:
     arguments: str = ""                   # after the quoted module path on the command line
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
+    dll_name: str | None = None           # the probe's own DLL, loaded from its directory (Sprint 046)
+    host_files: tuple[str, ...] = ()      # host source that implements the family too (the loader's Python)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The contract's rows from a probe's printed rows: derived, then the excluded rows dropped."""
@@ -178,7 +184,69 @@ def environment_family(start: str, summary: str, environment: tuple[str, ...], p
         output_file=f"w2m-environment-{start}.jsonl", environment=environment, plants=plants)
 
 
+def loader_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """apphelp.dll is in the loader lists of a binary's first execution on a runner and not of its second
+    (16 runs, both images): the application-compatibility engine looks at a binary it has not seen. The
+    rows drop it, with its count."""
+    out = []
+    for r in printed:
+        if "names" in r and "apphelp.dll" in r["names"]:
+            r = {**r, "names": [n for n in r["names"] if n != "apphelp.dll"], "count": r["count"] - 1,
+                 "bases_equal_module_handles": r["bases_equal_module_handles"] - 1}
+        out.append(r)
+    return out
+
+
 FAMILIES: dict[str, Family] = {
+    "loader": Family(
+        name="loader",
+        contract_id="windows.loader.static_import",
+        version="0.1.0",
+        summary=("A program that imports a DLL from its directory: the DLL's entry runs once with DLL_PROCESS_ATTACH "
+                 "and a non-NULL lpReserved before the program's entry; the DLL sits at its preferred base; "
+                 "GetModuleHandleW finds it by any case and without its extension; the PEB's loader lists hold the "
+                 "program, ntdll, KERNEL32, KERNELBASE and the DLL, initialization order ntdll, KERNELBASE, KERNEL32, "
+                 "the DLL."),
+        probe="loader", guest_file="module.c",
+        runs={
+              "38047927781": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631092-0", "AMD EPYC 9V45 96-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38047929442": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631092-1", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38047930988": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631092-2", "AMD EPYC 7763 64-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38047932539": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631092-3", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38047981900": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631150-0", "AMD EPYC 9V74 80-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38047983522": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631150-1", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38047984894": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631150-2", "AMD EPYC 7763 64-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38047987237": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631150-3", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38048037669": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631207-0", "AMD EPYC 7763 64-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38048039731": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631207-1", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38048041658": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631207-2", "AMD EPYC 7763 64-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38048043520": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631207-3", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38048095121": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631264-0", "AMD EPYC 7763 64-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38048097583": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631264-1", "AMD EPYC 7763 64-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+              "38048099528": Run("windows-2025", "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04", "loader-1791631264-2", "AMD EPYC 7763 64-Core Processor", dll="6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7"),
+              "38048101245": Run("windows-2022", "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96", "loader-1791631264-3", "AMD EPYC 9V74 80-Core Processor", dll="8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765"),
+        },
+        documented=(
+            documented("ms-dllmain", "dlls/dllmain", "2024-02-22",
+                       "lpReserved: If fdwReason is DLL_PROCESS_ATTACH, lpvReserved is NULL for dynamic loads and "
+                       "non-NULL for static loads."),),
+        open_questions=(
+            "apphelp.dll joins the lists on a binary's first execution on a runner; whether it does for the game "
+            "started by Steam is not observed. The rows drop it.",
+            "The probe's DLL loaded at its preferred base on all 16 runs though it is ASLR-enabled; UnityPlayer.dll's "
+            "base on Windows is not observed, and w2m places it at its preferred base when free.",
+            "ntdll's exports are not listed: GetProcAddress on ntdll stops the run."),
+        derive=loader_rows, dll_name="loader_dll.dll",
+        host_files=("src/w2m/loader.py", "src/w2m/modules.py", "src/w2m/vm_backend.py"),
+        plants={"init_order_kernel32_first": Plant(
+                    "        init = [nt, kb, k32, *(dll[d.name] for d in self.ld.dependency_order)]",
+                    "        init = [nt, k32, kb, *(dll[d.name] for d in self.ld.dependency_order)]",
+                    ("ldr.init_order",), host="w2m.vm_backend"),
+                "reserved_null": Plant(
+                    '        out += bytes.fromhex("49b8") + LOADER_STUB.to_bytes(8, "little")   # mov r8, lpReserved (non-NULL: static load)',
+                    '        out += bytes.fromhex("49b8") + (0).to_bytes(8, "little")',
+                    ("entry.calls_at_exe_entry",), host="w2m.loader")}),
+
     "environment_set": environment_family(
         "set", "A process started with an explicit environment block sees that block as it was passed, in its order, "
         "as a fresh process-heap copy of exactly its size on each GetEnvironmentStringsW call; "
@@ -540,7 +608,8 @@ def contract(f: Family) -> Contract:
     return load_contract(f.contract_path)
 
 
-def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | None = None) -> tuple[bytes, str, float]:
+def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | None = None,
+              dll: str | None = None) -> tuple[bytes, str, float]:
     """A runner's probe binary in the managed VM with a fresh file-system root, started as `f` says;
     (its rows' bytes: standard output, or f.output_file; the stop; seconds)."""
     from w2m.vm_backend import VM
@@ -548,7 +617,14 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
     with tempfile.TemporaryDirectory(prefix="w2m-family-") as d:
         files = FileBridge(Path(d))
         line = None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}'
-        vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes()), files=files,
+        if dll is None and f is not None and f.dll_name is not None:
+            dll = next(r.dll for r in f.runs.values() if r.binary == binary)
+        dll_bytes = None if dll is None else (ROOT / "store" / "binaries" / f"{dll}.dll").read_bytes()
+
+        def dlls(name: str) -> bytes | None:
+            return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None
+
+        vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes(), dlls, "probe.exe"), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
                 gui=f is not None and f.gui, command_line=line, environment=() if f is None else f.environment)
         try:
@@ -581,6 +657,30 @@ def named_reach(f: Family, p: Plant) -> list[str]:
     return [r["s"] for r in c.acceptance.rows if any(fnmatch.fnmatchcase(r["s"], pat) for pat in p.reach)]
 
 
+def candidate_sha256(f: Family, sources: dict[str, str] | None = None) -> str:
+    """The candidate is the family's guest file, and its host files when it names any (in order, each
+    preceded by its path): an edit to either makes a new candidate."""
+    text = (sources or {}).get(f.guest_file, (GUEST / f.guest_file).read_text())
+    for path in f.host_files:
+        text += f"\0{path}\0" + (ROOT / path).read_text()
+    return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+
+
+@contextlib.contextmanager
+def host_patched(module_name: str, old: str, new: str) -> Iterator[None]:
+    """Run with a host module's source changed once (a planted fault in the loader's Python); restored after."""
+    module = importlib.import_module(module_name)
+    source = Path(module.__file__ or "").read_text()
+    assert source.count(old) == 1, f"plant: its target text is not in {module_name} exactly once"
+    saved = dict(module.__dict__)
+    exec(compile(source.replace(old, new), module.__file__ or module_name, "exec"), module.__dict__)  # noqa: S102
+    try:
+        yield
+    finally:
+        module.__dict__.clear()
+        module.__dict__.update(saved)
+
+
 def planted_sources(f: Family, name: str) -> dict[str, str]:
     p = f.plants[name]
     text = (GUEST / f.guest_file).read_text()
@@ -594,8 +694,7 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
     from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
     c = contract(f)
-    text = (sources or {}).get(f.guest_file, (GUEST / f.guest_file).read_text())
-    sha = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+    sha = candidate_sha256(f, sources)
     cand = f"{f.name}-{sha[7:19]}"
     run_id = f"family-{f.name}-{time.time_ns()}"
     t0 = time.monotonic()
@@ -716,7 +815,11 @@ def main(argv: list[str]) -> int:
     if a.plants:
         binary = next(iter(f.runs.values())).binary
         for name, p in f.plants.items():
-            out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
+            if p.host is not None:
+                with host_patched(p.host, p.old, p.new):
+                    out, stop, _ = run_in_vm(binary, None, f)
+            else:
+                out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
             rows, named = unequal_rows(f, out), named_reach(f, p)
             verdict = "as named" if rows == named else f"NOT as named: named {named}"
             shown = rows if len(rows) <= 20 else [*rows[:20], f"... {len(rows) - 20} more"]

@@ -1,0 +1,164 @@
+{
+ "contract_id": "windows.loader.static_import",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A program that imports a DLL from its directory: the DLL's entry runs once with DLL_PROCESS_ATTACH and a non-NULL lpReserved before the program's entry; the DLL sits at its preferred base; GetModuleHandleW finds it by any case and without its extension; the PEB's loader lists hold the program, ntdll, KERNEL32, KERNELBASE and the DLL, initialization order ntdll, KERNELBASE, KERNEL32, the DLL.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/loader/loader.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "entry.calls_at_exe_entry",
+    "count": 1,
+    "calls": [
+     {
+      "reason": 1,
+      "reserved_null": false,
+      "instance_is_module_handle": true
+     }
+    ]
+   },
+   {
+    "s": "module_handle",
+    "by_name_nonnull": true,
+    "upper_case_same": true,
+    "upper_case_err": 57005,
+    "without_extension_same": true,
+    "without_extension_err": 57005
+   },
+   {
+    "s": "dll.base",
+    "at_preferred_base": true,
+    "dynamic_base": true,
+    "above_4gb": true,
+    "aligned_64k": true
+   },
+   {
+    "s": "dll.file_name",
+    "in_exe_directory": true,
+    "leaf": "loader_dll.dll"
+   },
+   {
+    "s": "dll.export",
+    "equals_import": true,
+    "err": 57005,
+    "missing_null": true,
+    "missing_err": 127
+   },
+   {
+    "s": "ldr.load_order",
+    "names": [
+     "probe.exe",
+     "ntdll.dll",
+     "KERNEL32.DLL",
+     "KERNELBASE.dll",
+     "loader_dll.dll"
+    ],
+    "count": 5,
+    "bases_equal_module_handles": 5
+   },
+   {
+    "s": "ldr.memory_order",
+    "names": [
+     "probe.exe",
+     "ntdll.dll",
+     "KERNEL32.DLL",
+     "KERNELBASE.dll",
+     "loader_dll.dll"
+    ],
+    "count": 5,
+    "bases_equal_module_handles": 5
+   },
+   {
+    "s": "ldr.init_order",
+    "names": [
+     "ntdll.dll",
+     "KERNELBASE.dll",
+     "KERNEL32.DLL",
+     "loader_dll.dll"
+    ],
+    "count": 4,
+    "bases_equal_module_handles": 4
+   },
+   {
+    "s": "ldr.first_is_exe",
+    "value": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38047927781: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38047929442: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38047930988: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38047932539: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38047981900: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38047983522: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38047984894: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38047987237: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38048037669: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38048039731: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38048041658: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38048043520: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38048095121: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38048097583: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96; run 38048099528: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04; run 38048101245: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "loader-1791631092-0-1",
+    "loader-1791631092-0-2",
+    "loader-1791631092-1-1",
+    "loader-1791631092-1-2",
+    "loader-1791631092-2-1",
+    "loader-1791631092-2-2",
+    "loader-1791631092-3-1",
+    "loader-1791631092-3-2",
+    "loader-1791631150-0-1",
+    "loader-1791631150-0-2",
+    "loader-1791631150-1-1",
+    "loader-1791631150-1-2",
+    "loader-1791631150-2-1",
+    "loader-1791631150-2-2",
+    "loader-1791631150-3-1",
+    "loader-1791631150-3-2",
+    "loader-1791631207-0-1",
+    "loader-1791631207-0-2",
+    "loader-1791631207-1-1",
+    "loader-1791631207-1-2",
+    "loader-1791631207-2-1",
+    "loader-1791631207-2-2",
+    "loader-1791631207-3-1",
+    "loader-1791631207-3-2",
+    "loader-1791631264-0-1",
+    "loader-1791631264-0-2",
+    "loader-1791631264-1-1",
+    "loader-1791631264-1-2",
+    "loader-1791631264-2-1",
+    "loader-1791631264-2-2",
+    "loader-1791631264-3-1",
+    "loader-1791631264-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-dllmain",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "lpReserved: If fdwReason is DLL_PROCESS_ATTACH, lpvReserved is NULL for dynamic loads and non-NULL for static loads."
+  }
+ ],
+ "open_questions": [
+  "apphelp.dll joins the lists on a binary's first execution on a runner; whether it does for the game started by Steam is not observed. The rows drop it.",
+  "The probe's DLL loaded at its preferred base on all 16 runs though it is ASLR-enabled; UnityPlayer.dll's base on Windows is not observed, and w2m places it at its preferred base when free.",
+  "ntdll's exports are not listed: GetProcAddress on ntdll stops the run."
+ ],
+ "sections": {
+  "probe": "probes/loader (Sprint 044)",
+  "implementation": "tools/guest_runtime/module.c",
+  "rows": "scripts/family_run.py loader",
+  "excluded": "none"
+ }
+}

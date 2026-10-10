@@ -43,7 +43,7 @@ from typing import Literal
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, BridgeRequestError, FileBridge
-from w2m.modules import EXPORTS as EXPORTS_SPEC, Modules
+from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import THUNK_BASE, GuestFault, Loaded, Memory, Region
@@ -102,7 +102,11 @@ TLS_EXPANSION_OFF = KERNELBASE_IMAGE_OFF + 0x1000   # TEB.TlsExpansionSlots' arr
 COMMAND_LINE_OFF = TLS_EXPANSION_OFF + 0x2000    # the command line, UTF-16 with a NUL (console.c)
 ENVIRONMENT_OFF = COMMAND_LINE_OFF + 0x1000      # the environment block, UTF-16 entries and a NUL (environment.c)
 ENVIRONMENT_SIZE = 0x4000
-PROCESS_SIZE = ENVIRONMENT_OFF + ENVIRONMENT_SIZE
+NTDLL_IMAGE_OFF = ENVIRONMENT_OFF + ENVIRONMENT_SIZE   # synthetic ntdll image, one page (modules.py; Sprint 046)
+LOADER_DATA_OFF = NTDLL_IMAGE_OFF + 0x1000     # PEB.Ldr: PEB_LDR_DATA, the LDR_DATA_TABLE_ENTRYs, their names
+LOADER_DATA_SIZE = 0x4000
+LDR_ENTRY_SIZE = 0x120
+PROCESS_SIZE = LOADER_DATA_OFF + LOADER_DATA_SIZE
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -979,7 +983,8 @@ class VM:
     def _modules(self, image_name: str) -> Modules:
         """The module table (src/w2m/modules.py) and the synthetic kernel32 and kernelbase images."""
         k32, kb = PROCESS_VA + KERNEL32_IMAGE_OFF, PROCESS_VA + KERNELBASE_IMAGE_OFF
-        for off in (KERNEL32_IMAGE_OFF, KERNELBASE_IMAGE_OFF):
+        ntdll = PROCESS_VA + NTDLL_IMAGE_OFF
+        for off in (KERNEL32_IMAGE_OFF, KERNELBASE_IMAGE_OFF, NTDLL_IMAGE_OFF):
             page = self._process(off)
             self.mm[page:page + 2] = b"MZ"
             struct.pack_into("<I", self.mm, page + 0x3C, 0x80)                 # e_lfanew
@@ -999,11 +1004,60 @@ class VM:
             return self.files is not None and any(e.lower() == name for e in os.listdir(self.files.root))
 
         spec = json.loads(EXPORTS_SPEC.read_text())
-        return Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
-                       image_name=image_name, kernel32=k32, kernelbase=kb,
-                       image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
-                       imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
-                       in_app_directory=in_app_directory)
+        dlls = {d.name.lower(): (d.base, d.pe.size_of_image, {n: d.base + rva for n, rva in d.pe.exports})
+                for d in self.ld.images[1:]}
+        modules = Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
+                          image_name=image_name, kernel32=k32, kernelbase=kb,
+                          image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
+                          imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
+                          in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
+                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]})
+        if self.ld.images:                       # a program from loader.load (tests build bare ones)
+            self._write_loader_data(modules)
+        return modules
+
+    def _write_loader_data(self, m: Modules) -> None:
+        """PEB.Ldr as the loader probe's rows have it (contracts/windows.loader.static_import): load and memory
+        order the program, ntdll.dll, KERNEL32.DLL, KERNELBASE.dll, then the program's DLLs as loaded;
+        initialization order ntdll.dll, KERNELBASE.dll, KERNEL32.DLL, then the DLLs dependencies first.
+        Offsets: PEB.Ldr 0x18; PEB_LDR_DATA Length 0, Initialized 4, the three list heads at 0x10, 0x20,
+        0x30; LDR_DATA_TABLE_ENTRY links at 0x00, 0x10, 0x20, DllBase 0x30, EntryPoint 0x38, SizeOfImage
+        0x40, FullDllName 0x48, BaseDllName 0x58 (UNICODE_STRING: Length, MaximumLength, Buffer at +8)."""
+        area, va0 = self._process(LOADER_DATA_OFF), PROCESS_VA + LOADER_DATA_OFF
+        system = "C:\\Windows\\System32\\"
+        program = (self.ld.images[0].base, self.ld.image_entry, self.ld.image.size_of_image, m.image_path, m.image_name)
+        k32 = (m.kernel32, 0, 0x1000, system + "KERNEL32.DLL", "KERNEL32.DLL")
+        kb = (m.kernelbase, 0, 0x1000, system + "KERNELBASE.dll", "KERNELBASE.dll")
+        nt = (m.ntdll, 0, 0x1000, system + "ntdll.dll", "ntdll.dll")
+        dll = {d.name: (d.base, d.entry or 0, d.pe.size_of_image, APP_PATH + d.name, d.name) for d in self.ld.images[1:]}
+        entries = [program, nt, k32, kb, *dll.values()]
+        init = [nt, kb, k32, *(dll[d.name] for d in self.ld.dependency_order)]
+        if 0x58 + LDR_ENTRY_SIZE * len(entries) > LOADER_DATA_SIZE // 2:
+            raise CompileError(f"{len(entries)} loader entries: the area holds fewer")
+        at = {e[0]: va0 + 0x58 + LDR_ENTRY_SIZE * i for i, e in enumerate(entries)}
+        strings = 0x58 + LDR_ENTRY_SIZE * len(entries)
+        for i, (base, entry, size, full, leaf) in enumerate(entries):
+            e = area + 0x58 + LDR_ENTRY_SIZE * i
+            struct.pack_into("<QQQ", self.mm, e + 0x30, base, entry, size)
+            for field_off, text in ((0x48, full), (0x58, leaf)):
+                raw = text.encode("utf-16-le")
+                if strings + len(raw) + 2 > LOADER_DATA_SIZE:
+                    raise CompileError("loader names: the area is full")
+                self.mm[area + strings:area + strings + len(raw)] = raw
+                struct.pack_into("<HHIQ", self.mm, e + field_off, len(raw), len(raw) + 2, 0, va0 + strings)
+                strings += (len(raw) + 2 + 7) & ~7
+
+        def link(head_off: int, link_off: int, order: list[tuple[int, int, int, str, str]]) -> None:
+            nodes = [va0 + head_off] + [at[o[0]] + link_off for o in order]
+            for i, node in enumerate(nodes):
+                off = area + (node - va0)
+                struct.pack_into("<QQ", self.mm, off, nodes[(i + 1) % len(nodes)], nodes[i - 1])
+
+        struct.pack_into("<II", self.mm, area, 0x58, 1)
+        link(0x10, 0x00, entries)
+        link(0x20, 0x10, entries)
+        link(0x30, 0x20, init)
+        struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x18, va0)
 
     def _bridge(self, import_name: str) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,

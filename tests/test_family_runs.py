@@ -4,7 +4,6 @@ index does for every rule: an edit to a family's file after its item run leaves 
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -22,6 +21,6 @@ def test_the_committed_index_accepts_every_family_on_its_current_file() -> None:
         s = index[name]
         assert s["events"].get("CANDIDATE_ACCEPTED") == 1, name
         assert s["events"]["COMPARISON_COMPLETED"] == len(f.runs), name
-        sha = "sha256:" + hashlib.sha256((family_run.GUEST / f.guest_file).read_bytes()).hexdigest()
-        assert s["candidate_sha256"] == sha, f"{name}: {f.guest_file} changed since its item run"
+        assert s["candidate_sha256"] == family_run.candidate_sha256(f), \
+            f"{name}: {f.guest_file} or its host files changed since its item run"
         assert (ROOT / s["record"]).is_dir(), s["record"]

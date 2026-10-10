@@ -6,8 +6,12 @@ GetModuleHandleExW, GetModuleFileNameW, GetProcAddress and FreeLibrary as Window
 It asks the host only what w2m's process holds:
 
   the image             its handle is its base (PEB.ImageBaseAddress); its path C:\\w2m\\app\\<name>
+  its DLLs              each DLL the loader mapped from the program's directory (Sprint 046): handle its
+                        base, path C:\\w2m\\app\\<name>, GetProcAddress its exports
   kernel32, kernelbase  synthetic images in the process area, one page each with DOS and PE headers;
                         their export names are Windows's (specs/windows_exports.json, Server 2025)
+  ntdll                 a synthetic image too (it is in every process's loader list, contracts/
+                        windows.loader.static_import); its exports are not listed, so GetProcAddress on it stops
   api-ms-win-core-*     kernelbase, as Windows maps api-ms-win-core-synch-l1-2-0 (the modules rows)
   anything else         a stop by name (Unimplemented) when Windows would find the module: a DLL of
                         System32 or of the program's directory, or an API set w2m has not observed;
@@ -49,9 +53,13 @@ class Modules:
     image_exports: dict[str, int]    # name -> VA
     imports: dict[str, int]          # "kernel32.dll!name" (lowercased dll) -> import thunk
     make_thunk: Callable[[str], int]  # "KERNEL32.dll!Name" -> a new thunk with its bridge
+    ntdll: int = 0
+    dlls: dict[str, tuple[int, int, dict[str, int]]] = field(default_factory=dict)   # canonical name -> base, size, exports
     system32: frozenset[str] = frozenset()
     in_app_directory: Callable[[str], bool] = lambda name: False
     _thunks: dict[str, int] = field(default_factory=dict)
+
+    dll_names: dict[str, str] = field(default_factory=dict)   # canonical name -> the name as loaded
 
     def __post_init__(self) -> None:
         spec = json.loads(EXPORTS.read_text())
@@ -76,7 +84,11 @@ class Modules:
         if c.startswith(("api-ms-", "ext-ms-")):
             raise Unimplemented(f"API set {name}: its host module on Windows is not observed")
         if c == "ntdll.dll":
-            raise Unimplemented("ntdll.dll: loaded in every Windows process, not modeled")
+            if not self.ntdll:
+                raise Unimplemented("ntdll.dll: loaded in every Windows process, not modeled")
+            return self.ntdll
+        if c in self.dlls:
+            return self.dlls[c][0]
         if not loading:
             return 0                                    # not loaded in a process of only these modules
         if c in self.system32 or self.in_app_directory(c):
@@ -90,20 +102,31 @@ class Modules:
             return "C:\\Windows\\System32\\KERNEL32.DLL"
         if handle == self.kernelbase:
             return "C:\\Windows\\System32\\KERNELBASE.dll"
+        for name, (base, _, _) in self.dlls.items():
+            if handle == base:
+                return APP_DIRECTORY + self.dll_names[name]
         return None
 
     def containing(self, address: int) -> int:
         if self.image_base <= address < self.image_base + self.image_size:
             return self.image_base
-        for h in (self.kernel32, self.kernelbase):
-            if h <= address < h + 0x1000:
+        for h in (self.kernel32, self.kernelbase, self.ntdll):
+            if h and h <= address < h + 0x1000:
                 return h
+        for base, size, _ in self.dlls.values():
+            if base <= address < base + size:
+                return base
         return 0
 
     def proc(self, handle: int, name: str) -> int:
         """GetProcAddress: a thunk, or 0 when the module does not export `name`."""
         if handle == self.image_base:
             return self.image_exports.get(name, 0)
+        for base, _, exports in self.dlls.values():
+            if handle == base:
+                return exports.get(name, 0)
+        if handle and handle == self.ntdll:
+            raise Unimplemented(f"GetProcAddress ntdll.dll!{name}: ntdll's exports are not listed")
         module = {self.kernel32: "kernel32", self.kernelbase: "kernelbase"}.get(handle)
         if module is None:
             raise Unimplemented(f"GetProcAddress on module 0x{handle:x}, which w2m did not hand out")

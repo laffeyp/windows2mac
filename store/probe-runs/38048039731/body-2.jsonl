@@ -1,0 +1,9 @@
+{"s":"entry.calls_at_exe_entry","count":1,"calls":[{"reason":1,"reserved_null":false,"instance_is_module_handle":true}]}
+{"s":"module_handle","by_name_nonnull":true,"upper_case_same":true,"upper_case_err":57005,"without_extension_same":true,"without_extension_err":57005}
+{"s":"dll.base","at_preferred_base":true,"dynamic_base":true,"above_4gb":true,"aligned_64k":true}
+{"s":"dll.file_name","in_exe_directory":true,"leaf":"loader_dll.dll"}
+{"s":"dll.export","equals_import":true,"err":57005,"missing_null":true,"missing_err":127}
+{"s":"ldr.load_order","names":["probe.exe","ntdll.dll","KERNEL32.DLL","KERNELBASE.dll","loader_dll.dll"],"count":5,"bases_equal_module_handles":5}
+{"s":"ldr.memory_order","names":["probe.exe","ntdll.dll","KERNEL32.DLL","KERNELBASE.dll","loader_dll.dll"],"count":5,"bases_equal_module_handles":5}
+{"s":"ldr.init_order","names":["ntdll.dll","KERNELBASE.dll","KERNEL32.DLL","loader_dll.dll"],"count":4,"bases_equal_module_handles":4}
+{"s":"ldr.first_is_exe","value":true}

@@ -259,6 +259,54 @@
    "38041160693": "conforms"
   }
  },
+ "loader": {
+  "candidate_sha256": "sha256:127c6b0bc90474110a352c571f78c98f74095afd1401f835559e9755b1619965",
+  "divergence": {
+   "38047927781": null,
+   "38047929442": null,
+   "38047930988": null,
+   "38047932539": null,
+   "38047981900": null,
+   "38047983522": null,
+   "38047984894": null,
+   "38047987237": null,
+   "38048037669": null,
+   "38048039731": null,
+   "38048041658": null,
+   "38048043520": null,
+   "38048095121": null,
+   "38048097583": null,
+   "38048099528": null,
+   "38048101245": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 16,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "loader",
+  "record": "store/runs/family-loader-1791631437398254000",
+  "verdicts": {
+   "38047927781": "conforms",
+   "38047929442": "conforms",
+   "38047930988": "conforms",
+   "38047932539": "conforms",
+   "38047981900": "conforms",
+   "38047983522": "conforms",
+   "38047984894": "conforms",
+   "38047987237": "conforms",
+   "38048037669": "conforms",
+   "38048039731": "conforms",
+   "38048041658": "conforms",
+   "38048043520": "conforms",
+   "38048095121": "conforms",
+   "38048097583": "conforms",
+   "38048099528": "conforms",
+   "38048101245": "conforms"
+  }
+ },
  "modules": {
   "candidate_sha256": "sha256:17e0a690b814488f4ee91189633f8060cd99e39ecd1d07959dd30e0253af16fd",
   "divergence": {

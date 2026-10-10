@@ -3,6 +3,8 @@ checked against llvm-objdump (an independent reader), plus malformed inputs."""
 
 from __future__ import annotations
 
+import json
+
 import re
 import shutil
 import subprocess
@@ -12,7 +14,10 @@ import pytest
 
 from w2m.pe import PeError, parse
 
-BINARIES = sorted((Path(__file__).resolve().parent.parent / "store" / "binaries").glob("*.exe"))
+ROOT = Path(__file__).resolve().parent.parent
+BINARIES = sorted((ROOT / "store" / "binaries").glob("*.exe"))
+PROBE_DLLS = {json.loads(p.read_text())["dll"]["name"] + ".dll" for p in (ROOT / "probes").glob("*/probe.json")
+              if "dll" in json.loads(p.read_text())}
 OBJDUMP = shutil.which("llvm-objdump") or (
     subprocess.run(["xcrun", "--find", "llvm-objdump"], capture_output=True, text=True).stdout.strip()
     if shutil.which("xcrun") else "")
@@ -64,10 +69,11 @@ def test_structure(path: Path) -> None:
     assert text.virtual_address <= img.entry_rva < text.virtual_address + text.virtual_size
     assert set(img.relocations) <= {0, 10}         # only DIR64 and ABSOLUTE padding
     assert ("static", img.entry_rva) in img.code_targets()
-    if sum(map(len, img.imports.values())) > 20:   # CRT-linked probes (hello, event_auto_reset)
+    if img.function_starts:                        # CRT-linked probes (hello, event_auto_reset): .pdata
         assert "WaitForSingleObject" in img.imports["KERNEL32.dll"]
-    else:                                          # no-CRT probes (Sprint 029): kernel32 only; DIR64
-        assert set(img.imports) == {"KERNEL32.dll"}  # entries appear with static pointer tables
+    else:                                          # no-CRT probes (Sprint 029): kernel32, and a DLL the
+        assert set(img.imports) - {"KERNEL32.dll"} <= PROBE_DLLS   # probe builds (Sprint 046); DIR64
+                                                     # entries appear with static pointer tables
                                                      # (create_file: 12), unused at the preferred base
 
 
