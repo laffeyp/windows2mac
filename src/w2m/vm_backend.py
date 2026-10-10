@@ -887,6 +887,7 @@ class VM:
         self.exit_code: int | None = None
         self.out = bytearray()
         self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
+        self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
         placed: list[tuple[Region, int]] = []
@@ -1042,6 +1043,7 @@ class VM:
         """Service the transport page (hvc #8). False when the guest exited."""
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
+        self.host_requests[op] = self.host_requests.get(op, 0) + 1
         if FILE_LOOKUP <= op <= FILE_UNLINK:
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")

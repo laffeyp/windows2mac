@@ -61,9 +61,11 @@ def main(argv: list[str]) -> int:
         vm = VM(load(data), image_name=Path(a.exe).name, gui=True)     # the game: a GUI program started by Steam
         try:
             r = vm.run(max_steps=a.max_steps, timeout_ms=60_000)
+            totals = vm.calls_total()
         finally:
             vm.close()
-        state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls)
+        state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
+                     host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
             name, ret = vm.unimplemented
             yield events.validate(events.SERVICE_UNIMPLEMENTED(
@@ -98,6 +100,7 @@ def main(argv: list[str]) -> int:
         if not e["kind"].startswith("substrate.") or e["kind"] in ("substrate.ProducerFailed",):
             print(e["kind"], {k: v for k, v in e["payload"].items() if k not in ("vocab_version", "harness_version")})
     print(f"stop: {state.get('stop')}; {state.get('instructions')} instructions; calls {state.get('calls')}")
+    print(f"host requests by op {state.get('host_requests')}; calls by service {state.get('calls_total')}")
     print(f"record {result.record_root}")
     return 0
 
