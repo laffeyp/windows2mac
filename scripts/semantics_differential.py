@@ -184,6 +184,16 @@ def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = No
     return True
 
 
+def _dispatchable(c: Case) -> bool:
+    """False when the case moves RSP out of the stack mapping and the model says it faults:
+    Windows dispatches an exception on the faulting thread's stack, so the probe process would
+    die (run 38010542937: [rsp+rbp*2+disp] placed at the page edge)."""
+    if STACK_VA + 0x1000 <= c.regs[4] < STACK_VA + STACK_SIZE:
+        return True
+    m = model(c)
+    return isinstance(m, str) or not m.fault
+
+
 def _memory_size(raw: bytes) -> int | None:
     d = decode(raw)
     if d.fields is None or not d.fields.ops:
@@ -224,6 +234,9 @@ def build_cases(seed: int = 2026_10_09_39) -> tuple[list[Case], Counter[str]]:
                 placeable = False
                 break
             s.code, s.label = raw, d.iclass
+            if not _dispatchable(s):
+                skipped["fault with RSP outside the stack (not dispatchable)"] += 1
+                continue
             out.append(s)
         size = _memory_size(raw)
         if placeable and size is not None:
@@ -231,7 +244,10 @@ def build_cases(seed: int = 2026_10_09_39) -> tuple[list[Case], Counter[str]]:
             target = PAGE_END - rng.randrange(1, size) if size > 1 else PAGE_END
             if _place(ins, s.regs, rng, lambda target=target: target):
                 s.code, s.label, s.kind = raw, d.iclass, 1
-                out.append(s)
+                if _dispatchable(s):
+                    out.append(s)
+                else:
+                    skipped["fault with RSP outside the stack (not dispatchable)"] += 1
             else:
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
     for code, label in _control_flow():

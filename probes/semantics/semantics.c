@@ -221,6 +221,7 @@ int main(int argc, char **argv) {
         fwrite(data + DATA_OFF, 1, WINDOW, out);
         fwrite(stack + STACK_OFF, 1, WINDOW, out);
         fwrite(data + EDGE_OFF, 1, EDGE, out);
+        fflush(out);                                          /* a crash leaves every finished case */
     }
     fclose(out);
     printf("cases %u, faults %u\n", count, faults);
