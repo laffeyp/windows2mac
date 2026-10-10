@@ -158,8 +158,15 @@ def w2m_tools(where: Path, runs: Path, model: str, session_id: str,
 
 def measurement_topology(model: str, steps: int, where: Path, runs: Path, session_id: str,
                          judged: list[dict[str, Any]]) -> Callable[[api.TopologyBuilder], None]:
+    return session(model, steps, where, session_id, w2m_tools(where, runs, model, session_id, judged))
+
+
+def session(model: str, steps: int, where: Path, session_id: str,
+            w2m: dict[str, Tool]) -> Callable[[api.TopologyBuilder], None]:
+    """Substrate's session topology: one turn, the workspace tools and `w2m`'s, then /exit
+    (shared with scripts/model_family.py)."""
     tools = {k: v for k, v in full_suite(where, owner=session_id).items() if k in WORKSPACE_TOOLS}
-    tools |= w2m_tools(where, runs, model, session_id, judged)
+    tools |= w2m
     turns = ("Read TASK.md and do the task it describes.", "/exit")
     base = session_topology(
         driver=OllamaResponder(model, temperature=0.2, num_ctx=131072, timeout=1200.0),

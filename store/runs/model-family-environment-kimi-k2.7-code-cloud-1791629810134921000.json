@@ -1,0 +1,59 @@
+{
+ "model": "ollama:kimi-k2.7-code:cloud",
+ "session_record": "store/runs/model-family-environment-kimi-k2.7-code-cloud-1791629810134921000",
+ "outcome": "item runs accepted",
+ "model_calls": 16,
+ "stop_reasons": {
+  "tool_use": 15,
+  "end_turn": 1
+ },
+ "prompt_tokens": 316810,
+ "completion_tokens": 1288,
+ "tool_calls": {
+  "read_file": 6,
+  "list_dir": 1,
+  "write_file": 2,
+  "build": 3,
+  "judge": 2,
+  "edit_file": 1
+ },
+ "judgments": [
+  {
+   "step": 11,
+   "outcome": "discrepancy",
+   "unequal_rows": null,
+   "record": null,
+   "error": null
+  },
+  {
+   "step": 14,
+   "outcome": "item runs accepted",
+   "unequal_rows": null,
+   "record": null,
+   "error": null
+  }
+ ],
+ "final_file_c": null,
+ "events": {
+  "substrate.RunStarted": 1,
+  "substrate.TriggerFired": 39,
+  "substrate.ProducerStarted": 38,
+  "SessionStarted": 1,
+  "substrate.ProducerCompleted": 36,
+  "PromptFragment": 1,
+  "UserMessage": 2,
+  "PromptComposed": 17,
+  "ModelReply": 16,
+  "ToolCall": 15,
+  "ToolResult": 15,
+  "Returned": 1,
+  "SessionEnded": 1,
+  "substrate.TerminationMatched": 1,
+  "substrate.RunFinalised": 1
+ },
+ "final_file": "store/runs/model-families/model-family-environment-kimi-k2.7-code-cloud-1791629810134921000/environment.c",
+ "item_run_records": {
+  "environment_empty": "store/runs/family-environment_empty-1791629848553471000",
+  "environment_set": "store/runs/family-environment_set-1791629839307013000"
+ }
+}
