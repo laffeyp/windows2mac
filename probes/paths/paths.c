@@ -16,7 +16,7 @@
 static char out[32768];
 static unsigned n;
 static WCHAR cwd[MAX_PATH], root[4] = L"?:\\";
-static unsigned cwd_len;
+static unsigned cwd_len, parent_len;            /* parent: cwd up to its last backslash */
 
 static void put(const char *s) { while (*s) out[n++] = *s++; }
 static void putu(unsigned long long v) {
@@ -47,6 +47,7 @@ static int starts(const WCHAR *s, const WCHAR *p, unsigned len) {
 static void path(const WCHAR *s) {
     out[n++] = '"';
     if (starts(s, cwd, cwd_len) && (s[cwd_len] == 0 || s[cwd_len] == '\\')) { put("<cwd>"); raw(s + cwd_len); }
+    else if (parent_len > 3 && starts(s, cwd, parent_len) && (s[parent_len] == 0 || s[parent_len] == '\\')) { put("<parent>"); raw(s + parent_len); }
     else if (starts(s, L"\\\\?\\", 4) && starts(s + 4, cwd, cwd_len)) { put("\\\\\\\\?\\\\<cwd>"); raw(s + 4 + cwd_len); }
     else if (starts(s, root, 3)) { put("<root>"); raw(s + 3); }
     else if (starts(s, root, 2)) { put("<d>:"); raw(s + 2); }
@@ -64,7 +65,15 @@ static void full(const char *name, const WCHAR *in, DWORD size) {
     SetLastError(SENTINEL);
     DWORD r = GetFullPathNameW(in, size, buf, &part);
     DWORD err = GetLastError();
-    row(name); put(",\"in\":"); path(in); field("ret", r); field("err", err);
+    unsigned len = 0;
+    while (r && r < size && buf[len]) len++;
+    row(name); put(",\"in\":"); path(in); field("ret_zero", r == 0); field("err", err);
+    if (r && r < size) field("ret_is_len", r == len);
+    if (r >= size) {                                  /* the length needed, NUL included */
+        static WCHAR big[1024];
+        DWORD whole = GetFullPathNameW(in, 1024, big, NULL);
+        field("ret_is_need", r == whole + 1);
+    }
     if (r && r < size) { put(",\"out\":"); path(buf); put(",\"part_from_end\":"); if (part) puts_((long long)(part - buf) - (long long)r); else put("null"); }
     else { put(",\"buffer_untouched\":"); put(buf[0] == 0xA5A5 ? "true" : "false"); }
     end();
@@ -83,6 +92,7 @@ static BOOL chdir_(const WCHAR *p) { return SetCurrentDirectoryW(p); }
 void start(void) {
     cwd_len = GetCurrentDirectoryW(MAX_PATH, cwd);
     root[0] = cwd[0];
+    for (unsigned i = 0; i < cwd_len; i++) if (cwd[i] == '\\') parent_len = i;
     row("cwd"); field("len_is_text", cwd_len > 3 && cwd[cwd_len] == 0); field("drive_form", cwd[1] == ':' && cwd[2] == '\\');
     field("trailing_backslash", cwd[cwd_len - 1] == '\\'); end();
     static WCHAR tiny[4];
@@ -132,7 +142,7 @@ void start(void) {
     {
         static WCHAR now[MAX_PATH];
         DWORD len = GetCurrentDirectoryW(MAX_PATH, now);
-        row("cwd.after_chdir"); put(",\"text\":"); path(now); field("len", len - cwd_len); end();
+        row("cwd.after_chdir"); put(",\"text\":"); path(now); field("len_grew_by", len - cwd_len); end();
     }
     dir("dir.chdir_back", "SetCurrentDirectoryW", L"..", chdir_);
     dir("dir.chdir_missing", "SetCurrentDirectoryW", L"w2m_missing", chdir_);
