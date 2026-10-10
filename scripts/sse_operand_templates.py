@@ -91,7 +91,10 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           ("PSLLQ", "66", 0x73, 6): "Wdq,Ib", ("PSLLQ", "66", 0xF3, None): "V,Wdq", ("PSRLW", "66", 0x71, 2): "Wdq,Ib",
           ("PSRLW", "66", 0xD1, None): "V,Wdq", ("PSRAW", "66", 0x71, 4): "Wdq,Ib", ("PSRAW", "66", 0xE1, None): "V,Wdq",
           ("PSHUFLW", "f2", 0x70, None): "V,Wdq,Ib", ("PSHUFHW", "f3", 0x70, None): "V,Wdq,Ib",
-          ("PINSRW", "66", 0xC4, None): "V,Ew,Ib", ("MOVHPS", "none", 0x16, None): "V,Wq", ("MOVHPS", "none", 0x17, None): "Wq,V"}
+          ("PINSRW", "66", 0xC4, None): "V,Ew,Ib", ("MOVHPS", "none", 0x16, None): "V,Wq", ("MOVHPS", "none", 0x17, None): "Wq,V",
+          # the approximations (a fifth block): packed from m128, scalar from m32
+          ("RCPPS", "none", 0x53, None): "V,Wdq", ("RSQRTPS", "none", 0x52, None): "V,Wdq",
+          ("RCPSS", "f3", 0x53, None): "V,Wd", ("RSQRTSS", "f3", 0x52, None): "V,Wd"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -217,6 +220,9 @@ def main(argv: list[str]) -> int:
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
+        elif spec["version"] == "0.7.5":
+            spec["version"] = "0.7.6"
+            spec["revision"] += "; 0.7.6 (2026-10-10): RCPPS, RSQRTPS, RCPSS, RSQRTSS (Sprint 046)"
         elif spec["version"] == "0.7.4":
             spec["version"] = "0.7.5"
             spec["revision"] += "; 0.7.5 (2026-10-10): operand templates for the third SSE block (Sprint 046)"

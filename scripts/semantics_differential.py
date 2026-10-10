@@ -324,6 +324,9 @@ LOCKABLE_046C = ("CMPXCHG16B",)
 # Sprint 046 (fourth block): the SSE2 integer classes UnityPlayer.dll reaches most (census 2026-10-10); PUNPCKLQDQ
 # stops the static C runtime's DLL start-up in w2m
 CLASSES_046D = frozenset(('PUNPCKLQDQ', 'PADDQ', 'PCMPGTD', 'PCMPEQD', 'PANDN', 'PSUBUSB', 'PMAXUB', 'UNPCKLPD', 'PACKUSWB', 'PADDSB', 'PADDSW', 'PADDW', 'PMULLW', 'PSUBSB', 'PSUBW', 'PUNPCKHBW', 'PUNPCKHDQ', 'PUNPCKHWD', 'PUNPCKLWD', 'PSLLQ', 'PSRLW', 'PSRAW', 'PSHUFLW', 'PSHUFHW', 'PINSRW', 'MOVHPS'))
+# Sprint 046 (fifth block): RCPPS, RSQRTPS (UnityPlayer's DllMain stops at RSQRTPS, 292,735 instructions) and
+# their scalar forms; judged on Intel only, whose tables w2m reproduces (AMD's differ)
+CLASSES_046E = frozenset(("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -337,7 +340,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "046": (2026_10_10_46, CLASSES_046, (), False),
     "046b": (2026_10_10_461, CLASSES_046B, (), False),
     "046c": (2026_10_10_462, CLASSES_046C, LOCKABLE_046C, False),
-    "046d": (2026_10_10_463, CLASSES_046D, (), False)}
+    "046d": (2026_10_10_463, CLASSES_046D, (), False),
+    "046e": (2026_10_10_464, CLASSES_046E, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
