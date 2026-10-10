@@ -25,6 +25,25 @@ static void putu(unsigned long long v) {
     while (k) out[n++] = t[--k];
 }
 static void row(const char *s) { put("{\"s\":\""); put(s); put("\""); }
+static void hexfield(const char *k, unsigned long long v) {
+    static const char d[] = "0123456789abcdef";
+    put(",\""); put(k); put("\":\"0x");
+    int started = 0;
+    for (int i = 60; i >= 0; i -= 4) {
+        unsigned x = (unsigned)(v >> i) & 15;
+        if (x || started || i == 0) { out[n++] = d[x]; started = 1; }
+    }
+    put("\"");
+}
+static void wide(const char *k, const WCHAR *w) {          /* ASCII of a wide string, '?' elsewhere */
+    put(",\""); put(k); put("\":\"");
+    for (; w && *w; w++) {
+        WCHAR c = *w;
+        if (c == '\\' || c == '"') out[n++] = '\\';
+        out[n++] = (c >= 32 && c < 127) ? (char)c : '?';
+    }
+    put("\"");
+}
 static void field(const char *k, unsigned long long v) { put(",\""); put(k); put("\":"); putu(v); }
 static void flag(const char *k, int v) { put(",\""); put(k); put(v ? "\":true" : "\":false"); }
 static void end(void) { put("}\n"); }
@@ -96,6 +115,25 @@ static void child(void) {
     flag("std_input_null", si.hStdInput == 0); flag("std_output_null", si.hStdOutput == 0);
     flag("reserved_null", si.lpReserved == 0); flag("desktop_null", si.lpDesktop == 0); flag("title_null", si.lpTitle == 0);
     end();
+    row("startup_info.child.values"); hexfield("std_input", (unsigned long long)si.hStdInput);
+    hexfield("std_output", (unsigned long long)si.hStdOutput); hexfield("std_error", (unsigned long long)si.hStdError);
+    wide("reserved", si.lpReserved); wide("desktop", si.lpDesktop); field("x", si.dwX); field("y", si.dwY); field("cb_reserved2", si.cbReserved2);
+    flag("reserved2_null", si.lpReserved2 == 0); end();
+    {
+        static WCHAR self[600];
+        DWORD len = GetModuleFileNameW(NULL, self, 300);
+        DWORD t = 0;
+        while (si.lpTitle && si.lpTitle[t]) t++;
+        int same = si.lpTitle && t == len;
+        for (DWORD i = 0; same && i < len; i++) same = si.lpTitle[i] == self[i];
+        row("startup_info.child.title"); field("length", t); flag("is_module_path", same); end();
+        const WCHAR *c = GetCommandLineW();
+        DWORD cl = 0;
+        while (c[cl]) cl++;
+        int quoted = cl > len + 2 && c[0] == '"' && c[len + 1] == '"';
+        for (DWORD i = 0; quoted && i < len; i++) quoted = c[i + 1] == self[i];
+        row("command_line.child"); flag("quoted_module_path_then_child", quoted && cl == len + 8); end();
+    }
 
     DWORD w;
     WriteFile(f, out, n, &w, NULL);

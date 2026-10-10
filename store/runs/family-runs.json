@@ -30,25 +30,33 @@
  "heap": {
   "candidate_sha256": "sha256:3b6b2b794d2c34e0cc3d3f73c1cbbf6133b7283168f0d8f80a0b8667c6ed138c",
   "divergence": {
-   "38040864736": null,
-   "38040866595": null,
-   "38040868097": null,
-   "38040870043": null
+   "38041103334": null,
+   "38041105720": null,
+   "38041107830": null,
+   "38041110146": null,
+   "38041154554": null,
+   "38041156624": null,
+   "38041158857": null,
+   "38041160693": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
    "CANDIDATE_GENERATED": 1,
-   "COMPARISON_COMPLETED": 4,
+   "COMPARISON_COMPLETED": 8,
    "SESSION_COMPLETED": 1,
    "SESSION_INIT": 1
   },
   "family": "heap",
-  "record": "store/runs/family-heap-1791624059068196000",
+  "record": "store/runs/family-heap-1791624236029468000",
   "verdicts": {
-   "38040864736": "conforms",
-   "38040866595": "conforms",
-   "38040868097": "conforms",
-   "38040870043": "conforms"
+   "38041103334": "conforms",
+   "38041105720": "conforms",
+   "38041107830": "conforms",
+   "38041110146": "conforms",
+   "38041154554": "conforms",
+   "38041156624": "conforms",
+   "38041158857": "conforms",
+   "38041160693": "conforms"
   }
  },
  "modules": {

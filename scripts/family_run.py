@@ -278,10 +278,14 @@ FAMILIES: dict[str, Family] = {
                  "zeroing and reallocation keep their promises, and failures return NULL with ERROR_NOT_ENOUGH_MEMORY."),
         probe="heap", guest_file="heap.c",
         runs={
-              "38040864736": Run("windows-2025", "38c8574d348d5d900fbf24ad1546d4dbd8772d6f9a9af5ccdc964ea03d6d706e", "heap-1791623844-0", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
-              "38040866595": Run("windows-2022", "cdd51d3d7615d2da5df59c1f0f49b81e5f6f01ed7a224204ec74bf564aed780f", "heap-1791623844-1", "AMD EPYC 7763 64-Core Processor"),
-              "38040868097": Run("windows-2025", "48adf0825a3ee8c73e31dab819bab113800bf33035414536cf90891e48ae293f", "heap-1791623844-2", "AMD EPYC 7763 64-Core Processor"),
-              "38040870043": Run("windows-2022", "52652cd8134c6cdc19210278612344d78672a460adbf04b439b616721932a83f", "heap-1791623844-3", "AMD EPYC 9V74 80-Core Processor"),
+              "38041103334": Run("windows-2025", "2f52e248f92990807fc2222c28b5f50a4ca83372c70c0016cddd76cbdeda92cb", "heap-1791624089-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38041105720": Run("windows-2022", "134d6dcd5c311dc80a7fab92f1eff20cd1ff7932c8de8964c18909ad65d482de", "heap-1791624089-1", "AMD EPYC 7763 64-Core Processor"),
+              "38041107830": Run("windows-2025", "2214b9352c627faedd3c2aed012096cb1adc924ccaf7d08fbdc91d37065224a1", "heap-1791624089-2", "AMD EPYC 7763 64-Core Processor"),
+              "38041110146": Run("windows-2022", "08c6d99a46b15f2ad89a85bf766ae843280d1cd47ac30ec2e5a65920d65cd1ef", "heap-1791624089-3", "AMD EPYC 7763 64-Core Processor"),
+              "38041154554": Run("windows-2025", "95fc2b0f7a3d423ffe8720f27c41018cd61532504d6009d1f34197bc7ca27677", "heap-1791624144-0", "AMD EPYC 7763 64-Core Processor"),
+              "38041156624": Run("windows-2022", "fa8a0a92909c7a93daf637d488820eba033c9de650a2f201d6c15e3b21769da2", "heap-1791624144-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38041158857": Run("windows-2025", "ab263ddf08e75bacbcf705e3c3a7edecf949dec9dd752cfa9afa087fd39ef06a", "heap-1791624144-2", "AMD EPYC 7763 64-Core Processor"),
+              "38041160693": Run("windows-2022", "fb32f84609c92f406c2e1196e530e09e5ff5887d16b259b2597785122274a031", "heap-1791624144-3", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(
             documented("ms-heapalloc", "api/heapapi/nf-heapapi-heapalloc", "2024-02-22",
@@ -298,7 +302,10 @@ FAMILIES: dict[str, Family] = {
         # dirty, freed block. Both named reaches were wrong; recorded in Sprint 044's card.)
         plants={"size_is_capacity": Plant("header_of(W2M_API_HeapSize, p)->size_and_magic_check",
                                           "header_of(W2M_API_HeapSize, p)->capacity",
-                                          ("size.matches_request", "alloc.zero_bytes")),
+                                          # named first as 2 rows; it changed 4: a block shrunk or refused in
+                                          # place keeps its capacity, so those sizes change too (recorded)
+                                          ("size.matches_request", "alloc.zero_bytes", "realloc.shrink",
+                                           "realloc.in_place_only_grow")),
                 "zero_flag_ignored": Plant("    if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);", "",
                                            ("alloc.zero_memory_after_dirty_free",))}),
 }

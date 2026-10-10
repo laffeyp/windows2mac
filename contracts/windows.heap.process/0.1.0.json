@@ -3,7 +3,7 @@
  "version": "0.1.0",
  "status": "accepted",
  "summary": "GetProcessHeap, HeapAlloc, HeapFree, HeapSize and HeapReAlloc on the process heap answer as Windows does: the handle is PEB.ProcessHeap, blocks are 16-byte aligned with their exact size, zeroing and reallocation keep their promises, and failures return NULL with ERROR_NOT_ENOUGH_MEMORY.",
- "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz)",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2022 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
  "roles": [
   "main"
  ],
@@ -42,6 +42,10 @@
    },
    {
     "s": "alloc.zero_memory",
+    "zeroed": true
+   },
+   {
+    "s": "alloc.zero_memory_after_dirty_free",
     "zeroed": true
    },
    {
@@ -100,17 +104,25 @@
   {
    "evidence_id": "runner-rows",
    "category": "observed",
-   "source_ref": "run 38040864736: windows-2025, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:38c8574d348d5d900fbf24ad1546d4dbd8772d6f9a9af5ccdc964ea03d6d706e; run 38040866595: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:cdd51d3d7615d2da5df59c1f0f49b81e5f6f01ed7a224204ec74bf564aed780f; run 38040868097: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:48adf0825a3ee8c73e31dab819bab113800bf33035414536cf90891e48ae293f; run 38040870043: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:52652cd8134c6cdc19210278612344d78672a460adbf04b439b616721932a83f",
+   "source_ref": "run 38041103334: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:2f52e248f92990807fc2222c28b5f50a4ca83372c70c0016cddd76cbdeda92cb; run 38041105720: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:134d6dcd5c311dc80a7fab92f1eff20cd1ff7932c8de8964c18909ad65d482de; run 38041107830: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2214b9352c627faedd3c2aed012096cb1adc924ccaf7d08fbdc91d37065224a1; run 38041110146: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:08c6d99a46b15f2ad89a85bf766ae843280d1cd47ac30ec2e5a65920d65cd1ef; run 38041154554: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:95fc2b0f7a3d423ffe8720f27c41018cd61532504d6009d1f34197bc7ca27677; run 38041156624: windows-2022, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:fa8a0a92909c7a93daf637d488820eba033c9de650a2f201d6c15e3b21769da2; run 38041158857: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:ab263ddf08e75bacbcf705e3c3a7edecf949dec9dd752cfa9afa087fd39ef06a; run 38041160693: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:fb32f84609c92f406c2e1196e530e09e5ff5887d16b259b2597785122274a031",
    "applicability": "the builds and CPUs observed",
    "execution_ids": [
-    "heap-1791623844-0-1",
-    "heap-1791623844-0-2",
-    "heap-1791623844-1-1",
-    "heap-1791623844-1-2",
-    "heap-1791623844-2-1",
-    "heap-1791623844-2-2",
-    "heap-1791623844-3-1",
-    "heap-1791623844-3-2"
+    "heap-1791624089-0-1",
+    "heap-1791624089-0-2",
+    "heap-1791624089-1-1",
+    "heap-1791624089-1-2",
+    "heap-1791624089-2-1",
+    "heap-1791624089-2-2",
+    "heap-1791624089-3-1",
+    "heap-1791624089-3-2",
+    "heap-1791624144-0-1",
+    "heap-1791624144-0-2",
+    "heap-1791624144-1-1",
+    "heap-1791624144-1-2",
+    "heap-1791624144-2-1",
+    "heap-1791624144-2-2",
+    "heap-1791624144-3-1",
+    "heap-1791624144-3-2"
    ]
   },
   {
