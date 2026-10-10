@@ -77,7 +77,19 @@ class ExactReturnOfArgument(Struct, frozen=True, forbid_unknown_fields=True,
     pairs: Annotated[int, Meta(ge=1)]
 
 
-Acceptance = AllowedOutcomeSet | ExactReturnOfArgument
+class ExactRows(Struct, frozen=True, forbid_unknown_fields=True,
+                tag="exact_rows", tag_field="relation"):
+    """The target prints one JSON object per scenario; each must equal the reference row with the
+    same `key` value, field for field, in the reference's order (v0.2 section 3, exact value or
+    bits: defined integer results, error codes; Sprint 042). The rows are the reference
+    execution's own output. The event's relation is `exact`; `exact_rows` names this acceptance
+    form in the contract file only."""
+
+    key: str
+    rows: tuple[dict[str, Any], ...]
+
+
+Acceptance = AllowedOutcomeSet | ExactReturnOfArgument | ExactRows
 
 
 class Before(Struct, frozen=True, forbid_unknown_fields=True):
@@ -150,6 +162,12 @@ def _check(c: Contract, path: Path) -> None:
             raise ContractError(f"{c.contract_id}: roles {sorted(set(x.over_roles) - roles)} undeclared")
         if x.write_api == x.read_api:
             raise ContractError(f"{c.contract_id}: write_api and read_api must differ")
+    elif isinstance(c.acceptance, ExactRows):
+        keys = [r.get(c.acceptance.key) for r in c.acceptance.rows]
+        if not keys or None in keys or len(keys) != len(set(keys)):
+            raise ContractError(f"{c.contract_id}: every row needs a distinct '{c.acceptance.key}'")
+        if not any(e.category == "observed" for e in c.evidence):
+            raise ContractError(f"{c.contract_id}: exact_rows rows are observed; cite the executions")
     else:
         _check_allowed_outcome_set(c, c.acceptance, roles)
     ev_ids = {e.evidence_id for e in c.evidence}

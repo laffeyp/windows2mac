@@ -15,23 +15,30 @@
 
 #define STD_OUTPUT_HANDLE 0xFFFFFFF5u           /* (DWORD)-11, GetStdHandle */
 #define STDOUT_HANDLE 0x74ull                   /* the runtime's handle value for standard output */
-#define ERROR_INVALID_HANDLE 6u
 
 static u64 host_call(u64 op, u64 a0, u64 a1) {
+    return w2m_host(op, a0, a1, 0, 0, 0);
+}
+
+/* A host request on the transport page (hvc #8); `second`, when given, receives arg[5]. */
+u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second) {
     volatile struct w2m_transport *t = (volatile struct w2m_transport *)W2M_TRANSPORT_VA;
     t->op = op;
     t->arg[0] = a0;
     t->arg[1] = a1;
+    t->arg[2] = a2;
+    t->arg[3] = a3;
     __asm__ volatile("hvc #8" ::: "memory");
+    if (second) *second = t->arg[5];
     return t->result;
 }
 
-static void unimplemented(u64 api, u64 detail) {
+void w2m_unimplemented(u64 api, u64 detail) {
     host_call(W2M_HOST_UNIMPLEMENTED, api, detail);     /* the host stops the run; no return */
     for (;;) {}
 }
 
-static u64 logged(u64 api, u64 arg0, u64 ret) {
+u64 w2m_logged(u64 api, u64 arg0, u64 ret) {
     struct w2m_ring *r = (struct w2m_ring *)W2M_RING_VA;
     if (r->count < r->capacity) {
         r->rec[r->count].api = api;
@@ -44,23 +51,23 @@ static u64 logged(u64 api, u64 arg0, u64 ret) {
 
 /* "Retrieves the thread identifier of the calling thread." */
 u64 k32_GetCurrentThreadId(void) {
-    return logged(W2M_API_GetCurrentThreadId, 0, (u32)w2m_teb()->client_thread);
+    return w2m_logged(W2M_API_GetCurrentThreadId, 0, (u32)w2m_teb()->client_thread);
 }
 
 /* "Sets the last-error code for the calling thread." Returns nothing: RAX is left as it was. */
 u64 k32_SetLastError(u64 code) {
     w2m_set_last_error((u32)code);
-    return logged(W2M_API_SetLastError, (u32)code, 0);
+    return w2m_logged(W2M_API_SetLastError, (u32)code, 0);
 }
 
 /* "Retrieves the calling thread's last-error code value." */
 u64 k32_GetLastError(void) {
-    return logged(W2M_API_GetLastError, 0, w2m_get_last_error());
+    return w2m_logged(W2M_API_GetLastError, 0, w2m_get_last_error());
 }
 
 u64 k32_GetStdHandle(u64 which) {
-    if ((u32)which != STD_OUTPUT_HANDLE) unimplemented(W2M_API_GetStdHandle, (u32)which);
-    return logged(W2M_API_GetStdHandle, (u32)which, STDOUT_HANDLE);
+    if ((u32)which != STD_OUTPUT_HANDLE) w2m_unimplemented(W2M_API_GetStdHandle, (u32)which);
+    return w2m_logged(W2M_API_GetStdHandle, (u32)which, STDOUT_HANDLE);
 }
 
 /* WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped):
@@ -68,29 +75,27 @@ u64 k32_GetStdHandle(u64 which) {
 u64 k32_WriteFile(u64 handle, u64 buffer, u64 count, u64 written, u64 rsp) {
     u64 overlapped = *(u64 *)(rsp + 0x28);
     count &= 0xFFFFFFFFull;
-    if (written == 0 || overlapped != 0) unimplemented(W2M_API_WriteFile, written);
+    if (written == 0 || overlapped != 0) w2m_unimplemented(W2M_API_WriteFile, written);
     *(u32 *)written = 0;
-    if (handle != STDOUT_HANDLE) {
-        w2m_teb()->last_error_value = ERROR_INVALID_HANDLE;
-        return logged(W2M_API_WriteFile, handle, 0);
-    }
+    if (handle != STDOUT_HANDLE)
+        return w2m_logged(W2M_API_WriteFile, handle, w2m_file_write(handle, buffer, count, written));
     host_call(W2M_HOST_WRITE, buffer, count);
     *(u32 *)written = (u32)count;
-    return logged(W2M_API_WriteFile, handle, 1);
+    return w2m_logged(W2M_API_WriteFile, handle, 1);
 }
 
 /* "Ends the calling process and all its threads." */
 u64 k32_ExitProcess(u64 code) {
-    logged(W2M_API_ExitProcess, (u32)code, 0);
+    w2m_logged(W2M_API_ExitProcess, (u32)code, 0);
     host_call(W2M_HOST_EXIT, (u32)code, 0);
     for (;;) {}
 }
 
 /* "Retrieves the current value of the performance counter"; nonzero on success. */
 u64 k32_QueryPerformanceCounter(u64 out) {
-    if (out == 0) unimplemented(W2M_API_QueryPerformanceCounter, 0);
+    if (out == 0) w2m_unimplemented(W2M_API_QueryPerformanceCounter, 0);
     *(u64 *)out = host_call(W2M_HOST_CLOCK, 0, 0);
-    return logged(W2M_API_QueryPerformanceCounter, out, 1);
+    return w2m_logged(W2M_API_QueryPerformanceCounter, out, 1);
 }
 
 /* ---- CPUID (Sprint 040) -------------------------------------------------------------------- */
@@ -101,7 +106,7 @@ u64 k32_QueryPerformanceCounter(u64 out) {
 void w2m_cpuid(void) {
     struct w2m_state *st = (struct w2m_state *)W2M_STATE_VA;
     u32 leaf = (u32)st->gpr[0], sub = (u32)st->gpr[1], a = 0, b = 0, c = 0, d = 0;
-    logged(W2M_API_Cpuid, (u64)leaf | (u64)sub << 32, 0);
+    w2m_logged(W2M_API_Cpuid, (u64)leaf | (u64)sub << 32, 0);
     if (leaf > W2M_CPUID_MAX_EXTENDED || (leaf > W2M_CPUID_MAX_BASIC && leaf < 0x80000000u))
         leaf = W2M_CPUID_MAX_BASIC;
     int found = 0, leaf_known = 0;
@@ -245,7 +250,7 @@ void w2m_exception(void) {
     }
     context_from_state(&e->context, st);
     e->magic = W2M_EXCEPTION_MAGIC;
-    logged(W2M_API_Exception, r->code, rip);
+    w2m_logged(W2M_API_Exception, r->code, rip);
     host_call(W2M_HOST_EXIT, r->code, 0);              /* unhandled: the process ends */
     for (;;) {}
 }

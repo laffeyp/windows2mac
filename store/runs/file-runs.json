@@ -1,0 +1,21 @@
+[
+ {
+  "record": "store/runs/file-createfilew-1791614609022743000",
+  "candidate_sha256": "sha256:c210056adeed48604c0ee9174c7571deca80ffd8c43a10339357edb55d4414a3",
+  "verdicts": {
+   "38031352273": "conforms",
+   "38031354036": "conforms"
+  },
+  "divergence": {
+   "38031352273": null,
+   "38031354036": null
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ }
+]

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,9 @@ def test_the_committed_index_accepts_every_class_on_its_current_rule() -> None:
         assert s["verdicts"] == {"model": "conforms", "managed_vm": "conforms"}, ic
         assert s["rule_sha256"] == registry()[ic].sha256, f"{ic}: rule changed since its item run"
         assert (ROOT / s["record"]).exists(), s["record"]
+        kinds = Counter(e["kind"] for e in read_record(ROOT / s["record"]))
+        # one decision per candidate (Sprint 042: the decide trigger fired once per comparison before Once())
+        assert kinds["CANDIDATE_ACCEPTED"] == 1 and kinds["SESSION_COMPLETED"] == 1, (ic, dict(kinds))
 
 
 @pytest.mark.hvf

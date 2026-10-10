@@ -49,8 +49,8 @@ from w2m.rules import registry  # noqa: E402
 from w2m.x86dec import decode  # noqa: E402
 
 # Each case set's reference: an Intel Xeon Platinum 8573C run of its case file
-REFERENCES = {"039": "38011862284", "041": "38029980267"}
-CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0"}     # the case set (its class list and seed)
+REFERENCES = {"039": "38011862284", "041": "38029980267", "042": "38031723882"}
+CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0", "042": "0.42.0"}     # the case set (its class list and seed)
 
 
 def contract_id(iclass: str) -> str:
@@ -95,7 +95,7 @@ def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> Counter[str]:
 
 def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored)") -> dict[str, Any]:
     """Judge one class in one substrate run; return its verdict summary."""
-    from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
+    from substrate.api import Once, PerEvent, Runtime, Subscription, TopologyBuilder, read_record, threshold_count
 
     rule = registry()[iclass]
     case_set, cases, results = cases_for(iclass)
@@ -195,7 +195,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
                       starts=name, policy=PerEvent(),
                       input_builder=lambda c: {"candidate_id": c.event.payload["candidate_id"]})
         b.trigger("decide", subscription=on({"COMPARISON_COMPLETED"}),
-                  predicate=lambda c: len(state["verdicts"]) == 2, starts="acceptance", policy=PerEvent(),
+                  predicate=lambda c: len(state["verdicts"]) == 2, starts="acceptance", policy=Once(),
                   input_builder=lambda c: {})
         b.trigger("close", subscription=on({"substrate.ProducerCompleted"}),       # once the decision is written
                   predicate=lambda c: c.event.payload["producer"]["kind"] == "acceptance",

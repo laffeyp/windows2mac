@@ -77,9 +77,11 @@ def _parse(data: bytes) -> tuple[list[tuple[int, bytes]], dict[str, int]]:
     return segments, symbols
 
 
-def build(base_va: int, defines: dict[str, int], last_error_source: str | None = None) -> Image:
-    """Compile runtime.c and the last-error pair (the default file, or `last_error_source`, a
-    candidate's C) and link them at `base_va`."""
+def build(base_va: int, defines: dict[str, int], last_error_source: str | None = None,
+          file_source: str | None = None) -> Image:
+    """Compile runtime.c, file.c and the last-error pair (the default file, or `last_error_source`, a
+    candidate's C) and link them at `base_va`. `file_source` replaces file.c (Sprint 042: a planted
+    fault or a model's implementation)."""
     runtime = (SOURCE / "runtime.c").read_text()
     header = (SOURCE / "runtime.h").read_text()
     last_error = ('#include "runtime.h"\n' + last_error_source if last_error_source is not None
@@ -87,7 +89,8 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
     from w2m.cpuid import c_header
     cpuid_table = c_header()
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
-    key = hashlib.sha256("\0".join([runtime, header, last_error, cpuid_table, " ".join(CFLAGS), " ".join(dflags),
+    file_c = file_source if file_source is not None else (SOURCE / "file.c").read_text()
+    key = hashlib.sha256("\0".join([runtime, header, last_error, file_c, cpuid_table, " ".join(CFLAGS), " ".join(dflags),
                                     f"{base_va:x}"]).encode()).hexdigest()
     out = CACHE / f"{key}.bin"
     if not out.exists():
@@ -96,8 +99,9 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
         work.mkdir(exist_ok=True)
         (work / "last_error.c").write_text(last_error)
         (work / "cpuid_table.h").write_text(cpuid_table)
+        (work / "file.c").write_text(file_c)
         objs = []
-        for src in (SOURCE / "runtime.c", work / "last_error.c"):
+        for src in (SOURCE / "runtime.c", work / "file.c", work / "last_error.c"):
             obj = work / (src.stem + ".o")
             r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{work}", "-c", str(src), "-o", str(obj)],
                                capture_output=True, text=True)

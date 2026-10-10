@@ -40,6 +40,7 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
+from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, FileBridge
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded, Memory, Region
@@ -81,8 +82,8 @@ MONITOR_SIZE = RECON_TABLE + 16 * RECON_ENTRIES
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
-RING_SIZE = 0x4000
-EXCEPTION_OFF = 0x9000              # the last unhandled exception: record and CONTEXT (runtime.h)
+RING_SIZE = 0x40000                 # 10,922 records; Sprint 042 probe makes 1,275 calls (shared-memory rings: Sprint 044)
+EXCEPTION_OFF = RING_OFF + RING_SIZE             # the last unhandled exception: record and CONTEXT (runtime.h)
 EXCEPTION_MAGIC = 0x7832774E4F495445
 PROCESS_SIZE = EXCEPTION_OFF + 0x1000
 STDOUT_HANDLE = 0x74
@@ -90,7 +91,10 @@ STDOUT_HANDLE = 0x74
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
             "GetLastError": ("k32_GetLastError", True), "GetStdHandle": ("k32_GetStdHandle", True),
             "WriteFile": ("k32_WriteFile", True), "ExitProcess": ("k32_ExitProcess", False),
-            "QueryPerformanceCounter": ("k32_QueryPerformanceCounter", True)}
+            "QueryPerformanceCounter": ("k32_QueryPerformanceCounter", True),
+            "CreateFileW": ("k32_CreateFileW", True), "CloseHandle": ("k32_CloseHandle", True),
+            "DeleteFileW": ("k32_DeleteFileW", True), "ReadFile": ("k32_ReadFile", True),
+            "SetFilePointerEx": ("k32_SetFilePointerEx", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
@@ -654,6 +658,29 @@ def _round_up(n: int, to: int = PAGE) -> int:
     return (n + to - 1) & ~(to - 1)
 
 
+class _GuestView:
+    """Guest memory as the file bridge sees it: the image's regions, and the monitor area where the
+    runtime keeps its own buffers (a normalized path)."""
+
+    def __init__(self, vm: VM) -> None:
+        self.vm = vm
+
+    def _monitor(self, va: int, n: int) -> int | None:
+        off = va - MONITOR_VA
+        return off if 0 <= off and off + n <= MONITOR_SIZE else None
+
+    def read(self, va: int, n: int) -> bytes:
+        off = self._monitor(va, n)
+        return bytes(self.vm.mm[off:off + n]) if off is not None else self.vm.mem.read(va, n)
+
+    def write(self, va: int, data: bytes) -> None:
+        off = self._monitor(va, len(data))
+        if off is not None:
+            self.vm.mm[off:off + len(data)] = data
+        else:
+            self.vm.mem.write(va, data)
+
+
 class VM:
     """One guest thread of `loaded` in a fresh Hypervisor.framework VM.
 
@@ -662,8 +689,10 @@ class VM:
     """
 
     def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False,
-                 clock: Callable[[], int] = monotonic_count, last_error_source: str | None = None) -> None:
+                 clock: Callable[[], int] = monotonic_count, last_error_source: str | None = None,
+                 files: FileBridge | None = None, file_source: str | None = None) -> None:
         self.ld = loaded
+        self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
         self.clock = clock
         self.th = Thread(tid)
@@ -688,7 +717,7 @@ class VM:
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
         self.runtime = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(),
-            last_error_source)
+            last_error_source, file_source)
         _RUNTIME_SYMBOLS.clear()
         _RUNTIME_SYMBOLS.update(self.runtime.symbols)
         if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
@@ -779,6 +808,12 @@ class VM:
         """Service the transport page (hvc #8). False when the guest exited."""
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
+        if FILE_LOOKUP <= op <= FILE_UNLINK:
+            if self.files is None:
+                raise Unimplemented("a file call in a run with no file-system root")
+            result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
+            struct.pack_into("<QQ", self.mm, t + 48, second, result)
+            return True
         if op == HOST_WRITE:
             self.out += self.mem.read(a0, a1)
             result = a1

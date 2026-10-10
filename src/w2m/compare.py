@@ -12,12 +12,13 @@ is not guest order).
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import AsyncIterator, Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from w2m import events
-from w2m.contract import AllowedOutcomeSet, Contract, ExactReturnOfArgument, load_contract
+from w2m.contract import AllowedOutcomeSet, Contract, ExactReturnOfArgument, ExactRows, load_contract
 from w2m.trace import trace_path
 
 
@@ -162,10 +163,50 @@ def compare_exact_return_of_argument(
     return done("conforms")
 
 
+def compare_exact_rows(
+    contract: Contract,
+    output: bytes,
+    comparison_id: str,
+    reference_ref: str,
+    target_execution_id: str,
+) -> events.COMPARISON_COMPLETED:
+    """Judge a target's printed rows against an ExactRows acceptance: the first row missing,
+    extra, out of order or unequal in any field is the divergence ("row <key>: <field> ...")."""
+    x = contract.acceptance
+    assert isinstance(x, ExactRows)
+
+    def done(verdict: events.EnumVerdict, divergence: str | None = None) -> events.COMPARISON_COMPLETED:
+        return events.validate(events.COMPARISON_COMPLETED(
+            comparison_id=comparison_id, contract_id=contract.contract_id,
+            contract_version=contract.version, relation="exact",
+            reference_ref=reference_ref, target_execution_id=target_execution_id,
+            verdict=verdict, first_divergence=divergence[:500] if divergence else None))
+
+    try:
+        got = [json.loads(line) for line in output.splitlines() if line.strip()]
+    except json.JSONDecodeError as e:
+        return done("discrepancy", f"output is not one JSON object per line: {e}")
+    for i, want in enumerate(x.rows):
+        name = want[x.key]
+        if i >= len(got):
+            return done("discrepancy", f"row {name}: missing ({len(got)} rows printed, {len(x.rows)} expected)")
+        row = got[i]
+        if row.get(x.key) != name:
+            return done("discrepancy", f"row {name}: target printed {row.get(x.key)!r} in its place")
+        for k in sorted(set(want) | set(row)):
+            if want.get(k) != row.get(k):
+                return done("discrepancy", f"row {name}: {k} reference {want.get(k)!r}, target {row.get(k)!r}")
+    if len(got) > len(x.rows):
+        return done("discrepancy", f"{len(got) - len(x.rows)} rows past the reference's {len(x.rows)}")
+    return done("conforms")
+
+
 def compare(contract: Contract, trace_bytes: bytes, role_map: Mapping[str, int],
             comparison_id: str, reference_ref: str,
             target_execution_id: str) -> events.COMPARISON_COMPLETED:
     """Judge with the relation the contract's acceptance names."""
+    if isinstance(contract.acceptance, ExactRows):
+        return compare_exact_rows(contract, trace_bytes, comparison_id, reference_ref, target_execution_id)
     judge = (compare_exact_return_of_argument if isinstance(contract.acceptance, ExactReturnOfArgument)
              else compare_allowed_outcome_set)
     return judge(contract, trace_bytes, role_map, comparison_id, reference_ref, target_execution_id)

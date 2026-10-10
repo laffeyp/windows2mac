@@ -62,13 +62,13 @@ def test_structure(path: Path) -> None:
     text = next(s for s in img.sections if s.name == ".text")
     assert text.flags == "r-x"
     assert text.virtual_address <= img.entry_rva < text.virtual_address + text.virtual_size
-    assert set(img.relocations) <= {0, 10}         # only DIR64 and ABSOLUTE padding (an all-
-                                                   # RIP-relative no-CRT image has none at all)
+    assert set(img.relocations) <= {0, 10}         # only DIR64 and ABSOLUTE padding
     assert ("static", img.entry_rva) in img.code_targets()
     if sum(map(len, img.imports.values())) > 20:   # CRT-linked probes (hello, event_auto_reset)
         assert "WaitForSingleObject" in img.imports["KERNEL32.dll"]
-    else:                                          # no-CRT skeleton (Sprint 029)
-        assert set(img.imports) == {"KERNEL32.dll"} and not img.relocations
+    else:                                          # no-CRT probes (Sprint 029): kernel32 only; DIR64
+        assert set(img.imports) == {"KERNEL32.dll"}  # entries appear with static pointer tables
+                                                     # (create_file: 12), unused at the preferred base
 
 
 @pytest.mark.parametrize(("name", "mutate", "needle"), [

@@ -50,7 +50,7 @@ from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 from w2m.record import producer  # noqa: E402
 
-RELEASES = {"039": "semantics-039", "041": "semantics-041"}
+RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042"}
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
 
 
