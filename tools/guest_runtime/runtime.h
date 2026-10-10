@@ -188,6 +188,13 @@ struct w2m_exception_area {
 #define W2M_API_GetModuleFileNameW 25
 #define W2M_API_GetProcAddress 26
 #define W2M_API_FreeLibrary 27
+#define W2M_API_InitializeCriticalSectionEx 28
+#define W2M_API_InitializeCriticalSectionAndSpinCount 29
+#define W2M_API_InitializeCriticalSection 30
+#define W2M_API_EnterCriticalSection 31
+#define W2M_API_TryEnterCriticalSection 32
+#define W2M_API_LeaveCriticalSection 33
+#define W2M_API_DeleteCriticalSection 34
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);

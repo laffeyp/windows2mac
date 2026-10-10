@@ -1,0 +1,170 @@
+{
+ "contract_id": "windows.module.queries",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "LoadLibraryExW, GetModuleHandleW, GetModuleHandleExW, GetModuleFileNameW, GetProcAddress and FreeLibrary answer as Windows does: which handle a name yields relative to the others, the error codes, what success leaves in the last error, and GetModuleFileNameW's truncation.",
+ "applicability": "windows-2022 (AMD EPYC 7763); windows-2022 (AMD EPYC 9V74); windows-2025 (AMD EPYC 7763); windows-2025 (AMD EPYC 9V74); windows-2025 (Intel Xeon 6973P-C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/modules/modules.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "handle.kernel32",
+    "nonzero": true,
+    "err": 57005
+   },
+   {
+    "s": "handle.kernelbase",
+    "nonzero": true,
+    "differs_from_kernel32": true
+   },
+   {
+    "s": "handle.kernel32_upper_case",
+    "equals_kernel32": true
+   },
+   {
+    "s": "handle.null",
+    "equals_image_base": true,
+    "equals_peb_image_base": true
+   },
+   {
+    "s": "handle.missing",
+    "null": true,
+    "err": 126
+   },
+   {
+    "s": "load.apiset_synch",
+    "nonzero": true,
+    "err": 57005,
+    "equals_kernelbase": true,
+    "equals_kernel32": false
+   },
+   {
+    "s": "load.kernel32",
+    "equals_kernel32": true,
+    "err": 57005
+   },
+   {
+    "s": "load.kernel32_no_extension",
+    "equals_kernel32": true
+   },
+   {
+    "s": "load.missing",
+    "null": true,
+    "err": 126
+   },
+   {
+    "s": "load.missing_default_search",
+    "null": true,
+    "err": 126
+   },
+   {
+    "s": "proc.kernel32_found",
+    "nonzero": true,
+    "equals_import": true,
+    "err": 57005
+   },
+   {
+    "s": "proc.apiset_found",
+    "nonzero": true,
+    "err": 57005
+   },
+   {
+    "s": "proc.same_function_both_ways",
+    "equal": false
+   },
+   {
+    "s": "proc.missing",
+    "null": true,
+    "err": 127
+   },
+   {
+    "s": "handle_ex.from_address",
+    "ret": 1,
+    "equals_image_base": true,
+    "err": 57005
+   },
+   {
+    "s": "file_name.null",
+    "nonzero": true,
+    "length_matches": true,
+    "ends_with_probe_exe": true,
+    "absolute": true,
+    "err": 0
+   },
+   {
+    "s": "file_name.small_buffer",
+    "ret": 4,
+    "terminated": true,
+    "prefix_kept": true,
+    "err": 122
+   },
+   {
+    "s": "free.kernel32",
+    "ret": 1,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38039204088: windows-2025, Intel Xeon 6973P-C, probe sha256:dc5dc17938bc5d6fe90630cea27d2ecd92dc37d1c3055cc2ff971d4d235d8803; run 38039205782: windows-2022, AMD EPYC 7763, probe sha256:2023b96471cb2f483ce8f0f7b1fd644897c39820e6de2a53df8c6093a7315fc2; run 38039207305: windows-2025, AMD EPYC 7763, probe sha256:16fa45b585275647ae802b8e735675f6aae2a9781e06b3d57deea0700c7f8826; run 38039209016: windows-2022, AMD EPYC 7763, probe sha256:5c2a1271b0fd34fb03eef5dd2219421a63dedc8a3ce1572e189318b7e24a1ad9; run 38039210828: windows-2025, AMD EPYC 9V74, probe sha256:845b240e2d35ba8c4cb102a65fc665b53e3369262747cca46b83db5b7e75d9b0; run 38039212442: windows-2022, AMD EPYC 9V74, probe sha256:d289f28d9c8c03b406e6a171cc3eb45795a076a1f6fb962e56de40df5704cc27",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "modules-1791622152-0-1",
+    "modules-1791622152-0-2",
+    "modules-1791622154-1-1",
+    "modules-1791622154-1-2",
+    "modules-1791622156-2-1",
+    "modules-1791622156-2-2",
+    "modules-1791622157-3-1",
+    "modules-1791622157-3-2",
+    "modules-1791622159-4-1",
+    "modules-1791622159-4-2",
+    "modules-1791622160-5-1",
+    "modules-1791622160-5-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getmodulefilenamew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamew (page updated 2025-10-07; retrieved 2026-10-10)",
+   "quote": "If the buffer is too small to hold the module name, the string is truncated to nSize characters including the terminating null character, the function returns nSize, and the function sets the last error to ERROR_INSUFFICIENT_BUFFER."
+  },
+  {
+   "evidence_id": "ms-getprocaddress",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "If the function succeeds, the return value is the address of the exported function or variable. If the function fails, the return value is NULL."
+  }
+ ],
+ "open_questions": [
+  "api-ms-win-core-synch-l1-2-0 loads as kernelbase on every run; w2m maps every api-ms-win-core-* name the same way and stops on other API-set families (src/w2m/modules.py). Each new API set the frontier meets is a row to add.",
+  "Success leaves the last error untouched for LoadLibraryExW, GetModuleHandleW, GetModuleHandleExW, GetProcAddress and FreeLibrary; GetModuleFileNameW sets it to 0 (the 'err' rows), which the page does not say.",
+  "Handles and addresses are compared only as relations (equal to another answer, the image base)."
+ ],
+ "sections": {
+  "probe": "probes/modules (Sprint 044)",
+  "implementation": "tools/guest_runtime/module.c",
+  "rows": "scripts/family_run.py modules",
+  "excluded": "none"
+ }
+}

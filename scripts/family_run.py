@@ -158,6 +158,83 @@ FAMILIES: dict[str, Family] = {
                                                  ("time.qpf", "time.counter_tracks_time")),
                 "process_id_from_thread": Plant("(u32)w2m_teb()->client_process", "(u32)w2m_teb()->client_thread",
                                                 ("ids.process", "ids.thread"))}),
+    "modules": Family(
+        name="modules",
+        contract_id="windows.module.queries",
+        version="0.1.0",
+        summary=("LoadLibraryExW, GetModuleHandleW, GetModuleHandleExW, GetModuleFileNameW, GetProcAddress and "
+                 "FreeLibrary answer as Windows does: which handle a name yields relative to the others, the "
+                 "error codes, what success leaves in the last error, and GetModuleFileNameW's truncation."),
+        probe="modules", guest_file="module.c",
+        runs={"38039204088": Run("windows-2025", "dc5dc17938bc5d6fe90630cea27d2ecd92dc37d1c3055cc2ff971d4d235d8803",
+                                 "modules-1791622152-0", "Intel Xeon 6973P-C"),
+              "38039205782": Run("windows-2022", "2023b96471cb2f483ce8f0f7b1fd644897c39820e6de2a53df8c6093a7315fc2",
+                                 "modules-1791622154-1", "AMD EPYC 7763"),
+              "38039207305": Run("windows-2025", "16fa45b585275647ae802b8e735675f6aae2a9781e06b3d57deea0700c7f8826",
+                                 "modules-1791622156-2", "AMD EPYC 7763"),
+              "38039209016": Run("windows-2022", "5c2a1271b0fd34fb03eef5dd2219421a63dedc8a3ce1572e189318b7e24a1ad9",
+                                 "modules-1791622157-3", "AMD EPYC 7763"),
+              "38039210828": Run("windows-2025", "845b240e2d35ba8c4cb102a65fc665b53e3369262747cca46b83db5b7e75d9b0",
+                                 "modules-1791622159-4", "AMD EPYC 9V74"),
+              "38039212442": Run("windows-2022", "d289f28d9c8c03b406e6a171cc3eb45795a076a1f6fb962e56de40df5704cc27",
+                                 "modules-1791622160-5", "AMD EPYC 9V74")},
+        documented=(
+            documented("ms-getmodulefilenamew", "api/libloaderapi/nf-libloaderapi-getmodulefilenamew", "2025-10-07",
+                       "If the buffer is too small to hold the module name, the string is truncated to nSize characters "
+                       "including the terminating null character, the function returns nSize, and the function sets the "
+                       "last error to ERROR_INSUFFICIENT_BUFFER."),
+            documented("ms-getprocaddress", "api/libloaderapi/nf-libloaderapi-getprocaddress", "2025-07-01",
+                       "If the function succeeds, the return value is the address of the exported function or variable. "
+                       "If the function fails, the return value is NULL.")),
+        open_questions=(
+            "api-ms-win-core-synch-l1-2-0 loads as kernelbase on every run; w2m maps every api-ms-win-core-* name "
+            "the same way and stops on other API-set families (src/w2m/modules.py). Each new API set the frontier "
+            "meets is a row to add.",
+            "Success leaves the last error untouched for LoadLibraryExW, GetModuleHandleW, GetModuleHandleExW, "
+            "GetProcAddress and FreeLibrary; GetModuleFileNameW sets it to 0 (the 'err' rows), which the page does "
+            "not say.",
+            "Handles and addresses are compared only as relations (equal to another answer, the image base)."),
+        plants={"file_name_leaves_error": Plant("        set_error(0);\n        return w2m_logged(W2M_API_GetModuleFileNameW",
+                                                "        return w2m_logged(W2M_API_GetModuleFileNameW",
+                                                ("file_name.null",)),
+                "truncation_returns_size_minus_one": Plant("return w2m_logged(W2M_API_GetModuleFileNameW, module, size);",
+                                                           "return w2m_logged(W2M_API_GetModuleFileNameW, module, size - 1);",
+                                                           ("file_name.small_buffer",)),
+                "proc_missing_wrong_code": Plant("if (!p) set_error(ERROR_PROC_NOT_FOUND);",
+                                                 "if (!p) set_error(ERROR_MOD_NOT_FOUND);", ("proc.missing",))}),
+    "critical_sections": Family(
+        name="critical_sections",
+        contract_id="windows.critical_section.single_thread",
+        version="0.1.0",
+        summary=("InitializeCriticalSectionEx, InitializeCriticalSectionAndSpinCount, InitializeCriticalSection, "
+                 "EnterCriticalSection, TryEnterCriticalSection, LeaveCriticalSection and DeleteCriticalSection on "
+                 "one thread leave the CRITICAL_SECTION's fields as Windows leaves them, with Windows's returns."),
+        probe="critical_sections", guest_file="critical_section.c",
+        runs={
+              "38039748482": Run("windows-2025", "9289dc8bfe06771ffa5434e170798322cafb71f9eeb959bc12301f05b37bfd00", "critical_sections-1791622717-0", "AMD EPYC 7763 64-Core Processor"),
+              "38039751056": Run("windows-2022", "88e8478288b4dc4e444a32fdcd6882e966a8fcb060d744e84f2331d18c1bca57", "critical_sections-1791622717-1", "AMD EPYC 7763 64-Core Processor"),
+              "38039753569": Run("windows-2025", "0f7bb5f8e79380972f0ac6bf0f5927de765185a0fdc08abf01c1bb1d64fcd867", "critical_sections-1791622717-2", "AMD EPYC 9V45 96-Core Processor"),
+              "38039755720": Run("windows-2022", "9669215f8cf17a60d82a487c2b7a11a938b26399505554a9dba7a112b951e5d3", "critical_sections-1791622717-3", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38039757756": Run("windows-2025", "25376298d8c925e49c8362f51f2ec9830e8cff395952ee380ab83bc5e8171704", "critical_sections-1791622717-4", "AMD EPYC 7763 64-Core Processor"),
+              "38039759979": Run("windows-2022", "9de03e8427a1c25d4b18220e6312cb348059e168e5a439497885dbc6054d52bc", "critical_sections-1791622717-5", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-initializecriticalsectionex", "api/synchapi/nf-synchapi-initializecriticalsectionex",
+                       "2024-02-22", "If the function succeeds, the return value is nonzero. ... A critical section "
+                       "object cannot be moved or copied. The process must also not modify the object, but must treat "
+                       "it as logically opaque."),),
+        open_questions=(
+            "The page calls the structure opaque; the rows record its fields anyway, because a program can read them "
+            "and w2m must then see what Windows leaves (LockCount -1 free, -2 held; DebugInfo -1; SpinCount flags).",
+            "One thread only: a section held by another thread is Sprint 047's (waits, LockSemaphore).",
+            "InitializeCriticalSectionEx with a zero count and flags was not observed; w2m stops on it."),
+        # (a first plant, LockCount not restored on the last Leave, was named for 3 rows and in fact stopped the
+        # run: TryEnter then finds a held section with no owner; the named reach was wrong, recorded in Sprint
+        # 044's card, and the plant replaced by one whose effect stays in its row)
+        plants={"delete_keeps_debug_info": Plant("    for (int i = 0; i < 40; i++) b[i] = 0;",
+                                                 "    for (int i = 8; i < 40; i++) b[i] = 0;", ("delete",)),
+                "default_spin_without_flag": Plant("#define DEFAULT_SPIN 0x020007D0ull", "#define DEFAULT_SPIN 0x000007D0ull",
+                                                   ("init_ex.0.0", "init"))}),
 }
 
 
@@ -331,7 +408,9 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
 
     result = run_with_provenance(runs / run_id, topology)
     kinds = Counter(e["kind"] for e in read_record(result.record_root) if not e["kind"].startswith("substrate."))
-    return {"family": f.name, "record": str(Path(result.record_root).relative_to(ROOT)), "candidate_sha256": sha,
+    record = Path(result.record_root)
+    return {"family": f.name, "record": str(record.relative_to(ROOT) if record.is_relative_to(ROOT) else record),
+            "candidate_sha256": sha,
             "verdicts": dict(state["verdicts"]), "divergence": dict(state["divergence"]), "events": dict(kinds)}
 
 

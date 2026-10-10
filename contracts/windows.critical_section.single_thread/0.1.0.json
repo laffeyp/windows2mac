@@ -1,0 +1,221 @@
+{
+ "contract_id": "windows.critical_section.single_thread",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "InitializeCriticalSectionEx, InitializeCriticalSectionAndSpinCount, InitializeCriticalSection, EnterCriticalSection, TryEnterCriticalSection, LeaveCriticalSection and DeleteCriticalSection on one thread leave the CRITICAL_SECTION's fields as Windows leaves them, with Windows's returns.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/critical_sections/critical_sections.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "size",
+    "bytes": 40
+   },
+   {
+    "s": "init_ex.ret",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "init_ex.4000.0",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -1,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "enter.1",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -2,
+    "recursion_count": 1,
+    "owner_is_this_thread": true,
+    "owner_null": false,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "enter.2",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -2,
+    "recursion_count": 2,
+    "owner_is_this_thread": true,
+    "owner_null": false,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "try_enter.owned.ret",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "try_enter.owned",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -2,
+    "recursion_count": 3,
+    "owner_is_this_thread": true,
+    "owner_null": false,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "leave.1",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -2,
+    "recursion_count": 2,
+    "owner_is_this_thread": true,
+    "owner_null": false,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "leave.2",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -2,
+    "recursion_count": 1,
+    "owner_is_this_thread": true,
+    "owner_null": false,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "leave.3",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -1,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "try_enter.free.ret",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "try_enter.free",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -2,
+    "recursion_count": 1,
+    "owner_is_this_thread": true,
+    "owner_null": false,
+    "lock_semaphore": "0x0",
+    "spin_count": "0xfa0"
+   },
+   {
+    "s": "delete",
+    "debug_info": "0x0",
+    "lock_count": 0,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0x0"
+   },
+   {
+    "s": "init_ex.0.0",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -1,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0x20007d0"
+   },
+   {
+    "s": "init_ex.4000.no_debug_info",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -1,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0x1000fa0"
+   },
+   {
+    "s": "init_spin.ret",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "init_spin.1500",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -1,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0x5dc"
+   },
+   {
+    "s": "init",
+    "debug_info": "0xffffffffffffffff",
+    "lock_count": -1,
+    "recursion_count": 0,
+    "owner_is_this_thread": false,
+    "owner_null": true,
+    "lock_semaphore": "0x0",
+    "spin_count": "0x20007d0"
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38039748482: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:9289dc8bfe06771ffa5434e170798322cafb71f9eeb959bc12301f05b37bfd00; run 38039751056: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:88e8478288b4dc4e444a32fdcd6882e966a8fcb060d744e84f2331d18c1bca57; run 38039753569: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:0f7bb5f8e79380972f0ac6bf0f5927de765185a0fdc08abf01c1bb1d64fcd867; run 38039755720: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:9669215f8cf17a60d82a487c2b7a11a938b26399505554a9dba7a112b951e5d3; run 38039757756: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:25376298d8c925e49c8362f51f2ec9830e8cff395952ee380ab83bc5e8171704; run 38039759979: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:9de03e8427a1c25d4b18220e6312cb348059e168e5a439497885dbc6054d52bc",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "critical_sections-1791622717-0-1",
+    "critical_sections-1791622717-0-2",
+    "critical_sections-1791622717-1-1",
+    "critical_sections-1791622717-1-2",
+    "critical_sections-1791622717-2-1",
+    "critical_sections-1791622717-2-2",
+    "critical_sections-1791622717-3-1",
+    "critical_sections-1791622717-3-2",
+    "critical_sections-1791622717-4-1",
+    "critical_sections-1791622717-4-2",
+    "critical_sections-1791622717-5-1",
+    "critical_sections-1791622717-5-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-initializecriticalsectionex",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-initializecriticalsectionex (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "If the function succeeds, the return value is nonzero. ... A critical section object cannot be moved or copied. The process must also not modify the object, but must treat it as logically opaque."
+  }
+ ],
+ "open_questions": [
+  "The page calls the structure opaque; the rows record its fields anyway, because a program can read them and w2m must then see what Windows leaves (LockCount -1 free, -2 held; DebugInfo -1; SpinCount flags).",
+  "One thread only: a section held by another thread is Sprint 047's (waits, LockSemaphore).",
+  "InitializeCriticalSectionEx with a zero count and flags was not observed; w2m stops on it."
+ ],
+ "sections": {
+  "probe": "probes/critical_sections (Sprint 044)",
+  "implementation": "tools/guest_runtime/critical_section.c",
+  "rows": "scripts/family_run.py critical_sections",
+  "excluded": "none"
+ }
+}

@@ -80,7 +80,7 @@ def test_every_rule_writes_each_temporary_once() -> None:
     from w2m.lift import lift
     from w2m.vm_backend import _temps_written
     import semantics_differential as sd
-    twice = Counter()
+    twice: Counter[str] = Counter()
     for k in sd.CASE_SETS:
         seed, classes, locked, control = sd.CASE_SETS[k]
         for c in sd.build_cases(seed, classes, locked, control)[0]:

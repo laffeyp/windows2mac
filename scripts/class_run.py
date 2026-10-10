@@ -48,8 +48,8 @@ from w2m.rules import registry  # noqa: E402
 from w2m.x86dec import decode  # noqa: E402
 
 # Each case set's reference: an Intel Xeon Platinum 8573C run of its case file
-REFERENCES = {"039": "38011862284", "041": "38029980267", "042": "38031723882", "044": "38039360955"}
-CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0", "042": "0.42.0", "044": "0.44.0"}     # the case set (its class list and seed)
+REFERENCES = {"039": "38011862284", "041": "38029980267", "042": "38031723882", "044": "38039360955", "044b": "38039726462"}
+CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0", "042": "0.42.0", "044": "0.44.0", "044b": "0.44.1"}     # the case set (its class list and seed)
 
 
 def contract_id(iclass: str) -> str:
@@ -87,6 +87,8 @@ def cases_for(iclass: str) -> tuple[str, list[sd.Case], list[sd.Result]]:
 def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> Counter[str]:
     out: Counter[str] = Counter()
     for c, r in zip(cases, results, strict=True):
+        if sd.undefined_memory(c):                   # set aside, as the semantics judge does (Sprint 044)
+            continue
         for k, _detail in sd.judge(c, r, c.label):
             out[k] += 1
     return out
@@ -125,8 +127,9 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
                 example: dict[str, str] = {}
             else:
                 diffs, example, skipped, judged, _faults = vm_oracle.run_cases(cases, results)
-                if skipped:
-                    diffs.update({f"not compiled: {k}": n for k, n in skipped.items()})
+                not_compiled = {k: n for k, n in skipped.items() if "(not judged)" not in k}   # set-asides are not
+                if not_compiled:                                                             # the VM's failures
+                    diffs.update({f"not compiled: {k}": n for k, n in not_compiled.items()})
             state["diffs"][executor] = (diffs, example)
             verdict: events.EnumVerdict = "discrepancy" if diffs else "conforms"
             state["verdicts"][executor] = verdict

@@ -1,12 +1,68 @@
 {
- "process_queries": {
-  "candidate_sha256": "sha256:083ca926a777dd968571bd3e109354095197ab3aa9b5aa3d4995ebde3e1eea26",
+ "critical_sections": {
+  "candidate_sha256": "sha256:24a0b43197cd427eb58b353259181d13d76fca19b6c55909d87a14d0d55a81d1",
   "divergence": {
-   "38037899422": "row ids.process: missing (0 rows printed, 35 expected)",
-   "38037900735": "row ids.process: missing (0 rows printed, 35 expected)",
-   "38037902222": "row ids.process: missing (0 rows printed, 35 expected)",
-   "38037903596": "row ids.process: missing (0 rows printed, 35 expected)",
-   "38038027558": "row ids.process: missing (0 rows printed, 35 expected)"
+   "38039748482": null,
+   "38039751056": null,
+   "38039753569": null,
+   "38039755720": null,
+   "38039757756": null,
+   "38039759979": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 6,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "critical_sections",
+  "record": "store/runs/family-critical_sections-1791622937505837000",
+  "verdicts": {
+   "38039748482": "conforms",
+   "38039751056": "conforms",
+   "38039753569": "conforms",
+   "38039755720": "conforms",
+   "38039757756": "conforms",
+   "38039759979": "conforms"
+  }
+ },
+ "modules": {
+  "candidate_sha256": "sha256:17e0a690b814488f4ee91189633f8060cd99e39ecd1d07959dd30e0253af16fd",
+  "divergence": {
+   "38039204088": null,
+   "38039205782": null,
+   "38039207305": null,
+   "38039209016": null,
+   "38039210828": null,
+   "38039212442": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 6,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "modules",
+  "record": "store/runs/family-modules-1791622752119193000",
+  "verdicts": {
+   "38039204088": "conforms",
+   "38039205782": "conforms",
+   "38039207305": "conforms",
+   "38039209016": "conforms",
+   "38039210828": "conforms",
+   "38039212442": "conforms"
+  }
+ },
+ "process_queries": {
+  "candidate_sha256": "sha256:eaa2221a53e4a40e2c300f3b849b3182a75a81304140653d75dd9468b2110854",
+  "divergence": {
+   "38037899422": null,
+   "38037900735": null,
+   "38037902222": null,
+   "38037903596": "row time.counter_tracks_time: within_25_percent reference True, target False",
+   "38038027558": null
   },
   "events": {
    "CANDIDATE_GENERATED": 1,
@@ -18,13 +74,13 @@
    "SESSION_INIT": 1
   },
   "family": "process_queries",
-  "record": "store/runs/family-process_queries-1791621239307425000",
+  "record": "store/runs/family-process_queries-1791622778782803000",
   "verdicts": {
-   "38037899422": "discrepancy",
-   "38037900735": "discrepancy",
-   "38037902222": "discrepancy",
+   "38037899422": "conforms",
+   "38037900735": "conforms",
+   "38037902222": "conforms",
    "38037903596": "discrepancy",
-   "38038027558": "discrepancy"
+   "38038027558": "conforms"
   }
  }
 }

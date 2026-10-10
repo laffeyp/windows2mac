@@ -348,7 +348,10 @@ class Runtime:
             self._exec_ops(ins)
         except (GuestFault, fp.SimdFault):
             mxcsr = th.mxcsr
+            interrupted = list(th.regs)
             th.regs, th.flags, th.xmm, th.mxcsr, th.df = saved
+            if any(op[0] == "rep" for op in ins.ops):        # REP keeps its completed iterations (SDM
+                th.regs = interrupted                        # Vol 1 7.3.9): RCX, RSI, RDI as at the fault
             th.mxcsr = mxcsr                                  # MXCSR flags a fault sets survive it
             th.rip = ins.address
             raise

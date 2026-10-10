@@ -114,7 +114,14 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "LoadLibraryExW": ("k32_LoadLibraryExW", True), "GetModuleHandleW": ("k32_GetModuleHandleW", True),
             "GetModuleHandleExW": ("k32_GetModuleHandleExW", True),
             "GetModuleFileNameW": ("k32_GetModuleFileNameW", True), "GetProcAddress": ("k32_GetProcAddress", True),
-            "FreeLibrary": ("k32_FreeLibrary", True)}
+            "FreeLibrary": ("k32_FreeLibrary", True),
+            "InitializeCriticalSectionEx": ("k32_InitializeCriticalSectionEx", True),
+            "InitializeCriticalSectionAndSpinCount": ("k32_InitializeCriticalSectionAndSpinCount", True),
+            "InitializeCriticalSection": ("k32_InitializeCriticalSection", False),
+            "EnterCriticalSection": ("k32_EnterCriticalSection", False),
+            "TryEnterCriticalSection": ("k32_TryEnterCriticalSection", True),
+            "LeaveCriticalSection": ("k32_LeaveCriticalSection", False),
+            "DeleteCriticalSection": ("k32_DeleteCriticalSection", False)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py

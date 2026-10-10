@@ -1,8 +1,8 @@
 [
  {
   "iclass": "ADD",
-  "record": "store/runs/class-add-1791621510490243000",
-  "rule_sha256": "sha256:402b4544d32114adad293aa52c7b7ca6c08a9fe3b6eb71b6b049c98e094d1f2e",
+  "record": "store/runs/class-add-1791623111774116000",
+  "rule_sha256": "sha256:5bd77545e645588eeb21c4911413f25816d7a1b5999cde7f91e72cd6a1a834ff",
   "cases": 1374,
   "verdicts": {
    "model": "conforms",
@@ -18,8 +18,8 @@
  },
  {
   "iclass": "ADDPD",
-  "record": "store/runs/class-addpd-1791621510574871000",
-  "rule_sha256": "sha256:18fd644fa256f87f9730df7a5459943195d184f95be909d264a4db25d735db03",
+  "record": "store/runs/class-addpd-1791623111779091000",
+  "rule_sha256": "sha256:c3906d65b2d065c9774f1f2eaa2928beb0738ad4404fcd61629be06484476de6",
   "cases": 227,
   "verdicts": {
    "model": "conforms",
@@ -35,8 +35,8 @@
  },
  {
   "iclass": "ADDPS",
-  "record": "store/runs/class-addps-1791621510553808000",
-  "rule_sha256": "sha256:64fd7c11c6b9b72fa55e8feeaf85ea497a9667bd4772f2bfa6b0f1531397f2fa",
+  "record": "store/runs/class-addps-1791623111770006000",
+  "rule_sha256": "sha256:d3fb5e887fe44e61b7f797a47b69fe75847729e2e5234927d36da16f4c8ecc13",
   "cases": 156,
   "verdicts": {
    "model": "conforms",
@@ -52,8 +52,8 @@
  },
  {
   "iclass": "ADDSD",
-  "record": "store/runs/class-addsd-1791621510567106000",
-  "rule_sha256": "sha256:cc9964fed01251462dbfef6c08810f3cc3c782a801bcf7451514563d1cf1cd00",
+  "record": "store/runs/class-addsd-1791623111706721000",
+  "rule_sha256": "sha256:f105b1329cee75ea44905850b4c4b338deb7d3a8a6f0f81ebad4bf8a580e3267",
   "cases": 359,
   "verdicts": {
    "model": "conforms",
@@ -69,8 +69,8 @@
  },
  {
   "iclass": "ADDSS",
-  "record": "store/runs/class-addss-1791621510582183000",
-  "rule_sha256": "sha256:d9b0de3a946a5656ce2c9ea91777521b4157ec92b203fe457fe3b1ac9e33ba05",
+  "record": "store/runs/class-addss-1791623111771552000",
+  "rule_sha256": "sha256:70cce0267a1c3e7d98e3f6a14e6a016e712a370993d654edd5037af8f4106a3d",
   "cases": 343,
   "verdicts": {
    "model": "conforms",
@@ -86,8 +86,8 @@
  },
  {
   "iclass": "ADD_LOCK",
-  "record": "store/runs/class-add_lock-1791621510388005000",
-  "rule_sha256": "sha256:410030d12b430ad77a2051288e73e635375cee0ef9780527ce5a6d7ef028d6bf",
+  "record": "store/runs/class-add_lock-1791623111579752000",
+  "rule_sha256": "sha256:4e4cc934adaf269afd5e142aa89b4a42f392a942678b3aa6f28eb4b7fadfc675",
   "cases": 740,
   "verdicts": {
    "model": "conforms",
@@ -103,8 +103,8 @@
  },
  {
   "iclass": "AND",
-  "record": "store/runs/class-and-1791621510570544000",
-  "rule_sha256": "sha256:06aa6e2b7544b71c0a7e62d5381551fbb233113005de9e91d9f90e27832f3f43",
+  "record": "store/runs/class-and-1791623111751720000",
+  "rule_sha256": "sha256:a8e60587f0f0415fadc48b0a3f4560a4398f2e82ed320b55ea4691aa5fdd0299",
   "cases": 1347,
   "verdicts": {
    "model": "conforms",
@@ -120,8 +120,8 @@
  },
  {
   "iclass": "ANDPD",
-  "record": "store/runs/class-andpd-1791621510564525000",
-  "rule_sha256": "sha256:29f0034fb4524e8762eeacf4fb2e7395292daf7362a86823adce83781e68fb13",
+  "record": "store/runs/class-andpd-1791623111735710000",
+  "rule_sha256": "sha256:def3649f2476cc1dd004bf7dcd0a0604e59d2ce2e91d4aae7b21b6635730f091",
   "cases": 244,
   "verdicts": {
    "model": "conforms",
@@ -137,8 +137,8 @@
  },
  {
   "iclass": "ANDPS",
-  "record": "store/runs/class-andps-1791621510917426000",
-  "rule_sha256": "sha256:cf0da7ee5a2ff9e6318f7b5f13df4ca766db0af80d1d1ce998e407c6a81c40d9",
+  "record": "store/runs/class-andps-1791623112276601000",
+  "rule_sha256": "sha256:98de200149b5fe496247dca25edaf3185c4391d38a36abc8c81b5e1bb4af7c8d",
   "cases": 138,
   "verdicts": {
    "model": "conforms",
@@ -154,8 +154,8 @@
  },
  {
   "iclass": "AND_LOCK",
-  "record": "store/runs/class-and_lock-1791621510771125000",
-  "rule_sha256": "sha256:ecf3638e1aceffe75d76eddada2c0faca3bf6c64cfbb86ac36a855d04f21afc1",
+  "record": "store/runs/class-and_lock-1791623112106399000",
+  "rule_sha256": "sha256:8eab23493e21c2193189829a3a27c01671f4d6180a64311977da7bf5e5638546",
   "cases": 706,
   "verdicts": {
    "model": "conforms",
@@ -170,9 +170,77 @@
   }
  },
  {
+  "iclass": "BSWAP",
+  "record": "store/runs/class-bswap-1791623112082614000",
+  "rule_sha256": "sha256:452ddb08fda6c862587e8b521f651810505629dd35d4424ec2d963c1ac157261",
+  "cases": 1012,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "BT",
+  "record": "store/runs/class-bt-1791623112038276000",
+  "rule_sha256": "sha256:b1da1906879ba2c5698b0adb69814cbe75eaab34d812d26336c31e2fdb9a0de7",
+  "cases": 299,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "BTR",
+  "record": "store/runs/class-btr-1791623112138071000",
+  "rule_sha256": "sha256:b1da1906879ba2c5698b0adb69814cbe75eaab34d812d26336c31e2fdb9a0de7",
+  "cases": 341,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "BTS",
+  "record": "store/runs/class-bts-1791623112102014000",
+  "rule_sha256": "sha256:b1da1906879ba2c5698b0adb69814cbe75eaab34d812d26336c31e2fdb9a0de7",
+  "cases": 288,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "CALL_NEAR",
-  "record": "store/runs/class-call_near-1791621510931381000",
-  "rule_sha256": "sha256:d0cd3f5e775769281bedca829f699734c8bae8e1bba5367a03f9d1a4fe773852",
+  "record": "store/runs/class-call_near-1791623112546204000",
+  "rule_sha256": "sha256:4bf9dfeda896fb2486e5796e28bdb421f24105a3cc72438959ff4f824943ef56",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -187,9 +255,43 @@
   }
  },
  {
+  "iclass": "CDQ",
+  "record": "store/runs/class-cdq-1791623112301457000",
+  "rule_sha256": "sha256:e9d12ae0e2f22415ccff5965fe55ac8b18cf5030be5218f2d14ca896ecd6569e",
+  "cases": 88,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CDQE",
+  "record": "store/runs/class-cdqe-1791623112366134000",
+  "rule_sha256": "sha256:98e024f79600ecee5409cd1a4ec733985728cd16be1ffb1828ccf581caf2808c",
+  "cases": 48,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "CLD",
-  "record": "store/runs/class-cld-1791621510960610000",
-  "rule_sha256": "sha256:0bbead5c4a0e707496c8025d38a6b2e05ed0de63a4db07a48e438f98116d9d0d",
+  "record": "store/runs/class-cld-1791623112644282000",
+  "rule_sha256": "sha256:f80e38a12568e3e78ab936a19e30206080afa709144bf4f6e4d30481ce28eefc",
   "cases": 172,
   "verdicts": {
    "model": "conforms",
@@ -205,8 +307,8 @@
  },
  {
   "iclass": "CMOVB",
-  "record": "store/runs/class-cmovb-1791621510833106000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovb-1791623112442466000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 165,
   "verdicts": {
    "model": "conforms",
@@ -222,8 +324,8 @@
  },
  {
   "iclass": "CMOVBE",
-  "record": "store/runs/class-cmovbe-1791621510846713000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovbe-1791623112494105000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 168,
   "verdicts": {
    "model": "conforms",
@@ -239,8 +341,8 @@
  },
  {
   "iclass": "CMOVL",
-  "record": "store/runs/class-cmovl-1791621511013324000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovl-1791623112504356000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 174,
   "verdicts": {
    "model": "conforms",
@@ -256,8 +358,8 @@
  },
  {
   "iclass": "CMOVLE",
-  "record": "store/runs/class-cmovle-1791621511022926000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovle-1791623112531448000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 176,
   "verdicts": {
    "model": "conforms",
@@ -273,8 +375,8 @@
  },
  {
   "iclass": "CMOVNB",
-  "record": "store/runs/class-cmovnb-1791621510998876000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovnb-1791623112545241000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 156,
   "verdicts": {
    "model": "conforms",
@@ -290,8 +392,8 @@
  },
  {
   "iclass": "CMOVNBE",
-  "record": "store/runs/class-cmovnbe-1791621511081147000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovnbe-1791623112547884000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 158,
   "verdicts": {
    "model": "conforms",
@@ -307,8 +409,8 @@
  },
  {
   "iclass": "CMOVNL",
-  "record": "store/runs/class-cmovnl-1791621511085484000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovnl-1791623112656858000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 129,
   "verdicts": {
    "model": "conforms",
@@ -324,8 +426,8 @@
  },
  {
   "iclass": "CMOVNLE",
-  "record": "store/runs/class-cmovnle-1791621511058620000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovnle-1791623112721741000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 146,
   "verdicts": {
    "model": "conforms",
@@ -341,8 +443,8 @@
  },
  {
   "iclass": "CMOVNO",
-  "record": "store/runs/class-cmovno-1791621511113007000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovno-1791623112660819000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 160,
   "verdicts": {
    "model": "conforms",
@@ -358,8 +460,8 @@
  },
  {
   "iclass": "CMOVNP",
-  "record": "store/runs/class-cmovnp-1791621511137087000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovnp-1791623112678123000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 156,
   "verdicts": {
    "model": "conforms",
@@ -375,8 +477,8 @@
  },
  {
   "iclass": "CMOVNS",
-  "record": "store/runs/class-cmovns-1791621511163572000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovns-1791623112764409000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 148,
   "verdicts": {
    "model": "conforms",
@@ -392,8 +494,8 @@
  },
  {
   "iclass": "CMOVNZ",
-  "record": "store/runs/class-cmovnz-1791621511142946000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovnz-1791623112770796000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 157,
   "verdicts": {
    "model": "conforms",
@@ -409,8 +511,8 @@
  },
  {
   "iclass": "CMOVO",
-  "record": "store/runs/class-cmovo-1791621511156512000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovo-1791623112714423000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 149,
   "verdicts": {
    "model": "conforms",
@@ -426,8 +528,8 @@
  },
  {
   "iclass": "CMOVP",
-  "record": "store/runs/class-cmovp-1791621511223486000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovp-1791623112801994000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 139,
   "verdicts": {
    "model": "conforms",
@@ -443,8 +545,8 @@
  },
  {
   "iclass": "CMOVS",
-  "record": "store/runs/class-cmovs-1791621511198285000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovs-1791623112814158000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 169,
   "verdicts": {
    "model": "conforms",
@@ -460,8 +562,8 @@
  },
  {
   "iclass": "CMOVZ",
-  "record": "store/runs/class-cmovz-1791621511201292000",
-  "rule_sha256": "sha256:adc83f0f86fd3420099996ef45b8cd2dbbfe64724e5bcdb0d4ed5d7bef41d4fe",
+  "record": "store/runs/class-cmovz-1791623112889335000",
+  "rule_sha256": "sha256:9355d79f6c3bc68e3095e021140aa7fe8c97786cae5d8322ef3f31dfb4fbd31d",
   "cases": 156,
   "verdicts": {
    "model": "conforms",
@@ -477,8 +579,8 @@
  },
  {
   "iclass": "CMP",
-  "record": "store/runs/class-cmp-1791621511397169000",
-  "rule_sha256": "sha256:73a1bb0b0802f843adc50bcc8182db884cecc66dcee9a1fb52f7e03bca0eb4d2",
+  "record": "store/runs/class-cmp-1791623113121811000",
+  "rule_sha256": "sha256:b87ed79b3bc299ffdb7e7e836d904ba89903c4ad915ca342b037c3061f3de641",
   "cases": 1317,
   "verdicts": {
    "model": "conforms",
@@ -494,8 +596,8 @@
  },
  {
   "iclass": "CMPXCHG",
-  "record": "store/runs/class-cmpxchg-1791621511261632000",
-  "rule_sha256": "sha256:4dcae4c183ca3bec8a1fc27884c65fdd75ac863b8bfdc49b095cd6d89eb054d4",
+  "record": "store/runs/class-cmpxchg-1791623112928110000",
+  "rule_sha256": "sha256:a2d3e3400c38660fccf2db20a5758fa9af6a2092cb01763b72bc742102af1ab7",
   "cases": 275,
   "verdicts": {
    "model": "conforms",
@@ -511,8 +613,8 @@
  },
  {
   "iclass": "CMPXCHG_LOCK",
-  "record": "store/runs/class-cmpxchg_lock-1791621511318175000",
-  "rule_sha256": "sha256:b90223680ab1d35516431b76cad33be94f4f0ac1c6c81909bfabf37df9d34732",
+  "record": "store/runs/class-cmpxchg_lock-1791623112886026000",
+  "rule_sha256": "sha256:6c57fbcf78dde96394765ac7e181c7e16193549a331268de77731829fcb35f3f",
   "cases": 262,
   "verdicts": {
    "model": "conforms",
@@ -528,8 +630,8 @@
  },
  {
   "iclass": "COMISD",
-  "record": "store/runs/class-comisd-1791621511501478000",
-  "rule_sha256": "sha256:2cbbc543a1fbfd56152565276ba5a462b1030102d5b0351344313be4d04c720d",
+  "record": "store/runs/class-comisd-1791623113137019000",
+  "rule_sha256": "sha256:65e5a7d041356518ce02dee4b12a654b91e9c42a3c6b1c9a736567d324dbd99f",
   "cases": 330,
   "verdicts": {
    "model": "conforms",
@@ -545,8 +647,8 @@
  },
  {
   "iclass": "COMISS",
-  "record": "store/runs/class-comiss-1791621511447837000",
-  "rule_sha256": "sha256:4aea285c656cfb5b27e0a4f75d67f488023dd6a1ad6c4550491664b79d36eb41",
+  "record": "store/runs/class-comiss-1791623113153562000",
+  "rule_sha256": "sha256:04038f74dc28ebe43fd984c674a9221e247738bcfb63426cbfbd535a2243d368",
   "cases": 105,
   "verdicts": {
    "model": "conforms",
@@ -562,8 +664,8 @@
  },
  {
   "iclass": "CVTSD2SI",
-  "record": "store/runs/class-cvtsd2si-1791621511471339000",
-  "rule_sha256": "sha256:cd1fa8d48014a87e815de28c8459d16c85a0ab8d50300d512063126b01db041c",
+  "record": "store/runs/class-cvtsd2si-1791623113248341000",
+  "rule_sha256": "sha256:c2271d8ee044bf344a6779ff93dc9618513c5dfe90646c231690678b1fce32a4",
   "cases": 247,
   "verdicts": {
    "model": "conforms",
@@ -579,8 +681,8 @@
  },
  {
   "iclass": "CVTSD2SS",
-  "record": "store/runs/class-cvtsd2ss-1791621511542747000",
-  "rule_sha256": "sha256:bbbb06af9567e8c0618269b5e296494ccc907e8c8d4a442023be98db430ec123",
+  "record": "store/runs/class-cvtsd2ss-1791623113267461000",
+  "rule_sha256": "sha256:9250ba42fe88b6ca659ad6d07dde0526cebcba9ec6ee7f9537f18e34f33b130b",
   "cases": 413,
   "verdicts": {
    "model": "conforms",
@@ -596,8 +698,8 @@
  },
  {
   "iclass": "CVTSI2SD",
-  "record": "store/runs/class-cvtsi2sd-1791621511514424000",
-  "rule_sha256": "sha256:41de7097818db7b7bbddcc72441a487c492e5935241d0eeff12d9c4674b3c469",
+  "record": "store/runs/class-cvtsi2sd-1791623113299260000",
+  "rule_sha256": "sha256:736a9957def6ad89bfb071edf439ad8ff07fb9c97f3e9c97b375eb915c90bd69",
   "cases": 233,
   "verdicts": {
    "model": "conforms",
@@ -613,8 +715,8 @@
  },
  {
   "iclass": "CVTSI2SS",
-  "record": "store/runs/class-cvtsi2ss-1791621511559981000",
-  "rule_sha256": "sha256:06e415cba6a776e042d3464f24fdf962b1a6e4dad41a42fda54bb36e0e63471d",
+  "record": "store/runs/class-cvtsi2ss-1791623113375234000",
+  "rule_sha256": "sha256:a70e23110625bce8ecc6a4110456091ca9bee14aac71dcdf7021b964eab05566",
   "cases": 362,
   "verdicts": {
    "model": "conforms",
@@ -630,8 +732,8 @@
  },
  {
   "iclass": "CVTSS2SD",
-  "record": "store/runs/class-cvtss2sd-1791621511623867000",
-  "rule_sha256": "sha256:0c8e31d58088e2b656c9e9e70118c752d982e2134c89cc6657196c1ef245242e",
+  "record": "store/runs/class-cvtss2sd-1791623113422259000",
+  "rule_sha256": "sha256:4e1eee70914a66220f920eef2a1ef974b30ba473ce835a36a561084b5d0a6317",
   "cases": 396,
   "verdicts": {
    "model": "conforms",
@@ -647,8 +749,8 @@
  },
  {
   "iclass": "CVTSS2SI",
-  "record": "store/runs/class-cvtss2si-1791621511719651000",
-  "rule_sha256": "sha256:ea3c4debcab80905f0ac147c422ed3e47799fe69e8aac63b3182564bec6eddf6",
+  "record": "store/runs/class-cvtss2si-1791623113547088000",
+  "rule_sha256": "sha256:2ce2412a76b5297b0abdb4e76d7c79ec6aa016f80628763fc345a59ff5865a89",
   "cases": 272,
   "verdicts": {
    "model": "conforms",
@@ -664,8 +766,8 @@
  },
  {
   "iclass": "CVTTSD2SI",
-  "record": "store/runs/class-cvttsd2si-1791621511841761000",
-  "rule_sha256": "sha256:0ad44110811bc7bf31e2126e54550869196d3e2374a3047d9936ffeb64f225df",
+  "record": "store/runs/class-cvttsd2si-1791623113667523000",
+  "rule_sha256": "sha256:174350901b81d6e97c5bfe347c219820e00ce0ca765520429c070194b815825a",
   "cases": 279,
   "verdicts": {
    "model": "conforms",
@@ -681,8 +783,8 @@
  },
  {
   "iclass": "CVTTSS2SI",
-  "record": "store/runs/class-cvttss2si-1791621511815109000",
-  "rule_sha256": "sha256:ff91aa3f41feddafb4cda2fa19ff9e6284f82be7029d03228a611866658aec65",
+  "record": "store/runs/class-cvttss2si-1791623113741028000",
+  "rule_sha256": "sha256:0a5a0e242194b9661b35128ec15afc619ddee95b95b6e448368c35be3517ac30",
   "cases": 257,
   "verdicts": {
    "model": "conforms",
@@ -698,8 +800,8 @@
  },
  {
   "iclass": "DEC",
-  "record": "store/runs/class-dec-1791621511846245000",
-  "rule_sha256": "sha256:679f80c2393fb6a82ccff48ed3c3426104c36dd92007768e6199e9cb62dcb6eb",
+  "record": "store/runs/class-dec-1791623113772899000",
+  "rule_sha256": "sha256:0d65141faf14dc9ec403ebf3130a64558a9202ec343d46cc77492f5d5585a18e",
   "cases": 316,
   "verdicts": {
    "model": "conforms",
@@ -715,8 +817,8 @@
  },
  {
   "iclass": "DEC_LOCK",
-  "record": "store/runs/class-dec_lock-1791621511745513000",
-  "rule_sha256": "sha256:8b871d800461e0d9adaba4086a8c9222744aa7a4910c6eecd0d5c5e63373953d",
+  "record": "store/runs/class-dec_lock-1791623113645127000",
+  "rule_sha256": "sha256:bd2d2da8f0bd6ae728daec911bad07cba0242504cf56aee19b7e43bd04130c66",
   "cases": 274,
   "verdicts": {
    "model": "conforms",
@@ -731,9 +833,26 @@
   }
  },
  {
+  "iclass": "DIV",
+  "record": "store/runs/class-div-1791623113740634000",
+  "rule_sha256": "sha256:7ba5cf3e02f688fa6bae265b9c7b3e0e26b46f60a8bf75529956b089c1ee570c",
+  "cases": 327,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "DIVPD",
-  "record": "store/runs/class-divpd-1791621511950408000",
-  "rule_sha256": "sha256:4cdb43593a6c4e3e7ab1cb0de2a88272a928943c9421b1cf3b05fa5936be1acd",
+  "record": "store/runs/class-divpd-1791623114077735000",
+  "rule_sha256": "sha256:3640b7028af197c03e371d23e3cafadf0f3d4fc159126b1cd087e8105da77d4f",
   "cases": 306,
   "verdicts": {
    "model": "conforms",
@@ -749,8 +868,8 @@
  },
  {
   "iclass": "DIVPS",
-  "record": "store/runs/class-divps-1791621512022367000",
-  "rule_sha256": "sha256:96ed48b740e88d44f36f0fd57321bf8db0d48a79c28ee85f03abb133fc6c3518",
+  "record": "store/runs/class-divps-1791623114131253000",
+  "rule_sha256": "sha256:ec8041db1d22e9bc2f516f3e9b367b6606730e26937f4a2424a09201ae26b7ab",
   "cases": 102,
   "verdicts": {
    "model": "conforms",
@@ -766,8 +885,8 @@
  },
  {
   "iclass": "DIVSD",
-  "record": "store/runs/class-divsd-1791621511972783000",
-  "rule_sha256": "sha256:19551fd103bb6c11de3b99b02991bbdf61fcc6812d06d3e7ea236a4b4df5aebd",
+  "record": "store/runs/class-divsd-1791623114131628000",
+  "rule_sha256": "sha256:f34a9fa89b11da56c09496eee39bdfeb4c747366d6a6d837b425694c1ba02155",
   "cases": 347,
   "verdicts": {
    "model": "conforms",
@@ -783,8 +902,8 @@
  },
  {
   "iclass": "DIVSS",
-  "record": "store/runs/class-divss-1791621512088521000",
-  "rule_sha256": "sha256:18dbf6d83d2525bd2d54d8c91bdf349134fcb938b84199c4c7de5a9d898bebe4",
+  "record": "store/runs/class-divss-1791623114175895000",
+  "rule_sha256": "sha256:990e32d2e9efa70cc16784e235455d8e6560e126737edf94b9874a951424917a",
   "cases": 426,
   "verdicts": {
    "model": "conforms",
@@ -800,8 +919,8 @@
  },
  {
   "iclass": "IMUL",
-  "record": "store/runs/class-imul-1791621511941244000",
-  "rule_sha256": "sha256:c290f78a80a34e0fc9bf60064a3b64605eea55854fbab4a82c62de79fb22232d",
+  "record": "store/runs/class-imul-1791623114018547000",
+  "rule_sha256": "sha256:d3657fdeb9b0723bbb0efc8c57fb6ea2cc24d5940d41c066fb0231d95fef8ed7",
   "cases": 722,
   "verdicts": {
    "model": "conforms",
@@ -817,8 +936,8 @@
  },
  {
   "iclass": "INC",
-  "record": "store/runs/class-inc-1791621512179918000",
-  "rule_sha256": "sha256:7c6e35d99cde1a2987b2ee26a874a2ca898d2ab7d994808f2220633b3221a2af",
+  "record": "store/runs/class-inc-1791623114258110000",
+  "rule_sha256": "sha256:1ec5fa23eb8b0f17045cf5ac1e86ed285708c46731639a84e6339caaa9401ef6",
   "cases": 285,
   "verdicts": {
    "model": "conforms",
@@ -834,8 +953,8 @@
  },
  {
   "iclass": "INC_LOCK",
-  "record": "store/runs/class-inc_lock-1791621512004368000",
-  "rule_sha256": "sha256:e64dbbcae9c646ade2c0b262b3dbbdb69905dfad20748dee56438c9ff54d2473",
+  "record": "store/runs/class-inc_lock-1791623114131184000",
+  "rule_sha256": "sha256:858a9a53c91be1a4a293802e73136c13cbcffc249c9e4b5803aca9067416c8bf",
   "cases": 290,
   "verdicts": {
    "model": "conforms",
@@ -851,8 +970,8 @@
  },
  {
   "iclass": "JB",
-  "record": "store/runs/class-jb-1791621512157727000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jb-1791623114345362000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -868,8 +987,8 @@
  },
  {
   "iclass": "JBE",
-  "record": "store/runs/class-jbe-1791621512290658000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jbe-1791623114548475000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -885,8 +1004,8 @@
  },
  {
   "iclass": "JL",
-  "record": "store/runs/class-jl-1791621512303575000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jl-1791623114647799000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -902,8 +1021,8 @@
  },
  {
   "iclass": "JLE",
-  "record": "store/runs/class-jle-1791621512325756000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jle-1791623114677121000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -919,8 +1038,8 @@
  },
  {
   "iclass": "JMP",
-  "record": "store/runs/class-jmp-1791621512380307000",
-  "rule_sha256": "sha256:7bfdc9d60744888a250707e6b39ee7fcee199af9831d04876913a879dc491bc8",
+  "record": "store/runs/class-jmp-1791623114698818000",
+  "rule_sha256": "sha256:5f8f0a426ed1c57ec9792ff3acab5ae9acfaa80fa6c4eb04c90d7d4ae62f363d",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -936,8 +1055,8 @@
  },
  {
   "iclass": "JNB",
-  "record": "store/runs/class-jnb-1791621512372485000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jnb-1791623114789637000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -953,8 +1072,8 @@
  },
  {
   "iclass": "JNBE",
-  "record": "store/runs/class-jnbe-1791621512472252000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jnbe-1791623114811820000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -970,8 +1089,8 @@
  },
  {
   "iclass": "JNL",
-  "record": "store/runs/class-jnl-1791621512446574000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jnl-1791623114924384000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -987,8 +1106,8 @@
  },
  {
   "iclass": "JNLE",
-  "record": "store/runs/class-jnle-1791621512501292000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jnle-1791623114879016000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1004,8 +1123,8 @@
  },
  {
   "iclass": "JNO",
-  "record": "store/runs/class-jno-1791621512543824000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jno-1791623114895788000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1021,8 +1140,8 @@
  },
  {
   "iclass": "JNP",
-  "record": "store/runs/class-jnp-1791621512544955000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jnp-1791623115008973000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1038,8 +1157,8 @@
  },
  {
   "iclass": "JNS",
-  "record": "store/runs/class-jns-1791621512636029000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jns-1791623115029522000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1055,8 +1174,8 @@
  },
  {
   "iclass": "JNZ",
-  "record": "store/runs/class-jnz-1791621512628514000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jnz-1791623115141579000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1072,8 +1191,8 @@
  },
  {
   "iclass": "JO",
-  "record": "store/runs/class-jo-1791621512634572000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jo-1791623115140788000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1089,8 +1208,8 @@
  },
  {
   "iclass": "JP",
-  "record": "store/runs/class-jp-1791621512694604000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jp-1791623115178084000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1106,8 +1225,8 @@
  },
  {
   "iclass": "JS",
-  "record": "store/runs/class-js-1791621512730987000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-js-1791623115234647000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1123,8 +1242,8 @@
  },
  {
   "iclass": "JZ",
-  "record": "store/runs/class-jz-1791621512752247000",
-  "rule_sha256": "sha256:cbb61a37fb8ece71cee25b5f6cc271f5b497b4a384bbc6210f52ae25ebce3b71",
+  "record": "store/runs/class-jz-1791623115252955000",
+  "rule_sha256": "sha256:1e683beb6d6db9a153f558d23ad8fbfb50de3ed6cdf0aab92b39d0c82565a387",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1140,8 +1259,8 @@
  },
  {
   "iclass": "LEA",
-  "record": "store/runs/class-lea-1791621512861291000",
-  "rule_sha256": "sha256:1dab0d199ec9c3b8890cf78c1aedfe741ff08f36176728b37dba6142246a7945",
+  "record": "store/runs/class-lea-1791623115298082000",
+  "rule_sha256": "sha256:21deb43b9ef19738019b1d20f8ffd2bb7530a4c41e6a46ab7f460fba1e51d79f",
   "cases": 108,
   "verdicts": {
    "model": "conforms",
@@ -1157,8 +1276,8 @@
  },
  {
   "iclass": "MAXPD",
-  "record": "store/runs/class-maxpd-1791621512789668000",
-  "rule_sha256": "sha256:d575fd83dead44fa8df79fe8fb95a464b56168e617e02185836b52253760b248",
+  "record": "store/runs/class-maxpd-1791623115467374000",
+  "rule_sha256": "sha256:817fcbf59f476530c8ec50e0209884aee555f50bf9ef5ba377e7543cf6bb9070",
   "cases": 341,
   "verdicts": {
    "model": "conforms",
@@ -1174,8 +1293,8 @@
  },
  {
   "iclass": "MAXPS",
-  "record": "store/runs/class-maxps-1791621512871233000",
-  "rule_sha256": "sha256:4c0d2d236fea489946c016fec26a15623e3be2b1a9bcc8177daa099eb7bddf77",
+  "record": "store/runs/class-maxps-1791623115475172000",
+  "rule_sha256": "sha256:f3bc516b091c38d91f155d9eb68a2e4fa535650e0b7b1f186083f60df65a9260",
   "cases": 130,
   "verdicts": {
    "model": "conforms",
@@ -1191,8 +1310,8 @@
  },
  {
   "iclass": "MAXSD",
-  "record": "store/runs/class-maxsd-1791621512882810000",
-  "rule_sha256": "sha256:bcc344a37a8b1324a2c48d87e4239001903dc53a9bd7b3e81a4cb89bcc7c8a59",
+  "record": "store/runs/class-maxsd-1791623115574554000",
+  "rule_sha256": "sha256:ef449af8d21d8785f608c51a6f03da87c7c1fe47cc95f54f069cf6956f0bf9d3",
   "cases": 359,
   "verdicts": {
    "model": "conforms",
@@ -1208,8 +1327,8 @@
  },
  {
   "iclass": "MAXSS",
-  "record": "store/runs/class-maxss-1791621512893222000",
-  "rule_sha256": "sha256:0e1ae9320705db54afba08687eec27912c6ea6aeb8c6a99671449b9bdfec3ef9",
+  "record": "store/runs/class-maxss-1791623115529419000",
+  "rule_sha256": "sha256:fa11905dd9278b4577ec32cab77d40fff9accccc216e563474736202052f4dda",
   "cases": 339,
   "verdicts": {
    "model": "conforms",
@@ -1225,8 +1344,8 @@
  },
  {
   "iclass": "MINPD",
-  "record": "store/runs/class-minpd-1791621512993303000",
-  "rule_sha256": "sha256:ed87b8909d71696a1263f2776a2fb621a3b4b61dfc8bbbb812d135e2a6003691",
+  "record": "store/runs/class-minpd-1791623115543462000",
+  "rule_sha256": "sha256:e0c5b56fa5bd9d34be2f9946ca5955b0ba3d28a60b0b535464145eea8f8d9c0c",
   "cases": 330,
   "verdicts": {
    "model": "conforms",
@@ -1242,8 +1361,8 @@
  },
  {
   "iclass": "MINPS",
-  "record": "store/runs/class-minps-1791621512984265000",
-  "rule_sha256": "sha256:85cf9b34452a94ab01129b951d30dd36251a2711d557ffb77ac2bc775edc7a45",
+  "record": "store/runs/class-minps-1791623115599334000",
+  "rule_sha256": "sha256:6aa633fadf7f6294d5333611f5c6234de94e9ff5e7c8ac4eec223f8adf769348",
   "cases": 103,
   "verdicts": {
    "model": "conforms",
@@ -1259,8 +1378,8 @@
  },
  {
   "iclass": "MINSD",
-  "record": "store/runs/class-minsd-1791621513060062000",
-  "rule_sha256": "sha256:92609a9d8d91d2495fca819a0d0aca2f13c46bc42f4616593745442a5ea38854",
+  "record": "store/runs/class-minsd-1791623115697760000",
+  "rule_sha256": "sha256:ea3d9508abed3fbfb5015910869699d663e8ccc2b2da572fa0008678b4b4b2fc",
   "cases": 405,
   "verdicts": {
    "model": "conforms",
@@ -1276,8 +1395,8 @@
  },
  {
   "iclass": "MINSS",
-  "record": "store/runs/class-minss-1791621513138613000",
-  "rule_sha256": "sha256:2bfb491242efac0c36267839cff58e0f8bbb389a1e4f80a4c4404f3bb2283de6",
+  "record": "store/runs/class-minss-1791623115728489000",
+  "rule_sha256": "sha256:4869c3c479fadbe244d7d1e979216db156a3d08410102b8cab05539f69fe6166",
   "cases": 349,
   "verdicts": {
    "model": "conforms",
@@ -1293,8 +1412,8 @@
  },
  {
   "iclass": "MOV",
-  "record": "store/runs/class-mov-1791621513176037000",
-  "rule_sha256": "sha256:e4aaba92d93ba9cb29ef1b02ab6931b7154490bf5fcfa44815eff4d1f3cfcade",
+  "record": "store/runs/class-mov-1791623115926707000",
+  "rule_sha256": "sha256:2df29ad47502c1c43d63cbb6f6510b84c384d4fabfd3b1e7a0d07af12afa8d63",
   "cases": 3390,
   "verdicts": {
    "model": "conforms",
@@ -1310,8 +1429,8 @@
  },
  {
   "iclass": "MOVAPD",
-  "record": "store/runs/class-movapd-1791621513207427000",
-  "rule_sha256": "sha256:cceb8f99dba70ad433a979644378756561953a350747b0486c833c6197d57382",
+  "record": "store/runs/class-movapd-1791623116060064000",
+  "rule_sha256": "sha256:618824d4e6b32cf28c137568de518607d05b57ba9f9fdead4a1544cc5559fb0f",
   "cases": 661,
   "verdicts": {
    "model": "conforms",
@@ -1327,8 +1446,8 @@
  },
  {
   "iclass": "MOVAPS",
-  "record": "store/runs/class-movaps-1791621513284251000",
-  "rule_sha256": "sha256:94ce80c310a0a0b50dfcb4ab1fa840e6998bc03f9aad894c5353e61e418201dc",
+  "record": "store/runs/class-movaps-1791623116088090000",
+  "rule_sha256": "sha256:b16b22d1bddd08911b7eaf092d1d8d5df5acb0d9c2123162d1b4cc209e9134db",
   "cases": 269,
   "verdicts": {
    "model": "conforms",
@@ -1344,8 +1463,8 @@
  },
  {
   "iclass": "MOVD",
-  "record": "store/runs/class-movd-1791621513237112000",
-  "rule_sha256": "sha256:2b2db0a5099dc8592c7af539ec32b4c73e246fd2f0600940e862b20b7d3912f5",
+  "record": "store/runs/class-movd-1791623116172485000",
+  "rule_sha256": "sha256:5be4e454d2481f1c05f9240be0c57f0df031109a8fae4de2b20d66df4145a476",
   "cases": 528,
   "verdicts": {
    "model": "conforms",
@@ -1361,8 +1480,8 @@
  },
  {
   "iclass": "MOVQ",
-  "record": "store/runs/class-movq-1791621513248783000",
-  "rule_sha256": "sha256:10cc0ca523c95f4d42fba14d15e8935d51765cbdab74ae9c808f5df01dab7de4",
+  "record": "store/runs/class-movq-1791623116105179000",
+  "rule_sha256": "sha256:2a67ed810366dc861b5c27ffa6f859f9229f5b9e07dd8c3154c22f6c3a58be0f",
   "cases": 1245,
   "verdicts": {
    "model": "conforms",
@@ -1378,8 +1497,8 @@
  },
  {
   "iclass": "MOVSD_XMM",
-  "record": "store/runs/class-movsd_xmm-1791621513326213000",
-  "rule_sha256": "sha256:ca628730cb1c74edb86b4cab50f23d1759223304e4d33615f392b840d3ecccd6",
+  "record": "store/runs/class-movsd_xmm-1791623116179854000",
+  "rule_sha256": "sha256:422d26632f5963fb89b6d2bf2ebf4f879a32b4cce2e8718d34efaf1636106acb",
   "cases": 787,
   "verdicts": {
    "model": "conforms",
@@ -1395,8 +1514,8 @@
  },
  {
   "iclass": "MOVSS",
-  "record": "store/runs/class-movss-1791621513394500000",
-  "rule_sha256": "sha256:94896723edb9855952dc268ef5b07c789fef88c57f7b8efd1711e5bc0113f4e7",
+  "record": "store/runs/class-movss-1791623116318378000",
+  "rule_sha256": "sha256:c55da19d48d11c9820e983667907490ac809052178cbb232b4811c85ff865af7",
   "cases": 612,
   "verdicts": {
    "model": "conforms",
@@ -1411,9 +1530,26 @@
   }
  },
  {
+  "iclass": "MOVSX",
+  "record": "store/runs/class-movsx-1791623116051507000",
+  "rule_sha256": "sha256:42a5646fcfe1830723a86e6b5ee24f6c12223050441d2e24c5fb1c9da01bf15f",
+  "cases": 310,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "MOVSXD",
-  "record": "store/runs/class-movsxd-1791621513457242000",
-  "rule_sha256": "sha256:c748b0363d60e6c9fc05d6213f707b1ace9856ac266d05fb39fea66f55f041c6",
+  "record": "store/runs/class-movsxd-1791623116637300000",
+  "rule_sha256": "sha256:6e63b9f5dd990471524562926eec04daec2035db3336cc5d6a37d785c92306ca",
   "cases": 142,
   "verdicts": {
    "model": "conforms",
@@ -1429,8 +1565,8 @@
  },
  {
   "iclass": "MOVUPD",
-  "record": "store/runs/class-movupd-1791621513596668000",
-  "rule_sha256": "sha256:38e678b637ef2e863e594af4ea4f0a2279755e4249c83dbee3cd88cfb92e41b2",
+  "record": "store/runs/class-movupd-1791623116576637000",
+  "rule_sha256": "sha256:79cde26baec973b8e57a3a71494ca45ee67d1f44e38ce5ed9609fffc9e66ff2d",
   "cases": 550,
   "verdicts": {
    "model": "conforms",
@@ -1446,8 +1582,8 @@
  },
  {
   "iclass": "MOVUPS",
-  "record": "store/runs/class-movups-1791621513603041000",
-  "rule_sha256": "sha256:8c65745f9c15a26eea1c0fa59641e25d5c49ac905c9add5f144ae87763ae40ac",
+  "record": "store/runs/class-movups-1791623116713945000",
+  "rule_sha256": "sha256:11f12d87064a9894ae59fdfc87d5a45e6c755c56339434b856d5e00dd95fbec1",
   "cases": 260,
   "verdicts": {
    "model": "conforms",
@@ -1463,8 +1599,8 @@
  },
  {
   "iclass": "MOVZX",
-  "record": "store/runs/class-movzx-1791621513662500000",
-  "rule_sha256": "sha256:099dcc4da2c19261e8dfb14e3471f3b6db1a7a4d64db7bd62927a3b2c19af73a",
+  "record": "store/runs/class-movzx-1791623116742400000",
+  "rule_sha256": "sha256:3c79695b7e4548eaf1bdea2472f8c3ee209a323339ca0bdde96dfa91e940a14f",
   "cases": 334,
   "verdicts": {
    "model": "conforms",
@@ -1480,8 +1616,8 @@
  },
  {
   "iclass": "MUL",
-  "record": "store/runs/class-mul-1791621513784115000",
-  "rule_sha256": "sha256:83d45ffe41d2090bb879700fd3f85b27799c68fbc0ccb3847006d604351a4570",
+  "record": "store/runs/class-mul-1791623116817977000",
+  "rule_sha256": "sha256:40abfbab9de507eafb5444b73503098a9f6141daa51572a6746eaf2423070211",
   "cases": 37,
   "verdicts": {
    "model": "conforms",
@@ -1497,8 +1633,8 @@
  },
  {
   "iclass": "MULPD",
-  "record": "store/runs/class-mulpd-1791621513751298000",
-  "rule_sha256": "sha256:928e24ccdea9a1dac26c854302d879eeefd8048d8bb12f6f0cb215732402e708",
+  "record": "store/runs/class-mulpd-1791623116956443000",
+  "rule_sha256": "sha256:d6ff75a73fd49d55df908d1a090fbffd4bfbd8130ed03dcf60fb6f91149cc4eb",
   "cases": 332,
   "verdicts": {
    "model": "conforms",
@@ -1514,8 +1650,8 @@
  },
  {
   "iclass": "MULPS",
-  "record": "store/runs/class-mulps-1791621513778770000",
-  "rule_sha256": "sha256:02f8b1b7b62dd2199df14c3cd9b4aaefa97287ac88d6e7f2400e67ebf54cd310",
+  "record": "store/runs/class-mulps-1791623116988163000",
+  "rule_sha256": "sha256:cc4897956fa680f5ecad37db92343ba3886427f3d105559eda8a189abf2cfc7e",
   "cases": 148,
   "verdicts": {
    "model": "conforms",
@@ -1531,8 +1667,8 @@
  },
  {
   "iclass": "MULSD",
-  "record": "store/runs/class-mulsd-1791621513862526000",
-  "rule_sha256": "sha256:ea93ef9ee9243077eb3c7a8644a8b77dbde1de019dda158102d8b82a5745c11b",
+  "record": "store/runs/class-mulsd-1791623117028460000",
+  "rule_sha256": "sha256:b770ae253d50cc09c10e02dfbeefa86b2ee711374e3f0408b883cdddcd021497",
   "cases": 423,
   "verdicts": {
    "model": "conforms",
@@ -1548,8 +1684,8 @@
  },
  {
   "iclass": "MULSS",
-  "record": "store/runs/class-mulss-1791621513982945000",
-  "rule_sha256": "sha256:06ddb6d5e1e3846197437acacb9ea606e7dd8c5ff7bc0cc83fc7e70d4d2b155b",
+  "record": "store/runs/class-mulss-1791623117183041000",
+  "rule_sha256": "sha256:959161d5d2d10e751ac7ef802e8186961b824aef072cba650cc04e77db594a46",
   "cases": 392,
   "verdicts": {
    "model": "conforms",
@@ -1565,8 +1701,8 @@
  },
  {
   "iclass": "NEG",
-  "record": "store/runs/class-neg-1791621513762726000",
-  "rule_sha256": "sha256:49c0419d3dad5e266cb74119fcf9fca1c18ebf86cac43f4a30cd91eaaf13f02f",
+  "record": "store/runs/class-neg-1791623116858553000",
+  "rule_sha256": "sha256:5251fa042c92d902a0baf8fedb2e1ed1d7625bf7d7d761aec96b0316d869b881",
   "cases": 321,
   "verdicts": {
    "model": "conforms",
@@ -1582,8 +1718,8 @@
  },
  {
   "iclass": "NEG_LOCK",
-  "record": "store/runs/class-neg_lock-1791621513775762000",
-  "rule_sha256": "sha256:80d1f8958e69f11a633a909850169a2dda33dd5d8acaec7a0274e2b0e2a61291",
+  "record": "store/runs/class-neg_lock-1791623116916406000",
+  "rule_sha256": "sha256:25ae36a2b3a4a95ba0b5c609bb07b925863b463262d1713267d6828ead81eacb",
   "cases": 297,
   "verdicts": {
    "model": "conforms",
@@ -1599,8 +1735,8 @@
  },
  {
   "iclass": "NOP",
-  "record": "store/runs/class-nop-1791621514040744000",
-  "rule_sha256": "sha256:bb8fec8fd515f7bd468c0f2e58033e46969be9fdd057cc1ff2ced531816b95b8",
+  "record": "store/runs/class-nop-1791623117241664000",
+  "rule_sha256": "sha256:fc84138cc185c6c7d5c0b3895efe2190b70e3945db5ebc468022444350fc2825",
   "cases": 1204,
   "verdicts": {
    "model": "conforms",
@@ -1615,9 +1751,26 @@
   }
  },
  {
+  "iclass": "NOT",
+  "record": "store/runs/class-not-1791623117128232000",
+  "rule_sha256": "sha256:67f9f08722f9529d8ff66fa10cb815983582be9ea031d01b99570202ceeac5b2",
+  "cases": 325,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "OR",
-  "record": "store/runs/class-or-1791621514145032000",
-  "rule_sha256": "sha256:59ffc57a43c1130172644055faaddbb3d5c2a8e71c6f5b53e2564e5f04edcb26",
+  "record": "store/runs/class-or-1791623117460403000",
+  "rule_sha256": "sha256:1bf9bbd2b9f4f3d7722931c7e0909091ece21c81ac102eb623b4f73f6d37af03",
   "cases": 1391,
   "verdicts": {
    "model": "conforms",
@@ -1633,8 +1786,8 @@
  },
  {
   "iclass": "OR_LOCK",
-  "record": "store/runs/class-or_lock-1791621513986058000",
-  "rule_sha256": "sha256:3ac8b67f5a95bbde961bf561bff2c900b726341e49b9a90ed5149b6747211492",
+  "record": "store/runs/class-or_lock-1791623117181965000",
+  "rule_sha256": "sha256:7569204f42e372ab21cc62431896475e8c18b52001f393b97dc2641f5ffd5112",
   "cases": 688,
   "verdicts": {
    "model": "conforms",
@@ -1650,8 +1803,8 @@
  },
  {
   "iclass": "POP",
-  "record": "store/runs/class-pop-1791621514118142000",
-  "rule_sha256": "sha256:1fbd9a80dedaf3727dbfba67a1cc7076b7a668f2513aa57f79cbdec08ac66e2f",
+  "record": "store/runs/class-pop-1791623117465249000",
+  "rule_sha256": "sha256:a6f11f1d6257d84efd0e1a89e3ed869548526ca86b5b030b0b947aa83e553939",
   "cases": 1377,
   "verdicts": {
    "model": "conforms",
@@ -1667,8 +1820,8 @@
  },
  {
   "iclass": "PUSH",
-  "record": "store/runs/class-push-1791621514158904000",
-  "rule_sha256": "sha256:98603d4e0978f162455d656cac2e0bf386dba86ba8eed7d15bcf7278949c1194",
+  "record": "store/runs/class-push-1791623117557587000",
+  "rule_sha256": "sha256:77cb4919a4c38ca1e5fd6f571f1cd6a8a162326e877e648a84e3855232eb5853",
   "cases": 1714,
   "verdicts": {
    "model": "conforms",
@@ -1683,9 +1836,145 @@
   }
  },
  {
+  "iclass": "REP_MOVSB",
+  "record": "store/runs/class-rep_movsb-1791623117266368000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 68,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_MOVSD",
+  "record": "store/runs/class-rep_movsd-1791623117292313000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 60,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_MOVSQ",
+  "record": "store/runs/class-rep_movsq-1791623117340388000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 28,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_MOVSW",
+  "record": "store/runs/class-rep_movsw-1791623117362804000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 24,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_STOSB",
+  "record": "store/runs/class-rep_stosb-1791623117402158000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 56,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_STOSD",
+  "record": "store/runs/class-rep_stosd-1791623117412676000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 36,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_STOSQ",
+  "record": "store/runs/class-rep_stosq-1791623117420977000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 24,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "REP_STOSW",
+  "record": "store/runs/class-rep_stosw-1791623117473388000",
+  "rule_sha256": "sha256:af0c0cab412e39cad1e43f89b9911c3f8f46cd15cf266a5ec6509d21c1d4e6bd",
+  "cases": 24,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "RET_NEAR",
-  "record": "store/runs/class-ret_near-1791621514143622000",
-  "rule_sha256": "sha256:f3948c981dcb009f0cf5975cc957a6db39606148d98e1b52e5176e6c7f85aec3",
+  "record": "store/runs/class-ret_near-1791623117768090000",
+  "rule_sha256": "sha256:2eac50861b0d68e763ef5daab46bfd89bef3b190e3e88065f2ed3e1a587f013b",
   "cases": 16,
   "verdicts": {
    "model": "conforms",
@@ -1701,8 +1990,8 @@
  },
  {
   "iclass": "ROL",
-  "record": "store/runs/class-rol-1791621514108300000",
-  "rule_sha256": "sha256:b3967a5a9d13b155f887d239049989540c1e108a60be395953cb846f69546d65",
+  "record": "store/runs/class-rol-1791623117549564000",
+  "rule_sha256": "sha256:ebcd99f954b16a6e298c5fa1adc17b1aefca1af12112267fa051ec3b3e337a2c",
   "cases": 912,
   "verdicts": {
    "model": "conforms",
@@ -1718,8 +2007,8 @@
  },
  {
   "iclass": "ROR",
-  "record": "store/runs/class-ror-1791621514184777000",
-  "rule_sha256": "sha256:9203ffad0acd3fc429193849d951bbb656a1e2c45ce61463ac22cf695d7a6c14",
+  "record": "store/runs/class-ror-1791623117674492000",
+  "rule_sha256": "sha256:efbb0db216a29683e7854bca41a0d60f6018cfed6b28392e4c33f89f8596af01",
   "cases": 924,
   "verdicts": {
    "model": "conforms",
@@ -1735,8 +2024,8 @@
  },
  {
   "iclass": "SAR",
-  "record": "store/runs/class-sar-1791621514273461000",
-  "rule_sha256": "sha256:b814f2a451547fd31f5f8da61541f79c2f6ec1a0321127831be187c6ab8e3cde",
+  "record": "store/runs/class-sar-1791623117664466000",
+  "rule_sha256": "sha256:0fe4c992d8fc499649f6a6e47660fb7a3fc648c4aa5d1cdcbc29b57c5704e928",
   "cases": 942,
   "verdicts": {
    "model": "conforms",
@@ -1751,9 +2040,26 @@
   }
  },
  {
+  "iclass": "SBB",
+  "record": "store/runs/class-sbb-1791623117697510000",
+  "rule_sha256": "sha256:ed88cfb66997f4d59c269af56b84cf2d560e189143e4742ec7549015e8fbcef9",
+  "cases": 1434,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "SETB",
-  "record": "store/runs/class-setb-1791621514407653000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setb-1791623118089347000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 148,
   "verdicts": {
    "model": "conforms",
@@ -1769,8 +2075,8 @@
  },
  {
   "iclass": "SETBE",
-  "record": "store/runs/class-setbe-1791621514608196000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setbe-1791623118330581000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 166,
   "verdicts": {
    "model": "conforms",
@@ -1786,8 +2092,8 @@
  },
  {
   "iclass": "SETL",
-  "record": "store/runs/class-setl-1791621514634239000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setl-1791623118282037000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 136,
   "verdicts": {
    "model": "conforms",
@@ -1803,8 +2109,8 @@
  },
  {
   "iclass": "SETLE",
-  "record": "store/runs/class-setle-1791621514697182000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setle-1791623118370485000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 155,
   "verdicts": {
    "model": "conforms",
@@ -1820,8 +2126,8 @@
  },
  {
   "iclass": "SETNB",
-  "record": "store/runs/class-setnb-1791621514707988000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setnb-1791623118405363000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 149,
   "verdicts": {
    "model": "conforms",
@@ -1837,8 +2143,8 @@
  },
  {
   "iclass": "SETNBE",
-  "record": "store/runs/class-setnbe-1791621514784109000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setnbe-1791623118407035000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 140,
   "verdicts": {
    "model": "conforms",
@@ -1854,8 +2160,8 @@
  },
  {
   "iclass": "SETNL",
-  "record": "store/runs/class-setnl-1791621514792507000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setnl-1791623118469528000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 165,
   "verdicts": {
    "model": "conforms",
@@ -1871,8 +2177,8 @@
  },
  {
   "iclass": "SETNLE",
-  "record": "store/runs/class-setnle-1791621514805075000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setnle-1791623118516467000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 146,
   "verdicts": {
    "model": "conforms",
@@ -1888,8 +2194,8 @@
  },
  {
   "iclass": "SETNO",
-  "record": "store/runs/class-setno-1791621514827717000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setno-1791623118593755000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 171,
   "verdicts": {
    "model": "conforms",
@@ -1905,8 +2211,8 @@
  },
  {
   "iclass": "SETNP",
-  "record": "store/runs/class-setnp-1791621514899548000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setnp-1791623118739730000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 146,
   "verdicts": {
    "model": "conforms",
@@ -1922,8 +2228,8 @@
  },
  {
   "iclass": "SETNS",
-  "record": "store/runs/class-setns-1791621514912452000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setns-1791623118717834000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 186,
   "verdicts": {
    "model": "conforms",
@@ -1939,8 +2245,8 @@
  },
  {
   "iclass": "SETNZ",
-  "record": "store/runs/class-setnz-1791621515047963000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setnz-1791623118766422000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 162,
   "verdicts": {
    "model": "conforms",
@@ -1956,8 +2262,8 @@
  },
  {
   "iclass": "SETO",
-  "record": "store/runs/class-seto-1791621515033873000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-seto-1791623118796759000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 144,
   "verdicts": {
    "model": "conforms",
@@ -1973,8 +2279,8 @@
  },
  {
   "iclass": "SETP",
-  "record": "store/runs/class-setp-1791621515070400000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setp-1791623118884842000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 179,
   "verdicts": {
    "model": "conforms",
@@ -1990,8 +2296,8 @@
  },
  {
   "iclass": "SETS",
-  "record": "store/runs/class-sets-1791621515081507000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-sets-1791623118928441000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 149,
   "verdicts": {
    "model": "conforms",
@@ -2007,8 +2313,8 @@
  },
  {
   "iclass": "SETZ",
-  "record": "store/runs/class-setz-1791621515084425000",
-  "rule_sha256": "sha256:9a7d63a011385362d7c8ffd2c7af9d5ec59ff828f1c462754fb09401fab349e1",
+  "record": "store/runs/class-setz-1791623118895822000",
+  "rule_sha256": "sha256:23e5dc58316f39dc1dc0d1e5a983c1a6d10a210f6f466020b1ce4489970e2eb3",
   "cases": 172,
   "verdicts": {
    "model": "conforms",
@@ -2024,8 +2330,8 @@
  },
  {
   "iclass": "SHL",
-  "record": "store/runs/class-shl-1791621515001354000",
-  "rule_sha256": "sha256:89452167c58f02fe21bdb35c26aca9e3666c7423594fb8e0d820cb029587eabc",
+  "record": "store/runs/class-shl-1791623118819501000",
+  "rule_sha256": "sha256:c81ea6af48c597f9677795ad0799b4bed509ef8e1721b11523c0cf9209bd3ed0",
   "cases": 1964,
   "verdicts": {
    "model": "conforms",
@@ -2041,8 +2347,8 @@
  },
  {
   "iclass": "SHR",
-  "record": "store/runs/class-shr-1791621515180413000",
-  "rule_sha256": "sha256:a4b0d2c622ef953857073fef6024ada023a68f78b817b7ec37e2cfc625699d0d",
+  "record": "store/runs/class-shr-1791623119108281000",
+  "rule_sha256": "sha256:ac541c7b1f10a1baf5aba690ed115ae21db41cafaa416bf72f7c4abcdef17dd4",
   "cases": 976,
   "verdicts": {
    "model": "conforms",
@@ -2058,8 +2364,8 @@
  },
  {
   "iclass": "SQRTPD",
-  "record": "store/runs/class-sqrtpd-1791621515267143000",
-  "rule_sha256": "sha256:65c22ee1cb3982d77dc5042b96da82cbcffe3d1783101e5b2bbe08731244f665",
+  "record": "store/runs/class-sqrtpd-1791623119126087000",
+  "rule_sha256": "sha256:4015839edc8d064210c3c63487496bcf31959aef0e561da162785cc24f383ee4",
   "cases": 323,
   "verdicts": {
    "model": "conforms",
@@ -2075,8 +2381,8 @@
  },
  {
   "iclass": "SQRTPS",
-  "record": "store/runs/class-sqrtps-1791621515318744000",
-  "rule_sha256": "sha256:96c2d78d58e8d76206d44ef800ce1c66b36de503700e58bf626043b8fe2c016d",
+  "record": "store/runs/class-sqrtps-1791623119148115000",
+  "rule_sha256": "sha256:16296c20b8fdb5394745aacaa41a72cfb488aa9cf6a4e21daf9f7c574a170bed",
   "cases": 96,
   "verdicts": {
    "model": "conforms",
@@ -2092,8 +2398,8 @@
  },
  {
   "iclass": "SQRTSD",
-  "record": "store/runs/class-sqrtsd-1791621515334422000",
-  "rule_sha256": "sha256:32de194e6e5a39b44024228740f76a1ba4db2df980f627f196ca085e0ed05b97",
+  "record": "store/runs/class-sqrtsd-1791623119247087000",
+  "rule_sha256": "sha256:784b29cdb238f8082347b52eb20bc1c37d6db56a72eca876a2bcc871aed4fe6b",
   "cases": 398,
   "verdicts": {
    "model": "conforms",
@@ -2109,8 +2415,8 @@
  },
  {
   "iclass": "SQRTSS",
-  "record": "store/runs/class-sqrtss-1791621515353690000",
-  "rule_sha256": "sha256:2753e9fc8618796901cbaaf8de5a6cf75ae238d803def458ddc6cc5915776b25",
+  "record": "store/runs/class-sqrtss-1791623119286860000",
+  "rule_sha256": "sha256:e15b677c8800bfd8fc64b74630d5111d707d03e1087aed9835cdb7ee47cc2aca",
   "cases": 403,
   "verdicts": {
    "model": "conforms",
@@ -2126,8 +2432,8 @@
  },
  {
   "iclass": "STD",
-  "record": "store/runs/class-std-1791621515422656000",
-  "rule_sha256": "sha256:7e71c2620d1c0647c5cb852beaf058091ab55dfc10ec6982c5e68325e55580ef",
+  "record": "store/runs/class-std-1791623119273695000",
+  "rule_sha256": "sha256:b20ac81d69d50e19e68882fac22b137bb5f61d319aa89d49a788b949a96db92c",
   "cases": 160,
   "verdicts": {
    "model": "conforms",
@@ -2143,8 +2449,8 @@
  },
  {
   "iclass": "SUB",
-  "record": "store/runs/class-sub-1791621515416008000",
-  "rule_sha256": "sha256:d8f9d9a68a9523d09af60b9053c10c2635cd001fdf0634c7ccdf5a14598d7e62",
+  "record": "store/runs/class-sub-1791623119311068000",
+  "rule_sha256": "sha256:2b0e4479bcd4fa5bfb8e2ee6a317593f8cb19f5e9b16abd37e7441762bb78743",
   "cases": 1363,
   "verdicts": {
    "model": "conforms",
@@ -2160,8 +2466,8 @@
  },
  {
   "iclass": "SUBPD",
-  "record": "store/runs/class-subpd-1791621515585795000",
-  "rule_sha256": "sha256:54b0ce3c9e2df0b6eb7df9779f61d8adc22450fb5c5ba12e15602a0491b40ece",
+  "record": "store/runs/class-subpd-1791623119576226000",
+  "rule_sha256": "sha256:b725f4de4f58264d926da1d5dd35928b2ef4588a78d40cb80dcad716d1216f44",
   "cases": 215,
   "verdicts": {
    "model": "conforms",
@@ -2177,8 +2483,8 @@
  },
  {
   "iclass": "SUBPS",
-  "record": "store/runs/class-subps-1791621515625145000",
-  "rule_sha256": "sha256:09a6bcae6adc3753c01fe460c046f3d1d3f71d0840830cc98b5853d08cc90f4a",
+  "record": "store/runs/class-subps-1791623119583733000",
+  "rule_sha256": "sha256:5ab31c19fd1cd229d2928b7d43244345d022c294ad83c1c7c1daa0bdc40f545d",
   "cases": 130,
   "verdicts": {
    "model": "conforms",
@@ -2194,8 +2500,8 @@
  },
  {
   "iclass": "SUBSD",
-  "record": "store/runs/class-subsd-1791621515749395000",
-  "rule_sha256": "sha256:a1c4319b5206543448123f414e0f9384214993d29eaceb18002a2243dbee680f",
+  "record": "store/runs/class-subsd-1791623119717399000",
+  "rule_sha256": "sha256:d5ccc8cb65a9ba70225fb50f5596e42f9ca36caad3ec560f8b5c5ca1f17dbeae",
   "cases": 422,
   "verdicts": {
    "model": "conforms",
@@ -2211,8 +2517,8 @@
  },
  {
   "iclass": "SUBSS",
-  "record": "store/runs/class-subss-1791621515696839000",
-  "rule_sha256": "sha256:cd426cd022067e3107b068379fb6207daf331f1d2a0b48f066b49f77ad1793b4",
+  "record": "store/runs/class-subss-1791623119766920000",
+  "rule_sha256": "sha256:6075402ec7923d71ef68512426d7e963773fe43f1ec076f3231a2c4feb7c4425",
   "cases": 415,
   "verdicts": {
    "model": "conforms",
@@ -2228,8 +2534,8 @@
  },
  {
   "iclass": "SUB_LOCK",
-  "record": "store/runs/class-sub_lock-1791621515543379000",
-  "rule_sha256": "sha256:3bbffb120134a2673331e064d10fd0c5a7d74017ef7c6e8e00184e7a51375265",
+  "record": "store/runs/class-sub_lock-1791623119589983000",
+  "rule_sha256": "sha256:545d7013cdea311064a180dbe2e05805f572d12fe8be9c30bf9ecde4b9af4f4c",
   "cases": 720,
   "verdicts": {
    "model": "conforms",
@@ -2245,8 +2551,8 @@
  },
  {
   "iclass": "TEST",
-  "record": "store/runs/class-test-1791621515787087000",
-  "rule_sha256": "sha256:6718d94bffd353604eae9255edb576bac3bd7d0d50be5d5aaace293524b3662f",
+  "record": "store/runs/class-test-1791623119898879000",
+  "rule_sha256": "sha256:2822c5855d2c8a2e1e28f6b70df04c5b25c4ae70af642de53080eb661cd3007d",
   "cases": 1235,
   "verdicts": {
    "model": "conforms",
@@ -2262,8 +2568,8 @@
  },
  {
   "iclass": "UCOMISD",
-  "record": "store/runs/class-ucomisd-1791621515732427000",
-  "rule_sha256": "sha256:f641c15dcab339c919d435c250473a18242e67b0d3f102bd0c273a096ee92989",
+  "record": "store/runs/class-ucomisd-1791623119887401000",
+  "rule_sha256": "sha256:60fe1fe0ea4c0d836eaecbe0bc38da0a7cd1415d3caac2a51a69bba51fab63fa",
   "cases": 322,
   "verdicts": {
    "model": "conforms",
@@ -2279,8 +2585,8 @@
  },
  {
   "iclass": "UCOMISS",
-  "record": "store/runs/class-ucomiss-1791621515953602000",
-  "rule_sha256": "sha256:3f4e909edf3969f7607e84f2a4b029861b0f488f087c46604080e870111bf40b",
+  "record": "store/runs/class-ucomiss-1791623120046323000",
+  "rule_sha256": "sha256:fdd368a8116015e93edacbd1be13b8f5d7d68a2fbbccd871792c6cd43918e19e",
   "cases": 131,
   "verdicts": {
    "model": "conforms",
@@ -2296,8 +2602,8 @@
  },
  {
   "iclass": "XADD",
-  "record": "store/runs/class-xadd-1791621515752130000",
-  "rule_sha256": "sha256:bb981c6a4f0b11eda84e6287fdda807efe0e4958b4ee29117b00b5214c71519b",
+  "record": "store/runs/class-xadd-1791623119787169000",
+  "rule_sha256": "sha256:2f7e66683d84bec3dbd3214082f2ee17fc807546fd3267093fed17da21534f19",
   "cases": 306,
   "verdicts": {
    "model": "conforms",
@@ -2313,8 +2619,8 @@
  },
  {
   "iclass": "XADD_LOCK",
-  "record": "store/runs/class-xadd_lock-1791621515819328000",
-  "rule_sha256": "sha256:eaac6b862e3238fc998532b47417f9d7b1a26f59a80dd7e045af82451aa83278",
+  "record": "store/runs/class-xadd_lock-1791623119989294000",
+  "rule_sha256": "sha256:c481e455dda303a9d2b4f92c7a8535b6c884cf1e80e8614ecf40f2addbde2342",
   "cases": 288,
   "verdicts": {
    "model": "conforms",
@@ -2329,9 +2635,26 @@
   }
  },
  {
+  "iclass": "XCHG",
+  "record": "store/runs/class-xchg-1791623119998737000",
+  "rule_sha256": "sha256:1fb289c89af05c873ec6609d8137b4dd36611d9f280c746401adf941f96dbbcc",
+  "cases": 1455,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "XOR",
-  "record": "store/runs/class-xor-1791621515983573000",
-  "rule_sha256": "sha256:0d446ca2bbdfe65bb2302d84582232ed1b7997a1c396d34cd6d3907cb436b7f8",
+  "record": "store/runs/class-xor-1791623120249394000",
+  "rule_sha256": "sha256:9dc50a291a08342a9b8f6ef7ac4b4f402ed501768af405fcff4aece1e72ca4eb",
   "cases": 1304,
   "verdicts": {
    "model": "conforms",
@@ -2347,8 +2670,8 @@
  },
  {
   "iclass": "XORPD",
-  "record": "store/runs/class-xorpd-1791621516103589000",
-  "rule_sha256": "sha256:f4b2afb73e8cfa92bbd66ec5d58b37cde87dd50b7d777ace3c37f2d3b173523c",
+  "record": "store/runs/class-xorpd-1791623120271594000",
+  "rule_sha256": "sha256:142d1ecf736e5c684a4de83202e41490fc9a9e2bcedb5e52a88960364791ebf2",
   "cases": 278,
   "verdicts": {
    "model": "conforms",
@@ -2364,8 +2687,8 @@
  },
  {
   "iclass": "XORPS",
-  "record": "store/runs/class-xorps-1791621516110020000",
-  "rule_sha256": "sha256:4e7bc0fa8e79a0cf42396b50280af5145ba871f4e1cfd374f9b942b5c14f9b5d",
+  "record": "store/runs/class-xorps-1791623120267920000",
+  "rule_sha256": "sha256:1a89806b36da33b4acbca04dce2cbca7cf555976e8c0ff74cf8e0443b1f713b0",
   "cases": 106,
   "verdicts": {
    "model": "conforms",
@@ -2381,8 +2704,8 @@
  },
  {
   "iclass": "XOR_LOCK",
-  "record": "store/runs/class-xor_lock-1791621515972832000",
-  "rule_sha256": "sha256:fdd64c1870a472ea50d42c59e4f2dcef3ef502279203c7ab4a70773e2734ebc9",
+  "record": "store/runs/class-xor_lock-1791623120193875000",
+  "rule_sha256": "sha256:aef7d24e0f67e3193b9a16accfd4e6df852ea64ef125f835a12184a6bdba1d57",
   "cases": 724,
   "verdicts": {
    "model": "conforms",
