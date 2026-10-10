@@ -80,15 +80,15 @@ static void full(const char *name, const WCHAR *in, DWORD size) {
     end();
 }
 
-static void dir(const char *name, const char *call, const WCHAR *p, BOOL (*f)(const WCHAR *)) {
-    SetLastError(SENTINEL);
-    BOOL ok = f(p);
-    DWORD err = GetLastError();
+/* Each call is direct: an import reached only through a function pointer is invisible to the reference traversal
+ * (KIT_DIARY, Sprint 046). */
+static void report(const char *name, const char *call, BOOL ok, DWORD err) {
     row(name); put(",\"call\":\""); put(call); put("\""); field("ret", ok != 0); field("err", err); end();
 }
-static BOOL make(const WCHAR *p) { return CreateDirectoryW(p, NULL); }
-static BOOL unmake(const WCHAR *p) { return RemoveDirectoryW(p); }
-static BOOL chdir_(const WCHAR *p) { return SetCurrentDirectoryW(p); }
+#define dir(name, call, p, f) do { SetLastError(SENTINEL); BOOL ok_ = f(p); report(name, call, ok_, GetLastError()); } while (0)
+#define make(p) CreateDirectoryW(p, NULL)
+#define unmake(p) RemoveDirectoryW(p)
+#define chdir_(p) SetCurrentDirectoryW(p)
 
 void start(void) {
     cwd_len = GetCurrentDirectoryW(MAX_PATH, cwd);
