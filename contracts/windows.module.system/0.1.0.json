@@ -1,0 +1,128 @@
+{
+ "contract_id": "windows.module.system",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A system DLL imported statically (SHELL32): LoadLibraryW and GetModuleHandleW find it under any spelling (case, no extension, full path); GetModuleFileNameW gives C:\\Windows\\System32\\SHELL32.dll; GetProcAddress gives the import's address for an imported name, an address for another export, NULL and 127 for a name it does not export; FreeLibrary succeeds and the module stays.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/system_modules/system_modules.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "first",
+    "non_null": 1
+   },
+   {
+    "s": "load.lower",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "load.upper",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "load.no_extension",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "load.full_path",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "handle.upper",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "handle.no_extension",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "handle.full_path",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "file_name",
+    "len_is_text": 1,
+    "path": "C:\\Windows\\System32\\SHELL32.dll",
+    "err": 0
+   },
+   {
+    "s": "proc.imported",
+    "is_import": 1,
+    "non_null": 1,
+    "err": 57005
+   },
+   {
+    "s": "proc.other_export",
+    "non_null": 1,
+    "err": 57005
+   },
+   {
+    "s": "proc.missing",
+    "non_null": 0,
+    "err": 127
+   },
+   {
+    "s": "free",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "after_free",
+    "still_loaded": 1
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38094160385: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815; run 38094162181: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "system_modules-1791673893-0-1",
+    "system_modules-1791673893-0-2",
+    "system_modules-1791673893-1-1",
+    "system_modules-1791673893-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getmodulehandlew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew (page updated 2024-12-09; retrieved 2026-10-10)",
+   "quote": "Retrieves a module handle for the specified module. The module must have been loaded by the calling process."
+  }
+ ],
+ "open_questions": [
+  "The system DLLs are not in PEB.Ldr's lists in w2m; Windows lists them. Nothing on the frontier walks the lists for them yet.",
+  "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts (user32 1,007 against 1,041)."
+ ],
+ "sections": {
+  "probe": "probes/system_modules (Sprint 044)",
+  "implementation": "tools/guest_runtime/module.c",
+  "rows": "scripts/family_run.py system_modules",
+  "excluded": "none"
+ }
+}

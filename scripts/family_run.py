@@ -1180,6 +1180,32 @@ FAMILIES: dict[str, Family] = {
             "maximum_without_delete": Plant("    u32 all = desired & (GENERIC_ALL | MAXIMUM_ALLOWED) ? R | W | D : 0;",
                                             "    u32 all = desired & GENERIC_ALL ? R | W | D : desired & MAXIMUM_ALLOWED ? R | W : 0;",
                                             ("share.read_write.maximum_allowed",))}),
+    "system_modules": Family(
+        name="system_modules",
+        contract_id="windows.module.system",
+        version="0.1.0",
+        summary=("A system DLL imported statically (SHELL32): LoadLibraryW and GetModuleHandleW find it under any "
+                 "spelling (case, no extension, full path); GetModuleFileNameW gives C:\\Windows\\System32\\SHELL32.dll; "
+                 "GetProcAddress gives the import's address for an imported name, an address for another export, NULL "
+                 "and 127 for a name it does not export; FreeLibrary succeeds and the module stays."),
+        probe="system_modules", guest_file="module.c", host_files=("src/w2m/modules.py", "src/w2m/vm_backend.py"),
+        runs={
+              "38094160385": Run("windows-2025", "202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815", "system_modules-1791673893-0", "AMD EPYC 7763 64-Core Processor"),
+              "38094162181": Run("windows-2022", "fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff", "system_modules-1791673893-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getmodulehandlew", "api/libloaderapi/nf-libloaderapi-getmodulehandlew", "2024-12-09",
+                       "Retrieves a module handle for the specified module. The module must have been loaded by the "
+                       "calling process."),),
+        open_questions=(
+            "The system DLLs are not in PEB.Ldr's lists in w2m; Windows lists them. Nothing on the frontier walks the "
+            "lists for them yet.",
+            "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
+            "(user32 1,007 against 1,041).",),
+        plants={
+            "loadlibraryw_not_found": Plant("    u64 h = find(name, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+                                            "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+                                            ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
 }
 
 

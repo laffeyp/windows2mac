@@ -113,8 +113,10 @@ ENVIRONMENT_SIZE = 0x4000
 NTDLL_IMAGE_OFF = ENVIRONMENT_OFF + ENVIRONMENT_SIZE   # synthetic ntdll image, one page (modules.py; Sprint 046)
 LOADER_DATA_OFF = NTDLL_IMAGE_OFF + 0x1000     # PEB.Ldr: PEB_LDR_DATA, the LDR_DATA_TABLE_ENTRYs, their names
 LOADER_DATA_SIZE = 0x4000
+SYSTEM_IMAGES_OFF = LOADER_DATA_OFF + LOADER_DATA_SIZE   # one page per other system DLL imported (modules.py; Sprint 048)
+SYSTEM_IMAGES = 32
 LDR_ENTRY_SIZE = 0x120
-PROCESS_SIZE = LOADER_DATA_OFF + LOADER_DATA_SIZE
+PROCESS_SIZE = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -218,7 +220,7 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetLogicalProcessorInformationEx": ("k32_GetLogicalProcessorInformationEx", True), "GetLogicalProcessorInformation": ("k32_GetLogicalProcessorInformation", True), "GetActiveProcessorCount": ("k32_GetActiveProcessorCount", True), "GetCurrentProcess": ("k32_GetCurrentProcess", True), "GetProcessAffinityMask": ("k32_GetProcessAffinityMask", True), "SetThreadAffinityMask": ("k32_SetThreadAffinityMask", True), "GetNumaHighestNodeNumber": ("k32_GetNumaHighestNodeNumber", True),
             "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True),
             "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True),
-            "GetHandleInformation": ("k32_GetHandleInformation", True)}
+            "GetHandleInformation": ("k32_GetHandleInformation", True), "LoadLibraryW": ("k32_LoadLibraryW", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
 DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
                 "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047
@@ -1130,6 +1132,24 @@ class VM:
             return self.files is not None and any(e.lower() == name for e in os.listdir(self.files.root))
 
         spec = json.loads(EXPORTS_SPEC.read_text())
+        own = {d.name.lower() for d in self.ld.images[1:]}
+        spellings: dict[str, str] = {}
+        for n in self.ld.thunks.values():
+            dll = n.split("!", 1)[0]
+            c = dll.lower() if "." in dll else dll.lower() + ".dll"
+            if c not in own and c not in ("kernel32.dll", "kernelbase.dll", "ntdll.dll") and c[:-4] in spec["modules"]:
+                spellings.setdefault(c, dll)
+        if len(spellings) > SYSTEM_IMAGES:
+            raise CompileError(f"{len(spellings)} system DLLs imported; the process area holds {SYSTEM_IMAGES}")
+        system: dict[str, tuple[int, str]] = {}
+        for i, (c, spelling) in enumerate(sorted(spellings.items())):
+            off = SYSTEM_IMAGES_OFF + 0x1000 * i
+            page = self._process(off)
+            self.mm[page:page + 2] = b"MZ"
+            struct.pack_into("<I", self.mm, page + 0x3C, 0x80)
+            self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
+            struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)
+            system[c] = (PROCESS_VA + off, spelling)
         dlls = {d.name.lower(): (d.base, d.pe.size_of_image, {n: d.base + rva for n, rva in d.pe.exports})
                 for d in self.ld.images[1:]}
         modules = Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
@@ -1137,7 +1157,7 @@ class VM:
                           image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
                           imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
                           in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
-                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]})
+                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system)
         if self.ld.images:                       # a program from loader.load (tests build bare ones)
             self._write_loader_data(modules)
         return modules

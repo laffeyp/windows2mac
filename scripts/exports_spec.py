@@ -15,12 +15,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "specs" / "windows_exports.json"
 
 
-def build(run: Path, previous: dict) -> dict:
+def build(run: Path, previous: dict[str, Any]) -> dict[str, Any]:
     rows = [json.loads(line) for line in (run / "body-1.jsonl").read_text().splitlines() if line.strip()]
     missing = [r["m"] for r in rows if r.get("missing")]
     if missing:
