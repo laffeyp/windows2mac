@@ -126,13 +126,13 @@ void start(void) {
     row("file_name.null"); flag("nonzero", len != 0); flag("length_matches", len == real);
     flag("ends_with_probe_exe", ends_with_ci(path, len, L"\\probe.exe")); flag("absolute", len > 2 && path[1] == ':');
     field("err", err); end();
-    static WCHAR small[4];
-    for (int i = 0; i < 4; i++) small[i] = 0x7777;
+    static WCHAR short_buffer[4];
+    for (int i = 0; i < 4; i++) short_buffer[i] = 0x7777;
     SetLastError(SENTINEL);
     DWORD slen = GetModuleFileNameW(NULL, short_buffer, 4);
     err = GetLastError();
-    row("file_name.small_buffer"); field("ret", slen); flag("terminated", small[3] == 0);
-    flag("prefix_kept", small[0] == path[0] && small[1] == path[1] && small[2] == path[2]); field("err", err); end();
+    row("file_name.small_buffer"); field("ret", slen); flag("terminated", short_buffer[3] == 0);
+    flag("prefix_kept", short_buffer[0] == path[0] && short_buffer[1] == path[1] && short_buffer[2] == path[2]); field("err", err); end();
 
     SetLastError(SENTINEL);
     BOOL fr = FreeLibrary(lk);
