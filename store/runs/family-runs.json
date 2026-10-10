@@ -82,5 +82,39 @@
    "38037903596": "discrepancy",
    "38038027558": "conforms"
   }
+ },
+ "thread_storage": {
+  "candidate_sha256": "sha256:240c9ef756af4064ab3b4bfcbf22df14ee198a74c5bc5b6a600ff0dac1448343",
+  "divergence": {
+   "38040526466": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040528813": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040531024": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040533511": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040598310": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040600812": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040602719": "row tls.alloc.first: missing (0 rows printed, 20 expected)",
+   "38040604585": "row tls.alloc.first: missing (0 rows printed, 20 expected)"
+  },
+  "events": {
+   "CANDIDATE_GENERATED": 1,
+   "CANDIDATE_REJECTED": 1,
+   "COMPARISON_COMPLETED": 8,
+   "DISCREPANCY_REPORTED": 1,
+   "DISCREPANCY_ROUTED": 1,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "thread_storage",
+  "record": "store/runs/family-thread_storage-1791623680478278000",
+  "verdicts": {
+   "38040526466": "discrepancy",
+   "38040528813": "discrepancy",
+   "38040531024": "discrepancy",
+   "38040533511": "discrepancy",
+   "38040598310": "discrepancy",
+   "38040600812": "discrepancy",
+   "38040602719": "discrepancy",
+   "38040604585": "discrepancy"
+  }
  }
 }

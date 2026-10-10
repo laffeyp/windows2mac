@@ -153,6 +153,30 @@ def sbb(ctx: Ctx) -> None:
     b.emit("flags", "sbb", a, c, r, bits)
 
 
+def adc(ctx: Ctx) -> None:
+    """ADC: dest + src + CF (SDM ADC); flags as an addition with carry."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    a, c, r = _val(b, dk, dst), _val(b, sk, src), b.t()
+    b.emit("alu", r, "adc", a, c, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", "adc", a, c, r, bits)
+
+
+def bit_scan(ctx: Ctx) -> None:
+    """BSF, BSR (SDM): the index of the lowest (highest) set bit; ZF set and the destination not
+    written when the source is 0 (the SDM: destination undefined; the CPU's cases decide what the
+    model keeps); CF OF SF AF PF undefined."""
+    b, ic, ops, nxt = ctx.b, ctx.ic, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    v, r = _val(b, sk, src), b.t()
+    b.emit("alu", r, ic.lower(), v, v, bits)
+    b.emit("cst", v, dst, r)
+    b.emit("flags", "bsf", v, v, r, bits)
+
+
 def bit_test(ctx: Ctx) -> None:
     """BT, BTS, BTR (SDM BT): CF = the selected bit; BTS sets it, BTR clears it. A register or an
     immediate offset selects bit (offset mod operand size); a register offset with a memory base

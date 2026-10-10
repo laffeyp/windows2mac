@@ -1,0 +1,247 @@
+{
+ "contract_id": "windows.thread_storage.single_thread",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "TlsAlloc, TlsGetValue, TlsSetValue, TlsFree, FlsAlloc, FlsGetValue, FlsSetValue and FlsFree on one thread give Windows's indices, values, returns and last errors, with TLS values in the TEB.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/thread_storage/thread_storage.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "tls.alloc.first",
+    "index": 1,
+    "err": 57005
+   },
+   {
+    "s": "tls.alloc.second",
+    "index": 2
+   },
+   {
+    "s": "tls.get.fresh",
+    "null": true,
+    "err": 0
+   },
+   {
+    "s": "tls.set",
+    "ret": 1,
+    "err": 57005,
+    "teb_slot_holds_value": true
+   },
+   {
+    "s": "tls.get.after_set",
+    "value_returned": true,
+    "err": 0
+   },
+   {
+    "s": "tls.get.out_of_range",
+    "null": true,
+    "err": 87
+   },
+   {
+    "s": "tls.set.out_of_range",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "tls.alloc.many",
+    "below_64": 60,
+    "above_64": 20,
+    "last": 83
+   },
+   {
+    "s": "tls.alloc.many.indices",
+    "indices": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83
+    ]
+   },
+   {
+    "s": "tls.set.expansion",
+    "ret": 1,
+    "err": 57005,
+    "expansion_present": true,
+    "expansion_holds_value": true,
+    "value_returned": true
+   },
+   {
+    "s": "tls.free",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "tls.alloc.after_free",
+    "reuses_freed": true
+   },
+   {
+    "s": "tls.get.reused",
+    "null": true,
+    "err": 0
+   },
+   {
+    "s": "fls.alloc.first",
+    "index": 1,
+    "err": 57005
+   },
+   {
+    "s": "fls.alloc.second",
+    "index": 2
+   },
+   {
+    "s": "fls.get.fresh",
+    "null": true,
+    "err": 87
+   },
+   {
+    "s": "fls.set",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "fls.get.after_set",
+    "value_returned": true,
+    "err": 0
+   },
+   {
+    "s": "fls.get.out_of_range",
+    "null": true,
+    "err": 87
+   },
+   {
+    "s": "fls.free.no_callback",
+    "ret": 1,
+    "err": 57005,
+    "callbacks": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38040526466: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:4426a716a6a15990383d970d2ee20c6b14b651128b6866fd5f70e4f7fda5a10c; run 38040528813: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:2997768ba33f5c1acf33aef96e588e39216db887037b78693243ccfc290e9722; run 38040531024: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b7c76bb07b75b708f02b637ad0c47b8cc11eda44540f95f3eb0e61f1f0b68a3c; run 38040533511: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:88100e479bb25c1a9c3f0efc985d6d7d74888b65b6a3b9aecd3866d757181c8a; run 38040598310: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:2f99a59a6f85d897db00e24e2091f488dad95a554b6c50c3f2aa8d68774a3825; run 38040600812: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:7a74e31d3b1bbcec1289858f22e4af691ffab6f29c81dc2c5cff2d6a21751f5f; run 38040602719: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:f6f0e51889a8351333cf5c471489640d23e300e36538e85842fcfa8b5b0fc93c; run 38040604585: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:82c8ad6ef3f4dd191bcf0011c113e6e6cf2cb3e6919f5ca553f737c76c8be1b1",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "thread_storage-1791623504-0-1",
+    "thread_storage-1791623504-0-2",
+    "thread_storage-1791623504-1-1",
+    "thread_storage-1791623504-1-2",
+    "thread_storage-1791623504-2-1",
+    "thread_storage-1791623504-2-2",
+    "thread_storage-1791623504-3-1",
+    "thread_storage-1791623504-3-2",
+    "thread_storage-1791623577-0-1",
+    "thread_storage-1791623577-0-2",
+    "thread_storage-1791623577-1-1",
+    "thread_storage-1791623577-1-2",
+    "thread_storage-1791623577-2-1",
+    "thread_storage-1791623577-2-2",
+    "thread_storage-1791623577-3-1",
+    "thread_storage-1791623577-3-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "A fresh process holds TLS indices 0 and 16 before the program's first TlsAlloc (row tls.alloc.many.indices on every run); which component holds them is not observed.",
+  "FlsGetValue answers ERROR_INVALID_PARAMETER for an allocated index until the thread's first FlsSetValue (rows fls.get.fresh, fls.get.after_set).",
+  "Excluded rows: see sections.excluded."
+ ],
+ "sections": {
+  "probe": "probes/thread_storage (Sprint 044)",
+  "implementation": "tools/guest_runtime/thread_storage.c",
+  "rows": "scripts/family_run.py thread_storage",
+  "excluded": "fls.free.with_callback: FlsFree runs the index's callback in the program's code; w2m cannot yet call into guest code from the runtime and stops there (Sprint 047, with threads, whose exits run FLS callbacks too). The probe writes its other rows first."
+ }
+}

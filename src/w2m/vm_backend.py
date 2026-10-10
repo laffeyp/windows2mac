@@ -94,7 +94,8 @@ EXCEPTION_OFF = RING_OFF + RING_SIZE             # the last unhandled exception:
 EXCEPTION_MAGIC = 0x7832774E4F495445
 KERNEL32_IMAGE_OFF = EXCEPTION_OFF + 0x1000     # synthetic module images, one page each (modules.py)
 KERNELBASE_IMAGE_OFF = KERNEL32_IMAGE_OFF + 0x1000
-PROCESS_SIZE = KERNELBASE_IMAGE_OFF + 0x1000
+TLS_EXPANSION_OFF = KERNELBASE_IMAGE_OFF + 0x1000   # TEB.TlsExpansionSlots' array: 1024 values (thread_storage.c)
+PROCESS_SIZE = TLS_EXPANSION_OFF + 0x2000
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -121,11 +122,16 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "EnterCriticalSection": ("k32_EnterCriticalSection", False),
             "TryEnterCriticalSection": ("k32_TryEnterCriticalSection", True),
             "LeaveCriticalSection": ("k32_LeaveCriticalSection", False),
-            "DeleteCriticalSection": ("k32_DeleteCriticalSection", False)}
+            "DeleteCriticalSection": ("k32_DeleteCriticalSection", False),
+            "TlsAlloc": ("k32_TlsAlloc", True), "TlsGetValue": ("k32_TlsGetValue", True),
+            "TlsSetValue": ("k32_TlsSetValue", True), "TlsFree": ("k32_TlsFree", True),
+            "FlsAlloc": ("k32_FlsAlloc", True), "FlsGetValue": ("k32_FlsGetValue", True),
+            "FlsSetValue": ("k32_FlsSetValue", True), "FlsFree": ("k32_FlsFree", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
+TLS_TAKEN = 16                      # the TLS index besides 0 a fresh Windows process holds: set from the rows
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
@@ -245,6 +251,21 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         a.emit(a64.ubfx(REG_CF, rr, 0, 1))
         _mark_defined(a, U_CF)
         _mark_undefined(a, U_OF | U_SF | U_AF | U_PF)
+        return
+    if kind == "bsf":                                          # SDM BSF/BSR: ZF the source was 0; the rest undefined
+        a.emit(a64.ubfx(16, ra, 0, bits) if bits < 64 else a64.mov(16, ra), a64.cmpi(16, 0), a64.cset(REG_ZF, "eq"))
+        _mark_defined(a, U_ZF)
+        _mark_undefined(a, U_CF | U_OF | U_SF | U_AF | U_PF)
+        return
+    if kind == "adc":                                          # SDM ADC: carry and overflow from a, b, r
+        a.emit(a64.eor(16, ra, rb), a64.eor(17, ra, rr), a64.bic(17, 17, 16),
+               a64.ubfx(REG_OF, 17, bits - 1, 1))
+        a.emit(a64.and_(16, ra, rb), a64.orr(17, ra, rb), a64.bic(17, 17, rr), a64.orr(16, 16, 17),
+               a64.ubfx(REG_CF, 16, bits - 1, 1))
+        _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF)
+        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, AF_OPERANDS + 16))
+        _mark_defined(a, U_AF)
+        _set_zf_sf_pf(a, rr, bits)
         return
     if kind == "sbb":                                          # SDM SBB: borrow and overflow from a, b, r
         a.emit(a64.eor(16, ra, rb), a64.eor(17, ra, rr), a64.and_(17, 17, 16),
@@ -428,6 +449,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_TEB_VA": PROCESS_VA + TEB_OFF, "W2M_PEB_VA": PROCESS_VA + PEB_OFF,
         "W2M_TRANSPORT_VA": PROCESS_VA + TRANSPORT_OFF, "W2M_RING_VA": PROCESS_VA + RING_OFF,
         "W2M_STATE_VA": PROCESS_VA + STATE_OFF, "W2M_EXCEPTION_VA": PROCESS_VA + EXCEPTION_OFF,
+        "W2M_TLS_EXPANSION_VA": PROCESS_VA + TLS_EXPANSION_OFF, "W2M_TLS_TAKEN": TLS_TAKEN,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -587,6 +609,15 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
                 a.emit(a64.sbfx(rd, rx, 0, 8 if o == "sext8" else 16))
             elif o == "bswap":
                 a.emit(a64.rev(rd, rx, bits))
+            elif o == "adc":                                    # a + b + CF; CF must be defined
+                _exit_if_undefined(a, "C")
+                a.emit(a64.add(rd, rx, ry), a64.add(rd, rd, REG_CF))
+            elif o in ("bsf", "bsr"):                           # the result is stored only for a nonzero source
+                a.emit(a64.ubfx(16, rx, 0, bits) if bits < 64 else a64.mov(16, rx))
+                if o == "bsf":
+                    a.emit(a64.rbit(16, 16), a64.clz(rd, 16))
+                else:
+                    a.emit(a64.clz(16, 16), a64.movz(17, 63), a64.sub(rd, 17, 16))
             elif o == "sbb":                                    # a - b - CF; CF must be defined
                 _exit_if_undefined(a, "C")
                 a.emit(a64.sub(rd, rx, ry), a64.sub(rd, rd, REG_CF))

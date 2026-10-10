@@ -152,6 +152,13 @@ class Runtime:
         if kind == "bt":                                          # SDM BT/BTS/BTR: CF the bit; ZF unchanged
             f.update(C=bool(r & 1), O=None, S=None, A=None, P=None)
             return
+        if kind == "bsf":                                         # SDM BSF/BSR: ZF the source was 0
+            f.update(Z=(a & m) == 0, C=None, O=None, S=None, A=None, P=None)
+            return
+        if kind == "adc":                                         # SDM ADC: a + b + CF, with carry
+            f.update(Z=res == 0, S=bool(res & sign), P=_parity(res), A=bool((a ^ b ^ res) & 0x10),
+                     O=bool(~(a ^ b) & (a ^ res) & sign), C=bool(((a & b) | ((a | b) & ~res)) & sign))
+            return
         if kind == "sbb":                                         # SDM SBB: a - b - CF, with borrow
             f.update(Z=res == 0, S=bool(res & sign), P=_parity(res), A=bool((a ^ b ^ res) & 0x10),
                      O=bool((a ^ b) & (a ^ res) & sign), C=bool(((~a & b) | (~(a ^ b) & res)) & sign))
@@ -408,6 +415,11 @@ class Runtime:
                     v = int.from_bytes((x & m).to_bytes(bits // 8, "little"), "big")
                 elif o == "sbb":
                     v = x - y - int(self._flag("C"))
+                elif o == "adc":
+                    v = x + y + int(self._flag("C"))
+                elif o in ("bsf", "bsr"):
+                    xm = x & m
+                    v = 0 if xm == 0 else ((xm & -xm).bit_length() - 1 if o == "bsf" else xm.bit_length() - 1)
                 elif o in ("shl", "sar", "rol", "ror"):
                     c = y & (0x3F if bits == 64 else 0x1F)
                     xm = x & m

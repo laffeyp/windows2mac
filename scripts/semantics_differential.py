@@ -275,13 +275,16 @@ CLASSES_044B = frozenset(f"REP_{k}{s}" for k in ("STOS", "MOVS") for s in "BWDQ"
 STRING_ENCODINGS = {"REP_STOSB": "f3aa", "REP_STOSW": "66f3ab", "REP_STOSD": "f3ab", "REP_STOSQ": "f348ab",
                     "REP_MOVSB": "f3a4", "REP_MOVSW": "66f3a5", "REP_MOVSD": "f3a5", "REP_MOVSQ": "f348a5"}
 STRING_STATES = 24
+# Sprint 044 (third block): ADC (the thread-storage probe's code), BSF, BSR
+CLASSES_044C = frozenset(("ADC", "BSF", "BSR"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
     "041": (2026_10_10_41, CLASSES_041, LOCKABLE_041, False),
     "042": (2026_10_11_42, CLASSES_042, LOCKABLE_042, False),
     "044": (2026_10_10_44, CLASSES_044, (), False),
-    "044b": (2026_10_10_441, CLASSES_044B, (), False)}
+    "044b": (2026_10_10_441, CLASSES_044B, (), False),
+    "044c": (2026_10_10_442, CLASSES_044C, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:

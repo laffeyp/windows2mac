@@ -155,6 +155,18 @@ def rev(rd: int, rn: int, bits: int = 64) -> int:
     return (0xDAC00C00 if bits == 64 else 0x5AC00800) | rn << 5 | rd
 
 
+def clz(rd: int, rn: int) -> int:
+    """CLZ Xd, Xn: leading zero bits (BSR: bits - 1 - CLZ)."""
+    _r(rd, rn)
+    return 0xDAC01000 | rn << 5 | rd
+
+
+def rbit(rd: int, rn: int) -> int:
+    """RBIT Xd, Xn: bits reversed (BSF: CLZ of the reversal)."""
+    _r(rd, rn)
+    return 0xDAC00000 | rn << 5 | rd
+
+
 def lsrv(rd: int, rn: int, rm: int) -> int:
     _r(rd, rn, rm)
     return 0x9AC02400 | rm << 16 | rn << 5 | rd

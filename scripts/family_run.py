@@ -235,6 +235,38 @@ FAMILIES: dict[str, Family] = {
                                                  "    for (int i = 8; i < 40; i++) b[i] = 0;", ("delete",)),
                 "default_spin_without_flag": Plant("#define DEFAULT_SPIN 0x020007D0ull", "#define DEFAULT_SPIN 0x000007D0ull",
                                                    ("init_ex.0.0", "init"))}),
+    "thread_storage": Family(
+        name="thread_storage",
+        contract_id="windows.thread_storage.single_thread",
+        version="0.1.0",
+        summary=("TlsAlloc, TlsGetValue, TlsSetValue, TlsFree, FlsAlloc, FlsGetValue, FlsSetValue and FlsFree on "
+                 "one thread give Windows's indices, values, returns and last errors, with TLS values in the TEB."),
+        probe="thread_storage", guest_file="thread_storage.c",
+        runs={
+              "38040526466": Run("windows-2025", "4426a716a6a15990383d970d2ee20c6b14b651128b6866fd5f70e4f7fda5a10c", "thread_storage-1791623504-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38040528813": Run("windows-2022", "2997768ba33f5c1acf33aef96e588e39216db887037b78693243ccfc290e9722", "thread_storage-1791623504-1", "AMD EPYC 7763 64-Core Processor"),
+              "38040531024": Run("windows-2025", "b7c76bb07b75b708f02b637ad0c47b8cc11eda44540f95f3eb0e61f1f0b68a3c", "thread_storage-1791623504-2", "AMD EPYC 7763 64-Core Processor"),
+              "38040533511": Run("windows-2022", "88100e479bb25c1a9c3f0efc985d6d7d74888b65b6a3b9aecd3866d757181c8a", "thread_storage-1791623504-3", "AMD EPYC 9V45 96-Core Processor"),
+              "38040598310": Run("windows-2025", "2f99a59a6f85d897db00e24e2091f488dad95a554b6c50c3f2aa8d68774a3825", "thread_storage-1791623577-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38040600812": Run("windows-2022", "7a74e31d3b1bbcec1289858f22e4af691ffab6f29c81dc2c5cff2d6a21751f5f", "thread_storage-1791623577-1", "AMD EPYC 7763 64-Core Processor"),
+              "38040602719": Run("windows-2025", "f6f0e51889a8351333cf5c471489640d23e300e36538e85842fcfa8b5b0fc93c", "thread_storage-1791623577-2", "AMD EPYC 9V74 80-Core Processor"),
+              "38040604585": Run("windows-2022", "82c8ad6ef3f4dd191bcf0011c113e6e6cf2cb3e6919f5ca553f737c76c8be1b1", "thread_storage-1791623577-3", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(),
+        open_questions=(
+            "A fresh process holds TLS indices 0 and 16 before the program's first TlsAlloc (row "
+            "tls.alloc.many.indices on every run); which component holds them is not observed.",
+            "FlsGetValue answers ERROR_INVALID_PARAMETER for an allocated index until the thread's first "
+            "FlsSetValue (rows fls.get.fresh, fls.get.after_set).",
+            "Excluded rows: see sections.excluded."),
+        excluded={"fls.free.with_callback": "FlsFree runs the index's callback in the program's code; w2m cannot yet "
+                  "call into guest code from the runtime and stops there (Sprint 047, with threads, whose exits run "
+                  "FLS callbacks too). The probe writes its other rows first."},
+        plants={"tls_get_keeps_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_TlsGetValue",
+                                             "    return w2m_logged(W2M_API_TlsGetValue",
+                                             ("tls.get.fresh", "tls.get.after_set", "tls.get.reused")),
+                "tls_index_16_free": Plant("    tls_used[W2M_TLS_TAKEN] = 1;", "",
+                                           ("tls.alloc.many", "tls.alloc.many.indices"))}),
 }
 
 

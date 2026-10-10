@@ -64,6 +64,8 @@ CASES: list[tuple[str, int]] = [
     ("msub x27, x18, x26, x25", a64.msub(27, 18, 26, 25)),
     ("rev x29, x30", a64.rev(29, 30)),
     ("rev w29, w30", a64.rev(29, 30, 32)),
+    ("clz x18, x25", a64.clz(18, 25)),
+    ("rbit x26, x27", a64.rbit(26, 27)),
     ("ldaxrb w25, [x18]", a64.ldaxr(1, 25, 18)),
     ("ldaxrh w25, [x18]", a64.ldaxr(2, 25, 18)),
     ("ldaxr w25, [x18]", a64.ldaxr(4, 25, 18)),
