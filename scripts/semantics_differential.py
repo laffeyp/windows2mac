@@ -227,11 +227,34 @@ CLASSES_039 = frozenset((
 ))
 
 
-def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039) -> tuple[list[Case], Counter[str]]:
+# Sprint 041's block, chosen by frequency in the game's code (Sprint 036): IMUL, CMOVcc, the shifts and
+# rotates, XADD, CMPXCHG, and the LOCK forms of the lockable classes w2m lifts. The generator never emits
+# a LOCK prefix, so each memory-destination case of a lockable class also appears with F0 in front.
+CMOV_CC = ("O", "NO", "B", "NB", "Z", "NZ", "BE", "NBE", "S", "NS", "P", "NP", "L", "NL", "LE", "NLE")
+LOCKABLE_041 = ("ADD", "SUB", "AND", "OR", "XOR", "INC", "DEC", "XADD", "CMPXCHG")
+CLASSES_041 = frozenset(("IMUL", "SHL", "SAR", "ROL", "ROR", "XADD", "CMPXCHG", *(f"CMOV{c}" for c in CMOV_CC),
+                         *(f"{c}_LOCK" for c in LOCKABLE_041)))
+CASE_SETS = {"039": (2026_10_09_39, CLASSES_039, False, True), "041": (2026_10_10_41, CLASSES_041, True, False)}
+
+
+def _locked_variants(rng: random.Random) -> Iterator[Any]:
+    """F0-prefixed copies of the generator's memory-destination cases of the lockable classes."""
+    for c in encgen_cases():
+        try:
+            d = decode(c.raw)
+        except DecodeError:
+            continue
+        if d.iclass in LOCKABLE_041 and d.fields is not None and d.fields.ops and operands(d.fields)[0][0] == "M":
+            yield type(c)(raw=b"\xf0" + c.raw[:14], row=c.row, note=c.note + " +lock")
+
+
+def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039,
+                locked: bool = False, control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     out: list[Case] = []
     skipped: Counter[str] = Counter()
-    for c in encgen_cases():
+    source = list(encgen_cases()) + (list(_locked_variants(rng)) if locked else [])
+    for c in source:
         try:
             d = decode(c.raw)
             ins = lift(c.raw[:d.length] + b"\x90" * 15, CODE_VA)
@@ -270,7 +293,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                     skipped["fault with RSP outside the stack (not dispatchable)"] += 1
             else:
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
-    for code, label in _control_flow():
+    for code, label in _control_flow() if control_flow else []:
         for _ in range(CONTROL_STATES):
             s = _state(rng, False)
             if label == "RET_NEAR":
@@ -472,13 +495,15 @@ def judge_format1(c: Case, r: Result, label: str) -> list[tuple[str, str]]:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", action="store_true")
+    ap.add_argument("--set", default="039", choices=sorted(CASE_SETS))
     ap.add_argument("--out", type=Path, default=ROOT / "probes" / "semantics" / "cases.bin")
     ap.add_argument("--judge", type=Path)
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--runs", type=Path, default=ROOT / "runs")
     a = ap.parse_args(argv)
     if a.cases:
-        cs, skipped = build_cases()
+        seed, classes, locked, control = CASE_SETS[a.set]
+        cs, skipped = build_cases(seed, classes, locked, control)
         write_cases(cs, a.out)
         labels = Counter(c.label for c in cs)
         print(f"{len(cs)} cases over {len(labels)} iclasses ({sum(c.kind for c in cs)} fault placements) -> "

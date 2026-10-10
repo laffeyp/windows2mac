@@ -4,6 +4,7 @@ follow the Intel SDM Vol 2 page of each instruction; the commit rule (specs/gues
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, cast
 
 from w2m.lift import ALU, CC, RAX, RDX, RSP, LiftError, _operand, _pop, _push, _val
@@ -148,3 +149,115 @@ def pop(ctx: Ctx) -> None:
     else:
         b.emit("st", ("r", RSP, 64, False), nsp)           # POP RSP: the popped value wins (SDM)
         b.emit("st", dst, v)
+
+
+def _count(ctx: Ctx, bits: int) -> tuple[str, Any]:
+    """A shift's count operand: CL or an immediate; the D0/D1 forms carry an implicit 1."""
+    if len(ctx.ops) > 1:
+        k, x, _ = _operand(ctx.b, ctx.ops[1], ctx.nxt)
+        return k, x
+    one = ctx.b.t()
+    ctx.b.emit("imm", one, 1)
+    return "imm", one
+
+
+def shift(ctx: Ctx) -> None:
+    """SHL (and SAL), SAR, ROL, ROR: the result, stored before flags (commit rule)."""
+    b, ic = ctx.b, ctx.ic
+    op = {"SHL": "shl", "SAR": "sar", "ROL": "rol", "ROR": "ror"}[ic]
+    dk, dst, bits = _operand(b, ctx.ops[0], ctx.nxt)
+    a = _val(b, dk, dst)
+    ck, cx = _count(ctx, bits)
+    cnt = _val(b, ck, cx)
+    r = b.t()
+    b.emit("alu", r, op, a, cnt, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", op, a, cnt, r, bits)
+
+
+def imul(ctx: Ctx) -> None:
+    """SDM IMUL: one operand (AX, DX:AX, EDX:EAX or RDX:RAX = accumulator * r/m), two (r = r * r/m)
+    or three (r = r/m * imm); CF and OF on a truncated signed product."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    if len(ops) == 1:
+        sk, src, bits = _operand(b, ops[0], nxt)
+        a, c = b.t(), _val(b, sk, src)
+        b.emit("ld", a, ("r", RAX, bits, False))
+        lo, hi = b.t(), b.t()
+        b.emit("alu", lo, "smul_lo", a, c, bits)
+        b.emit("alu", hi, "smul_hi", a, c, bits)
+        if bits == 8:                                      # AX = AL * r/m8
+            b.emit("st", ("r", RAX, 8, False), lo)
+            b.emit("st", ("r", RAX, 8, True), hi)
+        else:
+            b.emit("st", ("r", RAX, bits, False), lo)
+            b.emit("st", ("r", RDX, bits, False), hi)
+        b.emit("flags", "imul", a, c, lo, bits)
+        return
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    if len(ops) == 2:
+        sk, src, _ = _operand(b, ops[1], nxt, bits)
+        a, c = _val(b, dk, dst), _val(b, sk, src)
+    else:
+        sk, src, _ = _operand(b, ops[1], nxt, bits)
+        ik, imm, _ = _operand(b, ops[2], nxt, bits)
+        a, c = _val(b, sk, src), _val(b, ik, imm)
+    r = b.t()
+    b.emit("alu", r, "smul_lo", a, c, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", "imul", a, c, r, bits)
+
+
+def cmov(ctx: Ctx) -> None:
+    """SDM CMOVcc: the source is read whether or not the condition holds."""
+    b = ctx.b
+    _, dst, bits = _operand(b, ctx.ops[0], ctx.nxt)
+    sk, src, _ = _operand(b, ctx.ops[1], ctx.nxt, bits)
+    b.emit("cmov", CC[ctx.ic[4:]], dst, _val(b, sk, src))
+
+
+def xadd(ctx: Ctx) -> None:
+    """SDM XADD: TEMP = SRC + DEST; SRC = DEST; DEST = TEMP. A memory destination is stored first
+    (commit rule); with two registers the destination is written last, as the SDM orders it."""
+    b = ctx.b
+    dk, dst, bits = _operand(b, ctx.ops[0], ctx.nxt)
+    sk, src, _ = _operand(b, ctx.ops[1], ctx.nxt)
+    a, c, r = _val(b, dk, dst), _val(b, sk, src), b.t()
+    b.emit("alu", r, "add", a, c, bits)
+    if cast(tuple[Any, ...], dst)[0] == "m":
+        b.emit("st", dst, r)
+        b.emit("st", src, a)
+    else:
+        b.emit("st", src, a)
+        b.emit("st", dst, r)
+    b.emit("flags", "add", a, c, r, bits)
+
+
+def cmpxchg(ctx: Ctx) -> None:
+    """SDM CMPXCHG: compare the accumulator with DEST; equal: DEST = SRC; else the accumulator =
+    DEST. DEST is always written ("never produces a locked read without also producing a locked
+    write"); flags as CMP accumulator, DEST."""
+    b = ctx.b
+    dk, dst, bits = _operand(b, ctx.ops[0], ctx.nxt)
+    sk, src, _ = _operand(b, ctx.ops[1], ctx.nxt)
+    acc = ("r", RAX, bits, False)
+    a, d, s = b.t(), _val(b, dk, dst), _val(b, sk, src)
+    b.emit("ld", a, acc)
+    eq, one, ne, new, r = b.t(), b.t(), b.t(), b.t(), b.t()
+    b.emit("alu", eq, "eq", a, d, bits)
+    b.emit("imm", one, 1)
+    b.emit("alu", ne, "xor", eq, one, 64)
+    b.emit("sel", new, eq, s, d)
+    b.emit("alu", r, "sub", a, d, bits)
+    b.emit("st", dst, new)
+    b.emit("cst", ne, acc, d)
+    b.emit("flags", "sub", a, d, r, bits)
+
+
+def locked(base: Callable[[Ctx], None]) -> Callable[[Ctx], None]:
+    """A LOCK-prefixed form (iclass X_LOCK): the base rule's operations under the base iclass. One
+    thread sees the same result; the VM lowers the locked forms atomically (rules/<x>_lock.py)."""
+    def rule(ctx: Ctx) -> None:
+        ctx.ic = ctx.ic.removesuffix("_LOCK")
+        base(ctx)
+    return rule

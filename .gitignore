@@ -28,3 +28,4 @@ __pycache__/
 # Third-party source trees (pinned commits recorded in WORKING_AGREEMENT.md)
 /third_party/
 probes/semantics/cases.bin
+probes/semantics_041/cases.bin

@@ -119,12 +119,36 @@ class Runtime:
         if kind == "mul":                                         # SDM MUL: SF ZF AF PF undefined
             f.update(C=res != 0, O=res != 0, Z=None, S=None, P=None, A=None)
             return
+        cnt = b & (0x3F if bits == 64 else 0x1F)                  # shift and rotate counts are masked
+        if kind in ("shr", "shl", "sar", "rol", "ror") and cnt == 0:
+            return                                                # SDM: a zero count affects no flag
         if kind == "shr":
-            cnt = b & (0x3F if bits == 64 else 0x1F)
-            if cnt == 0:
-                return                                            # flags unaffected
-            f.update(C=bool((a >> (cnt - 1)) & 1), Z=res == 0, S=bool(res & sign), P=_parity(res),
-                     O=bool(a & sign) if cnt == 1 else None, A=None)       # SDM SHR: AF undefined
+            # SDM SHR: CF undefined when the count >= the operand size (Sprint 041; the model had
+            # defined it); OF only for a 1-bit shift; AF undefined
+            f.update(C=bool((a >> (cnt - 1)) & 1) if cnt < bits else None, Z=res == 0, S=bool(res & sign),
+                     P=_parity(res), O=bool(a & sign) if cnt == 1 else None, A=None)
+            return
+        if kind == "shl":                                         # SDM SAL/SHL
+            c = bool((a >> (bits - cnt)) & 1) if cnt < bits else None
+            f.update(C=c, Z=res == 0, S=bool(res & sign), P=_parity(res), A=None,
+                     O=(bool(res & sign) != c) if cnt == 1 and c is not None else None)
+            return
+        if kind == "sar":                                         # SDM SAR: CF defined for every count
+            sa = (a & m) - (1 << bits) if a & sign else a & m
+            f.update(C=bool((sa >> (cnt - 1)) & 1), Z=res == 0, S=bool(res & sign), P=_parity(res),
+                     O=False if cnt == 1 else None, A=None)
+            return
+        if kind == "rol":                                         # SDM ROL: only CF and OF
+            f.update(C=bool(res & 1), O=(bool(res & sign) != bool(res & 1)) if cnt == 1 else None)
+            return
+        if kind == "ror":                                         # SDM ROR: only CF and OF
+            f.update(C=bool(res & sign), O=(bool(res & sign) != bool(res & (sign >> 1))) if cnt == 1 else None)
+            return
+        if kind == "imul":                                        # SDM IMUL: CF=OF on truncation; SF ZF AF PF undefined
+            sx = (a & m) - (1 << bits) if a & sign else a & m
+            sy = (b & m) - (1 << bits) if b & sign else b & m
+            sr = res - (1 << bits) if res & sign else res
+            f.update(C=sx * sy != sr, O=sx * sy != sr, Z=None, S=None, P=None, A=None)
             return
         f.update(Z=res == 0, S=bool(res & sign), P=_parity(res))
         if kind == "logic":
@@ -290,6 +314,22 @@ class Runtime:
                     v = (x * y) >> 64
                 elif o == "sext32":
                     v = x - (1 << 32) if x & 0x80000000 else x
+                elif o in ("shl", "sar", "rol", "ror"):
+                    c = y & (0x3F if bits == 64 else 0x1F)
+                    xm = x & m
+                    if o == "shl":
+                        v = xm << c
+                    elif o == "sar":
+                        v = ((xm - (1 << bits)) if xm >> (bits - 1) else xm) >> c
+                    else:
+                        k = c % bits
+                        v = ((xm << k) | (xm >> (bits - k))) if o == "rol" else ((xm >> k) | (xm << (bits - k)))
+                elif o in ("smul_lo", "smul_hi"):
+                    sx = (x & m) - (1 << bits) if x >> (bits - 1) & 1 else x & m
+                    sy = (y & m) - (1 << bits) if y >> (bits - 1) & 1 else y & m
+                    v = sx * sy if o == "smul_lo" else (sx * sy) >> bits
+                elif o == "eq":
+                    v = int((x & m) == (y & m))
                 else:
                     raise LiftError(f"alu {o}")
                 t[d] = v & m
@@ -300,6 +340,16 @@ class Runtime:
                 self._store(op[2], int(self._cond(op[1])))
             elif k == "df":
                 self.th.df = bool(op[1])
+            elif k == "sel":                                      # ("sel", t, cond_t, x, y): cond ? x : y
+                t[op[1]] = t[op[3]] if t[op[2]] else t[op[4]]
+            elif k == "cst":                                      # ("cst", cond_t, loc, t): store when cond
+                if t[op[1]]:
+                    self._store(op[2], t[op[3]])
+            elif k == "cmov":                                     # ("cmov", cc, loc, t): SDM CMOVcc
+                if self._cond(op[1]):
+                    self._store(op[2], t[op[3]])
+                elif op[2][0] == "r" and op[2][2] == 32:
+                    self.th.regs[op[2][1]] &= 0xFFFF_FFFF         # 64-bit mode: a 32-bit CMOV zero-extends
             elif k == "cpuid":                                # 32-bit results zero-extend (SDM CPUID)
                 eax, ecx = self.th.regs[0] & 0xFFFF_FFFF, self.th.regs[1] & 0xFFFF_FFFF
                 self.cpuid_reads.append((eax, ecx))

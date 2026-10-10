@@ -59,7 +59,10 @@ jobs:
           $cfg = "probes/${{ inputs.probe }}/probe.json"
           $flags = @("-O1", "-Wall", "-Werror"); $libs = @("-ladvapi32", "-lbcrypt")
           if (Test-Path $cfg) { $c = Get-Content $cfg -Raw | ConvertFrom-Json; $flags = $c.cflags -split " "; $libs = $c.libs -split " " }
-          clang @flags -o probe.exe "probes/${{ inputs.probe }}/${{ inputs.probe }}.c" @libs
+          # probe.json `source` (Sprint 041): build another probe's harness against this probe's inputs
+          $src = "probes/${{ inputs.probe }}/${{ inputs.probe }}.c"
+          if ((Test-Path $cfg) -and $c.source) { $src = $c.source }
+          clang @flags -o probe.exe $src @libs
       - name: run
         shell: pwsh
         run: |
