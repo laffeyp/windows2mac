@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Review 2026-10-10 D2: every record names the code that wrote it. w2m records are written through
 w2m.record.run_with_provenance, which puts w2m's commit and the substrate clone's into the run's
 baseline (RunStarted)."""

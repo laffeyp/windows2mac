@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """rows_from_sdm.py — propose x86 decode spec rows from the Intel SDM instruction pages (Sprint 036).
 
 Source: the SDM Vol 2 instruction pages as transcribed at felixcloutier.com/x86 (one page per

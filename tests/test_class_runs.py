@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 041 grading surface: a class is accepted by its own item run.
 
 Every iclass with a rule is either judged by an item run on Sprint 039's cases or named as judged

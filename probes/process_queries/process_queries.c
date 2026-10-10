@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* process_queries.c — the C runtime's first questions to Windows (Sprint 044, family "process queries").
  *
  * No C runtime: entry `start`, kernel32 imports only. The launcher's start-up stops first at

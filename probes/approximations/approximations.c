@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* approximations.c — RCPPS and RSQRTPS bit for bit (Sprint 046, family "approximations").
  *
  * No C runtime. UnityPlayer.dll's DllMain stops at RSQRTPS (frontier 2026-10-10, 292,735 instructions).

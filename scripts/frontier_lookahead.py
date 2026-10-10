@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """frontier_lookahead.py — list the imports a program calls past its frontier (Sprint 047).
 
 The frontier (scripts/run_frontier.py) stops at the first import w2m lacks. This run instead has

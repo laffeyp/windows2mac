@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """rebuild_decode_spec.py — rebuild specs/x86_decode.json 0.7.0 from 0.6.3 (Sprint 036).
 
 Steps, each recorded in the spec's revision note:

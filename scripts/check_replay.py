@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """check_replay.py — every committed substrate record replays (review 2026-10-09 progress S5).
 
 Runs substrate's assert_replayable at level 2 (event hashes re-derived) over each record under

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* environment.c — the environment block (Sprint 044, family "environment").
  *
  * GetEnvironmentStringsW, FreeEnvironmentStringsW and lstrlenW, as

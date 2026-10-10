@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 034: specs/guest_state.json against the runner's probes/guest_state output (run
 37989842529), with planted faults so a clean result is a result, and the state block's own shape."""
 

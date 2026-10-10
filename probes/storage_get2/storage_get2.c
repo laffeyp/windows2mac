@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* storage_get2.c — FlsGetValue2 and TlsGetValue2 (Sprint 046, family "storage get2").
  *
  * No C runtime. The static C runtime of the runners' MSVC toolset looks up FlsGetValue2 with

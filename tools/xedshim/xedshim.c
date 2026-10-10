@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* xedshim.c — batch front end to Intel XED (third_party/xed, v2026.08.23) for the decoder
  * differential. Reads one hex byte string per line on stdin (up to 15 bytes); writes one
  * tab-separated line per input:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """cpuid.py — the guest CPUID profile (specs/guest_cpuid.json; Sprint 040, review 2026-10-09 N5).
 
 One table serves both executors: `lookup` for the model runtime, `c_header` for the guest runtime

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """rules — one module per x86 instruction class (Sprint 041; docs/plan.md Phase 4).
 
 Each module names the iclasses it lifts (`ICLASSES`), gives the lifting rule (`rule(ctx)`, which

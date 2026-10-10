@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """PUNPCKLQDQ (Intel SDM Vol 2, PUNPCKLQDQ; Sprint 046)."""
 
 from w2m.rules import _sse

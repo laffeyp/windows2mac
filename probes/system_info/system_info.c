@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* system_info.c — what Windows says about the machine (Sprint 046, family "system information").
  *
  * No C runtime. UnityPlayer.dll's start-up stops at GetNativeSystemInfo (frontier 2026-10-10, 156,277

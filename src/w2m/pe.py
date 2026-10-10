@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """pe.py — PE32+ (x86-64) image reader (v0.2 section 4.1: the frontend starts from the PE).
 
 Reads headers, sections, imports, base relocations, exports, and TLS callbacks from the bytes

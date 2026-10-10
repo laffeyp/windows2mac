@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Shared SSE rule and AArch64 lowering (moved unchanged from lift.py and vm_backend.py in Sprint
 041). XMM i is V i; V30 and V31 are scratch; FPCR follows MXCSR (vm_backend.fpcr_for). An
 instruction that can raise an SIMD exception leaves the fast path when MXCSR unmasks any."""

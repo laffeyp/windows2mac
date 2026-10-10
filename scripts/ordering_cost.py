@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """ordering_cost.py — execution time of x86-TSO ordering lowerings on one synthetic kernel, native process and managed VM (Sprint 011).
 
 Builds and signs probes/ordering_cost/ordering_cost.c, checks the native TSO lowering with an MP

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """A guest service that refuses an argument form stops the run as SERVICE_UNIMPLEMENTED says: the
 service with its form, and the call's return address in the guest (Sprint 044; before, the frontier
 reported such a stop as a fault)."""

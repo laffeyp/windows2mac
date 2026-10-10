@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """NEG_LOCK: NEG with the LOCK prefix (Intel SDM Vol 2, NEG; Vol 3A 9.1.2.2 locked
 atomic operations): the base rule's operations; atomic in the VM's lowering."""
 

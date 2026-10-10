@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* heap.c — the process heap (Sprint 044, family "heap").
  *
  * GetProcessHeap, HeapAlloc, HeapFree, HeapSize, HeapReAlloc on the process heap, as

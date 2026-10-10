@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """string_compare.py — the SSE4.2 packed string compares, PCMPISTRI and its three siblings (Sprint 047).
 
 Intel SDM Vol. 2B, PCMPISTRI, and Vol. 2A §4.1 ("Imm8 Control Byte Operation for PCMPESTRI / PCMPESTRM /

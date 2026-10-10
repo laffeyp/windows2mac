@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* exception_filter.c — SetUnhandledExceptionFilter's answers (Sprint 044, family "exception filter").
  *
  * No C runtime. The launcher's C runtime sets its unhandled-exception filter after its environment

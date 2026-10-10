@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* hv_capability.c — destination capability probe for the managed-VM backend (Sprint 008).
  *
  * Usage: hv_capability 4k|16k

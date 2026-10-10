@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """approximate.py — RCPPS, RCPSS, RSQRTPS and RSQRTSS as the reference CPU computes them (Sprint 046).
 
 The SDM bounds these results' relative error by 1.5 * 2^-12 and leaves the bits to the CPU; AMD's EPYC

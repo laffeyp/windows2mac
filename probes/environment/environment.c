@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* environment.c — the environment block a process sees (Sprint 044, family "environment").
  *
  * No C runtime; built as a GUI program, as the launcher is. The launcher's C runtime asks for its

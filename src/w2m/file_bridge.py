@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """file_bridge.py — the host side of the guest runtime's file system (Sprint 042).
 
 The guest runtime (`tools/guest_runtime/file.c`) implements the Windows file calls: dispositions,

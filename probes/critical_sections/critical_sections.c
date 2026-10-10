@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* critical_sections.c — CRITICAL_SECTION as Windows leaves it (Sprint 044, family "critical sections").
  *
  * No C runtime. The launcher's start-up reaches InitializeCriticalSectionEx through GetProcAddress

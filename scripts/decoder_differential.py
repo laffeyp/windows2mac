@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """decoder_differential.py — decoder differential over every PE in a directory (Sprints 016-017;
 --record, a causal differential run with one unit per PE file, Sprint 043).
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* console.c — standard handles and the console in a GUI process started without handles (Sprint 044,
  * family "console").
  *

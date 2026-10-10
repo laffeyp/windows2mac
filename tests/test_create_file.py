@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 042 grading surface: CreateFileW and its companions, judged by Windows's own rows.
 
 The contract is the runners' output (probes/create_file on Server 2025 and Server 2022, equal byte

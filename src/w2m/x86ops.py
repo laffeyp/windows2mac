@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """x86ops.py — explicit operands of a decoded instruction, resolved from the row's operand
 template (SDM Vol 2D Appendix A notation) against the fields x86dec.decode returns (Sprint 022).
 

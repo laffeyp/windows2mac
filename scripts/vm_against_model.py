@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """vm_against_model.py — a case set run in the VM and judged against the model, with no runner (Sprint 047).
 
 scripts/vm_oracle.py judges the VM against a Windows result file. This script makes the result file from

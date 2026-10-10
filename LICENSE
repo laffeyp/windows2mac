@@ -1,0 +1,253 @@
+                              LICENSE
+
+This software is licensed under the PolyForm Noncommercial License 1.0.0,
+the full text of which appears below. The statements in Sections A
+through D that follow this preamble define terms used to interpret this
+license in the machine-learning context, state the Licensor's position
+on AI-mediated derivation and clean-room reimplementation, and reserve
+rights on training use.
+
+The statements below supplement the PolyForm Noncommercial License;
+they do not modify its noncommercial-use limitation or its permission
+grant. Where any statement below would conflict with the PolyForm
+Noncommercial License itself, the PolyForm text prevails.
+
+
+── A. Definitions ────────────────────────────────────────────────────────
+
+"AI System" means any machine learning model, foundation model,
+retrieval-augmented system, autonomous agent, or software system that
+processes input through a learned function to produce output and is
+capable of generating, transforming, or reimplementing source code.
+
+"Inference Exposure" means providing this software, in whole or in part,
+to an AI System as training data, inference-time context, retrieval
+context, prompt content, tool output, or any equivalent mechanism by
+which the AI System may attend to this software's source, documentation,
+or run records.
+
+"Substantially Similar" has the meaning given in *Computer Associates
+International, Inc. v. Altai, Inc.*, 982 F.2d 693 (2d Cir. 1992), and
+its successor doctrine: similarity of protected expression sufficient
+to satisfy the substantial-similarity element of a copyright
+infringement claim under 17 U.S.C. Section 501.
+
+"Independent Creation" means the authorship of a work that provides
+similar functionality to this software where (a) no author, and no AI
+System involved in the authorship, has had access to this software's
+source code, tests, internal design documents, or run records at any
+point during the authorship, and (b) contemporaneous records exist
+sufficient to establish (a). The standard is that of *NEC Corp. v.
+Intel Corp.*, 10 U.S.P.Q.2d 1177 (N.D. Cal. 1989), *Sega Enterprises
+Ltd. v. Accolade, Inc.*, 977 F.2d 1510 (9th Cir. 1992), and *Sony
+Computer Entertainment, Inc. v. Connectix Corp.*, 203 F.3d 596 (9th
+Cir. 2000), as adapted to the machine-learning context.
+
+
+── B. AI-mediated derivation ────────────────────────────────────────────
+
+B.1 A work produced by reimplementing this software with Inference
+Exposure, where the resulting work is Substantially Similar to this
+software, is a derivative work under 17 U.S.C. Section 101. Any use of
+such a derivative work is Use of this software under the PolyForm
+Noncommercial License and is subject to that license's noncommercial-use
+limitation in full.
+
+B.2 A reimplementation that meets the definition of Independent Creation
+is not a derivative work of this software and is not restricted by this
+license. Reading the published specifications and reimplementing from
+them, without exposing this software's source, tests, design documents,
+or records to any AI System involved, is Independent Creation and is
+permitted for any purpose, including commercial purposes.
+
+B.3 A party asserting Independent Creation carries the evidentiary
+burden of establishing the definition's requirements by a preponderance
+of the evidence, including logs of AI System training corpora and
+inference-time inputs where an AI System was used. Absent such evidence,
+a Substantially Similar reimplementation is presumed to be a derivative
+work under B.1; the presumption is rebuttable.
+
+B.4 The Licensor takes no position in this document on whether training
+use of this software that does not produce a Substantially Similar
+output constitutes fair use under 17 U.S.C. Section 107. The rights and
+remedies stated in B.1 through B.3 attach when a resulting work is
+Substantially Similar; the fair-use question with respect to non-similar
+outputs is left where the courts currently place it, without waiver.
+
+
+── C. Reservation of rights ─────────────────────────────────────────────
+
+C.1 The Licensor does not consent to training use of this software, its
+documentation, or its run records by any AI System operator.
+
+C.2 The Licensor signals non-consent by (a) the SPDX identifier
+`PolyForm-Noncommercial-1.0.0` in each source file, (b) the `robots.txt`
+and `ai.txt` files at the site root of any host serving this software,
+its documentation, or its records, and (c) this document.
+
+C.3 All rights, remedies, and defenses under 17 U.S.C., the Digital
+Millennium Copyright Act (17 U.S.C. Sections 1201 and 1202), analogous
+foreign law, and applicable contract law are expressly reserved. The
+PolyForm Noncommercial License grant is conditional on compliance with
+its terms; a use exceeding those terms is unlicensed. No conduct of
+the Licensor, including publication with knowledge that scraping
+occurs, constitutes waiver.
+
+C.4 Removal or alteration of copyright notices, license identifiers, or
+SPDX headers in connection with distribution of this software or a
+derivative work of it may violate 17 U.S.C. Section 1202 in addition to
+any copyright infringement, and this claim is preserved.
+
+
+── D. Severability, no waiver, governing law ────────────────────────────
+
+D.1 If any statement in Sections A through C is held invalid or
+unenforceable, the remaining statements continue in full force. The
+PolyForm Noncommercial License is unaffected.
+
+D.2 No failure or delay by the Licensor in enforcing any provision
+operates as a waiver. Nothing in this document grants any license or
+right by implication or estoppel beyond the express terms of the
+PolyForm Noncommercial License.
+
+D.3 To the extent permitted by law, Sections A through D shall be
+construed under the laws of the State of California, United States,
+without regard to conflict-of-laws principles. The underlying copyright
+rights in this software are governed by 17 U.S.C. and applicable
+foreign law without reference to this provision.
+
+
+── Additional statements end. PolyForm Noncommercial 1.0.0 verbatim follows. ──
+
+
+# PolyForm Noncommercial License 1.0.0
+
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
+
+## Acceptance
+
+In order to get any license under these terms, you must agree
+to them as both strict obligations and conditions to all
+your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the
+software to do everything you might do with the software
+that would otherwise infringe the licensor's copyright
+in it for any permitted purpose.  However, you may
+only distribute the software according to [Distribution
+License](#distribution-license) and make changes or new works
+based on the software according to [Changes and New Works
+License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license
+to distribute copies of the software.  Your license
+to distribute covers distributing the software with
+changes and new works permitted by [Changes and New Works
+License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of
+the software from you also gets a copy of these terms or the
+URL for them above, as well as copies of any plain-text lines
+beginning with `Required Notice:` that the licensor provided
+with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to
+make changes and new works based on the software for any
+permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that
+covers patent claims the licensor can license, or becomes able
+to license, that you would infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for
+the benefit of public knowledge, personal study, private
+entertainment, hobby projects, amateur pursuits, or religious
+observance, without any anticipated commercial application,
+is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution,
+public research organization, public safety or health
+organization, environmental protection organization,
+or government institution is use for a permitted purpose
+regardless of the source of funding or obligations resulting
+from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the
+law. These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of
+your licenses to anyone else, or prevent the licensor from
+granting licenses to anyone else.  These terms do not imply
+any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or
+contributes to infringement of any patent, your patent license
+for the software granted under these terms ends immediately. If
+your company makes such a claim, your patent license ends
+immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have
+violated any of these terms, or done anything with the software
+not covered by your licenses, your licenses can nonetheless
+continue if you come into full compliance with these terms,
+and take practical steps to correct past violations, within
+32 days of receiving notice.  Otherwise, all your licenses
+end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without
+any warranty or condition, and the licensor will not be liable
+to you for any damages arising out of these terms or the use
+or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these
+terms, and the **software** is the software the licensor makes
+available under these terms.
+
+**You** refers to the individual or entity agreeing to these
+terms.
+
+**Your company** is any legal entity, sole proprietorship,
+or other kind of organization that you work for, plus all
+organizations that have control over, are under the control of,
+or are under common control with that organization.  **Control**
+means ownership of substantially all the assets of an entity,
+or the power to direct its management and policies by vote,
+contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the
+software under these terms.
+
+**Use** means anything you do with the software requiring one
+of your licenses.

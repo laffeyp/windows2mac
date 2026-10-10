@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 027: property-based fuzzing of the two parsers that read shipped game bytes
 (review 2026-10-08 §5: parsers of untrusted input). Hypothesis 6.168.5."""
 

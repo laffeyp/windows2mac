@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """x86fp.py — SSE floating-point semantics on bit patterns, under MXCSR (Sprint 039).
 
 The reference the model runs for scalar and packed single- and double-precision instructions.

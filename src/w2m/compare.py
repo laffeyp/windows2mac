@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """compare.py — the comparator operator (v0.2 section 3 relations).
 
 Implements `allowed_outcome_set`: the contract names an outcome rule over roles, the allowed

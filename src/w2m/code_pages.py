@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """code_pages.py — the ANSI code page's tables for the guest runtime, from runner rows (Sprint 044).
 
 tools/guest_runtime/code_pages.c answers GetStringTypeW, LCMapStringW and the 1252 conversions from

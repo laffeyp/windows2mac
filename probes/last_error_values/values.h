@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* values.h — written by scripts/gen_last_error_values.py (seed 20261009); do not edit.
  * VALUE[i] is a SetLastError argument; ARGS_SHA256[i] is sha256 of
  * "SetLastError(<VALUE[i] in decimal>)". Two arrays, so indexing needs no multiply. */

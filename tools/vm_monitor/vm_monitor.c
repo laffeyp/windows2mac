@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* vm_monitor.c — VM monitor for the w2m managed-VM back end (Sprint 030).
  *
  * Holds no policy: src/w2m/vm_backend.py builds the page tables, compiles the code, and services every

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* context.c — thread state at faults and suspensions, without the C runtime (Sprint 040).
  *
  * The checks of probes/guest_state (Sprint 034) that concern CONTEXT, rebuilt to run both on the

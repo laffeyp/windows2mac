@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """class_run.py — one instruction class judged on its own record (Sprint 041; docs/plan.md Phase 4).
 
 An item run is one substrate run whose events cause one another:
@@ -236,12 +238,18 @@ def main(argv: list[str]) -> int:
     else:
         with ProcessPoolExecutor(a.pool) as pool:
             summaries = list(pool.map(item_run, targets, [a.runs] * len(targets)))
-    accepted = [s for s in summaries if all(v == "conforms" for v in s["verdicts"].values())]
+    # accepted means the record says so: both judges' verdicts conform and CANDIDATE_ACCEPTED was written (a judge
+    # whose producer failed leaves one verdict and no acceptance; the 2026-10-10 rerun counted ADD_LOCK so)
+    accepted = [s for s in summaries if s["verdicts"] == {"model": "conforms", "managed_vm": "conforms"}
+                and s["events"].get("CANDIDATE_ACCEPTED") == 1]
     for s in summaries:
-        mark = "accepted" if s in accepted else "discrepancy"
-        print(f"{s['iclass']:12} {mark:11} {s['cases']:5} cases  {s['verdicts']}  {s['record']}")
+        mark = "accepted" if s in accepted else "not accepted"
+        print(f"{s['iclass']:12} {mark:12} {s['cases']:5} cases  {s['verdicts']}  {s['record']}")
     print(f"{len(accepted)} of {len(summaries)} classes accepted; {time.monotonic() - t0:.0f} s")
-    (a.runs / "class-runs.json").write_text(json.dumps(summaries, indent=1) + "\n")
+    index_path = a.runs / "class-runs.json"            # merged by class: a run of some classes keeps the others
+    index = {s["iclass"]: s for s in json.loads(index_path.read_text())} if index_path.exists() else {}
+    index.update({s["iclass"]: s for s in summaries})
+    index_path.write_text(json.dumps([index[k] for k in sorted(index)], indent=1) + "\n")
     return 0 if len(accepted) == len(summaries) else 1
 
 

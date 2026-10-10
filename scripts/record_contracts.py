@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """record_contracts.py — the contract registry on the signal plane (Sprint 038; review 2026-10-09
 progress K1).
 

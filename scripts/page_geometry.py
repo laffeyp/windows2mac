@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """page_geometry.py — 4 KB guest page protection on this Mac: correctness and execution time of each enforcement variant (Sprint 012).
 
 Builds and signs probes/page_geometry/page_geometry.c; runs the native and VM correctness checks

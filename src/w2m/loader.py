@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """loader.py — map PE32+ images into guest memory and bind their imports (Sprints 029, 046).
 
 The program's image is mapped at its preferred base (ImageBase); headers and each section's raw data

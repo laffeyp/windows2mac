@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* guest_state.c — Windows-visible thread and process state, measured on Windows (Sprint 034).
  *
  * Prints one JSON object per line:

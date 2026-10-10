@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* console.c — standard handles, the console and the command line (Sprint 044, family "console").
  *
  * GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, GetConsoleCP, WriteConsoleW,

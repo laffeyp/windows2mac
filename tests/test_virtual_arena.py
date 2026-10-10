@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """The VirtualAlloc arena's size (Sprint 047): UnityPlayer.dll reserves 0x1FFFF000 bytes at a time, and its
 ninth such reservation filled the 4 GB arena of Sprint 046 (scripts/frontier_lookahead.py, 462,293
 instructions). Windows gives a 64-bit process 128 TB; w2m's arena is 512 GB of sparse address space."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 013 grading surface: the PE reader on real binaries built by the windows-2025 runner,
 checked against llvm-objdump (an independent reader), plus malformed inputs."""
 

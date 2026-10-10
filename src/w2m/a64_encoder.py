@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """a64.py — the AArch64 instructions the managed-VM back end emits (Sprint 030).
 
 Each function returns one 32-bit instruction word. Encodings follow the Arm ARM (DDI 0487),

@@ -305,3 +305,11 @@
 **Finding (#33):** a rule that is checked only at the close is checked too late, and a blocked check hides the failures behind it. A test that reads an input CI cannot have is a local test whatever its marker says; the inputs belong in the repository (here, the probe binaries already in `store/binaries`).
 
 **Kit change suggested:** read the CI conclusion of each push before the next push, and before reporting a blocked run as the only obstacle, read the last run that did start.
+
+### 2026-10-10 — a summary that counted what was not there
+
+**What happened:** A full rerun of the class runs printed "231 of 231 classes accepted". ADD_LOCK's record held one COMPARISON_COMPLETED (the model's), a ProducerFailed from the VM judge (`vm_monitor: vset -> []`, the monitor process gone), and no CANDIDATE_ACCEPTED. The summary counted a class accepted when every verdict present conformed, so a missing verdict passed; the index test caught it. A rerun of that one class then rewrote the whole index with one entry. The monitor's death recurred in none of 1,155 further runs.
+
+**Finding (#34):** a summary must read the decision from the record, not infer it from what is present; absence is a result. A tool that writes a shared index from a partial run must merge, not replace.
+
+**Kit change suggested:** every tool that prints an acceptance count derives it from the record's decision event, and its test plants a judge failure.

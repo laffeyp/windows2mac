@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """record_probes.py — PROBE_AUTHORED for every probe binary in the content store (Sprint 038).
 
 A probe program enters the store when its binary is kept: store/binaries/<sha256>.exe (built on the

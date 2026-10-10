@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 # Game runner (Sprint 033). Unpacks a game from its private release, checks every file against
 # games/<game>/files.json, starts it through tools/jit_capture (Mono JIT-done hook) in Unity batch
 # mode, and uploads the capture and the Unity log for the decoder differential on the Mac.

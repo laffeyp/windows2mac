@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """guest_runtime.py — build the w2m guest runtime image and read it for loading (Sprint 035).
 
 The runtime is freestanding C (`tools/guest_runtime/`) compiled to AArch64 with Xcode's clang and

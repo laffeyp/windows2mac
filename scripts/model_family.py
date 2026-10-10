@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """model_family.py — a cloud model writes a family's guest C file in substrate's session topology
 (Sprint 044, review 2026-10-10 D7).
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """record.py — write one substrate run for a computation that is a single step (Sprint 038; review
 2026-10-09 progress S4).
 

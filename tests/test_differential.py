@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 043 grading surface: a differential's record is causal, and a discrepancy one run reports
 is resolved on the record of the run that fixed it.
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """candidate.py — admit, prompt for, and install a generated last-error implementation (Sprint 031;
 C since Sprint 035).
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* critical_section.c — CRITICAL_SECTION on one thread (Sprint 044, family "critical sections").
  *
  * InitializeCriticalSectionEx, InitializeCriticalSectionAndSpinCount, InitializeCriticalSection,

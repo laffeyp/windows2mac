@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """trace.py — guest-trace ingest (vocabulary operator `trace_ingester`).
 
 A guest trace is a JSONL file in the content store at `<store>/traces/<hex>.jsonl`. Only a trace

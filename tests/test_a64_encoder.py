@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 030: every encoder form in src/w2m/a64_encoder.py equals clang's assembly of the same text
 (the Arm ARM transcription checked by an independent assembler)."""
 

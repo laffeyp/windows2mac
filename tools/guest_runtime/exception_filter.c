@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* exception_filter.c — the process's unhandled-exception filter (Sprint 044, family "exception filter").
  *
  * SetUnhandledExceptionFilter, as contracts/windows.exception_filter.set/0.1.0.json records Windows

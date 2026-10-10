@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """encgen.py — generated x86-64 encodings for the decoder differential (Sprint 020).
 
 Corpus binaries exercise the regular part of the encoding space compilers emit; decoder bugs

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* skeleton.c — walking-skeleton probe (Sprint 029). No C runtime: entry point `start`, six
  * kernel32 imports. The probe writes its own guest-trace body (GUEST_THREAD_STARTED, two
  * GUEST_CALL_RETURNED, GUEST_THREAD_EXITED) to standard output with WriteFile; the harness wraps

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 029 grading surface: the walking skeleton. The runner-built skeleton.exe (committed in
 store/binaries) runs through loader -> x86dec -> lift -> runtime, and its trace is judged against
 windows.thread.last_error.set_get@0.1.0. Planted faults must turn the verdict, or stop the run."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """The committed family index accepts every family on its current guest file (Sprint 044), as the class
 index does for every rule: an edit to a family's file after its item run leaves the acceptance stale
 (heap.c was, after the environment family added w2m_heap_take)."""

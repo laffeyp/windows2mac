@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* code_pages.c — code pages and character data as Windows answers (Sprint 044, family "code pages").
  *
  * No C runtime. The launcher's start-up reaches GetACP after its standard handles (frontier

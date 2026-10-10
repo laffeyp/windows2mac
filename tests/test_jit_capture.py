@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 033: the capture parser (both formats, duplicates, a torn tail, CPU features), the decoder's
 row identity and LOCK CMPXCHG16B, and the lifter's refusal of forms without an operand template."""
 

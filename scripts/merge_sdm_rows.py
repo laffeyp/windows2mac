@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """merge_sdm_rows.py — add rows proposed by rows_from_sdm.py to specs/x86_decode.json (Sprint 036).
 
 A proposed row is skipped when the spec already has a row with the same decoding key (map, opcode,

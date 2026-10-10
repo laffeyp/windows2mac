@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* sync_objects.c — semaphores, events and mutexes on one thread (Sprint 046, family "sync objects").
  *
  * No C runtime; one thread. UnityPlayer.dll's DllMain creates a semaphore (CreateSemaphoreExW; frontier

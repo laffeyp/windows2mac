@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* runtime.c — kernel32 services run inside the managed VM (Sprint 035).
  *
  * Each k32_* function is entered from an AArch64 bridge stub that src/w2m/vm_backend.py generates

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """x86dec.py — w2m's own x86-64 decoder (length, mnemonic, XED-style iclass), driven by tables
 generated from specs/x86_decode.json (Intel SDM opcode maps). Compared against Intel XED (the
 primary reference) and Capstone at every position; every disagreement is reported.

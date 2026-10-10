@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """LEA (Intel SDM Vol 2, LEA)."""
 
 from w2m.rules import _int

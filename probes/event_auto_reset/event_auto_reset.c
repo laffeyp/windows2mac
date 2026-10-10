@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* event_auto_reset.c — probe for windows.event.auto_reset.single_signal@0.1.0 (Sprint 007).
  *
  * main creates an auto-reset event (non-signaled), starts waiters a and b, each calling

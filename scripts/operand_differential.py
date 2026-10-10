@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """operand_differential.py — w2m operands vs Intel XED operands over a corpus (Sprint 022).
 
 Positions come from the Capstone recursive traversal, as in decoder_differential.py. At each

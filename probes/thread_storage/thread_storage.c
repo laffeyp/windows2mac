@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* thread_storage.c — TLS and FLS as Windows answers on one thread (Sprint 044, family "thread storage").
  *
  * No C runtime. The launcher's start-up reaches FlsAlloc through an API set (frontier 2026-10-10,

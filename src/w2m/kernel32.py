@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """kernel32.py — kernel32 serviced in the host (Sprint 029; shared by the `model` runtime and the
 managed-VM back end since Sprint 030).
 

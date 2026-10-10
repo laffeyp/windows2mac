@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """probe_capabilities.py — destination capability probes on this Mac (Sprint 008).
 
 Builds probes/mac_hv_capability/hv_capability.c, ad-hoc signs it with the
