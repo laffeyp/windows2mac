@@ -213,3 +213,11 @@
 
 **Kit change suggested:** the signal-contract checklist asks "for each tag emitted, quote its note"; a sprint that adds an emitter cannot close without it.
 
+### 2026-10-09 — A planted fault the judge could not see
+
+**What happened:** Sprint 039's card planted "AF computed as undefined after ADD" as a fault the CPU oracle must catch. The judge compares only flags the model defines, so a model that wrongly calls a flag undefined passes every comparison. The plant was replaced with AF from the wrong bit, which the oracle caught. In the same sprint, the model's guesses about unmasked SIMD exceptions were marked "oracle" in the code; the CPU refuted one of them (UE suppressing PE) within the hour.
+
+**Finding (#21):** a planted fault proves the check only if it lies inside what the check compares. Before choosing a plant, list what the judge skips (undefined flags, uncompared windows, unplaceable addresses); a fault there is a blind spot to record, not a test.
+
+**Kit change suggested:** the observation contract's planted-fault line asks "which field differs when this fault is present, and does the judge compare that field?"
+

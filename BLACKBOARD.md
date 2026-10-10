@@ -147,6 +147,7 @@
 - **2026-10-09** — Sprint 036 (the decoder for Hail to the Rainbow) closed. `specs/x86_decode.json` 0.7.0 (1,061 rows), `src/w2m/x86dec.py` (strict mandatory prefix, per-opcode legacy prefixes, row-level NP/NFx, ModRM.reg validity, XOP vvvv, JECXZ), `scripts/rows_from_sdm.py`, `scripts/merge_sdm_rows.py`, `scripts/rebuild_decode_spec.py`, `specs/x86_decode_sdm_request.txt`, `specs/x86_decode_confirmations.json`, `store/runs/gendiff-1791583020404460000`, `store/runs/gamediff-1791583316617553000`. Dual contract: signal pass; artifact pass (gates.sh 0, 231 passed). Observation: pass — decoder exit criterion (d) met on Hail to the Rainbow (718 of 718 used rows confirmed); game positions without a row 8,962 → 2 (APX, refused as the target CPUs do); generated confirmations 549/809 → 971/1,061; criteria (a)-(c) unchanged.
 - **2026-10-09** — Sprint 037 (the semantics oracle) closed. `probes/semantics/` (C harness, case file), `scripts/semantics_differential.py`, `tests/test_semantics_differential.py`, `windows-probe.yml` (mode file; CPU recorded), `lift.py` (16-bit PUSH/POP; FS/GS memory operands refused), `store/probe-runs/{38001396341,38001569019,38001576821,38001667936,38001673879,38001680277}/`, release `semantics-037`, `store/runs/semantics-1791586629398365000` (Intel, conforms), `store/runs/semantics-1791586641965639000` (AMD, 0F 0D class). Dual contract: signal pass; artifact pass (gates.sh 0). Observation: pass — 20,116 cases over 53 iclasses; the model agrees with Intel Xeon Platinum 8573C on every case; two lifter defects found and fixed; a planted SUB-carry fault caught by the CPU alone; review 2026-10-09 H3 closed.
 - **2026-10-09** — Sprint 038 (the frontier and the game's demands) closed. Vocabulary 0.6 (P15 SERVICE_UNIMPLEMENTED, P16 steamcmd); `scripts/run_frontier.py`, `scripts/acquire_depot.py`, `scripts/record_contracts.py`, `scripts/record_probes.py`, `src/w2m/record.py`; launcher import counting, GetProcAddress log, thread counts; windows-game play mode; records in `store/runs/` and `store/game-runs/{38006665419,38006671518}/`. Dual contract: signal pass (first emitters of SERVICE_UNIMPLEMENTED, DISTRIBUTION_RESOLVED/ACQUIRED, EVIDENCE_RECORDED, CONTRACT_PROPOSED/ACCEPTED/REVISED, DEPENDENTS_INVALIDATED, PROBE_AUTHORED); artifact pass (gates.sh 0). Observation: pass — frontier at GetSystemTimeAsFileTime after 13 instructions; 213/258 imports called; peak 41 threads; play mode renders on WARP and compiles 5,309 methods.
+- **2026-10-09** — Sprint 039 (the floating-point and fault oracle) closed. `src/w2m/x86fp.py`; XMM, MXCSR, AF, DF in `Thread`, `lift.py`, `runtime.py` (47 legacy-SSE classes; fault rollback); spec 0.7.1 (`scripts/sse_operand_templates.py`, 62 rows); semantics probe format 2 with fault cases, built on the runner; `scripts/probe_on_intel.py`; `probes/mac_hv_fp/hv_fp.c`, `scripts/probe_fp_control.py`; vocabulary 0.7 (P17). Dual contract: signal pass (CAPABILITY_PROBED for FPCR; semantics records); artifact pass (gates.sh 0, 258 tests). Observation: pass — Intel Xeon 8573C and 8370C agree with the model on all 39,708 cases, faults included; four planted faults caught; FPCR.AH=1 matches x86 except FCVTZS.
 
 ## Deferred
 
@@ -185,6 +186,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 039 (2026-10-09, closed)
+- **Scope:** the semantics oracle extended to XMM, MXCSR, AF, DF and faults; SSE floating-point semantics in the model; FPCR.AH in a guest.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the model gained exact SSE arithmetic and the probe gained full state; the runner built 39,708 cases from the seed and ran them three times per job; AMD runs taught three rules; two Intel runs then agreed on every case; a guest at EL1 ran FMIN, FMUL and FCVTZS under FPCR.AH 0 and 1.
+  - *Observation 1 (the CPU teaches what the manual leaves vague):* Windows's #XM codes, flags at an unmasked fault, and PE under trapped overflow came from the oracle, one guess refuted. Disposition: rules cite their run; Sprint 041 accepts classes on Intel verdicts.
+  - *Observation 2 (a plant outside the judge):* AF-undefined could not be caught. Disposition: KIT_DIARY #21; undefined-flag sets checked per class in 041.
+  - *Observation 3 (the VM had no display):* the Windows VM was created with no display device and sat at the boot prompt with an empty disk. Disposition: virtio-ramfb added, keystrokes sent through UTM; Setup now writes its image.
+- **Closed:** clean.
 
 ### Sprint 038 (2026-10-09, closed)
 - **Scope:** the frontier as a topology; the game's Windows calls, threads and play-time code from the runner; acquisition, contract and probe tags on real runs.
@@ -267,13 +277,4 @@
   - *Observation 3 (what is not yet isolated):* the monitor's tables and code share EL1 and the address space with translated guest code. Disposition: recorded for the next VM widening.
 - **Closed:** clean.
 
-### Sprint 029 (2026-10-08, closed)
-- **Scope:** walking skeleton through every v0.2 §2 stage.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the runner compiled skeleton.c without a C runtime and ran it; the program wrote four trace lines to stdout and exited 0. On the Mac the loader mapped the same bytes at 0x140000000 and pointed six import slots at host thunks; the runtime decoded, lifted and executed 5,153 instructions, answered GetCurrentThreadId, SetLastError, GetLastError, GetStdHandle and WriteFile in the host, and stopped at ExitProcess(0). Both traces were wrapped, ingested, and judged conforms against the last-error contract.
-  - *Observation 1 (worked first time; checked anyway):* the first Mac run succeeded. Three planted faults (kernel32, lifter, unliftable instruction) each changed the outcome, so the pass is not vacuous.
-  - *Observation 2 (what the skeleton does not prove):* one thread, one image at its preferred base, 23 instruction classes, no VM. Each is the next widening, not a gap in the path.
-  - *Observation 3 (a new fixture exposed an old oracle bug):* the LLVM reference parser in `test_x86ref.py` dropped the last instruction of `.text`; CRT probes hid it with trailing padding. Disposition: resolved-here; four CRT-only assertions scoped.
-- **Closed:** clean.
-
-Older entries (Sprints 000-028): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-029): `docs/sprint-tail-archive.md`.

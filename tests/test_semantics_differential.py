@@ -7,6 +7,7 @@ state differential involved. Full result files are assets of the private release
 
 from __future__ import annotations
 
+import functools
 import sys
 from pathlib import Path
 
@@ -37,7 +38,7 @@ def _classes(results: Path = AMD, limit: int | None = None) -> dict[str, int]:
 
 
 def test_case_file_round_trips(tmp_path: Path) -> None:
-    built, _ = sd.build_cases()
+    built = list(_built_039())
     sd.write_cases(built[::50], tmp_path / "cases.bin")
     stored = sd.read_cases(tmp_path / "cases.bin")
     assert [(c.code, c.regs, c.rflags, c.mxcsr, c.xmm, c.data, c.stack, c.edge, c.kind) for c in built[::50]] == \
@@ -75,8 +76,14 @@ def test_planted_signed_carry_on_sub_is_caught_by_the_cpu(monkeypatch: pytest.Mo
 RUN_039_AMD = ROOT / "store" / "probe-runs" / "38010775429"
 
 
+@functools.cache
+def _built_039() -> tuple[sd.Case, ...]:
+    """The case list, built once per session: every 039 test reads it, none mutates it."""
+    return tuple(sd.build_cases()[0])
+
+
 def _classes_039(run: Path, labels: set[str] | None = None) -> dict[str, int]:
-    built = sd.build_cases()[0][::10]
+    built = _built_039()[::10]
     out: dict[str, int] = {}
     for c, r in zip(built, sd.read_results(run / "result-1.every10.bin"), strict=True):
         if labels is not None and c.label not in labels:
@@ -88,7 +95,7 @@ def _classes_039(run: Path, labels: set[str] | None = None) -> dict[str, int]:
 
 def test_039_runner_ran_the_case_file_this_generator_builds(tmp_path: Path) -> None:
     import hashlib
-    sd.write_cases(sd.build_cases()[0], tmp_path / "cases.bin")
+    sd.write_cases(list(_built_039()), tmp_path / "cases.bin")
     assert hashlib.sha256((tmp_path / "cases.bin").read_bytes()).hexdigest() == \
         (RUN_039_AMD / "cases.sha256").read_text().strip()
 
@@ -158,3 +165,13 @@ def test_039_planted_partial_store_before_a_fault_is_caught(monkeypatch: pytest.
     monkeypatch.setattr(Memory, "write", partial)
     found = _classes_039(RUN_039_AMD, {"MOV", "MOVAPS", "MOVUPS", "MOVSS", "MOVSD_XMM", "MOVQ", "MOVD", "PUSH"})
     assert any(k.endswith(" edge") for k in found), found
+
+
+@pytest.mark.parametrize("run", ["38011862284", "38011858047"])   # Xeon Platinum 8573C, 8370C
+def test_039_intel_cpus_and_model_agree_on_every_case(run: str) -> None:
+    assert _classes_039(ROOT / "store" / "probe-runs" / run) == {}
+
+
+@pytest.mark.parametrize("run", ["38011255346", "38011704372"])   # EPYC 9V74, 9V45
+def test_039_other_amd_cpus_differ_only_on_0f0d_register_forms(run: str) -> None:
+    assert list(_classes_039(ROOT / "store" / "probe-runs" / run)) == ["NOP cpu fault"]

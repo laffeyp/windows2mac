@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 029 (2026-10-08, closed)
+- **Scope:** walking skeleton through every v0.2 §2 stage.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the runner compiled skeleton.c without a C runtime and ran it; the program wrote four trace lines to stdout and exited 0. On the Mac the loader mapped the same bytes at 0x140000000 and pointed six import slots at host thunks; the runtime decoded, lifted and executed 5,153 instructions, answered GetCurrentThreadId, SetLastError, GetLastError, GetStdHandle and WriteFile in the host, and stopped at ExitProcess(0). Both traces were wrapped, ingested, and judged conforms against the last-error contract.
+  - *Observation 1 (worked first time; checked anyway):* the first Mac run succeeded. Three planted faults (kernel32, lifter, unliftable instruction) each changed the outcome, so the pass is not vacuous.
+  - *Observation 2 (what the skeleton does not prove):* one thread, one image at its preferred base, 23 instruction classes, no VM. Each is the next widening, not a gap in the path.
+  - *Observation 3 (a new fixture exposed an old oracle bug):* the LLVM reference parser in `test_x86ref.py` dropped the last instruction of `.text`; CRT probes hid it with trailing padding. Disposition: resolved-here; four CRT-only assertions scoped.
+- **Closed:** clean.
+
 ### Sprint 028 (2026-10-08, closed)
 - **Scope:** witness the pending-waiters precondition instead of assuming it.
 - **Rubber Duck Pass:**
