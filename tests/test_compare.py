@@ -12,7 +12,7 @@ import msgspec
 import pytest
 from substrate.api import (
     PerEvent, Runtime, Subscription, TopologyBuilder, assert_event, assert_no_event,
-    quiescence_with_watchdog, read_record,
+    quiescence, read_record,
 )
 
 from w2m import events
@@ -123,7 +123,7 @@ async def _run(tmp_path: Path, raw: bytes) -> Path:
                       "trace_sha256": ctx.event.payload["trace_sha256"], "role_map": ROLES,
                       "comparison_id": "cmp1", "reference_ref": "ref-e0",
                       "target_execution_id": ctx.event.payload["execution_id"]})
-        b.termination(quiescence_with_watchdog(seconds=1))
+        b.termination(quiescence())
 
     result = await Runtime(tmp_path / "run").run(topology)
     assert result.status == "finalised"

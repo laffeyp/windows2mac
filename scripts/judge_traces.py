@@ -33,7 +33,7 @@ from typing import Any
 import msgspec
 from substrate.api import (
     PerEvent, Runtime, Subscription, TopologyBuilder, narration_summary,
-    quiescence_with_watchdog, read_record,
+    quiescence, read_record,
 )
 
 from w2m import VOCAB_VERSION, events
@@ -157,7 +157,7 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
         b.trigger("close", subscription=Subscription(kinds=frozenset({"COMPARISON_COMPLETED"})),
                   predicate=last_verdict, starts="harness", policy=PerEvent(),
                   input_builder=lambda ctx: None)
-        b.termination(quiescence_with_watchdog(seconds=2))
+        b.termination(quiescence())
 
     return topology
 

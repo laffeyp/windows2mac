@@ -701,8 +701,8 @@ wheels = [
 
 [[package]]
 name = "substrate-kernel"
-version = "1.1.1"
-source = { registry = "https://pypi.org/simple" }
+version = "1.1.2"
+source = { editable = "substrate" }
 dependencies = [
     { name = "click" },
     { name = "msgspec" },
@@ -711,15 +711,35 @@ dependencies = [
     { name = "rich" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2c/11/795312284f5cc70f7892bfb9f8e2c9767eae302290bdd84c4704aa1abe3d/substrate_kernel-1.1.1.tar.gz", hash = "sha256:27f0191e9656ad880307a08440e6b16c4f8791d6b9a8dcf9677f7a7e0fb39110", size = 94745744, upload-time = "2026-09-29T09:33:49.969Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/05/558c39e033a1652d05ca2f537aa2ea518d34f8abc92d9bd93d86fd97f02c/substrate_kernel-1.1.1-py3-none-any.whl", hash = "sha256:4ff01e22816b57335bcc24b9a85b5c5d11511ff61d3cf0bfde7b608974b0c475", size = 664733, upload-time = "2026-09-29T09:33:20.52Z" },
-]
 
 [package.optional-dependencies]
 openai-compat = [
     { name = "httpx" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "click" },
+    { name = "coverage", marker = "extra == 'dev'" },
+    { name = "datasets", marker = "extra == 'swebench'" },
+    { name = "httpx", marker = "extra == 'dev'" },
+    { name = "httpx", marker = "extra == 'openai-compat'" },
+    { name = "hypothesis", marker = "extra == 'dev'" },
+    { name = "import-linter", marker = "extra == 'dev'" },
+    { name = "msgspec", specifier = ">=0.21,<0.22" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'" },
+    { name = "pytest-benchmark", marker = "extra == 'dev'" },
+    { name = "pytest-timeout", marker = "extra == 'dev'" },
+    { name = "python-ulid" },
+    { name = "rfc8785" },
+    { name = "rich" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.17" },
+    { name = "swebench", marker = "extra == 'swebench'" },
+    { name = "typing-extensions" },
+]
+provides-extras = ["dev", "openai-compat", "swebench"]
 
 [[package]]
 name = "typing-extensions"
@@ -765,7 +785,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pytest-timeout", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.17" },
-    { name = "substrate-kernel", extras = ["openai-compat"], specifier = "==1.1.1" },
+    { name = "substrate-kernel", extras = ["openai-compat"], editable = "substrate" },
 ]
 provides-extras = ["dev", "reference"]
 
