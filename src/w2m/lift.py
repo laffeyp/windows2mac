@@ -33,7 +33,8 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
                                   instruction (the one exception to the commit rule)
   ("mxcsr", "st"|"ld", loc)       STMXCSR / LDMXCSR (SDM): MXCSR to or from 4 bytes of memory; LDMXCSR with
                                   a reserved bit (16-31) set faults before any write (Sprint 044)
-  ("fence",)                      SFENCE: earlier stores before later ones
+  ("fence", kind)                 SFENCE "st": earlier stores before later ones; LFENCE "ld": earlier loads
+                                  before later accesses; MFENCE "full": every access (Sprint 047)
   ("ud",)                         an instruction the guest profile makes undefined (#UD): XGETBV, since
                                   the profile's CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json)
   ("div", bits, t[, signed])      DIV r/m (unsigned), IDIV with signed True (Sprint 046): RDX:RAX (DX:AX, EDX:EAX;
@@ -99,6 +100,10 @@ SSE_ALIGNED |= {'PMULLW', 'PMAXUB', 'PSRLW', 'PCMPEQD', 'PUNPCKHDQ', 'UNPCKLPD',
 # Sprint 046 (fifth block): the approximations; the packed forms need 16-byte alignment
 SSE2_INT |= {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
 SSE_ALIGNED |= {"RCPPS", "RSQRTPS"}
+# Sprint 047: SSE4.2's PCMPISTRI (ECX and the flags; its m128 needs no alignment, SDM Vol 2A §4.1.1)
+SSE2_INT |= {"PCMPISTRI", "PCMPISTRI64"}
+SSE2_INT |= {"UNPCKHPD"}
+SSE_ALIGNED |= {"UNPCKHPD"}
 SSE |= SSE2_INT
 ALU = {"ADD": "add", "SUB": "sub", "AND": "and", "OR": "or", "XOR": "xor", "CMP": "sub", "TEST": "and"}
 
@@ -247,7 +252,7 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "XGETBV",
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV",
                               *REP_STRING):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")

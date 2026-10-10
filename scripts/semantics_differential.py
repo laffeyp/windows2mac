@@ -256,6 +256,48 @@ def _cmpxchg16b(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
             yield s
 
 
+# pcmpistri xmm1, xmm2 / xmm1, [rsi] / REX.W xmm1, xmm2, each followed by imm8 (Sprint 047)
+STRING_COMPARE_FORMS = (("PCMPISTRI", "660f3a63ca"), ("PCMPISTRI", "660f3a630e"), ("PCMPISTRI64", "66480f3a63ca"))
+STRING_COMPARE_STATES = 4
+
+
+def _text(rng: random.Random) -> bytes:
+    """16 bytes a string compare finds structure in: a small alphabet (signed and unsigned extremes
+    among them), and in most a zero byte (or word) that ends the implicit length."""
+    alphabet = rng.choice((b"ab", b"abc\x80\xff", b"a\x00", bytes(range(256))))
+    v = bytearray(rng.choice(alphabet) for _ in range(16))
+    if rng.random() < 0.6:
+        z = rng.randrange(16)
+        v[z] = 0
+        if rng.getrandbits(1):
+            v[z ^ 1] = 0
+    return bytes(v)
+
+
+def _string_compares(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
+    """PCMPISTRI states over all 128 control bytes (bit 7 is ignored): both operands from `_text`; the
+    memory form reads at RSI in the data window, unaligned, and one state in eight runs off the data
+    page's end (the read faults before ECX or the flags change)."""
+    for label, prefix in STRING_COMPARE_FORMS:
+        if label not in classes:
+            continue
+        memory = prefix.endswith("0e")
+        for imm in range(128):
+            for i in range(STRING_COMPARE_STATES):
+                s = _state(rng, True)
+                s.xmm[1] = int.from_bytes(_text(rng), "little")
+                s.xmm[2] = int.from_bytes(_text(rng), "little")
+                if memory:
+                    if (imm * STRING_COMPARE_STATES + i) % 8 == 7:
+                        s.regs[6], s.kind = PAGE_END - rng.randrange(1, 16), 1
+                    else:
+                        off = rng.randrange(0, WINDOW - 16 + 1)
+                        s.regs[6] = DATA_VA + DATA_OFF + off
+                        s.data = s.data[:off] + _text(rng) + s.data[off + 16:]
+                s.code, s.label = bytes.fromhex(prefix) + bytes([imm]), label
+                yield s
+
+
 def _control_flow() -> Iterator[tuple[bytes, str]]:
     for cc in range(16):
         yield bytes([0x70 + cc, 0x0E]), f"Jcc_{cc:x}"
@@ -327,6 +369,9 @@ CLASSES_046D = frozenset(('PUNPCKLQDQ', 'PADDQ', 'PCMPGTD', 'PCMPEQD', 'PANDN', 
 # Sprint 046 (fifth block): RCPPS, RSQRTPS (UnityPlayer's DllMain stops at RSQRTPS, 292,735 instructions) and
 # their scalar forms; judged on Intel only, whose tables w2m reproduces (AMD's differ)
 CLASSES_046E = frozenset(("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"))
+# Sprint 047: the classes UnityMain's start-up stops on (scripts/frontier_lookahead.py): PCMPISTRI (also constructed
+# over every control byte), UNPCKHPD, MUL's 8-, 16- and 32-bit forms, BTC, LFENCE and MFENCE
+CLASSES_047 = frozenset(("PCMPISTRI", "PCMPISTRI64", "UNPCKHPD", "MUL", "BTC", "LFENCE", "MFENCE"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -341,7 +386,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "046b": (2026_10_10_461, CLASSES_046B, (), False),
     "046c": (2026_10_10_462, CLASSES_046C, LOCKABLE_046C, False),
     "046d": (2026_10_10_463, CLASSES_046D, (), False),
-    "046e": (2026_10_10_464, CLASSES_046E, (), False)}
+    "046e": (2026_10_10_464, CLASSES_046E, (), False),
+    "047": (2026_10_10_47, CLASSES_047, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -379,6 +425,12 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             # what the runners ran (KIT_DIARY #23)
             skipped["segment-relative operand (not placeable)"] += 1
             continue
+        if classes is CLASSES_039 and d.iclass == "MUL" and \
+                any(op[0] == "st" and op[1][0] == "r" and op[1][2] != 64 for op in ins.ops):
+            # MUL r/m8, r/m16, r/m32: refused before Sprint 047 and lifted since; set 039 keeps the old refusal so its
+            # frozen file stays what the runners ran (KIT_DIARY #23), and set 047 holds them
+            skipped["MUL narrower than 64 bits (set 047)"] += 1
+            continue
         if any(op[0] == "br" for op in ins.ops):
             skipped["control flow (fixed encodings instead)"] += 1
             continue
@@ -410,6 +462,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
     out.extend(_strings(classes, rng))                         # only sets with REP classes (044b on)
     out.extend(_cmpxchg16b(classes, rng))                     # only sets with CMPXCHG16B (046c on)
+    out.extend(_string_compares(classes, rng))                # only sets with PCMPISTRI (047 on)
     if "RET_NEAR" in classes and not control_flow:              # 044e: RET imm16 (039 holds C3)
         for imm in RET_IMMEDIATES:
             for _ in range(CONTROL_STATES):

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from w2m import cpuid
-from w2m import approximate, x86fp as fp
+from w2m import approximate, string_compare, x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RBX, RCX, RDI, RDX, RSI, SSE2_INT, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
@@ -65,7 +65,7 @@ LANE_ARITH: dict[str, tuple[int, Callable[[int, int, int], int]]] = {
     "PMULLW": (16, lambda p, q, w: p * q),
 }
 # interleaves: (lane bits, from the high half)
-INTERLEAVE = {"PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
+INTERLEAVE = {"PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "UNPCKHPD": (64, True), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
               "PUNPCKHWD": (16, True), "PUNPCKLWD": (16, False)}
 
 
@@ -395,6 +395,14 @@ class Runtime:
                 x[dst[1]] = x[dst[1]] & _mask(64) | self._xread(src, 8) << 64
             else:
                 self._xwrite(dst, x[src[1]] >> 64, 8)
+            return
+        if ic in ("PCMPISTRI", "PCMPISTRI64"):                     # string_compare.py (SDM Vol 2A §4.1)
+            assert imm is not None
+            a, b = x[dst[1]], self._xread(src, 16)
+            res, flags = string_compare.compare(a, b, imm, string_compare.implicit_length(a, imm),
+                                                string_compare.implicit_length(b, imm))
+            self._wr(RCX, 64 if ic.endswith("64") else 32, False, string_compare.index(res, imm))
+            self.th.flags.update(flags)
             return
         if ic in ("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"):         # the reference CPU's tables (approximate.py)
             table_fn = approximate.rcp if ic.startswith("RCP") else approximate.rsqrt

@@ -82,15 +82,18 @@ DISPATCH_TABLE = 0x02000             # 4096 entries of (x86 address, code VA)
 DISPATCH_ENTRIES = 4096
 TRANSLATION_TABLES = 0x12000            # stage-1 translation tables
 TRANSLATION_TABLES_SIZE = 0x40000
+# Sprint 047: UnityPlayer filled the 4 MB code cache's 65,536-entry reconstruction table at 1,457,522 instructions.
+# The areas are sparse in the memory file; the cache stays below the runtime so every branch between them is in
+# B's and BL's +-128 MB.
 CODE_CACHE = 0x60000
-CODE_CACHE_SIZE = 0x400000
-RUNTIME_IMAGE = 0x460000              # guest runtime (tools/guest_runtime), linked at MONITOR_VA + this
+CODE_CACHE_SIZE = 0x400_0000          # 64 MB
+RUNTIME_IMAGE = CODE_CACHE + CODE_CACHE_SIZE   # guest runtime (tools/guest_runtime), linked at MONITOR_VA + this
 RUNTIME_IMAGE_SIZE = 0x20000
-RUNTIME_STACK = 0x480000              # the runtime's AArch64 stack (SP set by each bridge)
+RUNTIME_STACK = RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE   # the runtime's AArch64 stack (SP set by each bridge)
 RUNTIME_STACK_SIZE = 0x10000
-RECON_TABLE = 0x490000                # reconstruction table: (host code VA, x86 address) pairs, sorted
-RECON_ENTRIES = 0x10000
-MONITOR_SIZE = RECON_TABLE + 16 * RECON_ENTRIES
+RECON_TABLE = RUNTIME_STACK + RUNTIME_STACK_SIZE     # reconstruction table: (host code VA, x86 address) pairs, sorted
+RECON_ENTRIES = 0x40_0000             # 4 Mi entries, 64 MB
+MONITOR_SIZE = (RECON_TABLE + 16 * RECON_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -747,7 +750,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k in ("mxcsr", "ud"):                               # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
-            a.emit(a64.dmb_ishst())
+            a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())
         elif k == "rep":
             # REP STOS / MOVS: the guest's RCX, RSI, RDI live in x1, x6, x7 and change once per element,
             # so a fault on an element leaves them at that iteration and the reconstruction table

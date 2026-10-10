@@ -81,6 +81,8 @@ CASES: list[tuple[str, int]] = [
     ("ushr v2.2d, v2.2d, #13", a64.ushr_2d(2, 2, 13)),
     ("ushr v2.2d, v3.2d, #64", a64.ushr_2d(2, 3, 64)),
     ("dmb ishst", a64.dmb_ishst()),
+    ("dmb ishld", a64.dmb_ishld()),
+    ("dmb ish", a64.dmb_ish()),
     ("ldaxrb w25, [x18]", a64.ldaxr(1, 25, 18)),
     ("ldaxrh w25, [x18]", a64.ldaxr(2, 25, 18)),
     ("ldaxr w25, [x18]", a64.ldaxr(4, 25, 18)),

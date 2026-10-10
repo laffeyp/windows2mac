@@ -94,7 +94,10 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           ("PINSRW", "66", 0xC4, None): "V,Ew,Ib", ("MOVHPS", "none", 0x16, None): "V,Wq", ("MOVHPS", "none", 0x17, None): "Wq,V",
           # the approximations (a fifth block): packed from m128, scalar from m32
           ("RCPPS", "none", 0x53, None): "V,Wdq", ("RSQRTPS", "none", 0x52, None): "V,Wdq",
-          ("RCPSS", "f3", 0x53, None): "V,Wd", ("RSQRTSS", "f3", 0x52, None): "V,Wd"}
+          ("RCPSS", "f3", 0x53, None): "V,Wd", ("RSQRTSS", "f3", 0x52, None): "V,Wd",
+          # SSE4.2's implicit-length index (Sprint 047; 0F 3A 63): xmm1, xmm2/m128 (no alignment), imm8
+          ("PCMPISTRI", "66", 0x63, None): "V,Wdq,Ib", ("PCMPISTRI64", "66", 0x63, None): "V,Wdq,Ib",
+          ("UNPCKHPD", "66", 0x15, None): "V,Wdq"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -191,7 +194,7 @@ def main(argv: list[str]) -> int:
     written = 0
     for e in spec["entries"]:
         manual = MANUAL.get((e["iclass"], e["pfx"], e["op"], e.get("reg")))
-        if manual and e["map"] == "0f" and not e.get("vex") and not e.get("evex") and not e.get("ops"):
+        if manual and e["map"] in ("0f", "0f3a") and not e.get("vex") and not e.get("evex") and not e.get("ops"):
             e["ops"] = manual
             e["src_ops"] = f"written by hand from the row's SDM line ({e['src']}); notation Vol 2D Table A-1 (Sprint 044)"
             written += 1
@@ -220,6 +223,9 @@ def main(argv: list[str]) -> int:
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
+        elif spec["version"] == "0.7.6":
+            spec["version"] = "0.7.7"
+            spec["revision"] += "; 0.7.7 (2026-10-10): PCMPISTRI, UNPCKHPD (Sprint 047)"
         elif spec["version"] == "0.7.5":
             spec["version"] = "0.7.6"
             spec["revision"] += "; 0.7.6 (2026-10-10): RCPPS, RSQRTPS, RCPSS, RSQRTSS (Sprint 046)"

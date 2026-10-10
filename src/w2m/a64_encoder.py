@@ -583,6 +583,16 @@ def dmb_ishst() -> int:
     return 0xD5033ABF
 
 
+def dmb_ishld() -> int:
+    """DMB ISHLD: earlier loads before later loads and stores (LFENCE)."""
+    return 0xD50339BF
+
+
+def dmb_ish() -> int:
+    """DMB ISH: every earlier access before every later one (MFENCE)."""
+    return 0xD5033BBF
+
+
 def fmov_to_v(size: int, vd: int, rn: int) -> int:
     """FMOV Sd, Wn / Dd, Xn: the rest of Vd zeroed."""
     _v(vd, rn)

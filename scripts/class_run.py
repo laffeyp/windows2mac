@@ -70,7 +70,7 @@ def _built(case_set: str) -> list[sd.Case]:
 def case_sets_of(iclass: str) -> list[str]:
     """The case sets that cover `iclass`, oldest first: one, or more where a later set adds a form of the
     class (RET_NEAR imm16 in 044e, after 039's C3)."""
-    found = [k for k in sd.CASE_SETS if iclass in {iclass_of(c) for c in _built(k)}]
+    found = [k for k in sd.CASE_SETS if k in REFERENCES and iclass in {iclass_of(c) for c in _built(k)}]
     if not found:
         raise KeyError(f"{iclass}: no case set covers it")
     return found
@@ -217,8 +217,8 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
 
 
 def classes_in_case_file() -> list[str]:
-    """Every iclass with a rule that some case set covers."""
-    return sorted({iclass_of(c) for k in sd.CASE_SETS for c in _built(k)} & set(registry()))
+    """Every iclass with a rule that some case set with a CPU run covers (a set awaiting its run judges nothing)."""
+    return sorted({iclass_of(c) for k in sd.CASE_SETS if k in REFERENCES for c in _built(k)} & set(registry()))
 
 
 def main(argv: list[str]) -> int:

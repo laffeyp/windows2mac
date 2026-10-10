@@ -208,7 +208,7 @@ def bit_scan(ctx: Ctx) -> None:
 
 
 def bit_test(ctx: Ctx) -> None:
-    """BT, BTS, BTR (SDM BT): CF = the selected bit; BTS sets it, BTR clears it. A register or an
+    """BT, BTS, BTR, BTC (SDM BT): CF = the selected bit; BTS sets it, BTR clears it, BTC complements it. A register or an
     immediate offset selects bit (offset mod operand size); a register offset with a memory base
     addresses the bit string: the operand at base + size * floor(offset / bits), signed, wrapping at
     32 bits under a 0x67 prefix. Every temporary is written once (the VM gives each write its own
@@ -243,7 +243,7 @@ def bit_test(ctx: Ctx) -> None:
     b.emit("alu", shifted, "shr", value, bit, bits)
     b.emit("imm", one, 1)
     b.emit("alu", cf, "and", shifted, one, bits)
-    if ic in ("BTS", "BTR"):
+    if ic in ("BTS", "BTR", "BTC"):
         sel, result = b.t(), b.t()
         b.emit("alu", sel, "shl", one, bit, bits)
         if ic == "BTR":
@@ -252,7 +252,7 @@ def bit_test(ctx: Ctx) -> None:
             b.emit("alu", notsel, "xor", sel, ones, bits)
             b.emit("alu", result, "and", value, notsel, bits)
         else:
-            b.emit("alu", result, "or", value, sel, bits)
+            b.emit("alu", result, "xor" if ic == "BTC" else "or", value, sel, bits)
         b.emit("st", dst, result)
     b.emit("flags", "bt", cf, cf, cf, bits)
 
@@ -273,7 +273,8 @@ def mxcsr(ctx: Ctx) -> None:
 
 
 def sfence(ctx: Ctx) -> None:
-    ctx.b.emit("fence")
+    """SFENCE, LFENCE, MFENCE (SDM): the ordering each gives, as one fence kind (Sprint 047)."""
+    ctx.b.emit("fence", {"SFENCE": "st", "LFENCE": "ld", "MFENCE": "full"}[ctx.ic])
 
 
 def undefined_by_profile(ctx: Ctx) -> None:
@@ -309,8 +310,19 @@ def shr(ctx: Ctx) -> None:
 def mul(ctx: Ctx) -> None:
     b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
     sk, src, bits = _operand(b, ops[0], nxt)
-    if bits != 64:
-        raise LiftError(f"MUL r/m{bits}")
+    if bits != 64:                  # SDM MUL: AX = AL * r/m8, DX:AX = AX * r/m16, EDX:EAX = EAX * r/m32 (Sprint 047):
+        a, c, p, k, hi = b.t(), _val(b, sk, src), b.t(), b.t(), b.t()     # the exact product in 64 bits, split
+        b.emit("ld", a, ("r", RAX, bits, False))
+        b.emit("alu", p, "mul_lo", a, c, 64)
+        b.emit("imm", k, bits)
+        b.emit("alu", hi, "shr", p, k, 64)
+        b.emit("flags", "mul", a, c, hi, bits)
+        if bits == 8:
+            b.emit("st", ("r", RAX, 16, False), p)
+        else:
+            b.emit("st", ("r", RAX, bits, False), p)
+            b.emit("st", ("r", RDX, bits, False), hi)
+        return
     a, c, lo, hi = b.t(), _val(b, sk, src), b.t(), b.t()
     b.emit("ld", a, ("r", RAX, 64, False))
     b.emit("alu", lo, "mul_lo", a, c, 64)
