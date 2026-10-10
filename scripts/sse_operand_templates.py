@@ -55,7 +55,16 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           ("PSRLQ", "66", 0xD3, None): "V,Wdq", ("PUNPCKLBW", "66", 0x60, None): "V,Wdq",
           ("PSHUFD", "66", 0x70, None): "V,Wdq,Ib", ("PMOVMSKB", "66", 0xD7, None): "Gd,Wdq",
           ("MOVNTPS", "none", 0x2B, None): "Wdq,V", ("STMXCSR", "none", 0xAE, 3): "Ed", ("LDMXCSR", "none", 0xAE, 2): "Ed",
-          ("PREFETCHNTA", "none", 0x18, 0): "Mcl"}
+          ("PREFETCHNTA", "none", 0x18, 0): "Mcl",
+          # Sprint 046: the second SSE block, the classes UnityPlayer.dll reaches most without a rule (census
+          # 2026-10-10) that raise no floating-point exception; MOVHLPS and MOVLHPS are the register-only rows
+          ("SHUFPS", "none", 0xC6, None): "V,Wdq,Ib", ("PXOR", "66", 0xEF, None): "V,Wdq",
+          ("ANDNPS", "none", 0x55, None): "V,Wdq", ("UNPCKLPS", "none", 0x14, None): "V,Wdq",
+          ("UNPCKHPS", "none", 0x15, None): "V,Wdq", ("MOVHLPS", "none", 0x12, None): "V,Wdq",
+          ("MOVLHPS", "none", 0x16, None): "V,Wdq", ("PUNPCKLDQ", "66", 0x62, None): "V,Wdq",
+          ("PADDD", "66", 0xFE, None): "V,Wdq", ("PSRLD", "66", 0xD2, None): "V,Wdq", ("PSRLD", "66", 0x72, 2): "Wdq,Ib",
+          ("PSLLD", "66", 0xF2, None): "V,Wdq", ("PSLLD", "66", 0x72, 6): "Wdq,Ib", ("PSRAD", "66", 0xE2, None): "V,Wdq",
+          ("PSRAD", "66", 0x72, 4): "Wdq,Ib", ("MOVMSKPS", "none", 0x50, None): "Gd,Wdq"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -181,6 +190,10 @@ def main(argv: list[str]) -> int:
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
+        elif spec["version"] == "0.7.2":
+            spec["version"] = "0.7.3"
+            spec["revision"] += ("; 0.7.3 (2026-10-10): operand templates for the second SSE block, the classes "
+                                 "UnityPlayer.dll reaches most without a rule and without floating-point exceptions (Sprint 046)")
         SPEC.write_text(json.dumps(spec, indent=1) + "\n")
     return 0
 

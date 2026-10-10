@@ -176,6 +176,20 @@ CASES: list[tuple[str, int]] = [
     ("ic iallu", a64.IC_IALLU),
     ("dsb ish", a64.DSB_ISH),
     ("isb", a64.ISB),
+    ("add v3.4s, v5.4s, v30.4s", a64.add_v(3, 5, 30, 2)),
+    ("bic v3.16b, v31.16b, v3.16b", a64.bic_v(3, 31, 3)),
+    ("zip1 v3.4s, v3.4s, v31.4s", a64.zip1_4s(3, 3, 31)),
+    ("zip2 v3.4s, v3.4s, v31.4s", a64.zip2_4s(3, 3, 31)),
+    ("ushr v3.4s, v3.4s, #1", a64.ushr_4s(3, 3, 1)),
+    ("ushr v3.4s, v3.4s, #31", a64.ushr_4s(3, 3, 31)),
+    ("sshr v3.4s, v3.4s, #7", a64.sshr_4s(3, 3, 7)),
+    ("sshr v3.4s, v3.4s, #32", a64.sshr_4s(3, 3, 32)),
+    ("shl v3.4s, v3.4s, #0", a64.shl_4s(3, 3, 0)),
+    ("shl v3.4s, v3.4s, #31", a64.shl_4s(3, 3, 31)),
+    ("dup v30.4s, w16", a64.dup_4s(30, 16)),
+    ("ushl v3.4s, v3.4s, v30.4s", a64.ushl_4s(3, 3, 30)),
+    ("sshl v3.4s, v3.4s, v30.4s", a64.sshl_4s(3, 3, 30)),
+    ("mov w16, v3.s[2]", a64.umov_s(16, 3, 2)),
 ]
 
 

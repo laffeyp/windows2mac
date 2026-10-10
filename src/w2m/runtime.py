@@ -337,6 +337,10 @@ class Runtime:
         def pack(ls: list[int], w: int) -> int:
             return sum((n & _mask(w)) << (w * i) for i, n in enumerate(ls))
 
+        if ic == "MOVMSKPS":
+            v = x[src[1]]
+            self._wr(dst[1], dst[2], False, sum(((v >> (32 * i + 31)) & 1) << i for i in range(4)))
+            return
         if ic == "PMOVMSKB":
             v = x[src[1]]
             self._wr(dst[1], dst[2], False, sum(((v >> (8 * i + 7)) & 1) << i for i in range(16)))
@@ -352,6 +356,19 @@ class Runtime:
             assert imm is not None
             n = min(imm, 16)
             x[dst[1]] = (a >> (8 * n) if ic == "PSRLDQ" else a << (8 * n)) & _mask(128)
+            return
+        if ic in ("PSRLD", "PSLLD", "PSRAD"):
+            count = imm if imm is not None else self._xread(src, 16) & _mask(64)
+            if ic == "PSRAD":
+                signed = [w - (1 << 32) if w >> 31 else w for w in lanes(a, 32)]
+                x[dst[1]] = pack([w >> min(count, 31) for w in signed], 32)
+            else:
+                x[dst[1]] = 0 if count > 31 else pack([w >> count if ic == "PSRLD" else w << count
+                                                       for w in lanes(a, 32)], 32)
+            return
+        if ic in ("MOVHLPS", "MOVLHPS"):
+            v = x[src[1]]
+            x[dst[1]] = (a & ~_mask(64) | v >> 64) if ic == "MOVHLPS" else (a & _mask(64) | (v & _mask(64)) << 64)
             return
         if ic == "PSRLQ":
             count = imm if imm is not None else self._xread(src, 16) & _mask(64)
@@ -372,6 +389,19 @@ class Runtime:
             x[dst[1]] = pack([b for i in range(8) for b in (ab[i], vb[i])], 8)
         elif ic == "PCMPEQB":
             x[dst[1]] = pack([0xFF if p == q else 0 for p, q in zip(lanes(a, 8), lanes(v, 8))], 8)
+        elif ic == "SHUFPS":
+            assert imm is not None
+            aw, vw = lanes(a, 32), lanes(v, 32)
+            x[dst[1]] = pack([aw[imm & 3], aw[(imm >> 2) & 3], vw[(imm >> 4) & 3], vw[(imm >> 6) & 3]], 32)
+        elif ic == "PXOR":
+            x[dst[1]] = a ^ v
+        elif ic == "ANDNPS":
+            x[dst[1]] = ~a & v & _mask(128)
+        elif ic in ("UNPCKLPS", "PUNPCKLDQ", "UNPCKHPS"):
+            aw, vw, base = lanes(a, 32), lanes(v, 32), 2 if ic == "UNPCKHPS" else 0
+            x[dst[1]] = pack([aw[base], vw[base], aw[base + 1], vw[base + 1]], 32)
+        elif ic == "PADDD":
+            x[dst[1]] = pack([p + q for p, q in zip(lanes(a, 32), lanes(v, 32))], 32)
         else:
             raise LiftError(f"sse {ic}")
 

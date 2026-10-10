@@ -436,6 +436,77 @@ def ushr_2d(vd: int, vn: int, shift: int) -> int:
     return 0x6F400400 | (128 - shift) << 16 | vn << 5 | vd
 
 
+# Sprint 046: the second SSE block (SHUFPS PXOR ANDNPS UNPCK*PS MOVHLPS MOVLHPS PUNPCKLDQ PADDD PSRLD PSLLD
+# PSRAD MOVMSKPS)
+def add_v(vd: int, vn: int, vm: int, size: int) -> int:
+    """ADD Vd.<T>, Vn.<T>, Vm.<T>, size 2 for .4S."""
+    _v(vd, vn, vm)
+    return 0x4E208400 | size << 22 | vm << 16 | vn << 5 | vd
+
+
+def bic_v(vd: int, vn: int, vm: int) -> int:
+    """BIC Vd.16B, Vn.16B, Vm.16B: Vn AND NOT Vm."""
+    _v(vd, vn, vm)
+    return 0x4E601C00 | vm << 16 | vn << 5 | vd
+
+
+def zip1_4s(vd: int, vn: int, vm: int) -> int:
+    """ZIP1 Vd.4S, Vn.4S, Vm.4S: Vn[0], Vm[0], Vn[1], Vm[1]."""
+    _v(vd, vn, vm)
+    return 0x4E803800 | vm << 16 | vn << 5 | vd
+
+
+def zip2_4s(vd: int, vn: int, vm: int) -> int:
+    """ZIP2 Vd.4S, Vn.4S, Vm.4S: Vn[2], Vm[2], Vn[3], Vm[3]."""
+    _v(vd, vn, vm)
+    return 0x4E807800 | vm << 16 | vn << 5 | vd
+
+
+def ushr_4s(vd: int, vn: int, shift: int) -> int:
+    """USHR Vd.4S, Vn.4S, #shift (1-32)."""
+    _v(vd, vn)
+    assert 1 <= shift <= 32
+    return 0x6F000400 | (64 - shift) << 16 | vn << 5 | vd
+
+
+def sshr_4s(vd: int, vn: int, shift: int) -> int:
+    """SSHR Vd.4S, Vn.4S, #shift (1-32)."""
+    _v(vd, vn)
+    assert 1 <= shift <= 32
+    return 0x4F000400 | (64 - shift) << 16 | vn << 5 | vd
+
+
+def shl_4s(vd: int, vn: int, shift: int) -> int:
+    """SHL Vd.4S, Vn.4S, #shift (0-31)."""
+    _v(vd, vn)
+    assert 0 <= shift <= 31
+    return 0x4F005400 | (32 + shift) << 16 | vn << 5 | vd
+
+
+def dup_4s(vd: int, rn: int) -> int:
+    """DUP Vd.4S, Wn."""
+    _v(vd, rn)
+    return 0x4E040C00 | rn << 5 | vd
+
+
+def ushl_4s(vd: int, vn: int, vm: int) -> int:
+    """USHL Vd.4S, Vn.4S, Vm.4S: each lane shifted by the signed low byte of Vm's lane (negative: right)."""
+    _v(vd, vn, vm)
+    return 0x6EA04400 | vm << 16 | vn << 5 | vd
+
+
+def sshl_4s(vd: int, vn: int, vm: int) -> int:
+    """SSHL Vd.4S, Vn.4S, Vm.4S: as USHL, right shifts arithmetic."""
+    _v(vd, vn, vm)
+    return 0x4EA04400 | vm << 16 | vn << 5 | vd
+
+
+def umov_s(rd: int, vn: int, lane: int) -> int:
+    """UMOV Wd, Vn.S[lane]."""
+    _v(rd, vn)
+    return 0x0E003C00 | ((lane << 3) | 0b100) << 16 | vn << 5 | rd
+
+
 def dmb_ishst() -> int:
     """DMB ISHST: earlier stores before later stores (SFENCE)."""
     return 0xD5033ABF

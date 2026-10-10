@@ -86,6 +86,10 @@ SSE2_INT = {"MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUB
             "PUNPCKLBW", "PCMPEQB", "PSHUFD", "PMOVMSKB", "CVTDQ2PD"}
 SSE_ALIGNED |= {"MOVDQA", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PUNPCKLBW", "PCMPEQB",
                 "PSHUFD"}
+# Sprint 046: the second SSE block (no MXCSR flags); a legacy-SSE m128 operand needs 16-byte alignment (SDM:
+# #GP otherwise); MOVHLPS, MOVLHPS and MOVMSKPS take registers only
+SSE2_INT |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}
+SSE_ALIGNED |= {'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'PUNPCKLDQ', 'PXOR', 'PADDD', 'SHUFPS', 'UNPCKLPS'}
 SSE |= SSE2_INT
 ALU = {"ADD": "add", "SUB": "sub", "AND": "and", "OR": "or", "XOR": "xor", "CMP": "sub", "TEST": "and"}
 
