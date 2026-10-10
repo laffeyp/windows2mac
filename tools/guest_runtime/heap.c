@@ -95,6 +95,18 @@ static struct header *header_of(u64 api, u64 p) {
     return (struct header *)p - 1;
 }
 
+/* For the runtime's own calls that Windows serves from the process heap (GetEnvironmentStringsW's copy,
+ * Sprint 044): a block of exactly `size` bytes, as HeapAlloc makes one, without a ring entry; 0 when the
+ * arena is full. */
+u64 w2m_heap_take(u64 size) {
+    struct header *b = take(size);
+    if (!b) return 0;
+    b->size_and_magic_check = size;
+    return (u64)(b + 1);
+}
+
+void w2m_heap_release(u64 api, u64 p) { give_back(header_of(api, p)); }
+
 u64 k32_GetProcessHeap(void) {
     return w2m_logged(W2M_API_GetProcessHeap, 0, (u64)the_heap());
 }

@@ -100,7 +100,9 @@ KERNEL32_IMAGE_OFF = EXCEPTION_OFF + 0x1000     # synthetic module images, one p
 KERNELBASE_IMAGE_OFF = KERNEL32_IMAGE_OFF + 0x1000
 TLS_EXPANSION_OFF = KERNELBASE_IMAGE_OFF + 0x1000   # TEB.TlsExpansionSlots' array: 1024 values (thread_storage.c)
 COMMAND_LINE_OFF = TLS_EXPANSION_OFF + 0x2000    # the command line, UTF-16 with a NUL (console.c)
-PROCESS_SIZE = COMMAND_LINE_OFF + 0x1000
+ENVIRONMENT_OFF = COMMAND_LINE_OFF + 0x1000      # the environment block, UTF-16 entries and a NUL (environment.c)
+ENVIRONMENT_SIZE = 0x4000
+PROCESS_SIZE = ENVIRONMENT_OFF + ENVIRONMENT_SIZE
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -147,7 +149,10 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "WideCharToMultiByte": ("k32_WideCharToMultiByte", True),
             "GetStringTypeW": ("k32_GetStringTypeW", True),
             "LCMapStringW": ("k32_LCMapStringW", True),
-            "LCMapStringEx": ("k32_LCMapStringEx", True)}
+            "LCMapStringEx": ("k32_LCMapStringEx", True),
+            "GetEnvironmentStringsW": ("k32_GetEnvironmentStringsW", True),
+            "FreeEnvironmentStringsW": ("k32_FreeEnvironmentStringsW", True),
+            "lstrlenW": ("k32_lstrlenW", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
@@ -473,6 +478,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_TLS_EXPANSION_VA": PROCESS_VA + TLS_EXPANSION_OFF, "W2M_TLS_TAKEN": TLS_TAKEN,
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
+        "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -866,7 +872,8 @@ class VM:
                  clock: Callable[[], int] | None = None, last_error_source: str | None = None,
                  files: FileBridge | None = None, file_source: str | None = None,
                  runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe",
-                 gui: bool = False, command_line: str | None = None) -> None:
+                 gui: bool = False, command_line: str | None = None,
+                 environment: tuple[str, ...] = ()) -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
@@ -874,6 +881,7 @@ class VM:
         self.clock_from_host = clock is not None
         self.gui = gui                     # the Steam-like start: no standard handles (console.c)
         self.command_line = command_line if command_line is not None else f'"C:\\w2m\\app\\{image_name}"'
+        self.environment = environment     # the block's entries, in order ("NAME=value"; "=C:=..." too)
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
@@ -945,6 +953,12 @@ class VM:
         if len(line) > 0x1000:
             raise CompileError(f"command line of {len(line)} bytes: the page holds 4096")
         self.mm[self._process(COMMAND_LINE_OFF):self._process(COMMAND_LINE_OFF) + len(line)] = line
+        if any(not e or "\0" in e for e in self.environment):
+            raise CompileError("an environment entry is empty or holds a NUL")
+        block = "".join(e + "\0" for e in self.environment).encode("utf-16-le") + b"\0\0"
+        if len(block) > ENVIRONMENT_SIZE:
+            raise CompileError(f"environment of {len(block)} bytes: the area holds {ENVIRONMENT_SIZE}")
+        self.mm[self._process(ENVIRONMENT_OFF):self._process(ENVIRONMENT_OFF) + len(block)] = block
         teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)

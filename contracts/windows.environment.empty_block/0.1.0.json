@@ -1,0 +1,103 @@
+{
+ "contract_id": "windows.environment.empty_block",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A process started with an empty environment block gets two NULs, a 4-byte process-heap copy, from each GetEnvironmentStringsW call.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/environment/environment.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "block",
+    "null": false,
+    "err": 57005,
+    "length": 1,
+    "entries": []
+   },
+   {
+    "s": "second_call",
+    "same_pointer": false,
+    "same_content": true
+   },
+   {
+    "s": "copy",
+    "write_shows_in_next_call": false
+   },
+   {
+    "s": "heap",
+    "heap_size": 4,
+    "length_bytes": 2
+   },
+   {
+    "s": "free",
+    "ret": 1,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38044699077: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:f4f14814713c4e7ebbb495466dbac26666a57852b33bf382c69359c876dd7191; run 38044700976: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:70dc13b7c0dbdbc4a4ddbe167a3f737e10c469d9e27e3055b8254f28cfb58bae; run 38044703336: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:e989ea6b47e0bc74b60cb091ca7c4b07ed066e29df8d5cd2d31cc6b647356431; run 38044705168: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:35692e390c4e8f8baae67fed1239a419c7a609ad0b0ddb13f1a4af2a5fb6ed35; run 38044763968: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:d513171aa16ebe3810bbcc4ffc887dfb4336894d13cd1e68f5523f7a1c9d9dbf; run 38044766150: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:9a2591f53214278bb3dde9694dc09f63a74fa4f155102c24ec056b229ab5b078; run 38044768224: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:6902502708041214181579d816ae4098ce8dd360315f13a19a8680658d1dc8bc; run 38044770045: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:e42c82c80d83bed0a8a41ca735c0c0d854348a5384340c484c993c4b88281878; run 38044810768: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:55c0b9c2fd822fac38e77d4c913d1206fc7c2a5f84bc217ff431a616bdf0616f; run 38044813152: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:421b2d96ab2e1155cad7c91dfc32b62357544c5d38280a34da7b5c2e103af110; run 38044815499: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:c4f024890f252f5daa25820ab16dd3f416c23061af88d259b7da0c322d8ab0ce; run 38044817343: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:85d227c34bee19a6b6f6e22642937ba35e906c5aa3a5d499e0fa2a4c9c47bfb1",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "environment-1791627776-0-1",
+    "environment-1791627776-0-2",
+    "environment-1791627776-1-1",
+    "environment-1791627776-1-2",
+    "environment-1791627776-2-1",
+    "environment-1791627776-2-2",
+    "environment-1791627776-3-1",
+    "environment-1791627776-3-2",
+    "environment-1791627843-0-1",
+    "environment-1791627843-0-2",
+    "environment-1791627843-1-1",
+    "environment-1791627843-1-2",
+    "environment-1791627843-2-1",
+    "environment-1791627843-2-2",
+    "environment-1791627843-3-1",
+    "environment-1791627843-3-2",
+    "environment-1791627891-0-1",
+    "environment-1791627891-0-2",
+    "environment-1791627891-1-1",
+    "environment-1791627891-1-2",
+    "environment-1791627891-2-1",
+    "environment-1791627891-2-2",
+    "environment-1791627891-3-1",
+    "environment-1791627891-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getenvironmentstringsw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-getenvironmentstringsw (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Treat this memory as read-only; do not modify it directly. To add or change an environment variable, use the GetEnvironmentVariable and SetEnvironmentVariable functions."
+  }
+ ],
+ "open_questions": [
+  "The rows come from a child started with an explicit block (CREATE_UNICODE_ENVIRONMENT) and no handles; the block Steam passes the game is not observed, and w2m's frontier gives the launcher an empty block."
+ ],
+ "sections": {
+  "probe": "probes/environment (Sprint 044)",
+  "implementation": "tools/guest_runtime/environment.c",
+  "rows": "scripts/family_run.py environment_empty",
+  "excluded": "none"
+ }
+}

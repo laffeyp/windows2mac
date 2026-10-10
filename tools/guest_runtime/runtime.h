@@ -225,6 +225,9 @@ struct w2m_exception_area {
 #define W2M_API_GetStringTypeW 62
 #define W2M_API_LCMapStringW 63
 #define W2M_API_LCMapStringEx 64
+#define W2M_API_GetEnvironmentStringsW 65
+#define W2M_API_FreeEnvironmentStringsW 66
+#define W2M_API_lstrlenW 67
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -233,6 +236,8 @@ void w2m_unimplemented(u64 api, u64 detail);
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written);   /* file.c: WriteFile on a file handle */
 void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtime.c: the guest CPUID profile */
 int w2m_file_is_open(u64 handle);                                       /* file.c */
+u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */
+void w2m_heap_release(u64 api, u64 p);                                  /* heap.c: give it back */
 
 /* Monitor data word: the process's start (console.c): 0 a console program with redirected standard
  * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */

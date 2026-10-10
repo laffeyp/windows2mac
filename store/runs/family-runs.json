@@ -99,6 +99,86 @@
    "38039759979": "conforms"
   }
  },
+ "environment_empty": {
+  "candidate_sha256": "sha256:23d74888d7f177a8f72178fc0c1b5297b4cb4b7c0190733de8f01f3c7ce926d7",
+  "divergence": {
+   "38044699077": null,
+   "38044700976": null,
+   "38044703336": null,
+   "38044705168": null,
+   "38044763968": null,
+   "38044766150": null,
+   "38044768224": null,
+   "38044770045": null,
+   "38044810768": null,
+   "38044813152": null,
+   "38044815499": null,
+   "38044817343": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 12,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "environment_empty",
+  "record": "store/runs/family-environment_empty-1791628027992198000",
+  "verdicts": {
+   "38044699077": "conforms",
+   "38044700976": "conforms",
+   "38044703336": "conforms",
+   "38044705168": "conforms",
+   "38044763968": "conforms",
+   "38044766150": "conforms",
+   "38044768224": "conforms",
+   "38044770045": "conforms",
+   "38044810768": "conforms",
+   "38044813152": "conforms",
+   "38044815499": "conforms",
+   "38044817343": "conforms"
+  }
+ },
+ "environment_set": {
+  "candidate_sha256": "sha256:23d74888d7f177a8f72178fc0c1b5297b4cb4b7c0190733de8f01f3c7ce926d7",
+  "divergence": {
+   "38044699077": null,
+   "38044700976": null,
+   "38044703336": null,
+   "38044705168": null,
+   "38044763968": null,
+   "38044766150": null,
+   "38044768224": null,
+   "38044770045": null,
+   "38044810768": null,
+   "38044813152": null,
+   "38044815499": null,
+   "38044817343": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 12,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "environment_set",
+  "record": "store/runs/family-environment_set-1791628025742793000",
+  "verdicts": {
+   "38044699077": "conforms",
+   "38044700976": "conforms",
+   "38044703336": "conforms",
+   "38044705168": "conforms",
+   "38044763968": "conforms",
+   "38044766150": "conforms",
+   "38044768224": "conforms",
+   "38044770045": "conforms",
+   "38044810768": "conforms",
+   "38044813152": "conforms",
+   "38044815499": "conforms",
+   "38044817343": "conforms"
+  }
+ },
  "heap": {
   "candidate_sha256": "sha256:3b6b2b794d2c34e0cc3d3f73c1cbbf6133b7283168f0d8f80a0b8667c6ed138c",
   "divergence": {

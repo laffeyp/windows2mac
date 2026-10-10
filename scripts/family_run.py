@@ -75,6 +75,7 @@ class Family:
     gui: bool = False                     # the Steam-like start: no standard handles (console.c)
     arguments: str = ""                   # after the quoted module path on the command line
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
+    environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The contract's rows from a probe's printed rows: derived, then the excluded rows dropped."""
@@ -128,7 +129,72 @@ def code_page_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**r, "s": f"bestfit.{r['u']:04x}"} if r.get("s") == "bestfit" else r for r in printed]
 
 
+def child_rows(prefix: str) -> Callable[[list[dict[str, Any]]], list[dict[str, Any]]]:
+    """The runner parent prints both children's rows, each name prefixed with its start; w2m runs one child,
+    whose rows carry no prefix. Either way the family keeps its start's rows, unprefixed."""
+    starts = ("set.", "empty.")
+
+    def derive(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out = []
+        for r in printed:
+            name = r.get("s", "")
+            if name.startswith(prefix):
+                out.append({**r, "s": name[len(prefix):]})
+            elif not name.startswith(starts):
+                out.append(r)
+        return out
+    return derive
+
+
+ENVIRONMENT_RUNS = {
+              "38044699077": Run("windows-2025", "f4f14814713c4e7ebbb495466dbac26666a57852b33bf382c69359c876dd7191", "environment-1791627776-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38044700976": Run("windows-2022", "70dc13b7c0dbdbc4a4ddbe167a3f737e10c469d9e27e3055b8254f28cfb58bae", "environment-1791627776-1", "AMD EPYC 9V74 80-Core Processor"),
+              "38044703336": Run("windows-2025", "e989ea6b47e0bc74b60cb091ca7c4b07ed066e29df8d5cd2d31cc6b647356431", "environment-1791627776-2", "AMD EPYC 9V45 96-Core Processor"),
+              "38044705168": Run("windows-2022", "35692e390c4e8f8baae67fed1239a419c7a609ad0b0ddb13f1a4af2a5fb6ed35", "environment-1791627776-3", "AMD EPYC 9V45 96-Core Processor"),
+              "38044763968": Run("windows-2025", "d513171aa16ebe3810bbcc4ffc887dfb4336894d13cd1e68f5523f7a1c9d9dbf", "environment-1791627843-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38044766150": Run("windows-2022", "9a2591f53214278bb3dde9694dc09f63a74fa4f155102c24ec056b229ab5b078", "environment-1791627843-1", "AMD EPYC 7763 64-Core Processor"),
+              "38044768224": Run("windows-2025", "6902502708041214181579d816ae4098ce8dd360315f13a19a8680658d1dc8bc", "environment-1791627843-2", "AMD EPYC 7763 64-Core Processor"),
+              "38044770045": Run("windows-2022", "e42c82c80d83bed0a8a41ca735c0c0d854348a5384340c484c993c4b88281878", "environment-1791627843-3", "AMD EPYC 9V45 96-Core Processor"),
+              "38044810768": Run("windows-2025", "55c0b9c2fd822fac38e77d4c913d1206fc7c2a5f84bc217ff431a616bdf0616f", "environment-1791627891-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38044813152": Run("windows-2022", "421b2d96ab2e1155cad7c91dfc32b62357544c5d38280a34da7b5c2e103af110", "environment-1791627891-1", "AMD EPYC 7763 64-Core Processor"),
+              "38044815499": Run("windows-2025", "c4f024890f252f5daa25820ab16dd3f416c23061af88d259b7da0c322d8ab0ce", "environment-1791627891-2", "AMD EPYC 9V45 96-Core Processor"),
+              "38044817343": Run("windows-2022", "85d227c34bee19a6b6f6e22642937ba35e906c5aa3a5d499e0fa2a4c9c47bfb1", "environment-1791627891-3", "AMD EPYC 7763 64-Core Processor"),
+}
+ENVIRONMENT_SET = ("ZED=last", "alpha=1", "=C:=C:\\w2m", "SteamAppId=480", "Path=C:\\Windows\\system32")
+
+
+def environment_family(start: str, summary: str, environment: tuple[str, ...], plants: dict[str, Plant]) -> Family:
+    return Family(
+        name=f"environment_{start}", contract_id=f"windows.environment.{start}_block", version="0.1.0",
+        summary=summary, probe="environment", guest_file="environment.c", runs=ENVIRONMENT_RUNS,
+        documented=(
+            documented("ms-getenvironmentstringsw", "api/processenv/nf-processenv-getenvironmentstringsw",
+                       "2024-02-22", "Treat this memory as read-only; do not modify it directly. To add or change "
+                       "an environment variable, use the GetEnvironmentVariable and SetEnvironmentVariable functions."),),
+        open_questions=(
+            "The rows come from a child started with an explicit block (CREATE_UNICODE_ENVIRONMENT) and no handles; the "
+            "block Steam passes the game is not observed, and w2m's frontier gives the launcher an empty block.",),
+        derive=child_rows(f"{start}."), gui=True, arguments=f"child-{start}",
+        output_file=f"w2m-environment-{start}.jsonl", environment=environment, plants=plants)
+
+
 FAMILIES: dict[str, Family] = {
+    "environment_set": environment_family(
+        "set", "A process started with an explicit environment block sees that block as it was passed, in its order, "
+        "as a fresh process-heap copy of exactly its size on each GetEnvironmentStringsW call; "
+        "FreeEnvironmentStringsW frees it and answers TRUE.", ENVIRONMENT_SET,
+        {"shared_copy": Plant("    u64 copy = w2m_heap_take(units * 2);",
+                              "    static u64 shared;\n    u64 copy = shared ? shared : (shared = w2m_heap_take(units * 2));",
+                              ("second_call",)),
+         "sorted_block": Plant("    for (u64 i = 0; i < units; i++) to[i] = host[i];",
+                               "    for (u64 i = 0; i < units; i++) to[i] = host[i];\n"
+                               "    { u16 t = to[0]; to[0] = to[9]; to[9] = t; }",
+                               ("block",))}),
+    "environment_empty": environment_family(
+        "empty", "A process started with an empty environment block gets two NULs, a 4-byte process-heap copy, from "
+        "each GetEnvironmentStringsW call.", (),
+        {"one_nul": Plant("    if (!host[0]) units = 2;", "    if (!host[0]) units = 1;", ("heap",))}),
+
     "process_queries": Family(
         name="process_queries",
         contract_id="windows.process.queries",
@@ -448,7 +514,7 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         line = None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}'
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes()), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
-                gui=f is not None and f.gui, command_line=line)
+                gui=f is not None and f.gui, command_line=line, environment=() if f is None else f.environment)
         try:
             r = vm.run(max_steps=1 << 40, timeout_ms=60_000)    # the clock probes spin until time advances
         finally:
