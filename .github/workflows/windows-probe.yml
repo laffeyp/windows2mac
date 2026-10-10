@@ -5,6 +5,7 @@
 # mode file: <probe>.exe probes/<probe>/cases.bin out/result-<i>.bin (cases.bin built on the runner when
 # probe.json names a `generate` command; its sha256 lands in out/cases.sha256)
 name: windows-probe
+run-name: "probe ${{ inputs.probe }} ${{ inputs.execution_id }}"   # the dispatcher matches its own runs by this name
 
 on:
   workflow_dispatch:

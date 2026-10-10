@@ -22,7 +22,6 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,17 +33,19 @@ def gh(*args: str) -> str:
 
 
 def dispatch_batch(probe: str, repeat: int, ref: str, runners: list[str], size: int) -> list[int]:
-    since = datetime.now(timezone.utc)
+    """Dispatch `size` runs and return their ids, matched by run name (the workflow's run-name carries
+    the probe and execution id), so concurrent dispatchers never take each other's runs."""
+    stamp = int(time.time())
+    titles = {f"probe {probe} {probe}-{stamp}-{i}" for i in range(size)}
     for i in range(size):
         gh("workflow", "run", "windows-probe.yml", "--ref", ref, "-f", f"probe={probe}",
-           "-f", f"execution_id={probe}-{int(time.time())}-{i}", "-f", f"repeat={repeat}",
+           "-f", f"execution_id={probe}-{stamp}-{i}", "-f", f"repeat={repeat}",
            "-f", f"runner={runners[i % len(runners)]}")
     for _ in range(60):
         time.sleep(5)
         runs = json.loads(gh("run", "list", "--workflow", "windows-probe.yml", "--event", "workflow_dispatch",
-                             "--limit", str(size + 10), "--json", "databaseId,createdAt"))
-        new = [int(r["databaseId"]) for r in runs
-               if datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00")) >= since]
+                             "--limit", str(size + 40), "--json", "databaseId,displayTitle"))
+        new = [int(r["databaseId"]) for r in runs if r["displayTitle"] in titles]
         if len(new) >= size:
             return sorted(new)
     raise RuntimeError(f"fewer than {size} dispatched runs appeared within 5 minutes")
