@@ -247,8 +247,28 @@
    "38045632682": "conforms"
   }
  },
+ "file_access": {
+  "candidate_sha256": "sha256:e57802d08036094f90c5e13be4b321bdfcdc99bd6950b212f9cc39525415ef8d",
+  "divergence": {
+   "38093116676": null,
+   "38093118511": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "file_access",
+  "record": "store/runs/family-file_access-1791672994422963000",
+  "verdicts": {
+   "38093116676": "conforms",
+   "38093118511": "conforms"
+  }
+ },
  "file_attributes": {
-  "candidate_sha256": "sha256:3d3d479b2d4905e04b0ab7a25d58226466f5b926fd4a6bac8263ba6ebd84b2b3",
+  "candidate_sha256": "sha256:139b817bf59599ca2b36c6de6b71c77fbe4f6984e8c5757920d9c960d997f8e7",
   "divergence": {
    "38087355443": null,
    "38087357359": null
@@ -261,14 +281,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_attributes",
-  "record": "store/runs/family-file_attributes-1791672610945103000",
+  "record": "store/runs/family-file_attributes-1791672992539166000",
   "verdicts": {
    "38087355443": "conforms",
    "38087357359": "conforms"
   }
  },
  "file_security": {
-  "candidate_sha256": "sha256:1598482fb4aee3b32b4b430ca80d8c97d42586cc9d154db765a75dab35730173",
+  "candidate_sha256": "sha256:e57802d08036094f90c5e13be4b321bdfcdc99bd6950b212f9cc39525415ef8d",
   "divergence": {
    "38090863707": null,
    "38090865352": null
@@ -281,7 +301,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_security",
-  "record": "store/runs/family-file_security-1791672612169132000",
+  "record": "store/runs/family-file_security-1791672993809694000",
   "verdicts": {
    "38090863707": "conforms",
    "38090865352": "conforms"
@@ -436,7 +456,7 @@
   }
  },
  "paths": {
-  "candidate_sha256": "sha256:0295caa330abf04e03925412d1ae32da66c2bae8f6a0b0556901758ffad6f7ae",
+  "candidate_sha256": "sha256:b5869fefd471416077f7aeb6221b064faadca5bd33ca0f4c3ac7c34381bfedc9",
   "divergence": {
    "38090281974": null,
    "38090284442": null
@@ -449,7 +469,7 @@
    "SESSION_INIT": 1
   },
   "family": "paths",
-  "record": "store/runs/family-paths-1791672611498775000",
+  "record": "store/runs/family-paths-1791672993081016000",
   "verdicts": {
    "38090281974": "conforms",
    "38090284442": "conforms"

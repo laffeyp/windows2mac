@@ -1152,6 +1152,34 @@ FAMILIES: dict[str, Family] = {
             "interior_answers_null": Plant("        return w2m_logged(W2M_API_LocalFree, block, block);",
                                            "        return w2m_logged(W2M_API_LocalFree, block, 0);",
                                            ("argv_plus_1", "heap_block_plus_8"))}),
+    "file_access": Family(
+        name="file_access",
+        contract_id="windows.file.access",
+        version="0.1.0",
+        summary=("CreateFileW's access masks (13): reading with GENERIC_READ, FILE_GENERIC_READ or FILE_READ_DATA; writing "
+                 "with GENERIC_WRITE, FILE_GENERIC_WRITE, FILE_WRITE_DATA or FILE_APPEND_DATA; both with FILE_ALL_ACCESS, "
+                 "GENERIC_ALL or MAXIMUM_ALLOWED, which also carry DELETE into sharing; FILE_READ_ATTRIBUTES, SYNCHRONIZE "
+                 "and 0 open with no data access and no part in sharing."),
+        probe="file_access", guest_file="file.c", host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/paths.c"),
+        runs={
+              "38093116676": Run("windows-2025", "0ee5b17f1b2961169e640617187689155381e46c2a8207c2966ffd6a76aa885e", "file_access-1791672842-0", "AMD EPYC 7763 64-Core Processor"),
+              "38093118511": Run("windows-2022", "96bb232d78a05bf731dde8f6eba9671e7d06bcdf1ef95524aebf39923c3af8da", "file_access-1791672842-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-file-access-rights", "fileio/file-access-rights-constants", "2018-05-31",
+                       "FILE_APPEND_DATA ... For a file object, the right to append data to the file."),),
+        open_questions=(
+            "ReadFile and WriteFile are checked against data access only; the attribute rights' own calls "
+            "(GetFileInformationByHandle, SetFileAttributesW) are not served yet.",
+            "An append-only handle (FILE_APPEND_DATA without FILE_WRITE_DATA) writes at the end of the file, as the "
+            "access-rights page says; no row reads the file back, so that rule rests on the page alone."),
+        plants={
+            "append_gives_no_write": Plant("(desired & (GENERIC_WRITE | FILE_WRITE_DATA | FILE_APPEND_DATA) ? W : 0)",
+                                           "(desired & (GENERIC_WRITE | FILE_WRITE_DATA) ? W : 0)",
+                                           ("open.append_data", "share.none.append_data", "share.read.append_data")),
+            "maximum_without_delete": Plant("    u32 all = desired & (GENERIC_ALL | MAXIMUM_ALLOWED) ? R | W | D : 0;",
+                                            "    u32 all = desired & GENERIC_ALL ? R | W | D : desired & MAXIMUM_ALLOWED ? R | W : 0;",
+                                            ("share.read_write.maximum_allowed",))}),
 }
 
 
