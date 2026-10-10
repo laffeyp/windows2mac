@@ -26,6 +26,7 @@ mirrors a stop of runtime.py.
 
 from __future__ import annotations
 
+import json
 import mmap
 import os
 import struct
@@ -42,9 +43,10 @@ from typing import Literal
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, BridgeRequestError, FileBridge
+from w2m.modules import EXPORTS as EXPORTS_SPEC, Modules
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
-from w2m.loader import GuestFault, Loaded, Memory, Region
+from w2m.loader import THUNK_BASE, GuestFault, Loaded, Memory, Region
 from w2m.runtime import Result
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -90,7 +92,9 @@ RING_APIS = 64                      # per-API call counters after the ring's cou
 RING_HEADER = 16 + 8 * RING_APIS
 EXCEPTION_OFF = RING_OFF + RING_SIZE             # the last unhandled exception: record and CONTEXT (runtime.h)
 EXCEPTION_MAGIC = 0x7832774E4F495445
-PROCESS_SIZE = EXCEPTION_OFF + 0x1000
+KERNEL32_IMAGE_OFF = EXCEPTION_OFF + 0x1000     # synthetic module images, one page each (modules.py)
+KERNELBASE_IMAGE_OFF = KERNEL32_IMAGE_OFF + 0x1000
+PROCESS_SIZE = KERNELBASE_IMAGE_OFF + 0x1000
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -106,9 +110,14 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "IsProcessorFeaturePresent": ("k32_IsProcessorFeaturePresent", True),
             "InitializeSListHead": ("k32_InitializeSListHead", False),
             "GetStartupInfoW": ("k32_GetStartupInfoW", False),
-            "IsDebuggerPresent": ("k32_IsDebuggerPresent", True)}
+            "IsDebuggerPresent": ("k32_IsDebuggerPresent", True),
+            "LoadLibraryExW": ("k32_LoadLibraryExW", True), "GetModuleHandleW": ("k32_GetModuleHandleW", True),
+            "GetModuleHandleExW": ("k32_GetModuleHandleExW", True),
+            "GetModuleFileNameW": ("k32_GetModuleFileNameW", True), "GetProcAddress": ("k32_GetProcAddress", True),
+            "FreeLibrary": ("k32_FreeLibrary", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
+HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
@@ -783,7 +792,7 @@ class VM:
     def __init__(self, loaded: Loaded, tid: int = 4, lockstep: bool = False,
                  clock: Callable[[], int] | None = None, last_error_source: str | None = None,
                  files: FileBridge | None = None, file_source: str | None = None,
-                 runtime_sources: dict[str, str] | None = None) -> None:
+                 runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe") -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
@@ -830,6 +839,7 @@ class VM:
         self.slow_sse = 0                                # SSE instructions run by x86fp (MXCSR unmasked)
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name) for thunk, name in loaded.thunks.items()}
+        self.modules = self._modules(image_name)
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
 
     def flush_translations(self) -> None:
@@ -864,6 +874,35 @@ class VM:
         struct.pack_into("<QQQ", self.mm, st + 176, teb, teb, 0)
         struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - RING_HEADER) // 24)
 
+    def _modules(self, image_name: str) -> Modules:
+        """The module table (src/w2m/modules.py) and the synthetic kernel32 and kernelbase images."""
+        k32, kb = PROCESS_VA + KERNEL32_IMAGE_OFF, PROCESS_VA + KERNELBASE_IMAGE_OFF
+        for off in (KERNEL32_IMAGE_OFF, KERNELBASE_IMAGE_OFF):
+            page = self._process(off)
+            self.mm[page:page + 2] = b"MZ"
+            struct.pack_into("<I", self.mm, page + 0x3C, 0x80)                 # e_lfanew
+            self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
+            struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)             # x64, no sections
+        img = self.ld.image
+        base = img.image_base if img is not None else 0
+        imports = {f"{n.split('!', 1)[0].lower()}!{n.split('!', 1)[1].lower()}": t for t, n in self.ld.thunks.items()}
+
+        def make_thunk(key: str) -> int:
+            addr = THUNK_BASE + 16 * len(self.ld.thunks)
+            self.ld.thunks[addr] = key
+            self.bridges[addr] = self._bridge(key)
+            return addr
+
+        def in_app_directory(name: str) -> bool:
+            return self.files is not None and any(e.lower() == name for e in os.listdir(self.files.root))
+
+        spec = json.loads(EXPORTS_SPEC.read_text())
+        return Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
+                       image_name=image_name, kernel32=k32, kernelbase=kb,
+                       image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
+                       imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
+                       in_app_directory=in_app_directory)
+
     def _bridge(self, import_name: str) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
         R9 and RSP in x0-x4, call the C service on the runtime stack, put its result in RAX unless
@@ -872,7 +911,7 @@ class VM:
         with hvc #9."""
         dll, fn = import_name.split("!", 1)
         a = Assembler(MONITOR_VA + self.code_cursor)
-        service = SERVICES.get(fn) if dll.upper() == "KERNEL32.DLL" else None
+        service = SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL") else None
         state = PROCESS_VA + STATE_OFF
         if service is None:
             a.emit(a64.hvc(9))
@@ -918,6 +957,9 @@ class VM:
             result = self.clock() & M64
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
+        elif op in (HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT):
+            a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
+            result = self._module_request(op, a0, a1, a2)
         elif op == HOST_RUNTIME_FAULT:
             raise CompileError(f"guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} "
                                f"(EC 0x{a1 >> 26 & 0x3F:x}), not in translated code or not a data abort")
@@ -928,6 +970,23 @@ class VM:
             raise CompileError(f"guest runtime: unknown host request {op}")
         struct.pack_into("<Q", self.mm, t + 56, result)
         return True
+
+    def _module_request(self, op: int, a0: int, a1: int, a2: int) -> int:
+        view = _GuestView(self)
+        m = self.modules
+        if op == HOST_MODULE:
+            return m.module(view.read(a0, 2 * a1).decode("utf-16-le"), loading=bool(a2))
+        if op == HOST_PROC:
+            return m.proc(a0, view.read(a1, a2).decode("latin-1"))
+        if op == HOST_MODULE_AT:
+            return m.containing(a0)
+        path = m.file_name(a0)                                  # HOST_MODULE_PATH: buffer a1, a2 characters
+        if path is None:
+            return M64
+        raw = path.encode("utf-16-le")[:2 * a2]
+        if a2:
+            view.write(a1, raw)
+        return len(path)
 
     def calls(self) -> list[str]:
         """The service calls the guest runtime logged, in order: the first `capacity` of them."""

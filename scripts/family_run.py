@@ -206,7 +206,7 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None) -> tuple[bytes
     with tempfile.TemporaryDirectory(prefix="w2m-family-") as d:
         files = FileBridge(Path(d))
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes()), files=files,
-                runtime_sources=sources)
+                runtime_sources=sources, image_name="probe.exe")      # the runner ran it as probe.exe
         try:
             r = vm.run(max_steps=1 << 40, timeout_ms=60_000)    # the clock probes spin until time advances
         finally:

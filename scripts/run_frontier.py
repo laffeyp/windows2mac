@@ -58,7 +58,7 @@ def main(argv: list[str]) -> int:
         yield events.validate(events.EXECUTION_STARTED(
             execution_id=xid, subject_kind="application", subject_sha256=sha, profile_kind="managed_vm",
             profile_id="w2m-vm", initial_state_sha256=EMPTY, injected_inputs_sha256=EMPTY))
-        vm = VM(load(data))
+        vm = VM(load(data), image_name=Path(a.exe).name)
         try:
             r = vm.run(max_steps=a.max_steps, timeout_ms=60_000)
         finally:

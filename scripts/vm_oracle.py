@@ -46,7 +46,7 @@ from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, comp
 from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 
-RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042"}
+RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042", "044": "semantics-044"}
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
 
 
@@ -176,7 +176,7 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
     order: list[int] = []
     skipped: Counter[str] = Counter()
     for i, c in enumerate(cases):
-        why = vm_compiles(c.code)
+        why = vm_compiles(c.code) or sd.undefined_memory(c)
         if why:
             skipped[f"{c.label}: {why}"] += 1
         else:

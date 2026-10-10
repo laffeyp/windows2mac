@@ -192,6 +192,36 @@ class Runtime:
                 regs[RSI] = (regs[RSI] + step) & M64
             regs[RCX] -= 1
 
+    def _windows_divide_status(self) -> int:
+        """The status Windows gives a #DE (the CPU raises one exception for a zero divisor and for an
+        overflowing quotient; Windows tells them apart in software). Its handler re-decodes the
+        instruction and reads the divisor: a legacy high-byte register (encodings 4-7 without REX,
+        AH CH DH BH) is read as SPL BPL SIL DIL, and a memory operand's address is taken with the full
+        64-bit registers, ignoring a 0x67 prefix. Zero or unreadable: STATUS_INTEGER_DIVIDE_BY_ZERO;
+        otherwise STATUS_INTEGER_OVERFLOW. Grounds: all 127 DIV #DE results of case set 044 on an
+        Intel Xeon 8573C under Server 2022 (run 38039360955) follow this rule; reading the divisor as
+        the CPU does mispredicts 27 of them."""
+        from w2m.x86dec import decode
+        from w2m.x86ops import operands
+        from w2m.lift import REG
+        d = decode(self.mem.code_at(self.th.rip))
+        o = operands(d.fields)[0].split(":") if d.fields is not None and d.fields.ops else []
+        seen: int | None = None
+        if o and o[0] == "R":
+            idx, bits, hi = REG[o[1]]
+            seen = self.th.regs[idx + 4] & 0xFF if hi else self.th.regs[idx] & _mask(bits)
+        elif o and o[0] == "M":
+            base, index, scale, disp, width = o[2], o[3], int(o[4]), int(o[5]), int(o[6])
+            addr = disp + (self.th.regs[REG[base][0]] if base not in ("INVALID", "RIP") else 0)
+            addr += self.th.regs[REG[index][0]] * scale if index != "INVALID" else 0
+            if base == "RIP":
+                addr += self.th.rip + d.length
+            try:
+                seen = int.from_bytes(self.mem.read(addr & M64, width), "little")
+            except GuestFault:
+                seen = None
+        return STATUS_INTEGER_OVERFLOW if seen else STATUS_INTEGER_DIVIDE_BY_ZERO
+
     def _div(self, bits: int, divisor: int) -> None:
         """DIV (SDM DIV): faults before any write; every flag undefined afterwards."""
         m = _mask(bits)
@@ -200,12 +230,10 @@ class Runtime:
             dividend = self._rd(RAX, 16, False)
         else:
             dividend = self._rd(RDX, bits, False) << bits | self._rd(RAX, bits, False)
-        if divisor == 0:
-            raise GuestFault(f"#DE: DIV by zero at 0x{self.th.rip:x}", STATUS_INTEGER_DIVIDE_BY_ZERO)
-        q, rem = divmod(dividend, divisor)
-        if q > m:
-            raise GuestFault(f"#DE: DIV quotient 0x{q:x} wider than {bits} bits at 0x{self.th.rip:x}",
-                             STATUS_INTEGER_OVERFLOW)
+        q, rem = divmod(dividend, divisor) if divisor else (0, 0)
+        if divisor == 0 or q > m:
+            why = "by zero" if divisor == 0 else f"quotient 0x{q:x} wider than {bits} bits"
+            raise GuestFault(f"#DE: DIV {why} at 0x{self.th.rip:x}", self._windows_divide_status())
         if bits == 8:
             self._wr(RAX, 8, False, q)
             self._wr(RAX, 8, True, rem)

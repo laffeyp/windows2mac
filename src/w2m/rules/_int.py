@@ -156,41 +156,50 @@ def sbb(ctx: Ctx) -> None:
 def bit_test(ctx: Ctx) -> None:
     """BT, BTS, BTR (SDM BT): CF = the selected bit; BTS sets it, BTR clears it. A register or an
     immediate offset selects bit (offset mod operand size); a register offset with a memory base
-    addresses the bit string: the operand at base + size * floor(offset / bits), signed."""
+    addresses the bit string: the operand at base + size * floor(offset / bits), signed, wrapping at
+    32 bits under a 0x67 prefix. Every temporary is written once (the VM gives each write its own
+    register)."""
     b, ic, ops, nxt = ctx.b, ctx.ic, ctx.ops, ctx.nxt
     dk, dst, bits = _operand(b, ops[0], nxt)
     ok, off_loc, obits = _operand(b, ops[1], nxt)
     off = _val(b, ok, off_loc)
     log = bits.bit_length() - 1                         # 16 -> 4, 32 -> 5, 64 -> 6
     if dst[0] == "m" and ok == "loc":                   # type: ignore[index]
-        wide, shift, scaled, step, addr = b.t(), b.t(), b.t(), b.t(), b.t()
-        if obits == 64:
-            wide = off
-        else:
+        wide = off
+        if obits != 64:
+            wide = b.t()
             b.emit("alu", wide, "sext32" if obits == 32 else "sext16", off, off, 64)
+        shift, words, step, scaled, addr = b.t(), b.t(), b.t(), b.t(), b.t()
         b.emit("imm", shift, log)
-        b.emit("alu", scaled, "sar", wide, shift, 64)
+        b.emit("alu", words, "sar", wide, shift, 64)
         b.emit("imm", step, log - 3)
-        b.emit("alu", scaled, "shl", scaled, step, 64)
+        b.emit("alu", scaled, "shl", words, step, 64)
         b.emit("alu", addr, "add", dst[1], scaled, 64)  # type: ignore[index]
+        abits = next(op[6] for op in b.ops if op[0] == "addr" and op[1] == dst[1])    # type: ignore[index]
+        if abits == 32:                                 # a 0x67 prefix: the address wraps at 32 bits
+            low, wrapped = b.t(), b.t()
+            b.emit("imm", low, 0xFFFF_FFFF)
+            b.emit("alu", wrapped, "and", addr, low, 64)
+            addr = wrapped
         dst = ("m", addr, dst[2])                       # type: ignore[index]
-    mask, bit, value, one, sel, cf = b.t(), b.t(), b.t(), b.t(), b.t(), b.t()
+    mask, bit, shifted, one, cf = b.t(), b.t(), b.t(), b.t(), b.t()
     b.emit("imm", mask, bits - 1)
     b.emit("alu", bit, "and", off, mask, 64)
     value = _val(b, "loc", dst)
-    b.emit("alu", cf, "shr", value, bit, bits)
+    b.emit("alu", shifted, "shr", value, bit, bits)
     b.emit("imm", one, 1)
-    b.emit("alu", cf, "and", cf, one, bits)
+    b.emit("alu", cf, "and", shifted, one, bits)
     if ic in ("BTS", "BTR"):
+        sel, result = b.t(), b.t()
         b.emit("alu", sel, "shl", one, bit, bits)
         if ic == "BTR":
             ones, notsel = b.t(), b.t()
             b.emit("imm", ones, (1 << bits) - 1)
             b.emit("alu", notsel, "xor", sel, ones, bits)
-            b.emit("alu", value, "and", value, notsel, bits)
+            b.emit("alu", result, "and", value, notsel, bits)
         else:
-            b.emit("alu", value, "or", value, sel, bits)
-        b.emit("st", dst, value)
+            b.emit("alu", result, "or", value, sel, bits)
+        b.emit("st", dst, result)
     b.emit("flags", "bt", cf, cf, cf, bits)
 
 

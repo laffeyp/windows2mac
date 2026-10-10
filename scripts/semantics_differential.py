@@ -200,6 +200,39 @@ def _memory_size(raw: bytes) -> int | None:
     return sizes[0] if sizes else None
 
 
+def _strings(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
+    """REP STOS / REP MOVS states that stay inside the compared windows: RDI in the data window
+    (RSI in the stack window for MOVS) with a count that fits, DF clear or set, a zero count; and,
+    one state in four, RDI near the data page's end with a count that runs past it, so the stores
+    fault part way (SDM Vol 1 7.3.9: the registers show the faulting iteration)."""
+    for label in sorted(STRING_ENCODINGS):
+        if label not in classes:
+            continue
+        code, size = bytes.fromhex(STRING_ENCODINGS[label]), {"B": 1, "W": 2, "D": 4, "Q": 8}[label[-1]]
+        for i in range(STRING_STATES):
+            s = _state(rng, False)
+            df = rng.getrandbits(1)
+            s.rflags = (s.rflags & ~(1 << DF_BIT)) | df << DF_BIT
+            if i % 4 == 3:                                     # runs off the data page: faults part way
+                done = rng.randrange(1, 4)
+                s.regs[7] = PAGE_END - done * size if not df else PAGE_END - size
+                s.regs[1] = done + rng.randrange(1, 9) if not df else rng.randrange(1, 4)
+                s.kind = 1 if not df else 0
+            else:
+                count = 0 if i % 8 == 0 else rng.randrange(1, WINDOW // size + 1)
+                span = count * size
+                lo = DATA_VA + DATA_OFF
+                first = lo + rng.randrange(0, WINDOW - span + 1)
+                s.regs[7] = first if not df else first + max(span - size, 0)
+                s.regs[1] = count
+            src_lo = STACK_VA + STACK_OFF
+            s.regs[6] = src_lo + (rng.randrange(0, WINDOW - s.regs[1] * size + 1) if s.regs[1] * size <= WINDOW else 0)
+            if df and s.regs[1]:
+                s.regs[6] += max(s.regs[1] * size - size, 0)
+            s.code, s.label = code, label
+            yield s
+
+
 def _control_flow() -> Iterator[tuple[bytes, str]]:
     for cc in range(16):
         yield bytes([0x70 + cc, 0x0E]), f"Jcc_{cc:x}"
@@ -236,12 +269,19 @@ LOCKABLE_042 = ("NEG",)
 CLASSES_042 = frozenset(("NEG", "NEG_LOCK"))
 # Sprint 044: the integer classes the launcher's reachable code uses without a rule (census 2026-10-10)
 CLASSES_044 = frozenset(("NOT", "CDQE", "CDQ", "MOVSX", "BSWAP", "XCHG", "SBB", "BT", "BTS", "BTR", "DIV"))
+# Sprint 044 (second block): REP STOS and REP MOVS, from fixed encodings with controlled states
+# (_strings): random registers would send RDI anywhere with a count near 2^64
+CLASSES_044B = frozenset(f"REP_{k}{s}" for k in ("STOS", "MOVS") for s in "BWDQ")
+STRING_ENCODINGS = {"REP_STOSB": "f3aa", "REP_STOSW": "66f3ab", "REP_STOSD": "f3ab", "REP_STOSQ": "f348ab",
+                    "REP_MOVSB": "f3a4", "REP_MOVSW": "66f3a5", "REP_MOVSD": "f3a5", "REP_MOVSQ": "f348a5"}
+STRING_STATES = 24
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
     "041": (2026_10_10_41, CLASSES_041, LOCKABLE_041, False),
     "042": (2026_10_11_42, CLASSES_042, LOCKABLE_042, False),
-    "044": (2026_10_10_44, CLASSES_044, (), False)}
+    "044": (2026_10_10_44, CLASSES_044, (), False),
+    "044b": (2026_10_10_441, CLASSES_044B, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -308,6 +348,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                     skipped["fault with RSP outside the stack (not dispatchable)"] += 1
             else:
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
+    out.extend(_strings(classes, rng))                         # only sets with REP classes (044b on)
     for code, label in _control_flow() if control_flow else []:
         for _ in range(CONTROL_STATES):
             s = _state(rng, False)
@@ -438,6 +479,35 @@ def model(c: Case) -> ModelRun | str:
     return ModelRun(rt, 0, "")
 
 
+def undefined_memory(c: Case) -> str | None:
+    """Why a case cannot be judged, or None. BT, BTS and BTR with a register offset address a bit
+    string: the operand they touch may lie outside the windows a case defines (the data window, the
+    page edge, the stack window), where the runner's page holds bytes the case never set (case set
+    044: 3 such cases differed in CF). Those cases are set aside, counted, not judged."""
+    from w2m.lift import REG
+    if c.label not in ("BT", "BTS", "BTR"):
+        return None
+    d = decode(c.code)
+    o = operands(d.fields) if d.fields is not None and d.fields.ops else []
+    if len(o) < 2 or o[0][0] != "M" or o[1][0] != "R":
+        return None
+    p = o[0].split(":")
+    wrap = (1 << 32) - 1 if d.fields is not None and 0x67 in d.fields.prefixes else M64
+    ea = int(p[5]) + (c.regs[REG[p[2]][0]] if p[2] != "INVALID" else 0)
+    ea += c.regs[REG[p[3]][0]] * int(p[4]) if p[3] != "INVALID" else 0
+    idx, obits, _ = REG[o[1].split(":")[1]]
+    off = c.regs[idx] & ((1 << obits) - 1)
+    off -= (1 << obits) if off >> (obits - 1) else 0
+    size = int(p[6])
+    addr = (ea + size * (off // (8 * size))) & wrap
+    windows = ((DATA_VA + DATA_OFF, WINDOW), (DATA_VA + EDGE_OFF, EDGE), (STACK_VA + STACK_OFF, WINDOW))
+    if any(lo <= addr and addr + size <= lo + n for lo, n in windows):
+        return None
+    if not any(lo <= addr < lo + 0x1000 for lo in (DATA_VA, STACK_VA)):
+        return None                                   # unmapped on both: the fault is judged
+    return "bit string outside the case's windows (not judged)"
+
+
 def judge(c: Case, r: Result, label: str) -> list[tuple[str, str]]:
     """(class, detail) for every field where the model differs from the CPU (format 2)."""
     m = model(c)
@@ -556,13 +626,18 @@ def judge_run(a: argparse.Namespace) -> int:
     classes: Counter[str] = Counter()
     example: dict[str, str] = {}
     faults = Counter(f"0x{r.fault:x}" for r in runs[0] if r.marker == 2)
+    set_aside: Counter[str] = Counter()
     for i, (c, r) in enumerate(zip(built, runs[0], strict=True)):
+        why = undefined_memory(c)
+        if why:
+            set_aside[f"{c.label}: {why}"] += 1
+            continue
         for k, detail in judge(c, r, c.label):
             classes[k] += 1
             example.setdefault(k, f"case {i}: {c.code.hex()} {detail}")
     print(f"cases {len(built)} over {len({c.label for c in built})} iclasses; runs {len(runs)} on {cpu} ({profile}); "
           f"cpu faults {dict(faults)}; cases whose CPU result differs between runs {unstable}; "
-          f"classes {len(classes)}; {time.monotonic() - t0:.0f} s")
+          f"classes {len(classes)}; set aside {dict(set_aside)}; {time.monotonic() - t0:.0f} s")
     for k, n in classes.most_common(60):
         print(f"  {n:6} {k}: {example[k]}")
     if a.record:

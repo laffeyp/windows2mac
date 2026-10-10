@@ -71,3 +71,21 @@ def test_planted_wrong_rule_is_reported_and_routed(tmp_path: Path, monkeypatch: 
     assert "CANDIDATE_ACCEPTED" not in kinds
     assert kinds.count("DISCREPANCY_REPORTED") == kinds.count("DISCREPANCY_ROUTED") > 0
     assert kinds.count("SESSION_COMPLETED") == 1
+
+
+def test_every_rule_writes_each_temporary_once() -> None:
+    """The VM gives each write of a temporary its own register before reading the operands, so a
+    rule that writes a temporary twice reads garbage there (Sprint 044: BT's first draft, caught by
+    the CPU in 200 cases). Checked on every case of every case set."""
+    from w2m.lift import lift
+    from w2m.vm_backend import _temps_written
+    import semantics_differential as sd
+    twice = Counter()
+    for k in sd.CASE_SETS:
+        seed, classes, locked, control = sd.CASE_SETS[k]
+        for c in sd.build_cases(seed, classes, locked, control)[0]:
+            ins = lift(c.code + b"\x90" * 15, sd.CODE_VA)
+            written = Counter(t for op in ins.ops for t in _temps_written(op))
+            if any(n > 1 for n in written.values()):
+                twice[ins.iclass] += 1
+    assert twice == Counter()

@@ -48,8 +48,8 @@ from w2m.rules import registry  # noqa: E402
 from w2m.x86dec import decode  # noqa: E402
 
 # Each case set's reference: an Intel Xeon Platinum 8573C run of its case file
-REFERENCES = {"039": "38011862284", "041": "38029980267", "042": "38031723882"}
-CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0", "042": "0.42.0"}     # the case set (its class list and seed)
+REFERENCES = {"039": "38011862284", "041": "38029980267", "042": "38031723882", "044": "38039360955"}
+CASE_FILE_VERSIONS = {"039": "0.39.0", "041": "0.41.0", "042": "0.42.0", "044": "0.44.0"}     # the case set (its class list and seed)
 
 
 def contract_id(iclass: str) -> str:
