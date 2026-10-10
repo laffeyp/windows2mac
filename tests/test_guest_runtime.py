@@ -5,6 +5,8 @@ discovered and published on the signal plane."""
 
 from __future__ import annotations
 
+import re
+
 from collections import Counter
 from pathlib import Path
 
@@ -26,6 +28,15 @@ def _skeleton() -> bytes:
 def test_api_ids_match_the_services() -> None:
     internal = {"Exception", "Cpuid"}                          # ring entries that are not kernel32 services
     assert set(guest_runtime.api_ids().values()) - internal == set(vm_backend.SERVICES)
+
+
+def test_every_api_id_has_a_call_counter() -> None:
+    """runtime.c counts a call only when its id is below W2M_RING_APIS; ids 64-68 went uncounted until
+    Sprint 044 raised the bound (LCMapStringEx, the environment functions, SetUnhandledExceptionFilter)."""
+    header = (ROOT / "tools" / "guest_runtime" / "runtime.h").read_text()
+    bound = int(re.search(r"#define W2M_RING_APIS (\d+)", header).group(1))   # type: ignore[union-attr]
+    assert bound == vm_backend.RING_APIS
+    assert max(guest_runtime.api_ids()) < bound
 
 
 @pytest.mark.hvf

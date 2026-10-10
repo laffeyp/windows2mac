@@ -44,7 +44,7 @@ struct w2m_transport {
 /* Ring buffer: one record per service call, in order, for the first `capacity` calls; `per_api`
  * counts every call by API id, past capacity too (Sprint 044: the hot services make millions of
  * calls, and the totals must stay exact). The host reads both after the run, without an exit. */
-#define W2M_RING_APIS 64
+#define W2M_RING_APIS 256                /* above every W2M_API_* id (tests/test_guest_runtime.py) */
 struct w2m_ring_record {
     u64 api;
     u64 arg0;

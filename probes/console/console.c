@@ -8,7 +8,7 @@
  * it starts itself again with no inherited handles and an empty STARTUPINFO (the child, the
  * Steam-like start), waits, and copies the child's rows from a file to its own standard output. The
  * child's rows: GetStdHandle, GetFileType, GetConsoleMode, GetConsoleCP, WriteConsoleW, SetStdHandle,
- * FlushFileBuffers and GetStartupInfoW, each with its return and last error (after SetLastError(0xDEAD)).
+ * FlushFileBuffers, GetStartupInfoW and GetCommandLineA, each with its return and last error (after SetLastError(0xDEAD)).
  */
 #include <windows.h>
 
@@ -133,6 +133,15 @@ static void child(void) {
         int quoted = cl > len + 2 && c[0] == '"' && c[len + 1] == '"';
         for (DWORD i = 0; quoted && i < len; i++) quoted = c[i + 1] == self[i];
         row("command_line.child"); flag("quoted_module_path_then_child", quoted && cl == len + 8); end();
+        /* GetCommandLineA (Sprint 044: the launcher calls it): the same characters as the wide line, which is
+           ASCII here, and the same pointer on a second call */
+        const char *ca = GetCommandLineA();
+        DWORD al = 0;
+        while (ca[al]) al++;
+        int equal = al == cl;
+        for (DWORD i = 0; equal && i < cl; i++) equal = (unsigned char)ca[i] == c[i];
+        row("command_line_a.child"); flag("same_characters_as_wide", equal); flag("same_pointer", GetCommandLineA() == ca);
+        end();
     }
 
     DWORD w;
