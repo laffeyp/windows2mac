@@ -157,7 +157,23 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetEnvironmentStringsW": ("k32_GetEnvironmentStringsW", True),
             "FreeEnvironmentStringsW": ("k32_FreeEnvironmentStringsW", True),
             "lstrlenW": ("k32_lstrlenW", True),
-            "SetUnhandledExceptionFilter": ("k32_SetUnhandledExceptionFilter", True)}
+            "SetUnhandledExceptionFilter": ("k32_SetUnhandledExceptionFilter", True),
+            "EncodePointer": ("k32_EncodePointer", True),
+            "DecodePointer": ("k32_DecodePointer", True),
+            "InitializeSRWLock": ("k32_InitializeSRWLock", True),
+            "InitializeConditionVariable": ("k32_InitializeConditionVariable", True),
+            "AcquireSRWLockExclusive": ("k32_AcquireSRWLockExclusive", True),
+            "TryAcquireSRWLockExclusive": ("k32_TryAcquireSRWLockExclusive", True),
+            "ReleaseSRWLockExclusive": ("k32_ReleaseSRWLockExclusive", True),
+            "AcquireSRWLockShared": ("k32_AcquireSRWLockShared", True),
+            "TryAcquireSRWLockShared": ("k32_TryAcquireSRWLockShared", True),
+            "ReleaseSRWLockShared": ("k32_ReleaseSRWLockShared", True),
+            "SleepConditionVariableSRW": ("k32_SleepConditionVariableSRW", True),
+            "WakeConditionVariable": ("k32_WakeConditionVariable", True),
+            "WakeAllConditionVariable": ("k32_WakeAllConditionVariable", True),
+            "GetCurrentThread": ("k32_GetCurrentThread", True),
+            "GetThreadTimes": ("k32_GetThreadTimes", True),
+            "GetThreadPriority": ("k32_GetThreadPriority", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py

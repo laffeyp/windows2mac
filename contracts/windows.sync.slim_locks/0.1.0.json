@@ -1,0 +1,141 @@
+{
+ "contract_id": "windows.sync.slim_locks",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "SRW locks and condition variables on one thread: the words Windows leaves (0 free, 1 exclusive, (n << 4) | 1 for n shared holders), the try forms' answers, a timed sleep's FALSE and ERROR_TIMEOUT, and wakes with no waiter.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/slim_locks/slim_locks.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "srw.initialized",
+    "word": 0
+   },
+   {
+    "s": "cv.initialized",
+    "word": 0
+   },
+   {
+    "s": "srw.exclusive",
+    "word": 1
+   },
+   {
+    "s": "srw.try_exclusive_while_held",
+    "ret": 0,
+    "err": 57005,
+    "word": 1
+   },
+   {
+    "s": "srw.try_shared_while_exclusive",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "cv.sleep_timeout_zero",
+    "ret": 0,
+    "err": 1460,
+    "lock_word": 1,
+    "cv_word": 0
+   },
+   {
+    "s": "cv.sleep_timeout_one_ms",
+    "ret": 0,
+    "err": 1460,
+    "lock_word": 1,
+    "cv_word": 0
+   },
+   {
+    "s": "srw.released",
+    "word": 0
+   },
+   {
+    "s": "srw.try_exclusive_free",
+    "ret": 1,
+    "err": 57005,
+    "word": 1
+   },
+   {
+    "s": "srw.shared_once",
+    "word": 17
+   },
+   {
+    "s": "srw.shared_twice",
+    "word": 33
+   },
+   {
+    "s": "srw.try_exclusive_while_shared",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "srw.shared_released_once",
+    "word": 17
+   },
+   {
+    "s": "srw.shared_released_twice",
+    "word": 0
+   },
+   {
+    "s": "cv.wake_one_no_waiters",
+    "err": 57005,
+    "word": 0
+   },
+   {
+    "s": "cv.wake_all_no_waiters",
+    "err": 57005,
+    "word": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38048676516: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:d233c8440737eb0e6ddb8ddae518df8d65d8778f5afc0de37a8b2124074a8c10; run 38048679185: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:05310917f137b890e6e9c7cc147e380260ccca50af2ae9311d0b76be5e76ea47; run 38048681485: windows-2025, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:d233c8440737eb0e6ddb8ddae518df8d65d8778f5afc0de37a8b2124074a8c10; run 38048683615: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:05310917f137b890e6e9c7cc147e380260ccca50af2ae9311d0b76be5e76ea47",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "slim_locks-1791631853-0-1",
+    "slim_locks-1791631853-0-2",
+    "slim_locks-1791631853-1-1",
+    "slim_locks-1791631853-1-2",
+    "slim_locks-1791631853-2-1",
+    "slim_locks-1791631853-2-2",
+    "slim_locks-1791631853-3-1",
+    "slim_locks-1791631853-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-sleepconditionvariablesrw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-sleepconditionvariablesrw (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "If the timeout expires the function returns FALSE and GetLastError returns ERROR_TIMEOUT."
+  }
+ ],
+ "open_questions": [
+  "One thread: an acquire of a held lock, an INFINITE sleep and a wake with a waiter stop the run (Sprint 047).",
+  "The timed sleep returns at once in w2m: no thread can wake it, and w2m does not pass the time.",
+  "The words are opaque on Microsoft Learn; the rows hold what a program can read."
+ ],
+ "sections": {
+  "probe": "probes/slim_locks (Sprint 044)",
+  "implementation": "tools/guest_runtime/slim_locks.c",
+  "rows": "scripts/family_run.py slim_locks",
+  "excluded": "none"
+ }
+}

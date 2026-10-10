@@ -1,0 +1,162 @@
+{
+ "contract_id": "windows.pointer.encoding",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "EncodePointer and DecodePointer as relations: every value round-trips, encodes the same twice and to something else, NULL included; no single XOR mask; the last error is left.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/pointer_encoding/pointer_encoding.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "value.0",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.1",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.2",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.3",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.4",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.5",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.6",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "value.7",
+    "round_trip": true,
+    "same_twice": true,
+    "changed": true,
+    "decode_changes": true,
+    "encode_err": 57005,
+    "decode_err": 57005
+   },
+   {
+    "s": "encoding.shape",
+    "distinct": true,
+    "xor_with_one_mask": false
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38048676507: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048678695: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048680921: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048682934: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048732025: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048733916: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048735710: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048737499: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048790083: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048791630: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048793388: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048794925: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048847109: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048848661: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6; run 38048850441: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1; run 38048852058: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "pointer_encoding-1791631853-0-1",
+    "pointer_encoding-1791631853-0-2",
+    "pointer_encoding-1791631853-1-1",
+    "pointer_encoding-1791631853-1-2",
+    "pointer_encoding-1791631853-2-1",
+    "pointer_encoding-1791631853-2-2",
+    "pointer_encoding-1791631853-3-1",
+    "pointer_encoding-1791631853-3-2",
+    "pointer_encoding-1791631910-0-1",
+    "pointer_encoding-1791631910-0-2",
+    "pointer_encoding-1791631910-1-1",
+    "pointer_encoding-1791631910-1-2",
+    "pointer_encoding-1791631910-2-1",
+    "pointer_encoding-1791631910-2-2",
+    "pointer_encoding-1791631910-3-1",
+    "pointer_encoding-1791631910-3-2",
+    "pointer_encoding-1791631968-0-1",
+    "pointer_encoding-1791631968-0-2",
+    "pointer_encoding-1791631968-1-1",
+    "pointer_encoding-1791631968-1-2",
+    "pointer_encoding-1791631968-2-1",
+    "pointer_encoding-1791631968-2-2",
+    "pointer_encoding-1791631968-3-1",
+    "pointer_encoding-1791631968-3-2",
+    "pointer_encoding-1791632026-0-1",
+    "pointer_encoding-1791632026-0-2",
+    "pointer_encoding-1791632026-1-1",
+    "pointer_encoding-1791632026-1-2",
+    "pointer_encoding-1791632026-2-1",
+    "pointer_encoding-1791632026-2-2",
+    "pointer_encoding-1791632026-3-1",
+    "pointer_encoding-1791632026-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-encodepointer",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/utilapiset/nf-utilapiset-encodepointer (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Encoding globally available pointers helps protect them from being exploited. The EncodePointer function obfuscates the pointer value with a secret so that it cannot be predicted by an external agent. The secret used by EncodePointer is different for each process."
+  }
+ ],
+ "open_questions": [
+  "The rows fix relations, not Windows's algorithm; w2m keeps one secret for every process, where Windows's differs per process (its page)."
+ ],
+ "sections": {
+  "probe": "probes/pointer_encoding (Sprint 044)",
+  "implementation": "tools/guest_runtime/pointer_encoding.c",
+  "rows": "scripts/family_run.py pointer_encoding",
+  "excluded": "none"
+ }
+}

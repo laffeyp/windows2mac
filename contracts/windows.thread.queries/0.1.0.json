@@ -1,0 +1,78 @@
+{
+ "contract_id": "windows.thread.queries",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetCurrentThread's pseudo-handle -2; GetThreadTimes on it (times as relations) and on NULL (ERROR_INVALID_HANDLE); GetThreadPriority 0.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (Intel(R) Xeon(R) 6973P-C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/thread_queries/thread_queries.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "current_thread",
+    "value": 18446744073709551614
+   },
+   {
+    "s": "times.current",
+    "ret": 1,
+    "err": 57005,
+    "created_near_now": true,
+    "exit_zero": true,
+    "kernel_under_ten_seconds": true,
+    "user_under_ten_seconds": true
+   },
+   {
+    "s": "times.null_handle",
+    "ret": 0,
+    "err": 6
+   },
+   {
+    "s": "priority.current",
+    "value": 0,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38048923955: windows-2025, Intel(R) Xeon(R) 6973P-C, probe sha256:397c3cb472085b1bc1b455fb2fb312a37bf9ea2cc4990fbf8165a988299aad7f; run 38048925932: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:a4f1490cbd7485c120dd20a7125c7d90e99e8c8e8e292039e290c19e53b69af3; run 38048928046: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:397c3cb472085b1bc1b455fb2fb312a37bf9ea2cc4990fbf8165a988299aad7f; run 38048930112: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:a4f1490cbd7485c120dd20a7125c7d90e99e8c8e8e292039e290c19e53b69af3",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "thread_queries-1791632104-0-1",
+    "thread_queries-1791632104-0-2",
+    "thread_queries-1791632104-1-1",
+    "thread_queries-1791632104-1-2",
+    "thread_queries-1791632104-2-1",
+    "thread_queries-1791632104-2-2",
+    "thread_queries-1791632104-3-1",
+    "thread_queries-1791632104-3-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "On Server 2022 a thread's creation time can read later than the system time taken after it (6 of 8 executions, first probe revision); the row is a window around now.",
+  "w2m's user time is the time since creation, an upper bound on the thread's own time."
+ ],
+ "sections": {
+  "probe": "probes/thread_queries (Sprint 044)",
+  "implementation": "tools/guest_runtime/thread_queries.c",
+  "rows": "scripts/family_run.py thread_queries",
+  "excluded": "none"
+ }
+}

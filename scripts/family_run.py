@@ -536,6 +536,90 @@ FAMILIES: dict[str, Family] = {
         plants={"returns_null": Plant("    return w2m_logged(W2M_API_SetUnhandledExceptionFilter, f, before);",
                                       "    (void)before;\n    return w2m_logged(W2M_API_SetUnhandledExceptionFilter, f, 0);",
                                       ("set.second", "set.null"))}),
+    "pointer_encoding": Family(
+        name="pointer_encoding",
+        contract_id="windows.pointer.encoding",
+        version="0.1.0",
+        summary=("EncodePointer and DecodePointer as relations: every value round-trips, encodes the same twice and "
+                 "to something else, NULL included; no single XOR mask; the last error is left."),
+        probe="pointer_encoding", guest_file="pointer_encoding.c",
+        runs={
+              "38048676507": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791631853-0", "AMD EPYC 7763 64-Core Processor"),
+              "38048678695": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791631853-1", "AMD EPYC 9V74 80-Core Processor"),
+              "38048680921": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791631853-2", "AMD EPYC 7763 64-Core Processor"),
+              "38048682934": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791631853-3", "AMD EPYC 7763 64-Core Processor"),
+              "38048732025": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791631910-0", "AMD EPYC 7763 64-Core Processor"),
+              "38048733916": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791631910-1", "AMD EPYC 7763 64-Core Processor"),
+              "38048735710": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791631910-2", "AMD EPYC 7763 64-Core Processor"),
+              "38048737499": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791631910-3", "AMD EPYC 7763 64-Core Processor"),
+              "38048790083": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791631968-0", "AMD EPYC 7763 64-Core Processor"),
+              "38048791630": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791631968-1", "AMD EPYC 7763 64-Core Processor"),
+              "38048793388": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791631968-2", "AMD EPYC 7763 64-Core Processor"),
+              "38048794925": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791631968-3", "AMD EPYC 7763 64-Core Processor"),
+              "38048847109": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791632026-0", "AMD EPYC 7763 64-Core Processor"),
+              "38048848661": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791632026-1", "AMD EPYC 9V74 80-Core Processor"),
+              "38048850441": Run("windows-2025", "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1", "pointer_encoding-1791632026-2", "AMD EPYC 7763 64-Core Processor"),
+              "38048852058": Run("windows-2022", "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6", "pointer_encoding-1791632026-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-encodepointer", "api/utilapiset/nf-utilapiset-encodepointer", "2024-02-22",
+                       "Encoding globally available pointers helps protect them from being exploited. The "
+                       "EncodePointer function obfuscates the pointer value with a secret so that it cannot be "
+                       "predicted by an external agent. The secret used by EncodePointer is different for each process."),),
+        open_questions=(
+            "The rows fix relations, not Windows's algorithm; w2m keeps one secret for every process, where Windows's "
+            "differs per process (its page).",),
+        plants={"identity": Plant("    return w2m_logged(W2M_API_EncodePointer, p, ror(p ^ SECRET, SECRET & 63));",
+                                  "    (void)ror;\n    return w2m_logged(W2M_API_EncodePointer, p, p);",
+                                  ("value.*", "encoding.shape"))}),
+    "slim_locks": Family(
+        name="slim_locks",
+        contract_id="windows.sync.slim_locks",
+        version="0.1.0",
+        summary=("SRW locks and condition variables on one thread: the words Windows leaves (0 free, 1 exclusive, "
+                 "(n << 4) | 1 for n shared holders), the try forms' answers, a timed sleep's FALSE and ERROR_TIMEOUT, "
+                 "and wakes with no waiter."),
+        probe="slim_locks", guest_file="slim_locks.c",
+        runs={
+              "38048676516": Run("windows-2025", "d233c8440737eb0e6ddb8ddae518df8d65d8778f5afc0de37a8b2124074a8c10", "slim_locks-1791631853-0", "AMD EPYC 7763 64-Core Processor"),
+              "38048679185": Run("windows-2022", "05310917f137b890e6e9c7cc147e380260ccca50af2ae9311d0b76be5e76ea47", "slim_locks-1791631853-1", "AMD EPYC 7763 64-Core Processor"),
+              "38048681485": Run("windows-2025", "d233c8440737eb0e6ddb8ddae518df8d65d8778f5afc0de37a8b2124074a8c10", "slim_locks-1791631853-2", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38048683615": Run("windows-2022", "05310917f137b890e6e9c7cc147e380260ccca50af2ae9311d0b76be5e76ea47", "slim_locks-1791631853-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-sleepconditionvariablesrw", "api/synchapi/nf-synchapi-sleepconditionvariablesrw",
+                       "2024-02-22", "If the timeout expires the function returns FALSE and GetLastError returns "
+                       "ERROR_TIMEOUT."),),
+        open_questions=(
+            "One thread: an acquire of a held lock, an INFINITE sleep and a wake with a waiter stop the run (Sprint 047).",
+            "The timed sleep returns at once in w2m: no thread can wake it, and w2m does not pass the time.",
+            "The words are opaque on Microsoft Learn; the rows hold what a program can read."),
+        plants={"shared_count_low_bits": Plant("    *(u64 *)lock = (w ? w + SHARED_ONE : SHARED_ONE | EXCLUSIVE);",
+                                               "    *(u64 *)lock = (w ? w + 1 : SHARED_ONE | EXCLUSIVE);",
+                                               ("srw.shared_twice", "srw.shared_released_once", "srw.shared_released_twice")),
+                "sleep_leaves_error": Plant("    set_error(ERROR_TIMEOUT);\n    return w2m_logged(W2M_API_SleepConditionVariableSRW",
+                                           "    (void)set_error;\n    return w2m_logged(W2M_API_SleepConditionVariableSRW",
+                                           ("cv.sleep_timeout_zero", "cv.sleep_timeout_one_ms"))}),
+    "thread_queries": Family(
+        name="thread_queries",
+        contract_id="windows.thread.queries",
+        version="0.1.0",
+        summary=("GetCurrentThread's pseudo-handle -2; GetThreadTimes on it (times as relations) and on NULL "
+                 "(ERROR_INVALID_HANDLE); GetThreadPriority 0."),
+        probe="thread_queries", guest_file="thread_queries.c",
+        runs={
+              "38048923955": Run("windows-2025", "397c3cb472085b1bc1b455fb2fb312a37bf9ea2cc4990fbf8165a988299aad7f", "thread_queries-1791632104-0", "Intel(R) Xeon(R) 6973P-C"),
+              "38048925932": Run("windows-2022", "a4f1490cbd7485c120dd20a7125c7d90e99e8c8e8e292039e290c19e53b69af3", "thread_queries-1791632104-1", "AMD EPYC 9V45 96-Core Processor"),
+              "38048928046": Run("windows-2025", "397c3cb472085b1bc1b455fb2fb312a37bf9ea2cc4990fbf8165a988299aad7f", "thread_queries-1791632104-2", "AMD EPYC 7763 64-Core Processor"),
+              "38048930112": Run("windows-2022", "a4f1490cbd7485c120dd20a7125c7d90e99e8c8e8e292039e290c19e53b69af3", "thread_queries-1791632104-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "On Server 2022 a thread's creation time can read later than the system time taken after it (6 of 8 "
+            "executions, first probe revision); the row is a window around now.",
+            "w2m's user time is the time since creation, an upper bound on the thread's own time."),
+        plants={"null_handle_wrong_error": Plant("        set_error(ERROR_INVALID_HANDLE);", "        set_error(87);",
+                                                 ("times.null_handle",))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",

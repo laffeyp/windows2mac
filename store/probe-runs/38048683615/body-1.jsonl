@@ -1,0 +1,16 @@
+{"s":"srw.initialized","word":0}
+{"s":"cv.initialized","word":0}
+{"s":"srw.exclusive","word":1}
+{"s":"srw.try_exclusive_while_held","ret":0,"err":57005,"word":1}
+{"s":"srw.try_shared_while_exclusive","ret":0,"err":57005}
+{"s":"cv.sleep_timeout_zero","ret":0,"err":1460,"lock_word":1,"cv_word":0}
+{"s":"cv.sleep_timeout_one_ms","ret":0,"err":1460,"lock_word":1,"cv_word":0}
+{"s":"srw.released","word":0}
+{"s":"srw.try_exclusive_free","ret":1,"err":57005,"word":1}
+{"s":"srw.shared_once","word":17}
+{"s":"srw.shared_twice","word":33}
+{"s":"srw.try_exclusive_while_shared","ret":0,"err":57005}
+{"s":"srw.shared_released_once","word":17}
+{"s":"srw.shared_released_twice","word":0}
+{"s":"cv.wake_one_no_waiters","err":57005,"word":0}
+{"s":"cv.wake_all_no_waiters","err":57005,"word":0}

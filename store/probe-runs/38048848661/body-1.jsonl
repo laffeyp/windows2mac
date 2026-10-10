@@ -1,0 +1,9 @@
+{"s":"value.0","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.1","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.2","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.3","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.4","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.5","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.6","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"value.7","round_trip":true,"same_twice":true,"changed":true,"decode_changes":true,"encode_err":57005,"decode_err":57005}
+{"s":"encoding.shape","distinct":true,"xor_with_one_mask":false}

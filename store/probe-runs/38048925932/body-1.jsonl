@@ -1,0 +1,4 @@
+{"s":"current_thread","value":18446744073709551614}
+{"s":"times.current","ret":1,"err":57005,"created_near_now":true,"exit_zero":true,"kernel_under_ten_seconds":true,"user_under_ten_seconds":true}
+{"s":"times.null_handle","ret":0,"err":6}
+{"s":"priority.current","value":0,"err":57005}

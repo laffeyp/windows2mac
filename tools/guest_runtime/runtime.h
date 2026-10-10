@@ -229,6 +229,22 @@ struct w2m_exception_area {
 #define W2M_API_FreeEnvironmentStringsW 66
 #define W2M_API_lstrlenW 67
 #define W2M_API_SetUnhandledExceptionFilter 68
+#define W2M_API_EncodePointer 69
+#define W2M_API_DecodePointer 70
+#define W2M_API_InitializeSRWLock 71
+#define W2M_API_InitializeConditionVariable 72
+#define W2M_API_AcquireSRWLockExclusive 73
+#define W2M_API_TryAcquireSRWLockExclusive 74
+#define W2M_API_ReleaseSRWLockExclusive 75
+#define W2M_API_AcquireSRWLockShared 76
+#define W2M_API_TryAcquireSRWLockShared 77
+#define W2M_API_ReleaseSRWLockShared 78
+#define W2M_API_SleepConditionVariableSRW 79
+#define W2M_API_WakeConditionVariable 80
+#define W2M_API_WakeAllConditionVariable 81
+#define W2M_API_GetCurrentThread 82
+#define W2M_API_GetThreadTimes 83
+#define W2M_API_GetThreadPriority 84
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -239,6 +255,8 @@ void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtim
 int w2m_file_is_open(u64 handle);                                       /* file.c */
 u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */
 void w2m_heap_release(u64 api, u64 p);                                  /* heap.c: give it back */
+u64 w2m_filetime_now(void);                                             /* process.c: the system time */
+u64 w2m_filetime_start(void);                                           /* process.c: its first reading */
 u64 w2m_unhandled_exception_filter(void);                               /* exception_filter.c: the current one */
 
 /* Monitor data word: the process's start (console.c): 0 a console program with redirected standard

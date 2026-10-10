@@ -335,6 +335,54 @@
    "38039212442": "conforms"
   }
  },
+ "pointer_encoding": {
+  "candidate_sha256": "sha256:69529f8e80d63bb2a9b7a03f8a7fc6b014fff25b91a642b99e9144725f0362c3",
+  "divergence": {
+   "38048676507": null,
+   "38048678695": null,
+   "38048680921": null,
+   "38048682934": null,
+   "38048732025": null,
+   "38048733916": null,
+   "38048735710": null,
+   "38048737499": null,
+   "38048790083": null,
+   "38048791630": null,
+   "38048793388": null,
+   "38048794925": null,
+   "38048847109": null,
+   "38048848661": null,
+   "38048850441": null,
+   "38048852058": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 16,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "pointer_encoding",
+  "record": "store/runs/family-pointer_encoding-1791632234596313000",
+  "verdicts": {
+   "38048676507": "conforms",
+   "38048678695": "conforms",
+   "38048680921": "conforms",
+   "38048682934": "conforms",
+   "38048732025": "conforms",
+   "38048733916": "conforms",
+   "38048735710": "conforms",
+   "38048737499": "conforms",
+   "38048790083": "conforms",
+   "38048791630": "conforms",
+   "38048793388": "conforms",
+   "38048794925": "conforms",
+   "38048847109": "conforms",
+   "38048848661": "conforms",
+   "38048850441": "conforms",
+   "38048852058": "conforms"
+  }
+ },
  "process_queries": {
   "candidate_sha256": "sha256:82a5a7b38c481f940168b103efe567f477f99ce79fba5489226b18e340654eb2",
   "divergence": {
@@ -359,6 +407,54 @@
    "38041800459": "conforms",
    "38041803105": "conforms",
    "38041805183": "conforms"
+  }
+ },
+ "slim_locks": {
+  "candidate_sha256": "sha256:ef493515eac1f847cd5fda5bdaf0e9d55f9dce1409625b203263aa8fa0673210",
+  "divergence": {
+   "38048676516": null,
+   "38048679185": null,
+   "38048681485": null,
+   "38048683615": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 4,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "slim_locks",
+  "record": "store/runs/family-slim_locks-1791632236485855000",
+  "verdicts": {
+   "38048676516": "conforms",
+   "38048679185": "conforms",
+   "38048681485": "conforms",
+   "38048683615": "conforms"
+  }
+ },
+ "thread_queries": {
+  "candidate_sha256": "sha256:3318950d474aa8df7cf3e6f54527bf47d14de78147d4c7374d4aefcd437ced0f",
+  "divergence": {
+   "38048923955": null,
+   "38048925932": null,
+   "38048928046": null,
+   "38048930112": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 4,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "thread_queries",
+  "record": "store/runs/family-thread_queries-1791632237850531000",
+  "verdicts": {
+   "38048923955": "conforms",
+   "38048925932": "conforms",
+   "38048928046": "conforms",
+   "38048930112": "conforms"
   }
  },
  "thread_storage": {

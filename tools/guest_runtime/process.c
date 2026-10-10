@@ -58,19 +58,27 @@ u64 k32_QueryPerformanceFrequency(u64 out) {
 
 static u64 base_filetime, base_counter;
 
+/* The system time as 100 ns intervals since 1601-01-01: the host's wall clock once, then the counter
+ * (thread_queries.c reads it too). */
+u64 w2m_filetime_now(void) {
+    if (clock_from_host()) return w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
+    u64 c = rescale(cntvct(), cntfrq(), QPC_FREQUENCY);             /* 10 MHz: one tick is 100 ns */
+    if (base_filetime == 0) {
+        base_filetime = w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
+        base_counter = c;
+    }
+    return base_filetime + (c - base_counter);
+}
+
+/* The first time the process read the clock: thread_queries.c's creation time. */
+u64 w2m_filetime_start(void) {
+    if (base_filetime == 0) (void)w2m_filetime_now();
+    return base_filetime;
+}
+
 /* "Retrieves the current system date and time ... in UTC" as 100 ns intervals since 1601-01-01. */
 u64 k32_GetSystemTimeAsFileTime(u64 out) {
-    u64 now;
-    if (clock_from_host()) {
-        now = w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
-    } else {
-        u64 c = rescale(cntvct(), cntfrq(), QPC_FREQUENCY);         /* 10 MHz: one tick is 100 ns */
-        if (base_filetime == 0) {
-            base_filetime = w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
-            base_counter = c;
-        }
-        now = base_filetime + (c - base_counter);
-    }
+    u64 now = w2m_filetime_now();
     *(u32 *)out = (u32)now;                                    /* FILETIME: dwLowDateTime, dwHighDateTime */
     *(u32 *)(out + 4) = (u32)(now >> 32);
     return w2m_logged(W2M_API_GetSystemTimeAsFileTime, out, 0);
