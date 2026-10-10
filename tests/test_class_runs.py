@@ -78,15 +78,15 @@ def test_planted_wrong_rule_is_reported_and_routed(tmp_path: Path, monkeypatch: 
 def test_every_rule_writes_each_temporary_once() -> None:
     """The VM gives each write of a temporary its own register before reading the operands, so a
     rule that writes a temporary twice reads garbage there (Sprint 044: BT's first draft, caught by
-    the CPU in 200 cases). Checked on every case of every case set."""
+    the CPU in 200 cases). Checked on every encoding of every committed case file."""
     from w2m.lift import lift
     from w2m.vm_backend import _temps_written
     import semantics_differential as sd
     twice: Counter[str] = Counter()
-    for k in sd.CASE_SETS:
-        for c in sd.cached_cases(k):
-            ins = lift(c.code + b"\x90" * 15, sd.CODE_VA)
-            written = Counter(t for op in ins.ops for t in _temps_written(op))
-            if any(n > 1 for n in written.values()):
-                twice[ins.iclass] += 1
+    codes = {c.code for k in sd.CASE_SETS for c in sd.read_cases(sd.case_file(k))}   # each encoding once
+    for code in codes:
+        ins = lift(code + b"\x90" * 15, sd.CODE_VA)
+        written = Counter(t for op in ins.ops for t in _temps_written(op))
+        if any(n > 1 for n in written.values()):
+            twice[ins.iclass] += 1
     assert twice == Counter()
