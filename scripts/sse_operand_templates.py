@@ -99,7 +99,10 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           ("RCPSS", "f3", 0x53, None): "V,Wd", ("RSQRTSS", "f3", 0x52, None): "V,Wd",
           # SSE4.2's implicit-length index (Sprint 047; 0F 3A 63): xmm1, xmm2/m128 (no alignment), imm8
           ("PCMPISTRI", "66", 0x63, None): "V,Wdq,Ib", ("PCMPISTRI64", "66", 0x63, None): "V,Wdq,Ib",
-          ("UNPCKHPD", "66", 0x15, None): "V,Wdq"}
+          ("UNPCKHPD", "66", 0x15, None): "V,Wdq",
+          # prefetch hints the frontier meets (Sprint 048): PREFETCHW 0F 0D /1, PREFETCHT0-T2 0F 18 /1-/3
+          ("PREFETCHW", "none", 0x0D, 1): "Mcl", ("PREFETCHT0", "none", 0x18, 1): "Mcl",
+          ("PREFETCHT1", "none", 0x18, 2): "Mcl", ("PREFETCHT2", "none", 0x18, 3): "Mcl"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -225,6 +228,9 @@ def main(argv: list[str]) -> int:
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
+        elif spec["version"] == "0.7.7":
+            spec["version"] = "0.7.8"
+            spec["revision"] += "; 0.7.8 (2026-10-10): PREFETCHW, PREFETCHT0, PREFETCHT1, PREFETCHT2 (Sprint 048)"
         elif spec["version"] == "0.7.6":
             spec["version"] = "0.7.7"
             spec["revision"] += "; 0.7.7 (2026-10-10): PCMPISTRI, UNPCKHPD (Sprint 047)"
