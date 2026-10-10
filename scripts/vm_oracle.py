@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """vm_oracle.py — Sprint 039's single-instruction cases run in the managed VM and judged against
 Windows on Intel (Sprint 040).
 

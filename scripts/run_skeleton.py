@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """run_skeleton.py — the walking skeleton end to end (Sprint 029).
 
 Input: a runner artifact directory from `windows-probe.yml` in stdout mode (body-<i>.jsonl,

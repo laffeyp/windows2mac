@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 038: the acquisition driver resolves an app's own Windows depots from SteamCMD's app info
 (not depots shared from another app), and reports auth_required instead of success when SteamCMD
 has no cached login."""

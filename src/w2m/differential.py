@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """differential.py — one causal topology for every differential (Sprint 043; review 2026-10-09 progress S1).
 
 A differential judges an implementation (the decoder, the lifter's rules, the guest-state spec, the

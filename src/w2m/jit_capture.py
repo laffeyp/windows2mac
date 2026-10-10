@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """jit_capture.py — read the capture file tools/jit_capture writes (Sprint 033).
 
 Format 2 (header "W2MJ", u32 2) holds CPUID records, compiled methods (jit_done) with their

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """check_vocab.py — structural gate for signals/<version>.json (Sprint 000 self-review, BOOTSTRAP Steps 1-10).
 
 Usage: python3 scripts/check_vocab.py [signals/<version>.json]   (default: signals/current.json)

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """class_census.py — the instruction classes a game's native code reaches, and which w2m lifts (Sprint 044).
 
 The method of the 2026-10-09 progress review's count (323 of UnityPlayer's 345 classes without a

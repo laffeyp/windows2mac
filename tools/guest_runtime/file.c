@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* file.c — the Windows file calls, inside the guest runtime (Sprint 042).
  *
  * CreateFileW, CloseHandle, DeleteFileW, ReadFile, SetFilePointerEx, and WriteFile on a file

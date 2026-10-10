@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """gen_last_error_values.py — write probes/last_error_values/values.h (Sprint 032).
 
 The probe picks SetLastError arguments at run time from this table. Each entry pairs a 32-bit
@@ -40,7 +42,8 @@ def render() -> str:
     vals = values()
     value_rows = "\n".join(f"    0x{v:08x}u," for v in vals)
     hash_rows = "\n".join(f'    "sha256:{args_sha256(v)}",' for v in vals)
-    return (f"/* values.h — written by scripts/gen_last_error_values.py (seed {SEED}); do not edit.\n"
+    return ("// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\n// Copyright (C) 2026 Peter Laffey\n"
+            f"/* values.h — written by scripts/gen_last_error_values.py (seed {SEED}); do not edit.\n"
             f" * VALUE[i] is a SetLastError argument; ARGS_SHA256[i] is sha256 of\n"
             f" * \"SetLastError(<VALUE[i] in decimal>)\". Two arrays, so indexing needs no multiply. */\n"
             f"#define VALUE_COUNT {COUNT}\n"

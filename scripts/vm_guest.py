@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """vm_guest.py — control of the local Windows VM over SSH (BLACKBOARD 2026-10-09: the local VM's
 role; review docs/review-2026-10-09-local-vm.md).
 

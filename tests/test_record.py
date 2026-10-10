@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 038: w2m.record.one_step_run writes a session around a single step's events, and the
 record replays."""
 

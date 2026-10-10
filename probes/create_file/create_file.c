@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* create_file.c — what Windows does with CreateFileW and the file calls the game makes (Sprint 042).
  *
  * No C runtime: entry point `start`, kernel32 imports only, so the same binary runs on the Windows

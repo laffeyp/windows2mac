@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* runtime.h — the w2m guest runtime's view of guest memory (Sprint 035).
  *
  * Freestanding C compiled to AArch64 and run inside the managed VM (BLACKBOARD 2026-10-09, runtime

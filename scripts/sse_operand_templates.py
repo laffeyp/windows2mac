@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """sse_operand_templates.py — operand templates for legacy-SSE rows of specs/x86_decode.json,
 transcribed from the SDM instruction pages (Sprint 039).
 

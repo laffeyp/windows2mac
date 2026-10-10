@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* heap.c — the process heap as Windows answers (Sprint 044, family "heap").
  *
  * No C runtime. The launcher's start-up reaches GetProcessHeap after its TLS and critical-section

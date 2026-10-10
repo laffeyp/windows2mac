@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """vm.py — the managed-VM back end: lifted x86-64 operations compiled to AArch64 and run inside a
 Hypervisor.framework VM (Sprint 030; profile_kind `managed_vm`).
 
@@ -1547,7 +1549,10 @@ class VM:
             pin.flush()
             reply = pout.readline().split()
             if not reply or reply[0] == "err":
-                raise RuntimeError(f"vm_monitor: {c.split()[0]} -> {reply}")
+                # an empty reply is the monitor gone: name its exit status (a signal is negative), which
+                # the one such failure seen (class ADD_LOCK, 2026-10-10, once in about 1,600 runs) lacked
+                gone = "" if reply else f" (monitor exit status {proc.wait(timeout=5)})"
+                raise RuntimeError(f"vm_monitor: {c.split()[0]} -> {reply}{gone}")
             return reply
 
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)

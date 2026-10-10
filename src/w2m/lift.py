@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """lift.py — x86-64 instructions to explicit operations (v0.2 §5 machine-semantics IR; Sprint 029).
 
 Each decoded instruction (src/w2m/x86dec.py) with its operands (src/w2m/x86ops.py, equal to

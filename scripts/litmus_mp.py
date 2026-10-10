@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """litmus_mp.py — EnTSO message-passing litmus on two vCPUs (Sprint 009).
 
 Builds probes/mac_hv_litmus/mp_litmus.c, ad-hoc signs it with the hypervisor entitlement, runs

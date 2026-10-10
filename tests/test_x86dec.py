@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 015 grading surface: w2m's own decoder (generated from specs/x86_decode.json) against
 the Capstone reference at every reachable instruction of the runner-built probes."""
 

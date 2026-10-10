@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 037: the semantics oracle. The committed case file is what the generator builds; the
 runner's CPU results agree with the model on every case (Intel Xeon Platinum 8573C, run
 38001673879) and on every case except the 0F 0D register forms, which AMD faults on (AMD EPYC 7763,

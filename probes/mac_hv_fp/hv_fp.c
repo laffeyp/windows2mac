@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* hv_fp.c — AArch64 floating-point control in a Hypervisor.framework guest (Sprint 039).
  *
  * Usage: hv_fp

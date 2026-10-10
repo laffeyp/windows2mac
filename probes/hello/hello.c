@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* hello.c — minimal w2m probe: proves the Windows runner loop (Sprint 006).
  *
  * Writes a guest trace (signals/0.1.json, category guest) to the path in argv[2]:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* mp_litmus.c — message-passing litmus test on two Hypervisor.framework vCPUs (Sprint 009).
  *
  * Writer: x[i] = 1; y[i] = 1 (i = 0..N-1).  Reader: spin until y[i] == 1, then read x[i].

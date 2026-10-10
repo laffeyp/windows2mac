@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* modules.c — how Windows answers a program about modules (Sprint 044, family "modules").
  *
  * No C runtime: entry `start`, kernel32 imports only. The launcher's start-up calls

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 027: with W2M_REQUIRE_REFERENCES=1 (set in CI), a skipped test fails. Tests skip when
 XED, llvm-objdump, or the corpus is absent; CI provides all three, so a skip there means the suite
 checked less than it claims (review 2026-10-08 §5).

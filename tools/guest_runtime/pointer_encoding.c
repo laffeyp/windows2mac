@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* pointer_encoding.c — EncodePointer and DecodePointer (Sprint 046, family "pointer encoding").
  *
  * contracts/windows.pointer.encoding records Windows on sixteen runners (32 identical outputs) as

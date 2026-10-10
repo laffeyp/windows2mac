@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """modules.py — which module a name means, for the guest runtime's module calls (Sprint 044).
 
 The guest runtime (`tools/guest_runtime/module.c`) implements LoadLibraryExW, GetModuleHandleW,

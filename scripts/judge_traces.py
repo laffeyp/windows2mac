@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """judge_traces.py — ingest and compare a directory of downloaded probe traces on one substrate run.
 
 Input: a `traces-<id>` artifact directory from .github/workflows/windows-probe.yml

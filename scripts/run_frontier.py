@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """run_frontier.py — run an application in w2m until it stops, on the signal plane (Sprint 038).
 
 One substrate run, three steps, each caused by the one before:

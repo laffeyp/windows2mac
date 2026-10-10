@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 014 grading surface: Capstone reference traversal of the runner-built probes, and an
 independent cross-check against LLVM's disassembler (llvm-objdump) at every reachable instruction."""
 

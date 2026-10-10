@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Shared integer and control-flow rules (moved unchanged from lift.py in Sprint 041). Semantics
 follow the Intel SDM Vol 2 page of each instruction; the commit rule (specs/guest_state.json
 0.2.0) orders every register and flag write after the last memory access."""

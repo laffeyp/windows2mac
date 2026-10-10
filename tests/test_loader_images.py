@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Several images (Sprint 046): a DLL the program imports is mapped, relocated, bound and started.
 
 The images are probe binaries MSVC built on the Windows runners (store/binaries), so the suite runs

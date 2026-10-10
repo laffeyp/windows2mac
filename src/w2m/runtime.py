@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """runtime.py — execute lifted x86-64 operations on the host, with kernel32 serviced in the host
 (Sprint 029; profile_kind `model`). One guest thread. The executor runs `lift.py` operations; a
 branch to a loader thunk calls the named kernel32 function (src/w2m/kernel32.py), which returns to the

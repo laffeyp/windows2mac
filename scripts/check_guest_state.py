@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """check_guest_state.py — judge specs/guest_state.json against probes/guest_state runs (Sprint 034).
 
 Three comparisons, each field by field:

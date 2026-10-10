@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """xedref.py — Intel XED as the primary reference decoder (decision 2026-10-08,
 docs/review-2026-10-08-decoder-theory.md).
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* process.c — the process queries the C runtime makes first (Sprint 044, family process_queries).
  *
  * GetSystemTimeAsFileTime, GetCurrentProcessId, QueryPerformanceCounter, QueryPerformanceFrequency,

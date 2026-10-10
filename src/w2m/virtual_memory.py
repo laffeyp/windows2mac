@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """virtual_memory.py — VirtualAlloc, VirtualFree, VirtualProtect and VirtualQuery for one process (Sprint 046).
 
 The guest runtime (`tools/guest_runtime/virtual_memory.c`) passes each call to the host (HOST_VIRTUAL), and

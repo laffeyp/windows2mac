@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 # Every gate in WORKING_AGREEMENT.md, in order; exits non-zero at the first failure (set -e).
 # Added Sprint 028 after two closes recorded passing gates that had failed: a gate piped
 # through tail (Sprint 026) and gates chained with ';' before a commit (Sprint 028).

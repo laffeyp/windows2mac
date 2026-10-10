@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """approximation_tables.py — specs/approximations.json from one approximations probe run (Sprint 046).
 
 The probe (probes/approximations) tabulated RCPPS and RSQRTPS on one CPU: 4,096 results per table (the

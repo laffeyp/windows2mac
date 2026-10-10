@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* loader_dll.c — the DLL the loader probe imports (Sprint 046). No C runtime; KERNEL32 only. Its entry
  * logs every call (reason, whether lpReserved is NULL, the instance handle); the probe reads the log
  * through two exports. */

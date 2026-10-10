@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """probe_on_intel.py — run a windows-probe workflow until an Intel CPU answers (Sprint 039).
 
 GitHub's Windows runners are AMD EPYC or Intel Xeon machines, assigned per job; a workflow cannot

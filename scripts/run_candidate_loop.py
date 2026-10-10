@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """run_candidate_loop.py — generate, run, judge, accept or reject, report, route, repair (Sprint 031).
 
 One substrate run of the v0.2 §11.2-11.4 loop for one contract and one probe:

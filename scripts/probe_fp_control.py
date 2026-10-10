@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """probe_fp_control.py — AArch64 FPCR.AH in a Hypervisor.framework guest, judged against x86
 (Sprint 039; review 2026-10-09 progress N4).
 

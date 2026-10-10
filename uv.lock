@@ -751,7 +751,7 @@ wheels = [
 ]
 
 [[package]]
-name = "w2m"
+name = "windows2mac"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [

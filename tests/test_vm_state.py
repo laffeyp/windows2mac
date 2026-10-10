@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 040 grading surface: the guest state in the VM back end, judged on Windows's records.
 
 Sprint 039's single-instruction cases run in the VM; for faults, the guest runtime's exception

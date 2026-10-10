@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """measure_file_generation.py — can a model write file.c inside the Sprint 042 pipeline? (a measurement)
 
 User decisions 2026-10-10: the sprint is the pipeline, not the model; the measurement uses a cloud

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* page_geometry.c — 4 KB guest page protection on a 16 KB-page Mac (Sprint 012).
  *
  * v0.2 section 8 example: [A, A+4096) readable/writable, [A+4096, A+8192) inaccessible.

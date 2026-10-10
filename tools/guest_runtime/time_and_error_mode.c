@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* time_and_error_mode.c — local time, time conversions, the error mode (Sprint 046, family "time and error
  * mode").
  *

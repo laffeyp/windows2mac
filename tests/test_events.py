@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 002 grading surface: generated Structs ride the substrate bus under their tag names,
 and malformed payloads fail at the speaker's mouth (`validate`) or at ingest (`decode_guest_line`).
 """

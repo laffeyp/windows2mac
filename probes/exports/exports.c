@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* exports.c — the names kernel32.dll and kernelbase.dll export on this Windows (Sprint 044).
  *
  * No C runtime. Walks each module's export directory in memory (PE/COFF, "The .edata Section") and

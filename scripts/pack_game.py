@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """pack_game.py — pack an installed Steam depot for the Windows runner (Sprint 033).
 
 Writes games/<name>/files.json (every installed file: path, size, sha256), then a zstd-compressed

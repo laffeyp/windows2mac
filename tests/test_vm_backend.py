@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 030 grading surface: the managed-VM back end. The runner-built skeleton.exe runs inside
 a Hypervisor.framework VM as AArch64 compiled from lifted operations; lockstep comparison with
 the model runtime after every x86 instruction finds no difference; planted compiler faults are

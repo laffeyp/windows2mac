@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* static_tls_dll.c — a DLL with static TLS, the static_tls probe imports it (Sprint 046). Built with the
  * static C runtime, whose tlssup supplies the TLS directory, as UnityPlayer.dll is built: a hand-made
  * directory (no C runtime) faulted on every runner while w2m ran it, so the probe takes the ordinary

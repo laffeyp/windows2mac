@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* last_error_values.c — contract windows.thread.last_error.set_get 0.2.0 (Sprint 032). No C runtime,
  * as probes/skeleton. The probe reads QueryPerformanceCounter once, before any SetLastError, and
  * mixes the count into three indices of VALUE (values.h); consecutive indices differ. It then

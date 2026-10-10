@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* system_info.c — what the process learns about the machine (Sprint 046, family "system information").
  *
  * GetNativeSystemInfo, GetSystemInfo, GetVersionExW, GlobalMemoryStatusEx, GetTickCount and

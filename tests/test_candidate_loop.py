@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 031 grading surface: the candidate loop on windows.thread.last_error.set_get, at 0.2.0
 since Sprint 032. A scripted Responder stands in for the model so the record's shape is checked
 exactly: repair after a discrepancy, refusal of code outside the admitted language, and

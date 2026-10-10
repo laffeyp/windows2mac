@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 005 grading surface: allowed_outcome_set comparison, standalone and on a record."""
 
 from __future__ import annotations

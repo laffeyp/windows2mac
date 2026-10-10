@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """BT, BTS, BTR (Intel SDM Vol 2, BT, BTS, BTR)."""
 
 from w2m.rules import _int

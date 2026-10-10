@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """contract.py — the contract file format (v0.2 sections 11.1-11.2).
 
 A contract lives at `contracts/<id>/<version>.json`. It carries its behavioral definition and

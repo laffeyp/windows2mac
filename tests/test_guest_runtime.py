@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 035: kernel32 runs as C inside the VM. The guest runtime image builds and names its
 services; a run leaves the last error in the TEB at 0x68, logs its calls in the guest ring, and
 matches the model; an import with no guest service stops the run by name; every compiled block is

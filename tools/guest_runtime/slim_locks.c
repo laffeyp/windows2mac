@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* slim_locks.c — SRW locks and condition variables on one thread (Sprint 046, family "slim locks").
  *
  * contracts/windows.sync.slim_locks records Windows on four runners (8 identical outputs), one thread:

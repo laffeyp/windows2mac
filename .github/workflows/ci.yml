@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 # Every gate in WORKING_AGREEMENT.md on each push (Sprint 027; review 2026-10-08 §5). The
 # references the tests compare against are present (XED at the pinned commits, llvm-objdump, the
 # Python 3.14.8 corpus at its manifest hash), and W2M_REQUIRE_REFERENCES=1 fails any skipped test.

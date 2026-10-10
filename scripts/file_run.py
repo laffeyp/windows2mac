@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """file_run.py — CreateFileW and its companions judged on their own record (Sprint 042).
 
 The pipeline for one Windows function, end to end:

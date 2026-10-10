@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """w2m harness package.
 
 Orchestrates contract construction, probes, comparison, and repair on substrate

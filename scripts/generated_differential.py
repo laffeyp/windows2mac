@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """generated_differential.py — w2m decoder vs Intel XED on generated encodings (Sprint 020).
 
 Outcome classes per case:

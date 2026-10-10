@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* static_tls.c — static TLS in a DLL the program imports (Sprint 046, family "static TLS").
  *
  * No C runtime; a console program without TLS that imports static_tls_dll.dll, which has static TLS, as

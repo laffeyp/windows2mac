@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* jit_capture.c — start a Unity Mono game with hooks that record the code Mono generates
  * (Sprint 033).
  *

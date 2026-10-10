@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Hot services stay in the guest (Decision 2026-10-09; Sprint 044 observation contract): over a whole
 probe run, QueryPerformanceCounter, GetCurrentThreadId and TlsGetValue make no host exit. The
 transport's requests by op (vm.host_requests) are the exits."""

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* loader.c — the Windows loader with two images (Sprint 046, family "loader").
  *
  * No C runtime; a console program that statically imports loader_dll.dll (built beside it, KERNEL32

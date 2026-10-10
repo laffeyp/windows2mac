@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 # Tiebreak probe runner (Sprints 006-007). Builds probes/<probe>/<probe>.c with clang on real x64
 # Windows, runs it `repeat` times, and uploads the guest traces and role maps for ingest on the Mac.
 # Dispatch: gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id> [-f repeat=N]

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """game_code_differential.py — w2m's decoder against Intel XED on all of a game's code: its native
 PE files and the code Mono generated for it on Windows (Sprint 033).
 

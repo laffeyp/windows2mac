@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* semantics.c — run single x86-64 instructions from stated states on a real CPU (Sprint 037;
  * format 2 with MXCSR, XMM0-15, AF, DF, an edge window and the state at a fault, Sprint 039).
  *

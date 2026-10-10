@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """family_run.py — a Windows function family judged on its own record (Sprint 044).
 
 Sprint 042's pipeline (scripts/file_run.py) for any family of functions that share state or a

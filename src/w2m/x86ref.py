@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """x86ref.py — reference decoding of reachable x86-64 code with Capstone (Sprint 014).
 
 The first of two independent decoders (user decision 2026-10-08): Capstone is the existing

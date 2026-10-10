@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 032 grading surface: windows.thread.last_error.set_get@0.2.0 on probes/last_error_values.
 The probe's table carries true argument hashes; the `exact` relation conforms only when each
 GetLastError returns the argument of the latest SetLastError; the values differ between runs on

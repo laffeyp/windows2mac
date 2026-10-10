@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """acquire_depot.py — a Steam app's Windows depot acquired with Valve's SteamCMD, on the signal
 plane (Sprint 038).
 

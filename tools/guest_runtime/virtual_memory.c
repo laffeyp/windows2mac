@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* virtual_memory.c — VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery (Sprint 046, family
  * "virtual memory").
  *

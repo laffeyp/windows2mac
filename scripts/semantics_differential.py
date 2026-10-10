@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """semantics_differential.py — the lifter judged by a real x86 CPU, one instruction at a time
 (Sprint 037; floating-point state and faults, Sprint 039).
 
