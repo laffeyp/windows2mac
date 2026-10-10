@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import class_run  # noqa: E402
 
-JUDGED_ELSEWHERE = {"CPUID"}
+JUDGED_ELSEWHERE = {"CPUID", "XGETBV"}      # the guest profile, not the runner's CPU
 
 
 def test_every_rule_has_cases_or_a_named_judge() -> None:

@@ -31,11 +31,17 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
                                   size, down when DF is set, and decrement RCX; interruptible, so a fault
                                   leaves the registers at the faulting iteration and RIP at the
                                   instruction (the one exception to the commit rule)
+  ("mxcsr", "st"|"ld", loc)       STMXCSR / LDMXCSR (SDM): MXCSR to or from 4 bytes of memory; LDMXCSR with
+                                  a reserved bit (16-31) set faults before any write (Sprint 044)
+  ("fence",)                      SFENCE: earlier stores before later ones
+  ("ud",)                         an instruction the guest profile makes undefined (#UD): XGETBV, since
+                                  the profile's CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json)
   ("div", bits, t)                DIV r/m (unsigned): RDX:RAX (DX:AX, EDX:EAX; AX for 8 bits) by t; quotient
                                   to RAX/EAX/AX/AL, remainder to RDX/EDX/DX/AH; every flag undefined;
                                   a zero divisor faults STATUS_INTEGER_DIVIDE_BY_ZERO, a quotient too wide
                                   STATUS_INTEGER_OVERFLOW (SDM DIV #DE; ntstatus.h), before any write
-  ("sse", iclass, dst, src, align)  one legacy-SSE instruction (Sprint 039): dst and src are locs,
+  ("sse", iclass, dst, src, align[, imm])  one legacy-SSE instruction (Sprint 039; imm, Sprint 044: PSHUFD's
+                                  order, a shift count): dst and src are locs,
                                   ("x", index) for an XMM register; align 16 when a memory operand
                                   must be 16-byte aligned (#GP otherwise); the runtime computes it
                                   with x86fp, after every read and before any write
@@ -74,6 +80,13 @@ SSE = SSE_ALIGNED | {"MOVUPS", "MOVUPD", "MOVSS", "MOVSD_XMM", "MOVD", "MOVQ"} |
     f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") for t in ("SS", "SD")} | {
     "CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI", "CVTSI2SS", "CVTSI2SD", "CVTSS2SD", "CVTSD2SS",
     "UCOMISS", "UCOMISD", "COMISS", "COMISD"}
+# Sprint 044: the SSE2 integer block (operands V, W, G, Ib; no MXCSR flags); MOVDQA and MOVNTPS need
+# 16-byte alignment (SDM: #GP otherwise)
+SSE2_INT = {"MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PSRLDQ", "PSLLDQ",
+            "PUNPCKLBW", "PCMPEQB", "PSHUFD", "PMOVMSKB", "CVTDQ2PD"}
+SSE_ALIGNED |= {"MOVDQA", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PUNPCKLBW", "PCMPEQB",
+                "PSHUFD"}
+SSE |= SSE2_INT
 ALU = {"ADD": "add", "SUB": "sub", "AND": "and", "OR": "or", "XOR": "xor", "CMP": "sub", "TEST": "and"}
 
 Op = tuple[Any, ...]
@@ -188,11 +201,14 @@ def commit_order(ins: Lifted) -> str | None:
             return "store"
         if op[0] == "sse" and (op[2][0] == "m" or op[3][0] == "m"):
             return "store" if op[2][0] == "m" else "load"
+        if op[0] == "mxcsr":
+            return "store" if op[1] == "st" else "load"
         return None
 
     def effect(op: Op) -> bool:
         return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid", "div") or (
-            op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m")
+            op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m") or (
+            op[0] == "mxcsr" and op[1] == "ld")
 
     last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
     if last_access < 0:
@@ -216,7 +232,7 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", *REP_STRING):
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "SFENCE", "XGETBV", *REP_STRING):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)

@@ -361,6 +361,86 @@ def and_v(vd: int, vn: int, vm: int) -> int:
     return 0x4E201C00 | vm << 16 | vn << 5 | vd
 
 
+# Sprint 044: the SSE2 integer block (PAND POR PSUB* PSRL* PS*LDQ PUNPCKLBW PCMPEQB PSHUFD PMOVMSKB CVTDQ2PD)
+def orr_v(vd: int, vn: int, vm: int) -> int:
+    """ORR Vd.16B, Vn.16B, Vm.16B."""
+    _v(vd, vn, vm)
+    return 0x4EA01C00 | vm << 16 | vn << 5 | vd
+
+
+def sub_v(vd: int, vn: int, vm: int, size: int) -> int:
+    """SUB Vd.<T>, Vn.<T>, Vm.<T>, size 2 for .4S, 3 for .2D."""
+    _v(vd, vn, vm)
+    return 0x6E208400 | size << 22 | vm << 16 | vn << 5 | vd
+
+
+def ext_v(vd: int, vn: int, vm: int, index: int) -> int:
+    """EXT Vd.16B, Vn.16B, Vm.16B, #index: bytes index..15 of Vn, then 0..index-1 of Vm."""
+    _v(vd, vn, vm)
+    assert 0 <= index < 16
+    return 0x6E000000 | vm << 16 | index << 11 | vn << 5 | vd
+
+
+def zip1_v(vd: int, vn: int, vm: int) -> int:
+    """ZIP1 Vd.16B, Vn.16B, Vm.16B: the low bytes interleaved, Vn's first."""
+    _v(vd, vn, vm)
+    return 0x4E003800 | vm << 16 | vn << 5 | vd
+
+
+def cmeq_v(vd: int, vn: int, vm: int) -> int:
+    """CMEQ Vd.16B, Vn.16B, Vm.16B: all ones where the bytes are equal."""
+    _v(vd, vn, vm)
+    return 0x6E208C00 | vm << 16 | vn << 5 | vd
+
+
+def sxtl_2d(vd: int, vn: int) -> int:
+    """SXTL Vd.2D, Vn.2S (SSHLL #0): the low two words sign-extended."""
+    _v(vd, vn)
+    return 0x0F20A400 | vn << 5 | vd
+
+
+def scvtf_2d(vd: int, vn: int) -> int:
+    """SCVTF Vd.2D, Vn.2D."""
+    _v(vd, vn)
+    return 0x4E61D800 | vn << 5 | vd
+
+
+def umov_d(rd: int, vn: int, lane: int) -> int:
+    """UMOV Xd, Vn.D[lane]."""
+    _v(rd, vn)
+    return 0x4E003C00 | ((lane << 4) | 0b1000) << 16 | vn << 5 | rd
+
+
+def ins_d(vd: int, lane: int, rn: int) -> int:
+    """INS Vd.D[lane], Xn."""
+    _v(vd, rn)
+    return 0x4E001C00 | ((lane << 4) | 0b1000) << 16 | rn << 5 | vd
+
+
+def ins_s_element(vd: int, lane: int, vn: int, src_lane: int) -> int:
+    """INS Vd.S[lane], Vn.S[src_lane]."""
+    _v(vd, vn)
+    return 0x6E000400 | ((lane << 3) | 0b100) << 16 | (src_lane << 2) << 11 | vn << 5 | vd
+
+
+def movi_zero(vd: int) -> int:
+    """MOVI Vd.2D, #0."""
+    _v(vd)
+    return 0x6F00E400 | vd
+
+
+def ushr_2d(vd: int, vn: int, shift: int) -> int:
+    """USHR Vd.2D, Vn.2D, #shift (1-64)."""
+    _v(vd, vn)
+    assert 1 <= shift <= 64
+    return 0x6F400400 | (128 - shift) << 16 | vn << 5 | vd
+
+
+def dmb_ishst() -> int:
+    """DMB ISHST: earlier stores before later stores (SFENCE)."""
+    return 0xD5033ABF
+
+
 def fmov_to_v(size: int, vd: int, rn: int) -> int:
     """FMOV Sd, Wn / Dd, Xn: the rest of Vd zeroed."""
     _v(vd, rn)

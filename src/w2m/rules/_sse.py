@@ -25,6 +25,18 @@ def rule(ctx: Ctx) -> None:
     b.emit("sse", ic, dst, src, 16 if has_memory and ic in SSE_ALIGNED else 0)
 
 
+def int_rule(ctx: Ctx) -> None:
+    """The SSE2 integer block (Sprint 044): as `rule`, with an immediate when the template has one
+    (PSHUFD V,W,Ib; the shift-by-immediate forms W,Ib, whose source is the destination itself)."""
+    b, ic, ops, nxt = ctx.b, ctx.ic, ctx.ops, ctx.nxt
+    imm = int(ops[-1].split(":")[2], 16) if ops[-1].startswith("I:") else None
+    dst = cast(tuple[Any, ...], _operand(b, ops[0], nxt)[1])
+    src = dst if len(ops) == 2 and imm is not None else cast(tuple[Any, ...], _operand(b, ops[1], nxt)[1])
+    has_memory = dst[0] == "m" or src[0] == "m"
+    align = 16 if has_memory and ic in SSE_ALIGNED else 0
+    b.emit("sse", ic, dst, src, align) if imm is None else b.emit("sse", ic, dst, src, align, imm)
+
+
 def _sse_src(a: Assembler, loc: Op, size: int, reg_of: Callable[[int], int], scratch: int = 31) -> int:
     """The V register holding a source operand: an XMM register, or `scratch` loaded from memory."""
     if loc[0] == "x":
@@ -53,8 +65,85 @@ def _set_flags_from_fcmp(a: Assembler) -> None:
     _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
 
 
+SSE2_INT_LOWERED = {"MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PSRLDQ",
+                    "PSLLDQ", "PUNPCKLBW", "PCMPEQB", "PSHUFD", "PMOVMSKB", "CVTDQ2PD"}
+
+
+def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of: Callable[[int], int]) -> None:
+    """The SSE2 integer block in NEON (Sprint 044). V31 and V30 are scratch; x16 and x17 too."""
+    if ic in ("MOVDQA", "MOVDQU", "MOVNTPS"):
+        if dst[0] == "x" and src[0] == "x":
+            a.emit(a64.mov_v(dst[1], src[1]))
+        elif dst[0] == "x":
+            a.emit(a64.ldr_v(16, dst[1], reg_of(src[1])))
+        else:
+            a.emit(a64.str_v(16, src[1], reg_of(dst[1])))
+        return
+    if ic == "PMOVMSKB":                                         # the 16 sign bits into a general register
+        v, rd = int(src[1]), int(dst[1])
+        for lane, shift in ((1, 8), (0, 0)):
+            a.emit(a64.umov_d(16, v, lane), a64.mov_imm(17, 0x8080_8080_8080_8080), a64.and_(16, 16, 17),
+                   a64.lsri(16, 16, 7), a64.mov_imm(17, 0x0102_0408_1020_4080), a64.mul(16, 16, 17),
+                   a64.lsri(16, 16, 56))
+            if shift:
+                a.emit(a64.eor(rd, a64.ZR, 16, a64.LSL, 8))
+            else:
+                a.emit(a64.orr(rd, rd, 16))
+        return
+    d = int(dst[1])
+    if ic == "CVTDQ2PD":                                         # two signed words to doubles, exactly
+        v = _sse_src(a, src, 8, reg_of)
+        a.emit(a64.sxtl_2d(30, v), a64.scvtf_2d(d, 30))
+        return
+    if ic in ("PSRLDQ", "PSLLDQ"):                               # whole-register byte shifts by imm8
+        assert imm is not None
+        if imm > 15:
+            a.emit(a64.movi_zero(d))
+        elif imm:
+            a.emit(a64.movi_zero(31))
+            a.emit(a64.ext_v(d, d, 31, imm) if ic == "PSRLDQ" else a64.ext_v(d, 31, d, 16 - imm))
+        return
+    if ic == "PSRLQ" and imm is not None:
+        if imm > 63:
+            a.emit(a64.movi_zero(d))
+        elif imm:
+            a.emit(a64.ushr_2d(d, d, imm))
+        return
+    if ic == "PSRLQ":                                            # by a count in the source's low 64 bits
+        v = _sse_src(a, src, 16, reg_of)
+        big, done = a.label(), a.label()
+        a.emit(a64.umov_d(16, v, 0), a64.cmpi(16, 63))
+        a.branch(lambda off: a64.bcond("hi", off), big)
+        for lane in (0, 1):
+            a.emit(a64.umov_d(17, d, lane), a64.lsrv(17, 17, 16), a64.ins_d(d, lane, 17))
+        a.branch(a64.b, done)
+        a.bind(big)
+        a.emit(a64.movi_zero(d))
+        a.bind(done)
+        return
+    if ic == "PSHUFD":                                           # word i of the result = source word (imm >> 2i) & 3
+        assert imm is not None
+        v = _sse_src(a, src, 16, reg_of, scratch=31)
+        a.emit(a64.mov_v(30, v))
+        for lane in range(4):
+            a.emit(a64.ins_s_element(d, lane, 30, imm >> (2 * lane) & 3))
+        return
+    v = _sse_src(a, src, 16, reg_of)
+    if ic in ("PAND", "POR", "ORPS"):
+        a.emit((a64.and_v if ic == "PAND" else a64.orr_v)(d, d, v))
+    elif ic in ("PSUBD", "PSUBQ"):
+        a.emit(a64.sub_v(d, d, v, 2 if ic == "PSUBD" else 3))
+    elif ic == "PUNPCKLBW":
+        a.emit(a64.zip1_v(d, d, v))
+    elif ic == "PCMPEQB":
+        a.emit(a64.cmeq_v(d, d, v))
+    else:
+        raise CompileError(f"sse {ic}")
+
+
 def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[Op, int], None]) -> None:
-    _, ic, dst, src, align = op
+    _, ic, dst, src, align, *rest = op
+    imm = rest[0] if rest else None
     for loc in (dst, src):
         if loc[0] == "m" and align:
             _check_alignment(a, reg_of(loc[1]))
@@ -64,6 +153,9 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         a.branch(lambda off: a64.bcond("eq", off), fast)
         a.emit(a64.hvc(HVC_SLOW_SSE))
         a.bind(fast)
+    if ic in SSE2_INT_LOWERED:
+        _lower_int(a, ic, dst, src, imm, reg_of)
+        return
     if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD"):
         if dst[0] == "x" and src[0] == "x":
             a.emit(a64.mov_v(dst[1], src[1]))

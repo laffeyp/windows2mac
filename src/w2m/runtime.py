@@ -7,17 +7,20 @@ against, one instruction at a time (`step`).
 
 from __future__ import annotations
 
+import struct
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from w2m import cpuid
 from w2m import x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
-from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
+from w2m.lift import RAX, RCX, RDI, RDX, RSI, SSE2_INT, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
 
 STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero divisor
 STATUS_INTEGER_OVERFLOW = 0xC000_0095         # ntstatus.h; DIV #DE with a quotient too wide
+STATUS_ILLEGAL_INSTRUCTION = 0xC000_001D      # ntstatus.h; #UD
 
 __all__ = ["Result", "Runtime", "UndefinedFlag", "Unimplemented"]
 
@@ -257,7 +260,7 @@ class Runtime:
             return self._rd(loc[1], loc[2], loc[3])
         return int.from_bytes(self.mem.read(self._t[loc[1]], nbytes), "little")
 
-    def _sse(self, ic: str, dst: Op, src: Op, align: int) -> None:
+    def _sse(self, ic: str, dst: Op, src: Op, align: int, imm: int | None = None) -> None:
         """One legacy-SSE instruction: every read and every fault check before any write."""
         th = self.th
         for loc in (dst, src):
@@ -265,9 +268,11 @@ class Runtime:
                 raise GuestFault(f"#GP: {ic} memory operand at 0x{self._t[loc[1]]:x} not {align}-byte aligned")
         msize = next((loc[2] for loc in (dst, src) if loc[0] == "m"), 16)
         x = th.xmm
-        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD"):
+        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "MOVDQA", "MOVDQU", "MOVNTPS"):
             v = self._xread(src, 16)
             self._xwrite(dst, v, 16)
+        elif ic in SSE2_INT:
+            self._sse2_int(ic, dst, src, imm)
         elif ic in ("MOVSS", "MOVSD_XMM"):
             n = 4 if ic == "MOVSS" else 8
             v = self._xread(src, n)
@@ -319,6 +324,54 @@ class Runtime:
             z, p, cf = fp.compare(f, a, c, env, signal_qnan=ic.startswith("COMI"))
             self._fp_check(env)
             th.flags.update(Z=z, P=p, C=cf, O=False, S=False, A=False)
+        else:
+            raise LiftError(f"sse {ic}")
+
+    def _sse2_int(self, ic: str, dst: Op, src: Op, imm: int | None) -> None:
+        """The SSE2 integer block (SDM pages of each; Sprint 044): no MXCSR flags."""
+        x = self.th.xmm
+
+        def lanes(v: int, w: int) -> list[int]:
+            return [(v >> (w * i)) & _mask(w) for i in range(128 // w)]
+
+        def pack(ls: list[int], w: int) -> int:
+            return sum((n & _mask(w)) << (w * i) for i, n in enumerate(ls))
+
+        if ic == "PMOVMSKB":
+            v = x[src[1]]
+            self._wr(dst[1], dst[2], False, sum(((v >> (8 * i + 7)) & 1) << i for i in range(16)))
+            return
+        if ic == "CVTDQ2PD":
+            v = self._xread(src, 8)
+            words = [(v >> (32 * i)) & 0xFFFF_FFFF for i in range(2)]
+            vals = [w - (1 << 32) if w >> 31 else w for w in words]
+            x[dst[1]] = pack([int.from_bytes(struct.pack("<d", float(n)), "little") for n in vals], 64)   # exact
+            return
+        a = x[dst[1]]
+        if ic in ("PSRLDQ", "PSLLDQ"):
+            assert imm is not None
+            n = min(imm, 16)
+            x[dst[1]] = (a >> (8 * n) if ic == "PSRLDQ" else a << (8 * n)) & _mask(128)
+            return
+        if ic == "PSRLQ":
+            count = imm if imm is not None else self._xread(src, 16) & _mask(64)
+            x[dst[1]] = 0 if count > 63 else pack([l >> count for l in lanes(a, 64)], 64)
+            return
+        v = self._xread(src, 16)
+        if ic == "PSHUFD":
+            assert imm is not None
+            words = lanes(v, 32)
+            x[dst[1]] = pack([words[(imm >> (2 * i)) & 3] for i in range(4)], 32)
+        elif ic in ("PAND", "POR", "ORPS"):
+            x[dst[1]] = a & v if ic == "PAND" else a | v
+        elif ic in ("PSUBD", "PSUBQ"):
+            w = 32 if ic == "PSUBD" else 64
+            x[dst[1]] = pack([p - q for p, q in zip(lanes(a, w), lanes(v, w))], w)
+        elif ic == "PUNPCKLBW":
+            ab, vb = lanes(a, 8), lanes(v, 8)
+            x[dst[1]] = pack([b for i in range(8) for b in (ab[i], vb[i])], 8)
+        elif ic == "PCMPEQB":
+            x[dst[1]] = pack([0xFF if p == q else 0 for p, q in zip(lanes(a, 8), lanes(v, 8))], 8)
         else:
             raise LiftError(f"sse {ic}")
 
@@ -382,6 +435,18 @@ class Runtime:
                 self._div(op[1], t[op[2]])
             elif k == "rep":
                 self._rep(op[1], op[2])
+            elif k == "mxcsr":
+                if op[1] == "st":
+                    self._store(op[2], self.th.mxcsr)
+                else:
+                    v = self._load(op[2], t)
+                    if v & ~0xFFFF:                                       # MXCSR_MASK 0xFFFF: reserved bits #GP
+                        raise GuestFault(f"#GP: LDMXCSR 0x{v:x} sets reserved bits at 0x{ins.address:x}")
+                    self.th.mxcsr = v
+            elif k == "fence":
+                pass
+            elif k == "ud":
+                raise GuestFault(f"#UD: {ins.iclass} at 0x{ins.address:x}", STATUS_ILLEGAL_INSTRUCTION)
             elif k == "ld":
                 t[op[1]] = self._load(op[2], t)
             elif k == "st":
@@ -461,7 +526,7 @@ class Runtime:
                 a, b, c, d = cpuid.lookup(eax, ecx)
                 self.th.regs[0], self.th.regs[3], self.th.regs[1], self.th.regs[2] = a, b, c, d
             elif k == "sse":
-                self._sse(op[1], op[2], op[3], op[4])
+                self._sse(op[1], op[2], op[3], op[4], op[5] if len(op) > 5 else None)
             elif k == "br":
                 if self._cond(op[1]):
                     self.th.rip = t[op[2]]

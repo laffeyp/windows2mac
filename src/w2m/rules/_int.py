@@ -236,6 +236,21 @@ def rep_string(ctx: Ctx) -> None:
     ctx.b.emit("rep", kind, size)
 
 
+def mxcsr(ctx: Ctx) -> None:
+    """STMXCSR, LDMXCSR m32 (SDM)."""
+    _, loc, _ = _operand(ctx.b, ctx.ops[0], ctx.nxt)
+    ctx.b.emit("mxcsr", "st" if ctx.ic == "STMXCSR" else "ld", loc)
+
+
+def sfence(ctx: Ctx) -> None:
+    ctx.b.emit("fence")
+
+
+def undefined_by_profile(ctx: Ctx) -> None:
+    """XGETBV: #UD while CR4.OSXSAVE is clear, which the guest profile's CPUID.1:ECX.OSXSAVE reports."""
+    ctx.b.emit("ud")
+
+
 def div(ctx: Ctx) -> None:
     """DIV r/m (unsigned; SDM DIV)."""
     b, ops, nxt = ctx.b, ctx.ops, ctx.nxt

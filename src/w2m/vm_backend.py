@@ -666,6 +666,10 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
+        elif k in ("mxcsr", "ud"):                               # run by the model (hvc #11): MXCSR's fault rule
+            a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
+        elif k == "fence":
+            a.emit(a64.dmb_ishst())
         elif k == "rep":
             # REP STOS / MOVS: the guest's RCX, RSI, RDI live in x1, x6, x7 and change once per element,
             # so a fault on an element leaves them at that iteration and the reconstruction table
@@ -1200,7 +1204,7 @@ class VM:
         x[REG_UNDEFINED_FLAGS] = sum(1 << FLAG_BIT[f] for f in "CZSOPA" if th.flags[f] is None)
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
-        self.set_vectors(th.xmm, fpcr, 0)
+        self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
         return self.miss_va                                    # dispatch the next instruction
 

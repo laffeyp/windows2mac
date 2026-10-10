@@ -278,6 +278,11 @@ STRING_ENCODINGS = {"REP_STOSB": "f3aa", "REP_STOSW": "66f3ab", "REP_STOSD": "f3
 STRING_STATES = 24
 # Sprint 044 (third block): ADC (the thread-storage probe's code), BSF, BSR
 CLASSES_044C = frozenset(("ADC", "BSF", "BSR"))
+# Sprint 044 (fourth block): the SSE2 integer block, MXCSR access, SFENCE, PREFETCHNTA (XGETBV is judged
+# by the guest profile: the runners' CPUs set OSXSAVE)
+CLASSES_044D = frozenset(("MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PSRLDQ",
+                          "PSLLDQ", "PUNPCKLBW", "PCMPEQB", "PSHUFD", "PMOVMSKB", "CVTDQ2PD", "STMXCSR", "LDMXCSR",
+                          "SFENCE", "PREFETCHNTA"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -285,7 +290,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "042": (2026_10_11_42, CLASSES_042, LOCKABLE_042, False),
     "044": (2026_10_10_44, CLASSES_044, (), False),
     "044b": (2026_10_10_441, CLASSES_044B, (), False),
-    "044c": (2026_10_10_442, CLASSES_044C, (), False)}
+    "044c": (2026_10_10_442, CLASSES_044C, (), False),
+    "044d": (2026_10_10_443, CLASSES_044D, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
