@@ -12,8 +12,11 @@ __attribute__((section(".tls$ZZZ"))) char _tls_end = 0;
 __attribute__((section(".CRT$XLA"), used)) PIMAGE_TLS_CALLBACK __xl_a = 0;
 __attribute__((section(".CRT$XLZ"), used)) PIMAGE_TLS_CALLBACK __xl_z = 0;
 
-const IMAGE_TLS_DIRECTORY64 _tls_used = {(ULONGLONG)&_tls_start, (ULONGLONG)&_tls_end, (ULONGLONG)&_tls_index,
-                                         (ULONGLONG)(&__xl_a + 1), 0, 0};
+/* designated: the Windows SDK's IMAGE_TLS_DIRECTORY64 puts Characteristics in a union, mingw's does not */
+const IMAGE_TLS_DIRECTORY64 _tls_used = {.StartAddressOfRawData = (ULONGLONG)&_tls_start,
+                                         .EndAddressOfRawData = (ULONGLONG)&_tls_end,
+                                         .AddressOfIndex = (ULONGLONG)&_tls_index,
+                                         .AddressOfCallBacks = (ULONGLONG)(&__xl_a + 1), .SizeOfZeroFill = 0};
 
 __declspec(thread) int counter = 41;
 __declspec(thread) unsigned char zeros[64];
