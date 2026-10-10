@@ -61,7 +61,7 @@
    "SESSION_INIT": 1
   },
   "family": "command_line_args",
-  "record": "store/runs/family-command_line_args-1791667047709182000",
+  "record": "store/runs/family-command_line_args-1791667524052461000",
   "verdicts": {
    "38084317468": "conforms",
    "38084319695": "conforms"
@@ -247,8 +247,28 @@
    "38045632682": "conforms"
   }
  },
+ "file_attributes": {
+  "candidate_sha256": "sha256:e1d53358297d75816abdf60e9d1aba7d55892a7e24c12728f6d0a0e494233895",
+  "divergence": {
+   "38087355443": null,
+   "38087357359": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "file_attributes",
+  "record": "store/runs/family-file_attributes-1791667535997529000",
+  "verdicts": {
+   "38087355443": "conforms",
+   "38087357359": "conforms"
+  }
+ },
  "generate_random": {
-  "candidate_sha256": "sha256:8956dd2bcfcbb3a04f590d62c7eb2de9db9ca0cde5015aa4d7848f90bc9c678b",
+  "candidate_sha256": "sha256:80a041c9d8b5e739ff8d67933f5a85f7213afc45b9b636f4d6a9d1e16d9fa6d0",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -261,7 +281,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791667048760216000",
+  "record": "store/runs/family-generate_random-1791667524322645000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -300,7 +320,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:aaa133f08c0f014a5357ae8a9855e84089bf250617eb4e22cff3e673a3156149",
+  "candidate_sha256": "sha256:ac8575ca0b8e579653ae54f3d0dda2a4306fe6b9f08a820ef4ac966fdbabbc61",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -327,7 +347,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791667037452598000",
+  "record": "store/runs/family-loader-1791667519545371000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -498,7 +518,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:bb293a33a726d81857fa23a765e99ddfe92c3d86456c25312343b8cef72a0bd4",
+  "candidate_sha256": "sha256:452653b3fe5c49668ee6b2c7b9a2aa1486f90b9b5fcf9bcc3cedf140588b9fdb",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -525,7 +545,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791667042351648000",
+  "record": "store/runs/family-static_tls-1791667521871541000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -762,7 +782,7 @@
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:b5d3af3b8a5e9aee63fb0efeab0aa22f508f88031bcf21e42ee8116a856d8c15",
+  "candidate_sha256": "sha256:f516ec72ae0bddf221e0846fd9ce6f0975db891265025cae99a1989f81c2eb4a",
   "divergence": {
    "38050561886": null,
    "38050563770": null,
@@ -785,7 +805,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791667040086757000",
+  "record": "store/runs/family-virtual_memory-1791667520609971000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

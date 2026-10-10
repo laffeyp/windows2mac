@@ -1010,6 +1010,38 @@ FAMILIES: dict[str, Family] = {
                 ("ex.size_query.*", "ex.short_buffer.*", "ex.query.*")),
             "cache_entry_48": Plant("    return 56;\n}", "    return 48;\n}", ("ex.query.2", "ex.query.65535")),
             "zero_mask_accepted": Plant("    if (!mask || (mask & ~1ull)) {", "    if (mask & ~1ull) {", ("thread_affinity.zero",))}),
+    "file_attributes": Family(
+        name="file_attributes",
+        contract_id="windows.file.attributes",
+        version="0.1.0",
+        summary=("GetFileAttributesExW and GetFileAttributesW over a 5-byte file (any case, trailing dot or space), the "
+                 "working directory (0x10, size 4096), the empty name and missing paths (3), a missing file (2), "
+                 "wildcards (123) and an invalid level (87); times as relations to the clock; success leaves the last "
+                 "error and failure the caller's structure."),
+        probe="file_attributes", guest_file="file_attributes.c",
+        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/file.c"),
+        runs={
+              "38087355443": Run("windows-2025", "f7c82e7ade1ebdbea2207111490e87681ba1d74256df2a614cc5237d41e9a334", "file_attributes-1791667332-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38087357359": Run("windows-2022", "28cb58d08437a23643ec9661d294e90a72617def99961475c27e11c04516e248", "file_attributes-1791667332-1", "AMD EPYC 9V74 80-Core Processor"),
+        },
+        documented=(
+            documented("ms-getfileattributesexw", "api/fileapi/nf-fileapi-getfileattributesexw", "2018-12-05",
+                       "If the function succeeds, the return value is a nonzero value. If the function fails, the "
+                       "return value is zero (0). To get extended error information, call GetLastError."),),
+        open_questions=(
+            "A file named with a trailing backslash: ERROR_DIRECTORY (267) on Server 2025, ERROR_INVALID_NAME (123) on "
+            "2022; excluded, and w2m answers as 2025.",
+            "Absolute paths (the game asks about C:\\w2m\\app\\Data\\...) need the guest's drive namespace; the "
+            "probe names files relative to its working directory."),
+        excluded={"ex.file.trailing_backslash": "Server 2025: ERROR_DIRECTORY (267); 2022: ERROR_INVALID_NAME (123)",
+                  "plain.file.trailing_backslash": "Server 2025: ERROR_DIRECTORY (267); 2022: ERROR_INVALID_NAME (123)"},
+        plants={
+            "directory_size_zero": Plant("    if (kind == 2) st[0] = 4096;", "    if (kind == 2) st[0] = 0;",
+                                         ("ex.dot", "ex.dot.backslash")),
+            "empty_name_not_found": Plant("    if (!s[0]) return ERROR_PATH_NOT_FOUND;", "    if (!s[0]) return ERROR_FILE_NOT_FOUND;",
+                                          ("ex.empty", "plain.empty")),
+            "wildcard_looked_up": Plant("        if (s[n] == '*' || s[n] == '?') return ERROR_INVALID_NAME;", "        ;",
+                                        ("ex.wildcard", "plain.wildcard"))}),
 }
 
 

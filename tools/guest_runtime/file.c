@@ -106,6 +106,13 @@ static u64 lookup(u64 chars, u64 *id) {
     return w2m_host(W2M_FILE_LOOKUP, (u64)path, chars, 0, 0, id);
 }
 
+/* For file_attributes.c (Sprint 047): the name normalized as CreateFileW's, then FILE_STAT (32 bytes at `out`:
+ * size, birth, access and write times). Returns the kind. */
+u64 w2m_file_stat(u64 name, u64 out) {
+    u64 chars = normalize(name);
+    return w2m_host(W2M_FILE_STAT, (u64)path, chars, out, 0, 0);
+}
+
 static u32 access_of(u32 desired) {
     return (desired & GENERIC_READ ? R : 0) | (desired & GENERIC_WRITE ? W : 0);
 }

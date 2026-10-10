@@ -16,6 +16,8 @@ guest's working directory:
     FILE_SIZE    (fd)                   -> size
     FILE_TRUNCATE(fd, size)             -> 0
     FILE_UNLINK  (path, chars)          -> 0, or -errno
+    FILE_STAT    (path, chars, out)     -> kind as FILE_LOOKUP; for a file or directory, 32 bytes at out: the size,
+                                           then the birth, access and modification times as FILETIME (Sprint 047)
 
 Paths arrive as UTF-16LE as the guest normalized them. Components compare ASCII case-folded, as
 NTFS compares ASCII names (its upcase table; non-ASCII folding is not needed by any recorded row
@@ -34,6 +36,8 @@ from w2m.kernel32 import Unimplemented
 from typing import Protocol
 
 FILE_LOOKUP, FILE_OPEN, FILE_CLOSE, FILE_READ, FILE_WRITE, FILE_SIZE, FILE_TRUNCATE, FILE_UNLINK = range(6, 14)
+FILE_STAT = 24                      # after the host requests 14-23 (vm_backend.py)
+FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
 M64 = (1 << 64) - 1
 
@@ -41,6 +45,22 @@ M64 = (1 << 64) - 1
 class BridgeRequestError(RuntimeError):
     """The guest runtime sent a request no Windows path or descriptor can mean (a NUL inside a
     path, an unknown descriptor): a runtime defect; the run stops with this message."""
+
+
+def birth_ns(path: Path, st: os.stat_result) -> int:
+    """A file's birth time in exact nanoseconds: libc stat's st_birthtimespec (macOS arm64 struct stat: the access,
+    modification, change and birth timespecs at 32, 48, 64 and 80). Python 3.12 gives it only as float seconds, about
+    120 ns off at this date, coarser than FILETIME's 100 ns (a run read an access time before the creation time). The
+    access and modification times at those offsets must equal os.stat's, or the layout is not the one assumed."""
+    import ctypes
+    import struct as st_struct
+    buf = ctypes.create_string_buffer(256)
+    if ctypes.CDLL(None).stat(os.fsencode(path), buf) != 0:
+        raise Unimplemented(f"stat of {path} failed")
+    a, m, b = (st_struct.unpack_from("<qq", buf.raw, off) for off in (32, 48, 80))
+    if a[0] * 10**9 + a[1] != st.st_atime_ns or m[0] * 10**9 + m[1] != st.st_mtime_ns:
+        raise Unimplemented("struct stat's layout is not macOS arm64's")
+    return int(b[0]) * 10**9 + int(b[1])
 
 
 class GuestMemory(Protocol):
@@ -100,6 +120,13 @@ class FileBridge:
             self.next_fd += 1
             self.fds[fd] = host
             return fd, os.fstat(host).st_ino
+        if op == FILE_STAT:
+            kind, path = self._resolve(self._path(mem, arg[0], arg[1]))
+            if kind in (IS_FILE, IS_DIRECTORY):
+                st = os.stat(path)
+                times = [t // 100 + FILETIME_UNIX_EPOCH for t in (birth_ns(path, st), st.st_atime_ns, st.st_mtime_ns)]
+                mem.write(arg[2], b"".join(v.to_bytes(8, "little") for v in [st.st_size, *times]))
+            return kind, 0
         if op == FILE_UNLINK:
             kind, path = self._resolve(self._path(mem, arg[0], arg[1]))
             try:

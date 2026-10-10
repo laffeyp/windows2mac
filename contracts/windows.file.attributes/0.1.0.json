@@ -1,0 +1,249 @@
+{
+ "contract_id": "windows.file.attributes",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetFileAttributesExW and GetFileAttributesW over a 5-byte file (any case, trailing dot or space), the working directory (0x10, size 4096), the empty name and missing paths (3), a missing file (2), wildcards (123) and an invalid level (87); times as relations to the clock; success leaves the last error and failure the caller's structure.",
+ "applicability": "windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/file_attributes/file_attributes.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "setup",
+    "created": true,
+    "written": 5
+   },
+   {
+    "s": "ex.file",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "size_high": 0,
+    "size_low": 5,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.file",
+    "attributes": 32,
+    "err": 57005
+   },
+   {
+    "s": "ex.file.upper",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "size_high": 0,
+    "size_low": 5,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.file.upper",
+    "attributes": 32,
+    "err": 57005
+   },
+   {
+    "s": "ex.file.trailing_dot",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "size_high": 0,
+    "size_low": 5,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.file.trailing_dot",
+    "attributes": 32,
+    "err": 57005
+   },
+   {
+    "s": "ex.file.trailing_space",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "size_high": 0,
+    "size_low": 5,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.file.trailing_space",
+    "attributes": 32,
+    "err": 57005
+   },
+   {
+    "s": "ex.file.as_directory",
+    "ret": 0,
+    "err": 3,
+    "data_untouched": true
+   },
+   {
+    "s": "plain.file.as_directory",
+    "attributes": 4294967295,
+    "err": 3
+   },
+   {
+    "s": "ex.dot",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 16,
+    "size_high": 0,
+    "size_low": 4096,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.dot",
+    "attributes": 16,
+    "err": 57005
+   },
+   {
+    "s": "ex.dot.backslash",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 16,
+    "size_high": 0,
+    "size_low": 4096,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.dot.backslash",
+    "attributes": 16,
+    "err": 57005
+   },
+   {
+    "s": "ex.dot.file",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "size_high": 0,
+    "size_low": 5,
+    "times_nonzero": true,
+    "creation_le_write": true,
+    "access_ge_creation": true,
+    "write_in_window": true
+   },
+   {
+    "s": "plain.dot.file",
+    "attributes": 32,
+    "err": 57005
+   },
+   {
+    "s": "ex.empty",
+    "ret": 0,
+    "err": 3,
+    "data_untouched": true
+   },
+   {
+    "s": "plain.empty",
+    "attributes": 4294967295,
+    "err": 3
+   },
+   {
+    "s": "ex.missing",
+    "ret": 0,
+    "err": 2,
+    "data_untouched": true
+   },
+   {
+    "s": "plain.missing",
+    "attributes": 4294967295,
+    "err": 2
+   },
+   {
+    "s": "ex.missing_directory",
+    "ret": 0,
+    "err": 3,
+    "data_untouched": true
+   },
+   {
+    "s": "plain.missing_directory",
+    "attributes": 4294967295,
+    "err": 3
+   },
+   {
+    "s": "ex.wildcard",
+    "ret": 0,
+    "err": 123,
+    "data_untouched": true
+   },
+   {
+    "s": "plain.wildcard",
+    "attributes": 4294967295,
+    "err": 123
+   },
+   {
+    "s": "ex.level_1",
+    "ret": 0,
+    "err": 87,
+    "data_untouched": true
+   },
+   {
+    "s": "ex.after_delete",
+    "ret": 0,
+    "err": 2,
+    "data_untouched": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38087355443: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:f7c82e7ade1ebdbea2207111490e87681ba1d74256df2a614cc5237d41e9a334; run 38087357359: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:28cb58d08437a23643ec9661d294e90a72617def99961475c27e11c04516e248",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "file_attributes-1791667332-0-1",
+    "file_attributes-1791667332-0-2",
+    "file_attributes-1791667332-1-1",
+    "file_attributes-1791667332-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getfileattributesexw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfileattributesexw (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "If the function succeeds, the return value is a nonzero value. If the function fails, the return value is zero (0). To get extended error information, call GetLastError."
+  }
+ ],
+ "open_questions": [
+  "A file named with a trailing backslash: ERROR_DIRECTORY (267) on Server 2025, ERROR_INVALID_NAME (123) on 2022; excluded, and w2m answers as 2025.",
+  "Absolute paths (the game asks about C:\\w2m\\app\\Data\\...) need the guest's drive namespace; the probe names files relative to its working directory."
+ ],
+ "sections": {
+  "probe": "probes/file_attributes (Sprint 044)",
+  "implementation": "tools/guest_runtime/file_attributes.c",
+  "rows": "scripts/family_run.py file_attributes",
+  "excluded": "ex.file.trailing_backslash: Server 2025: ERROR_DIRECTORY (267); 2022: ERROR_INVALID_NAME (123); plain.file.trailing_backslash: Server 2025: ERROR_DIRECTORY (267); 2022: ERROR_INVALID_NAME (123)"
+ }
+}
