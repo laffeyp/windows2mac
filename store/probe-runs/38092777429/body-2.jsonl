@@ -1,0 +1,8 @@
+{"s":"null","ret":0,"err":57005}
+{"s":"argv_plus_1","ret":1,"err":6}
+{"s":"after_interior","strings_intact":1}
+{"s":"argv","ret":0,"err":57005}
+{"s":"heap_block_plus_8","ret":1,"err":6}
+{"s":"heap_block","ret":0,"err":57005}
+{"s":"exit.safe","code":0}
+{"s":"exit.argv_plus_2","code":3221226356}

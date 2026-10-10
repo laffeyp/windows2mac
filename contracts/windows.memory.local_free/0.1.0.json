@@ -1,0 +1,86 @@
+{
+ "contract_id": "windows.memory.local_free",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "LocalFree as UnityPlayer calls it on argv + 1: NULL and a block's start answer NULL; a pointer 8 bytes past a 16-byte boundary (argv + 1, a HeapAlloc block + 8) answers itself with ERROR_INVALID_HANDLE and the block stays intact; the last error is left on success. A pointer 16 bytes in ends the process (STATUS_HEAP_CORRUPTION), recorded by the probe's parent and excluded.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/local_free/local_free.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "null",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "argv_plus_1",
+    "ret": 1,
+    "err": 6
+   },
+   {
+    "s": "after_interior",
+    "strings_intact": 1
+   },
+   {
+    "s": "argv",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "heap_block_plus_8",
+    "ret": 1,
+    "err": 6
+   },
+   {
+    "s": "heap_block",
+    "ret": 0,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38092775612: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:ac9257dab2fa346fe224a45462b87a9d2ad1ad687f37f4b065a9fb336906f44c; run 38092777429: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:ac655d2145982f7850a7e9c30d8afab979bcc651e15faf68f3bb8d9c99be395d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "local_free-1791672496-0-1",
+    "local_free-1791672496-0-2",
+    "local_free-1791672496-1-1",
+    "local_free-1791672496-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-localfree",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "If the function succeeds, the return value is NULL. If the function fails, the return value is equal to a handle to the local memory object. To get extended error information, call GetLastError."
+  }
+ ],
+ "open_questions": [
+  "Windows ends the process for a 16-aligned pointer inside a block (exit.argv_plus_2, 0xC0000374); w2m stops the run there by name instead."
+ ],
+ "sections": {
+  "probe": "probes/local_free (Sprint 044)",
+  "implementation": "tools/guest_runtime/command_line_args.c",
+  "rows": "scripts/family_run.py local_free",
+  "excluded": "exit.argv_plus_2: the parent's row: the 16-byte case ends its child with STATUS_HEAP_CORRUPTION; exit.safe: the parent's row: w2m runs the probe's safe child, which prints no exit codes"
+ }
+}

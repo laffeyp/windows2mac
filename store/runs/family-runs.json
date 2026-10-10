@@ -48,7 +48,7 @@
   }
  },
  "command_line_args": {
-  "candidate_sha256": "sha256:517729cf29785392fba5f13012c977f3018841ccbe30c424843c6883d6091753",
+  "candidate_sha256": "sha256:32e80b6a18c545bfb8cabfe886e67e8caf60480bd146ef459cd1f615eedc28ba",
   "divergence": {
    "38084317468": null,
    "38084319695": null
@@ -61,7 +61,7 @@
    "SESSION_INIT": 1
   },
   "family": "command_line_args",
-  "record": "store/runs/family-command_line_args-1791667524052461000",
+  "record": "store/runs/family-command_line_args-1791672609849536000",
   "verdicts": {
    "38084317468": "conforms",
    "38084319695": "conforms"
@@ -261,7 +261,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_attributes",
-  "record": "store/runs/family-file_attributes-1791672119685216000",
+  "record": "store/runs/family-file_attributes-1791672610945103000",
   "verdicts": {
    "38087355443": "conforms",
    "38087357359": "conforms"
@@ -281,7 +281,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_security",
-  "record": "store/runs/family-file_security-1791672111579116000",
+  "record": "store/runs/family-file_security-1791672612169132000",
   "verdicts": {
    "38090863707": "conforms",
    "38090865352": "conforms"
@@ -301,7 +301,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791670824140211000",
+  "record": "store/runs/family-generate_random-1791672610360108000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -367,7 +367,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791670776711788000",
+  "record": "store/runs/family-loader-1791672599861024000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -385,6 +385,26 @@
    "38048097583": "conforms",
    "38048099528": "conforms",
    "38048101245": "conforms"
+  }
+ },
+ "local_free": {
+  "candidate_sha256": "sha256:32e80b6a18c545bfb8cabfe886e67e8caf60480bd146ef459cd1f615eedc28ba",
+  "divergence": {
+   "38092775612": null,
+   "38092777429": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "local_free",
+  "record": "store/runs/family-local_free-1791672612638216000",
+  "verdicts": {
+   "38092775612": "conforms",
+   "38092777429": "conforms"
   }
  },
  "modules": {
@@ -429,7 +449,7 @@
    "SESSION_INIT": 1
   },
   "family": "paths",
-  "record": "store/runs/family-paths-1791672122838660000",
+  "record": "store/runs/family-paths-1791672611498775000",
   "verdicts": {
    "38090281974": "conforms",
    "38090284442": "conforms"
@@ -585,7 +605,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791670804124722000",
+  "record": "store/runs/family-static_tls-1791672604829319000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -845,7 +865,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791670789309387000",
+  "record": "store/runs/family-virtual_memory-1791672602393438000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

@@ -107,7 +107,15 @@ u64 shell32_CommandLineToArgvW(u64 line, u64 count) {
     return w2m_logged(W2M_API_CommandLineToArgvW, line, block);
 }
 
+/* LocalFree (contracts/windows.memory.local_free, Sprint 048): NULL and a block's start answer NULL (the block is
+ * freed); a pointer 8 bytes past a 16-byte boundary, as UnityPlayer passes argv + 1, answers itself with
+ * ERROR_INVALID_HANDLE and frees nothing; Windows ends the process for a 16-aligned pointer inside a block, which
+ * is not on the game's path and stops the run here (heap.c checks the block). */
 u64 k32_LocalFree(u64 block) {
+    if ((block & 15) == 8) {
+        w2m_set_last_error(6);
+        return w2m_logged(W2M_API_LocalFree, block, block);
+    }
     if (block) w2m_heap_release(W2M_API_LocalFree, block);
-    return w2m_logged(W2M_API_LocalFree, block, 0);      /* NULL: freed (row local_free_null) */
+    return w2m_logged(W2M_API_LocalFree, block, 0);
 }

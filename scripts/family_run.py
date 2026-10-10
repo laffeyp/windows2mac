@@ -1123,6 +1123,35 @@ FAMILIES: dict[str, Family] = {
                 "    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);\n"
                 "    if (security && *(u32 *)security != 24) { set_error(87); return w2m_logged(W2M_API_CreateFileW, name, INVALID_HANDLE_VALUE); }",
                 ("length_*",))}),
+    "local_free": Family(
+        name="local_free",
+        contract_id="windows.memory.local_free",
+        version="0.1.0",
+        summary=("LocalFree as UnityPlayer calls it on argv + 1: NULL and a block's start answer NULL; a pointer 8 bytes "
+                 "past a 16-byte boundary (argv + 1, a HeapAlloc block + 8) answers itself with ERROR_INVALID_HANDLE and "
+                 "the block stays intact; the last error is left on success. A pointer 16 bytes in ends the process "
+                 "(STATUS_HEAP_CORRUPTION), recorded by the probe's parent and excluded."),
+        probe="local_free", guest_file="command_line_args.c", arguments="safe",
+        runs={
+              "38092775612": Run("windows-2025", "ac9257dab2fa346fe224a45462b87a9d2ad1ad687f37f4b065a9fb336906f44c", "local_free-1791672496-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38092777429": Run("windows-2022", "ac655d2145982f7850a7e9c30d8afab979bcc651e15faf68f3bb8d9c99be395d", "local_free-1791672496-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-localfree", "api/winbase/nf-winbase-localfree", "2018-12-05",
+                       "If the function succeeds, the return value is NULL. If the function fails, the return value is "
+                       "equal to a handle to the local memory object. To get extended error information, call "
+                       "GetLastError."),),
+        open_questions=(
+            "Windows ends the process for a 16-aligned pointer inside a block (exit.argv_plus_2, 0xC0000374); w2m stops "
+            "the run there by name instead.",),
+        excluded={"exit.safe": "the parent's row: w2m runs the probe's safe child, which prints no exit codes",
+                  "exit.argv_plus_2": "the parent's row: the 16-byte case ends its child with STATUS_HEAP_CORRUPTION"},
+        plants={
+            "interior_error_left": Plant("        w2m_set_last_error(6);\n", "",
+                                         ("argv_plus_1", "heap_block_plus_8")),
+            "interior_answers_null": Plant("        return w2m_logged(W2M_API_LocalFree, block, block);",
+                                           "        return w2m_logged(W2M_API_LocalFree, block, 0);",
+                                           ("argv_plus_1", "heap_block_plus_8"))}),
 }
 
 
