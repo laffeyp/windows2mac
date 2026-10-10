@@ -234,26 +234,33 @@ CMOV_CC = ("O", "NO", "B", "NB", "Z", "NZ", "BE", "NBE", "S", "NS", "P", "NP", "
 LOCKABLE_041 = ("ADD", "SUB", "AND", "OR", "XOR", "INC", "DEC", "XADD", "CMPXCHG")
 CLASSES_041 = frozenset(("IMUL", "SHL", "SAR", "ROL", "ROR", "XADD", "CMPXCHG", *(f"CMOV{c}" for c in CMOV_CC),
                          *(f"{c}_LOCK" for c in LOCKABLE_041)))
-CASE_SETS = {"039": (2026_10_09_39, CLASSES_039, False, True), "041": (2026_10_10_41, CLASSES_041, True, False)}
+# Sprint 042: NEG, the one class the CreateFileW probe's code (both runner binaries) has no rule for
+LOCKABLE_042 = ("NEG",)
+CLASSES_042 = frozenset(("NEG", "NEG_LOCK"))
+# set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
+CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
+    "039": (2026_10_09_39, CLASSES_039, (), True),
+    "041": (2026_10_10_41, CLASSES_041, LOCKABLE_041, False),
+    "042": (2026_10_11_42, CLASSES_042, LOCKABLE_042, False)}
 
 
-def _locked_variants(rng: random.Random) -> Iterator[Any]:
-    """F0-prefixed copies of the generator's memory-destination cases of the lockable classes."""
+def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
+    """F0-prefixed copies of the generator's memory-destination cases of the `lockable` classes."""
     for c in encgen_cases():
         try:
             d = decode(c.raw)
         except DecodeError:
             continue
-        if d.iclass in LOCKABLE_041 and d.fields is not None and d.fields.ops and operands(d.fields)[0][0] == "M":
+        if d.iclass in lockable and d.fields is not None and d.fields.ops and operands(d.fields)[0][0] == "M":
             yield type(c)(raw=b"\xf0" + c.raw[:14], row=c.row, note=c.note + " +lock")
 
 
 def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039,
-                locked: bool = False, control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
+                locked: tuple[str, ...] = (), control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     out: list[Case] = []
     skipped: Counter[str] = Counter()
-    source = list(encgen_cases()) + (list(_locked_variants(rng)) if locked else [])
+    source = list(encgen_cases()) + list(_locked_variants(locked))
     for c in source:
         try:
             d = decode(c.raw)

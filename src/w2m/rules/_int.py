@@ -66,6 +66,18 @@ def inc_dec(ctx: Ctx) -> None:
     b.emit("flags", ic.lower(), a, one, r, bits)
 
 
+def neg(ctx: Ctx) -> None:
+    """NEG: 0 - dest. SDM NEG: CF is 0 when the operand is 0 and 1 otherwise, OF SF ZF AF PF by the
+    result: SUB's flags for 0 - dest, whose borrow is exactly that CF."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    zero, a, r = b.t(), _val(b, dk, dst), b.t()
+    b.emit("imm", zero, 0)
+    b.emit("alu", r, "sub", zero, a, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", "sub", zero, a, r, bits)
+
+
 def shr(ctx: Ctx) -> None:
     b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
     dk, dst, bits = _operand(b, ops[0], nxt)
