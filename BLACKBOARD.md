@@ -166,6 +166,7 @@
 - **2026-10-09** — Sprint 040 (guest state built) closed. `src/w2m/lift.py` (commit rule and `commit_order`; POP [m] order and RSP-based destination), `src/w2m/vm_backend.py` (lazy AF, DF, reconstruction table in guest memory, EL1 exception entry, translation flush, forward rule on asynchronous stops, CPUID through the runtime), `tools/guest_runtime/` (state block, EXCEPTION_RECORD and CONTEXT, `w2m_exception`, `w2m_cpuid`), `src/w2m/cpuid.py`, `specs/guest_cpuid.json` 0.1.0, `scripts/vm_oracle.py`, `tests/test_vm_state.py`, `store/probe-runs/38011862284/result-1.faults.bin`; `CLASSES_039` in `scripts/semantics_differential.py`. Dual contract: signal pass (two COMPARISON_COMPLETED conforms); artifact pass (gates.sh 0, 269 tests). Observation: pass — the guest runtime builds Windows's CONTEXT and exception record for all 1,916 compilable fault cases on two Intel CPUs, 20,448 completed cases agree with AF and DF; three planted faults caught; 763 asynchronous stops, all at block starts, count exact.
 - **2026-10-10** — Sprint 041 (instruction classes as item runs) closed. `src/w2m/rules/` (92 modules, 140 iclasses; SSE lowering and the integer rules with their class), `scripts/class_run.py` (item runs, pool), VM vector state and SSE (`vm_monitor` vget/vset, FPCR from MXCSR, slow path), LOCK as exclusive loops, case set 041 (`probes/semantics_041/`, release `semantics-041`), `store/probe-runs/38029980267/`. Dual contract: signal pass; artifact pass (gates.sh 0, 280 tests). Observation: pass — the VM agrees with Intel on every case of sets 039 (39,708) and 041 (13,243), XMM, MXCSR and faults included; 139 classes accepted on their own records; four planted faults caught.
 - **2026-10-10** — Sprint 042 (the Windows-function pipeline, on CreateFileW) closed. `probes/create_file/` (188 rows, Server 2025 run 38031352273 and Server 2022 run 38031354036), `contracts/windows.file.create_file.dispositions_sharing/0.1.0.json` (acceptance `exact_rows`, relation `exact`), `ExactRows` and `compare_exact_rows`, `tools/guest_runtime/file.c`, `src/w2m/file_bridge.py`, `build_runtime()`, `scripts/file_run.py` (item run, plants), `tests/test_create_file.py`, NEG rule and case set 042 (release `semantics-042`, run 38031723882), `Once()` decision triggers (141 classes rerun), service ring 10,922 records, `scripts/measure_file_generation.py` (session topology; kimi-k2.7-code:cloud accepted in one turn, 46 model calls), substrate from `./substrate` branch `w2m`. Dual contract: signal pass; artifact pass (gates 0, 306 tests, 441 records replay); observation pass.
+- **2026-10-10** — Sprint 043 (causality in every record) closed. `src/w2m/differential.py` (one topology: candidate → comparison → decision → route → resolution; `rebuild_ledger`), `store/runs/discrepancy-ledger.json`, six differentials moved onto it and the decoder differential recording for the first time, `tests/test_differential.py`. Nine causal records; 3 discrepancies open, all decoder gaps routed contract_revision. Dual contract: signal pass; artifact pass (gates 0, 312 tests, 451 records); observation pass.
 
 ## Deferred
 
@@ -206,6 +207,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 043 (2026-10-10, closed)
+- **Scope:** every differential as a causal topology; discrepancies resolved across runs.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* per unit, candidate → comparison → decision; report → route; acceptance → resolution of what the ledger held open; the ledger folds the records.
+  - *Observation 1 (the ledger is derived):* nothing writes it but the fold. Disposition: tested.
+  - *Observation 2 (no unit field):* the unit rides in the first-divergence prefix. Disposition: recorded.
+  - *Observation 3 (CI red underneath):* six red pushes found by the review. Disposition: resolved-here; KIT_DIARY #28.
+- **Closed:** clean.
 
 ### Sprint 042 (2026-10-10, closed)
 - **Scope:** one Windows function end to end: probe, contract from Windows's rows, file-system bridge, runtime implementation, judge; a cloud model measured inside it.
@@ -287,14 +297,4 @@
   - *Observation 2 (values written from memory):* SegCs 0x33 and SegGs 0x2B were not read by the probe. Disposition: marked unobserved in the spec; the next probe revision reads them.
 - **Closed:** clean.
 
-### Sprint 033 (2026-10-09, closed)
-- **Scope:** Hail to the Rainbow's native and Mono-generated code, captured on the Windows runner and judged against XED.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the depot was packed into five zstd tar parts on a private release; the runner checked each part's hash, unpacked, checked all 297 files and that no other file was present, built the launcher, and started the game through UnityMain with Mono's jit_done and jit_code_buffer hooks; the hooks wrote each method's image, name and bytes, each trampoline's bytes, and the CPU's features; on the Mac the differential decoded every native position and every captured region, let XED decide where w2m's decoder refused, and wrote one substrate run.
-  - *Observation 1 (the fixture was wrong twice):* BioShock 2 Remastered was 32-bit, and the decoder's "0 gaps" came from a Python corpus. Disposition: recorded (KIT_DIARY #17); criterion (d) re-pointed at this game.
-  - *Observation 2 (the reader trusted its first record):* empty image names and data decoded as IN/OUT came from Mono reporting methods twice and trampolines carrying inline arguments. Disposition: resolved-here, with tests.
-  - *Observation 3 (captures depend on the CPU):* run 1 had an Intel Xeon 8370C, run 2 an AMD EPYC 7763; Mono selects instructions by feature. Disposition: CPUID is recorded in every capture.
-  - *Observation 4 (why rows are unconfirmed):* two missing validity rules (LEA mod=3; F2/F3 over 66). Disposition: deferred to Sprint 036 (decoder), first items.
-- **Closed:** clean.
-
-Older entries (Sprints 000-032): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-033): `docs/sprint-tail-archive.md`.

@@ -2,6 +2,16 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 033 (2026-10-09, closed)
+- **Scope:** Hail to the Rainbow's native and Mono-generated code, captured on the Windows runner and judged against XED.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the depot was packed into five zstd tar parts on a private release; the runner checked each part's hash, unpacked, checked all 297 files and that no other file was present, built the launcher, and started the game through UnityMain with Mono's jit_done and jit_code_buffer hooks; the hooks wrote each method's image, name and bytes, each trampoline's bytes, and the CPU's features; on the Mac the differential decoded every native position and every captured region, let XED decide where w2m's decoder refused, and wrote one substrate run.
+  - *Observation 1 (the fixture was wrong twice):* BioShock 2 Remastered was 32-bit, and the decoder's "0 gaps" came from a Python corpus. Disposition: recorded (KIT_DIARY #17); criterion (d) re-pointed at this game.
+  - *Observation 2 (the reader trusted its first record):* empty image names and data decoded as IN/OUT came from Mono reporting methods twice and trampolines carrying inline arguments. Disposition: resolved-here, with tests.
+  - *Observation 3 (captures depend on the CPU):* run 1 had an Intel Xeon 8370C, run 2 an AMD EPYC 7763; Mono selects instructions by feature. Disposition: CPUID is recorded in every capture.
+  - *Observation 4 (why rows are unconfirmed):* two missing validity rules (LEA mod=3; F2/F3 over 66). Disposition: deferred to Sprint 036 (decoder), first items.
+- **Closed:** clean.
+
 ### Sprint 032 (2026-10-09, closed)
 - **Scope:** last-error contract 0.2.0 judged on values chosen at run time.
 - **Rubber Duck Pass:**

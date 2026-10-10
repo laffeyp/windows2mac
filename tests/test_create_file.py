@@ -115,6 +115,7 @@ def test_committed_item_run_accepts_file_c_once() -> None:
     assert chain[0] == "acceptance" and chain[-1] == "harness" and "implementation_source" in chain
 
 
+@pytest.mark.hvf                                    # builds the guest runtime: Xcode's clang and ld -preload
 def test_runtime_missing_a_service_is_refused_at_build() -> None:
     """Sprint 042 defect: a file.c without k32_SetFilePointerEx linked (a preload image resolves
     nothing) and the VM then failed with a bare KeyError while binding imports."""
