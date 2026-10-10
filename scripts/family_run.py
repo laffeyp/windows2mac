@@ -471,16 +471,16 @@ FAMILIES: dict[str, Family] = {
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
-        version="0.1.0",
+        version="0.2.0",
         summary=("A GUI process started without handles (as Steam starts the game) gets NULL standard handles, "
                  "no console, and Windows's answers from GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, "
-                 "GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW and GetCommandLineW."),
+                 "GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW, GetCommandLineW and GetCommandLineA."),
         probe="console", guest_file="console.c",
         runs={
-              "38041313080": Run("windows-2025", "b5d610d864cb7a1a7a5c09fd5aec8e2d39291b5831c765f283911c97ec205e5d", "console-1791624304-0", "AMD EPYC 7763 64-Core Processor"),
-              "38041315490": Run("windows-2022", "39a6cda432228ad4f72af4aa44f85ca5bfe508397108df9cf3676ba3d3fe8cff", "console-1791624304-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38041317837": Run("windows-2025", "9cafe66a6c848f58271ae1ce9c5152c8daa8c683d8935402830d778d64c7ed41", "console-1791624304-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38041320429": Run("windows-2022", "fd3d5c379120837747c1f35ebfd8540ab1f93308ab20f3c305fc3a760c09aabb", "console-1791624304-3", "AMD EPYC 7763 64-Core Processor"),
+              "38046095100": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-0", "AMD EPYC 7763 64-Core Processor"),
+              "38046096985": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-1", "AMD EPYC 7763 64-Core Processor"),
+              "38046099129": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38046100953": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-3", "AMD EPYC 7763 64-Core Processor"),
         },
         documented=(),
         open_questions=(

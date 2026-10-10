@@ -50,10 +50,10 @@
  "console": {
   "candidate_sha256": "sha256:146b476654725ae4ba4bef55bc36b5b5c10d0ee7e6b27a731e83a92da6b53d07",
   "divergence": {
-   "38041313080": null,
-   "38041315490": null,
-   "38041317837": null,
-   "38041320429": null
+   "38046095100": null,
+   "38046096985": null,
+   "38046099129": null,
+   "38046100953": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
@@ -63,12 +63,12 @@
    "SESSION_INIT": 1
   },
   "family": "console",
-  "record": "store/runs/family-console-1791624517758673000",
+  "record": "store/runs/family-console-1791629305003161000",
   "verdicts": {
-   "38041313080": "conforms",
-   "38041315490": "conforms",
-   "38041317837": "conforms",
-   "38041320429": "conforms"
+   "38046095100": "conforms",
+   "38046096985": "conforms",
+   "38046099129": "conforms",
+   "38046100953": "conforms"
   }
  },
  "critical_sections": {
