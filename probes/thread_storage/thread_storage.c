@@ -87,6 +87,10 @@ void start(void) {
         last = more[i];
     }
     row("tls.alloc.many"); field("below_64", below); field("above_64", above); field("last", last); end();
+    row("tls.alloc.many.indices");                       /* every index received, in order */
+    put(",\"indices\":[");
+    for (int i = 0; i < 80 && more[i] != TLS_OUT_OF_INDEXES; i++) { if (i) put(","); putu(more[i]); }
+    put("]"); end();
     SetLastError(SENTINEL);
     ok = TlsSetValue(last, (LPVOID)0xABCDEFull);
     err = GetLastError();
