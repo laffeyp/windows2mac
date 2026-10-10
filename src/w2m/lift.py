@@ -71,6 +71,7 @@ for _i, _n in enumerate(GPR8_LEGACY[4:]):
     REG[_n] = (_i, 8, True)                  # AH, CH, DH, BH: bits 8-15 of registers 0-3
 RSP, RAX, RDX = 4, 0, 2
 RCX, RSI, RDI = 1, 6, 7
+RBX = 3
 # REP STOS and REP MOVS (Sprint 044): iclass -> (kind, element bytes)
 REP_STRING = {f"REP_{k}{s}": (k.lower(), n) for k in ("STOS", "MOVS") for s, n in (("B", 1), ("W", 2), ("D", 4), ("Q", 8))}
 CC = {"O": "o", "NO": "no", "B": "b", "NB": "nb", "Z": "z", "NZ": "nz", "BE": "be", "NBE": "nbe",
@@ -208,6 +209,8 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[2][0] == "m" else "load"
         if op[0] == "mxcsr":
             return "store" if op[1] == "st" else "load"
+        if op[0] == "cx16":                                   # one atomic read-and-write (CMPXCHG16B)
+            return "store"
         return None
 
     def effect(op: Op) -> bool:

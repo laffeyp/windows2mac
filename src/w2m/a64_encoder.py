@@ -143,6 +143,18 @@ def udiv(rd: int, rn: int, rm: int) -> int:
     return 0x9AC00800 | rm << 16 | rn << 5 | rd
 
 
+def ldaxp(rt: int, rt2: int, rn: int) -> int:
+    """LDAXP Xt, Xt2, [Xn]: a 16-byte exclusive load-acquire (CMPXCHG16B; Sprint 046)."""
+    _r(rt, rt2, rn)
+    return 0xC87F8000 | rt2 << 10 | rn << 5 | rt
+
+
+def stlxp(rs: int, rt: int, rt2: int, rn: int) -> int:
+    """STLXP Ws, Xt, Xt2, [Xn]: Ws = 0 when the 16-byte exclusive store-release succeeded."""
+    _r(rs, rt, rt2, rn)
+    return 0xC8208000 | rs << 16 | rt2 << 10 | rn << 5 | rt
+
+
 def sdiv(rd: int, rn: int, rm: int) -> int:
     """SDIV Xd, Xn, Xm: signed, toward zero."""
     _r(rd, rn, rm)

@@ -70,6 +70,7 @@ MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits 
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
+SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
@@ -489,6 +490,8 @@ def _temps_read(op: Op) -> list[int]:
         return [op[2]]
     if k == "div":
         return [op[2]]
+    if k == "cx16":
+        return [op[1]]
     if k == "set":
         return [op[2][1]] if op[2][0] == "m" else []
     if k == "sel":
@@ -772,6 +775,35 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             a.emit(a64.hvc(HVC_SLOW_STEP))
             a.bind(fast)
             _mark_undefined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
+        elif k == "cx16":
+            # CMPXCHG16B (Sprint 046): #GP unless 16-byte aligned, raised as SSE's alignment check raises it (a load
+            # from 0 before anything is written); then an exclusive pair loop. Equal: RCX:RBX stored, ZF 1; else the
+            # old value written back (x86 always writes), RDX:RAX loaded, ZF 0. The status register is borrowed and
+            # kept in SPILL.
+            rn = reg_of(op[1])
+            status = 30 if rn != 30 else 29
+            aligned, retry, differ, done = a.label(), a.label(), a.label(), a.label()
+            a.emit(a64.ubfx(16, rn, 0, 4))
+            a.branch(lambda off: a64.cbz(16, off), aligned)
+            a.emit(a64.movz(16, 0), a64.ldr(8, 16, 16, 0))
+            a.bind(aligned)
+            a.emit(a64.str_(8, status, 28, SPILL))
+            a.bind(retry)
+            a.emit(a64.ldaxp(16, 17, rn), a64.cmp(16, RAX))
+            a.branch(lambda off: a64.bcond("ne", off), differ)
+            a.emit(a64.cmp(17, RDX))
+            a.branch(lambda off: a64.bcond("ne", off), differ)
+            a.emit(a64.stlxp(status, 3, 1, rn))                  # RBX low, RCX high
+            a.branch(partial(a64.cbnz, status), retry)
+            a.emit(a64.movz(REG_ZF, 1))
+            a.branch(a64.b, done)
+            a.bind(differ)
+            a.emit(a64.stlxp(status, 16, 17, rn))
+            a.branch(partial(a64.cbnz, status), retry)
+            a.emit(a64.mov(RAX, 16), a64.mov(RDX, 17), a64.movz(REG_ZF, 0))
+            a.bind(done)
+            a.emit(a64.ldr(8, status, 28, SPILL))
+            _mark_defined(a, U_ZF)
         elif k == "set":
             _eval_condition(a, op[1])
             store(op[2], 16)

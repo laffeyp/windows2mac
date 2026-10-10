@@ -94,6 +94,8 @@ def operands(f: Fields) -> tuple[str, ...]:
             out.append(_mem(f, None))
         elif t == "Mcl":                       # a cache line of memory, 64 bytes (PREFETCHh; XED, Sprint 044)
             out.append(_mem(f, 64))
+        elif t == "Mqdq":                      # 8 bytes, 16 with a 64-bit operand size (CMPXCHG8B/16B; Sprint 046)
+            out.append(_mem(f, 16 if f.opsize == 64 else 8))
         elif t[0] == "I":
             out.append(f"I:{len(f.imm)}:{int.from_bytes(f.imm, 'little'):x}")
         elif t[0] == "J":

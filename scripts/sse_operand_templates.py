@@ -64,7 +64,9 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           ("MOVLHPS", "none", 0x16, None): "V,Wdq", ("PUNPCKLDQ", "66", 0x62, None): "V,Wdq",
           ("PADDD", "66", 0xFE, None): "V,Wdq", ("PSRLD", "66", 0xD2, None): "V,Wdq", ("PSRLD", "66", 0x72, 2): "Wdq,Ib",
           ("PSLLD", "66", 0xF2, None): "V,Wdq", ("PSLLD", "66", 0x72, 6): "Wdq,Ib", ("PSRAD", "66", 0xE2, None): "V,Wdq",
-          ("PSRAD", "66", 0x72, 4): "Wdq,Ib", ("MOVMSKPS", "none", 0x50, None): "Gd,Wdq"}
+          ("PSRAD", "66", 0x72, 4): "Wdq,Ib", ("MOVMSKPS", "none", 0x50, None): "Gd,Wdq",
+          # CMPXCHG8B m64 / CMPXCHG16B m128 (REX.W): the row names both by operand size
+          ("CMPXCHG8B", "none", 0xC7, 1): "Mqdq"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -190,6 +192,9 @@ def main(argv: list[str]) -> int:
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
+        elif spec["version"] == "0.7.3":
+            spec["version"] = "0.7.4"
+            spec["revision"] += "; 0.7.4 (2026-10-10): CMPXCHG8B/16B's template Mqdq (Sprint 046)"
         elif spec["version"] == "0.7.2":
             spec["version"] = "0.7.3"
             spec["revision"] += ("; 0.7.3 (2026-10-10): operand templates for the second SSE block, the classes "

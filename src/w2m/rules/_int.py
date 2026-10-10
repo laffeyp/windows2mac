@@ -486,6 +486,18 @@ def cmpxchg(ctx: Ctx) -> None:
     b.emit("flags", "sub", a, d, r, bits)
 
 
+def cmpxchg16b(ctx: Ctx) -> None:
+    """CMPXCHG16B m128 (SDM CMPXCHG8B/CMPXCHG16B; Sprint 046): RDX:RAX against the 16 bytes; equal: ZF set and
+    RCX:RBX stored; else ZF clear, RDX:RAX loaded and the old value written back (the destination is always
+    written); other flags unchanged; #GP unless 16-byte aligned. One op ("cx16", address): atomic in the VM
+    with or without LOCK. CMPXCHG8B (no REX.W) is not lifted."""
+    b = ctx.b
+    _, loc, bits = _operand(b, ctx.ops[0], ctx.nxt)
+    if bits != 128:
+        raise LiftError(f"CMPXCHG8B at 0x{ctx.address:x}")
+    b.emit("cx16", cast(tuple[Any, ...], loc)[1])
+
+
 def locked(base: Callable[[Ctx], None]) -> Callable[[Ctx], None]:
     """A LOCK-prefixed form (iclass X_LOCK): the base rule's operations under the base iclass. One
     thread sees the same result; the VM lowers the locked forms atomically (rules/<x>_lock.py)."""

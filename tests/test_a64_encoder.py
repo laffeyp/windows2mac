@@ -191,6 +191,8 @@ CASES: list[tuple[str, int]] = [
     ("sshl v3.4s, v3.4s, v30.4s", a64.sshl_4s(3, 3, 30)),
     ("mov w16, v3.s[2]", a64.umov_s(16, 3, 2)),
     ("sdiv x16, x0, x3", a64.sdiv(16, 0, 3)),
+    ("ldaxp x16, x17, [x25]", a64.ldaxp(16, 17, 25)),
+    ("stlxp w30, x3, x1, [x25]", a64.stlxp(30, 3, 1, 25)),
 ]
 
 

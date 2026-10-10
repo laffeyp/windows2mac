@@ -234,6 +234,28 @@ def _strings(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
             yield s
 
 
+CX16_ENCODINGS = {"CMPXCHG16B": "480fc70e", "CMPXCHG16B_LOCK": "f0480fc70e"}    # cmpxchg16b [rsi]
+CX16_STATES = 24
+
+
+def _cmpxchg16b(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
+    """CMPXCHG16B states the random generator almost never makes: RSI on a 16-byte boundary in the data window,
+    and in half of them the 16 bytes there equal RDX:RAX, so the exchange succeeds; one in four is 8 bytes
+    off a boundary (#GP)."""
+    for label in sorted(CX16_ENCODINGS):
+        if label not in classes:
+            continue
+        for i in range(CX16_STATES):
+            s = _state(rng, False)
+            off = 16 * rng.randrange(0, WINDOW // 16) if i % 4 != 3 else 16 * rng.randrange(0, WINDOW // 16 - 1) + 8
+            s.regs[6] = DATA_VA + DATA_OFF + off
+            if i % 2 == 0 and i % 4 != 3:
+                value = (s.regs[2] << 64 | s.regs[0]).to_bytes(16, "little")
+                s.data = s.data[:off] + value + s.data[off + 16:]
+            s.code, s.label = bytes.fromhex(CX16_ENCODINGS[label]), label
+            yield s
+
+
 def _control_flow() -> Iterator[tuple[bytes, str]]:
     for cc in range(16):
         yield bytes([0x70 + cc, 0x0E]), f"Jcc_{cc:x}"
@@ -295,6 +317,10 @@ CLASSES_046 = frozenset(("SHUFPS", "PXOR", "ANDNPS", "UNPCKLPS", "UNPCKHPS", "MO
 # Sprint 046 (second block): CQO, where UnityPlayer's start-up stops after its system queries (173,624
 # instructions with GetNativeSystemInfo stubbed), CWDE beside it, and IDIV
 CLASSES_046B = frozenset(("CQO", "CWDE", "IDIV"))
+# Sprint 046 (third block): CMPXCHG16B, plain and LOCK, where UnityPlayer's DllMain stops after its
+# semaphore (scratch run, 281,745 instructions); the profile advertises CMPXCHG16B
+CLASSES_046C = frozenset(("CMPXCHG16B", "CMPXCHG16B_LOCK"))
+LOCKABLE_046C = ("CMPXCHG16B",)
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -306,7 +332,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "044d": (2026_10_10_443, CLASSES_044D, (), False),
     "044e": (2026_10_10_444, CLASSES_044E, (), False),
     "046": (2026_10_10_46, CLASSES_046, (), False),
-    "046b": (2026_10_10_461, CLASSES_046B, (), False)}
+    "046b": (2026_10_10_461, CLASSES_046B, (), False),
+    "046c": (2026_10_10_462, CLASSES_046C, LOCKABLE_046C, False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -374,6 +401,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             else:
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
     out.extend(_strings(classes, rng))                         # only sets with REP classes (044b on)
+    out.extend(_cmpxchg16b(classes, rng))                     # only sets with CMPXCHG16B (046c on)
     if "RET_NEAR" in classes and not control_flow:              # 044e: RET imm16 (039 holds C3)
         for imm in RET_IMMEDIATES:
             for _ in range(CONTROL_STATES):

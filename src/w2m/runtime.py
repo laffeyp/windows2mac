@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from w2m import cpuid
 from w2m import x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
-from w2m.lift import RAX, RCX, RDI, RDX, RSI, SSE2_INT, Lifted, LiftError, Op, lift
+from w2m.lift import RAX, RBX, RCX, RDI, RDX, RSI, SSE2_INT, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
 
 STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero divisor
@@ -265,6 +265,20 @@ class Runtime:
             self._wr(RDX, bits, False, rem)
         self.th.flags.update(dict.fromkeys("CZSOPA"))
 
+    def _cmpxchg16b(self, addr: int) -> None:
+        """CMPXCHG16B (SDM): #GP (an access violation on Windows) unless 16-byte aligned; then compare
+        RDX:RAX, store RCX:RBX or load the old value, which is also written back; ZF only."""
+        if addr % 16:
+            raise GuestFault(f"#GP: CMPXCHG16B operand 0x{addr:x} not 16-byte aligned at 0x{self.th.rip:x}")
+        old = int.from_bytes(self.mem.read(addr, 16), "little")
+        regs = self.th.regs
+        equal = old == regs[RDX] << 64 | regs[RAX]
+        new = regs[RCX] << 64 | regs[RBX] if equal else old
+        self.mem.write(addr, new.to_bytes(16, "little"))
+        if not equal:
+            regs[RAX], regs[RDX] = old & M64, old >> 64
+        self.th.flags["Z"] = equal
+
     # SSE ---------------------------------------------------------------------------------------
     def _xread(self, loc: Op, nbytes: int) -> int:
         if loc[0] == "x":
@@ -476,6 +490,8 @@ class Runtime:
                 t[d] = v & _mask(abits)
             elif k == "div":
                 self._div(op[1], t[op[2]], bool(op[3]) if len(op) > 3 else False)
+            elif k == "cx16":
+                self._cmpxchg16b(t[op[1]])
             elif k == "rep":
                 self._rep(op[1], op[2])
             elif k == "mxcsr":
