@@ -19,6 +19,8 @@
 ---
 - **2026-10-09 agent** — COMPREHENSION_AFFIRMATION (hard rule 5: vocabulary 0.5 in force, the x86-64 profile changed, the architecture decided, 32-bit in scope; review 2026-10-09 progress K2): w2m runs a Windows x86-64 Steam game on this Mac inside a Hypervisor.framework VM that enforces x86 ordering and 4 KB pages in hardware. The guest's Windows-visible state (TEB, PEB, CONTEXT, a per-thread state block) lives in guest memory at Windows layouts; Windows services are freestanding C inside the guest, each a compilation unit generated against a contract and judged against Windows; x86 code is decoded by a spec-generated decoder judged by XED, lifted to explicit operations judged by a real x86 CPU, and compiled to AArch64. The x86-64 profile is Hail to the Rainbow (Unity 2019.4, Mono: its logic is code generated at run time); BioShock 2 Remastered is the 32-bit profile. Vocabulary 0.5 (61 tags, two planes) names every event; a substrate run holds the chain from cause to verdict, and the records under store/runs/ replay. The plan's current order lives in docs/plan.md.
 
+- **2026-10-09 agent** — COMPREHENSION_AFFIRMATION (hard rule 5: vocabulary 0.7 in force since Sprint 039; kit reread in full after compaction): w2m runs Hail to the Rainbow (Unity 2019.4, Mono, x86-64) on this M5 Max inside a Hypervisor.framework VM; x86 is decoded by a spec judged by XED, lifted to explicit operations judged instruction by instruction against Intel CPUs (39,708 cases in Sprint 039, faults included), and compiled to AArch64; Windows services are freestanding C in the guest. Vocabulary 0.7 (P17 added six FP capability values) names every event on two planes; each sprint is judged by a reference outside w2m (Windows on the runner, the CPU, XED) with planted faults that must be caught. Tonight's user decisions bind the work: blocks are removed, not routed around; a test that cannot run means the sprints are out of order, so Sprint 040 is judged on Sprint 039's Windows fault records and the scheduler moved to 047; nothing local takes seconds. `docs/plan.md` holds the order.
+
 ## Decisions
 
 - **2026-10-03 user** — Project scope: build the system described in `windows_to_macos_research_direction_v0_1.md` (pasted in chat 2026-10-03): obtain a Windows Steam game's distribution from the Mac command line, prepare it automatically, and launch it as a native Mac application; original Windows binaries are the input; Wine, Rosetta, and D3DMetal are not architectural dependencies. Use the substrate repo (`https://github.com/laffeyp/substrate`) and the SDD kit (`sdd-kit-3/`). Instruction verbatim: "use this, read the sdd kit in full, to review this and prep to make it."
@@ -154,6 +156,7 @@
 - **2026-10-09** — Sprint 038 (the frontier and the game's demands) closed. Vocabulary 0.6 (P15 SERVICE_UNIMPLEMENTED, P16 steamcmd); `scripts/run_frontier.py`, `scripts/acquire_depot.py`, `scripts/record_contracts.py`, `scripts/record_probes.py`, `src/w2m/record.py`; launcher import counting, GetProcAddress log, thread counts; windows-game play mode; records in `store/runs/` and `store/game-runs/{38006665419,38006671518}/`. Dual contract: signal pass (first emitters of SERVICE_UNIMPLEMENTED, DISTRIBUTION_RESOLVED/ACQUIRED, EVIDENCE_RECORDED, CONTRACT_PROPOSED/ACCEPTED/REVISED, DEPENDENTS_INVALIDATED, PROBE_AUTHORED); artifact pass (gates.sh 0). Observation: pass — frontier at GetSystemTimeAsFileTime after 13 instructions; 213/258 imports called; peak 41 threads; play mode renders on WARP and compiles 5,309 methods.
 - **2026-10-09** — Sprint 039 (the floating-point and fault oracle) closed. `src/w2m/x86fp.py`; XMM, MXCSR, AF, DF in `Thread`, `lift.py`, `runtime.py` (47 legacy-SSE classes; fault rollback); spec 0.7.1 (`scripts/sse_operand_templates.py`, 62 rows); semantics probe format 2 with fault cases, built on the runner; `scripts/probe_on_intel.py`; `probes/mac_hv_fp/hv_fp.c`, `scripts/probe_fp_control.py`; vocabulary 0.7 (P17). Dual contract: signal pass (CAPABILITY_PROBED for FPCR; semantics records); artifact pass (gates.sh 0, 258 tests). Observation: pass — Intel Xeon 8573C and 8370C agree with the model on all 39,708 cases, faults included; four planted faults caught; FPCR.AH=1 matches x86 except FCVTZS.
 
+- **2026-10-09** — Sprint 040 (guest state built) closed. `src/w2m/lift.py` (commit rule and `commit_order`; POP [m] order and RSP-based destination), `src/w2m/vm_backend.py` (lazy AF, DF, reconstruction table in guest memory, EL1 exception entry, translation flush, forward rule on asynchronous stops, CPUID through the runtime), `tools/guest_runtime/` (state block, EXCEPTION_RECORD and CONTEXT, `w2m_exception`, `w2m_cpuid`), `src/w2m/cpuid.py`, `specs/guest_cpuid.json` 0.1.0, `scripts/vm_oracle.py`, `tests/test_vm_state.py`, `store/probe-runs/38011862284/result-1.faults.bin`; `CLASSES_039` in `scripts/semantics_differential.py`. Dual contract: signal pass (two COMPARISON_COMPLETED conforms); artifact pass (gates.sh 0, 269 tests). Observation: pass — the guest runtime builds Windows's CONTEXT and exception record for all 1,916 compilable fault cases on two Intel CPUs, 20,448 completed cases agree with AF and DF; three planted faults caught; 763 asynchronous stops, all at block starts, count exact.
 ## Deferred
 
 - **2026-10-03 (Agent)** — Steam acquisition (`w2m steam install`) and the lsteamclient-style Steam bridge. Re-visit when the v0 slice launches a locally supplied game directory. *(Withdrawn 2026-10-03 by the v0.2 user decision: §4.2 makes the bridge a first-class subsystem and §12.1 puts acquisition inside the product slice.)*
@@ -191,6 +194,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 040 (2026-10-09, closed)
+- **Scope:** the guest state at a stop, in the VM, judged on Sprint 039's Windows fault records.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the comparator rebuilt 039's cases and checked their hash against the runner's, ran each compilable case in one VM, and read either the state at the next dispatch or the CONTEXT and exception record the guest runtime built after the EL1 vector saved the registers; both Intel CPUs conformed.
+  - *Observation 1 (a plant outside the reference, again):* no Windows record can show a PUSH that moves RSP early. Disposition: resolved-here (POP [m] planted); KIT_DIARY #22.
+  - *Observation 2 (reference inputs depended on the lifter):* lifting CPUID changed 039's case set. Disposition: resolved-here (`CLASSES_039`); KIT_DIARY #23.
+  - *Observation 3 (a static check beat the CPU):* `commit_order` found POP [m]'s order defect from Sprint 029. Disposition: resolved-here.
+- **Closed:** clean.
 
 ### Sprint 039 (2026-10-09, closed)
 - **Scope:** the semantics oracle extended to XMM, MXCSR, AF, DF and faults; SSE floating-point semantics in the model; FPCR.AH in a guest.
@@ -273,13 +285,4 @@
   - *Observation 3 (the contract is weaker than the loop):* a constant passes contract 0.1.0. Disposition: open question; pinned by a test.
 - **Closed:** clean, with one open contract defect.
 
-### Sprint 030 (2026-10-08, closed)
-- **Scope:** AArch64 back end in the Hypervisor.framework VM (profile_kind managed_vm).
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the host loaded the runner-built .exe into a shared memory file, wrote stage-1 tables so each x86 address maps to itself, wrote the dispatcher and vector table, and started the monitor. The vCPU entered the dispatcher with x17 = the entry address; each miss exited to the host, which lifted and compiled one basic block, filled the dispatch table and resumed. Six times control reached a kernel32 thunk; the host serviced the call on the guest's registers and memory and resumed at the return address. ExitProcess(0) ended the run after 5,153 instructions in 43 blocks.
-  - *Observation 1 (one real bug, found by the first run):* conditional branches were treated as ending control flow; the not-taken path ran into the next block. The failure was loud (undefined instruction at a named x86 address). Disposition: resolved-here.
-  - *Observation 2 (lockstep is not enough):* a planted signed-carry fault passed lockstep over the whole program, because no SUB on the path mixes signs. Disposition: resolved-here; a random-state differential (8,680 cases) now runs before every VM judging and in the gates. It found both planted faults it had first missed only after its memory comparison covered the bytes around every effective address, not just the stack.
-  - *Observation 3 (what is not yet isolated):* the monitor's tables and code share EL1 and the address space with translated guest code. Disposition: recorded for the next VM widening.
-- **Closed:** clean.
-
-Older entries (Sprints 000-029): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-030): `docs/sprint-tail-archive.md`.

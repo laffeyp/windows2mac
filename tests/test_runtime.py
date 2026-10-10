@@ -77,9 +77,9 @@ def test_planted_lift_fault_changes_the_trace() -> None:
 def test_unliftable_instruction_stops_the_run() -> None:
     from w2m.lift import LiftError
     with pytest.raises(LiftError):
-        lift(bytes.fromhex("0fa2") + b"\0" * 13, 0x1000)           # CPUID: no lifting rule
+        lift(bytes.fromhex("0f0b") + b"\0" * 13, 0x1000)           # UD2: no lifting rule
     rt = Runtime(load(_skeleton()))
-    rt.mem.write(rt.ld.entry, bytes.fromhex("0fa2"))
+    rt.mem.write(rt.ld.entry, bytes.fromhex("0f0b"))
     r = rt.run()
     assert r.stop.startswith("LiftError") and r.exit_code is None
 

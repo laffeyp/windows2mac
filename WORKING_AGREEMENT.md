@@ -59,6 +59,10 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | The plan: current order of work | `docs/plan.md` (edited in place; Decisions record why it changed) |
 | Guest state spec (state block, host registers, reconstruction, Windows layouts) | `specs/guest_state.json`; checker `scripts/check_guest_state.py` |
 | Semantics oracle (cases, runner harness, judge) | `probes/semantics/`, `scripts/semantics_differential.py` |
+| The oracle in the VM (039 cases judged in the managed VM against Windows) | `scripts/vm_oracle.py` |
+| Guest CPUID profile (table, lookup, C header) | `specs/guest_cpuid.json`, `src/w2m/cpuid.py` |
+| Guest state at a stop (state block, EXCEPTION_RECORD, CONTEXT, exception path) | `tools/guest_runtime/runtime.h`, `runtime.c` (`w2m_exception`) |
+| Local Windows VM control (SSH session, desktop agent) | `scripts/vm_guest.py`, `tools/vm_desktop/agent.ps1` |
 | Record replay gate | `scripts/check_replay.py` |
 | Reviews and specs | `docs/` |
 

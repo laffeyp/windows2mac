@@ -227,6 +227,31 @@ def hvc(imm16: int) -> int:
     return 0xD4000002 | (imm16 & 0xFFFF) << 5
 
 
+# System registers as (op0, op1, CRn, CRm, op2), Arm ARM D19 (AArch64 system register encodings).
+ESR_EL1 = (3, 0, 5, 2, 0)
+FAR_EL1 = (3, 0, 6, 0, 0)
+ELR_EL1 = (3, 0, 4, 0, 1)
+SPSR_EL1 = (3, 0, 4, 0, 0)
+
+
+def _sysreg(reg: tuple[int, int, int, int, int]) -> int:
+    op0, op1, crn, crm, op2 = reg
+    return (op0 - 2) << 19 | op1 << 16 | crn << 12 | crm << 8 | op2 << 5
+
+
+def mrs(rt: int, reg: tuple[int, int, int, int, int]) -> int:
+    """MRS Xt, <system register>."""
+    _r(rt)
+    return 0xD5300000 | _sysreg(reg) | rt
+
+
+def msr(reg: tuple[int, int, int, int, int], rt: int) -> int:
+    """MSR <system register>, Xt."""
+    _r(rt)
+    return 0xD5100000 | _sysreg(reg) | rt
+
+
+ERET = 0xD69F03E0
 IC_IALLU = 0xD508751F
 DSB_ISH = 0xD5033B9F
 ISB = 0xD5033FDF

@@ -84,8 +84,10 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
     header = (SOURCE / "runtime.h").read_text()
     last_error = ('#include "runtime.h"\n' + last_error_source if last_error_source is not None
                   else (SOURCE / "last_error.c").read_text())          # a candidate has no includes
+    from w2m.cpuid import c_header
+    cpuid_table = c_header()
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
-    key = hashlib.sha256("\0".join([runtime, header, last_error, " ".join(CFLAGS), " ".join(dflags),
+    key = hashlib.sha256("\0".join([runtime, header, last_error, cpuid_table, " ".join(CFLAGS), " ".join(dflags),
                                     f"{base_va:x}"]).encode()).hexdigest()
     out = CACHE / f"{key}.bin"
     if not out.exists():
@@ -93,10 +95,11 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
         work = CACHE / key
         work.mkdir(exist_ok=True)
         (work / "last_error.c").write_text(last_error)
+        (work / "cpuid_table.h").write_text(cpuid_table)
         objs = []
         for src in (SOURCE / "runtime.c", work / "last_error.c"):
             obj = work / (src.stem + ".o")
-            r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", "-c", str(src), "-o", str(obj)],
+            r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{work}", "-c", str(src), "-o", str(obj)],
                                capture_output=True, text=True)
             if r.returncode:
                 raise BuildError(f"{src.name}: {r.stderr.strip()}")

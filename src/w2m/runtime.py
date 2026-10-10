@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from w2m import cpuid
 from w2m import x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
@@ -53,6 +54,7 @@ class Runtime:
         self.kernel32 = self.kernel.handlers
         self.steps = 0
         self.seen: set[int] = set()
+        self.cpuid_reads: list[tuple[int, int]] = []           # (EAX, ECX) per CPUID executed
 
     @property
     def exit_code(self) -> int | None:
@@ -298,6 +300,11 @@ class Runtime:
                 self._store(op[2], int(self._cond(op[1])))
             elif k == "df":
                 self.th.df = bool(op[1])
+            elif k == "cpuid":                                # 32-bit results zero-extend (SDM CPUID)
+                eax, ecx = self.th.regs[0] & 0xFFFF_FFFF, self.th.regs[1] & 0xFFFF_FFFF
+                self.cpuid_reads.append((eax, ecx))
+                a, b, c, d = cpuid.lookup(eax, ecx)
+                self.th.regs[0], self.th.regs[3], self.th.regs[1], self.th.regs[2] = a, b, c, d
             elif k == "sse":
                 self._sse(op[1], op[2], op[3], op[4])
             elif k == "br":

@@ -210,7 +210,23 @@ def _control_flow() -> Iterator[tuple[bytes, str]]:
     yield bytes([0xC3]), "RET_NEAR"
 
 
-def build_cases(seed: int = 2026_10_09_39) -> tuple[list[Case], Counter[str]]:
+# The instruction classes Sprint 039's runs executed (cases.sha256 3094485413…). The generator keeps
+# exactly these, so a lifter that learns a new class (CPUID, Sprint 040) does not change a case file
+# Windows already ran; new classes get cases in a new run.
+CLASSES_039 = frozenset((
+    "ADD", "ADDPD", "ADDPS", "ADDSD", "ADDSS", "AND", "ANDPD", "ANDPS", "CALL_NEAR", "CLD", "CMP",
+    "COMISD", "COMISS", "CVTSD2SI", "CVTSD2SS", "CVTSI2SD", "CVTSI2SS", "CVTSS2SD", "CVTSS2SI",
+    "CVTTSD2SI", "CVTTSS2SI", "DEC", "DIVPD", "DIVPS", "DIVSD", "DIVSS", "INC", "JMP", "LEA", "MAXPD",
+    "MAXPS", "MAXSD", "MAXSS", "MINPD", "MINPS", "MINSD", "MINSS", "MOV", "MOVAPD", "MOVAPS", "MOVD",
+    "MOVQ", "MOVSD_XMM", "MOVSS", "MOVSXD", "MOVUPD", "MOVUPS", "MOVZX", "MUL", "MULPD", "MULPS",
+    "MULSD", "MULSS", "NOP", "OR", "POP", "PUSH", "RET_NEAR", "SETB", "SETBE", "SETL", "SETLE",
+    "SETNB", "SETNBE", "SETNL", "SETNLE", "SETNO", "SETNP", "SETNS", "SETNZ", "SETO", "SETP", "SETS",
+    "SETZ", "SHR", "SQRTPD", "SQRTPS", "SQRTSD", "SQRTSS", "STD", "SUB", "SUBPD", "SUBPS", "SUBSD",
+    "SUBSS", "TEST", "UCOMISD", "UCOMISS", "XOR", "XORPD", "XORPS",
+))
+
+
+def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     out: list[Case] = []
     skipped: Counter[str] = Counter()
@@ -220,6 +236,9 @@ def build_cases(seed: int = 2026_10_09_39) -> tuple[list[Case], Counter[str]]:
             ins = lift(c.raw[:d.length] + b"\x90" * 15, CODE_VA)
         except (DecodeError, LiftError, IndexError) as e:
             skipped[f"not lifted: {type(e).__name__}"] += 1
+            continue
+        if d.iclass not in classes:
+            skipped["not in this case file's class set"] += 1
             continue
         if any(op[0] == "br" for op in ins.ops):
             skipped["control flow (fixed encodings instead)"] += 1

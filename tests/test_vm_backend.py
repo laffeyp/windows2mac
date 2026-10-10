@@ -79,23 +79,33 @@ def test_planted_store_width_fault_is_found(monkeypatch: pytest.MonkeyPatch) -> 
     assert found and "differs" in found[0]
 
 
-def test_unmapped_store_is_a_guest_fault() -> None:
+def test_unmapped_store_is_an_unhandled_access_violation() -> None:
+    """Sprint 040: the guest runtime builds the exception record and CONTEXT a Windows handler
+    would get; with no handler the process ends with the exception code, as on Windows."""
     data = bytearray(_skeleton())
     ld = load(bytes(data))
     vm = VM(ld)
     try:
         vm.mem.write(ld.entry, bytes.fromhex("8804250000000000"))   # mov [0x0], al
         r = vm.run()
+        exc = vm.exception()
     finally:
         vm.close()
-    assert r.stop.startswith("GuestFault: access at 0x0") and r.exit_code is None
+    assert r.stop == f"UnhandledException 0xc0000005 at x86 0x{ld.entry:x}"
+    assert r.exit_code == 0xC0000005
+    assert exc is not None
+    assert (exc["code"], exc["address"], exc["parameters"], exc["info0"], exc["info1"]) == (
+        0xC0000005, ld.entry, 2, 1, 0)
+    assert exc["rip"] == ld.entry and exc["r4"] == ld.stack_top - 0x100 - 8
+    assert exc["eflags"] & 0x202 == 0x202 and exc["mxcsr"] == exc["fltsave_mxcsr"] == 0x1F80
+    assert exc["fltsave_control_word"] == 0x27F and exc["seg_cs"] == 0x33
 
 
 def test_unliftable_instruction_stops_the_vm() -> None:
     ld = load(_skeleton())
     vm = VM(ld)
     try:
-        vm.mem.write(ld.entry, bytes.fromhex("0fa2"))               # CPUID: no lifting rule
+        vm.mem.write(ld.entry, bytes.fromhex("0f0b"))               # UD2: no lifting rule
         r = vm.run()
     finally:
         vm.close()

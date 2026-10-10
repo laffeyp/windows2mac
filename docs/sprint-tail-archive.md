@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 030 (2026-10-08, closed)
+- **Scope:** AArch64 back end in the Hypervisor.framework VM (profile_kind managed_vm).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the host loaded the runner-built .exe into a shared memory file, wrote stage-1 tables so each x86 address maps to itself, wrote the dispatcher and vector table, and started the monitor. The vCPU entered the dispatcher with x17 = the entry address; each miss exited to the host, which lifted and compiled one basic block, filled the dispatch table and resumed. Six times control reached a kernel32 thunk; the host serviced the call on the guest's registers and memory and resumed at the return address. ExitProcess(0) ended the run after 5,153 instructions in 43 blocks.
+  - *Observation 1 (one real bug, found by the first run):* conditional branches were treated as ending control flow; the not-taken path ran into the next block. The failure was loud (undefined instruction at a named x86 address). Disposition: resolved-here.
+  - *Observation 2 (lockstep is not enough):* a planted signed-carry fault passed lockstep over the whole program, because no SUB on the path mixes signs. Disposition: resolved-here; a random-state differential (8,680 cases) now runs before every VM judging and in the gates. It found both planted faults it had first missed only after its memory comparison covered the bytes around every effective address, not just the stack.
+  - *Observation 3 (what is not yet isolated):* the monitor's tables and code share EL1 and the address space with translated guest code. Disposition: recorded for the next VM widening.
+- **Closed:** clean.
+
 ### Sprint 029 (2026-10-08, closed)
 - **Scope:** walking skeleton through every v0.2 §2 stage.
 - **Rubber Duck Pass:**

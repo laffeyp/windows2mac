@@ -14,6 +14,7 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("br", cond, t)                 cond: always or an SDM condition code (Vol 1 B.1)
   ("set", cond, loc)              SETcc
   ("df", 0|1)                     CLD, STD
+  ("cpuid",)                      CPUID: EAX, EBX, ECX, EDX from specs/guest_cpuid.json for EAX, ECX
   ("sse", iclass, dst, src, align)  one legacy-SSE instruction (Sprint 039): dst and src are locs,
                                   ("x", index) for an XMM register; align 16 when a memory operand
                                   must be 16-byte aligned (#GP otherwise); the runtime computes it
@@ -130,8 +131,8 @@ def _push(b: _OpBuilder, value_t: int, size: int = 8) -> None:
     b.emit("ld", sp, ("r", RSP, 64, False))
     b.emit("imm", step, size)
     b.emit("alu", nsp, "sub", sp, step, 64)
+    b.emit("st", ("m", nsp, size), value_t)          # the store, the only fault point, before RSP moves
     b.emit("st", ("r", RSP, 64, False), nsp)
-    b.emit("st", ("m", nsp, size), value_t)
 
 
 def _pop(b: _OpBuilder) -> int:
@@ -142,6 +143,41 @@ def _pop(b: _OpBuilder) -> int:
     b.emit("alu", nsp, "add", sp, eight, 64)
     b.emit("st", ("r", RSP, 64, False), nsp)
     return v
+
+
+def commit_order(ins: Lifted) -> str | None:
+    """None when `ins` obeys the commit rule (specs/guest_state.json 0.2.0, review 2026-10-09 N2):
+    no register, flag or DF write before the instruction's last memory access, and at most one
+    memory store, after every memory load. A fault then leaves the guest state as it was before
+    the instruction, so the reconstruction table maps it to the instruction's start. Otherwise the
+    first violation, named."""
+    def memory_access(op: Op) -> str | None:
+        if op[0] == "ld" and op[2][0] == "m":
+            return "load"
+        if op[0] == "st" and op[1][0] == "m":
+            return "store"
+        if op[0] == "set" and op[2][0] == "m":
+            return "store"
+        if op[0] == "sse" and (op[2][0] == "m" or op[3][0] == "m"):
+            return "store" if op[2][0] == "m" else "load"
+        return None
+
+    def effect(op: Op) -> bool:
+        return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df") or (
+            op[0] == "set" and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m")
+
+    last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
+    if last_access < 0:
+        return None
+    stores = [i for i, op in enumerate(ins.ops) if memory_access(op) == "store"]
+    if len(stores) > 1:
+        return f"{ins.iclass} at 0x{ins.address:x}: {len(stores)} memory stores"
+    if stores and stores[0] != last_access:
+        return f"{ins.iclass} at 0x{ins.address:x}: a memory access after the store"
+    for i, op in enumerate(ins.ops[:last_access]):
+        if effect(op):
+            return f"{ins.iclass} at 0x{ins.address:x}: {op[0]} at operation {i} before memory access {last_access}"
+    return None
 
 
 def lift(code: bytes, address: int) -> Lifted:
@@ -158,13 +194,15 @@ def lift(code: bytes, address: int) -> Lifted:
         # lifting this as a plain address would read the wrong memory (Sprint 037)
         raise LiftError(f"FS/GS-relative memory operand at 0x{address:x} ({code[:d.length].hex()}): "
                         "segment bases are not modeled")
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD"):
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID"):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     if ic == "NOP":
         pass
     elif ic in ("CLD", "STD"):
         b.emit("df", int(ic == "STD"))
+    elif ic == "CPUID":
+        b.emit("cpuid")                                # EAX, EBX, ECX, EDX from the guest profile
     elif ic in SSE:
         sse_dst = cast(tuple[Any, ...], _operand(b, ops[0], nxt)[1])
         sse_src = cast(tuple[Any, ...], _operand(b, ops[1], nxt)[1])
@@ -188,24 +226,24 @@ def lift(code: bytes, address: int) -> Lifted:
         sk, src, _ = _operand(b, ops[1], nxt, bits)
         a, c, r = _val(b, dk, dst), _val(b, sk, src), b.t()
         b.emit("alu", r, ALU[ic], a, c, bits)
-        b.emit("flags", "logic" if ALU[ic] in ("and", "or", "xor") else ALU[ic], a, c, r, bits)
         if ic not in ("CMP", "TEST"):
-            b.emit("st", dst, r)
+            b.emit("st", dst, r)                              # store before flags: the commit rule
+        b.emit("flags", "logic" if ALU[ic] in ("and", "or", "xor") else ALU[ic], a, c, r, bits)
     elif ic in ("INC", "DEC"):
         dk, dst, bits = _operand(b, ops[0], nxt)
         a, one, r = _val(b, dk, dst), b.t(), b.t()
         b.emit("imm", one, 1)
         b.emit("alu", r, "add" if ic == "INC" else "sub", a, one, bits)
-        b.emit("flags", ic.lower(), a, one, r, bits)
         b.emit("st", dst, r)
+        b.emit("flags", ic.lower(), a, one, r, bits)
     elif ic == "SHR":
         dk, dst, bits = _operand(b, ops[0], nxt)
         sk, src, _ = _operand(b, ops[1], nxt)
         a, r = _val(b, dk, dst), b.t()
         cnt = _val(b, sk, src)
         b.emit("alu", r, "shr", a, cnt, bits)
-        b.emit("flags", "shr", a, cnt, r, bits)
         b.emit("st", dst, r)
+        b.emit("flags", "shr", a, cnt, r, bits)
     elif ic == "MUL":
         sk, src, bits = _operand(b, ops[0], nxt)
         if bits != 64:
@@ -240,19 +278,30 @@ def lift(code: bytes, address: int) -> Lifted:
             raise LiftError(f"PUSH {bits}-bit")
         _push(b, _val(b, k, x), size)
     elif ic == "POP":
-        _, dst, bits = _operand(b, ops[0], nxt)
-        if bits == 16:                                     # 66 POP: RSP += 2
-            sp, two, nsp, v = b.t(), b.t(), b.t(), b.t()
-            b.emit("ld", sp, ("r", RSP, 64, False))
-            b.emit("ld", v, ("m", sp, 2))
-            b.emit("imm", two, 2)
-            b.emit("alu", nsp, "add", sp, two, 64)
-            b.emit("st", ("r", RSP, 64, False), nsp)
-            b.emit("st", dst, v)
-            return Lifted(address, d.length, ic, tuple(b.ops))
-        if bits != 64:
+        _, pop_dst, bits = _operand(b, ops[0], nxt)
+        dst = cast(tuple[Any, ...], pop_dst)
+        if bits not in (16, 64):
             raise LiftError(f"POP {bits}-bit")
-        b.emit("st", dst, _pop(b))
+        size = bits // 8                                       # 66 POP: RSP += 2
+        if dst[0] == "m":
+            # SDM POP: "If the ESP register is used as a base register for addressing a
+            # destination operand in memory, the POP instruction computes the effective address
+            # of the operand after it increments the ESP register." The address was computed from
+            # the old RSP; the new one is `size` higher.
+            for i, op in enumerate(b.ops):
+                if op[0] == "addr" and op[1] == dst[1] and op[2] == RSP:
+                    b.ops[i] = op[:5] + (op[5] + size,) + op[6:]
+        sp, step, nsp, v = b.t(), b.t(), b.t(), b.t()
+        b.emit("ld", sp, ("r", RSP, 64, False))
+        b.emit("ld", v, ("m", sp, size))
+        b.emit("imm", step, size)
+        b.emit("alu", nsp, "add", sp, step, 64)
+        if dst[0] == "m":
+            b.emit("st", dst, v)                               # the store before RSP moves: the commit rule
+            b.emit("st", ("r", RSP, 64, False), nsp)
+        else:
+            b.emit("st", ("r", RSP, 64, False), nsp)           # POP RSP: the popped value wins (SDM)
+            b.emit("st", dst, v)
     else:
         raise LiftError(f"no lifting rule for {ic} at 0x{address:x}")
     return Lifted(address, d.length, ic, tuple(b.ops))

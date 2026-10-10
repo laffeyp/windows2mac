@@ -1,0 +1,1 @@
+extracted from result-1.bin sha256 6a9da703a67c379854cbdbefe9b643aa1189928a6570ef9f945af9e92a55e42d (release semantics-039): every result whose marker is 2 (a fault), as <u32 case index><584-byte result>, 5485 records

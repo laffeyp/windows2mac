@@ -24,14 +24,14 @@ def _skeleton() -> bytes:
 
 
 def test_api_ids_match_the_services() -> None:
-    assert set(guest_runtime.api_ids().values()) == set(vm_backend.SERVICES)
+    internal = {"Exception", "Cpuid"}                          # ring entries that are not kernel32 services
+    assert set(guest_runtime.api_ids().values()) - internal == set(vm_backend.SERVICES)
 
 
 @pytest.mark.hvf
 def test_image_links_at_its_address_with_every_service() -> None:
     base = vm_backend.MONITOR_VA + vm_backend.RUNTIME_IMAGE
-    im = guest_runtime.build(base, {"W2M_TEB_VA": 0x7FFE_0000_0000, "W2M_PEB_VA": 0x7FFE_0000_2000,
-                                    "W2M_TRANSPORT_VA": 0x7FFE_0000_4000, "W2M_RING_VA": 0x7FFE_0000_5000})
+    im = guest_runtime.build(base, vm_backend.runtime_defines())
     assert im.segments[0][0] == base
     assert {sym for sym, _ in vm_backend.SERVICES.values()} <= set(im.symbols)
 

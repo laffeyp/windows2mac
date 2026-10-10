@@ -1,0 +1,120 @@
+{
+ "spec_id": "w2m.guest_cpuid",
+ "version": "0.1.0",
+ "decision": "BLACKBOARD 2026-10-09 (review N5): a fixed Intel-vendor x86-64-v2 profile (SSE through SSE4.2, POPCNT, CMPXCHG16B, LAHF/SAHF in 64-bit mode; no AVX, no AVX-512, no XSAVE) until a game needs more",
+ "sources": {
+  "sdm": "Intel SDM Vol 2A, CPUID: leaf layouts and feature bit positions; 'If a value entered for CPUID.EAX is higher than the maximum input value for basic or extended function for that processor then the data for the highest basic information leaf is returned'",
+  "psabi": "x86-64 psABI micro-architecture levels: x86-64-v2 = CMPXCHG16B, LAHF-SAHF, POPCNT, SSE3, SSE4.1, SSE4.2, SSSE3",
+  "family_model": "Intel Core i3-6100 (Skylake, family 6, model 0x5E, stepping 3), Hail to the Rainbow's minimum CPU on its Steam page; it has AVX2, which this profile does not report"
+ },
+ "leaves": [
+  {
+   "leaf": 0,
+   "subleaf": null,
+   "eax": 7,
+   "ebx": 1970169159,
+   "ecx": 1818588270,
+   "edx": 1231384169,
+   "note": "max basic leaf 7; vendor GenuineIntel as EBX 'Genu', EDX 'ineI', ECX 'ntel'"
+  },
+  {
+   "leaf": 1,
+   "subleaf": null,
+   "eax": 329443,
+   "ebx": 2048,
+   "ecx": 9970177,
+   "edx": 126614527,
+   "note": "EAX 0x000506E3 (family 6, model 0x5E, stepping 3); EBX CLFLUSH line 8 x 8 bytes, one logical processor, APIC id 0; ECX SSE3 0, SSSE3 9, CX16 13, SSE4.1 19, SSE4.2 20, POPCNT 23 (no OSXSAVE 27, AVX 28, hypervisor 31); EDX FPU through APIC 0-9, SEP 11, MTRR 12, PGE 13, MCA 14, CMOV 15, PAT 16, PSE36 17, CLFSH 19, MMX 23, FXSR 24, SSE 25, SSE2 26"
+  },
+  {
+   "leaf": 7,
+   "subleaf": 0,
+   "eax": 0,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "max subleaf 0; no structured extended features (no BMI1/2, AVX2, AVX-512, ERMS)"
+  },
+  {
+   "leaf": 2147483648,
+   "subleaf": null,
+   "eax": 2147483656,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "0x80000000: max extended leaf 0x80000008"
+  },
+  {
+   "leaf": 2147483649,
+   "subleaf": null,
+   "eax": 0,
+   "ebx": 0,
+   "ecx": 1,
+   "edx": 537921536,
+   "note": "0x80000001: ECX LAHF/SAHF 0; EDX SYSCALL 11, NX 20, LM 29"
+  },
+  {
+   "leaf": 2147483650,
+   "subleaf": null,
+   "eax": 544027255,
+   "ebx": 758528120,
+   "ecx": 1982673974,
+   "edx": 1969692722,
+   "note": "0x80000002: brand string bytes 0-15 of 'w2m x86-64-v2 guest', NUL-padded to 48"
+  },
+  {
+   "leaf": 2147483651,
+   "subleaf": null,
+   "eax": 7631717,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "0x80000003: brand string bytes 16-31 of 'w2m x86-64-v2 guest', NUL-padded to 48"
+  },
+  {
+   "leaf": 2147483652,
+   "subleaf": null,
+   "eax": 0,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "0x80000004: brand string bytes 32-47 of 'w2m x86-64-v2 guest', NUL-padded to 48"
+  },
+  {
+   "leaf": 2147483653,
+   "subleaf": null,
+   "eax": 0,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "0x80000005: reserved on Intel"
+  },
+  {
+   "leaf": 2147483654,
+   "subleaf": null,
+   "eax": 0,
+   "ebx": 0,
+   "ecx": 16801856,
+   "edx": 0,
+   "note": "0x80000006: L2 256 KB, 8-way (code 6), 64-byte lines, as the i3-6100"
+  },
+  {
+   "leaf": 2147483655,
+   "subleaf": null,
+   "eax": 0,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "0x80000007: no invariant TSC reported"
+  },
+  {
+   "leaf": 2147483656,
+   "subleaf": null,
+   "eax": 12327,
+   "ebx": 0,
+   "ecx": 0,
+   "edx": 0,
+   "note": "0x80000008: 39-bit physical, 48-bit linear addresses"
+  }
+ ]
+}

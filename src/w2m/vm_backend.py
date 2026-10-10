@@ -54,8 +54,13 @@ MONITOR_VA = 0x7F00_0000_0000
 PAGE = 0x1000
 # monitor layout (offsets into the shared file and from MONITOR_VA)
 MONITOR_DATA = 0x00000              # [0] instructions executed, [8] limit, [16] dispatch table VA
+AF_OPERANDS = 0x20                  # MONITOR_DATA + this: the last ADD/SUB/INC/DEC's a, b, r (lazy AF)
+DF_BYTE = 0x38                      # MONITOR_DATA + this: DF (0 or 1)
+RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the reconstruction table
+SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry)
 VECTORS = 0x01000               # vector table, 16 slots of 0x80
 DISPATCHER = 0x01800
+EXCEPTION_ENTRY = 0x01C00           # EL1 synchronous-exception path into the guest runtime
 DISPATCH_TABLE = 0x02000             # 4096 entries of (x86 address, code VA)
 DISPATCH_ENTRIES = 4096
 TRANSLATION_TABLES = 0x12000            # stage-1 translation tables
@@ -66,19 +71,23 @@ RUNTIME_IMAGE = 0x460000              # guest runtime (tools/guest_runtime), lin
 RUNTIME_IMAGE_SIZE = 0x20000
 RUNTIME_STACK = 0x480000              # the runtime's AArch64 stack (SP set by each bridge)
 RUNTIME_STACK_SIZE = 0x10000
-MONITOR_SIZE = RUNTIME_STACK + RUNTIME_STACK_SIZE
+RECON_TABLE = 0x490000                # reconstruction table: (host code VA, x86 address) pairs, sorted
+RECON_ENTRIES = 0x10000
+MONITOR_SIZE = RECON_TABLE + 16 * RECON_ENTRIES
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
 RING_SIZE = 0x4000
-PROCESS_SIZE = RING_OFF + RING_SIZE
+EXCEPTION_OFF = 0x9000              # the last unhandled exception: record and CONTEXT (runtime.h)
+EXCEPTION_MAGIC = 0x7832774E4F495445
+PROCESS_SIZE = EXCEPTION_OFF + 0x1000
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
             "GetLastError": ("k32_GetLastError", True), "GetStdHandle": ("k32_GetStdHandle", True),
             "WriteFile": ("k32_WriteFile", True), "ExitProcess": ("k32_ExitProcess", False),
             "QueryPerformanceCounter": ("k32_QueryPerformanceCounter", True)}
-HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED = 1, 2, 3, 4
+HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
 SYS_REG_ID = {"SCTLR_EL1": 0xC080, "TTBR0_EL1": 0xC100, "TCR_EL1": 0xC102, "MAIR_EL1": 0xC510,
@@ -91,10 +100,11 @@ CPSR_EL1H = 0x3C5
 TEMP_REGS = (18, 25, 26, 27, 29, 30)
 REG_CF, REG_ZF, REG_SF, REG_OF, REG_PF = 19, 20, 21, 22, 23
 REG_UNDEFINED_FLAGS = 24
-FLAG_BIT = {"C": 0, "Z": 1, "S": 2, "O": 3, "P": 4}
-U_CF, U_ZF, U_SF, U_OF, U_PF = (1 << FLAG_BIT[f] for f in "CZSOP")     # bits of REG_UNDEFINED_FLAGS
+FLAG_BIT = {"C": 0, "Z": 1, "S": 2, "O": 3, "P": 4, "A": 5}
+U_CF, U_ZF, U_SF, U_OF, U_PF, U_AF = (1 << FLAG_BIT[f] for f in "CZSOPA")   # bits of REG_UNDEFINED_FLAGS
 FLAG_REG = {"C": REG_CF, "Z": REG_ZF, "S": REG_SF, "O": REG_OF, "P": REG_PF}
 MAX_BLOCK_INSNS = 64
+ASYNC_STOP_RULE = "forward"     # "backward" exists only so a test can show the forward rule is what saves the count
 
 
 class StopRun(Exception):
@@ -180,11 +190,13 @@ def _set_zf_sf_pf(a: Assembler, r: int, bits: int) -> None:
 
 
 def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) -> None:
-    """runtime.Runtime._set_flags, compiled."""
+    """runtime.Runtime._set_flags, compiled. AF is lazy (specs/guest_state.json 0.2.0): ADD, SUB,
+    INC and DEC store a, b and r at MONITOR_DATA + AF_OPERANDS, and AF is bit 4 of a ^ b ^ r when
+    the state is read; the instructions that leave AF undefined set its bit in x24."""
     if kind == "mul":                                          # SDM MUL: SF ZF AF PF undefined
         a.emit(a64.cmpi(rr, 0), a64.cset(REG_CF, "ne"), a64.mov(REG_OF, REG_CF))
         _mark_defined(a, U_CF | U_OF)
-        _mark_undefined(a, U_ZF | U_SF | U_PF)
+        _mark_undefined(a, U_ZF | U_SF | U_PF | U_AF)
         return
     if kind == "shr":
         done, undef_o, zsp = a.label(), a.label(), a.label()
@@ -199,12 +211,14 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         _mark_defined(a, U_CF | U_ZF | U_SF | U_PF)
         _mark_undefined(a, U_OF)
         a.bind(zsp)
+        _mark_undefined(a, U_AF)                               # SDM SHR: AF undefined (count > 0)
         _set_zf_sf_pf(a, rr, bits)
         a.bind(done)
         return
     if kind == "logic":
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
         _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF)
+        _mark_undefined(a, U_AF)                               # SDM AND/OR/XOR/TEST: AF undefined
     elif kind in ("add", "inc"):
         a.emit(a64.eor(16, ra, rb), a64.eor(17, ra, rr), a64.bic(17, 17, 16),
                a64.ubfx(REG_OF, 17, bits - 1, 1))
@@ -222,6 +236,9 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         _mark_defined(a, (U_CF if kind == "sub" else 0) | U_ZF | U_SF | U_OF | U_PF)
     else:
         raise CompileError(f"flags kind {kind}")
+    if kind in ("add", "inc", "sub", "dec"):
+        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, AF_OPERANDS + 16))
+        _mark_defined(a, U_AF)
     _set_zf_sf_pf(a, rr, bits)
 
 
@@ -281,6 +298,26 @@ def _temps_read(op: Op) -> list[int]:
 
 def _temps_written(op: Op) -> list[int]:
     return [op[1]] if op[0] in ("imm", "addr", "ld", "alu") else []
+
+
+def runtime_defines() -> dict[str, int]:
+    """The guest-memory addresses the guest runtime is compiled against (tools/guest_runtime)."""
+    return {
+        "W2M_TEB_VA": PROCESS_VA + TEB_OFF, "W2M_PEB_VA": PROCESS_VA + PEB_OFF,
+        "W2M_TRANSPORT_VA": PROCESS_VA + TRANSPORT_OFF, "W2M_RING_VA": PROCESS_VA + RING_OFF,
+        "W2M_STATE_VA": PROCESS_VA + STATE_OFF, "W2M_EXCEPTION_VA": PROCESS_VA + EXCEPTION_OFF,
+        "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
+        "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
+        "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
+
+
+_RUNTIME_SYMBOLS: dict[str, int] = {}
+
+
+def runtime_symbol(name: str) -> int:
+    """A guest runtime symbol's address; the VM sets the table when it builds its runtime image.
+    Compiled outside a VM (an assembler check), the address is 0."""
+    return _RUNTIME_SYMBOLS.get(name, 0)
 
 
 def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
@@ -372,6 +409,17 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "set":
             _eval_condition(a, op[1])
             store(op[2], 16)
+        elif k == "cpuid":                                      # the guest runtime answers from the profile
+            state = PROCESS_VA + STATE_OFF
+            a.emit(a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.stp(i, i + 1, 16, 8 * i))
+            a.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
+                   a64.mov_imm(16, runtime_symbol("w2m_cpuid")), a64.blr(16), a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.ldp(i, i + 1, 16, 8 * i))
+        elif k == "df":                                         # CLD, STD
+            a.emit(a64.movz(16, op[1]), a64.str_(1, 16, 28, DF_BYTE))
         elif k == "br":
             if op[1] == "always":
                 a.emit(a64.mov(17, reg_of(op[2])))
@@ -469,10 +517,10 @@ class VM:
             n = len(r.data)
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
-        self.runtime = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, {
-            "W2M_TEB_VA": PROCESS_VA + TEB_OFF, "W2M_PEB_VA": PROCESS_VA + PEB_OFF,
-            "W2M_TRANSPORT_VA": PROCESS_VA + TRANSPORT_OFF, "W2M_RING_VA": PROCESS_VA + RING_OFF},
+        self.runtime = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(),
             last_error_source)
+        _RUNTIME_SYMBOLS.clear()
+        _RUNTIME_SYMBOLS.update(self.runtime.symbols)
         if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
             raise CompileError(f"guest runtime image ends at 0x{self.runtime.end:x}, past its area")
         for va, data in self.runtime.segments:
@@ -489,6 +537,18 @@ class VM:
         self.translations: list[tuple[int, int, Discovery]] = []   # (guest start, guest end, discovery)
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name) for thunk, name in loaded.thunks.items()}
+        self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
+
+    def flush_translations(self) -> None:
+        """Drop every translated block (bridges stay): the code cache, the dispatch table, the
+        reconstruction table and the host's maps return to their state after construction. For a
+        driver that puts different code at one address in turn (the semantics oracle)."""
+        self.code_cursor, recon = self._flush_point
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + RECON_COUNT, recon)
+        self.blocks.clear()
+        self.pc_map = [m for m in self.pc_map if m[0] < MONITOR_VA + self.code_cursor]
+        empty = struct.pack("<QQ", M64, self.miss_va)
+        self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
 
     def _process(self, off: int) -> int:
         """File offset of a process-area offset."""
@@ -502,7 +562,12 @@ class VM:
         for field_off, value in ((0x08, self.ld.stack_top), (0x10, stack.base), (0x30, teb),
                                  (0x40, 1), (0x48, tid), (0x60, peb)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
-        struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
+        if self.ld.image is not None:
+            struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
+        st = self._process(STATE_OFF)                   # thread-start defaults (spec, observed on Windows)
+        struct.pack_into("<I", self.mm, st + 152, 0x1F80)
+        struct.pack_into("<H", self.mm, st + 156, 0x27F)
+        struct.pack_into("<QQQ", self.mm, st + 176, teb, teb, 0)
         struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - 16) // 24)
 
     def _bridge(self, import_name: str) -> int:
@@ -536,6 +601,7 @@ class VM:
         va = MONITOR_VA + self.code_cursor
         self._write_words(self.code_cursor, words)
         self.code_cursor += 4 * len(words)
+        self._recon_append([(va, 0)])                   # a fault here is the runtime's, not the guest's
         return va
 
     def _host_request(self, x: list[int]) -> bool:
@@ -550,6 +616,9 @@ class VM:
             return False
         elif op == HOST_CLOCK:
             result = self.clock() & M64
+        elif op == HOST_RUNTIME_FAULT:
+            raise CompileError(f"guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} "
+                               f"(EC 0x{a1 >> 26 & 0x3F:x}), not in translated code or not a data abort")
         elif op == HOST_UNIMPLEMENTED:
             name = guest_runtime.api_ids().get(a0, f"api {a0}")
             raise Unimplemented(f"{name} argument form 0x{a1:x}")
@@ -567,6 +636,47 @@ class VM:
         return [names[struct.unpack_from("<Q", self.mm, self._process(RING_OFF) + 16 + 24 * i)[0]]
                 for i in range(count)]
 
+    def exception(self) -> dict[str, int] | None:
+        """The last unhandled exception the guest runtime recorded: the EXCEPTION_RECORD and the
+        CONTEXT fields it built (specs/guest_state.json offsets), or None."""
+        e = self._process(EXCEPTION_OFF)
+        if struct.unpack_from("<Q", self.mm, e)[0] != EXCEPTION_MAGIC:
+            return None
+        r, c = e + 16, e + 0x100
+        code, flags, _rec, address, nparams = struct.unpack_from("<IIQQI", self.mm, r)
+        info0, info1 = struct.unpack_from("<QQ", self.mm, r + 32)
+        out = {"code": code, "flags": flags, "address": address, "parameters": nparams,
+               "info0": info0, "info1": info1}
+        out["context_flags"], out["mxcsr"] = struct.unpack_from("<II", self.mm, c + 48)
+        segs = struct.unpack_from("<6H", self.mm, c + 56)
+        out.update(zip(("seg_cs", "seg_ds", "seg_es", "seg_fs", "seg_gs", "seg_ss"), segs, strict=True))
+        out["eflags"] = struct.unpack_from("<I", self.mm, c + 68)[0]
+        for i, v in enumerate(struct.unpack_from("<16Q", self.mm, c + 120)):
+            out[f"r{i}"] = v
+        out["rip"] = struct.unpack_from("<Q", self.mm, c + 248)[0]
+        out["fltsave_control_word"] = struct.unpack_from("<H", self.mm, c + 256)[0]
+        out["fltsave_mxcsr"] = struct.unpack_from("<I", self.mm, c + 256 + 24)[0]
+        return out
+
+    def clear_exception(self) -> None:
+        """Forget the last unhandled exception, and the service calls logged before it (a driver
+        that goes on past an exception starts a new process's worth of calls)."""
+        struct.pack_into("<Q", self.mm, self._process(EXCEPTION_OFF), 0)
+        struct.pack_into("<Q", self.mm, self._process(RING_OFF), 0)
+
+    def af(self) -> bool:
+        """AF from the lazy operands: bit 4 of a ^ b ^ r."""
+        a, b, r = struct.unpack_from("<QQQ", self.mm, MONITOR_DATA + AF_OPERANDS)
+        return bool((a ^ b ^ r) & 0x10)
+
+    def df(self) -> bool:
+        return bool(self.mm[MONITOR_DATA + DF_BYTE])
+
+    def set_af_df(self, af: bool, df: bool) -> None:
+        """Lazy-AF operands that read back as `af`, and DF."""
+        struct.pack_into("<QQQ", self.mm, MONITOR_DATA + AF_OPERANDS, 0x10 if af else 0, 0, 0)
+        self.mm[MONITOR_DATA + DF_BYTE] = int(df)
+
     def teb_u32(self, offset: int) -> int:
         return int(struct.unpack_from("<I", self.mm, self._process(TEB_OFF) + offset)[0])
 
@@ -574,9 +684,14 @@ class VM:
     def _write_monitor(self) -> None:
         struct.pack_into("<QQQ", self.mm, MONITOR_DATA, 0, 0, MONITOR_VA + DISPATCH_TABLE)
         vec = Assembler(MONITOR_VA + VECTORS)
-        for _ in range(16):
-            vec.emit(a64.hvc(2), *[a64.b(0)] * 31)     # each 0x80 slot: hvc #2, then spin
+        for slot in range(16):
+            if slot == 4:                               # VBAR + 0x200: synchronous, current EL, SP_ELx
+                vec.branch(a64.b, MONITOR_VA + EXCEPTION_ENTRY)
+                vec.emit(*[a64.b(0)] * 31)
+            else:
+                vec.emit(a64.hvc(2), *[a64.b(0)] * 31)  # each 0x80 slot: hvc #2, then spin
         self._write_words(VECTORS, vec.finish())
+        self._write_exception_entry()
         d = Assembler(MONITOR_VA + DISPATCHER)
         top, miss = d.label(), d.label()
         d.bind(top)
@@ -592,6 +707,28 @@ class VM:
         self._write_words(DISPATCHER, d.finish())
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
+
+    def _write_exception_entry(self) -> None:
+        """Save x0-x30, ESR, FAR and ELR in the monitor data page, leave exception state (ERET to
+        the continuation, EL1h, interrupts masked), take the runtime stack and call
+        w2m_exception, which does not return for a guest fault. Translated code keeps nothing in
+        SP, and x16 and x17 are temporaries, so the routine may use them."""
+        e = Assembler(MONITOR_VA + EXCEPTION_ENTRY)
+        e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + SAVE_AREA))
+        for i in range(0, 30, 2):
+            e.emit(a64.stp(i, i + 1, 16, 8 * i))
+        e.emit(a64.str_(8, 30, 16, 8 * 30))
+        e.emit(a64.mrs(0, a64.ESR_EL1), a64.mrs(1, a64.FAR_EL1), a64.mrs(2, a64.ELR_EL1),
+               a64.stp(0, 1, 16, 0x100), a64.str_(8, 2, 16, 0x110))
+        cont = e.here() + 4 * 8                         # four words of MOV, MSR, MOVZ, MSR, ERET below
+        e.emit(a64.movz(17, cont & 0xFFFF), *(a64.movk(17, cont >> 16 * h & 0xFFFF, h) for h in (1, 2, 3)),
+               a64.msr(a64.ELR_EL1, 17), a64.movz(17, CPSR_EL1H), a64.msr(a64.SPSR_EL1, 17), a64.ERET)
+        assert e.here() == cont
+        e.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
+               a64.mov_imm(16, self.runtime.symbols["w2m_exception"]), a64.blr(16), a64.hvc(2))
+        words = e.finish()
+        assert 4 * len(words) <= DISPATCH_TABLE - EXCEPTION_ENTRY
+        self._write_words(EXCEPTION_ENTRY, words)
 
     def _write_words(self, off: int, words: list[int]) -> None:
         self.mm[off:off + 4 * len(words)] = struct.pack(f"<{len(words)}I", *words)
@@ -615,9 +752,9 @@ class VM:
             if any(op[0] == "br" for op in ins.ops):
                 break
         exit_va = self.miss_va if self.lockstep else self.dispatch_va
+        pc_marks: list[tuple[int, int]] = [(a.here(), start)]    # the block entry: a guest boundary
         a.emit(a64.ldp(17, 18, 28, 0), a64.addi(17, 17, len(insns)), a64.str_(8, 17, 28, 0),
                a64.cmp(17, 18), a64.bcond("ls", 8), a64.hvc(4))
-        pc_marks: list[tuple[int, int]] = [(a.here(), start)]
         ended = False
         for ins in insns:
             pc_marks.append((a.here(), ins.address))
@@ -633,10 +770,21 @@ class VM:
         self.code_cursor += 4 * len(words)
         self.pc_map.extend(pc_marks)
         self.pc_map.sort()
+        self._recon_append(pc_marks)
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
         return va
+
+    def _recon_append(self, marks: list[tuple[int, int]]) -> None:
+        """Append (host code VA, x86 address) pairs to the reconstruction table in guest memory.
+        The code cache only grows, so the table stays sorted."""
+        n = struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0]
+        if n + len(marks) > RECON_ENTRIES:
+            raise CompileError("reconstruction table full")
+        for i, (host, guest) in enumerate(marks):
+            struct.pack_into("<QQ", self.mm, RECON_TABLE + 16 * (n + i), host, guest)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + RECON_COUNT, n + len(marks))
 
     def x86_address_at(self, pc: int) -> int:
         i = bisect_right(self.pc_map, (pc, M64)) - 1
@@ -644,9 +792,20 @@ class VM:
 
     # run -------------------------------------------------------------------------------------
     def run(self, max_steps: int = 1_000_000, timeout_ms: int = 10_000,
-            on_dispatch: Callable[[VM, list[int]], None] | None = None) -> Result:
+            on_dispatch: Callable[[VM, list[int]], None] | None = None,
+            on_exception: Callable[[VM, dict[str, int]], bool] | None = None,
+            interrupt_every_ms: int | None = None,
+            on_boundary: Callable[[VM, list[int], int], None] | None = None) -> Result:
         """Run until the guest exits or stops. `on_dispatch` sees (and may rewrite) the register
-        snapshot at each dispatch miss; x[17] is the x86 address about to run."""
+        snapshot at each dispatch miss; x[17] is the x86 address about to run. An unhandled
+        guest exception ends the process, as on Windows; `on_exception` sees its records and, by
+        returning True, has the VM go on at the next dispatch miss instead (the oracle's driver).
+
+        `interrupt_every_ms` stops the vCPU asynchronously (hv_vcpus_exit) that often, wherever
+        it is. The forward rule (specs/guest_state.json 0.2.0): the host does not reconstruct
+        state there; it lowers the block-entry stop point and resumes the vCPU unchanged, so the
+        vCPU stops at the next block entry, a guest instruction boundary where the state is exact.
+        `on_boundary(vm, x, guest_rip)` sees that state; the run then goes on."""
         proc = subprocess.Popen([str(build_monitor()), self.path, f"{IPA_BASE:x}", f"{self.size:x}"],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         assert proc.stdin and proc.stdout
@@ -661,23 +820,43 @@ class VM:
             return reply
 
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)
+        forced_stop = False
         for name, v in (("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
                         ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
             cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
         x = [0] * 31
         x[4] = self.ld.stack_top - 0x100 - 8                  # as runtime.Runtime: RSP % 16 == 8
         x[17] = self.ld.entry
-        x[REG_UNDEFINED_FLAGS] = 0x1F                                       # every flag undefined at entry
+        x[REG_UNDEFINED_FLAGS] = 0x3F                                       # every flag undefined at entry
         x[28] = MONITOR_VA + MONITOR_DATA
         pc = self.dispatch_va
+        cpsr = CPSR_EL1H
         stop = "timeout"
         try:
             while True:
-                cmd(f"set {pc:x} {CPSR_EL1H:x} " + " ".join(f"{v:x}" for v in x))
-                r = cmd(f"run {timeout_ms}")
+                cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
+                r = cmd(f"run {interrupt_every_ms if interrupt_every_ms is not None else timeout_ms}")
                 e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
                          int(r[7], 16), [int(v, 16) for v in r[8:39]])
                 x = e.x
+                cpsr = int(r[4], 16)
+                if e.kind == "cancel" and interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
+                    # the rule specs/guest_state.json forbids: restart the interrupted instruction
+                    x[17] = self.x86_address_at(e.pc)
+                    pc = self.miss_va
+                    cpsr = CPSR_EL1H
+                    if on_boundary:
+                        on_boundary(self, x, x[17])
+                    continue
+                if e.kind == "cancel" and interrupt_every_ms is not None:
+                    # an asynchronous stop at an arbitrary host instruction: stop at the next
+                    # block entry instead (set the stop point below the count) and resume as is
+                    executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+                    struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, executed)
+                    forced_stop = True
+                    pc = e.pc
+                    continue
+                cpsr = CPSR_EL1H
                 if e.kind == "cancel":
                     stop = "timeout"
                     break
@@ -699,7 +878,14 @@ class VM:
                     pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
                 elif imm == 8:
                     if not self._host_request(x):
-                        stop = "ExitProcess"
+                        exc = self.exception()
+                        if exc is not None and on_exception is not None and on_exception(self, exc):
+                            self.exit_code = None
+                            self.clear_exception()
+                            pc = self.miss_va                 # hvc #1: the driver sets the next state
+                            continue
+                        stop = ("ExitProcess" if exc is None else
+                                f"UnhandledException 0x{exc['code']:x} at x86 0x{exc['rip']:x}")
                         break
                     pc = e.pc
                 elif imm == 9:
@@ -715,6 +901,12 @@ class VM:
                     else:
                         stop = f"VmExit: EL1 exception EC 0x{ec:x} at x86 0x{self.x86_address_at(e.elr):x}"
                     break
+                elif imm == 4 and forced_stop:
+                    forced_stop = False
+                    struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)
+                    if on_boundary:
+                        on_boundary(self, x, where)
+                    pc = e.pc                                   # on into the block from its entry
                 elif imm == 4:
                     stop = "max_steps"
                     break
@@ -749,9 +941,13 @@ class VM:
         os.unlink(self.path)
 
 
-def x86_flags(x: list[int]) -> dict[str, bool | None]:
-    """The x86 flags held in a register snapshot, None where undefined."""
-    return {f: None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT[f] & 1 else bool(x[FLAG_REG[f]]) for f in "CZSOP"}
+def x86_flags(x: list[int], vm: VM | None = None) -> dict[str, bool | None]:
+    """The x86 flags held in a register snapshot, None where undefined; with `vm`, AF too (lazy,
+    from the monitor data page)."""
+    out = {f: None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT[f] & 1 else bool(x[FLAG_REG[f]]) for f in "CZSOP"}
+    if vm is not None:
+        out["A"] = None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["A"] & 1 else vm.af()
+    return out
 
 
 @dataclass
@@ -786,10 +982,12 @@ def lockstep(data: bytes, max_steps: int = 1_000_000, limit: int = 20) -> Lockst
         for i in range(16):
             if x[i] != th.regs[i]:
                 diffs.append(f"{where}: r{i} vm 0x{x[i]:x} model 0x{th.regs[i]:x}")
-        vf = x86_flags(x)
-        for f in "CZSOP":
+        vf = x86_flags(x, v)
+        for f in "CZSOPA":
             if vf[f] != th.flags[f]:
                 diffs.append(f"{where}: {f}F vm {vf[f]} model {th.flags[f]}")
+        if v.df() != th.df:
+            diffs.append(f"{where}: DF vm {v.df()} model {th.df}")
         if len(diffs) > limit:
             raise CompileError(f"lockstep: more than {limit} differences")
         n[0] += 1
@@ -903,9 +1101,11 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
             names = ["rip", *(f"r{i}" for i in range(16))]
             diffs.extend(f"{where}: {n} vm 0x{g:x} model 0x{w:x}"
                          for n, g, w in zip(names, got, want, strict=True) if g != w)
-            vf = x86_flags(x)
+            vf = x86_flags(x, v)
             diffs.extend(f"{where}: {f}F vm {vf[f]} model {th.flags[f]}"
-                         for f in "CZSOP" if vf[f] != th.flags[f])
+                         for f in "CZSOPA" if vf[f] != th.flags[f])
+            if v.df() != th.df:
+                diffs.append(f"{where}: DF vm {v.df()} model {th.df}")
             if window(v.mem) != window(model.mem):
                 diffs.append(f"{where}: stack window differs")
             for ea in spans:
@@ -919,9 +1119,10 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
         pos[0] += 1
         regs = [value() for _ in range(16)]
         place(addr, regs)
-        flags = {f: bool(rng.getrandbits(1)) for f in "CZSOP"}
+        flags = {f: bool(rng.getrandbits(1)) for f in "CZSOPA"}
+        df = bool(rng.getrandbits(1))
         th = model.th
-        th.regs, th.rip, th.flags = list(regs), addr, dict(flags)
+        th.regs, th.rip, th.flags, th.df = list(regs), addr, dict(flags), df
         try:
             model.step()
         except Exception as e:                          # the model's stop is part of the case
@@ -932,6 +1133,7 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
         for f in "CZSOP":
             x[FLAG_REG[f]] = int(flags[f])
         x[REG_UNDEFINED_FLAGS] = 0
+        v.set_af_df(flags["A"], df)
         pending.append((addr, k))
 
     try:

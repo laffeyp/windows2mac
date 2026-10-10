@@ -221,3 +221,13 @@
 
 **Kit change suggested:** the observation contract's planted-fault line asks "which field differs when this fault is present, and does the judge compare that field?"
 
+
+### 2026-10-09 — Sprint 040: two findings about references
+
+**What happened:** Sprint 040 judged the VM's fault handling on Sprint 039's Windows records. The card planted "PUSH moves RSP before its store", and the judge found nothing: every PUSH fault in those records is a load of a memory source, because a stack store that faults cannot be dispatched on Windows and the generator never placed one. The same week's #21 had the same shape (AF undefined, outside what the judge compares). Separately, lifting one new instruction (CPUID) changed Sprint 039's case set, because the generator kept whatever the lifter could lift, and every judgment against runs already made on Windows broke at once.
+
+**Finding (#22):** check a planted fault against the reference's inventory before writing it: list the reference cases where the planted defect changes a compared field. If the list is empty the plant is a blind spot to record, not a test. Twice in two sprints is a pattern; the card now carries the count with the plant.
+
+**Finding (#23):** a reference's inputs must not depend on the code it judges. A case generator that consults the lifter to decide which cases exist changes the reference whenever the lifter changes. Freeze the inputs of every run made on the reference (here `CLASSES_039` and the seed, checked by the case file's sha256), and give new coverage a new run.
+
+**Kit change suggested:** the observation contract's planted-fault line becomes "the fault, the field it changes, and how many reference cases change it"; the artifact contract of any reference generator names what its output depends on.
