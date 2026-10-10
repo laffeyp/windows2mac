@@ -214,7 +214,9 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "SystemTimeToFileTime": ("k32_SystemTimeToFileTime", True),
             "FileTimeToSystemTime": ("k32_FileTimeToSystemTime", True),
             "GetErrorMode": ("k32_GetErrorMode", True),
-            "SetErrorMode": ("k32_SetErrorMode", True)}
+            "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True)}
+# services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
+DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)}}   # Sprint 047
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
@@ -1185,7 +1187,8 @@ class VM:
         with hvc #9."""
         dll, fn = import_name.split("!", 1)
         a = Assembler(MONITOR_VA + self.code_cursor)
-        service = SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL") else None
+        service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
+                   else DLL_SERVICES.get(dll.upper(), {}).get(fn))
         state = PROCESS_VA + STATE_OFF
         if service is None:
             a.emit(a64.hvc(9))
