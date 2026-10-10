@@ -4,11 +4,12 @@
  * prints one JSON row per name, in the directory's order (sorted by the linker): {"m":module,
  * "n":name,"f":forwarded}. GetProcAddress in the guest answers NULL with ERROR_PROC_NOT_FOUND only
  * for a name its module does not export; an exported name w2m does not serve yet gets an address
- * that stops the run by name.
+ * that stops the run by name. Then every *.dll name in the system directory, {"system32":name}:
+ * LoadLibrary answers ERROR_MOD_NOT_FOUND only for a name found nowhere on the search path.
  */
 #include <windows.h>
 
-static char out[1 << 20];
+static char out[1 << 21];
 static unsigned n;
 
 static void put(const char *s) { while (*s) out[n++] = *s++; }
@@ -29,9 +30,22 @@ static void dump(const WCHAR *wname, const char *name) {
     }
 }
 
+static void system32(void) {
+    WIN32_FIND_DATAW f;
+    HANDLE h = FindFirstFileW(L"C:\\Windows\\System32\\*.dll", &f);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        put("{\"system32\":\"");
+        for (WCHAR *c = f.cFileName; *c; c++) out[n++] = *c < 128 ? (char)*c : '?';
+        put("\"}\n");
+    } while (FindNextFileW(h, &f));
+    FindClose(h);
+}
+
 void start(void) {
     dump(L"kernel32.dll", "kernel32");
     dump(L"kernelbase.dll", "kernelbase");
+    system32();
     DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);
