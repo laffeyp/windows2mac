@@ -272,6 +272,23 @@
   }
  },
  {
+  "iclass": "BTC",
+  "record": "/Users/peterlaffey/port/store/runs/class-btc-1791664382316525000",
+  "rule_sha256": "sha256:f4cb513f412a7324e6263b33075baca5446e3a154cf50afdf9d66739ff4ff21c",
+  "cases": 323,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "BTR",
   "record": "store/runs/class-btr-1791663801857074000",
   "rule_sha256": "sha256:f4cb513f412a7324e6263b33075baca5446e3a154cf50afdf9d66739ff4ff21c",
@@ -1462,6 +1479,23 @@
   }
  },
  {
+  "iclass": "LFENCE",
+  "record": "/Users/peterlaffey/port/store/runs/class-lfence-1791664383193907000",
+  "rule_sha256": "sha256:21bb2e5c0613a2be93aa832f6a9e249fde9d65fa011db0536cc0412460cfcf83",
+  "cases": 92,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "MAXPD",
   "record": "store/runs/class-maxpd-1791663804156953000",
   "rule_sha256": "sha256:cc53f534d35dac2a1b404b7ab17b5d795b63751053252698b668eb68a1df7e6a",
@@ -1517,6 +1551,23 @@
   "record": "store/runs/class-maxss-1791663804306974000",
   "rule_sha256": "sha256:4b91de939a3e26c7c311c96f528d37cf5c7d196efe9a14679b26ab192732c25b",
   "cases": 339,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "MFENCE",
+  "record": "/Users/peterlaffey/port/store/runs/class-mfence-1791664384042775000",
+  "rule_sha256": "sha256:3b24f741e6832f973788bbe378de04e1e49e33677d5feb8da1173cbbd8db0c4a",
+  "cases": 120,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"
@@ -1922,9 +1973,9 @@
  },
  {
   "iclass": "MUL",
-  "record": "store/runs/class-mul-1791663805291957000",
+  "record": "/Users/peterlaffey/port/store/runs/class-mul-1791664385012174000",
   "rule_sha256": "sha256:965c1c4c1aef4b41101c32aa63294fc98a554d3213bd60f5283eede5c0445704",
-  "cases": 37,
+  "cases": 348,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"
@@ -2299,6 +2350,40 @@
   "record": "store/runs/class-pcmpgtd-1791663805811150000",
   "rule_sha256": "sha256:42f3c6cc858d761cb7b7cc096c1c3cad603b77bc304ee108ecdd2cea35526d95",
   "cases": 173,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PCMPISTRI",
+  "record": "/Users/peterlaffey/port/store/runs/class-pcmpistri-1791664379434228000",
+  "rule_sha256": "sha256:fc92bacf35f037c97ed6b582699cb6675371b9af182eb69826e3081e80c35bd1",
+  "cases": 1277,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PCMPISTRI64",
+  "record": "/Users/peterlaffey/port/store/runs/class-pcmpistri64-1791664380518781000",
+  "rule_sha256": "sha256:fc92bacf35f037c97ed6b582699cb6675371b9af182eb69826e3081e80c35bd1",
+  "cases": 713,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"
@@ -3744,6 +3829,23 @@
   "record": "store/runs/class-ucomiss-1791663808613631000",
   "rule_sha256": "sha256:251585daed230b27df07caafd2f2a2ed7a508c8bfd61613ab51d6c80a500ff8e",
   "cases": 131,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "UNPCKHPD",
+  "record": "/Users/peterlaffey/port/store/runs/class-unpckhpd-1791664381489974000",
+  "rule_sha256": "sha256:788e43ea97bd1c2f8a0bc2637ba93e2cfc5986374c69cfe85f3c0f4305c9fd63",
+  "cases": 268,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"

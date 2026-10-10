@@ -639,9 +639,9 @@ def undefined_memory(c: Case) -> str | None:
     page edge, the stack window), where the runner's page holds bytes the case never set (case set
     044: 3 such cases differed in CF). Those cases are set aside, counted, not judged."""
     from w2m.lift import REG
-    if c.label not in ("BT", "BTS", "BTR", "BTC"):              # BTC: Sprint 047 (one AMD case read outside)
+    d = decode(c.code)                                          # the decoded class, not the label: a committed
+    if d.iclass not in ("BT", "BTS", "BTR", "BTC"):             # case file carries none (BTC: Sprint 047)
         return None
-    d = decode(c.code)
     o = operands(d.fields) if d.fields is not None and d.fields.ops else []
     if len(o) < 2 or o[0][0] != "M" or o[1][0] != "R":
         return None
