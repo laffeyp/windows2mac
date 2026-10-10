@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 031 (2026-10-08, closed)
+- **Scope:** the candidate loop run for real on `windows.thread.last_error.set_get@0.1.0`.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the harness opened a session; the generator sent the contract's summary, documented quotes and the interface to qwen2.5-coder:7b and stored its reply; the runner admitted the code, installed it in kernel32 and ran the skeleton three times in the VM; the comparator judged each trace; the guard re-hashed the contract and checker, found them unchanged, and accepted the candidate citing three conforming comparisons. In the planted session the guard rejected attempt 1, the reducer reported and routed the discrepancy, and the model's repair was accepted and the discrepancy resolved.
+  - *Observation 1 (the first real run failed silently in the record):* a missing httpx killed the generator and the session never closed. Disposition: resolved-here (dependency; abort path; test).
+  - *Observation 2 (the record misnamed a model):* the planted wrapper hid real metering, so the record named the wrapper as the model. Disposition: resolved-here; session repeated.
+  - *Observation 3 (the contract is weaker than the loop):* a constant passes contract 0.1.0. Disposition: open question; pinned by a test.
+- **Closed:** clean, with one open contract defect.
+
 ### Sprint 030 (2026-10-08, closed)
 - **Scope:** AArch64 back end in the Hypervisor.framework VM (profile_kind managed_vm).
 - **Rubber Duck Pass:**

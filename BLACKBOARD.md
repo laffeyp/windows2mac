@@ -112,6 +112,7 @@
 - **2026-10-09 user** — No workarounds in tests; a test that cannot run means the sprints are out of order or something was forgotten ("You can't really just build a workaround, right? ... It just means the sprints basically have to be reordered or we forgot something. No workarounds", chat 2026-10-09). Applied: Sprint 040's judgment ("Sprint 034's runner records reproduced inside w2m") needed Sprint 034's probe to run in w2m, and that probe links the C runtime statically: 84 kernel32 imports, of which w2m serves 7, plus VEH and threads with suspension, which `docs/plan.md` places in 045 and 047; 047 was already judged by the same records. The forgotten dependency is the C runtime's start-up surface. A no-CRT copy of the probe (`probes/context/`, runner run 38026220943) was written to make 040 judgeable and is withdrawn: it is kept on disk (no deletions) and judges nothing. Reordered in `docs/plan.md`: 040 builds the state block, the reconstruction table, the commit and forward rules, CONTEXT and the exception record in the guest runtime at a fault, lazy AF and DF, and the CPUID profile, judged on Sprint 039's Windows fault records (the CONTEXT Windows gave its handler on Intel for each single-instruction fault) and the CPU's AF and DF; the M:N scheduler and suspension move to 047, judged by Sprint 034's own probe once 045 and 046 let it run.
 - **2026-10-09 user** — The sequence change stands ("we do have to do the sequence change, obviously. Let's go", chat 2026-10-09): the M:N scheduler and suspension are Sprint 047, judged by Sprint 034's own probe once 045 and 046 let it run. And: "Make sure all the defects are fixed".
 - **2026-10-09 agent-resolved** — The gates type-checked `src/w2m` only; `scripts/` and `tests/` had 152 latent errors under strict mypy, and the package lacked its PEP 561 `py.typed` marker, so scripts saw it as untyped. Fixed, and `[tool.mypy] files` now covers `src/w2m`, `scripts`, `tests` (80 files, 0 errors, enforced by `scripts/gates.sh`). 78 of the errors were one mismatch: `substrate.api.Producer` declares `AsyncIterable[substrate.types.Event]`, but producers yield the msgspec Structs named in `producer_kind(schemas=)` and substrate's kernel checks exactly that (substrate 1.1.1 `kernel/topology.py`, `kernel/sequencer.py`); `w2m.record.producer` is the one place that bridges it, and every factory goes through it. The rest were list-for-tuple payloads, unvalidated enum strings (the candidate loop's relation and backend now checked at their boundaries), four-field keys declared as three, and tests that pass wrong values on purpose now saying so. Grounds: user decision above; SDD — AGENTS.md hard rule 3; practice — PEP 561, mypy strict. Revisit if: substrate corrects its Producer annotation (then the adapter goes).
+- **2026-10-10 agent-resolved** — LOCK-prefixed instructions are lowered as LDAXR/STLXR retry loops. The commit rule (no guest effect before the last memory access) makes a retry repeat only temporaries. A misaligned LOCK operand, which an exclusive cannot take, runs in the model through the slow path: atomic while one vCPU runs, not across several. That case (an x86 split lock) is judged when Sprint 047 runs threads on more than one vCPU. Grounds: Arm ARM (exclusives require natural alignment); Intel SDM Vol 3A 9.1.2.2 (locked operations); Sprint 041 run 38029980267. Revisit if: a game executes a misaligned LOCK operation.
 
 ## Built
 
@@ -159,6 +160,7 @@
 - **2026-10-09** — Sprint 039 (the floating-point and fault oracle) closed. `src/w2m/x86fp.py`; XMM, MXCSR, AF, DF in `Thread`, `lift.py`, `runtime.py` (47 legacy-SSE classes; fault rollback); spec 0.7.1 (`scripts/sse_operand_templates.py`, 62 rows); semantics probe format 2 with fault cases, built on the runner; `scripts/probe_on_intel.py`; `probes/mac_hv_fp/hv_fp.c`, `scripts/probe_fp_control.py`; vocabulary 0.7 (P17). Dual contract: signal pass (CAPABILITY_PROBED for FPCR; semantics records); artifact pass (gates.sh 0, 258 tests). Observation: pass — Intel Xeon 8573C and 8370C agree with the model on all 39,708 cases, faults included; four planted faults caught; FPCR.AH=1 matches x86 except FCVTZS.
 
 - **2026-10-09** — Sprint 040 (guest state built) closed. `src/w2m/lift.py` (commit rule and `commit_order`; POP [m] order and RSP-based destination), `src/w2m/vm_backend.py` (lazy AF, DF, reconstruction table in guest memory, EL1 exception entry, translation flush, forward rule on asynchronous stops, CPUID through the runtime), `tools/guest_runtime/` (state block, EXCEPTION_RECORD and CONTEXT, `w2m_exception`, `w2m_cpuid`), `src/w2m/cpuid.py`, `specs/guest_cpuid.json` 0.1.0, `scripts/vm_oracle.py`, `tests/test_vm_state.py`, `store/probe-runs/38011862284/result-1.faults.bin`; `CLASSES_039` in `scripts/semantics_differential.py`. Dual contract: signal pass (two COMPARISON_COMPLETED conforms); artifact pass (gates.sh 0, 269 tests). Observation: pass — the guest runtime builds Windows's CONTEXT and exception record for all 1,916 compilable fault cases on two Intel CPUs, 20,448 completed cases agree with AF and DF; three planted faults caught; 763 asynchronous stops, all at block starts, count exact.
+- **2026-10-10** — Sprint 041 (instruction classes as item runs) closed. `src/w2m/rules/` (92 modules, 140 iclasses; SSE lowering and the integer rules with their class), `scripts/class_run.py` (item runs, pool), VM vector state and SSE (`vm_monitor` vget/vset, FPCR from MXCSR, slow path), LOCK as exclusive loops, case set 041 (`probes/semantics_041/`, release `semantics-041`), `store/probe-runs/38029980267/`. Dual contract: signal pass; artifact pass (gates.sh 0, 280 tests). Observation: pass — the VM agrees with Intel on every case of sets 039 (39,708) and 041 (13,243), XMM, MXCSR and faults included; 139 classes accepted on their own records; four planted faults caught.
 ## Deferred
 
 - **2026-10-03 (Agent)** — Steam acquisition (`w2m steam install`) and the lsteamclient-style Steam bridge. Re-visit when the v0 slice launches a locally supplied game directory. *(Withdrawn 2026-10-03 by the v0.2 user decision: §4.2 makes the bridge a first-class subsystem and §12.1 puts acquisition inside the product slice.)*
@@ -197,6 +199,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 041 (2026-10-10, closed)
+- **Scope:** the instruction class as the unit of work: rules per class, item runs, the VM's SSE, the next block by frequency.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the VM ran both case sets against Intel; each class's item run caused its two comparisons and its decision; the runner ran set 041 on four CPUs; both executors agreed with all of them after three fixes.
+  - *Observation 1 (CPU over the SDM's wording):* CMPXCHG register destination unwritten on mismatch. Disposition: resolved-here; KIT_DIARY #25.
+  - *Observation 2 (a helper's scratch register):* `_mark_defined` clobbered the shift count. Disposition: resolved-here; KIT_DIARY #24.
+  - *Observation 3 (scope left for later):* model-drafted rules (042); LOCK atomicity across vCPUs (047). Disposition: recorded.
+- **Closed:** clean.
 
 ### Sprint 040 (2026-10-09, closed)
 - **Scope:** the guest state at a stop, in the VM, judged on Sprint 039's Windows fault records.
@@ -279,13 +290,4 @@
   - *Observation 3 (what 0.2.0 still allows):* a candidate that ignores its argument passes one pair with probability at most 1/256; three pairs with consecutive values different make that negligible, and the table is not in the prompt. Disposition: recorded in the contract's open questions.
 - **Closed:** clean.
 
-### Sprint 031 (2026-10-08, closed)
-- **Scope:** the candidate loop run for real on `windows.thread.last_error.set_get@0.1.0`.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the harness opened a session; the generator sent the contract's summary, documented quotes and the interface to qwen2.5-coder:7b and stored its reply; the runner admitted the code, installed it in kernel32 and ran the skeleton three times in the VM; the comparator judged each trace; the guard re-hashed the contract and checker, found them unchanged, and accepted the candidate citing three conforming comparisons. In the planted session the guard rejected attempt 1, the reducer reported and routed the discrepancy, and the model's repair was accepted and the discrepancy resolved.
-  - *Observation 1 (the first real run failed silently in the record):* a missing httpx killed the generator and the session never closed. Disposition: resolved-here (dependency; abort path; test).
-  - *Observation 2 (the record misnamed a model):* the planted wrapper hid real metering, so the record named the wrapper as the model. Disposition: resolved-here; session repeated.
-  - *Observation 3 (the contract is weaker than the loop):* a constant passes contract 0.1.0. Disposition: open question; pinned by a test.
-- **Closed:** clean, with one open contract defect.
-
-Older entries (Sprints 000-030): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-031): `docs/sprint-tail-archive.md`.

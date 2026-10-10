@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 041
-status: active
+status: closed
 phase: 4
 pass_kind: functional
 ---
@@ -59,3 +59,13 @@ The lifter is one file of rules, the VM compiles none of the 52 legacy-SSE class
 ## done criteria
 
 Every instruction class w2m lifts is a module with its own accepted record judged by an Intel CPU, the VM executes SSE as the CPU does, and the next block by frequency is in.
+
+## observed
+
+- **VM SSE:** both Intel CPUs agree with the VM on all 39,708 cases of set 039, including XMM, MXCSR and 5,485 faults. The slow path ran exactly the cases with an unmasked MXCSR. The class count is 52, not the 47 this card first said; the generator's assertion caught it.
+- **Planted faults** (reach counted first): no indefinite fix-up (37 cases), FPCR.AH=0 (117), IDC not mapped to DE (105), and a wrong ADD rule. Each was caught by the CPU's results.
+- **Rules:** 92 modules cover 140 iclasses. After the split, the VM oracle shows 0 differences on both CPUs.
+- **Item runs:** 139 classes accepted, each on its own causal record (index `store/runs/class-runs.json`). CPUID is judged by its profile test instead.
+- **Next block (case set 041, 13,243 cases):** the model and the VM agree with the Xeon 8573C (run 38029980267) and with AMD EPYC 7763 and 9V74. On the way: CMPXCHG leaves a register destination unwritten on mismatch; a flag-code register clobber was found by the CPU and fixed; SHR's CF is now undefined for count ≥ size, as the SDM states.
+- **Not done here:** model-drafted rules (Sprint 042), and LOCK atomicity across vCPUs (Sprint 047). A misaligned LOCK operand runs in the model through the slow path.
+- Gates: `scripts/gates.sh` 0 (280 tests, 289 records replay).

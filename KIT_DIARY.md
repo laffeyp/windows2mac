@@ -231,3 +231,13 @@
 **Finding (#23):** a reference's inputs must not depend on the code it judges. A case generator that consults the lifter to decide which cases exist changes the reference whenever the lifter changes. Freeze the inputs of every run made on the reference (here `CLASSES_039` and the seed, checked by the case file's sha256), and give new coverage a new run.
 
 **Kit change suggested:** the observation contract's planted-fault line becomes "the fault, the field it changes, and how many reference cases change it"; the artifact contract of any reference generator names what its output depends on.
+
+### 2026-10-10 — Sprint 041: a scratch register and two wordings
+
+**What happened:** The VM's shift flag code computed the count in x16, then called `_mark_defined`, which also uses x16, then tested x16 as if it still held the count. Every shift defined OF as if by one bit. Lockstep and the state differential had not run the new classes. The CPU caught the defect in 625 cases on its first run of case set 041. In the same run, Intel showed that CMPXCHG leaves a 32-bit register destination unwritten when the comparison fails. The SDM's text ("always written") is about memory. And the SDM's flag text showed that the model had defined SHR's CF where the SDM leaves it undefined, since Sprint 029.
+
+**Finding (#24):** an emitter helper's scratch registers are part of its signature. A helper that clobbers a register its caller reads later is a defect that type checks cannot see. Only a reference that exercises the path can.
+
+**Finding (#25):** where the reference and the manual's wording disagree, the reference decides, and the rule cites the run (CMPXCHG, run 38029980267). Where the manual leaves a flag undefined and the CPU happens to produce a value, the manual decides what the model may promise (SHR CF).
+
+**Kit change suggested:** generated-code helpers declare the registers they clobber; the compiler checks no live value sits in them across a call.
