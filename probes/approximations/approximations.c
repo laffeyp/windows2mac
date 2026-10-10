@@ -14,6 +14,9 @@
 #include <windows.h>
 #include <xmmintrin.h>
 
+/* float code without the C runtime: MSVC's linker wants the symbol the runtime would define */
+int _fltused = 0;
+
 static char out[200000];
 static unsigned n;
 
