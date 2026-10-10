@@ -146,6 +146,7 @@
 - **2026-10-09** — Sprint 035 (the guest runtime: kernel32 in C inside the VM) closed. `tools/guest_runtime/{runtime.h,runtime.c,last_error.c}`, `src/w2m/guest_runtime.py`, `src/w2m/vm_backend.py` (bridges, process area, transport, ring, `record_translations`), `src/w2m/candidate.py` (C candidates), `src/w2m/a64_encoder.py` (`stp`, `blr`), `scripts/run_candidate_loop.py`, `scripts/run_skeleton.py`, `tests/test_guest_runtime.py`, `store/runs/translations-1791579909159674000`, `store/runs/candidates-1791579927493057000`, `store/runs/candidates-1791579948983398000`. Dual contract: signal pass (CODE_TARGET_DISCOVERED 62, TRANSLATION_PUBLISHED 62; candidate loop records as listed); artifact pass (gates.sh 0). Observation: pass — both probes 3/3 under their contracts in the VM with kernel32 as guest C; lockstep and state differential 0 differences; the model wrote a C candidate accepted on attempt 1 and repaired a planted constant.
 - **2026-10-09** — Sprint 036 (the decoder for Hail to the Rainbow) closed. `specs/x86_decode.json` 0.7.0 (1,061 rows), `src/w2m/x86dec.py` (strict mandatory prefix, per-opcode legacy prefixes, row-level NP/NFx, ModRM.reg validity, XOP vvvv, JECXZ), `scripts/rows_from_sdm.py`, `scripts/merge_sdm_rows.py`, `scripts/rebuild_decode_spec.py`, `specs/x86_decode_sdm_request.txt`, `specs/x86_decode_confirmations.json`, `store/runs/gendiff-1791583020404460000`, `store/runs/gamediff-1791583316617553000`. Dual contract: signal pass; artifact pass (gates.sh 0, 231 passed). Observation: pass — decoder exit criterion (d) met on Hail to the Rainbow (718 of 718 used rows confirmed); game positions without a row 8,962 → 2 (APX, refused as the target CPUs do); generated confirmations 549/809 → 971/1,061; criteria (a)-(c) unchanged.
 - **2026-10-09** — Sprint 037 (the semantics oracle) closed. `probes/semantics/` (C harness, case file), `scripts/semantics_differential.py`, `tests/test_semantics_differential.py`, `windows-probe.yml` (mode file; CPU recorded), `lift.py` (16-bit PUSH/POP; FS/GS memory operands refused), `store/probe-runs/{38001396341,38001569019,38001576821,38001667936,38001673879,38001680277}/`, release `semantics-037`, `store/runs/semantics-1791586629398365000` (Intel, conforms), `store/runs/semantics-1791586641965639000` (AMD, 0F 0D class). Dual contract: signal pass; artifact pass (gates.sh 0). Observation: pass — 20,116 cases over 53 iclasses; the model agrees with Intel Xeon Platinum 8573C on every case; two lifter defects found and fixed; a planted SUB-carry fault caught by the CPU alone; review 2026-10-09 H3 closed.
+- **2026-10-09** — Sprint 038 (the frontier and the game's demands) closed. Vocabulary 0.6 (P15 SERVICE_UNIMPLEMENTED, P16 steamcmd); `scripts/run_frontier.py`, `scripts/acquire_depot.py`, `scripts/record_contracts.py`, `scripts/record_probes.py`, `src/w2m/record.py`; launcher import counting, GetProcAddress log, thread counts; windows-game play mode; records in `store/runs/` and `store/game-runs/{38006665419,38006671518}/`. Dual contract: signal pass (first emitters of SERVICE_UNIMPLEMENTED, DISTRIBUTION_RESOLVED/ACQUIRED, EVIDENCE_RECORDED, CONTRACT_PROPOSED/ACCEPTED/REVISED, DEPENDENTS_INVALIDATED, PROBE_AUTHORED); artifact pass (gates.sh 0). Observation: pass — frontier at GetSystemTimeAsFileTime after 13 instructions; 213/258 imports called; peak 41 threads; play mode renders on WARP and compiles 5,309 methods.
 
 ## Deferred
 
@@ -184,6 +185,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 038 (2026-10-09, closed)
+- **Scope:** the frontier as a topology; the game's Windows calls, threads and play-time code from the runner; acquisition, contract and probe tags on real runs.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the frontier ran the game's executable in the VM and recorded the service it lacked; the acquisition, contract and probe runs read the depots, contracts and binaries and emitted their lifecycle; on the runner the launcher counted every call through UnityPlayer's and Mono's imports and logged names resolved at run time and thread counts, in batch and play modes.
+  - *Observation 1 (definitions over names):* BRIDGE_CALL_UNMAPPED, a regex over Steam's format, and a release used as a folder each misled once. Disposition: resolved-here; KIT_DIARY #20.
+  - *Observation 2 (the hot path decides the design):* three functions take 68 million calls in 180 s. Disposition: Decision 2026-10-09; Sprint 040.
+  - *Observation 3 (the runner can render):* play mode created a D3D11 device on Microsoft Basic Render Driver. Disposition: recorded; the local VM is the place for interactive play.
+- **Closed:** clean.
 
 ### Sprint 037 (2026-10-09, closed)
 - **Scope:** single instructions on the runner's CPU judge the lifter, sharing no code with it.
@@ -266,13 +276,4 @@
   - *Observation 3 (a new fixture exposed an old oracle bug):* the LLVM reference parser in `test_x86ref.py` dropped the last instruction of `.text`; CRT probes hid it with trailing padding. Disposition: resolved-here; four CRT-only assertions scoped.
 - **Closed:** clean.
 
-### Sprint 028 (2026-10-08, closed)
-- **Scope:** witness the pending-waiters precondition instead of assuming it.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* on the runner, main started a and b, waited for both announcements, read the kernel's thread table once, found both in Wait/UserRequest, wrote two GUEST_THREAD_STATE_OBSERVED lines, then SetEvent; a returned 0, b timed out (258) after 2 s; main's final zero-timeout wait returned 258. The judge opened a session, imported 20 executions with observed exit codes and times, ingested 20 traces, found each witness ahead of SetEvent, and returned conforms ×20.
-  - *Observation 1 (the defer was not needed):* the witness took one documented interface and one guest tag; the struct offsets derived from the documented layouts were right on the first runner build. Disposition: resolved-here.
-  - *Observation 2 (third false gate):* part 1 was committed with a failing test because gates were chained with `;`. Disposition: resolved-here; `scripts/gates.sh` (fail-fast) now gates commits.
-  - *Observation 3 (what the data now says):* waiter b was always pending, and a still won 20 of 20. Creation order and wait order coincide; separating them is the contract's open question.
-- **Closed:** clean.
-
-Older entries (Sprints 000-027): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-028): `docs/sprint-tail-archive.md`.

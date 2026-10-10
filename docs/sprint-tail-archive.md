@@ -2,6 +2,15 @@
 
 Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027) and later, verbatim, newest first. The tail keeps the 10 most recent (`sdd-kit-3/templates/BLACKBOARD.md`); each sprint's summary also stands in `## Built`.
 
+### Sprint 028 (2026-10-08, closed)
+- **Scope:** witness the pending-waiters precondition instead of assuming it.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* on the runner, main started a and b, waited for both announcements, read the kernel's thread table once, found both in Wait/UserRequest, wrote two GUEST_THREAD_STATE_OBSERVED lines, then SetEvent; a returned 0, b timed out (258) after 2 s; main's final zero-timeout wait returned 258. The judge opened a session, imported 20 executions with observed exit codes and times, ingested 20 traces, found each witness ahead of SetEvent, and returned conforms ×20.
+  - *Observation 1 (the defer was not needed):* the witness took one documented interface and one guest tag; the struct offsets derived from the documented layouts were right on the first runner build. Disposition: resolved-here.
+  - *Observation 2 (third false gate):* part 1 was committed with a failing test because gates were chained with `;`. Disposition: resolved-here; `scripts/gates.sh` (fail-fast) now gates commits.
+  - *Observation 3 (what the data now says):* waiter b was always pending, and a still won 20 of 20. Creation order and wait order coincide; separating them is the contract's open question.
+- **Closed:** clean.
+
 ### Sprint 027 (2026-10-08, closed)
 - **Scope:** records repair, CI with nothing skipped, property-based fuzzing; review §3, §5, §6.8.
 - **Rubber Duck Pass:**

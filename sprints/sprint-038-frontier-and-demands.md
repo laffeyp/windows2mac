@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 038
-status: open
+status: closed
 phase: 3
 pass_kind: functional
 ---
@@ -63,7 +63,8 @@ The game's next need, its Windows calls, its threads and its play-time code are 
 
 ## self-review checklist
 
-- [x] Scope concrete. [x] Sources named. [x] No new vocabulary. [x] Observation contract states outcomes. [x] File count recorded (about 12; one concept: measure the game's demands).
+- [x] Scope concrete. [x] Sources named. [x] Vocabulary change recorded (0.6, P15, P16). [x] Observation contract states outcomes.
+- [ ] Two items differ from the card: the import and thread logs are files beside the capture (`<capture>.imports.tsv`, `.dynamic.tsv`, `.threads.txt`), not a capture format 3; the frontier has no separate next-item producer — `SERVICE_UNIMPLEMENTED` is the record of the next need, and starting item runs belongs to the pools (041, 045). [x] File count recorded (about 12; one concept: measure the game's demands).
 
 ## observed
 - Vocabulary 0.6 (P15 `SERVICE_UNIMPLEMENTED`, P16 `steamcmd`): reading the payloads showed `BRIDGE_CALL_UNMAPPED` is for Steam interface methods; the roadmap and the review had planned to misuse it. 62 tags; `check_vocab.py` 0.
@@ -74,4 +75,4 @@ The game's next need, its Windows calls, its threads and its play-time code are 
 - Runner run 38006665419 (batch, 180 s, AMD EPYC 7763): 803 imports hooked in UnityPlayer and Mono, 213 called (kernel32 163, user32 25, advapi32 9, ole32 8), 77,318,157 calls; 331 names resolved with GetProcAddress (CreateDXGIFactory among them); peak 32 threads, 35 distinct; capture 4,500 methods (564 Assembly-CSharp).
 - Runner run 38006671518 (play, 300 s): Unity created its D3D11 device on "Microsoft Basic Render Driver" (no GPU), FMOD fell back to silent output, the video decoder to software, `SteamAPI_Init` failed; 258 imports called (user32 54), 62,682,380 calls; 341 names resolved, including D3D11CreateDevice, CreateDXGIFactory2, XInputGetState; peak 41 threads, 45 distinct — under the 64-vCPU cap but within 23 of it; capture 5,309 methods (703 Assembly-CSharp), more than startup's 4,500, as expected. The job ended red after the capture uploaded (the key-sending loop; to read when play mode moves to the local VM). Logs and import tables in `store/game-runs/{38006665419,38006671518}/`; captures are assets of the private game release.
 - Hot paths: GetCurrentThreadId 27.8M, TlsGetValue 23.3M, QueryPerformanceCounter 16.9M calls in 180 s; Decision 2026-10-09 keeps them in the guest.
-
+- Gates: `scripts/gates.sh` 0; 33 records replay.
