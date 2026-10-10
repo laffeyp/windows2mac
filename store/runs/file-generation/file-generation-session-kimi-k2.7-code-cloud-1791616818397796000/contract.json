@@ -1,0 +1,1215 @@
+{
+ "contract_id": "windows.file.create_file.dispositions_sharing",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "CreateFileW's five dispositions on absent and existing files, the sharing rule over every pair of {read, write, both} x {no share, read, write, both}, DeleteFileW on closed and open files, name forms, and ReadFile, WriteFile and SetFilePointerEx on one handle produce exactly the rows Windows printed: validity, return values, last-error codes, sizes and bytes.",
+ "applicability": "Windows Server 2025 build 26100 and Server 2022 build 20348 (both observed); NTFS",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "directory": "the process's working directory, without the probe's files"
+  },
+  "execution": {
+   "main": "probes/create_file/create_file.c, top to bottom; SetLastError(0xDEAD) before each call under test, GetLastError after it"
+  },
+  "observation": {
+   "phase": "after each call, and after each scenario's handles are closed"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "disp.create_new.absent",
+    "valid": true,
+    "err": 0,
+    "exists": true,
+    "size": 0,
+    "head": ""
+   },
+   {
+    "s": "disp.create_new.existing",
+    "valid": false,
+    "err": 80,
+    "exists": true,
+    "size": 5,
+    "head": "68656c6c6f"
+   },
+   {
+    "s": "disp.create_always.absent",
+    "valid": true,
+    "err": 0,
+    "exists": true,
+    "size": 0,
+    "head": ""
+   },
+   {
+    "s": "disp.create_always.existing",
+    "valid": true,
+    "err": 183,
+    "exists": true,
+    "size": 0,
+    "head": ""
+   },
+   {
+    "s": "disp.open_existing.absent",
+    "valid": false,
+    "err": 2,
+    "exists": false
+   },
+   {
+    "s": "disp.open_existing.existing",
+    "valid": true,
+    "err": 0,
+    "exists": true,
+    "size": 5,
+    "head": "68656c6c6f"
+   },
+   {
+    "s": "disp.open_always.absent",
+    "valid": true,
+    "err": 0,
+    "exists": true,
+    "size": 0,
+    "head": ""
+   },
+   {
+    "s": "disp.open_always.existing",
+    "valid": true,
+    "err": 183,
+    "exists": true,
+    "size": 5,
+    "head": "68656c6c6f"
+   },
+   {
+    "s": "disp.truncate_existing.absent",
+    "valid": false,
+    "err": 2,
+    "exists": false
+   },
+   {
+    "s": "disp.truncate_existing.existing",
+    "valid": true,
+    "err": 0,
+    "exists": true,
+    "size": 0,
+    "head": ""
+   },
+   {
+    "s": "disp.truncate_existing.read_only",
+    "valid": false,
+    "err": 87,
+    "exists": true,
+    "size": 5,
+    "head": "68656c6c6f"
+   },
+   {
+    "s": "disp.zero",
+    "valid": false,
+    "err": 87
+   },
+   {
+    "s": "disp.six",
+    "valid": false,
+    "err": 87
+   },
+   {
+    "s": "share.r.0.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.r.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.w.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.0.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.r.r",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.r.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.r.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.r.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.w.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.r.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.r.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.w.r",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.w.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.w.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.w.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.w.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.r.r",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.rw.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.r.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.rw.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.w.r",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.rw.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.w.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.rw.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.rw.r",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.r.rw.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.r.rw.rw.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.0.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.r.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.w.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.0.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.r.w",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.r.r.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.r.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.w.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.r.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.r.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.w.w",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.w.w.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.w.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.w.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.r.w",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.rw.r.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.rw.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.w.w",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.rw.w.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.rw.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.w.rw.rw.w",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.w.rw.rw.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.rw.0.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.r.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.w.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.0.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.r.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.rw.r.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.w.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.r.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.r.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.w.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.rw.w.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.w.rw.rw",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.r.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.r.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.r.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.r.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.rw.rw.w.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.w.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.w.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.w.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "share.rw.rw.rw.0",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.rw.r",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.rw.w",
+    "first": true,
+    "valid": false,
+    "err": 32
+   },
+   {
+    "s": "share.rw.rw.rw.rw",
+    "first": true,
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "del.absent",
+    "ret": 0,
+    "err": 2,
+    "exists": false
+   },
+   {
+    "s": "del.closed",
+    "ret": 1,
+    "err": 57005,
+    "exists": false
+   },
+   {
+    "s": "del.open.no_share_delete",
+    "ret": 0,
+    "err": 32,
+    "exists": true,
+    "size": 5,
+    "head": "68656c6c6f"
+   },
+   {
+    "s": "del.open.share_delete",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "del.pending.open_existing",
+    "valid": false,
+    "err": 2
+   },
+   {
+    "s": "del.pending.create_new",
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "del.pending.after_close",
+    "exists": true,
+    "size": 0,
+    "head": ""
+   },
+   {
+    "s": "name.missing_dir.open_existing",
+    "valid": false,
+    "err": 3
+   },
+   {
+    "s": "name.missing_dir.create_new",
+    "valid": false,
+    "err": 3
+   },
+   {
+    "s": "name.dot.no_backup_semantics",
+    "valid": false,
+    "err": 5
+   },
+   {
+    "s": "name.empty",
+    "valid": false,
+    "err": 3
+   },
+   {
+    "s": "name.case.open_existing",
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "name.case.create_new",
+    "valid": false,
+    "err": 80
+   },
+   {
+    "s": "name.trailing_dot",
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "name.trailing_space",
+    "valid": true,
+    "err": 0
+   },
+   {
+    "s": "name.other_absent",
+    "valid": false,
+    "err": 2
+   },
+   {
+    "s": "io.write",
+    "ret": 1,
+    "err": 57005,
+    "done": 11
+   },
+   {
+    "s": "io.seek.current_0",
+    "ret": 1,
+    "err": 57005,
+    "pos": 11
+   },
+   {
+    "s": "io.seek.end_minus_5",
+    "ret": 1,
+    "err": 57005,
+    "pos": 6
+   },
+   {
+    "s": "io.read_8",
+    "ret": 1,
+    "err": 57005,
+    "done": 5,
+    "data": "776f726c64"
+   },
+   {
+    "s": "io.read_at_eof",
+    "ret": 1,
+    "err": 57005,
+    "done": 0,
+    "data": ""
+   },
+   {
+    "s": "io.seek.begin_minus_1",
+    "ret": 0,
+    "err": 131,
+    "pos": -7
+   },
+   {
+    "s": "io.seek.current_after_failure",
+    "ret": 1,
+    "err": 57005,
+    "pos": 11
+   },
+   {
+    "s": "io.seek.begin_100",
+    "ret": 1,
+    "err": 57005,
+    "pos": 100
+   },
+   {
+    "s": "io.write_at_100",
+    "ret": 1,
+    "err": 57005,
+    "done": 1
+   },
+   {
+    "s": "io.seek.begin_9",
+    "ret": 1,
+    "err": 57005,
+    "pos": 9
+   },
+   {
+    "s": "io.read_gap",
+    "ret": 1,
+    "err": 57005,
+    "done": 4,
+    "data": "6c640000"
+   },
+   {
+    "s": "io.after_close",
+    "exists": true,
+    "size": 101,
+    "head": "68656c6c6f20776f"
+   },
+   {
+    "s": "io.write_on_read_handle",
+    "ret": 0,
+    "err": 5,
+    "done": 0
+   },
+   {
+    "s": "io.read_on_write_handle",
+    "ret": 0,
+    "err": 5,
+    "done": 0
+   },
+   {
+    "s": "close.twice",
+    "ret": 0,
+    "err": 6
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38031352273: gha-windows-2025-x64-10.0.26100.33438-Server, probe sha256:798e17f634c9adc4af0322029392232251034c3eeae7565db318ed0278b85fdb; run 38031354036: gha-windows-2022-x64-10.0.20348.5622-Server, probe sha256:92685e0bbb89b5196a8850cc15157f9b499d598eac4cb4d74e6dbf257797cb40",
+   "applicability": "the two builds observed",
+   "execution_ids": [
+    "create_file-1791614008-0-1",
+    "create_file-1791614008-0-2",
+    "create_file-1791614010-1-1",
+    "create_file-1791614010-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-createfilew-dispositions",
+   "category": "documented",
+   "applicability": "Windows XP and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "If the specified file exists and is writable, the function truncates the file, the function succeeds, and last-error code is set to ERROR_ALREADY_EXISTS (183). ... If the specified file exists, the function fails and the last-error code is set to ERROR_FILE_EXISTS (80). ... If the specified file exists, the function succeeds and the last-error code is set to ERROR_ALREADY_EXISTS (183). ... The calling process must open the file with the GENERIC_WRITE bit set as part of the dwDesiredAccess parameter."
+  },
+  {
+   "evidence_id": "ms-sharing-table",
+   "category": "documented",
+   "applicability": "Windows XP and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/fileio/creating-and-opening-files (page updated 2026-07-17; retrieved 2026-10-10)",
+   "quote": "the system compares the requested access and sharing modes to those specified when the file was opened. If you specify an access or sharing mode that conflicts with the modes specified in the previous call, CreateFile fails."
+  },
+  {
+   "evidence_id": "ms-deletefile",
+   "category": "documented",
+   "applicability": "Windows XP and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-deletefilew (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "The DeleteFile function fails if an application attempts to delete a file that has other handles open for normal I/O or as a memory-mapped file (FILE_SHARE_DELETE must have been specified when other handles were opened). ... The use of POSIX delete causes the file to be deleted while handles remain open. Subsequent calls to CreateFile to open the file fail with ERROR_FILE_NOT_FOUND."
+  },
+  {
+   "evidence_id": "ms-setfilepointerex",
+   "category": "documented",
+   "applicability": "Windows XP and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfilepointerex (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "Note that it is not an error to set the file pointer to a position beyond the end of the file. ... A write operation increases the size of the file to the file pointer position plus the size of the buffer written, which results in the intervening bytes being zero initialized."
+  }
+ ],
+ "open_questions": [
+  "DeleteFileW's page also says DeleteFile 'marks a file for deletion on close' with later opens failing with ERROR_ACCESS_DENIED; both observed builds instead deleted at once (POSIX delete): OPEN_EXISTING then failed with 2 and CREATE_NEW made a new file. The rows follow the observation.",
+  "Naming Files says only 'Do not end a file or directory name with a space or a period'; the rows show Windows opens 'name.' and 'name ' as 'name'.",
+  "ERROR_NEGATIVE_SEEK (131) for a position before the start is observed only; the SetFilePointerEx page does not name the code.",
+  "Handle values are not compared (only validity); flags other than FILE_ATTRIBUTE_NORMAL, security attributes, templates, overlapped I/O and absolute paths are outside this scenario."
+ ],
+ "sections": {
+  "probe": "probes/create_file (Sprint 042)",
+  "implementation": "tools/guest_runtime/file.c with src/w2m/file_bridge.py"
+ }
+}

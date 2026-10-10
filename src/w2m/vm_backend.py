@@ -40,7 +40,7 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
-from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, FileBridge
+from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded, Memory, Region
@@ -416,6 +416,16 @@ def mxcsr_flags_from_fpsr(fpsr: int) -> int:
 _RUNTIME_SYMBOLS: dict[str, int] = {}
 
 
+def build_runtime(last_error_source: str | None = None, file_source: str | None = None) -> guest_runtime.Image:
+    """The guest runtime image, refused if it lacks a service SERVICES names (a candidate file.c or
+    last_error.c that left one out builds and links, since a preload image resolves nothing)."""
+    image = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(), last_error_source, file_source)
+    missing = sorted(sym for sym, _ in SERVICES.values() if sym not in image.symbols)
+    if missing:
+        raise guest_runtime.BuildError(f"the guest runtime does not define {', '.join(missing)}")
+    return image
+
+
 def runtime_symbol(name: str) -> int:
     """A guest runtime symbol's address; the VM sets the table when it builds its runtime image.
     Compiled outside a VM (an assembler check), the address is 0."""
@@ -716,8 +726,7 @@ class VM:
             n = len(r.data)
             self.mm[off:off + n] = bytes(r.data)
             self.mem.regions.append(Region(r.base, view[off:off + n], r.name))
-        self.runtime = guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(),
-            last_error_source, file_source)
+        self.runtime = build_runtime(last_error_source, file_source)
         _RUNTIME_SYMBOLS.clear()
         _RUNTIME_SYMBOLS.update(self.runtime.symbols)
         if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
@@ -1199,7 +1208,7 @@ class VM:
                     break
         except StopRun:
             stop = "stopped by on_dispatch"
-        except (LiftError, GuestFault, Unimplemented, HandlerFailed, CompileError) as ex:
+        except (LiftError, GuestFault, Unimplemented, HandlerFailed, CompileError, BridgeRequestError) as ex:
             stop = f"{type(ex).__name__}: {ex}"
         finally:
             try:

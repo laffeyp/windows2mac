@@ -113,3 +113,24 @@ def test_committed_item_run_accepts_file_c_once() -> None:
     acc = next(e for e in evs if e["kind"] == "CANDIDATE_ACCEPTED")
     chain = [x.kind for x in trace_ancestry(ROOT / s["record"], acc["producer"]["instance"])]
     assert chain[0] == "acceptance" and chain[-1] == "harness" and "implementation_source" in chain
+
+
+def test_runtime_missing_a_service_is_refused_at_build() -> None:
+    """Sprint 042 defect: a file.c without k32_SetFilePointerEx linked (a preload image resolves
+    nothing) and the VM then failed with a bare KeyError while binding imports."""
+    from w2m import guest_runtime
+    from w2m.vm_backend import build_runtime
+    text = file_run.FILE_C.read_text()
+    start = text.index("/* SetFilePointerEx(")
+    with pytest.raises(guest_runtime.BuildError, match="does not define k32_SetFilePointerEx"):
+        build_runtime(None, text[:start])
+
+
+@pytest.mark.hvf
+def test_path_with_a_nul_stops_the_run_by_name() -> None:
+    """Sprint 042 defect: a file.c that passed a length past the terminator handed the bridge a
+    path with a NUL, and os.open raised ValueError out of the run."""
+    text = file_run.FILE_C.read_text().replace("return w2m_host(W2M_FILE_LOOKUP, (u64)path, chars, 0, 0, id);",
+                                               "return w2m_host(W2M_FILE_LOOKUP, (u64)path, chars + 1, 0, 0, id);")
+    out, stop, _ = file_run.run_in_vm(file_run.RUNS["38031352273"][1], text)
+    assert stop.startswith("BridgeRequestError: path of 13 characters has a NUL at character 12")

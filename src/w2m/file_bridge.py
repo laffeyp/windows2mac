@@ -36,6 +36,11 @@ ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
 M64 = (1 << 64) - 1
 
 
+class BridgeRequestError(RuntimeError):
+    """The guest runtime sent a request no Windows path or descriptor can mean (a NUL inside a
+    path, an unknown descriptor): a runtime defect; the run stops with this message."""
+
+
 class GuestMemory(Protocol):
     def read(self, va: int, n: int) -> bytes: ...
     def write(self, va: int, data: bytes) -> None: ...
@@ -54,7 +59,9 @@ class FileBridge:
         return name.translate({c: c + 32 for c in range(ord("A"), ord("Z") + 1)})
 
     def _path(self, mem: GuestMemory, va: int, chars: int) -> list[str]:
-        name = mem.read(va, 2 * chars).decode("utf-16-le")
+        name = mem.read(va, 2 * chars).decode("utf-16-le", errors="replace")
+        if "\0" in name:
+            raise BridgeRequestError(f"path of {chars} characters has a NUL at character {name.index(chr(0))}: {name!r}")
         if name.startswith(("\\", "/")) or (len(name) > 1 and name[1] == ":"):
             raise Unimplemented(f"file path outside the working directory: {name!r}")
         parts = [p for p in name.replace("/", "\\").split("\\") if p not in ("", ".")]
@@ -98,6 +105,8 @@ class FileBridge:
             except OSError as e:
                 return -(e.errno or errno.EIO) & M64, 0
             return 0, 0
+        if arg[0] not in self.fds:
+            raise BridgeRequestError(f"file primitive {op} on descriptor {arg[0]}, which is not open")
         host = self.fds[arg[0]]
         if op == FILE_CLOSE:
             os.close(self.fds.pop(arg[0]))

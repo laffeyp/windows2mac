@@ -1,0 +1,90 @@
+{
+ "model": "ollama:kimi-k2.7-code:cloud",
+ "session_record": "store/runs/file-generation-session-kimi-k2.7-code-cloud-1791616818397796000",
+ "outcome": "item run accepted",
+ "model_calls": 46,
+ "stop_reasons": {
+  "tool_use": 45,
+  "end_turn": 1
+ },
+ "prompt_tokens": 2697424,
+ "completion_tokens": 35069,
+ "tool_calls": {
+  "read_file": 14,
+  "list_dir": 1,
+  "write_file": 4,
+  "build": 9,
+  "edit_file": 8,
+  "judge": 7,
+  "grep": 2
+ },
+ "judgments": [
+  {
+   "step": 15,
+   "outcome": "judge raised",
+   "unequal_rows": null,
+   "record": null,
+   "error": "KeyError: 'k32_SetFilePointerEx'"
+  },
+  {
+   "step": 19,
+   "outcome": "discrepancy",
+   "unequal_rows": "184 of 188",
+   "record": null,
+   "error": null
+  },
+  {
+   "step": 23,
+   "outcome": "discrepancy",
+   "unequal_rows": "18 of 188",
+   "record": null,
+   "error": null
+  },
+  {
+   "step": 28,
+   "outcome": "judge raised",
+   "unequal_rows": null,
+   "record": null,
+   "error": "ValueError: open: embedded null character in path"
+  },
+  {
+   "step": 37,
+   "outcome": "discrepancy",
+   "unequal_rows": "10 of 188",
+   "record": null,
+   "error": null
+  },
+  {
+   "step": 41,
+   "outcome": "discrepancy",
+   "unequal_rows": "2 of 188",
+   "record": null,
+   "error": null
+  },
+  {
+   "step": 44,
+   "outcome": "item run accepted",
+   "unequal_rows": null,
+   "record": "store/runs/file-createfilew-1791617115021734000",
+   "error": null
+  }
+ ],
+ "final_file_c": "store/runs/file-generation/file-generation-session-kimi-k2.7-code-cloud-1791616818397796000/file.c",
+ "events": {
+  "substrate.RunStarted": 1,
+  "substrate.TriggerFired": 99,
+  "substrate.ProducerStarted": 98,
+  "SessionStarted": 1,
+  "substrate.ProducerCompleted": 96,
+  "PromptFragment": 1,
+  "UserMessage": 2,
+  "PromptComposed": 47,
+  "ModelReply": 46,
+  "ToolCall": 45,
+  "ToolResult": 45,
+  "Returned": 1,
+  "SessionEnded": 1,
+  "substrate.TerminationMatched": 1,
+  "substrate.RunFinalised": 1
+ }
+}

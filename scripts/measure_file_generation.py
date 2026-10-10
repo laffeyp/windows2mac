@@ -1,28 +1,37 @@
 """measure_file_generation.py — can a model write file.c inside the Sprint 042 pipeline? (a measurement)
 
 User decisions 2026-10-10: the sprint is the pipeline, not the model; the measurement uses a cloud
-model, since local models cannot do it. Nothing depends on the outcome.
+model, since local models cannot do it; and it runs in substrate's session topology (the model
+harness loop: one ModelReply per model call with its stop reason and token counts, the exact
+prompt in PromptComposed, tool calls and results on the record), not in a loop of our own. The
+hand loop this replaces is at commit 55247f6, with its three result sets.
 
-The model gets what a person implementing file.c would get, and not file.c itself: the contract
-(Windows's 188 rows and its evidence), the probe that printed them, runtime.h, the host file
-primitives (src/w2m/file_bridge.py's docstring) and the functions to define. Each attempt's
-file.c goes through scripts/file_run.py's item run, on its own record, judged by the same rows in
-the managed VM. A build error, a stopped run or the unequal rows go back to the model for the next
-attempt. The summary (model, prompt sha256, each attempt's outcome and token counts) lands in
-store/runs/file-generation-<model>.json.
+The session gets one turn. Its workspace holds what a person implementing file.c would get, and
+not file.c itself: TASK.md, runtime.h, the probe that printed Windows's rows, the contract, and the
+host file primitives. Tools: read_file, list_dir, grep, edit_file and write_file over that
+workspace, and two of w2m's:
+  build  compiles the workspace's file.c into the guest runtime; returns clang's errors or "built"
+  judge  runs Windows's own probe binary in the managed VM over that file.c; returns the rows that
+         differ from the contract (with what was printed and what Windows printed), or, when all
+         188 are equal, runs scripts/file_run.py's item run on both runner binaries and returns its
+         verdicts and record
+The model decides when to build, judge, read and edit. The turn ends when the model answers
+without a tool call (or the step budget forces it); the stepper then sends /exit.
 
-Usage: uv run python scripts/measure_file_generation.py --model kimi-k2.7-code:cloud [--attempts 4]
+Usage: uv run python scripts/measure_file_generation.py --model kimi-k2.7-code:cloud [--steps 80]
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
 import re
+import shutil
 import sys
 import time
+from collections import Counter
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
@@ -31,21 +40,32 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import file_run  # noqa: E402
+from substrate import api  # noqa: E402
+from substrate.adapters import OllamaResponder  # noqa: E402
+from substrate.topologies.session import UserMessage, session_topology  # noqa: E402
+from substrate.topologies.session.vocabulary import (  # noqa: E402
+    PRODUCER_KIND_DRIVER_STEPPER, SESSION_ENDED, TRIGGER_ID_DRIVER_STEPPER_ON_RETURNED, TURN_END_KINDS)
+from substrate.topologies.tool_loop.tools import Tool, full_suite  # noqa: E402
 from w2m import file_bridge, guest_runtime  # noqa: E402
-from w2m.candidate import extract_code  # noqa: E402
-from w2m.vm_backend import MONITOR_VA, RUNTIME_IMAGE, runtime_defines  # noqa: E402
+from w2m.contract import ExactRows  # noqa: E402
+from w2m.record import producer  # noqa: E402
+from w2m.vm_backend import build_runtime  # noqa: E402
 
-TASK = """Write tools/guest_runtime/file.c for w2m, which runs Windows x64 programs on macOS.
+WORKSPACE_TOOLS = ("read_file", "list_dir", "grep", "edit_file", "write_file")
+NO_ARGUMENTS: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
 
-w2m translates the program's x86-64 code and runs it inside a virtual machine on Apple silicon. The
-program's kernel32 imports are served by a "guest runtime": freestanding C compiled for AArch64 with
-clang {cflags}, linked into the VM. There is no C library: no memcpy, no memset, no headers but
-"runtime.h". The program's arguments arrive per the Microsoft x64 calling convention: the first four
-in the C parameters, and `rsp` is the guest stack pointer at the call, so the fifth argument is at
+TASK = """# Task: write file.c for w2m
+
+w2m runs Windows x64 programs on macOS. It translates the program's x86-64 code and runs it inside
+a virtual machine on Apple silicon. The program's kernel32 imports are served by a "guest
+runtime": freestanding C compiled for AArch64 with clang {cflags}, linked into the VM. There is no
+C library: no memcpy, no memset, no headers but "runtime.h" (read it: it defines u64, u32 and u8
+and nothing else). Arguments arrive per the Microsoft x64 calling convention: the first four in
+the C parameters, and `rsp` is the guest stack pointer at the call, so the fifth argument is at
 *(u64 *)(rsp + 0x28), the sixth at rsp + 0x30, the seventh at rsp + 0x38. Guest pointers can be
-dereferenced directly. The return value of each function goes to RAX.
+dereferenced directly. Each function's return value goes to RAX.
 
-Define exactly these functions:
+Write `file.c` in this directory, defining exactly these functions:
 
   u64 k32_CreateFileW(u64 name, u64 desired_access, u64 share_mode, u64 security_attributes, u64 rsp);
       creation disposition at rsp+0x28 (u32), flags and attributes at rsp+0x30 (u32), template at rsp+0x38
@@ -58,124 +78,163 @@ Define exactly these functions:
       that `written` is not NULL and lpOverlapped is NULL; return 1 on success, 0 on failure
 
 The last-error code is w2m_teb()->last_error_value. Reach the Mac only through
-w2m_host(op, a0, a1, a2, a3, &second) with the W2M_FILE_* primitives below. Call
-w2m_logged(W2M_API_<name>, arg0, return_value) to return from each k32_ function (it records the call
-and returns its third argument). Call w2m_unimplemented(W2M_API_<name>, detail) for any argument
-form you do not support (it stops the run). Handle values must not be 0x74 (standard output).
+w2m_host(op, a0, a1, a2, a3, &second) with the W2M_FILE_* primitives (host_file_primitives.md).
+Return from each k32_ function through w2m_logged(W2M_API_<name>, arg0, return_value), which
+records the call and returns its third argument. Call w2m_unimplemented(W2M_API_<name>, detail)
+for an argument form you do not support; it stops the run. Handle values must not be 0x74
+(standard output).
 
-Your implementation is judged by running the probe below, compiled by Windows's clang, in w2m: its
-output must equal the contract's rows exactly, row for row and field for field. Those rows are what
-Windows Server 2025 and 2022 printed.
+The judge runs create_file.c, compiled by Windows's clang, in w2m over your file.c. Its output
+must equal the rows in contract.json exactly, row for row and field for field. Those rows are
+what Windows Server 2025 and 2022 printed.
 
-Reply with the whole file.c in one ```c fenced block.
-
-=== runtime.h ===
-{runtime_h}
-
-=== host file primitives (src/w2m/file_bridge.py) ===
-{bridge}
-
-=== the probe (probes/create_file/create_file.c) ===
-{probe}
-
-=== the contract (contracts/{contract_id}/{version}.json) ===
-{contract}
+Files here: runtime.h, create_file.c (the probe), contract.json, host_file_primitives.md.
+Tools: `build` compiles file.c and returns the compiler's errors or "built"; `judge` runs the probe
+over file.c and returns the rows that differ, or the item run's verdict once every row is equal.
+Work until `judge` reports the item run accepted, then answer with one line saying so.
 """
 
 
-def base_prompt() -> str:
-    doc = file_bridge.__doc__ or ""
-    return TASK.format(
-        cflags=" ".join(guest_runtime.CFLAGS), runtime_h=(guest_runtime.SOURCE / "runtime.h").read_text(),
-        bridge=doc, probe=(ROOT / "probes" / "create_file" / "create_file.c").read_text(),
-        contract_id=file_run.CONTRACT_ID, version=file_run.VERSION, contract=file_run.CONTRACT.read_text())
+def workspace(where: Path) -> None:
+    where.mkdir(parents=True)
+    (where / "TASK.md").write_text(TASK.format(cflags=" ".join(guest_runtime.CFLAGS)))
+    shutil.copy(guest_runtime.SOURCE / "runtime.h", where / "runtime.h")
+    shutil.copy(ROOT / "probes" / "create_file" / "create_file.c", where / "create_file.c")
+    shutil.copy(file_run.CONTRACT, where / "contract.json")
+    (where / "host_file_primitives.md").write_text(file_bridge.__doc__ or "")
 
 
-def feedback(source: str, outcome: dict[str, Any]) -> str:
-    """The previous attempt's own file.c and what the judge said about it."""
-    mine = f"Your previous file.c:\n```c\n{source}\n```\n"
-    if outcome["outcome"] == "build_error":
-        return mine + f"It did not compile:\n{outcome['detail']}\n"
-    rows = outcome.get("unequal_rows", [])
-    return mine + (f"It ran in w2m and was judged: {outcome['detail']}. "
-            f"{len(rows)} of the contract's rows were not reproduced exactly; the first of them: {rows[:12]}. "
-            "Here is what it printed for those rows:\n" + "\n".join(outcome.get("printed", [])[:12]) + "\n")
+def w2m_tools(where: Path, runs: Path, model: str, session_id: str,
+              judged: list[dict[str, Any]]) -> dict[str, Tool]:
+    def source() -> str:
+        path = where / "file.c"
+        if not path.exists():
+            raise FileNotFoundError("file.c does not exist yet; write it with write_file")
+        return path.read_text()
 
-
-def longest_c_block(reply: str) -> str:
-    """The longest fenced block of the reply: a reply that explains with snippets before the
-    whole file must be judged on the file (the first-block rule cut two attempts short)."""
-    blocks = re.findall(r"```[a-zA-Z]*\n(.*?)```", reply, re.S)
-    return max(blocks, key=len) if blocks else extract_code(reply)
-
-
-def attempt(source: str, runs: Path, model: str, k: int) -> dict[str, Any]:
-    try:
-        guest_runtime.build(MONITOR_VA + RUNTIME_IMAGE, runtime_defines(), None, source)
-    except guest_runtime.BuildError as e:
-        return {"outcome": "build_error", "detail": str(e)[:3000]}
-    c = file_run.contract()
-    out, stop, seconds = file_run.run_in_vm(file_run.RUNS["38031352273"][1], source)
-    unequal = file_run.unequal_rows(c, out)
-    printed = {}
-    for line in out.splitlines():
+    def build(_args: list[Any]) -> str:
         try:
-            printed[json.loads(line).get("s")] = line.decode()
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            continue
-    s = file_run.item_run(runs, source, generator_ref=f"ollama:{model} attempt {k}")
-    accepted = s["events"].get("CANDIDATE_ACCEPTED", 0) == 1
-    return {"outcome": "accepted" if accepted else "discrepancy",
-            "detail": "conforms on both runner binaries" if accepted else
-                      f"run stop {stop!r}; first divergence {next(iter(s['divergence'].values()))}",
-            "unequal_rows": unequal, "printed": [printed.get(r, f"(no row {r})") for r in unequal[:12]],
-            "record": str(Path(s["record"]).relative_to(ROOT)), "vm_seconds": round(seconds, 3)}
+            build_runtime(None, source())
+        except guest_runtime.BuildError as e:
+            return str(e)[:4000]
+        return "built"
+
+    def judge(_args: list[Any]) -> dict[str, Any]:
+        text = source()
+        try:
+            build_runtime(None, text)
+        except guest_runtime.BuildError as e:
+            judged.append({"outcome": "build_error"})
+            return {"outcome": "build_error", "compiler": str(e)[:4000]}
+        c = file_run.contract()
+        assert isinstance(c.acceptance, ExactRows)
+        out, stop, _ = file_run.run_in_vm(file_run.RUNS["38031352273"][1], text)
+        unequal = file_run.unequal_rows(c, out)
+        if unequal or stop != "ExitProcess":
+            printed = {}
+            for line in out.splitlines():
+                try:
+                    printed[json.loads(line).get("s")] = line.decode()
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+            want = {r["s"]: json.dumps(r, separators=(",", ":")) for r in c.acceptance.rows}
+            judged.append({"outcome": "discrepancy", "unequal_rows": len(unequal), "stop": stop})
+            return {"outcome": "discrepancy", "run_stop": stop, "unequal_rows": f"{len(unequal)} of 188",
+                    "first_unequal": [{"windows": want[r], "yours": printed.get(r, "(not printed)")}
+                                      for r in unequal[:10]]}
+        s = file_run.item_run(runs, text, generator_ref=f"ollama:{model} in session {session_id}")
+        accepted = s["events"].get("CANDIDATE_ACCEPTED", 0) == 1
+        record = str(Path(s["record"]).relative_to(ROOT))
+        judged.append({"outcome": "accepted" if accepted else "item_run_discrepancy", "record": record,
+                       "candidate_sha256": s["candidate_sha256"]})
+        return {"outcome": "item run accepted" if accepted else "item run discrepancy",
+                "verdicts": s["verdicts"], "record": record}
+
+    return {"build": Tool("build", "build() -> compiles file.c into the guest runtime: 'built' or the "
+                          "compiler's errors", False, build, NO_ARGUMENTS),
+            "judge": Tool("judge", "judge() -> runs the probe over file.c in w2m: the rows that differ "
+                          "from Windows's, or the item run's verdict once all 188 are equal", False, judge,
+                          NO_ARGUMENTS)}
 
 
-async def measure(model: str, attempts: int, runs: Path) -> dict[str, Any]:
-    from substrate.adapters import OllamaResponder, call_responder_metered
-    responder = OllamaResponder(model, temperature=0.2, num_ctx=131072, timeout=1200.0)
-    prompt0 = base_prompt()
-    out: dict[str, Any] = {"model": f"ollama:{model}", "prompt_sha256": "sha256:" + hashlib.sha256(prompt0.encode()).hexdigest(),
-                           "prompt_chars": len(prompt0), "attempts": []}
-    store = runs / "file-generation" / re.sub(r"[^a-z0-9.-]+", "-", model.lower())
-    store.mkdir(parents=True, exist_ok=True)
-    prompt = prompt0
-    for k in range(1, attempts + 1):
-        t0 = time.monotonic()
-        reply, usage = await call_responder_metered(responder, prompt)
-        (store / f"attempt-{k}.reply.md").write_text(reply)
-        source = longest_c_block(reply)
-        (store / f"attempt-{k}.c").write_text(source)
-        result = await asyncio.to_thread(attempt, source, runs, model, k)   # item_run runs its own event loop
-        result.update({"attempt": k, "source_sha256": "sha256:" + hashlib.sha256(source.encode()).hexdigest(),
-                       "source": str((store / f"attempt-{k}.c").relative_to(ROOT)),
-                       "reply": str((store / f"attempt-{k}.reply.md").relative_to(ROOT)),
-                       "prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens,
-                       "model_wall_ms": usage.wall_ms, "tokens_estimated": usage.estimated,
-                       "seconds": round(time.monotonic() - t0, 1)})
-        out["attempts"].append({k2: v for k2, v in result.items() if k2 != "printed"} |
-                               {"unequal_rows": result.get("unequal_rows", [])[:40],
-                                "unequal_row_count": len(result.get("unequal_rows", []))})
-        print(f"attempt {k}: {result['outcome']}; {result['detail'][:200]}; "
-              f"{len(result.get('unequal_rows', []))} rows unequal; {result['seconds']} s", flush=True)
-        if result["outcome"] == "accepted":
-            break
-        prompt = prompt0 + "\n\n" + feedback(source, result)
-    out["outcome"] = out["attempts"][-1]["outcome"]
-    return out
+def measurement_topology(model: str, steps: int, where: Path, runs: Path, session_id: str,
+                         judged: list[dict[str, Any]]) -> Callable[[api.TopologyBuilder], None]:
+    tools = {k: v for k, v in full_suite(where, owner=session_id).items() if k in WORKSPACE_TOOLS}
+    tools |= w2m_tools(where, runs, model, session_id, judged)
+    turns = ("Read TASK.md and do the task it describes.", "/exit")
+    base = session_topology(
+        driver=OllamaResponder(model, temperature=0.2, num_ctx=131072, timeout=1200.0),
+        driver_name=f"ollama:{model}", driver_context_tokens=131072,
+        seed="You are a C programmer working in a directory with tools. Use the tools; do not ask questions.",
+        tools=tools, max_turns=1, turn_max_steps=steps, session_id=session_id, workspace_path=str(where))
+
+    async def stepper(inp: Any) -> AsyncIterator[UserMessage]:
+        i = int(inp.get("turn_index", 0))
+        if i < len(turns):
+            yield UserMessage(text=turns[i], turn_index=i, assembled_prompt="", slash_source="w2m")
+
+    def topo(b: api.TopologyBuilder) -> None:
+        base(b)
+        b.producer_kind(PRODUCER_KIND_DRIVER_STEPPER, schemas=[UserMessage], schema_version=1,
+                        factory=lambda: producer(stepper), deterministic=True)
+        b.initial(PRODUCER_KIND_DRIVER_STEPPER, input={"turn_index": 0})
+        b.trigger(TRIGGER_ID_DRIVER_STEPPER_ON_RETURNED, subscription=api.Subscription(kinds=TURN_END_KINDS),
+                  predicate=lambda ctx: int(ctx.event.payload.get("turn_index", 0)) + 1 < len(turns),
+                  starts=PRODUCER_KIND_DRIVER_STEPPER,
+                  input_builder=lambda ctx: {"turn_index": int(ctx.event.payload.get("turn_index", 0)) + 1},
+                  policy=api.PerEvent())
+        b.termination(api.threshold_count(SESSION_ENDED, 1))
+
+    return topo
+
+
+def summarize(record: Path, model: str, where: Path) -> dict[str, Any]:
+    """Everything from the session record (blobs resolved: a long reply or result is a blob)."""
+    evs = list(api.read_record(record, resolve_blobs=True))
+    kinds = Counter(e["kind"] for e in evs)
+    replies = [e["payload"] for e in evs if e["kind"] == "ModelReply"]
+    tool_of = {e["payload"]["call_id"]: e["payload"]["tool"] for e in evs if e["kind"] == "ToolCall"}
+    judgments = []
+    for e in evs:
+        p = e["payload"]
+        if e["kind"] == "ToolResult" and tool_of.get(p.get("call_id")) == "judge":
+            out = p.get("output") if p.get("ok") else {"outcome": "judge raised", "error": p.get("error")}
+            judgments.append({"step": p.get("step"), "outcome": out.get("outcome"),
+                              "unequal_rows": out.get("unequal_rows"), "record": out.get("record"),
+                              "error": out.get("error")})
+    return {"model": f"ollama:{model}", "session_record": str(record.relative_to(ROOT)),
+            "outcome": judgments[-1]["outcome"] if judgments else "never judged",
+            "model_calls": len(replies), "stop_reasons": dict(Counter(r["stop_reason"] for r in replies)),
+            "prompt_tokens": sum(r["usage"].get("prompt_tokens", 0) for r in replies),
+            "completion_tokens": sum(r["usage"].get("completion_tokens", 0) for r in replies),
+            "tool_calls": dict(Counter(tool_of.values())), "judgments": judgments,
+            "final_file_c": str((where / "file.c").relative_to(ROOT)) if (where / "file.c").exists() else None,
+            "events": dict(kinds)}
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--attempts", type=int, default=4)
+    ap.add_argument("--steps", type=int, default=80)
     ap.add_argument("--runs", type=Path, default=ROOT / "store" / "runs")
+    ap.add_argument("--summarize", type=Path, help="write the summary of an existing session record")
     a = ap.parse_args(argv)
-    summary = asyncio.run(measure(a.model, a.attempts, a.runs))
+    if a.summarize:
+        session_id = a.summarize.name
+        summary = summarize(a.summarize.resolve(), a.model, a.runs / "file-generation" / session_id)
+        (a.runs / f"{session_id}.json").write_text(json.dumps(summary, indent=1) + "\n")
+        print(json.dumps({k: v for k, v in summary.items() if k != "judgments"}, indent=1))
+        return 0
     name = re.sub(r"[^a-z0-9.-]+", "-", a.model.lower())
-    (a.runs / f"file-generation-{name}.json").write_text(json.dumps(summary, indent=1) + "\n")
-    print(json.dumps({k: v for k, v in summary.items() if k != "attempts"}))
+    session_id = f"file-generation-session-{name}-{time.time_ns()}"
+    where = a.runs / "file-generation" / session_id
+    workspace(where)
+    judged: list[dict[str, Any]] = []
+    result = asyncio.run(api.Runtime(a.runs / session_id).run(
+        measurement_topology(a.model, a.steps, where, a.runs, session_id, judged)))
+    summary = summarize(Path(result.record_root), a.model, where)
+    (a.runs / f"{session_id}.json").write_text(json.dumps(summary, indent=1) + "\n")
+    print(json.dumps({k: v for k, v in summary.items() if k != "judgments"}, indent=1))
     return 0
 
 
