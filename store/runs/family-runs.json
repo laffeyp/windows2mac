@@ -433,6 +433,46 @@
    "38048683615": "conforms"
   }
  },
+ "system_info": {
+  "candidate_sha256": "sha256:b45ff312440b80fdc85830d0b395b365e3adcf1c9ceb42eb613883ffcf19167a",
+  "divergence": {
+   "38049865817": null,
+   "38049867401": null,
+   "38049869138": null,
+   "38049870799": null,
+   "38049919716": null,
+   "38049921396": null,
+   "38049922830": null,
+   "38049924427": null,
+   "38049993205": null,
+   "38049995593": null,
+   "38049997476": null,
+   "38049999396": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 12,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "system_info",
+  "record": "store/runs/family-system_info-1791633408731664000",
+  "verdicts": {
+   "38049865817": "conforms",
+   "38049867401": "conforms",
+   "38049869138": "conforms",
+   "38049870799": "conforms",
+   "38049919716": "conforms",
+   "38049921396": "conforms",
+   "38049922830": "conforms",
+   "38049924427": "conforms",
+   "38049993205": "conforms",
+   "38049995593": "conforms",
+   "38049997476": "conforms",
+   "38049999396": "conforms"
+  }
+ },
  "thread_queries": {
   "candidate_sha256": "sha256:3318950d474aa8df7cf3e6f54527bf47d14de78147d4c7374d4aefcd437ced0f",
   "divergence": {

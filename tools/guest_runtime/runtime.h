@@ -245,6 +245,12 @@ struct w2m_exception_area {
 #define W2M_API_GetCurrentThread 82
 #define W2M_API_GetThreadTimes 83
 #define W2M_API_GetThreadPriority 84
+#define W2M_API_GetNativeSystemInfo 85
+#define W2M_API_GetSystemInfo 86
+#define W2M_API_GetVersionExW 87
+#define W2M_API_GlobalMemoryStatusEx 88
+#define W2M_API_GetTickCount 89
+#define W2M_API_GetSystemDirectoryW 90
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -255,6 +261,7 @@ void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtim
 int w2m_file_is_open(u64 handle);                                       /* file.c */
 u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */
 void w2m_heap_release(u64 api, u64 p);                                  /* heap.c: give it back */
+u64 w2m_counter_now(void);                                              /* process.c: the 10 MHz counter */
 u64 w2m_filetime_now(void);                                             /* process.c: the system time */
 u64 w2m_filetime_start(void);                                           /* process.c: its first reading */
 u64 w2m_unhandled_exception_filter(void);                               /* exception_filter.c: the current one */

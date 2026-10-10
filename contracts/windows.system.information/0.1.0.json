@@ -1,0 +1,164 @@
+{
+ "contract_id": "windows.system.information",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetNativeSystemInfo and GetSystemInfo (fixed fields as observed, processor level and revision from CPUID), GetVersionExW without a manifest (6.2 build 9200), GlobalMemoryStatusEx, GetTickCount and GetSystemDirectoryW, with their size and length errors.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/system_info/system_info.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "native_system_info",
+    "err": 57005,
+    "architecture": 9,
+    "reserved": 0,
+    "page_size": 4096,
+    "minimum_address": 65536,
+    "maximum_address": 140737488289791,
+    "processors_match_mask": true,
+    "processors_positive": true,
+    "processor_type": 8664,
+    "allocation_granularity": 65536,
+    "level_is_cpuid_family": true,
+    "revision_is_cpuid_model_stepping": true
+   },
+   {
+    "s": "system_info",
+    "err": 57005,
+    "architecture": 9,
+    "reserved": 0,
+    "page_size": 4096,
+    "minimum_address": 65536,
+    "maximum_address": 140737488289791,
+    "processors_match_mask": true,
+    "processors_positive": true,
+    "processor_type": 8664,
+    "allocation_granularity": 65536,
+    "level_is_cpuid_family": true,
+    "revision_is_cpuid_model_stepping": true
+   },
+   {
+    "s": "system_info.same_as_native",
+    "value": true
+   },
+   {
+    "s": "version_ex",
+    "ret": 1,
+    "err": 57005,
+    "major": 6,
+    "minor": 2,
+    "build": 9200,
+    "platform": 2,
+    "service_pack_major": 0,
+    "product_type": 3,
+    "csd_empty": true
+   },
+   {
+    "s": "version_ex.bad_size",
+    "ret": 0,
+    "err": 122
+   },
+   {
+    "s": "memory_status_ex",
+    "ret": 1,
+    "err": 57005,
+    "length": 64,
+    "load_percent": true,
+    "avail_phys_le_total": true,
+    "total_phys_ge_1gb": true,
+    "avail_virtual_le_total": true,
+    "total_virtual": 140737488224256,
+    "avail_extended_virtual": 0
+   },
+   {
+    "s": "memory_status_ex.bad_length",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "tick_count",
+    "err": 57005,
+    "advances": true,
+    "step_under_100ms": true,
+    "system_time_under_100ms": true
+   },
+   {
+    "s": "system_directory",
+    "length": 19,
+    "err": 57005,
+    "is_c_windows_system32": true
+   },
+   {
+    "s": "system_directory.small",
+    "ret": 20,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38049865817: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97; run 38049867401: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4; run 38049869138: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97; run 38049870799: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4; run 38049919716: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97; run 38049921396: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4; run 38049922830: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97; run 38049924427: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4; run 38049993205: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97; run 38049995593: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4; run 38049997476: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97; run 38049999396: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "system_info-1791633068-0-1",
+    "system_info-1791633068-0-2",
+    "system_info-1791633068-1-1",
+    "system_info-1791633068-1-2",
+    "system_info-1791633068-2-1",
+    "system_info-1791633068-2-2",
+    "system_info-1791633068-3-1",
+    "system_info-1791633068-3-2",
+    "system_info-1791633124-0-1",
+    "system_info-1791633124-0-2",
+    "system_info-1791633124-1-1",
+    "system_info-1791633124-1-2",
+    "system_info-1791633124-2-1",
+    "system_info-1791633124-2-2",
+    "system_info-1791633124-3-1",
+    "system_info-1791633124-3-2",
+    "system_info-1791633198-0-1",
+    "system_info-1791633198-0-2",
+    "system_info-1791633198-1-1",
+    "system_info-1791633198-1-2",
+    "system_info-1791633198-2-1",
+    "system_info-1791633198-2-2",
+    "system_info-1791633198-3-1",
+    "system_info-1791633198-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getversionexw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getversionexw (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "applications not manifested for Windows 8.1 or Windows 10 will return the Windows 8 OS version value (6.2)."
+  }
+ ],
+ "open_questions": [
+  "The runners are Windows Server: product type 3. A player's desktop answers 1 (VER_NT_WORKSTATION); w2m answers as the rows do until a desktop reference exists.",
+  "Processor count, memory amounts and the tick count are machine values; the rows hold relations and w2m answers one processor, 16 GiB, and the guest counter's milliseconds."
+ ],
+ "sections": {
+  "probe": "probes/system_info (Sprint 044)",
+  "implementation": "tools/guest_runtime/system_info.c",
+  "rows": "scripts/family_run.py system_info",
+  "excluded": "none"
+ }
+}

@@ -42,6 +42,9 @@ static u64 counter_now(void) {
     return rescale(cntvct(), cntfrq(), QPC_FREQUENCY);
 }
 
+/* The 10 MHz counter (QueryPerformanceCounter's; system_info.c's tick count too). */
+u64 w2m_counter_now(void) { return counter_now(); }
+
 /* "Retrieves the current value of the performance counter"; nonzero on success. */
 u64 k32_QueryPerformanceCounter(u64 out) {
     if (out == 0) w2m_unimplemented(W2M_API_QueryPerformanceCounter, 0);

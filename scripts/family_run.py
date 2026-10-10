@@ -620,6 +620,40 @@ FAMILIES: dict[str, Family] = {
             "w2m's user time is the time since creation, an upper bound on the thread's own time."),
         plants={"null_handle_wrong_error": Plant("        set_error(ERROR_INVALID_HANDLE);", "        set_error(87);",
                                                  ("times.null_handle",))}),
+    "system_info": Family(
+        name="system_info",
+        contract_id="windows.system.information",
+        version="0.1.0",
+        summary=("GetNativeSystemInfo and GetSystemInfo (fixed fields as observed, processor level and revision from "
+                 "CPUID), GetVersionExW without a manifest (6.2 build 9200), GlobalMemoryStatusEx, GetTickCount and "
+                 "GetSystemDirectoryW, with their size and length errors."),
+        probe="system_info", guest_file="system_info.c",
+        runs={
+              "38049865817": Run("windows-2025", "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97", "system_info-1791633068-0", "AMD EPYC 7763 64-Core Processor"),
+              "38049867401": Run("windows-2022", "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4", "system_info-1791633068-1", "AMD EPYC 7763 64-Core Processor"),
+              "38049869138": Run("windows-2025", "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97", "system_info-1791633068-2", "AMD EPYC 7763 64-Core Processor"),
+              "38049870799": Run("windows-2022", "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4", "system_info-1791633068-3", "AMD EPYC 7763 64-Core Processor"),
+              "38049919716": Run("windows-2025", "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97", "system_info-1791633124-0", "AMD EPYC 7763 64-Core Processor"),
+              "38049921396": Run("windows-2022", "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4", "system_info-1791633124-1", "AMD EPYC 7763 64-Core Processor"),
+              "38049922830": Run("windows-2025", "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97", "system_info-1791633124-2", "AMD EPYC 7763 64-Core Processor"),
+              "38049924427": Run("windows-2022", "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4", "system_info-1791633124-3", "AMD EPYC 7763 64-Core Processor"),
+              "38049993205": Run("windows-2025", "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97", "system_info-1791633198-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38049995593": Run("windows-2022", "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4", "system_info-1791633198-1", "AMD EPYC 7763 64-Core Processor"),
+              "38049997476": Run("windows-2025", "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97", "system_info-1791633198-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38049999396": Run("windows-2022", "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4", "system_info-1791633198-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getversionexw", "api/sysinfoapi/nf-sysinfoapi-getversionexw", "2024-02-22",
+                       "applications not manifested for Windows 8.1 or Windows 10 will return the Windows 8 OS "
+                       "version value (6.2)."),),
+        open_questions=(
+            "The runners are Windows Server: product type 3. A player's desktop answers 1 (VER_NT_WORKSTATION); w2m "
+            "answers as the rows do until a desktop reference exists.",
+            "Processor count, memory amounts and the tick count are machine values; the rows hold relations and w2m "
+            "answers one processor, 16 GiB, and the guest counter's milliseconds."),
+        plants={"two_processors_one_bit": Plant("    *(u32 *)(p + 32) = 1;", "    *(u32 *)(p + 32) = 2;",
+                                                ("native_system_info", "system_info")),
+                "version_build_off": Plant("    *(u32 *)(p + 12) = 9200;", "    *(u32 *)(p + 12) = 9600;", ("version_ex",))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",

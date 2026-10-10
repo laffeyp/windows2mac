@@ -173,7 +173,13 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "WakeAllConditionVariable": ("k32_WakeAllConditionVariable", True),
             "GetCurrentThread": ("k32_GetCurrentThread", True),
             "GetThreadTimes": ("k32_GetThreadTimes", True),
-            "GetThreadPriority": ("k32_GetThreadPriority", True)}
+            "GetThreadPriority": ("k32_GetThreadPriority", True),
+            "GetNativeSystemInfo": ("k32_GetNativeSystemInfo", True),
+            "GetSystemInfo": ("k32_GetSystemInfo", True),
+            "GetVersionExW": ("k32_GetVersionExW", True),
+            "GlobalMemoryStatusEx": ("k32_GlobalMemoryStatusEx", True),
+            "GetTickCount": ("k32_GetTickCount", True),
+            "GetSystemDirectoryW": ("k32_GetSystemDirectoryW", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
