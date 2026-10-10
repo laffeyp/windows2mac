@@ -131,6 +131,12 @@ void start(void) {
     row("error_mode.set_open_file"); field("now", GetErrorMode()); end();
     SetErrorMode(0);
 
+    /* the parent's rows go out before the child starts: w2m serves no CreateProcessW, and its run of the parent
+       ends there with these rows written (the child's row is a family of its own) */
+    DWORD written;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
+    n = 0;
+
     static WCHAR self[600], cmd[700];
     DWORD len = GetModuleFileNameW(NULL, self, 300), k = 0;
     cmd[k++] = '"';
