@@ -54,6 +54,9 @@ void start(void) {
     row("tls.directory"); flag("callbacks_empty", *(void **)dir->AddressOfCallBacks == 0);
     field("zero_fill", dir->SizeOfZeroFill); flag("index_address_in_image", dir->AddressOfIndex != 0); end();
 
+    /* the DLL's static C runtime asks it at start-up (w2m, 2026-10-10); the probe asks too */
+    row("file_apis_ansi"); flag("value", AreFileApisANSI() != 0); end();
+
     DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);

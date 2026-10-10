@@ -10,8 +10,9 @@
  *     WriteConsoleW leaves *lpNumberOfCharsWritten as it was
  *   - SetStdHandle succeeds and GetStdHandle then answers that handle
  * The start mode is the host's (src/w2m/vm_backend.py): 0, a console program whose standard output
- * the runner's cmd redirected (the probes; only standard output is modeled there), or 1, the GUI
- * start. The command line is the host's too, a wide string at W2M_COMMAND_LINE_VA.
+ * the runner's cmd redirected (the probes), or 1, the GUI start. In the console start standard input
+ * and error answer NULL, as for a process started without them: the runner's are its own pipes, no
+ * probe reads them, and a probe's C runtime asks for them at start-up (Sprint 046). The command line is the host's too, a wide string at W2M_COMMAND_LINE_VA.
  */
 #include "runtime.h"
 
@@ -47,8 +48,7 @@ static void std_init(void) {
 u64 k32_GetStdHandle(u64 which) {
     std_init();
     int i = std_index(which);
-    if (i < 0 || (!gui_start() && i != 1 && std_handles[i] == 0))
-        w2m_unimplemented(W2M_API_GetStdHandle, (u32)which);   /* the console start's stdin, stderr: not observed */
+    if (i < 0) w2m_unimplemented(W2M_API_GetStdHandle, (u32)which);
     return w2m_logged(W2M_API_GetStdHandle, (u32)which, std_handles[i]);
 }
 
@@ -66,7 +66,9 @@ u64 k32_GetFileType(u64 handle) {
         return w2m_logged(W2M_API_GetFileType, handle, FILE_TYPE_UNKNOWN);
     }
     if (w2m_file_is_open(handle)) return w2m_logged(W2M_API_GetFileType, handle, FILE_TYPE_DISK);
-    w2m_unimplemented(W2M_API_GetFileType, handle);           /* the console start's redirected stdout */
+    /* the console start's standard output: the runner's cmd redirected it into a file (> out\body-N.jsonl) */
+    if (handle == STDOUT_HANDLE && !gui_start()) return w2m_logged(W2M_API_GetFileType, handle, FILE_TYPE_DISK);
+    w2m_unimplemented(W2M_API_GetFileType, handle);
     return 0;
 }
 
