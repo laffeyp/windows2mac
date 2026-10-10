@@ -228,6 +228,7 @@ struct w2m_exception_area {
 #define W2M_API_GetEnvironmentStringsW 65
 #define W2M_API_FreeEnvironmentStringsW 66
 #define W2M_API_lstrlenW 67
+#define W2M_API_SetUnhandledExceptionFilter 68
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -238,6 +239,7 @@ void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtim
 int w2m_file_is_open(u64 handle);                                       /* file.c */
 u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */
 void w2m_heap_release(u64 api, u64 p);                                  /* heap.c: give it back */
+u64 w2m_unhandled_exception_filter(void);                               /* exception_filter.c: the current one */
 
 /* Monitor data word: the process's start (console.c): 0 a console program with redirected standard
  * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */

@@ -1,0 +1,105 @@
+{
+ "contract_id": "windows.exception_filter.set",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "SetUnhandledExceptionFilter returns the filter it replaces: NULL in a fresh process, then each earlier filter, NULL included; it leaves the last error.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor); windows-2025 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/exception_filter/exception_filter.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "set.first",
+    "returned": 0,
+    "err": 57005
+   },
+   {
+    "s": "set.second",
+    "returned": 1,
+    "err": 57005
+   },
+   {
+    "s": "set.null",
+    "returned": 2,
+    "err": 57005
+   },
+   {
+    "s": "set.first_again",
+    "returned": 0,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38045461436: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:1f99c34664447d076e17c4cbb02a3225abcf4cec1c55eaa32fd56f06b0b5676f; run 38045463327: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:7b7cb9155af9c2e1c981e0124d26fc64701b827fc583770daebee553d7af3714; run 38045465137: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:b7bf8ad48559ced781c1ab5424f817337aeee0c14b76e9902ffb4aa44a844df7; run 38045466832: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:206c9bad8f5ba0031d2ab50a9bbf8f95acc31ae11e399479476a9057fa2ad697; run 38045524237: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:d0b53af3e88d3166ce9915839932692e02a93041cccd274e9d06d17c7cf121cf; run 38045526273: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:28c318a01ba9543409d7a8493722e2df045a3ae528132b00727376a4e71b2169; run 38045528177: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:5c868e4e261844ac774eed443abbdc66dce5a1f618b9b6de7e6c040b03c34fe2; run 38045530145: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:d71257aef7dfcfdf8322e786141a3620cc445f876d428e94cab2e145e0d65b18; run 38045583044: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f; run 38045585339: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf; run 38045587579: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f; run 38045589805: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf; run 38045626475: windows-2025, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f; run 38045628559: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf; run 38045630511: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f; run 38045632682: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "exception_filter-1791628557-0-1",
+    "exception_filter-1791628557-0-2",
+    "exception_filter-1791628557-1-1",
+    "exception_filter-1791628557-1-2",
+    "exception_filter-1791628557-2-1",
+    "exception_filter-1791628557-2-2",
+    "exception_filter-1791628557-3-1",
+    "exception_filter-1791628557-3-2",
+    "exception_filter-1791628622-0-1",
+    "exception_filter-1791628622-0-2",
+    "exception_filter-1791628622-1-1",
+    "exception_filter-1791628622-1-2",
+    "exception_filter-1791628622-2-1",
+    "exception_filter-1791628622-2-2",
+    "exception_filter-1791628622-3-1",
+    "exception_filter-1791628622-3-2",
+    "exception_filter-1791628684-0-1",
+    "exception_filter-1791628684-0-2",
+    "exception_filter-1791628684-1-1",
+    "exception_filter-1791628684-1-2",
+    "exception_filter-1791628684-2-1",
+    "exception_filter-1791628684-2-2",
+    "exception_filter-1791628684-3-1",
+    "exception_filter-1791628684-3-2",
+    "exception_filter-1791628730-0-1",
+    "exception_filter-1791628730-0-2",
+    "exception_filter-1791628730-1-1",
+    "exception_filter-1791628730-1-2",
+    "exception_filter-1791628730-2-1",
+    "exception_filter-1791628730-2-2",
+    "exception_filter-1791628730-3-1",
+    "exception_filter-1791628730-3-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-setunhandledexceptionfilter",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-setunhandledexceptionfilter (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "The SetUnhandledExceptionFilter function returns the address of the previous exception filter established with the function. A NULL return value means that there is no current top-level exception handler."
+  }
+ ],
+ "open_questions": [
+  "The rows cover setting the filter; Windows calling it on an unhandled exception is exception dispatch (roadmap Sprint 047)."
+ ],
+ "sections": {
+  "probe": "probes/exception_filter (Sprint 044)",
+  "implementation": "tools/guest_runtime/exception_filter.c",
+  "rows": "scripts/family_run.py exception_filter",
+  "excluded": "none"
+ }
+}

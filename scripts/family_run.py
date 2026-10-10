@@ -432,6 +432,42 @@ FAMILIES: dict[str, Family] = {
                     ("m2w.utf8.surrogate_encoded", "u8.e0.80*", "u8.e0.8f*", "u8.e0.90*", "u8.e0.9f*", "u8.ed.a0*",
                      "u8.ed.bf*", "u8.f0.80*", "u8.f0.8f*", "u8.f4.90*", "u8.f4.9f*", "u8.f4.a0*", "u8.f4.bf*")),
                 "no_best_fit": Plant("            if (b < 0) b = best_fit(c);\n", "            (void)best_fit;\n", ("bestfit.*",))}),
+    "exception_filter": Family(
+        name="exception_filter",
+        contract_id="windows.exception_filter.set",
+        version="0.1.0",
+        summary=("SetUnhandledExceptionFilter returns the filter it replaces: NULL in a fresh process, then each "
+                 "earlier filter, NULL included; it leaves the last error."),
+        probe="exception_filter", guest_file="exception_filter.c",
+        runs={
+              "38045461436": Run("windows-2025", "1f99c34664447d076e17c4cbb02a3225abcf4cec1c55eaa32fd56f06b0b5676f", "exception_filter-1791628557-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38045463327": Run("windows-2022", "7b7cb9155af9c2e1c981e0124d26fc64701b827fc583770daebee553d7af3714", "exception_filter-1791628557-1", "AMD EPYC 9V45 96-Core Processor"),
+              "38045465137": Run("windows-2025", "b7bf8ad48559ced781c1ab5424f817337aeee0c14b76e9902ffb4aa44a844df7", "exception_filter-1791628557-2", "AMD EPYC 9V74 80-Core Processor"),
+              "38045466832": Run("windows-2022", "206c9bad8f5ba0031d2ab50a9bbf8f95acc31ae11e399479476a9057fa2ad697", "exception_filter-1791628557-3", "AMD EPYC 9V74 80-Core Processor"),
+              "38045524237": Run("windows-2025", "d0b53af3e88d3166ce9915839932692e02a93041cccd274e9d06d17c7cf121cf", "exception_filter-1791628622-0", "AMD EPYC 7763 64-Core Processor"),
+              "38045526273": Run("windows-2022", "28c318a01ba9543409d7a8493722e2df045a3ae528132b00727376a4e71b2169", "exception_filter-1791628622-1", "AMD EPYC 7763 64-Core Processor"),
+              "38045528177": Run("windows-2025", "5c868e4e261844ac774eed443abbdc66dce5a1f618b9b6de7e6c040b03c34fe2", "exception_filter-1791628622-2", "AMD EPYC 9V45 96-Core Processor"),
+              "38045530145": Run("windows-2022", "d71257aef7dfcfdf8322e786141a3620cc445f876d428e94cab2e145e0d65b18", "exception_filter-1791628622-3", "AMD EPYC 7763 64-Core Processor"),
+              "38045583044": Run("windows-2025", "941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f", "exception_filter-1791628684-0", "AMD EPYC 7763 64-Core Processor"),
+              "38045585339": Run("windows-2022", "e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf", "exception_filter-1791628684-1", "AMD EPYC 7763 64-Core Processor"),
+              "38045587579": Run("windows-2025", "941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f", "exception_filter-1791628684-2", "AMD EPYC 7763 64-Core Processor"),
+              "38045589805": Run("windows-2022", "e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf", "exception_filter-1791628684-3", "AMD EPYC 7763 64-Core Processor"),
+              "38045626475": Run("windows-2025", "941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f", "exception_filter-1791628730-0", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38045628559": Run("windows-2022", "e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf", "exception_filter-1791628730-1", "AMD EPYC 7763 64-Core Processor"),
+              "38045630511": Run("windows-2025", "941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f", "exception_filter-1791628730-2", "AMD EPYC 7763 64-Core Processor"),
+              "38045632682": Run("windows-2022", "e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf", "exception_filter-1791628730-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-setunhandledexceptionfilter", "api/errhandlingapi/nf-errhandlingapi-setunhandledexceptionfilter",
+                       "2024-02-22", "The SetUnhandledExceptionFilter function returns the address of the previous "
+                       "exception filter established with the function. A NULL return value means that there is no "
+                       "current top-level exception handler."),),
+        open_questions=(
+            "The rows cover setting the filter; Windows calling it on an unhandled exception is exception dispatch "
+            "(roadmap Sprint 047).",),
+        plants={"returns_null": Plant("    return w2m_logged(W2M_API_SetUnhandledExceptionFilter, f, before);",
+                                      "    (void)before;\n    return w2m_logged(W2M_API_SetUnhandledExceptionFilter, f, 0);",
+                                      ("set.second", "set.null"))}),
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",

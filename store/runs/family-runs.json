@@ -179,6 +179,54 @@
    "38044817343": "conforms"
   }
  },
+ "exception_filter": {
+  "candidate_sha256": "sha256:6ffe22c8d6fb9f2a482e5bd1ed79179866a5d526ab5c80b80096f5d659359fae",
+  "divergence": {
+   "38045461436": null,
+   "38045463327": null,
+   "38045465137": null,
+   "38045466832": null,
+   "38045524237": null,
+   "38045526273": null,
+   "38045528177": null,
+   "38045530145": null,
+   "38045583044": null,
+   "38045585339": null,
+   "38045587579": null,
+   "38045589805": null,
+   "38045626475": null,
+   "38045628559": null,
+   "38045630511": null,
+   "38045632682": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 16,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "exception_filter",
+  "record": "store/runs/family-exception_filter-1791628824205697000",
+  "verdicts": {
+   "38045461436": "conforms",
+   "38045463327": "conforms",
+   "38045465137": "conforms",
+   "38045466832": "conforms",
+   "38045524237": "conforms",
+   "38045526273": "conforms",
+   "38045528177": "conforms",
+   "38045530145": "conforms",
+   "38045583044": "conforms",
+   "38045585339": "conforms",
+   "38045587579": "conforms",
+   "38045589805": "conforms",
+   "38045626475": "conforms",
+   "38045628559": "conforms",
+   "38045630511": "conforms",
+   "38045632682": "conforms"
+  }
+ },
  "heap": {
   "candidate_sha256": "sha256:3b6b2b794d2c34e0cc3d3f73c1cbbf6133b7283168f0d8f80a0b8667c6ed138c",
   "divergence": {

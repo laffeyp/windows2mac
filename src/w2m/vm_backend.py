@@ -152,7 +152,8 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "LCMapStringEx": ("k32_LCMapStringEx", True),
             "GetEnvironmentStringsW": ("k32_GetEnvironmentStringsW", True),
             "FreeEnvironmentStringsW": ("k32_FreeEnvironmentStringsW", True),
-            "lstrlenW": ("k32_lstrlenW", True)}
+            "lstrlenW": ("k32_lstrlenW", True),
+            "SetUnhandledExceptionFilter": ("k32_SetUnhandledExceptionFilter", True)}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
