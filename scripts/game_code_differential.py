@@ -50,6 +50,7 @@ from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86dec_tables import SPEC_VERSION
 from w2m.x86ref import walk
 from w2m.xedref import XedResult, decode_many
+from w2m.record import producer
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIRMATIONS = ROOT / "specs" / "x86_decode_confirmations.json"
@@ -241,7 +242,7 @@ def record(a: argparse.Namespace, t: Tally, total: int, used: int, unconfirmed: 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(spec_version=SPEC_VERSION, reference=XED_PROFILE, game=a.game, positions=total)
         b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: harness)
+                        factory=lambda: producer(harness))
         b.initial("comparator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

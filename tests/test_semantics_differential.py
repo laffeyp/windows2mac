@@ -16,6 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import semantics_differential as sd  # noqa: E402
+from w2m.x86dec import decode  # noqa: E402
 
 AMD = ROOT / "store" / "probe-runs" / "38001569019" / "result-1.every10.bin"
 INTEL = ROOT / "store" / "probe-runs" / "38001673879" / "result-1.every10.bin"
@@ -29,7 +30,7 @@ def _classes(results: Path = AMD, limit: int | None = None) -> dict[str, int]:
     out: dict[str, int] = {}
     cases = sd.read_cases_format1(CASES_037)[::10]
     for c, r in zip(cases, sd.read_results_format1(results), strict=True):
-        label = sd.decode(c.code).iclass if c.code[0] not in range(0x70, 0x80) else "Jcc"
+        label = decode(c.code).iclass if c.code[0] not in range(0x70, 0x80) else "Jcc"
         if limit is not None and label not in ("SUB", "CMP"):
             continue
         for k, _ in sd.judge_format1(c, r, label):

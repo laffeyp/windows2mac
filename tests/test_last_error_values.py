@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 import sys
 from pathlib import Path
 
@@ -71,7 +72,9 @@ def test_windows_reference_conforms_with_values_varying() -> None:
 
 
 def test_model_runtime_conforms_and_clock_chooses_values() -> None:
-    runs = [Runtime(load(_probe()), clock=lambda c=c: c).run() for c in (1_000, 1_000, 987_654_321)]
+    def fixed(c: int) -> Callable[[], int]:
+        return lambda: c
+    runs = [Runtime(load(_probe()), clock=fixed(c)).run() for c in (1_000, 1_000, 987_654_321)]
     assert all((r.stop, r.exit_code) == ("ExitProcess", 0) for r in runs)
     assert runs[0].calls[:3] == ["GetCurrentThreadId", "QueryPerformanceCounter", "SetLastError"]
     assert all(_judge(r.stdout)[0] == "conforms" for r in runs)
@@ -87,8 +90,9 @@ def test_constant_and_lost_values_are_discrepancies() -> None:
     assert verdict == "discrepancy" and "returned 1234" in (why or "")
     second_lost = body.splitlines()
     first_get = second_lost[2]
-    second_lost[4] = re.sub(rb'"return_value":\d+', re.search(rb'"return_value":\d+', first_get)
-                            .group(0), second_lost[4])                 # second read repeats the first
+    first_value = re.search(rb'"return_value":\d+', first_get)
+    assert first_value is not None
+    second_lost[4] = re.sub(rb'"return_value":\d+', first_value.group(0), second_lost[4])                 # second read repeats the first
     verdict, why = _judge(b"\n".join(second_lost) + b"\n")
     assert verdict == "discrepancy" and "read 2 of 3" in (why or "")
 

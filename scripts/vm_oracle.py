@@ -49,6 +49,7 @@ from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, comp
                             x86_flags)
 from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 RELEASE = "semantics-039"
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
@@ -303,7 +304,7 @@ def record(a: argparse.Namespace, profile: str, judged: int, faults: int, classe
 
     def topology(b: Any) -> None:
         b.baseline(run=a.run, judged=judged, faults=faults, lifter_spec=SPEC_VERSION)
-        b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1, factory=lambda: harness)
+        b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1, factory=lambda: producer(harness))
         b.initial("comparator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

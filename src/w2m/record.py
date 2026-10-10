@@ -22,6 +22,16 @@ from substrate.api import Producer, Runtime, TopologyBuilder, read_record, thres
 from w2m import VOCAB_VERSION, events
 
 
+def producer(fn: Callable[[Any], AsyncIterator[msgspec.Struct]]) -> Producer:
+    """A w2m producer as substrate's `Producer`. substrate's protocol declares
+    `AsyncIterable[substrate.types.Event]`, but Event is the bus frame the kernel builds around what
+    a producer yields; producers yield the frozen msgspec Structs named in `producer_kind(schemas=)`
+    (substrate 1.1.1 kernel/topology.py: each schema must subclass Struct; kernel/sequencer.py:
+    `isinstance(obj, Struct)`). The annotation is substrate's defect; this is the one place w2m
+    bridges it."""
+    return cast(Producer, fn)
+
+
 Purpose = Literal["contract_construction", "conformance", "compilation", "capability", "measurement",
                   "application", "product"]
 Outcome = Literal["completed", "completed_with_discrepancies", "aborted"]
@@ -48,7 +58,7 @@ def one_step_run(root: Path, *, profile: str, contract_version: str, purpose: Pu
     def topology(b: TopologyBuilder) -> None:
         b.baseline(**baseline)
         b.producer_kind("work", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: cast(Producer, harness))
+                        factory=lambda: producer(harness))
         b.initial("work", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

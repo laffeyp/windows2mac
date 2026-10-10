@@ -104,6 +104,7 @@ def test_encodings_match_clang(tmp_path: Path) -> None:
     src = tmp_path / "a.s"
     src.write_text(".text\n" + "".join(f"  {t}\n" for t, _ in CASES))
     obj = tmp_path / "a.o"
+    assert CLANG is not None
     subprocess.run([CLANG, "-c", "--target=aarch64-linux-gnu", "-x", "assembler", str(src),
                     "-o", str(obj)], check=True, capture_output=True)
     out = subprocess.run([OBJDUMP, "-d", str(obj)], capture_output=True, text=True, check=True).stdout

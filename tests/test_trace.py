@@ -17,6 +17,7 @@ from substrate.api import (
 
 from w2m import events
 from w2m.trace import ingest, trace_ingester, trace_path
+from w2m.record import producer
 
 H = "sha256:" + "cd" * 32
 
@@ -110,9 +111,9 @@ async def _run(tmp_path: Path, lines: list[dict[str, Any]]) -> tuple[str, Path]:
 
     def topology(b: TopologyBuilder) -> None:
         b.producer_kind("reference_runner", schemas=[events.EXECUTION_STARTED,
-                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: runner)
+                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
         b.producer_kind("trace_ingester", schemas=[events.TRACE_INGESTED, events.TRACE_REJECTED],
-                        schema_version=1, factory=lambda: trace_ingester(tmp_path / "store"))
+                        schema_version=1, factory=lambda: producer(trace_ingester(tmp_path / "store")))
         b.initial("reference_runner", input=None)
         b.trigger(
             "ingest-on-complete",

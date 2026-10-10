@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from w2m.contract import ContractError, load_contract
+from w2m.contract import AllowedOutcomeSet, ContractError, load_contract
 
 ROOT = Path(__file__).resolve().parent.parent
 EVENT = ROOT / "contracts" / "windows.event.auto_reset.single_signal" / "0.1.0.json"
@@ -18,12 +18,13 @@ def test_first_contract_loads() -> None:
     c = load_contract(EVENT)
     assert (c.contract_id, c.version, c.status) == (
         "windows.event.auto_reset.single_signal", "0.1.0", "proposed")
+    assert isinstance(c.acceptance, AllowedOutcomeSet)
     assert {tuple(s) for s in c.acceptance.allowed} == {("a",), ("b",)}
     assert [e.category for e in c.evidence] == ["documented", "documented", "hypothesis"]
 
 
 def _write(tmp: Path, doc: dict[str, Any]) -> Path:
-    p = tmp / "contracts" / doc["contract_id"] / f"{doc['version']}.json"
+    p: Path = tmp / "contracts" / doc["contract_id"] / f"{doc['version']}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(doc))
     return p

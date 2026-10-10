@@ -15,6 +15,7 @@ from substrate.api import Runtime, TopologyBuilder, assert_event, assert_no_even
 from substrate.api import threshold_count
 
 from w2m import VOCAB_VERSION, events
+from w2m.record import producer
 
 SIGNALS = Path(__file__).resolve().parent.parent / "signals"
 VOCAB = json.loads((SIGNALS / (json.loads((SIGNALS / "current.json").read_text())["version"]
@@ -39,7 +40,7 @@ async def test_session_events_land_on_a_substrate_record(tmp_path: Path) -> None
 
     def topology(b: TopologyBuilder) -> None:
         b.producer_kind("harness", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: harness)
+                        factory=lambda: producer(harness))
         b.initial("harness", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 
@@ -60,8 +61,8 @@ async def test_session_events_land_on_a_substrate_record(tmp_path: Path) -> None
     {"guest_line_count": -1},                       # u64
 ])
 def test_validate_rejects_bad_fields(bad: dict[str, Any]) -> None:
-    good = dict(execution_id="e1", exit_status="exited", exit_code=0, trace_sha256=H,
-                guest_line_count=3, elapsed_seconds=0.5)
+    good: dict[str, Any] = dict(execution_id="e1", exit_status="exited", exit_code=0, trace_sha256=H,
+                                guest_line_count=3, elapsed_seconds=0.5)
     events.validate(events.EXECUTION_COMPLETED(**good))
     with pytest.raises(msgspec.ValidationError):
         events.validate(events.EXECUTION_COMPLETED(**{**good, **bad}))
@@ -78,7 +79,8 @@ def test_harness_integers_stay_in_substrate_canonical_range() -> None:
     # the guest plane keeps the full u64 range (plain JSONL, never canonicalized)
     line = {"tag": "GUEST_MEMORY_OBSERVED", "thread_id": 1, "thread_seq": 1, "hb_refs": [],
             "address": 2**64 - 1, "width": 8, "value": 2**64 - 1, "access": "load"}
-    assert events.decode_guest_line(json.dumps(line)).value == 2**64 - 1
+    seen = events.decode_guest_line(json.dumps(line))
+    assert isinstance(seen, events.GUEST_MEMORY_OBSERVED) and seen.value == 2**64 - 1
 
 
 def test_guest_line_decoding_is_strict() -> None:

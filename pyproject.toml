@@ -35,7 +35,8 @@ extend-exclude = ["sdd-kit-3", "substrate"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src/w2m"]
+files = ["src/w2m", "scripts", "tests"]
+mypy_path = "scripts:tests"
 
 # Capstone ships no type stubs (reference decoder, optional extra `reference`).
 [[tool.mypy.overrides]]

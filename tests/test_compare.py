@@ -19,6 +19,7 @@ from w2m import events
 from w2m.compare import compare_allowed_outcome_set, comparator
 from w2m.contract import load_contract
 from w2m.trace import trace_ingester, trace_path
+from w2m.record import producer
 
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACTS = ROOT / "contracts"
@@ -105,11 +106,11 @@ async def _run(tmp_path: Path, raw: bytes) -> Path:
 
     def topology(b: TopologyBuilder) -> None:
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_COMPLETED],
-                        schema_version=1, factory=lambda: runner)
+                        schema_version=1, factory=lambda: producer(runner))
         b.producer_kind("trace_ingester", schemas=[events.TRACE_INGESTED, events.TRACE_REJECTED],
-                        schema_version=1, factory=lambda: trace_ingester(store))
+                        schema_version=1, factory=lambda: producer(trace_ingester(store)))
         b.producer_kind("comparator", schemas=[events.COMPARISON_COMPLETED], schema_version=1,
-                        factory=lambda: comparator(store, CONTRACTS))
+                        factory=lambda: producer(comparator(store, CONTRACTS)))
         b.initial("destination_runner", input=None)
         b.trigger("ingest", subscription=Subscription(kinds=frozenset({"EXECUTION_COMPLETED"})),
                   predicate=lambda ctx: True, starts="trace_ingester", policy=PerEvent(),

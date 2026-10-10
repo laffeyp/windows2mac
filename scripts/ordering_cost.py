@@ -24,6 +24,7 @@ import msgspec
 from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
+from w2m.record import producer
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "probes" / "ordering_cost" / "ordering_cost.c"
@@ -106,7 +107,7 @@ def main(argv: list[str]) -> int:
                    repeats=a.repeats, sets={k: list(v) for k, v in SETS.items()},
                    mp_check=mp)
         b.producer_kind("destination_evaluator", schemas=list(events.HARNESS_EVENTS),
-                        schema_version=1, factory=lambda: harness)
+                        schema_version=1, factory=lambda: producer(harness))
         b.initial("destination_evaluator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

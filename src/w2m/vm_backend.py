@@ -1159,6 +1159,7 @@ def record_translations(vm: VM, image_sha256: str, runs_root: Path, profile: str
 
     from w2m import VOCAB_VERSION, events
     from w2m.x86dec_tables import SPEC_VERSION
+    from w2m.record import producer
 
     run_id = f"translations-{time.time_ns()}"
     blocks = list(vm.translations)
@@ -1182,7 +1183,7 @@ def record_translations(vm: VM, image_sha256: str, runs_root: Path, profile: str
     def topology(b: Any) -> None:
         b.baseline(image_sha256=image_sha256, runtime_image=vm.runtime.sha256, blocks=len(blocks))
         b.producer_kind("translator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: translator)
+                        factory=lambda: producer(translator))
         b.initial("translator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

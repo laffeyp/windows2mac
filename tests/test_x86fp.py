@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 import struct
 
 import numpy as np
@@ -19,7 +20,7 @@ NEAREST = fp.MXCSR_DEFAULT
 
 
 def f64(x: float) -> int:
-    return struct.unpack("<Q", struct.pack("<d", x))[0]
+    return int(struct.unpack("<Q", struct.pack("<d", x))[0])
 
 
 def bits32(x: np.float32) -> int:
@@ -27,7 +28,7 @@ def bits32(x: np.float32) -> int:
 
 
 def from32(b: int) -> np.float32:
-    return np.array([b], dtype=np.uint32).view(np.float32)[0]
+    return np.float32(np.array([b], dtype=np.uint32).view(np.float32)[0])
 
 
 def _finite(rng: random.Random, f: fp.Fmt) -> int:
@@ -39,8 +40,8 @@ def _finite(rng: random.Random, f: fp.Fmt) -> int:
 
 def test_binary64_matches_host_in_round_to_nearest() -> None:
     rng = random.Random(39)
-    ops = {"add": lambda a, b: a + b, "sub": lambda a, b: a - b, "mul": lambda a, b: a * b,
-           "div": lambda a, b: a / b}
+    ops: dict[str, Callable[[float, float], float]] = {
+        "add": lambda a, b: a + b, "sub": lambda a, b: a - b, "mul": lambda a, b: a * b, "div": lambda a, b: a / b}
     for _ in range(20000):
         a, b = _finite(rng, F64), _finite(rng, F64)
         x, y = struct.unpack("<d", struct.pack("<Q", a))[0], struct.unpack("<d", struct.pack("<Q", b))[0]

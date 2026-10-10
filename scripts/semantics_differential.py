@@ -58,6 +58,7 @@ from w2m.runtime import Runtime  # noqa: E402
 from w2m.x86dec import DecodeError, decode  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 from w2m.x86ops import operands  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 CODE_VA, DATA_VA, STACK_VA = 0x2000_0000, 0x3000_0000, 0x4000_0000
 DATA_OFF, STACK_OFF, WINDOW, CODE_BYTES = 0x40, 0x87C0, 64, 32
@@ -570,7 +571,7 @@ def record(a: argparse.Namespace, profile: str, total: int, classes: Counter[str
     def topology(b: Any) -> None:
         b.baseline(spec_version=SPEC_VERSION, reference=profile, cases=total)
         b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: harness)
+                        factory=lambda: producer(harness))
         b.initial("comparator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

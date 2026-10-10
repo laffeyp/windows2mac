@@ -39,6 +39,7 @@ from substrate.api import (
 from w2m import VOCAB_VERSION, events
 from w2m.compare import comparator
 from w2m.trace import trace_ingester, trace_path
+from w2m.record import producer
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 
@@ -108,14 +109,15 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
                 unobserved="timeout_seconds, kill_grace_seconds: imported execution; the "
                            "harness set no timeout"))
             missing = [f for f in ("exit_code", "elapsed_seconds") if it[f] is None]
+            observed: dict[str, Any] = {f: it[f] for f in ("exit_code", "elapsed_seconds") if it[f] is not None}
+            if missing:
+                observed["unobserved"] = (f"{', '.join(missing)}: not recorded by the runner workflow "
+                                          "before 2026-10-08 (the job fails on a non-zero exit, so an "
+                                          "uploaded trace implies exit 0; inferred, not emitted)")
             yield events.validate(events.EXECUTION_COMPLETED(
                 execution_id=it["execution_id"], exit_status="exited",
                 trace_sha256=it["trace_sha256"], guest_line_count=it["lines"],
-                **{f: it[f] for f in ("exit_code", "elapsed_seconds") if it[f] is not None},
-                **({"unobserved": f"{', '.join(missing)}: not recorded by the runner workflow "
-                                  "before 2026-10-08 (the job fails on a non-zero exit, so an "
-                                  "uploaded trace implies exit 0; inferred, not emitted)"}
-                   if missing else {})))
+                **observed))
 
     def last_verdict(ctx: Any) -> bool:
         seen.append(ctx.event.payload["verdict"])
@@ -131,13 +133,13 @@ def topology_for(probe_sha: str, items: list[dict[str, Any]], store: Path, contr
     def topology(b: TopologyBuilder) -> None:
         b.baseline(contract=f"{cid}@{cver}", probe_sha256=probe_sha, traces=len(items))
         b.producer_kind("reference_runner", schemas=[events.SESSION_INIT, events.EXECUTION_STARTED,
-                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: importer)
+                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(importer))
         b.producer_kind("harness", schemas=[events.SESSION_COMPLETED], schema_version=1,
-                        factory=lambda: closer)
+                        factory=lambda: producer(closer))
         b.producer_kind("trace_ingester", schemas=[events.TRACE_INGESTED, events.TRACE_REJECTED],
-                        schema_version=1, factory=lambda: trace_ingester(store))
+                        schema_version=1, factory=lambda: producer(trace_ingester(store)))
         b.producer_kind("comparator", schemas=[events.COMPARISON_COMPLETED], schema_version=1,
-                        factory=lambda: comparator(store, contracts))
+                        factory=lambda: producer(comparator(store, contracts)))
         b.initial("reference_runner", input=None)
         b.trigger("ingest", subscription=Subscription(kinds=frozenset({"EXECUTION_COMPLETED"})),
                   predicate=lambda ctx: True, starts="trace_ingester", policy=PerEvent(),

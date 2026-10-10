@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.vm_backend import VM  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 
@@ -82,10 +83,10 @@ def main(argv: list[str]) -> int:
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm")
-        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: harness)
+        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
-                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: runner)
-        b.producer_kind("closer", schemas=[events.SESSION_COMPLETED], schema_version=1, factory=lambda: closer)
+                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
+        b.producer_kind("closer", schemas=[events.SESSION_COMPLETED], schema_version=1, factory=lambda: producer(closer))
         b.initial("harness", input=None)
         b.trigger("run", subscription=Subscription(kinds=frozenset({"SESSION_INIT"})), predicate=lambda c: True,
                   starts="destination_runner", policy=PerEvent(), input_builder=lambda c: None)

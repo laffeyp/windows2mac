@@ -43,7 +43,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast, get_args
 
 import msgspec
 from substrate.adapters import ModelUsage, call_responder_metered
@@ -62,6 +62,7 @@ from w2m.contract import load_contract  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.runtime import Result, Runtime as ModelRuntime  # noqa: E402
 from w2m.trace import trace_ingester, trace_path  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 ACCEPTANCE_FILES = (ROOT / "src" / "w2m" / "compare.py", ROOT / "src" / "w2m" / "contract.py")
@@ -99,7 +100,7 @@ class PlantedFirst:
             reply, self.first = self.first, None
             return reply, ModelUsage(model="planted", prompt_tokens=0, completion_tokens=0,
                                      wall_ms=0, estimated=True)
-        return await call_responder_metered(self.rest, prompt)  # type: ignore[arg-type]
+        return await call_responder_metered(self.rest, prompt)
 
 
 def sha256_file(p: Path) -> str:
@@ -112,7 +113,7 @@ class Session:
     contract_path: Path
     probe: bytes
     probe_sha: str
-    backend: str
+    backend: events.EnumProfileKind
     profile_id: str
     runs: int
     attempts: int
@@ -170,7 +171,10 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
                  cver: str) -> Callable[[TopologyBuilder], None]:
     t0 = time.monotonic()
     contract = load_contract(s.contract_path)
-    relation = type(contract.acceptance).__struct_config__.tag      # "exact" | "allowed_outcome_set"
+    tag = type(contract.acceptance).__struct_config__.tag           # "exact" | "allowed_outcome_set"
+    if tag not in get_args(events.EnumRelation):
+        raise ValueError(f"{s.contract_path}: acceptance relation {tag!r} is not in the vocabulary's relation enum")
+    relation = cast(events.EnumRelation, tag)
     (store / "candidates").mkdir(parents=True, exist_ok=True)
 
     async def harness_open(_inp: Any) -> AsyncIterator[msgspec.Struct]:
@@ -298,7 +302,7 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
             s.accepted += 1
             yield events.validate(events.CANDIDATE_ACCEPTED(
                 candidate_id=cand_id, contract_id=cid, contract_version=cver,
-                comparison_ids=[r["comparison_id"] for r in res]))
+                comparison_ids=tuple(r["comparison_id"] for r in res)))
         elif "discrepancy" in verdicts:
             first = next(r for r in res if r.get("verdict") == "discrepancy")
             yield events.validate(events.CANDIDATE_REJECTED(
@@ -376,24 +380,24 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
         b.baseline(contract=f"{cid}@{cver}", probe_sha256=s.probe_sha, backend=s.backend,
                    generator=s.generator_ref, attempts=s.attempts, runs_per_candidate=s.runs)
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1,
-                        factory=lambda: harness_open)
+                        factory=lambda: producer(harness_open))
         b.producer_kind("harness_close", schemas=[events.SESSION_COMPLETED], schema_version=1,
-                        factory=lambda: harness_close)
+                        factory=lambda: producer(harness_close))
         b.producer_kind("candidate_generator", schemas=[events.CANDIDATE_GENERATED, ModelUsage],
-                        schema_version=1, factory=lambda: generator, deterministic=False)
+                        schema_version=1, factory=lambda: producer(generator), deterministic=False)
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED,
                         events.EXECUTION_COMPLETED, events.EXECUTION_FAILED], schema_version=1,
-                        factory=lambda: runner)
+                        factory=lambda: producer(runner))
         b.producer_kind("trace_ingester", schemas=[events.TRACE_INGESTED, events.TRACE_REJECTED],
-                        schema_version=1, factory=lambda: trace_ingester(store))
+                        schema_version=1, factory=lambda: producer(trace_ingester(store)))
         b.producer_kind("comparator", schemas=[events.COMPARISON_COMPLETED], schema_version=1,
-                        factory=lambda: comparator(store, contracts))
+                        factory=lambda: producer(comparator(store, contracts)))
         b.producer_kind("acceptance_guard", schemas=[events.CANDIDATE_ACCEPTED,
                         events.CANDIDATE_REJECTED, events.ACCEPTANCE_CONDITION_ALTERED],
-                        schema_version=1, factory=lambda: guard)
+                        schema_version=1, factory=lambda: producer(guard))
         b.producer_kind("reducer", schemas=[events.REDUCTION_COMPLETED,
                         events.DISCREPANCY_REPORTED, events.DISCREPANCY_ROUTED,
-                        events.DISCREPANCY_RESOLVED], schema_version=1, factory=lambda: reducer)
+                        events.DISCREPANCY_RESOLVED], schema_version=1, factory=lambda: producer(reducer))
         b.initial("harness", input=None)
 
         def on(kinds: set[str]) -> Subscription:
@@ -447,7 +451,7 @@ def topology_for(s: Session, responder: Responder, store: Path, contracts: Path,
     return topology
 
 
-def run_loop(responder: Responder, generator_ref: str, *, contract: str, backend: str,
+def run_loop(responder: Responder, generator_ref: str, *, contract: str, backend: events.EnumProfileKind,
              runs: int, attempts: int, store: Path, contracts: Path, runs_root: Path,
              probe: bytes, profile_id: str) -> Path:
     cid, cver = contract.split("@")

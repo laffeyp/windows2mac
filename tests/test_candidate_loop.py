@@ -12,9 +12,12 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from substrate.api import read_record
+
+from w2m import events
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -78,9 +81,9 @@ def store(tmp_path: Path) -> Path:
     return _store(tmp_path, CONTRACT)
 
 
-def _run(store: Path, tmp_path: Path, responder: Scripted, backend: str = "model",
+def _run(store: Path, tmp_path: Path, responder: Scripted, backend: events.EnumProfileKind = "model",
          contracts: Path = ROOT / "contracts", contract: str = CONTRACT,
-         attempts: int = 3) -> list[tuple[str, dict]]:
+         attempts: int = 3) -> list[tuple[str, dict[str, Any]]]:
     record = run_loop(responder, "scripted (tests/test_candidate_loop.py)",
                       contract=contract, backend=backend,
                       runs=3, attempts=attempts, store=store, contracts=contracts,
@@ -90,7 +93,7 @@ def _run(store: Path, tmp_path: Path, responder: Scripted, backend: str = "model
             if not e["kind"].startswith("substrate.") and e["kind"] != "ModelUsage"]
 
 
-def _kinds(evs: list[tuple[str, dict]], keep: set[str]) -> list[str]:
+def _kinds(evs: list[tuple[str, dict[str, Any]]], keep: set[str]) -> list[str]:
     return [k for k, _ in evs if k in keep]
 
 

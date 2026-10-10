@@ -25,6 +25,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "specs" / "x86_decode.json"
@@ -122,7 +123,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args(argv)
     spec = json.loads(SPEC.read_text())
-    lines_by_key: dict[tuple[str, int, str, bool | None], list] = {}
+    lines_by_key: dict[tuple[str, int, str, bool | None], list[tuple[Any, ...]]] = {}
     for iclass, pages in ICLASSES.items():
         mnemonic = "MOVSD" if iclass == "MOVSD_XMM" else iclass
         for page in pages.split():

@@ -34,6 +34,7 @@ from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 STEAMCMD = Path.home() / "w2m-tools" / "steamcmd" / "steamcmd.sh"
 
@@ -123,7 +124,7 @@ def main(argv: list[str]) -> int:
         build, depots = resolve(a.app)
         found.update(build=build, depots=depots)
         yield events.validate(events.DISTRIBUTION_RESOLVED(
-            app_id=a.app, build_id=build, depot_ids=depots, platform="windows"))
+            app_id=a.app, build_id=build, depot_ids=tuple(depots), platform="windows"))
 
     async def acquirer(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         build = found["build"]
@@ -155,11 +156,11 @@ def main(argv: list[str]) -> int:
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(app_id=a.app, install=str(a.install), tool="steamcmd")
-        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: harness)
+        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("distribution_resolver", schemas=[events.DISTRIBUTION_RESOLVED], schema_version=1,
-                        factory=lambda: resolver)
+                        factory=lambda: producer(resolver))
         b.producer_kind("acquirer", schemas=[events.DISTRIBUTION_ACQUIRED, events.ACQUISITION_FAILED,
-                        events.SESSION_COMPLETED], schema_version=1, factory=lambda: acquirer)
+                        events.SESSION_COMPLETED], schema_version=1, factory=lambda: producer(acquirer))
         b.initial("harness", input=None)
         b.trigger("resolve", subscription=Subscription(kinds=frozenset({"SESSION_INIT"})), predicate=lambda c: True,
                   starts="distribution_resolver", policy=PerEvent(), input_builder=lambda c: None)

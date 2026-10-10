@@ -33,6 +33,7 @@ import msgspec
 from substrate.api import Runtime, TopologyBuilder, read_record, threshold_count
 
 from w2m import VOCAB_VERSION, events
+from w2m.record import producer
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "specs" / "guest_state.json"
@@ -117,7 +118,7 @@ def record(a: argparse.Namespace, version: str, profile: str, n: int, diffs: lis
            elapsed: float) -> None:
     run_id = f"gueststate-{time.time_ns()}"
 
-    async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
+    async def harness(input: Any) -> AsyncIterator[msgspec.Struct]:
         yield events.validate(events.SESSION_INIT(
             vocab_version=VOCAB_VERSION, profile=profile, contract_version=version,
             harness_version="0.0.1", purpose="conformance"))
@@ -144,7 +145,7 @@ def record(a: argparse.Namespace, version: str, profile: str, n: int, diffs: lis
     def topology(b: TopologyBuilder) -> None:
         b.baseline(spec_version=version, reference=profile, run_dir=str(a.run_dir))
         b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: harness)
+                        factory=lambda: producer(harness))
         b.initial("comparator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

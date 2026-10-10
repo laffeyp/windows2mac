@@ -52,7 +52,7 @@ def main(argv: list[str]) -> int:
 
     def work() -> Iterator[msgspec.Struct]:
         for name, sha, contracts in found:
-            yield events.PROBE_AUTHORED(probe_id=name, probe_sha256=sha, contract_ids=contracts, origin="hand")
+            yield events.PROBE_AUTHORED(probe_id=name, probe_sha256=sha, contract_ids=tuple(contracts), origin="hand")
 
     root, kinds = one_step_run(a.runs / f"probes-{time.time_ns()}",
                                profile="store", contract_version=VOCAB_VERSION, purpose="contract_construction",

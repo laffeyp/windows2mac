@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.contract import Contract, ContractError, load_contract  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 CONTRACTS = ROOT / "contracts"
 STORE_RUNS = ROOT / "store" / "runs"
@@ -78,7 +79,7 @@ def main(argv: list[str]) -> int:
                     **({"distinguishing_check": ev.distinguishing_check} if ev.distinguishing_check else {})))
             yield events.validate(events.CONTRACT_PROPOSED(
                 contract_id=c.contract_id, version=c.version,
-                evidence_ids=[ev.evidence_id for ev in c.evidence], proposer="agent"))
+                evidence_ids=tuple(ev.evidence_id for ev in c.evidence), proposer="agent"))
 
     async def acceptor(inp: dict[str, Any]) -> AsyncIterator[msgspec.Struct]:
         cid, ver = inp["contract_id"], inp["version"]
@@ -89,7 +90,7 @@ def main(argv: list[str]) -> int:
             return
         if c.status == "accepted":
             yield events.validate(events.CONTRACT_ACCEPTED(
-                contract_id=cid, version=ver, evidence_ids=[ev.evidence_id for ev in c.evidence],
+                contract_id=cid, version=ver, evidence_ids=tuple(ev.evidence_id for ev in c.evidence),
                 open_question_count=len(c.open_questions), applicability=c.applicability))
 
     async def reviser(inp: dict[str, Any]) -> AsyncIterator[msgspec.Struct]:
@@ -103,7 +104,7 @@ def main(argv: list[str]) -> int:
         yield events.validate(events.CONTRACT_REVISED(
             contract_id=cid, from_version=prev, to_version=ver,
             rationale_ref=new.sections.get("supersedes") or f"contracts/{cid}/{ver}.json sections and open questions",
-            evidence_ids=[e.evidence_id for e in new.evidence]))
+            evidence_ids=tuple(e.evidence_id for e in new.evidence)))
         yield events.validate(events.DEPENDENTS_INVALIDATED(
             contract_id=cid, from_version=prev, to_version=ver, artifact_count=0,
             candidate_count=accepted_candidates(cid, prev), evidence_count=len(dropped)))
@@ -119,13 +120,13 @@ def main(argv: list[str]) -> int:
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(contracts=[str(f.relative_to(ROOT)) for f in files])
-        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: harness)
+        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("proposer", schemas=[events.EVIDENCE_RECORDED, events.CONTRACT_PROPOSED],
-                        schema_version=1, factory=lambda: proposer)
-        b.producer_kind("acceptor", schemas=[events.CONTRACT_ACCEPTED], schema_version=1, factory=lambda: acceptor)
+                        schema_version=1, factory=lambda: producer(proposer))
+        b.producer_kind("acceptor", schemas=[events.CONTRACT_ACCEPTED], schema_version=1, factory=lambda: producer(acceptor))
         b.producer_kind("reviser", schemas=[events.CONTRACT_REVISED, events.DEPENDENTS_INVALIDATED],
-                        schema_version=1, factory=lambda: reviser)
-        b.producer_kind("closer", schemas=[events.SESSION_COMPLETED], schema_version=1, factory=lambda: closer)
+                        schema_version=1, factory=lambda: producer(reviser))
+        b.producer_kind("closer", schemas=[events.SESSION_COMPLETED], schema_version=1, factory=lambda: producer(closer))
         b.initial("harness", input=None)
 
         def on(kinds: set[str]) -> Subscription:

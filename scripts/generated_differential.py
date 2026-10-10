@@ -50,6 +50,7 @@ from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86dec_tables import SPEC_VERSION
 from w2m.x86ops import OperandError, normalize, operands
 from w2m.xedref import decode_many
+from w2m.record import producer
 
 
 def main(argv: list[str]) -> int:
@@ -66,8 +67,8 @@ def main(argv: list[str]) -> int:
     cs = list(cases(per_row=a.per_row))
     xs = decode_many([c.raw for c in cs], a.chip)
     outcome: Counter[str] = Counter()
-    kinds: Counter[tuple[str, str, str]] = Counter()
-    example: dict[tuple[str, str, str], str] = {}
+    kinds: Counter[tuple[str, str, str, str]] = Counter()          # (outcome, xed, ours, lengths)
+    example: dict[tuple[str, str, str, str], str] = {}
     per_row: dict[int, Counter[str]] = {}
     op_n = 0
     op_diff: Counter[tuple[str, str]] = Counter()
@@ -107,8 +108,8 @@ def main(argv: list[str]) -> int:
         outcome[o] += 1
         per_row.setdefault(c.row, Counter())[o] += 1
         if o not in ("both_reject", "agree"):
-            kinds[(o, *k[:2], k[2])] += 1  # type: ignore[arg-type]
-            example.setdefault((o, *k[:2], k[2]), f"{c.raw[:x.length or 15].hex()} [{c.note}]")  # type: ignore[arg-type]
+            kinds[(o, k[0], k[1], k[2])] += 1
+            example.setdefault((o, k[0], k[1], k[2]), f"{c.raw[:x.length or 15].hex()} [{c.note}]")
     total = len(cs)
     print(f"cases {total} ({a.per_row} per row, chip {a.chip}); {time.monotonic() - t0:.0f} s")
     for o in ("agree", "both_reject", "ours_accepts", "ours_gap", "length_differs", "iclass_differs"):
@@ -120,17 +121,17 @@ def main(argv: list[str]) -> int:
         top = [(k, n) for k, n in kinds.most_common() if k[0] == o][:12]
         if top:
             print(f"{o} (xed, ours, lengths): count, example")
-            for k, n in top:
-                print(f"  {n:6} {k[1:]} {example[k]}")
+            for kind, n in top:
+                print(f"  {n:6} {kind[1:]} {example[kind]}")
     if a.confirmations:
         rows = json.loads(SPEC.read_text())["entries"]
         bad = ("ours_accepts", "ours_gap", "length_differs", "iclass_differs", "operand_differs")
         conf = {}
         for idx, e in enumerate(rows):
-            n = per_row.get(idx, Counter())
+            row_counts = per_row.get(idx, Counter())
             key = "sha256:" + hashlib.sha256(json.dumps(e, sort_keys=True).encode()).hexdigest()
-            conf[key] = {"row": idx, "mn": e["mn"], "cases": sum(n.values()), **dict(sorted(n.items())),
-                         "confirmed": sum(n.values()) > 0 and not any(n[b] for b in bad)}
+            conf[key] = {"row": idx, "mn": e["mn"], "cases": sum(row_counts.values()), **dict(sorted(row_counts.items())),
+                         "confirmed": sum(row_counts.values()) > 0 and not any(row_counts[b] for b in bad)}
         ok = sum(v["confirmed"] for v in conf.values())
         a.confirmations.write_text(json.dumps({
             "reference": f"Intel XED v2026.08.23 (0bcb6237345c), chip {a.chip}",
@@ -138,7 +139,7 @@ def main(argv: list[str]) -> int:
             indent=1) + "\n")
         print(f"confirmations: {ok} of {len(conf)} rows confirmed by XED -> {a.confirmations}")
     if a.record:
-        classes = [(k, n, example[k]) for k, n in kinds.most_common()]
+        classes: list[tuple[tuple[str, ...], int, str]] = [(k, n, example[k]) for k, n in kinds.most_common()]
         classes += [(("operand_differs", *k, ""), n, op_ex[k]) for k, n in op_diff.most_common()]
         record(a, classes, total, time.monotonic() - t0)
     if a.json:
@@ -203,7 +204,7 @@ def record(a: argparse.Namespace, classes: list[tuple[tuple[str, ...], int, str]
     def topology(b: TopologyBuilder) -> None:
         b.baseline(spec_version=SPEC_VERSION, reference=XED_PROFILE, cases=total, chip=a.chip)
         b.producer_kind("comparator", schemas=list(events.HARNESS_EVENTS), schema_version=1,
-                        factory=lambda: harness)
+                        factory=lambda: producer(harness))
         b.initial("comparator", input=None)
         b.termination(threshold_count("substrate.ProducerCompleted", 1))
 

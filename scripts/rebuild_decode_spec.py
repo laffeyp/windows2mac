@@ -59,7 +59,7 @@ def base_edits(d: dict[str, Any]) -> None:
     entries = d["entries"]
 
     def one(mn: str) -> dict[str, Any]:
-        hits = [e for e in entries if e["mn"] == mn]
+        hits: list[dict[str, Any]] = [e for e in entries if e["mn"] == mn]
         assert len(hits) == 1, (mn, len(hits))
         return hits[0]
 

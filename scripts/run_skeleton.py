@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -121,7 +122,8 @@ def main(argv: list[str]) -> int:
             finally:
                 finished_vms.append(vm)                # recorded and closed after timing
 
-        backends = (("model", "w2m-model", lambda: Runtime(load(exe)).run()),
+        backends: tuple[tuple[str, str, Callable[[], Result]], ...] = (
+            ("model", "w2m-model", lambda: Runtime(load(exe)).run()),
                     ("managed_vm", "w2m-vm", run_vm))
         for kind, prefix, execute in backends:
             out = Path(tmp) / kind

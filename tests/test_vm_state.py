@@ -16,6 +16,7 @@ import pytest
 
 from test_semantics_differential import _built_039
 from w2m import lift as lift_module
+from w2m import a64_encoder as a64
 from w2m import vm_backend
 from w2m.encgen import cases as encgen_cases
 from w2m.lift import commit_order, lift
@@ -89,7 +90,7 @@ def test_planted_pop_order_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
     (A PUSH that moves RSP first is the same defect, but no Windows record can show it: PUSH
     faults here are loads of a memory source, and a fault on the stack store itself cannot be
     dispatched on Windows, so Sprint 039 never placed one.)"""
-    real_lift = vm_backend.lift
+    real_lift = lift
 
     def rsp_first(code: bytes, address: int) -> lift_module.Lifted:
         ins = real_lift(code, address)
@@ -112,7 +113,7 @@ def test_planted_lazy_af_operand_is_caught(monkeypatch: pytest.MonkeyPatch) -> N
     def wrong_af(a: vm_backend.Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) -> None:
         original(a, kind, ra, rb, rr, bits)
         if kind in ("add", "sub", "inc", "dec"):
-            a.emit(vm_backend.a64.str_(8, ra, 28, vm_backend.AF_OPERANDS + 16))
+            a.emit(a64.str_(8, ra, 28, vm_backend.AF_OPERANDS + 16))
     monkeypatch.setattr(vm_backend, "_set_flags", wrong_af)
     cases, results = _subset(INTEL[0], {"ADD", "SUB"})
     classes, _, _, _, _ = vm_oracle.run_cases(cases, results)

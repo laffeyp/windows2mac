@@ -15,6 +15,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 PART_BYTES = 1900 * 1024 * 1024
@@ -33,7 +34,7 @@ def main(argv: list[str]) -> int:
     install, name, app_id, build_id, out = Path(argv[0]), argv[1], argv[2], argv[3], Path(argv[4])
     files = sorted(p for p in install.rglob("*") if p.is_file()
                    and p.relative_to(install).parts[0] != SKIP)
-    listing = [{"path": p.relative_to(install).as_posix(), "size": p.stat().st_size,
+    listing: list[dict[str, Any]] = [{"path": p.relative_to(install).as_posix(), "size": p.stat().st_size,
                 "sha256": sha256(p)} for p in files]
     meta = ROOT / "games" / name
     meta.mkdir(parents=True, exist_ok=True)
@@ -55,7 +56,7 @@ def main(argv: list[str]) -> int:
     if (zstd.wait(), split.wait(), tar.returncode) != (0, 0, 0):
         print("packing failed", file=sys.stderr)
         return 1
-    parts = [{"name": p.name, "size": p.stat().st_size, "sha256": sha256(p)}
+    parts: list[dict[str, Any]] = [{"name": p.name, "size": p.stat().st_size, "sha256": sha256(p)}
              for p in sorted(out.glob(stem + "*"))]
     (meta / "release.json").write_text(json.dumps(
         {"tag": f"game-{app_id}-{build_id}", "parts": parts}, indent=1) + "\n")

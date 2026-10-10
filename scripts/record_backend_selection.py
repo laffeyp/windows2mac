@@ -32,6 +32,7 @@ from substrate.api import PerEvent, Runtime, Subscription, TopologyBuilder, read
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
+from w2m.record import producer  # noqa: E402
 
 STORE = ROOT / "store" / "runs"
 EVIDENCE = ("capability-1791496383", "litmus-1791496387", "ordering-1791442786", "pagegeom-1791443163")
@@ -72,7 +73,7 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     capabilities, ns, ids = _evidence()
     vm_pass, vm_fail = _vm_conformance()
-    evaluations: dict[str, dict[str, Any]] = {}
+    evaluations: dict[events.EnumBackend, dict[str, Any]] = {}
 
     async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         yield events.validate(events.SESSION_INIT(
@@ -98,22 +99,22 @@ def main(argv: list[str]) -> int:
         yield events.validate(events.BACKEND_EVALUATED(
             evaluation_id=f"eval-{backend}", backend=backend, application_profile_id=APP,
             destination_profile_id=DEST, conformance_pass_count=passes, conformance_fail_count=fails,
-            objective_ref=objective, measurement_ids=mids))
+            objective_ref=objective, measurement_ids=tuple(mids)))
 
     async def selector(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         chosen = max(evaluations, key=lambda b: (evaluations[b]["tso"], evaluations[b]["pass"]))
         yield events.validate(events.BACKEND_SELECTED(
             backend=chosen, application_profile_id=APP, destination_profile_id=DEST,
-            evaluation_ids=[f"eval-{b}" for b in sorted(evaluations)], decision_ref=DECISION))
+            evaluation_ids=tuple(f"eval-{b}" for b in sorted(evaluations)), decision_ref=DECISION))
         yield events.validate(events.SESSION_COMPLETED(
             outcome="completed", discrepancy_count=0, accepted_count=0, elapsed_seconds=0.0))
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(evidence=list(EVIDENCE), decision=DECISION)
-        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: harness)
-        b.producer_kind("evaluator", schemas=[events.BACKEND_EVALUATED], schema_version=1, factory=lambda: evaluator)
+        b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
+        b.producer_kind("evaluator", schemas=[events.BACKEND_EVALUATED], schema_version=1, factory=lambda: producer(evaluator))
         b.producer_kind("selector", schemas=[events.BACKEND_SELECTED, events.SESSION_COMPLETED],
-                        schema_version=1, factory=lambda: selector)
+                        schema_version=1, factory=lambda: producer(selector))
         b.initial("harness", input=None)
         b.trigger("evaluate-vm", subscription=Subscription(kinds=frozenset({"SESSION_INIT"})),
                   predicate=lambda c: True, starts="evaluator", policy=PerEvent(),

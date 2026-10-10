@@ -94,7 +94,8 @@ def render(vocab_bytes: bytes) -> str:
         out.append(f"{_enum_alias(name)} = Literal[{', '.join(repr(x) for x in values)}]")
     out.append("")
 
-    harness, guest = [], []
+    harness: list[str] = []
+    guest: list[str] = []
     for t in v["tags"]:
         is_guest = t["category"] == "guest"
         (guest if is_guest else harness).append(t["name"])

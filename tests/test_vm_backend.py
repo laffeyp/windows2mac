@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from test_runtime import _skeleton, _verdict
+from w2m import a64_encoder as a64
 from w2m import vm_backend
 from w2m.loader import load
 from w2m.runtime import Runtime
@@ -40,12 +41,12 @@ def test_lockstep_finds_no_difference() -> None:
 
 def test_planted_parity_fault_is_found(monkeypatch: pytest.MonkeyPatch) -> None:
     """PF compiled with the opposite sense: lockstep names the first instruction that sets it."""
-    orig = vm_backend.a64.cset
+    orig = a64.cset
 
     def wrong(rd: int, cond: str) -> int:
         return orig(rd, "ne" if rd == vm_backend.REG_PF and cond == "eq" else cond)
 
-    monkeypatch.setattr(vm_backend.a64, "cset", wrong)
+    monkeypatch.setattr(a64, "cset", wrong)
     result = lockstep(_skeleton(), limit=0)
     assert result.differences and "PF vm" in result.differences[0]
     assert "x86 0x14000" in result.differences[0]
@@ -61,8 +62,8 @@ def test_planted_carry_fault_passes_lockstep_and_fails_state_differential(
     """SUB's carry (unsigned borrow) compiled as signed less-than. Every SUB and CMP on the
     skeleton's path has operands of equal sign, where the two agree, so the full lockstep run
     passes; random operand states find it."""
-    orig = vm_backend.a64.cset
-    monkeypatch.setattr(vm_backend.a64, "cset",
+    orig = a64.cset
+    monkeypatch.setattr(a64, "cset",
                         lambda rd, cond: orig(rd, "lt" if cond == "lo" else cond))
     assert lockstep(_skeleton()).differences == []
     found = state_differential(_skeleton(), limit=0).differences
@@ -72,8 +73,8 @@ def test_planted_carry_fault_passes_lockstep_and_fails_state_differential(
 def test_planted_store_width_fault_is_found(monkeypatch: pytest.MonkeyPatch) -> None:
     """32-bit stores compiled as 64-bit. The skeleton's 32-bit stores are RIP-relative into
     .data; the bytes compared around each effective address catch the extra four."""
-    orig = vm_backend.a64.str_
-    monkeypatch.setattr(vm_backend.a64, "str_",
+    orig = a64.str_
+    monkeypatch.setattr(a64, "str_",
                         lambda size, rt, rn, offset=0: orig(8 if size == 4 else size, rt, rn, offset))
     found = state_differential(_skeleton(), limit=0).differences
     assert found and "differs" in found[0]
