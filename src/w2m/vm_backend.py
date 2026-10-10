@@ -43,7 +43,7 @@ from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
-from w2m.lift import Lifted, LiftError, Op, lift
+from w2m.lift import RAX, RDX, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded, Memory, Region
 from w2m.runtime import Result
 
@@ -225,6 +225,21 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
     if kind in ("shr", "shl", "sar", "rol", "ror"):
         _shift_flags(a, kind, ra, rb, rr, bits)
         return
+    if kind == "bt":                                           # SDM BT: CF the bit; OF SF AF PF undefined; ZF kept
+        a.emit(a64.ubfx(REG_CF, rr, 0, 1))
+        _mark_defined(a, U_CF)
+        _mark_undefined(a, U_OF | U_SF | U_AF | U_PF)
+        return
+    if kind == "sbb":                                          # SDM SBB: borrow and overflow from a, b, r
+        a.emit(a64.eor(16, ra, rb), a64.eor(17, ra, rr), a64.and_(17, 17, 16),
+               a64.ubfx(REG_OF, 17, bits - 1, 1))
+        a.emit(a64.bic(16, rb, ra), a64.eor(17, ra, rb), a64.bic(17, rr, 17), a64.orr(16, 16, 17),
+               a64.ubfx(REG_CF, 16, bits - 1, 1))
+        _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF)
+        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, AF_OPERANDS + 16))
+        _mark_defined(a, U_AF)
+        _set_zf_sf_pf(a, rr, bits)
+        return
     if kind == "imul":                                         # SDM IMUL: CF=OF on truncation; SF ZF AF PF undefined
         if bits < 64:
             a.emit(a64.sbfx(16, ra, 0, bits), a64.sbfx(17, rb, 0, bits), a64.mul(16, 16, 17),
@@ -373,6 +388,8 @@ def _temps_read(op: Op) -> list[int]:
     if k == "flags":
         return [op[2], op[3], op[4]]
     if k == "br":
+        return [op[2]]
+    if k == "div":
         return [op[2]]
     if k == "set":
         return [op[2][1]] if op[2][0] == "m" else []
@@ -550,6 +567,13 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
                 a.emit(a64.umulh(rd, rx, ry))
             elif o == "sext32":
                 a.emit(a64.sxtw(rd, rx))
+            elif o in ("sext8", "sext16"):
+                a.emit(a64.sbfx(rd, rx, 0, 8 if o == "sext8" else 16))
+            elif o == "bswap":
+                a.emit(a64.rev(rd, rx, bits))
+            elif o == "sbb":                                    # a - b - CF; CF must be defined
+                _exit_if_undefined(a, "C")
+                a.emit(a64.sub(rd, rx, ry), a64.sub(rd, rd, REG_CF))
             elif o in ("shl", "sar"):
                 a.emit(a64.ubfx(16, ry, 0, 6 if bits == 64 else 5))
                 if o == "shl":
@@ -581,6 +605,28 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
+        elif k == "div":
+            # DIV: the quotient overflows exactly when the dividend's high half >= the divisor, which
+            # includes a zero divisor; those, a 64-bit dividend with RDX != 0 (no 128/64 divide here)
+            # and the 8- and 16-bit forms run in the model (hvc #11), which raises #DE as Windows does.
+            # Every check comes before any write (commit rule). Flags: all undefined.
+            _, bits, src = op
+            rs, fast, done = reg_of(src), a.label(), a.label()
+            if bits == 64:
+                a.branch(lambda off: a64.cbnz(RDX, off), done)
+                a.branch(lambda off: a64.cbz(rs, off), done)
+                a.emit(a64.udiv(16, RAX, rs), a64.msub(RDX, 16, rs, RAX), a64.mov(RAX, 16))
+                a.branch(a64.b, fast)
+            elif bits == 32:
+                a.emit(a64.mov32(16, RDX), a64.mov32(17, rs), a64.cmp(16, 17))
+                a.branch(lambda off: a64.bcond("hs", off), done)
+                a.emit(a64.eor(16, a64.ZR, 16, a64.LSL, 32), a64.bfi(16, RAX, 0, 32), a64.udiv(RAX, 16, 17),
+                       a64.msub(RDX, RAX, 17, 16))
+                a.branch(a64.b, fast)
+            a.bind(done)
+            a.emit(a64.hvc(HVC_SLOW_STEP))
+            a.bind(fast)
+            _mark_undefined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
         elif k == "set":
             _eval_condition(a, op[1])
             store(op[2], 16)
@@ -993,7 +1039,7 @@ class VM:
         try:
             rt.step()
         except (fp.SimdFault, GuestFault) as e:
-            code = fp.xm_status(th.mxcsr) if isinstance(e, fp.SimdFault) else 0xC000_0005
+            code = fp.xm_status(th.mxcsr) if isinstance(e, fp.SimdFault) else e.code
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
             self.set_vectors(xmm, fpcr, 0)
             return self._raise_in_guest(x, xmm, code, rip)

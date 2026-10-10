@@ -13,8 +13,11 @@ from dataclasses import dataclass, field
 from w2m import cpuid
 from w2m import x86fp as fp
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
-from w2m.lift import Lifted, LiftError, Op, lift
+from w2m.lift import RAX, RDX, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
+
+STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero divisor
+STATUS_INTEGER_OVERFLOW = 0xC000_0095         # ntstatus.h; DIV #DE with a quotient too wide
 
 __all__ = ["Result", "Runtime", "UndefinedFlag", "Unimplemented"]
 
@@ -146,6 +149,13 @@ class Runtime:
         if kind == "ror":                                         # SDM ROR: only CF and OF
             f.update(C=bool(res & sign), O=(bool(res & sign) != bool(res & (sign >> 1))) if cnt == 1 else None)
             return
+        if kind == "bt":                                          # SDM BT/BTS/BTR: CF the bit; ZF unchanged
+            f.update(C=bool(r & 1), O=None, S=None, A=None, P=None)
+            return
+        if kind == "sbb":                                         # SDM SBB: a - b - CF, with borrow
+            f.update(Z=res == 0, S=bool(res & sign), P=_parity(res), A=bool((a ^ b ^ res) & 0x10),
+                     O=bool((a ^ b) & (a ^ res) & sign), C=bool(((~a & b) | (~(a ^ b) & res)) & sign))
+            return
         if kind == "imul":                                        # SDM IMUL: CF=OF on truncation; SF ZF AF PF undefined
             sx = (a & m) - (1 << bits) if a & sign else a & m
             sy = (b & m) - (1 << bits) if b & sign else b & m
@@ -166,6 +176,28 @@ class Runtime:
             f["O"] = bool((a ^ b) & (a ^ res) & sign)
             if kind == "sub":
                 f["C"] = (a & m) < (b & m)
+
+    def _div(self, bits: int, divisor: int) -> None:
+        """DIV (SDM DIV): faults before any write; every flag undefined afterwards."""
+        m = _mask(bits)
+        divisor &= m
+        if bits == 8:
+            dividend = self._rd(RAX, 16, False)
+        else:
+            dividend = self._rd(RDX, bits, False) << bits | self._rd(RAX, bits, False)
+        if divisor == 0:
+            raise GuestFault(f"#DE: DIV by zero at 0x{self.th.rip:x}", STATUS_INTEGER_DIVIDE_BY_ZERO)
+        q, rem = divmod(dividend, divisor)
+        if q > m:
+            raise GuestFault(f"#DE: DIV quotient 0x{q:x} wider than {bits} bits at 0x{self.th.rip:x}",
+                             STATUS_INTEGER_OVERFLOW)
+        if bits == 8:
+            self._wr(RAX, 8, False, q)
+            self._wr(RAX, 8, True, rem)
+        else:
+            self._wr(RAX, bits, False, q)
+            self._wr(RDX, bits, False, rem)
+        self.th.flags.update(dict.fromkeys("CZSOPA"))
 
     # SSE ---------------------------------------------------------------------------------------
     def _xread(self, loc: Op, nbytes: int) -> int:
@@ -293,6 +325,8 @@ class Runtime:
                 v = disp + (self.th.regs[base] if base is not None else 0)
                 v += self.th.regs[index] * scale if index is not None else 0
                 t[d] = v & _mask(abits)
+            elif k == "div":
+                self._div(op[1], t[op[2]])
             elif k == "ld":
                 t[op[1]] = self._load(op[2], t)
             elif k == "st":
@@ -318,6 +352,14 @@ class Runtime:
                     v = (x * y) >> 64
                 elif o == "sext32":
                     v = x - (1 << 32) if x & 0x80000000 else x
+                elif o in ("sext8", "sext16"):
+                    w = 8 if o == "sext8" else 16
+                    xw = x & _mask(w)
+                    v = xw - (1 << w) if xw >> (w - 1) else xw
+                elif o == "bswap":
+                    v = int.from_bytes((x & m).to_bytes(bits // 8, "little"), "big")
+                elif o == "sbb":
+                    v = x - y - int(self._flag("C"))
                 elif o in ("shl", "sar", "rol", "ror"):
                     c = y & (0x3F if bits == 64 else 0x1F)
                     xm = x & m

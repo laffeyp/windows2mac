@@ -78,6 +78,129 @@ def neg(ctx: Ctx) -> None:
     b.emit("flags", "sub", zero, a, r, bits)
 
 
+def not_(ctx: Ctx) -> None:
+    """NOT: one's complement; no flag changes (SDM NOT)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    a, ones, r = _val(b, dk, dst), b.t(), b.t()
+    b.emit("imm", ones, (1 << bits) - 1)
+    b.emit("alu", r, "xor", a, ones, bits)
+    b.emit("st", dst, r)
+
+
+def cdqe(ctx: Ctx) -> None:
+    """CDQE: RAX = sign-extended EAX (SDM CBW/CWDE/CDQE)."""
+    b = ctx.b
+    v, r = b.t(), b.t()
+    b.emit("ld", v, ("r", RAX, 32, False))
+    b.emit("alu", r, "sext32", v, v, 64)
+    b.emit("st", ("r", RAX, 64, False), r)
+
+
+def cdq(ctx: Ctx) -> None:
+    """CDQ: EDX = every bit EAX's sign (SDM CWD/CDQ/CQO); a 32-bit write zero-extends RDX."""
+    b = ctx.b
+    v, n, r = b.t(), b.t(), b.t()
+    b.emit("ld", v, ("r", RAX, 32, False))
+    b.emit("imm", n, 31)
+    b.emit("alu", r, "sar", v, n, 32)
+    b.emit("st", ("r", RDX, 32, False), r)
+
+
+def movsx(ctx: Ctx) -> None:
+    """MOVSX r, r/m8 or r/m16: sign-extended to the destination (SDM MOVSX/MOVSXD)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, dbits = _operand(b, ops[0], nxt)
+    sk, src, sbits = _operand(b, ops[1], nxt)
+    if sbits not in (8, 16):
+        raise LiftError(f"MOVSX from {sbits} bits")
+    v, r = _val(b, sk, src), b.t()
+    b.emit("alu", r, f"sext{sbits}", v, v, dbits)
+    b.emit("st", dst, r)
+
+
+def bswap(ctx: Ctx) -> None:
+    """BSWAP r32/r64 (SDM BSWAP; the 16-bit form is undefined and not lifted)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    if bits not in (32, 64):
+        raise LiftError(f"BSWAP r{bits}: undefined (SDM)")
+    v, r = _val(b, dk, dst), b.t()
+    b.emit("alu", r, "bswap", v, v, bits)
+    b.emit("st", dst, r)
+
+
+def xchg(ctx: Ctx) -> None:
+    """XCHG: the two operands swap; the memory store comes first (commit rule). A memory operand is
+    locked by the processor (SDM XCHG); atomicity across vCPUs is judged in Sprint 047, with threads."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    ak, a_loc, bits = _operand(b, ops[0], nxt)
+    bk, b_loc, _ = _operand(b, ops[1], nxt)
+    a, c = _val(b, ak, a_loc), _val(b, bk, b_loc)
+    first, second = (a_loc, b_loc) if a_loc[0] == "m" else (b_loc, a_loc)       # type: ignore[index]
+    b.emit("st", first, c if first is a_loc else a)
+    b.emit("st", second, a if second is b_loc else c)
+
+
+def sbb(ctx: Ctx) -> None:
+    """SBB: dest - src - CF (SDM SBB); flags as a subtraction with borrow."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    a, c, r = _val(b, dk, dst), _val(b, sk, src), b.t()
+    b.emit("alu", r, "sbb", a, c, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", "sbb", a, c, r, bits)
+
+
+def bit_test(ctx: Ctx) -> None:
+    """BT, BTS, BTR (SDM BT): CF = the selected bit; BTS sets it, BTR clears it. A register or an
+    immediate offset selects bit (offset mod operand size); a register offset with a memory base
+    addresses the bit string: the operand at base + size * floor(offset / bits), signed."""
+    b, ic, ops, nxt = ctx.b, ctx.ic, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    ok, off_loc, obits = _operand(b, ops[1], nxt)
+    off = _val(b, ok, off_loc)
+    log = bits.bit_length() - 1                         # 16 -> 4, 32 -> 5, 64 -> 6
+    if dst[0] == "m" and ok == "loc":                   # type: ignore[index]
+        wide, shift, scaled, step, addr = b.t(), b.t(), b.t(), b.t(), b.t()
+        if obits == 64:
+            wide = off
+        else:
+            b.emit("alu", wide, "sext32" if obits == 32 else "sext16", off, off, 64)
+        b.emit("imm", shift, log)
+        b.emit("alu", scaled, "sar", wide, shift, 64)
+        b.emit("imm", step, log - 3)
+        b.emit("alu", scaled, "shl", scaled, step, 64)
+        b.emit("alu", addr, "add", dst[1], scaled, 64)  # type: ignore[index]
+        dst = ("m", addr, dst[2])                       # type: ignore[index]
+    mask, bit, value, one, sel, cf = b.t(), b.t(), b.t(), b.t(), b.t(), b.t()
+    b.emit("imm", mask, bits - 1)
+    b.emit("alu", bit, "and", off, mask, 64)
+    value = _val(b, "loc", dst)
+    b.emit("alu", cf, "shr", value, bit, bits)
+    b.emit("imm", one, 1)
+    b.emit("alu", cf, "and", cf, one, bits)
+    if ic in ("BTS", "BTR"):
+        b.emit("alu", sel, "shl", one, bit, bits)
+        if ic == "BTR":
+            ones, notsel = b.t(), b.t()
+            b.emit("imm", ones, (1 << bits) - 1)
+            b.emit("alu", notsel, "xor", sel, ones, bits)
+            b.emit("alu", value, "and", value, notsel, bits)
+        else:
+            b.emit("alu", value, "or", value, sel, bits)
+        b.emit("st", dst, value)
+    b.emit("flags", "bt", cf, cf, cf, bits)
+
+
+def div(ctx: Ctx) -> None:
+    """DIV r/m (unsigned; SDM DIV)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    sk, src, bits = _operand(b, ops[0], nxt)
+    b.emit("div", bits, _val(b, sk, src))
+
+
 def shr(ctx: Ctx) -> None:
     b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
     dk, dst, bits = _operand(b, ops[0], nxt)

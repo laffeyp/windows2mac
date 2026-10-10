@@ -234,11 +234,14 @@ CLASSES_041 = frozenset(("IMUL", "SHL", "SAR", "ROL", "ROR", "XADD", "CMPXCHG", 
 # Sprint 042: NEG, the one class the CreateFileW probe's code (both runner binaries) has no rule for
 LOCKABLE_042 = ("NEG",)
 CLASSES_042 = frozenset(("NEG", "NEG_LOCK"))
+# Sprint 044: the integer classes the launcher's reachable code uses without a rule (census 2026-10-10)
+CLASSES_044 = frozenset(("NOT", "CDQE", "CDQ", "MOVSX", "BSWAP", "XCHG", "SBB", "BT", "BTS", "BTR", "DIV"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
     "041": (2026_10_10_41, CLASSES_041, LOCKABLE_041, False),
-    "042": (2026_10_11_42, CLASSES_042, LOCKABLE_042, False)}
+    "042": (2026_10_11_42, CLASSES_042, LOCKABLE_042, False),
+    "044": (2026_10_10_44, CLASSES_044, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -427,7 +430,7 @@ def model(c: Case) -> ModelRun | str:
     try:
         rt.step()
     except GuestFault as e:
-        return ModelRun(rt, ACCESS_VIOLATION, str(e))
+        return ModelRun(rt, e.code, str(e))                        # ACCESS_VIOLATION unless DIV's #DE
     except fp.SimdFault as e:
         return ModelRun(rt, fp.xm_status(th.mxcsr), str(e))
     except Exception as e:                                       # the model's stop is a result

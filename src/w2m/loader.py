@@ -20,8 +20,13 @@ STACK_SIZE = 1 << 20
 
 
 class GuestFault(RuntimeError):
-    """A guest memory access outside every mapped region (the guest would see an access
-    violation); the runtime stops and reports it."""
+    """A guest fault the runtime stops on and reports: by default a memory access outside every
+    mapped region (an access violation); `code` is the Windows status the guest would see
+    (Sprint 044: DIV's STATUS_INTEGER_DIVIDE_BY_ZERO and STATUS_INTEGER_OVERFLOW)."""
+
+    def __init__(self, message: str, code: int = 0xC000_0005) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass

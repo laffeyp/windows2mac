@@ -23,6 +23,13 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
                                   is zero-extended either way (SDM CMOVcc, 64-bit mode)
   alu ops (Sprint 041): shl sar rol ror (count masked as the SDM says), smul_lo smul_hi (signed
   product of `bits`-wide operands, low and high halves)
+  alu ops (Sprint 044): sext8 sext16 (sign-extend the low 8 or 16 bits), bswap (byte order, 32 or 64
+  bits), sbb (a - b - CF; reads CF, which must be defined); flags kinds sbb (SDM SBB) and bt (SDM BT:
+  CF the bit, OF SF AF PF undefined, ZF unchanged)
+  ("div", bits, t)                DIV r/m (unsigned): RDX:RAX (DX:AX, EDX:EAX; AX for 8 bits) by t; quotient
+                                  to RAX/EAX/AX/AL, remainder to RDX/EDX/DX/AH; every flag undefined;
+                                  a zero divisor faults STATUS_INTEGER_DIVIDE_BY_ZERO, a quotient too wide
+                                  STATUS_INTEGER_OVERFLOW (SDM DIV #DE; ntstatus.h), before any write
   ("sse", iclass, dst, src, align)  one legacy-SSE instruction (Sprint 039): dst and src are locs,
                                   ("x", index) for an XMM register; align 16 when a memory operand
                                   must be 16-byte aligned (#GP otherwise); the runtime computes it
@@ -176,7 +183,7 @@ def commit_order(ins: Lifted) -> str | None:
         return None
 
     def effect(op: Op) -> bool:
-        return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid") or (
+        return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid", "div") or (
             op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m")
 
     last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
@@ -201,7 +208,7 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID"):
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE"):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)

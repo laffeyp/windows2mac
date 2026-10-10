@@ -137,6 +137,24 @@ def sxtw(rd: int, rn: int) -> int:
     return 0x93407C00 | rn << 5 | rd
 
 
+def udiv(rd: int, rn: int, rm: int) -> int:
+    """UDIV Xd, Xn, Xm (Sprint 044, DIV): Xn / Xm unsigned; a zero divisor gives 0, no trap."""
+    _r(rd, rn, rm)
+    return 0x9AC00800 | rm << 16 | rn << 5 | rd
+
+
+def msub(rd: int, rn: int, rm: int, ra: int) -> int:
+    """MSUB Xd, Xn, Xm, Xa: Xa - Xn * Xm (the remainder after UDIV)."""
+    _r(rd, rn, rm, ra)
+    return 0x9B008000 | rm << 16 | ra << 10 | rn << 5 | rd
+
+
+def rev(rd: int, rn: int, bits: int = 64) -> int:
+    """REV Xd, Xn (or REV Wd, Wn for bits 32): byte order reversed (BSWAP)."""
+    _r(rd, rn)
+    return (0xDAC00C00 if bits == 64 else 0x5AC00800) | rn << 5 | rd
+
+
 def lsrv(rd: int, rn: int, rm: int) -> int:
     _r(rd, rn, rm)
     return 0x9AC02400 | rm << 16 | rn << 5 | rd
