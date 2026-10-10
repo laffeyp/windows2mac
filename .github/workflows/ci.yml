@@ -46,6 +46,12 @@ jobs:
           git -C substrate log --oneline -1
       - name: sync
         run: uv sync --all-extras
+      - name: case files (sets 039 and 041 are built here, not committed; 24 and 8 MB)
+        run: |
+          uv run python scripts/semantics_differential.py --cases --set 039 --out probes/semantics/cases.bin
+          uv run python scripts/semantics_differential.py --cases --set 041 --out probes/semantics_041/cases.bin
+          echo "$(cat store/probe-runs/38011862284/cases.sha256)  probes/semantics/cases.bin" | sha256sum -c -
+          echo "$(cat store/probe-runs/38029980267/cases.sha256)  probes/semantics_041/cases.bin" | sha256sum -c -
       - name: vocabulary
         run: |
           python3 scripts/check_vocab.py
