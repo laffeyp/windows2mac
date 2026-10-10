@@ -19,13 +19,17 @@ on:
         description: number of executions
         required: false
         default: "1"
+      runner:
+        description: runner image (Sprint 039 - the CPU behind an image is assigned per job, AMD or Intel)
+        required: false
+        default: windows-2025
 
 permissions:
   contents: read
 
 jobs:
   probe:
-    runs-on: windows-2025
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -67,7 +71,7 @@ jobs:
           if (Test-Path $cfg) { $mode = (Get-Content $cfg -Raw | ConvertFrom-Json).mode }
           $cv = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
           $v = [Environment]::OSVersion.Version
-          "gha-windows-2025-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
+          "gha-${{ inputs.runner }}-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
           (Get-CimInstance Win32_Processor | Select-Object -First 1).Name | Out-File -Encoding ascii -NoNewline out/cpu.txt
           for ($i = 1; $i -le [int]"${{ inputs.repeat }}"; $i++) {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()

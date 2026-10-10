@@ -185,16 +185,23 @@ class Env:
         n = _round_int(a / q, negative, self.rc)
         r = n * q
         inexact = r != a
+        # an unmasked overflow or underflow delivers no rounded result; Precision then reports
+        # whether rounding to the format's precision with an unbounded exponent was inexact
+        # (IEEE 754 trapped exceptions; MULSS and CVTSD2SS, run 38010775429)
+        wide_inexact = unbounded != a
         if r > f.max_finite:
-            self.flags |= OE | PE
             to_inf = self.rc == 0 or (self.rc == 1 and negative) or (self.rc == 2 and not negative)
+            self.flags |= OE | (PE if self.masks & OE or wide_inexact else 0)
             return sign | (f.emask << f.mbits if to_inf else (f.emask - 1) << f.mbits | f.mmask)
         if tiny:
             um = self.masks & UE
             if um and self.mxcsr & FTZ:
                 self.flags |= UE | PE
                 return sign
-            if inexact or not um:
+            if not um:
+                self.flags |= UE | (PE if wide_inexact else 0)
+                inexact = False
+            elif inexact:
                 self.flags |= UE
         if inexact:
             self.flags |= PE
@@ -207,9 +214,26 @@ class Env:
         return sign | (e2 + f.bias) << f.mbits | mant
 
     def check(self) -> None:
-        unmasked = self.flags & ~self.masks & 0x3F
-        if unmasked:
+        """Raise SimdFault for an unmasked exception. An unmasked pre-computation exception (IE,
+        DE, ZE) stops the instruction before any result is computed, so only those flags reach
+        MXCSR; otherwise every flag does (observed on AMD EPYC 7763, run 38010775429)."""
+        pre = self.flags & (IE | DE | ZE)
+        if pre & ~self.masks:
+            raise SimdFault(pre)
+        if self.flags & ~self.masks & 0x3F:
             raise SimdFault(self.flags)
+
+
+# The Windows exception code a #XM is delivered with: the first unmasked flag of MXCSR after the
+# fault, in this order, picks it; Denormal is reported as an invalid operation (ntstatus.h codes;
+# order and DE's code observed on windows-2025, run 38010775429, 1,056 #XM faults).
+XM_STATUS = ((IE, 0xC000_0090), (ZE, 0xC000_008E), (DE, 0xC000_0090), (OE, 0xC000_0091),
+             (UE, 0xC000_0093), (PE, 0xC000_008F))
+
+
+def xm_status(mxcsr: int) -> int:
+    unmasked = mxcsr & ~(mxcsr >> MASK_SHIFT) & 0x3F
+    return next(code for flag, code in XM_STATUS if unmasked & flag)
 
 
 def _quiet(f: Fmt, x: int) -> int:

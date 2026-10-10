@@ -131,7 +131,7 @@
     "date": "2026-10-07",
     "by": "agent-resolved",
     "into": "0.2",
-    "grounds": "project — v0.2 sections 8.2, 13; SDD — PRINCIPLES.md proposal taxonomy (PAYLOAD_FIELD_PROPOSED), 0.1 Layer 10 override (enum addition bumps the minor version); practice — n/a"
+    "grounds": "project \u2014 v0.2 sections 8.2, 13; SDD \u2014 PRINCIPLES.md proposal taxonomy (PAYLOAD_FIELD_PROPOSED), 0.1 Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
    }
   },
   {
@@ -148,7 +148,7 @@
     "date": "2026-10-08",
     "by": "agent-resolved",
     "into": "0.3",
-    "grounds": "project — v0.2 section 8; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (enum addition bumps the minor version); practice — n/a"
+    "grounds": "project \u2014 v0.2 section 8; SDD \u2014 PRINCIPLES.md proposal taxonomy, Layer 10 override (enum addition bumps the minor version); practice \u2014 n/a"
    }
   },
   {
@@ -165,7 +165,7 @@
     "date": "2026-10-08",
     "by": "agent-resolved",
     "into": "0.4",
-    "grounds": "project — user decision 2026-10-08 ('cost' refers to money only); SDD — PRINCIPLES.md proposal taxonomy; practice — n/a. BACKEND_EVALUATED has never fired, so no record is invalidated."
+    "grounds": "project \u2014 user decision 2026-10-08 ('cost' refers to money only); SDD \u2014 PRINCIPLES.md proposal taxonomy; practice \u2014 n/a. BACKEND_EVALUATED has never fired, so no record is invalidated."
    }
   },
   {
@@ -175,14 +175,14 @@
    "candidate": [
     "capability_outcome gains not_established"
    ],
-   "source": "project review 2026-10-08 §4.5, §4.6; v0.2 8.1",
+   "source": "project review 2026-10-08 \u00a74.5, \u00a74.6; v0.2 8.1",
    "rationale": "0.3 offers present, absent, error. A probe that cannot decide (an SDK header search for native TSO; a litmus run whose control shows no effect) had no honest value and recorded absent or present.",
    "status": "ratified",
    "ratified": {
     "date": "2026-10-08",
     "by": "agent-resolved",
     "into": "0.4",
-    "grounds": "project — review 2026-10-08 §4.6; v0.2 8.1; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice — TECHNIQUES.md #47 (do not fake-emit)"
+    "grounds": "project \u2014 review 2026-10-08 \u00a74.6; v0.2 8.1; SDD \u2014 PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice \u2014 TECHNIQUES.md #47 (do not fake-emit)"
    }
   },
   {
@@ -194,14 +194,14 @@
     "EXECUTION_COMPLETED.exit_code, elapsed_seconds -> optional",
     "both tags gain optional unobserved (text)"
    ],
-   "source": "project review 2026-10-08 §4.7; Sprint 007 Rubber Duck observation 3",
+   "source": "project review 2026-10-08 \u00a74.7; Sprint 007 Rubber Duck observation 3",
    "rationale": "Runner executions are imported after the fact; the harness neither set a timeout nor timed them. 0.3 required the fields, so the importer wrote 600.0, 0.0, and exit_code 0 as constants.",
    "status": "ratified",
    "ratified": {
     "date": "2026-10-08",
     "by": "agent-resolved",
     "into": "0.4",
-    "grounds": "project — review 2026-10-08 §4.7; v0.2 3.1, 14; SDD — PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice — TECHNIQUES.md #47 (substrate-gap-honest events)"
+    "grounds": "project \u2014 review 2026-10-08 \u00a74.7; v0.2 3.1, 14; SDD \u2014 PRINCIPLES.md proposal taxonomy, Layer 10 override (field changes bump the minor version); practice \u2014 TECHNIQUES.md #47 (substrate-gap-honest events)"
    }
   },
   {
@@ -211,14 +211,14 @@
    "candidate": [
     "GUEST_THREAD_STATE_OBSERVED (thread_id, thread_seq, hb_refs, subject_thread_id, thread_state, wait_reason, source)"
    ],
-   "source": "user decision 2026-10-08 ('dont defer! lets do it'); project review 2026-10-08 §4.7; contract windows.event.auto_reset.single_signal open question 4",
+   "source": "user decision 2026-10-08 ('dont defer! lets do it'); project review 2026-10-08 \u00a74.7; contract windows.event.auto_reset.single_signal open question 4",
    "rationale": "The event contract's precondition (both waiters pending at SetEvent) rested on Sleep(200). No guest tag could record one thread observing another's scheduler state, so the precondition could not be witnessed in a trace.",
    "status": "ratified",
    "ratified": {
     "date": "2026-10-08",
     "by": "agent-resolved",
     "into": "0.5",
-    "grounds": "project — v0.2 §3 (a schedule must be witnessed, not assumed), §11.1 (observed evidence); SDD — PRINCIPLES.md proposal taxonomy (new tag bumps the minor version); practice — Microsoft Learn NtQuerySystemInformation, .NET ThreadState and ThreadWaitReason (retrieved 2026-10-08)"
+    "grounds": "project \u2014 v0.2 \u00a73 (a schedule must be witnessed, not assumed), \u00a711.1 (observed evidence); SDD \u2014 PRINCIPLES.md proposal taxonomy (new tag bumps the minor version); practice \u2014 Microsoft Learn NtQuerySystemInformation, .NET ThreadState and ThreadWaitReason (retrieved 2026-10-08)"
    }
   },
   {
@@ -228,14 +228,14 @@
    "candidate": [
     "SERVICE_UNIMPLEMENTED (execution_id, service, guest_address, instructions_executed)"
    ],
-   "source": "roadmap docs/plan.md Sprint 038; review docs/review-2026-10-09-progress.md §6.3 (the frontier as signals)",
+   "source": "roadmap docs/plan.md Sprint 038; review docs/review-2026-10-09-progress.md \u00a76.3 (the frontier as signals)",
    "rationale": "The frontier stops when the game calls a Windows service w2m lacks. EXECUTION_FAILED means the harness obtained no execution; EXECUTION_COMPLETED needs a trace and an exit status; BRIDGE_CALL_UNMAPPED is for Steam interface methods (v0.2 4.2). The roadmap and the review had planned to misuse the last; no tag fit.",
    "status": "ratified",
    "ratified": {
     "date": "2026-10-09",
     "by": "agent-resolved",
     "into": "0.6",
-    "grounds": "project — v0.2 §7 (the contract inventory follows the application's required behavior), §11.4; SDD — PRINCIPLES.md proposal taxonomy (a new tag bumps the minor version)"
+    "grounds": "project \u2014 v0.2 \u00a77 (the contract inventory follows the application's required behavior), \u00a711.4; SDD \u2014 PRINCIPLES.md proposal taxonomy (a new tag bumps the minor version)"
    }
   },
   {
@@ -252,7 +252,24 @@
     "date": "2026-10-09",
     "by": "agent-resolved",
     "into": "0.6",
-    "grounds": "project — v0.2 §4.1; SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version)"
+    "grounds": "project \u2014 v0.2 \u00a74.1; SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version)"
+   }
+  },
+  {
+   "id": "P17",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "capability += guest_fp_alternate_handling, guest_fp_minmax_x86, guest_fp_nan_x86, guest_fp_tininess_x86, guest_fp_denormal_x86, guest_fp_to_int_x86"
+   ],
+   "source": "sprints/sprint-039-fp-and-fault-oracle.md item 8; review docs/review-2026-10-09-progress.md N4 (SSE vs AArch64 floating point)",
+   "rationale": "probes/mac_hv_fp/hv_fp.c measures, in a Hypervisor.framework guest, whether FEAT_AFP is present and FPCR.AH settable, and whether AArch64 with AH=1 gives x86's answer for MIN/MAX, NaN results, tininess, denormal inputs and float-to-integer overflow. The capability enum named page, TSO and Metal properties only, so CAPABILITY_PROBED could not state these.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-09",
+    "by": "agent-resolved",
+    "into": "0.7",
+    "grounds": "project \u2014 v0.2 \u00a78.1 (destination capabilities are probed, not assumed); SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version)"
    }
   }
  ]

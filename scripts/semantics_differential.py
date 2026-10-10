@@ -76,9 +76,9 @@ CASE_SIZE_1 = 8 + CODE_BYTES + 8 * 16 + 8 + WINDOW + WINDOW
 RESULT_SIZE_1 = 8 * 16 + 8 + 8 + 8 + WINDOW + WINDOW
 EDGE_VALUES = (0, 1, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, 0x7FFF_FFFF, 0x8000_0000, 0xFFFF_FFFF,
                0x7FFF_FFFF_FFFF_FFFF, 0x8000_0000_0000_0000, M64)
-# Windows exception codes (ntstatus.h): an access violation, which Windows also reports for #GP on
-# a misaligned SSE operand; and STATUS_FLOAT_MULTIPLE_TRAPS for #XM
-ACCESS_VIOLATION, FLOAT_MULTIPLE_TRAPS = 0xC000_0005, 0xC000_02B5
+# Windows reports a page fault, and #GP on a misaligned SSE operand, as an access violation
+# (ntstatus.h); #XM as the STATUS_FLOAT_* code x86fp.xm_status picks
+ACCESS_VIOLATION = 0xC000_0005
 F32_EDGES = (0, 0x8000_0000, 1, 0x007F_FFFF, 0x0080_0000, 0x0080_0001, 0x7F7F_FFFF, 0xFF7F_FFFF,
              0x7F80_0000, 0xFF80_0000, 0x7FC0_0000, 0xFFC0_0000, 0x7F80_0001, 0x7FA0_0000, 0xFFC1_2345,
              0x3F80_0000, 0xBF80_0000, 0x3F00_0000, 0x3FC0_0000, 0x4020_0000, 0xBFC0_0000, 0x3F7F_FFFE,
@@ -374,7 +374,7 @@ def model(c: Case) -> ModelRun | str:
     except GuestFault as e:
         return ModelRun(rt, ACCESS_VIOLATION, str(e))
     except fp.SimdFault as e:
-        return ModelRun(rt, FLOAT_MULTIPLE_TRAPS, str(e))
+        return ModelRun(rt, fp.xm_status(th.mxcsr), str(e))
     except Exception as e:                                       # the model's stop is a result
         return f"{type(e).__name__}: {e}"
     return ModelRun(rt, 0, "")

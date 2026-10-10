@@ -6,4 +6,4 @@ named by signals/current.json; its version is pinned here so every emitted SESSI
 trace can assert it.
 """
 
-VOCAB_VERSION = "0.6"
+VOCAB_VERSION = "0.7"

@@ -228,8 +228,12 @@ class Runtime:
             raise
 
     def _fp_check(self, env: fp.Env) -> None:
+        try:
+            env.check()
+        except fp.SimdFault as e:
+            self.th.mxcsr |= e.flags                          # the flags the fault reports
+            raise
         self.th.mxcsr |= env.flags
-        env.check()
 
     # execution -------------------------------------------------------------------------------
     def _exec(self, ins: Lifted) -> None:
