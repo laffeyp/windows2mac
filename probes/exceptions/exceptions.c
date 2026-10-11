@@ -10,7 +10,7 @@
  *
  * Rows, each written as it ends: a thread-naming RaiseException taken by __except; CONTINUE_EXECUTION; the search
  * order through two frames with a __finally between; a noncontinuable exception continued; a vectored handler
- * before the frames; a raise three calls deep through a frame pointer, a large allocation and saved XMM registers,
+ * before the frames; a raise three calls deep through a frame pointer (a realigned frame), a large allocation and saved XMM registers,
  * each frame's __finally reading its own local; access violations; the Rtl* queries on the probe's own code; last,
  * an exception no frame takes, which reaches the top-level filter.
  */
@@ -19,6 +19,8 @@
 #define SENTINEL 0xDEADu
 #define CODE 0xE0577053u
 #define THREAD_NAMING 0x406D1388u
+
+int _fltused;                                            /* the linker's mark of floating point, as a C runtime defines */
 
 static char out[4096];
 static unsigned n;
@@ -246,7 +248,9 @@ __declspec(noinline) static int level_big(int k) {
 }
 
 __declspec(noinline) static int level_fp(int k) {
-    volatile char *p = __builtin_alloca((unsigned)k * 16);   /* a variable allocation: a frame pointer */
+    _Alignas(64) volatile char p[64];                    /* realigned: a frame pointer (a variable alloca would
+                                                            call __chkstk, which a program without the C runtime
+                                                            lacks) */
     p[0] = (char)k;
     int local = 11;
     __try {
