@@ -21,7 +21,7 @@ BINARIES = sorted((ROOT / "store" / "binaries").glob("*.exe"))
 PROBE_DLLS = {json.loads(p.read_text())["dll"]["name"] + ".dll" for p in (ROOT / "probes").glob("*/probe.json")
               if "dll" in json.loads(p.read_text())}
 # system DLLs a family probes (command_line_args, generate_random; known_folders; integrity_level)
-SYSTEM_DLLS = {"SHELL32.dll", "bcrypt.dll", "ole32.dll", "ADVAPI32.dll"}
+SYSTEM_DLLS = {"SHELL32.dll", "bcrypt.dll", "ole32.dll", "ADVAPI32.dll", "OLEAUT32.dll"}
 OBJDUMP = shutil.which("llvm-objdump") or (
     subprocess.run(["xcrun", "--find", "llvm-objdump"], capture_output=True, text=True).stdout.strip()
     if shutil.which("xcrun") else "")
@@ -40,6 +40,9 @@ def objdump_imports(path: Path) -> dict[str, set[str]]:
         m = re.match(r"\s+\d+\s+(\S+)$", line)
         if dll and m:
             imports[dll].add(m.group(1))
+        m = re.match(r"\s+(\d+)$", line)              # an import by ordinal: the number alone (Sprint 052)
+        if dll and m:
+            imports[dll].add(f"#{m.group(1)}")
         if line.strip().startswith("lookup "):
             dll = None
     return imports

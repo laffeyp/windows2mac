@@ -1792,6 +1792,39 @@ FAMILIES: dict[str, Family] = {
             "exited_suspend_error": Plant("        set_error(ERROR_ACCESS_DENIED);\n        return w2m_logged(W2M_API_SuspendThread",
                                           "        set_error(6);\n        return w2m_logged(W2M_API_SuspendThread",
                                           ("suspend.exited",))}),
+    "com": Family(
+        name="com",
+        contract_id="windows.com.com",
+        version="0.1.0",
+        summary=("COM as the game uses it (specs/work_list.json): apartments per thread (S_OK, S_FALSE, "
+                 "RPC_E_CHANGED_MODE; the process's multithreaded apartment serves a thread without one; "
+                 "CO_E_NOTINITIALIZED with none); CoCreateInstance of the audio device enumerator, one object COM keeps "
+                 "a reference to, REGDB_E_CLASSNOTREG for an unknown class, E_NOINTERFACE for an interface it lacks, "
+                 "E_INVALIDARG for a NULL out pointer; no audio endpoint on the runners (empty collections, "
+                 "GetDefaultAudioEndpoint E_NOTFOUND); notification clients registered without AddRef; "
+                 "PropVariantClear, CoCreateGuid (version 4, variant 10), BSTRs and VariantClear."),
+        probe="com", guest_file="com.c",
+        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/runtime.h"),
+        runs={
+              "38126872187": Run("windows-2025", "da7ca465e5f2b4e226c8f49a2d20f159c20e88b37d89e449dacf621fab691f09", "com-1791709273-0", "AMD EPYC 7763 64-Core Processor"),
+              "38126873913": Run("windows-2022", "a6e5f68b6d7b952199acac0418054346609592ff7cd382c32d6608d6d9e8c229", "com-1791709273-1", "AMD EPYC 9V45 96-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "The runners have no audio endpoint, and w2m answers as they do: the game's audio code sees no device. "
+            "An endpoint backed by the Mac's output is later work (sound), with rows from a machine that has one.",
+            "UnityPlayer's first CoInitialize answers S_FALSE in the capture (the main thread already in an "
+            "apartment by then, from a call the capture does not show); w2m answers S_OK.",
+            "GetDevice, an endpoint collection's Item, aggregation, other class contexts and other VARIANT types "
+            "are not in the rows and stop the run."),
+        plants={
+            "enumerator_count_reset": Plant("    if (!enumerator.vtable) {", "    if (1) {", ("refcount",)),
+            "default_endpoint_found": Plant("    return w2m_logged(W2M_API_W2mEnumeratorGetDefaultAudioEndpoint, flow, E_NOTFOUND);",
+                                            "    return w2m_logged(W2M_API_W2mEnumeratorGetDefaultAudioEndpoint, flow, 0x80004005u);",
+                                            ("default.render_console", "default.render_multimedia", "default.capture_console")),
+            "guid_version_1": Plant("    g[7] = (u8)((g[7] & 0x0F) | 0x40);", "    g[7] = (u8)((g[7] & 0x0F) | 0x10);", ("guid",)),
+            "implicit_mta_refused": Plant("    if (!w2m_thread_scratch()->com_inits && !process_mta)",
+                                          "    if (!w2m_thread_scratch()->com_inits)", ("create.implicit_mta",))}),
 }
 
 
