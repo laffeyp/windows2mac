@@ -50,10 +50,10 @@ static MEMORY_BASIC_INFORMATION query(const char *name, ULONG_PTR at, ULONG_PTR 
 
 void start(void) {
     heap = (ULONG_PTR)GetProcessHeap();
-    BYTE *small = HeapAlloc(GetProcessHeap(), 0, 64);
+    BYTE *block64 = HeapAlloc(GetProcessHeap(), 0, 64);
     BYTE *big = HeapAlloc(GetProcessHeap(), 0, 1 << 20);
-    row("blocks"); field("small_above_heap", (ULONG_PTR)small > heap); field("big_non_null", big != NULL); end();
-    MEMORY_BASIC_INFORMATION m = query("query.small", (ULONG_PTR)small, (ULONG_PTR)small);
+    row("blocks"); field("small_above_heap", (ULONG_PTR)block64 > heap); field("big_non_null", big != NULL); end();
+    MEMORY_BASIC_INFORMATION m = query("query.small", (ULONG_PTR)block64, (ULONG_PTR)block64);
     query("query.heap", heap, heap);
     query("query.big", (ULONG_PTR)big, (ULONG_PTR)big);
     ULONG_PTR after = (ULONG_PTR)m.BaseAddress + m.RegionSize;
