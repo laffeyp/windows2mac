@@ -140,7 +140,7 @@ void start(void) {
         d.size = sizeof d;
         HRESULT hr = get(&d);
         row("dll_get_version.info"); field("hr", (DWORD)hr); field("size", d.size); field("major", d.major);
-        field("minor", d.minor); build_relations(d.build); field("platform", d.platform); end();
+        field("minor", d.minor); build_relations(d.build); field("build", d.build); field("platform", d.platform); end();
         dll_version2 d2;
         zero(&d2, sizeof d2);
         d2.info.size = sizeof d2;
@@ -148,7 +148,8 @@ void start(void) {
         row("dll_get_version.info2"); field("hr", (DWORD)hr); field("major", d2.info.major); field("minor", d2.info.minor);
         build_relations(d2.info.build); field("platform", d2.info.platform); field("flags", d2.flags);
         field("version_major", d2.version >> 48); field("version_minor", d2.version >> 32 & 0xFFFF);
-        flag("version_build_is_info_build", (d2.version >> 16 & 0xFFFF) == d2.info.build); end();
+        flag("version_build_is_info_build", (d2.version >> 16 & 0xFFFF) == d2.info.build);
+        field("version_low", d2.version & 0xFFFF); end();
         dll_version bad;
         zero(&bad, sizeof bad);
         bad.size = 12;

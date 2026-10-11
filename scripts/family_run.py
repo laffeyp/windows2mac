@@ -1847,6 +1847,62 @@ FAMILIES: dict[str, Family] = {
             "tick_64_high_set": Plant("    return w2m_logged(W2M_API_GetTickCount64, 0, w2m_counter_now() / 10000);",
                                       "    return w2m_logged(W2M_API_GetTickCount64, 0, w2m_counter_now() / 10000 + (1ull << 32));",
                                       ("tick_count_64.against_tick_count",))}),
+    "registry": Family(
+        name="registry",
+        contract_id="windows.registry.registry",
+        version="0.1.0",
+        summary=("RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software "
+                 "that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a "
+                 "NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; "
+                 "a key closes once; the last error is left."),
+        probe="registry", guest_file="registry.c", host_files=("src/w2m/vm_backend.py",),
+        runs={
+              "38173241012": Run("windows-2025", "77693426a875153bdbf03f4930875bdb62c3e6b382aa02a4160415cad9c14cd5", "registry-1791751265-0", "Intel(R) Xeon(R) 6973P-C"),
+              "38173242936": Run("windows-2022", "18132de8c453d0f2b319cef8e53346b35e086dba9602e6cc468607eb7ea923f5", "registry-1791751265-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
+        documented=(),
+        open_questions=("w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not "
+                        "exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run.",),
+        plants={
+            "missing_untouched": Plant("    if (!exists(path)) {\n        *(u64 *)result = 0;", "    if (!exists(path)) {",
+                                       ("open.missing", "open.missing_two_levels", "open.missing_case",
+                                        "open.missing_below_software_handle")),
+            "case_kept": Plant("return c >= 'A' && c <= 'Z' ? (char)(c + 32) : (char)c;", "return (char)c;",
+                               ("open.software", "open.software_case", "open.missing_below_software_handle",
+                                "close.software", "close.software_case", "close.software_again")),
+            "close_twice_succeeds": Plant("    keys[(h - KEY_BASE) / 4].open = 0;", "", ("close.software_again",)),
+            "root_new_handle": Plant("        *(u64 *)result = root;\n", "        *(u64 *)result = KEY_BASE + 0x100;\n",
+                                     ("open.root_null_subkey", "open.root_empty_subkey", "close.root_null_subkey",
+                                      "close.root_empty_subkey"))}),
+    "file_search": Family(
+        name="file_search",
+        contract_id="windows.file.file_search",
+        version="0.1.0",
+        summary=("FindFirstFileExW in UnityPlayer's form (FindExInfoBasic, name match, no filter or flags), FindNextFileW "
+                 "and FindClose: a folder's entries \".\" and \"..\" first, then by name without case; attributes 0x10 with "
+                 "size 0 for a folder, 0x20 and the size for a file; times as GetFileAttributesExW's; no short name; * and ? "
+                 "without case; a plain name found as stored; ERROR_NO_MORE_FILES at the end; ERROR_PATH_NOT_FOUND for a "
+                 "missing folder, ERROR_FILE_NOT_FOUND for no match; FindClose of INVALID_HANDLE_VALUE ERROR_INVALID_HANDLE."),
+        probe="file_search", guest_file="file_search.c",
+        host_files=("src/w2m/vm_backend.py", "src/w2m/file_bridge.py", "tools/guest_runtime/file.c", "tools/guest_runtime/paths.c"),
+        runs={
+              "38173241103": Run("windows-2025", "8ab37a462d1a658a2e983372c45fde028a1dfae3ed7b321a0fb744ba3dce704e", "file_search-1791751265-0", "AMD EPYC 7763 64-Core Processor"),
+              "38173242874": Run("windows-2022", "298c4f783acb7f1bd199f95118728cc8465837fa3130ea0692d645a05339b2f8", "file_search-1791751265-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("FindExInfoStandard (short names), other search operations, flags, filters, the DOS wildcards and "
+                        "\"*.*\" are not in the rows and stop the run.",),
+        plants={
+            "order_with_case": Plant("    return upper(*a) < upper(*b);", "    return *a < *b;", ("all.next1", "all.next2", "all.next3")),
+            "folder_size_4096": Plant("    if (kind != 2) { *(u32 *)(d + 28)", "    if (1) { *(u32 *)(d + 28)",
+                                      ("all", "all.next0", "all.next3", "folder_itself")),
+            "case_matters": Plant("upper(*p) == upper(*s)", "*p == *s",
+                                  ("exact_other_case", "exact_other_case.next0", "exact_other_case.close")),
+            "end_error_left": Plant("        set_error(ERROR_NO_MORE_FILES);\n", "",
+                                    ("all.next4", "pattern_txt.next0", "pattern_question.next0", "exact.next0",
+                                     "exact_other_case.next0", "folder_itself.next0")),
+            "missing_folder_as_file": Plant("        set_error(ERROR_PATH_NOT_FOUND);", "        set_error(ERROR_FILE_NOT_FOUND);",
+                                            ("missing_folder",))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",

@@ -367,6 +367,26 @@
    "38120626017": "conforms"
   }
  },
+ "file_search": {
+  "candidate_sha256": "sha256:eb1bf6a9c21cb8e872cabc72dc1a86d6ba443105b7dff12fa2687429c349d022",
+  "divergence": {
+   "38173241103": null,
+   "38173242874": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "file_search",
+  "record": "store/runs/family-file_search-1791751580438246000",
+  "verdicts": {
+   "38173241103": "conforms",
+   "38173242874": "conforms"
+  }
+ },
  "file_security": {
   "candidate_sha256": "sha256:b4a7d6123faee78440341e4868f28b3aa60e0905d1b63db3438e46a4f6b1f7f6",
   "divergence": {
@@ -831,6 +851,26 @@
    "38086763271": "conforms",
    "38086765021": "conforms",
    "38086767249": "conforms"
+  }
+ },
+ "registry": {
+  "candidate_sha256": "sha256:2ffa7e02b2da6da7d287fad4fa52420f6261feb438c81dc8e090734a2abd923d",
+  "divergence": {
+   "38173241012": null,
+   "38173242936": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "registry",
+  "record": "store/runs/family-registry-1791751431202765000",
+  "verdicts": {
+   "38173241012": "conforms",
+   "38173242936": "conforms"
   }
  },
  "slim_locks": {

@@ -25,6 +25,9 @@ guest's working directory:
                                            one, so its views outlive the file's handle)
     FILE_MKDIR   (path, chars)          -> 0, or -errno (Sprint 048)
     FILE_RMDIR   (path, chars)          -> 0, or -errno (Sprint 048)
+    FILE_LIST    (path, chars, out, size)-> bytes the directory's names take, each UTF-16 with a NUL, then one more NUL,
+                                           written at out when they fit in size; arg[5] the kind as FILE_LOOKUP (Sprint
+                                           054: FindFirstFileExW; the guest matches, sorts and adds "." and "..")
 
 Paths arrive as UTF-16LE as the guest normalized them: full paths ("C:\\w2m\\app\\a.txt", tools/guest_runtime/paths.c)
 or, as before Sprint 048, names relative to the working directory. Drive C: is a host directory per run holding
@@ -46,6 +49,7 @@ from typing import Protocol
 
 FILE_LOOKUP, FILE_OPEN, FILE_CLOSE, FILE_READ, FILE_WRITE, FILE_SIZE, FILE_TRUNCATE, FILE_UNLINK = range(6, 14)
 FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP = 24, 25, 26, 27, 28   # after the host requests 14-23
+FILE_LIST = 32                                                              # after the host requests 29-31
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
 # C:\Users\w2m and the AppData folders SHGetKnownFolderPath names, each an existing directory on Windows
@@ -184,6 +188,14 @@ class FileBridge:
                 times = [t // 100 + FILETIME_UNIX_EPOCH for t in (birth_ns(path, st), st.st_atime_ns, st.st_mtime_ns)]
                 mem.write(arg[2], b"".join(v.to_bytes(8, "little") for v in [st.st_size, *times]))
             return kind, 0
+        if op == FILE_LIST:
+            kind, path = self._resolve(self._path(mem, arg[0], arg[1]))
+            if kind != IS_DIRECTORY:
+                return 0, kind
+            names = b"".join(e.encode("utf-16-le") + b"\0\0" for e in sorted(os.listdir(path))) + b"\0\0"
+            if len(names) <= arg[3]:
+                mem.write(arg[2], names)
+            return len(names), kind
         if op in (FILE_MKDIR, FILE_RMDIR):
             kind, path = self._resolve(self._path(mem, arg[0], arg[1]))
             if kind == PARENT_MISSING:          # _resolve's path is then the first missing component, not the name

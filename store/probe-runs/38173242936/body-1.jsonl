@@ -1,0 +1,16 @@
+{"s":"open.missing","ret":2,"err":57005,"result_null":true,"result_untouched":false,"result_is_root":false}
+{"s":"open.missing_two_levels","ret":2,"err":57005,"result_null":true,"result_untouched":false,"result_is_root":false}
+{"s":"open.missing_case","ret":2,"err":57005,"result_null":true,"result_untouched":false,"result_is_root":false}
+{"s":"open.software","ret":0,"err":57005,"result_null":false,"result_untouched":false,"result_is_root":false}
+{"s":"open.software_case","ret":0,"err":57005,"result_null":false,"result_untouched":false,"result_is_root":false}
+{"s":"open.missing_below_software_handle","ret":2,"err":57005,"result_null":true,"result_untouched":false,"result_is_root":false}
+{"s":"open.root_null_subkey","ret":0,"err":57005,"result_null":false,"result_untouched":false,"result_is_root":true}
+{"s":"open.root_empty_subkey","ret":0,"err":57005,"result_null":false,"result_untouched":false,"result_is_root":true}
+{"s":"open.not_a_key","ret":6,"err":57005,"result_null":true,"result_untouched":false,"result_is_root":false}
+{"s":"close.software","ret":0,"err":57005}
+{"s":"close.software_case","ret":0,"err":57005}
+{"s":"close.software_again","ret":6,"err":57005}
+{"s":"close.root_null_subkey","ret":0,"err":57005}
+{"s":"close.root_empty_subkey","ret":0,"err":57005}
+{"s":"close.not_a_key","ret":6,"err":57005}
+{"s":"close.null","ret":6,"err":57005}

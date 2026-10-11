@@ -248,7 +248,8 @@ enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FI
        W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR,      /* 24: Sprint 047; 25, 26: 048 */
        W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW,                                           /* 27-29: Sprint 049 */
        W2M_HOST_THREAD,                                                                           /* 30: Sprint 051 */
-       W2M_HOST_EXCEPTION };                                                                      /* 31: Sprint 053 */
+       W2M_HOST_EXCEPTION,                                                                        /* 31: Sprint 053 */
+       W2M_FILE_LIST };                                                                           /* 32: Sprint 054 */
 
 /* W2M_HOST_EXCEPTION's first argument (exceptions.c): the x86 stubs' page; XMM0-15 copied to a CONTEXT's. */
 enum { W2M_EXCEPTION_STUBS = 1, W2M_EXCEPTION_CAPTURE_XMM };
