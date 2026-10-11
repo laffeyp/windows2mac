@@ -1529,6 +1529,38 @@ FAMILIES: dict[str, Family] = {
             "semaphore_leaves_error": Plant("    u64 h = handle_for(api, new_object(api, kind, count, max));\n    set_error(0);",
                                             "    u64 h = handle_for(api, new_object(api, kind, count, max));",
                                             ("semaphore.zero", "semaphore.one"))}),
+    "heap_query": Family(
+        name="heap_query",
+        contract_id="windows.memory.heap_query",
+        version="0.1.0",
+        summary=("The process heap as mono's collector queries it: a block's region belongs to one MEM_PRIVATE "
+                 "reservation whose base is the heap's handle (64 KB aligned), allocation protection read-write; "
+                 "committed read-write where blocks lie, reserved after; BaseAddress is the queried page; the last "
+                 "error is left."),
+        probe="heap_query", guest_file="heap.c", host_files=("src/w2m/virtual_memory.py",),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("query.small", "query.after_small_region")
+                                         and k == "allocation_base_below_block")}
+                                for r in printed],
+        runs={
+              "38115120174": Run("windows-2025", "5b2e6d18b8335848996effd91796cf03bc4e055ddc6e740f0d696a4c2f05b871", "heap_query-1791696755-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38115121838": Run("windows-2022", "90374fedfe0602d20ca0cab4e4cab1bb5ef0da0dea4e6ff7ebb0087b957cdde9", "heap_query-1791696755-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "Whether a 64-byte block lies within 64 KB of the heap's base depends on where Windows put it (it differs "
+            "between a run's two executions); the derive drops that relation for query.small and "
+            "query.after_small_region.",
+            "Excluded rows: see sections.excluded."),
+        excluded={"query.big": "Windows gives a 1 MB block an allocation of its own (allocation_base_is_heap 0); "
+                               "w2m's heap.c serves every size from its one reservation. The threshold is not probed; "
+                               "the allocator that replaces heap.c (review F5) takes it up"},
+        plants={
+            "all_committed": Plant("        committed = _up(max(used, base + PAGE), PAGE)",
+                                   "        committed = base + size", ("query.after_small_region",), host="w2m.virtual_memory"),
+            "base_is_page": Plant("            return Info(page, base, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)",
+                                  "            return Info(page, page, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)",
+                                  ("query.small",), host="w2m.virtual_memory")}),
 }
 
 

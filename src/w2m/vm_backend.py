@@ -976,6 +976,7 @@ class VM:
                                      ([(loaded.image.image_base, loaded.image)] if loaded.image is not None else []),
                                      read=lambda va, n: bytes(self.mem.read(va, n)))
         self.virtual.stack = self._stack
+        self.virtual.heap = (HEAP_VA, HEAP_SIZE)
         self.virtual.snapshot()
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
 

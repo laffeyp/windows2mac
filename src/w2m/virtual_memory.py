@@ -80,6 +80,8 @@ class VirtualMemory:
     reservations: dict[int, Reservation] = field(default_factory=dict)
     image_protect: dict[int, int] = field(default_factory=dict)       # page VA -> a protection VirtualProtect set
     stack: tuple[int, int, int] | None = None    # the main thread's (DeallocationStack, StackLimit, StackBase)
+    heap: tuple[int, int] | None = None          # the process heap's reservation (base, size); heap.c keeps its high
+                                                 # water mark at base + 8
 
     # ---- lookups -------------------------------------------------------------------------------------
     def _reservation(self, va: int) -> Reservation | None:
@@ -211,6 +213,8 @@ class VirtualMemory:
         page = _down(address, PAGE)
         if self.stack is not None and self.stack[0] <= address < self.stack[2]:
             return self._stack_query(page)
+        if self.heap is not None and self.heap[0] <= address < self.heap[0] + self.heap[1]:
+            return self._heap_query(page)
         r = self._reservation(address)
         if r is not None:
             i = (page - r.base) // PAGE
@@ -254,6 +258,18 @@ class VirtualMemory:
                 start = base + s.virtual_address
                 for va in range(start, start + _up(max(s.virtual_size, 1), PAGE), PAGE):
                     self.pristine[va] = self.read(va, PAGE)
+
+    def _heap_query(self, page: int) -> Info:
+        """The process heap as contracts/windows.memory.heap_query records it (Sprint 049): one MEM_PRIVATE
+        reservation whose base is the heap's handle, read-write, committed up to the pages heap.c has used and
+        reserved after; BaseAddress is the queried page."""
+        assert self.read is not None and self.heap is not None
+        base, size = self.heap
+        used = int.from_bytes(self.read(base + 8, 8), "little") or base + PAGE      # heap.c's `next`
+        committed = _up(max(used, base + PAGE), PAGE)
+        if page < committed:
+            return Info(page, base, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)
+        return Info(page, base, PAGE_READWRITE, base + size - page, MEM_RESERVE, 0, MEM_PRIVATE)
 
     def _stack_query(self, page: int) -> Info:
         """The thread's stack as contracts/windows.memory.thread_stack records it (Sprint 049): one MEM_PRIVATE

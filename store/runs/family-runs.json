@@ -399,6 +399,26 @@
    "38041160693": "conforms"
   }
  },
+ "heap_query": {
+  "candidate_sha256": "sha256:886cfbf29a2b23190cd8ae71a67bf6b2c50b24f0a5baae343cd5a7f14195a927",
+  "divergence": {
+   "38115120174": null,
+   "38115121838": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "heap_query",
+  "record": "store/runs/family-heap_query-1791696847237628000",
+  "verdicts": {
+   "38115120174": "conforms",
+   "38115121838": "conforms"
+  }
+ },
  "integrity_level": {
   "candidate_sha256": "sha256:8bab81df409e76deb7da1393081f6922a0d4b788b033af93c6bc0e29231ec4c8",
   "divergence": {
