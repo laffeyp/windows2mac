@@ -329,3 +329,20 @@
 **Finding (#36):** a value carried from the host to the guest must keep the guest's resolution end to end; a relation the guest documents (creation no later than access) breaks when one side is rounded.
 
 **Kit change suggested:** for each host value a contract compares, name its host resolution beside the guest's.
+
+### 2026-10-10 — Sprint 048: a probe's own fault read as Windows's
+
+**What happened:** the temp-path probe died with 0xC0000005 before printing a row. Writing each row as it ended showed the last row before the fault, `clear`, and a commit blamed GetEnvironmentStringsW on an emptied environment and changed the probe around that guess. The fault stayed. The cause was the probe's: it deleted at most 64 variables in one pass, a runner holds more, and the next row printed the rest into a 4 KB buffer. Four runner runs went to it (38098431870, 38098511094, 38098565802, 38098627044).
+
+**Finding (#37):** when a probe faults, the probe is the first suspect; a row writer bounded by assumption about the runner's state is a probe defect waiting for a runner. A cause goes into a commit message only once a run has confirmed it.
+
+**Kit change suggested:** probes write each row as it ends and bound every buffer they fill from the machine's state.
+
+### 2026-10-10 — Sprint 048: a plant whose reach the row cannot see
+
+**What happened:** the plant that tries TEMP before TMP named ten rows; nine changed. `temp.size_zero` prints only the size needed, and `C:\t\` is as long as `C:\m\`, so the fault cannot show there. `family_run` failed the plant, as it should.
+
+**Finding (#38):** a plant's named rows are a prediction about what each row prints, not about what the fault touches; a row that prints a length or a flag is blind to a fault that keeps the length or the flag.
+
+**Kit change suggested:** when naming a plant's rows, read each row's printed fields, not only its call.
+
