@@ -29,8 +29,8 @@ def test_relocations_move_every_site_by_the_delta_and_nothing_else() -> None:
     raw = TLS_DLL.read_bytes()
     pe = parse(raw)
     a, b = loader.Memory(), loader.Memory()
-    loader._map_image(a, raw, pe, pe.image_base, "a")
-    loader._map_image(b, raw, pe, loader.DLL_BASE, "b")
+    loader.map_image(a, raw, pe, pe.image_base, "a")
+    loader.map_image(b, raw, pe, loader.DLL_BASE, "b")
     x, y = a.regions[0].data, b.regions[0].data
     delta = loader.DLL_BASE - pe.image_base
     sites = {rva for rva, kind in pe.relocation_sites if kind == 10}

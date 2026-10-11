@@ -24,13 +24,15 @@ from w2m.pe import PeImage, SCN_MEM_EXECUTE, SCN_MEM_READ, SCN_MEM_WRITE
 
 PAGE, GRANULARITY = 0x1000, 0x10000
 MEM_COMMIT, MEM_RESERVE, MEM_DECOMMIT, MEM_RELEASE = 0x1000, 0x2000, 0x4000, 0x8000
-MEM_FREE, MEM_PRIVATE, MEM_IMAGE = 0x10000, 0x20000, 0x1000000
+MEM_FREE, MEM_PRIVATE, MEM_MAPPED, MEM_IMAGE = 0x10000, 0x20000, 0x40000, 0x1000000
 PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY = 0x01, 0x02, 0x04, 0x08
 PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY = 0x10, 0x20, 0x40, 0x80
 PROTECTIONS = {PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY, PAGE_EXECUTE, PAGE_EXECUTE_READ,
                PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY}
 ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED, ERROR_INVALID_ADDRESS = 87, 50, 487
 RESERVED, COMMITTED = 1, 2
+PAGE_GUARD = 0x100
+STACK_GUARD_PAGES = 3          # the guard below StackLimit (contracts/windows.memory.thread_stack, Sprint 049)
 
 
 def _down(v: int, to: int) -> int:
@@ -48,6 +50,7 @@ class Reservation:
     allocation_protect: int
     state: bytearray = field(default_factory=bytearray)      # per page: RESERVED or COMMITTED
     protect: bytearray = field(default_factory=bytearray)    # per page: the protection while committed
+    type: int = MEM_PRIVATE                                   # MEM_MAPPED for a file view (Sprint 049)
 
     def __post_init__(self) -> None:
         pages = self.size // PAGE
@@ -77,6 +80,11 @@ class VirtualMemory:
     pristine: dict[int, bytes] = field(default_factory=dict)   # writable image page VA -> its bytes at load
     reservations: dict[int, Reservation] = field(default_factory=dict)
     image_protect: dict[int, int] = field(default_factory=dict)       # page VA -> a protection VirtualProtect set
+    stack: tuple[int, int, int] | None = None    # the main thread's (DeallocationStack, StackLimit, StackBase)
+    mapped: list[tuple[int, int]] = field(default_factory=list)   # every range the VM maps, (base, size): what is
+                                                 # outside all of them is free address space (Sprint 049)
+    heap: tuple[int, int] | None = None          # the process heap's reservation (base, size); heap.c keeps its high
+                                                 # water mark at base + 8
 
     # ---- lookups -------------------------------------------------------------------------------------
     def _reservation(self, va: int) -> Reservation | None:
@@ -95,12 +103,15 @@ class VirtualMemory:
         return self.arena <= va and va + size <= self.arena + self.arena_size
 
     def _free_range(self, size: int) -> int:
-        """The lowest 64 KB-aligned arena address with `size` bytes free."""
+        """The lowest 64 KB-aligned arena address with `size` bytes free (reservations and images loaded into the
+        arena both take space)."""
         at = self.arena
-        for r in sorted(self.reservations.values(), key=lambda r: r.base):
-            if at + size <= r.base:
+        taken = [(r.base, r.size) for r in self.reservations.values()]
+        taken += [(b, pe.size_of_image) for b, pe in self.images if self._in_arena(b)]
+        for base, n in sorted(taken):
+            if at + size <= base:
                 return at
-            at = max(at, _up(r.base + r.size, GRANULARITY))
+            at = max(at, _up(base + n, GRANULARITY))
         if at + size > self.arena + self.arena_size:
             raise Unimplemented(f"VirtualAlloc of 0x{size:x} bytes: the arena (0x{self.arena_size:x}) is full")
         return at
@@ -157,6 +168,8 @@ class VirtualMemory:
             r = self.reservations.get(address)
             if r is None:
                 return 0, ERROR_INVALID_ADDRESS
+            if r.type == MEM_MAPPED:
+                raise Unimplemented(f"VirtualFree of the file view at 0x{address:x}")      # not in the rows
             for i, s in enumerate(r.state):
                 if s == COMMITTED:
                     self.zero(r.base + i * PAGE, PAGE)
@@ -203,6 +216,10 @@ class VirtualMemory:
 
     def query(self, address: int) -> Info | None:
         page = _down(address, PAGE)
+        if self.stack is not None and self.stack[0] <= address < self.stack[2]:
+            return self._stack_query(page)
+        if self.heap is not None and self.heap[0] <= address < self.heap[0] + self.heap[1]:
+            return self._heap_query(page)
         r = self._reservation(address)
         if r is not None:
             i = (page - r.base) // PAGE
@@ -211,7 +228,7 @@ class VirtualMemory:
                 j += 1
             committed = r.state[i] == COMMITTED
             return Info(page, r.base, r.allocation_protect, (j - i) * PAGE, MEM_COMMIT if committed else MEM_RESERVE,
-                        r.protect[i] if committed else 0, MEM_PRIVATE)
+                        r.protect[i] if committed else 0, r.type)
         image = self._image(address)
         if image is not None:
             base, pe = image
@@ -223,7 +240,70 @@ class VirtualMemory:
         if self._in_arena(address):
             nxt = min((r.base for r in self.reservations.values() if r.base > page), default=self.arena + self.arena_size)
             return Info(page, 0, 0, nxt - page, MEM_FREE, PAGE_NOACCESS, 0)
+        if self.mapped and not any(b <= address < b + n for b, n in self.mapped):
+            # free address space, as a released range reads (contracts/windows.memory.virtual row query.released): no allocation, PAGE_NOACCESS, up
+            # to the next mapped range (Sprint 049: mono's collector walks past the stack's top)
+            nxt = min((b for b, _ in self.mapped if b > page), default=1 << 47)
+            return Info(page, 0, 0, nxt - page, MEM_FREE, PAGE_NOACCESS, 0)
         raise Unimplemented(f"VirtualQuery at 0x{address:x}, outside the arena and the images")
+
+    def map_view(self, size: int, protect: int) -> int:
+        """A view of a file mapping (contracts/windows.file.file_mapping, Sprint 049): a 64 KB-aligned MEM_MAPPED
+        region of the view's pages, committed with `protect`, its allocation protection the same; the rest of the
+        64 KB granule is free address space, as on Windows (rows query.after_view, query.granule_end). The caller
+        writes the file's bytes over the zeroed pages."""
+        pages = _up(size, PAGE)
+        base = self._free_range(pages)
+        r = Reservation(base, pages, protect, type=MEM_MAPPED)
+        self.reservations[base] = r
+        self._commit(r, base, pages, protect)
+        return base
+
+    def place_image(self, pe: PeImage) -> int:
+        """Where a DLL loaded at run time goes (Sprint 049): its preferred base when that lies free in the arena,
+        else the lowest free 64 KB-aligned range, relocated there by the caller. The image is then one of
+        `images` (VirtualQuery reports MEM_IMAGE); `snapshot_image` records its writable pages once written."""
+        size = _up(pe.size_of_image, PAGE)
+        base = pe.image_base
+        free = self._in_arena(base, size) and base % GRANULARITY == 0 and all(
+            b + n <= base or base + size <= b for b, n in
+            [(r.base, r.size) for r in self.reservations.values()] + [(b, p.size_of_image) for b, p in self.images])
+        if not free:
+            base = self._free_range(size)
+        self.images.append((base, pe))
+        return base
+
+    def snapshot_image(self, base: int, pe: PeImage) -> None:
+        assert self.read is not None
+        for s in pe.sections:
+            if s.characteristics & SCN_MEM_WRITE:
+                start = base + s.virtual_address
+                for va in range(start, start + _up(max(s.virtual_size, 1), PAGE), PAGE):
+                    self.pristine[va] = self.read(va, PAGE)
+
+    def _heap_query(self, page: int) -> Info:
+        """The process heap as contracts/windows.memory.heap_query records it (Sprint 049): one MEM_PRIVATE
+        reservation whose base is the heap's handle, read-write, committed up to the pages heap.c has used and
+        reserved after; BaseAddress is the queried page."""
+        assert self.read is not None and self.heap is not None
+        base, size = self.heap
+        used = int.from_bytes(self.read(base + 8, 8), "little") or base + PAGE      # heap.c's `next`
+        committed = _up(max(used, base + PAGE), PAGE)
+        if page < committed:
+            return Info(page, base, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)
+        return Info(page, base, PAGE_READWRITE, base + size - page, MEM_RESERVE, 0, MEM_PRIVATE)
+
+    def _stack_query(self, page: int) -> Info:
+        """The thread's stack as contracts/windows.memory.thread_stack records it (Sprint 049): one MEM_PRIVATE
+        reservation from DeallocationStack, read-write: reserved below StackLimit - 3 pages, those 3 pages committed
+        with PAGE_GUARD, and committed read-write from StackLimit to StackBase; BaseAddress is the queried page."""
+        dealloc, limit, base = self.stack                       # type: ignore[misc]
+        guard = limit - STACK_GUARD_PAGES * PAGE
+        if page < guard:
+            return Info(page, dealloc, PAGE_READWRITE, guard - page, MEM_RESERVE, 0, MEM_PRIVATE)
+        if page < limit:
+            return Info(page, dealloc, PAGE_READWRITE, limit - page, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD, MEM_PRIVATE)
+        return Info(page, dealloc, PAGE_READWRITE, base - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)
 
     def snapshot(self) -> None:
         """Remember every writable image page as loaded (the copy-on-write test of _image_page_protect)."""

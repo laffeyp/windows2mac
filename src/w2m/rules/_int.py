@@ -269,9 +269,74 @@ def rep_string(ctx: Ctx) -> None:
 
 
 def mxcsr(ctx: Ctx) -> None:
-    """STMXCSR, LDMXCSR m32 (SDM)."""
+    """STMXCSR, LDMXCSR m32 (SDM), and their VEX forms VSTMXCSR, VLDMXCSR (the same; Sprint 049)."""
     _, loc, _ = _operand(ctx.b, ctx.ops[0], ctx.nxt)
-    ctx.b.emit("mxcsr", "st" if ctx.ic == "STMXCSR" else "ld", loc)
+    ctx.b.emit("mxcsr", "st" if ctx.ic.endswith("STMXCSR") else "ld", loc)
+
+
+def andn(ctx: Ctx) -> None:
+    """ANDN r, vvvv, r/m (SDM; BMI1): r = ~vvvv & r/m; SF ZF by the result, CF OF 0, AF PF undefined."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    _, dst, bits = _operand(b, ops[0], nxt)
+    vk, vsrc, _ = _operand(b, ops[1], nxt)
+    sk, src, _ = _operand(b, ops[2], nxt, bits)
+    a, c, ones, inv, r = _val(b, vk, vsrc), _val(b, sk, src), b.t(), b.t(), b.t()
+    b.emit("imm", ones, (1 << 64) - 1)
+    b.emit("alu", inv, "xor", a, ones, bits)
+    b.emit("alu", r, "and", inv, c, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", "andn", inv, c, r, bits)
+
+
+def shift_x(ctx: Ctx) -> None:
+    """SHLX, SHRX r, r/m, vvvv (SDM; BMI2): the count is vvvv masked to 5 or 6 bits; no flag changes."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    _, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    ck, cnt, _ = _operand(b, ops[2], nxt)
+    a, c, r = _val(b, sk, src), _val(b, ck, cnt), b.t()
+    b.emit("alu", r, "shl" if ctx.ic == "SHLX" else "shr", a, c, bits)
+    b.emit("st", dst, r)
+
+
+def rorx(ctx: Ctx) -> None:
+    """RORX r, r/m, imm8 (SDM; BMI2): rotate right by imm8 masked to 5 or 6 bits; no flag changes."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    _, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    ik, count, _ = _operand(b, ops[2], nxt, bits)
+    a, c, r = _val(b, sk, src), _val(b, ik, count), b.t()
+    b.emit("alu", r, "ror", a, c, bits)
+    b.emit("st", dst, r)
+
+
+def mulx(ctx: Ctx) -> None:
+    """MULX r_hi, r_lo(vvvv), r/m (SDM; BMI2): RDX (EDX) * r/m unsigned; the low half to vvvv first, then the
+    high half to ModRM.reg, so the high half wins when both name one register; no flag changes."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    _, hi_dst, bits = _operand(b, ops[0], nxt)
+    _, lo_dst, _ = _operand(b, ops[1], nxt)
+    sk, src, _ = _operand(b, ops[2], nxt, bits)
+    rdx, c = b.t(), _val(b, sk, src)
+    b.emit("ld", rdx, ("r", 2, bits, False))
+    lo, hi = b.t(), b.t()
+    if bits == 64:
+        b.emit("alu", lo, "mul_lo", rdx, c, 64)
+        b.emit("alu", hi, "mul_hi", rdx, c, 64)
+    else:                                                 # 32 x 32 bits: the 64-bit product, split
+        k = b.t()
+        b.emit("alu", lo, "mul_lo", rdx, c, 64)
+        b.emit("imm", k, 32)
+        b.emit("alu", hi, "shr", lo, k, 64)
+    b.emit("st", lo_dst, lo)
+    b.emit("st", hi_dst, hi)
+
+
+def fpu_control(ctx: Ctx) -> None:
+    """FNSTCW m2byte (SDM FSTCW/FNSTCW; Sprint 049): the x87 control word to memory, with no check for pending
+    x87 exceptions (the N form); w2m runs no x87 arithmetic, so none is ever pending."""
+    _, loc, _ = _operand(ctx.b, ctx.ops[0], ctx.nxt)
+    ctx.b.emit("fcw", "st", loc)
 
 
 def sfence(ctx: Ctx) -> None:
@@ -280,8 +345,14 @@ def sfence(ctx: Ctx) -> None:
 
 
 def undefined_by_profile(ctx: Ctx) -> None:
-    """XGETBV: #UD while CR4.OSXSAVE is clear, which the guest profile's CPUID.1:ECX.OSXSAVE reports."""
+    """An instruction the guest profile makes #UD (none since Sprint 049; XGETBV was one while OSXSAVE was clear)."""
     ctx.b.emit("ud")
+
+
+def xgetbv(ctx: Ctx) -> None:
+    """XGETBV (SDM): EDX:EAX = XCR[ECX]. The profile reports OSXSAVE and XCR0 = x87 | SSE | AVX (7) (Sprint 049,
+    specs/guest_cpuid.json 0.2.0); XGETBV1 is not reported, so any ECX but 0 is #GP."""
+    ctx.b.emit("xgetbv")
 
 
 def div(ctx: Ctx) -> None:

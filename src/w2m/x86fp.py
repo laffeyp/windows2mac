@@ -416,6 +416,109 @@ def convert(src: Fmt, dst: Fmt, b: int, env: Env) -> int:
     return env.round(dst, value(src, b))
 
 
+def fma(f: Fmt, a: int, b: int, c: int, negate_product: bool, negate_addend: bool, env: Env) -> int:
+    """(+-a*b) +- c with one rounding (SDM VFMADD*, VFMSUB*, VFNMADD*, VFNMSUB*; Sprint 049). a, b, c are the
+    multiplicands and the addend as the form orders them; NaN priority is taken from the instruction's operand
+    order by the caller (the first NaN of `nan_order`), an SNaN sets IE; inf*0 and inf - inf are invalid."""
+    a, b, c = env.src(f, a), env.src(f, b), env.src(f, c)
+    if any(is_nan(f, x) for x in (a, b, c)):
+        raise ValueError("fma: NaN operands are resolved by fma_lane")
+    sp = bool(a & f.sign) ^ bool(b & f.sign) ^ negate_product      # XOR: != chains in Python
+    sc = bool(c & f.sign) != negate_addend
+    ia, ib, ic = is_inf(f, a), is_inf(f, b), is_inf(f, c)
+    za, zb = is_zero(f, a), is_zero(f, b)
+    if (ia and zb) or (ib and za):
+        env.flags = env.flags & ~DE | IE
+        return f.indefinite
+    if ia or ib:
+        if ic and sc != sp:
+            env.flags = env.flags & ~DE | IE
+            return f.indefinite
+        return (f.sign if sp else 0) | f.emask << f.mbits
+    if ic:
+        return (f.sign if sc else 0) | f.emask << f.mbits
+    product = value(f, a) * value(f, b)
+    product = -product if negate_product else product
+    addend = -value(f, c) if negate_addend else value(f, c)
+    v = product + addend
+    if v == 0:
+        pz = product == 0
+        if pz and is_zero(f, c) and sp == sc:
+            return f.sign if sp else 0
+        return f.sign if env.rc == 1 else 0                    # exact zero sum: -0 only rounding down
+    return env.round(f, v)
+
+
+def fma_lane(f: Fmt, ops: tuple[int, int, int], mul: tuple[int, int], add: int, negate_product: bool,
+             negate_addend: bool, env: Env) -> int:
+    """One lane of an FMA form: `ops` are (operand 1, operand 2, operand 3) of the instruction, the destination
+    first; `mul` and `add` index them. A NaN operand: the first of the two multiplicands, then the addend,
+    quieted, an SNaN not outranking a QNaN (Intel Xeon 8573C, set 049: 132, 231, SNaN addend against a QNaN
+    multiplicand); an SNaN sets IE."""
+    srcs = tuple(env.src(f, x) for x in ops)
+    nans = [srcs[i] for i in (*mul, add) if is_nan(f, srcs[i])]
+    if nans:
+        if any(is_snan(f, x) for x in nans):
+            env.flags |= IE
+        env.flags &= ~DE                                       # inf * 0 plus a QNaN addend is not Invalid (Xeon
+                                                               # 8573C, set 049b cases 25743, 27363; IEEE 754-2008
+                                                               # 7.2(c) leaves it to the implementation)
+        return _quiet(f, nans[0])
+    return fma(f, srcs[mul[0]], srcs[mul[1]], srcs[add], negate_product, negate_addend, env)
+
+
+# CMPPS/CMPSD predicates 0-31 (SDM CMPPD, Table 3-1): (relation, true when unordered, signals on QNaN)
+CMP_PREDICATES = [("eq", False, False), ("lt", False, True), ("le", False, True), (None, True, False),
+                  ("ne", True, False), ("nlt", True, True), ("nle", True, True), (None, False, False),
+                  ("eq", True, False), ("nge", True, True), ("ngt", True, True), ("false", False, False),
+                  ("ne", False, False), ("ge", False, True), ("gt", False, True), ("true", True, False),
+                  ("eq", False, True), ("lt", False, False), ("le", False, False), (None, True, True),
+                  ("ne", True, True), ("nlt", True, False), ("nle", True, False), (None, False, True),
+                  ("eq", True, True), ("nge", True, False), ("ngt", True, False), ("false", False, True),
+                  ("ne", False, True), ("ge", False, False), ("gt", False, False), ("true", True, True)]
+
+
+def cmp_predicate(f: Fmt, a: int, b: int, imm: int, env: Env) -> bool:
+    """CMPSD/CMPPD's predicate `imm` on a, b: (relation, result when unordered, signals on QNaN)."""
+    rel, unordered_result, signals = CMP_PREDICATES[imm & 31]
+    a, b = env.src(f, a), env.src(f, b)
+    if is_nan(f, a) or is_nan(f, b):
+        env.flags &= ~DE
+        if signals or is_snan(f, a) or is_snan(f, b):
+            env.flags |= IE
+        if rel is None:                                        # UNORD (3, 19) true, ORD (7, 23) false
+            return unordered_result
+        return unordered_result if rel not in ("false", "true") else rel == "true"
+    if rel is None:
+        return not unordered_result
+    ka, kb = _key(f, a), _key(f, b)
+    return {"eq": ka == kb, "lt": ka < kb, "le": ka <= kb, "ne": ka != kb, "nlt": not ka < kb,
+            "nle": not ka <= kb, "nge": not ka >= kb, "ngt": not ka > kb, "ge": ka >= kb, "gt": ka > kb,
+            "false": False, "true": True}[rel]
+
+
+def round_to_integer(f: Fmt, b: int, imm: int, env: Env) -> int:
+    """ROUNDSD/ROUNDSS (SDM): b to an integral value; imm bit 2 takes MXCSR.RC, else imm bits 1:0 (nearest, down,
+    up, toward zero); imm bit 3 suppresses Precision. An SNaN sets IE and is quieted; inf and zero pass."""
+    b = env.src(f, b, denormal_flag=False)
+    if is_nan(f, b):
+        if is_snan(f, b):
+            env.flags |= IE
+        env.flags &= ~DE
+        return _quiet(f, b)
+    if is_inf(f, b) or is_zero(f, b):
+        return b
+    v = value(f, b)
+    negative = v < 0
+    rc = env.rc if imm & 4 else imm & 3                # ROUNDSD reports Invalid and Precision only, never Denormal
+    n = _round_int(-v if negative else v, negative, rc)
+    if Fraction(-n if negative else n) != v and not imm & 8:
+        env.flags |= PE
+    if n == 0:
+        return f.sign if negative else 0
+    return env.round(f, Fraction(-n if negative else n))
+
+
 def lanes(x: int, width: int, count: int) -> list[int]:
     return [x >> (width * i) & ((1 << width) - 1) for i in range(count)]
 
@@ -427,7 +530,7 @@ def join(parts: list[int], width: int) -> int:
 ARITH = {"ADD": "add", "SUB": "sub", "MUL": "mul", "DIV": "div"}
 
 
-def execute(name: str, dst: int, src: int, mxcsr: int) -> tuple[int, int]:
+def execute(name: str, dst: int, src: int, mxcsr: int, check: bool = True) -> tuple[int, int]:
     """One legacy-SSE arithmetic instruction (ADD/SUB/MUL/DIV/SQRT/MIN/MAX in SS/SD/PS/PD) on a
     128-bit destination and a source (128-bit, or the scalar in its low bits). Returns the new
     destination and MXCSR; raises SimdFault (MXCSR flags already merged into .flags) when an
@@ -451,5 +554,7 @@ def execute(name: str, dst: int, src: int, mxcsr: int) -> tuple[int, int]:
             raise ValueError(name)
         lane_flags |= env.flags
     env.flags = lane_flags
+    if not check:                                       # the caller checks several halves at once (VEX.256)
+        return join(out, f.bits), lane_flags
     env.check()
     return join(out, f.bits), mxcsr | lane_flags

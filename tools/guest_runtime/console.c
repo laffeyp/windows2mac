@@ -116,3 +116,6 @@ u64 k32_GetCommandLineA(void) {
     command_line_a[i] = 0;
     return w2m_logged(W2M_API_GetCommandLineA, 0, (u64)command_line_a);
 }
+
+/* For sync_objects.c's DuplicateHandle (Sprint 049): whether h is one of the standard handles. */
+int w2m_is_std_handle(u64 h) { return h && (h == std_handles[0] || h == std_handles[1] || h == std_handles[2] || h == STDOUT_HANDLE); }

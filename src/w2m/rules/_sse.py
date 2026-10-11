@@ -74,13 +74,14 @@ LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "UNPCKHPD": 
                 "PSUBW": ("sub", 1), "PCMPEQD": ("cmeq", 2), "PCMPGTD": ("cmgt", 2), "PSUBUSB": ("uqsub", 0),
                 "PSUBSB": ("sqsub", 0), "PADDSB": ("sqadd", 0), "PADDSW": ("sqadd", 1), "PMAXUB": ("umax", 0),
                 "PMULLW": ("mul", 1), "PUNPCKHBW": ("zip2", 0), "PUNPCKHDQ": ("zip2", 2), "PUNPCKHWD": ("zip2", 1),
-                "PUNPCKLWD": ("zip1", 1)}
+                "PUNPCKLWD": ("zip1", 1), "PCMPEQW": ("cmeq", 1)}
 SSE2_INT_LOWERED_APPROXIMATE = {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
 SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
           "PSRAW": (1, "arith"), "PSLLQ": (3, "left")}
 SSE2_INT_LOWERED |= {'PADDSB', 'PACKUSWB', 'PUNPCKHDQ', 'PMAXUB', 'PSUBSB', 'PSRAW', 'PADDQ', 'PCMPEQD', 'PSHUFLW', 'PSUBUSB', 'PSRLW', 'MOVHPS', 'PUNPCKHBW', 'PUNPCKHWD', 'PUNPCKLWD', 'PANDN', 'PADDW', 'PADDSW', 'PSUBW', 'PUNPCKLQDQ', 'PSHUFHW', 'PMULLW', 'PINSRW', 'UNPCKLPD', 'PCMPGTD', 'PSLLQ'}
 SSE2_INT_LOWERED |= SSE2_INT_LOWERED_APPROXIMATE
 SSE2_INT_LOWERED |= {"PCMPISTRI", "PCMPISTRI64", "UNPCKHPD"}                    # Sprint 047
+SSE2_INT_LOWERED |= {"PCMPEQW"}                                                  # Sprint 049
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
@@ -291,9 +292,11 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
             a.emit(a64.str_v(4 if ic == "MOVD" else 8, src[1], reg_of(dst[1])))
         else:                                                    # MOVQ xmm, xmm: low 64 bits, the rest zeroed
             a.emit(a64.fmov_from_v(8, 16, src[1]), a64.fmov_to_v(8, dst[1], 16))
-    elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD"):
+    elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD", "ORPD"):
         v = _sse_src(a, src, 16, reg_of)
-        a.emit((a64.eor_v if ic.startswith("XOR") else a64.and_v)(dst[1], dst[1], v))
+        a.emit((a64.eor_v if ic.startswith("XOR") else a64.orr_v if ic == "ORPD" else a64.and_v)(dst[1], dst[1], v))
+    elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD"):  # in the model (x86fp; Sprint 049), whole
+        a.emit(a64.hvc(HVC_SLOW_SSE))
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
         kind, form = ic[:-2].lower(), ic[-2:]
         n = 4 if form in ("SS", "PS") else 8

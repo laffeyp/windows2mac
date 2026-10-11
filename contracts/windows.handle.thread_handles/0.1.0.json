@@ -1,0 +1,141 @@
+{
+ "contract_id": "windows.handle.thread_handles",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "DuplicateHandle as mono calls it: the pseudo-handles -1 and -2 become real handles, new ones each time, naming the current process and thread; a thread's handle does not signal while it runs; a duplicate of an event names the same event, and with DUPLICATE_CLOSE_SOURCE takes the source's value; a source that is no handle: FALSE, 6, the target NULL; success leaves the last error. OpenThread on the current thread's id gives a real handle, on an id no thread has NULL and 87. CreateSemaphoreW sets error 0 on success; an initial count above the maximum is NULL and 87.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/thread_handles/thread_handles.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "pseudo",
+    "process_is_minus_1": 1,
+    "thread_is_minus_2": 1
+   },
+   {
+    "s": "dup.thread",
+    "ret": 1,
+    "real": 1,
+    "err": 57005,
+    "thread_id_is_current": 1
+   },
+   {
+    "s": "dup.thread_again",
+    "distinct": 1,
+    "thread_id_is_current": 1
+   },
+   {
+    "s": "wait.own_thread",
+    "ret": 258,
+    "err": 57005
+   },
+   {
+    "s": "dup.process",
+    "ret": 1,
+    "real": 1,
+    "err": 57005,
+    "process_id_is_current": 1
+   },
+   {
+    "s": "dup.event",
+    "ret": 1,
+    "distinct": 1,
+    "err": 57005,
+    "set_through_copy_seen": 1
+   },
+   {
+    "s": "dup.close_source",
+    "ret": 1,
+    "err": 57005,
+    "copy_is_source_value": 1,
+    "copy_signaled": 1
+   },
+   {
+    "s": "dup.bad_source",
+    "ret": 0,
+    "err": 6,
+    "out_untouched": 0,
+    "out_null": 1
+   },
+   {
+    "s": "close.thread",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "semaphore.zero",
+    "real": 1,
+    "err": 0,
+    "wait": 258
+   },
+   {
+    "s": "semaphore.one",
+    "real": 1,
+    "err": 0,
+    "wait": 0
+   },
+   {
+    "s": "semaphore.initial_above_max",
+    "null": 1,
+    "err": 87
+   },
+   {
+    "s": "open.current",
+    "real": 1,
+    "err": 57005,
+    "thread_id_is_current": 1
+   },
+   {
+    "s": "open.missing",
+    "null": 1,
+    "err": 87
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38114820680: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:42e42696025a5ee2c71994db9a47d4be2fe667d8b769e65a617b68359cf65703; run 38114822014: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:6b75ead1c4597d8c4b1ec8426c3e775e4b8fbd9e859d861ef6a249f8a51c56a6",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "thread_handles-1791696424-0-1",
+    "thread_handles-1791696424-0-2",
+    "thread_handles-1791696424-1-1",
+    "thread_handles-1791696424-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-duplicatehandle",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "DUPLICATE_CLOSE_SOURCE: Closes the source handle. This occurs regardless of any error status returned."
+  }
+ ],
+ "open_questions": [
+  "One thread runs in w2m: OpenThread answers only the current thread's id, and waiting without a timeout on a running thread stops the run.",
+  "Windows reuses a closed handle's value; w2m gives a CLOSE_SOURCE copy the source's slot and otherwise the lowest free slot. Which value a later handle gets is not in the rows."
+ ],
+ "sections": {
+  "probe": "probes/thread_handles (Sprint 044)",
+  "implementation": "tools/guest_runtime/sync_objects.c",
+  "rows": "scripts/family_run.py thread_handles",
+  "excluded": "none"
+ }
+}

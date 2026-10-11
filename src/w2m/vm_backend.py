@@ -44,12 +44,14 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
-from w2m.file_bridge import FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
+from w2m.file_bridge import (FILE_DUP, FILE_FSTAT, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
+                             FileBridge)
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
-from w2m.virtual_memory import VirtualMemory
+from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
-from w2m.loader import THUNK_BASE, GuestFault, Loaded, Memory, Region
+from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
+from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,6 +75,8 @@ MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits 
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
+YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
+FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
@@ -90,7 +94,7 @@ TRANSLATION_TABLES_SIZE = 0x40000
 CODE_CACHE = 0x60000
 CODE_CACHE_SIZE = 0x400_0000          # 64 MB
 RUNTIME_IMAGE = CODE_CACHE + CODE_CACHE_SIZE   # guest runtime (tools/guest_runtime), linked at MONITOR_VA + this
-RUNTIME_IMAGE_SIZE = 0x20000
+RUNTIME_IMAGE_SIZE = 0x100000             # 1 MB: the system message table takes 430 KB (Sprint 049)
 RUNTIME_STACK = RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE   # the runtime's AArch64 stack (SP set by each bridge)
 RUNTIME_STACK_SIZE = 0x10000
 RECON_TABLE = RUNTIME_STACK + RUNTIME_STACK_SIZE     # reconstruction table: (host code VA, x86 address) pairs, sorted
@@ -118,125 +122,19 @@ SYSTEM_IMAGES = 32
 LDR_ENTRY_SIZE = 0x120
 PROCESS_SIZE = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000
 STDOUT_HANDLE = 0x74
-# kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
-SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
-            "GetLastError": ("k32_GetLastError", True), "GetStdHandle": ("k32_GetStdHandle", True),
-            "WriteFile": ("k32_WriteFile", True), "ExitProcess": ("k32_ExitProcess", False),
-            "QueryPerformanceCounter": ("k32_QueryPerformanceCounter", True),
-            "CreateFileW": ("k32_CreateFileW", True), "CloseHandle": ("k32_CloseHandle", True),
-            "DeleteFileW": ("k32_DeleteFileW", True), "ReadFile": ("k32_ReadFile", True),
-            "SetFilePointerEx": ("k32_SetFilePointerEx", True),
-            "GetSystemTimeAsFileTime": ("k32_GetSystemTimeAsFileTime", False),
-            "GetCurrentProcessId": ("k32_GetCurrentProcessId", True),
-            "QueryPerformanceFrequency": ("k32_QueryPerformanceFrequency", True),
-            "IsProcessorFeaturePresent": ("k32_IsProcessorFeaturePresent", True),
-            "InitializeSListHead": ("k32_InitializeSListHead", False),
-            "GetStartupInfoW": ("k32_GetStartupInfoW", False),
-            "IsDebuggerPresent": ("k32_IsDebuggerPresent", True),
-            "LoadLibraryExW": ("k32_LoadLibraryExW", True), "GetModuleHandleW": ("k32_GetModuleHandleW", True),
-            "GetModuleHandleExW": ("k32_GetModuleHandleExW", True),
-            "GetModuleFileNameW": ("k32_GetModuleFileNameW", True), "GetProcAddress": ("k32_GetProcAddress", True),
-            "FreeLibrary": ("k32_FreeLibrary", True),
-            "InitializeCriticalSectionEx": ("k32_InitializeCriticalSectionEx", True),
-            "InitializeCriticalSectionAndSpinCount": ("k32_InitializeCriticalSectionAndSpinCount", True),
-            "InitializeCriticalSection": ("k32_InitializeCriticalSection", False),
-            "EnterCriticalSection": ("k32_EnterCriticalSection", False),
-            "TryEnterCriticalSection": ("k32_TryEnterCriticalSection", True),
-            "LeaveCriticalSection": ("k32_LeaveCriticalSection", False),
-            "DeleteCriticalSection": ("k32_DeleteCriticalSection", False),
-            "TlsAlloc": ("k32_TlsAlloc", True), "TlsGetValue": ("k32_TlsGetValue", True),
-            "TlsSetValue": ("k32_TlsSetValue", True), "TlsFree": ("k32_TlsFree", True),
-            "FlsAlloc": ("k32_FlsAlloc", True), "FlsGetValue": ("k32_FlsGetValue", True),
-            "FlsSetValue": ("k32_FlsSetValue", True), "FlsFree": ("k32_FlsFree", True),
-            "GetProcessHeap": ("k32_GetProcessHeap", True), "HeapAlloc": ("k32_HeapAlloc", True),
-            "HeapFree": ("k32_HeapFree", True), "HeapSize": ("k32_HeapSize", True),
-            "HeapReAlloc": ("k32_HeapReAlloc", True),
-            "SetStdHandle": ("k32_SetStdHandle", True), "GetFileType": ("k32_GetFileType", True),
-            "GetConsoleMode": ("k32_GetConsoleMode", True), "GetConsoleCP": ("k32_GetConsoleCP", True),
-            "WriteConsoleW": ("k32_WriteConsoleW", True), "FlushFileBuffers": ("k32_FlushFileBuffers", True),
-            "GetCommandLineW": ("k32_GetCommandLineW", True), "GetCommandLineA": ("k32_GetCommandLineA", True),
-            "GetACP": ("k32_GetACP", True),
-            "GetOEMCP": ("k32_GetOEMCP", True),
-            "IsValidCodePage": ("k32_IsValidCodePage", True),
-            "GetCPInfo": ("k32_GetCPInfo", True),
-            "MultiByteToWideChar": ("k32_MultiByteToWideChar", True),
-            "WideCharToMultiByte": ("k32_WideCharToMultiByte", True),
-            "GetStringTypeW": ("k32_GetStringTypeW", True),
-            "LCMapStringW": ("k32_LCMapStringW", True),
-            "LCMapStringEx": ("k32_LCMapStringEx", True),
-            "GetEnvironmentStringsW": ("k32_GetEnvironmentStringsW", True),
-            "FreeEnvironmentStringsW": ("k32_FreeEnvironmentStringsW", True),
-            "lstrlenW": ("k32_lstrlenW", True),
-            "SetUnhandledExceptionFilter": ("k32_SetUnhandledExceptionFilter", True),
-            "EncodePointer": ("k32_EncodePointer", True),
-            "DecodePointer": ("k32_DecodePointer", True),
-            "InitializeSRWLock": ("k32_InitializeSRWLock", True),
-            "InitializeConditionVariable": ("k32_InitializeConditionVariable", True),
-            "AcquireSRWLockExclusive": ("k32_AcquireSRWLockExclusive", True),
-            "TryAcquireSRWLockExclusive": ("k32_TryAcquireSRWLockExclusive", True),
-            "ReleaseSRWLockExclusive": ("k32_ReleaseSRWLockExclusive", True),
-            "AcquireSRWLockShared": ("k32_AcquireSRWLockShared", True),
-            "TryAcquireSRWLockShared": ("k32_TryAcquireSRWLockShared", True),
-            "ReleaseSRWLockShared": ("k32_ReleaseSRWLockShared", True),
-            "SleepConditionVariableSRW": ("k32_SleepConditionVariableSRW", True),
-            "WakeConditionVariable": ("k32_WakeConditionVariable", True),
-            "WakeAllConditionVariable": ("k32_WakeAllConditionVariable", True),
-            "GetCurrentThread": ("k32_GetCurrentThread", True),
-            "GetThreadTimes": ("k32_GetThreadTimes", True),
-            "GetThreadPriority": ("k32_GetThreadPriority", True),
-            "GetNativeSystemInfo": ("k32_GetNativeSystemInfo", True),
-            "GetSystemInfo": ("k32_GetSystemInfo", True),
-            "GetVersionExW": ("k32_GetVersionExW", True),
-            "GlobalMemoryStatusEx": ("k32_GlobalMemoryStatusEx", True),
-            "GetTickCount": ("k32_GetTickCount", True),
-            "GetSystemDirectoryW": ("k32_GetSystemDirectoryW", True),
-            "VirtualAlloc": ("k32_VirtualAlloc", True),
-            "VirtualFree": ("k32_VirtualFree", True),
-            "VirtualProtect": ("k32_VirtualProtect", True),
-            "VirtualQuery": ("k32_VirtualQuery", True),
-            "CreateSemaphoreExW": ("k32_CreateSemaphoreExW", True),
-            "CreateEventW": ("k32_CreateEventW", True),
-            "CreateEventA": ("k32_CreateEventA", True),
-            "CreateEventExW": ("k32_CreateEventExW", True),
-            "CreateMutexA": ("k32_CreateMutexA", True),
-            "SetEvent": ("k32_SetEvent", True),
-            "ResetEvent": ("k32_ResetEvent", True),
-            "ReleaseSemaphore": ("k32_ReleaseSemaphore", True),
-            "ReleaseMutex": ("k32_ReleaseMutex", True),
-            "WaitForSingleObject": ("k32_WaitForSingleObject", True),
-            "WaitForSingleObjectEx": ("k32_WaitForSingleObjectEx", True),
-            "WaitForMultipleObjects": ("k32_WaitForMultipleObjects", True),
-            "Sleep": ("k32_Sleep", False),
-            "FlsGetValue2": ("k32_FlsGetValue2", True),
-            "TlsGetValue2": ("k32_TlsGetValue2", True),
-            "AreFileApisANSI": ("k32_AreFileApisANSI", True),
-            "GetSystemTime": ("k32_GetSystemTime", False),
-            "GetLocalTime": ("k32_GetLocalTime", False),
-            "GetTimeZoneInformation": ("k32_GetTimeZoneInformation", True),
-            "SystemTimeToFileTime": ("k32_SystemTimeToFileTime", True),
-            "FileTimeToSystemTime": ("k32_FileTimeToSystemTime", True),
-            "GetErrorMode": ("k32_GetErrorMode", True),
-            "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True),
-            "GetLogicalProcessorInformationEx": ("k32_GetLogicalProcessorInformationEx", True), "GetLogicalProcessorInformation": ("k32_GetLogicalProcessorInformation", True), "GetActiveProcessorCount": ("k32_GetActiveProcessorCount", True), "GetCurrentProcess": ("k32_GetCurrentProcess", True), "GetProcessAffinityMask": ("k32_GetProcessAffinityMask", True), "SetThreadAffinityMask": ("k32_SetThreadAffinityMask", True), "GetNumaHighestNodeNumber": ("k32_GetNumaHighestNodeNumber", True),
-            "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True),
-            "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True),
-            "GetHandleInformation": ("k32_GetHandleInformation", True), "LoadLibraryW": ("k32_LoadLibraryW", True),
-            "GetEnvironmentVariableW": ("k32_GetEnvironmentVariableW", True),
-            "SetEnvironmentVariableW": ("k32_SetEnvironmentVariableW", True), "GetTempPathW": ("k32_GetTempPathW", True),
-            "LocalAlloc": ("k32_LocalAlloc", True)}
-# services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
-DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True),
-                                 "SHGetKnownFolderPath": ("shell32_SHGetKnownFolderPath", True)},   # Sprint 048
-                "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)},   # Sprint 047
-                "OLE32.DLL": {"CoTaskMemFree": ("ole32_CoTaskMemFree", False)},       # Sprint 048
-                "ADVAPI32.DLL": {"OpenProcessToken": ("advapi32_OpenProcessToken", True),
-                                 "GetTokenInformation": ("advapi32_GetTokenInformation", True),
-                                 "GetSidSubAuthority": ("advapi32_GetSidSubAuthority", True)}}
+# The services the guest runtime defines (Sprint 049: derived from its C files, guest_runtime.service_table):
+# kernel32 import name -> (C symbol, sets RAX), and for each other system DLL (upper case) the same
+_SERVICE_TABLE = guest_runtime.service_table()
+SERVICES = _SERVICE_TABLE.pop("KERNEL32")
+DLL_SERVICES = _SERVICE_TABLE
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
 HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY = 19, 20, 21, 22   # virtual_memory.py
+INIT_STUB_SLOT = 0x80                # where module.c keeps LoadLibrary's return address in a DllMain stub (Sprint 049)
 HOST_RANDOM = 23                    # a0 bytes of the host's CSPRNG (os.urandom) at guest address a1 (bcrypt.c)
+HOST_MAP_VIEW = 29                  # a view of a0 bytes of file descriptor a1 with protection a2 (file.c; Sprint 049;
+                                    # 24-28 are file primitives)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -402,6 +300,12 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         _mark_defined(a, U_CF | U_OF)
         _mark_undefined(a, U_ZF | U_SF | U_PF | U_AF)
         return
+    if kind == "andn":                                         # SDM ANDN: SF ZF by the result, CF OF 0, AF PF undefined
+        a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
+        _set_zf_sf_pf(a, rr, bits)
+        _mark_defined(a, U_CF | U_ZF | U_SF | U_OF)
+        _mark_undefined(a, U_AF | U_PF)
+        return
     if kind == "logic":
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
         _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF)
@@ -531,6 +435,12 @@ def _temps_read(op: Op) -> list[int]:
     k = op[0]
     if k == "sse":
         return [loc[1] for loc in (op[2], op[3]) if loc[0] == "m"]
+    if k == "vex":                                      # ("vex", base, d, s1, s2, L, align, imm) (Sprint 049)
+        return [loc[1] for loc in (op[2], op[4]) if loc[0] == "m"]
+    if k == "vexs":                                     # ("vexs", ic, d, s1, s2, L, imm): cross-lane VEX
+        return [loc[1] for loc in (op[2], op[4]) if loc[0] == "m"]
+    if k == "fma":                                      # ("fma", ic, d, s2, s3, L)
+        return [op[4][1]] if op[4][0] == "m" else []
     if k == "ld":
         return [op[2][1]] if op[2][0] == "m" else []
     if k == "st":
@@ -560,6 +470,12 @@ def _temps_written(op: Op) -> list[int]:
     return [op[1]] if op[0] in ("imm", "addr", "ld", "alu", "sel") else []
 
 
+def _canonical_dll(name: str) -> str:
+    """A DLL's import name as the module table keys it: lower case, '.dll' added when it has no extension."""
+    c = name.lower()
+    return c if "." in c else c + ".dll"
+
+
 def runtime_defines() -> dict[str, int]:
     """The guest-memory addresses the guest runtime is compiled against (tools/guest_runtime)."""
     return {
@@ -570,6 +486,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
         "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
+        "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -772,7 +689,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
-        elif k in ("mxcsr", "ud"):                               # run by the model (hvc #11): MXCSR's fault rule
+        elif k in ("mxcsr", "ud", "fcw", "xgetbv"):              # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())
@@ -881,6 +798,9 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             if op[2][0] == "r" and op[2][2] == 32:              # a 32-bit destination is zero-extended anyway
                 a.emit(a64.mov32(op[2][1], op[2][1]))
             a.bind(end)
+        elif k in ("vex", "vexs", "fma", "vzeroupper"):          # VEX (src/w2m/rules/_vex.py; Sprint 049)
+            from w2m.rules import _vex
+            _vex.lower(a, op, reg_of, store)
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)
             from w2m.rules import registry
             lower = registry()[op[1]].lower
@@ -1025,6 +945,7 @@ class VM:
         self.out = bytearray()
         self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
         self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
+        self._pending_init = 0                          # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
         placed: list[tuple[Region, int]] = []
@@ -1074,6 +995,9 @@ class VM:
                                      [(i.base, i.pe) for i in loaded.images] or
                                      ([(loaded.image.image_base, loaded.image)] if loaded.image is not None else []),
                                      read=lambda va, n: bytes(self.mem.read(va, n)))
+        self.virtual.stack = self._stack
+        self.virtual.heap = (HEAP_VA, HEAP_SIZE)
+        self.virtual.mapped = [(va, size) for va, _, size in maps] + [(THUNK_BASE, 1 << 32)]
         self.virtual.snapshot()
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
 
@@ -1109,9 +1033,13 @@ class VM:
         teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)
-        for field_off, value in ((0x08, self.ld.stack_top), (0x10, stack.base), (0x30, teb),
-                                 (0x40, PROCESS_ID), (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb)):
+        # the stack as Windows lays it out (contracts/windows.memory.thread_stack): DeallocationStack at the
+        # reservation's bottom, one reserved page, the 3-page guard, then StackLimit; w2m commits the rest
+        limit = stack.base + (1 + STACK_GUARD_PAGES) * 0x1000
+        for field_off, value in ((0x08, self.ld.stack_top), (0x10, limit), (0x30, teb), (0x40, PROCESS_ID),
+                                 (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb), (0x1478, stack.base)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
+        self._stack = (stack.base, limit, self.ld.stack_top)
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
         struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x30, HEAP_VA)     # PEB.ProcessHeap (heap.c)
@@ -1170,7 +1098,8 @@ class VM:
                           image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
                           imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
                           in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
-                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system)
+                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system,
+                          load_dll=self._load_dll)
         if self.ld.images:                       # a program from loader.load (tests build bare ones)
             self._write_loader_data(modules)
         return modules
@@ -1258,7 +1187,7 @@ class VM:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
-        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR):
+        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP):
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
             result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
@@ -1277,6 +1206,14 @@ class VM:
             result = a0
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
+        elif op == HOST_MAP_VIEW:                       # the view's pages, then the file's bytes copied in
+            a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
+            if self.files is None or a1 not in self.files.fds:
+                raise Unimplemented(f"a file view of descriptor {a1}, which is not open")
+            base = self.virtual.map_view(a0, a2)
+            self.mem.write(base, os.pread(self.files.fds[a1], a0, 0))
+            struct.pack_into("<QQ", self.mm, t + 48, 0, base)
+            return True
         elif op in (HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY):
             a2, a3 = struct.unpack_from("<QQ", self.mm, t + 24)
             result, second = self._virtual_request(op, a0, a1, a2, a3)
@@ -1285,6 +1222,8 @@ class VM:
         elif op in (HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT):
             a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
             result = self._module_request(op, a0, a1, a2)
+            struct.pack_into("<Q", self.mm, t + 48, self._pending_init)      # a DLL just loaded: its DllMain stub
+            self._pending_init = 0
         elif op == HOST_RUNTIME_FAULT:
             raise CompileError(f"guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} "
                                f"(EC 0x{a1 >> 26 & 0x3F:x}), not in translated code or not a data abort")
@@ -1315,6 +1254,75 @@ class VM:
         if a2:
             view.write(a1, raw)
         return len(path)
+
+    def _load_dll(self, name: str) -> int:
+        """LoadLibrary of a DLL file after the start (Sprint 049): the file the name finds (a full path, or a name
+        in the program's directory) is mapped into the VirtualAlloc arena at its preferred base or relocated
+        there, its imports bound (the program's DLLs by export, every other DLL through a thunk), and it joins
+        the module table under its full path. Its DllMain(base, DLL_PROCESS_ATTACH, NULL) is left to a stub the
+        service returns through (`_init_stub`), so the guest runs it as the caller's next code. 0: no file."""
+        if self.files is None:
+            return 0
+        host = self.files.host_file(name)
+        if host is None:
+            return 0
+        raw = host.read_bytes()
+        pe = parse_pe(raw)
+        if pe.tls is not None or pe.tls_callbacks:
+            raise Unimplemented(f"LoadLibrary {name}: static TLS in a DLL loaded after the start")
+        base = self.virtual.place_image(pe)
+        staging = Memory()
+        map_image(staging, raw, pe, base, host.name)
+        self.mem.write(base, bytes(staging.regions[0].data))
+        m = self.modules
+        for slot, target in sorted(pe.iat.items()):
+            dll, fn = target.split("!", 1)
+            leaf = _canonical_dll(dll)
+            if leaf in m.dlls:
+                va = m.dlls[leaf][2].get(fn)
+                if va is None:
+                    raise LoadError(f"{host.name} imports {target}, which {leaf} does not export")
+            else:
+                key = f"{dll.lower()}!{fn.lower()}"
+                va = m.imports.get(key) or m.make_thunk(target)
+                m.imports[key] = va
+            self.mem.write(base + slot, va.to_bytes(8, "little"))
+        self.virtual.snapshot_image(base, pe)
+        c = host.name.lower()
+        m.dlls[c] = (base, pe.size_of_image, {n: base + rva for n, rva in pe.exports})
+        m.dll_names[c] = host.name
+        root = self.files.root
+        m.dll_paths[c] = APP_PATH + "\\".join(host.relative_to(root).parts) if root in host.parents else str(host)
+        self.ld.images.append(Image(host.name, pe, base))
+        if pe.entry_rva:
+            self._pending_init = self._init_stub(base, base + pe.entry_rva)
+        return base
+
+    def _init_stub(self, base: int, entry: int) -> int:
+        """x86 that LoadLibrary returns through (module.c writes the caller's return address at +0x80): DllMain(base,
+        DLL_PROCESS_ATTACH, NULL) with the shadow space (RSP is 16-aligned after the service's ret), a FALSE return
+        calls a thunk that stops the run by name, else RAX = base and a jump to the caller."""
+        page, error = self.virtual.alloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+        if error:
+            raise Unimplemented(f"LoadLibrary: no page for the DllMain stub (error {error})")
+        failed = self.modules.make_thunk(DLL_INIT_FAILED)
+        code = bytearray()
+        code += bytes.fromhex("4883ec20")                                      # sub rsp, 0x20
+        code += bytes.fromhex("48b9") + base.to_bytes(8, "little")             # mov rcx, instance
+        code += bytes.fromhex("ba01000000")                                    # mov edx, DLL_PROCESS_ATTACH
+        code += bytes.fromhex("4531c0")                                        # xor r8d, r8d: a dynamic load
+        code += bytes.fromhex("48b8") + entry.to_bytes(8, "little")            # mov rax, DllMain
+        code += bytes.fromhex("ffd0")                                          # call rax
+        code += bytes.fromhex("4883c420")                                      # add rsp, 0x20
+        code += bytes.fromhex("85c0")                                          # test eax, eax
+        code += bytes.fromhex("750c")                                          # jnz past the failure call
+        code += bytes.fromhex("48b8") + failed.to_bytes(8, "little") + bytes.fromhex("ffd0")
+        code += bytes.fromhex("48b8") + base.to_bytes(8, "little")             # mov rax, the module's handle
+        disp = INIT_STUB_SLOT - (len(code) + 6)
+        code += bytes.fromhex("ff25") + disp.to_bytes(4, "little", signed=True)   # jmp [the caller's return]
+        assert len(code) <= INIT_STUB_SLOT
+        self.mem.write(page, bytes(code))
+        return page
 
     def _zero(self, va: int, n: int) -> None:
         self.mem.write(va, bytes(n))
@@ -1395,6 +1403,15 @@ class VM:
     def set_vectors(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
         self._cmd("vset " + " ".join(f"{q:032x}" for q in xmm) + f" {fpcr:x} {fpsr:x}")
 
+    def ymm_hi(self) -> list[int]:
+        """YMM0-15 bits 255:128 (the monitor data page's slots; Sprint 049)."""
+        return [int.from_bytes(self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16],
+                               "little") for i in range(16)]
+
+    def set_ymm_hi(self, values: list[int]) -> None:
+        for i, v in enumerate(values):
+            self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
+
     def mxcsr(self) -> int:
         """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
         stored = struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]
@@ -1464,6 +1481,9 @@ class VM:
         rt = Runtime(Loaded(None, self.mem, rip, {}, 0))       # type: ignore[arg-type]
         th = rt.th
         th.regs, th.rip, th.xmm, th.mxcsr, th.df = list(x[:16]), rip, list(xmm), mx, self.df()
+        th.fcw = struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0]
+        th.ymm_hi = [int.from_bytes(self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16],
+                                    "little") for i in range(16)]
         th.flags = x86_flags(x, self)
         try:
             rt.step()
@@ -1479,6 +1499,9 @@ class VM:
         x[REG_UNDEFINED_FLAGS] = sum(1 << FLAG_BIT[f] for f in "CZSOPA" if th.flags[f] is None)
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
+        struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
+        for i, v in enumerate(th.ymm_hi):
+            self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
         return self.miss_va                                    # dispatch the next instruction
@@ -1655,6 +1678,8 @@ class VM:
         self._cmd = cmd
         if struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0] == 0:
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
+        if struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0] == 0:
+            struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, 0x27F)        # as a Windows thread starts
         cmd(f"vset {' '.join('0' * 32 for _ in range(16))} "
             f"{fpcr_for(struct.unpack_from('<I', self.mm, MONITOR_DATA + MXCSR_OFF)[0]):x} 0")
         for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),

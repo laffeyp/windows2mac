@@ -1,0 +1,10 @@
+{"s":"file.image","ret":38,"err":0,"w_len":38,"ret_is_w_len":1,"text_is_w":1,"nul_at_shown":1,"byte_after":165}
+{"s":"file.kernel32","ret":32,"err":0,"w_len":32,"ret_is_w_len":1,"text_is_w":1,"nul_at_shown":1,"byte_after":165}
+{"s":"file.exact","ret":38,"err":0,"w_len":38,"ret_is_w_len":1,"text_is_w":1,"nul_at_shown":1,"byte_after":165}
+{"s":"file.short","ret":38,"err":122,"w_len":38,"ret_is_w_len":1,"text_is_w":1,"nul_at_shown":1,"byte_after":165}
+{"s":"file.one","ret":1,"err":122,"w_len":38,"ret_is_w_len":0,"text_is_w":1,"nul_at_shown":1,"byte_after":165}
+{"s":"handle.kernel32","is_kernel32":1,"null":0,"err":57005}
+{"s":"handle.upper","is_kernel32":1,"null":0,"err":57005}
+{"s":"handle.no_extension","is_kernel32":1,"null":0,"err":57005}
+{"s":"handle.missing","is_kernel32":0,"null":1,"err":126}
+{"s":"handle.null","is_image":1,"err":57005}

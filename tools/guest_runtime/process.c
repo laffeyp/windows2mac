@@ -82,7 +82,7 @@ u64 w2m_filetime_start(void) {
 }
 
 /* "Retrieves the current system date and time ... in UTC" as 100 ns intervals since 1601-01-01. */
-u64 k32_GetSystemTimeAsFileTime(u64 out) {
+W2M_VOID u64 k32_GetSystemTimeAsFileTime(u64 out) {
     u64 now = w2m_filetime_now();
     *(u32 *)out = (u32)now;                                    /* FILETIME: dwLowDateTime, dwHighDateTime */
     *(u32 *)(out + 4) = (u32)(now >> 32);
@@ -129,7 +129,7 @@ u64 k32_IsProcessorFeaturePresent(u64 pf) {
 }
 
 /* "Initializes the head of a singly linked list": all 16 bytes zero (row slist.initialize). */
-u64 k32_InitializeSListHead(u64 head) {
+W2M_VOID u64 k32_InitializeSListHead(u64 head) {
     for (int i = 0; i < 16; i++) ((volatile u8 *)head)[i] = 0;
     return w2m_logged(W2M_API_InitializeSListHead, head, 0);
 }
@@ -143,7 +143,7 @@ static unsigned short title[520];
  * lpReserved an empty string, lpDesktop "winsta0\default", lpTitle the module's path, every count,
  * flag and position 0, lpReserved2 NULL, and hStdInput, hStdOutput, hStdError not written at all
  * when the start passed no handles (STARTF_USESTDHANDLES clear: the caller's bytes stay). */
-u64 k32_GetStartupInfoW(u64 si) {
+W2M_VOID u64 k32_GetStartupInfoW(u64 si) {
     u8 *b = (u8 *)si;
     for (int i = 0; i < 80; i++) b[i] = 0;                /* through wShowWindow, cbReserved2, lpReserved2 */
     *(u32 *)si = 104;                                      /* cb */

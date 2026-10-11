@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 /* exports.c — the names system DLLs export on this Windows (Sprint 044: kernel32.dll and kernelbase.dll;
- * Sprint 048: every other DLL UnityPlayer.dll imports, loaded with LoadLibraryW).
+ * Sprint 048: every other DLL UnityPlayer.dll imports, loaded with LoadLibraryW; Sprint 049: the DLLs mono imports and
+ * the game names at run time).
  *
  * No C runtime. Walks each module's export directory in memory (PE/COFF, "The .edata Section") and
  * prints one JSON row per name, in the directory's order (sorted by the linker): {"m":module,
@@ -67,6 +68,22 @@ void start(void) {
     dump(L"ws2_32.dll", "ws2_32");
     dump(L"bcrypt.dll", "bcrypt");
     dump(L"ole32.dll", "ole32");
+    /* Sprint 049: every other DLL the game's DLLs import or name at run time (specs/work_list.json; mono's imports) */
+    dump(L"ntdll.dll", "ntdll");
+    dump(L"psapi.dll", "psapi");
+    dump(L"combase.dll", "combase");
+    dump(L"dxgi.dll", "dxgi");
+    dump(L"d3d11.dll", "d3d11");
+    dump(L"d3d12.dll", "d3d12");
+    dump(L"shcore.dll", "shcore");
+    dump(L"iphlpapi.dll", "iphlpapi");
+    dump(L"xinput1_4.dll", "xinput1_4");
+    dump(L"xinput1_3.dll", "xinput1_3");
+    dump(L"xinput9_1_0.dll", "xinput9_1_0");
+    dump(L"dwmapi.dll", "dwmapi");
+    dump(L"uxtheme.dll", "uxtheme");
+    dump(L"dbghelp.dll", "dbghelp");
+    dump(L"kernel.appcore.dll", "kernel.appcore");
     system32();
     DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);

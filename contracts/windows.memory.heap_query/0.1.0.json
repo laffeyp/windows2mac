@@ -1,0 +1,93 @@
+{
+ "contract_id": "windows.memory.heap_query",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The process heap as mono's collector queries it: a block's region belongs to one MEM_PRIVATE reservation whose base is the heap's handle (64 KB aligned), allocation protection read-write; committed read-write where blocks lie, reserved after; BaseAddress is the queried page; the last error is left.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/heap_query/heap_query.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "blocks",
+    "small_above_heap": 1,
+    "big_non_null": 1
+   },
+   {
+    "s": "query.small",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_is_page": 1,
+    "allocation_base_is_heap": 1,
+    "allocation_base_64k": 1,
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "query.heap",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_is_page": 1,
+    "allocation_base_is_heap": 1,
+    "allocation_base_below_block": 1,
+    "allocation_base_64k": 1,
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "query.after_small_region",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_is_page": 1,
+    "allocation_base_is_heap": 1,
+    "allocation_base_64k": 1,
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38115120174: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:5b2e6d18b8335848996effd91796cf03bc4e055ddc6e740f0d696a4c2f05b871; run 38115121838: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:90374fedfe0602d20ca0cab4e4cab1bb5ef0da0dea4e6ff7ebb0087b957cdde9",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "heap_query-1791696755-0-1",
+    "heap_query-1791696755-0-2",
+    "heap_query-1791696755-1-1",
+    "heap_query-1791696755-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "Whether a 64-byte block lies within 64 KB of the heap's base depends on where Windows put it (it differs between a run's two executions); the derive drops that relation for query.small and query.after_small_region.",
+  "Excluded rows: see sections.excluded."
+ ],
+ "sections": {
+  "probe": "probes/heap_query (Sprint 044)",
+  "implementation": "tools/guest_runtime/heap.c",
+  "rows": "scripts/family_run.py heap_query",
+  "excluded": "query.big: Windows gives a 1 MB block an allocation of its own (allocation_base_is_heap 0); w2m's heap.c serves every size from its one reservation. The threshold is not probed; the allocator that replaces heap.c (review F5) takes it up"
+ }
+}

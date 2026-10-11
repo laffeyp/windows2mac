@@ -1,0 +1,8 @@
+{"s":"teb","reserve_is_header":1,"sp_inside":1,"aligned":1,"limit_above_dealloc":1}
+{"s":"query.sp","ret_is_size":1,"err":57005,"base_address":"limit+2p","allocation_base":"dealloc","end":"base","allocation_protect":4,"state":4096,"protect":4,"type":131072}
+{"s":"query.below_limit","ret_is_size":1,"err":57005,"base_address":"limit-1p","allocation_base":"dealloc","end":"limit","allocation_protect":4,"state":4096,"protect":260,"type":131072}
+{"s":"query.limit","ret_is_size":1,"err":57005,"base_address":"limit","allocation_base":"dealloc","end":"base","allocation_protect":4,"state":4096,"protect":4,"type":131072}
+{"s":"query.below_guard","ret_is_size":1,"err":57005,"base_address":"limit-2p","allocation_base":"dealloc","end":"limit","allocation_protect":4,"state":4096,"protect":260,"type":131072}
+{"s":"query.dealloc","ret_is_size":1,"err":57005,"base_address":"dealloc","allocation_base":"dealloc","end":"limit-3p","allocation_protect":4,"state":8192,"protect":0,"type":131072}
+{"s":"query.base_minus_one","ret_is_size":1,"err":57005,"base_address":"limit+2p","allocation_base":"dealloc","end":"base","allocation_protect":4,"state":4096,"protect":4,"type":131072}
+{"s":"limits","low":"dealloc","high":"base","err":57005}

@@ -18,6 +18,11 @@ guest's working directory:
     FILE_UNLINK  (path, chars)          -> 0, or -errno
     FILE_STAT    (path, chars, out)     -> kind as FILE_LOOKUP; for a file or directory, 32 bytes at out: the size,
                                            then the birth, access and modification times as FILETIME (Sprint 047)
+    FILE_FSTAT   (fd, out)              -> 0; 40 bytes at out: FILE_STAT's 32, then the change time (st_ctime) as FILETIME
+                                           (Sprint 049: GetFileInformationByHandleEx asks by handle, so a name deleted
+                                           or renamed since the open still answers)
+    FILE_DUP     (fd)                   -> a second descriptor on the same open file (Sprint 049: a file mapping holds
+                                           one, so its views outlive the file's handle)
     FILE_MKDIR   (path, chars)          -> 0, or -errno (Sprint 048)
     FILE_RMDIR   (path, chars)          -> 0, or -errno (Sprint 048)
 
@@ -40,7 +45,7 @@ from w2m.kernel32 import Unimplemented
 from typing import Protocol
 
 FILE_LOOKUP, FILE_OPEN, FILE_CLOSE, FILE_READ, FILE_WRITE, FILE_SIZE, FILE_TRUNCATE, FILE_UNLINK = range(6, 14)
-FILE_STAT, FILE_MKDIR, FILE_RMDIR = 24, 25, 26   # after the host requests 14-23 (vm_backend.py)
+FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP = 24, 25, 26, 27, 28   # after the host requests 14-23
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
 # C:\Users\w2m and the AppData folders SHGetKnownFolderPath names, each an existing directory on Windows
@@ -55,15 +60,17 @@ class BridgeRequestError(RuntimeError):
     path, an unknown descriptor): a runtime defect; the run stops with this message."""
 
 
-def birth_ns(path: Path, st: os.stat_result) -> int:
+def birth_ns(path: Path | int, st: os.stat_result) -> int:
     """A file's birth time in exact nanoseconds: libc stat's st_birthtimespec (macOS arm64 struct stat: the access,
     modification, change and birth timespecs at 32, 48, 64 and 80). Python 3.12 gives it only as float seconds, about
     120 ns off at this date, coarser than FILETIME's 100 ns (a run read an access time before the creation time). The
-    access and modification times at those offsets must equal os.stat's, or the layout is not the one assumed."""
+    access and modification times at those offsets must equal os.stat's, or the layout is not the one assumed. An int
+    is a host descriptor (fstat)."""
     import ctypes
     import struct as st_struct
     buf = ctypes.create_string_buffer(256)
-    if ctypes.CDLL(None).stat(os.fsencode(path), buf) != 0:
+    libc = ctypes.CDLL(None)
+    if (libc.fstat(path, buf) if isinstance(path, int) else libc.stat(os.fsencode(path), buf)) != 0:
         raise Unimplemented(f"stat of {path} failed")
     a, m, b = (st_struct.unpack_from("<qq", buf.raw, off) for off in (32, 48, 80))
     if a[0] * 10**9 + a[1] != st.st_atime_ns or m[0] * 10**9 + m[1] != st.st_mtime_ns:
@@ -108,6 +115,15 @@ class FileBridge:
         name = mem.read(va, 2 * chars).decode("utf-16-le", errors="replace")
         if "\0" in name:
             raise BridgeRequestError(f"path of {chars} characters has a NUL at character {name.index(chr(0))}: {name!r}")
+        return self._parts(name)
+
+    def host_file(self, name: str) -> Path | None:
+        """The host path of the file a guest name means (full, or relative to C:\\w2m\\app), or None when no file
+        is there: LoadLibrary's search of the program's directory (Sprint 049)."""
+        kind, path = self._resolve(self._parts(name))
+        return path if kind == IS_FILE else None
+
+    def _parts(self, name: str) -> list[str]:
         if name.startswith("\\\\?\\"):
             name = name[4:]
         if len(name) > 1 and name[1] == ":":
@@ -202,6 +218,19 @@ class FileBridge:
             if self.read_only and arg[0] in self.read_only_fds:
                 raise Unimplemented("a write to a file under the read-only C:\\w2m\\app")
             return os.pwrite(host, mem.read(arg[1], arg[2]), arg[3]), 0
+        if op == FILE_DUP:
+            fd = self.next_fd
+            self.next_fd += 1
+            self.fds[fd] = os.dup(host)
+            if arg[0] in self.read_only_fds:
+                self.read_only_fds.add(fd)
+            return fd, 0
+        if op == FILE_FSTAT:
+            st = os.fstat(host)
+            times = [t // 100 + FILETIME_UNIX_EPOCH
+                     for t in (birth_ns(host, st), st.st_atime_ns, st.st_mtime_ns, st.st_ctime_ns)]
+            mem.write(arg[1], b"".join(v.to_bytes(8, "little") for v in [st.st_size, *times]))
+            return 0, 0
         if op == FILE_SIZE:
             st = os.fstat(host)
             assert stat.S_ISREG(st.st_mode)

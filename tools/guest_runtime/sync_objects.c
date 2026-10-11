@@ -30,46 +30,82 @@
 #define CREATE_EVENT_MANUAL_RESET 1u
 #define CREATE_EVENT_INITIAL_SET 2u
 
-enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN };   /* TOKEN: token.c (Sprint 048) */
+enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PROCESS, MAPPING };   /* TOKEN: token.c;
+                                                                          * THREAD, PROCESS, MAPPING: Sprint 049 */
 
-static struct object { u32 kind; s64 count, max; } objects[OBJECTS];   /* count: semaphore count, event 0/1, mutex recursion */
+/* Objects, and the handles that name them (Sprint 049: DuplicateHandle gives a second handle to one object, which
+ * lives until its last handle closes). count: semaphore count, event 0/1, mutex recursion, a thread's id, a file
+ * mapping's host descriptor (its own; closed with the mapping); max: a mapping's size. */
+static struct object { u32 kind; s64 count, max; u32 refs; } objects[OBJECTS];
+static int handle_object[OBJECTS];              /* handle slot -> object index + 1; 0: the slot is free */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
-static u64 make(u64 api, u32 kind, s64 count, s64 max) {
+static u64 handle_for(u64 api, int object) {
     for (int i = 0; i < OBJECTS; i++)
-        if (objects[i].kind == FREE) {
-            objects[i] = (struct object){kind, count, max};
-            set_error(0);                              /* rows *.create: err 0 */
-            return w2m_logged(api, kind, OBJECT_BASE + 4 * (u64)i);
-        }
-    w2m_unimplemented(api, OBJECTS);
-    return 0;
-}
-
-static struct object *object_of(u64 h) {
-    if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || (h - OBJECT_BASE) / 4 >= OBJECTS) return 0;
-    struct object *o = &objects[(h - OBJECT_BASE) / 4];
-    return o->kind == FREE ? 0 : o;
-}
-
-/* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. */
-/* For token.c: a process token's handle, from this table so CloseHandle closes it; and whether h is one. */
-u64 w2m_object_token(u64 api) {
-    for (int i = 0; i < OBJECTS; i++)
-        if (objects[i].kind == FREE) {
-            objects[i] = (struct object){TOKEN, 0, 0};           /* the last error is left (row open) */
+        if (!handle_object[i]) {
+            handle_object[i] = object + 1;
+            objects[object].refs++;
             return OBJECT_BASE + 4 * (u64)i;
         }
     w2m_unimplemented(api, OBJECTS);
     return 0;
 }
-int w2m_object_is_token(u64 h) { struct object *o = object_of(h); return o && o->kind == TOKEN; }
 
-int w2m_object_close(u64 h) {
+static int new_object(u64 api, u32 kind, s64 count, s64 max) {
+    for (int i = 0; i < OBJECTS; i++)
+        if (objects[i].kind == FREE) {
+            objects[i] = (struct object){kind, count, max, 0};
+            return i;
+        }
+    w2m_unimplemented(api, OBJECTS);
+    return 0;
+}
+
+static u64 make(u64 api, u32 kind, s64 count, s64 max) {
+    u64 h = handle_for(api, new_object(api, kind, count, max));
+    set_error(0);                                  /* rows *.create: err 0 */
+    return w2m_logged(api, kind, h);
+}
+
+static int slot_of(u64 h) {
+    if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || (h - OBJECT_BASE) / 4 >= OBJECTS) return -1;
+    int i = (int)((h - OBJECT_BASE) / 4);
+    return handle_object[i] ? i : -1;
+}
+
+static struct object *object_of(u64 h) {
+    int i = slot_of(h);
+    return i < 0 ? 0 : &objects[handle_object[i] - 1];
+}
+
+/* For token.c: a process token's handle, from this table so CloseHandle closes it; and whether h is one. The
+ * last error is left (row open). */
+u64 w2m_object_token(u64 api) { return handle_for(api, new_object(api, TOKEN, 0, 0)); }
+int w2m_object_is_token(u64 h) { struct object *o = object_of(h); return o && o->kind == TOKEN; }
+int w2m_object_is_open(u64 h) { return object_of(h) != 0; }        /* file.c's handle calls (Sprint 049) */
+
+/* For file.c's CreateFileMappingW and MapViewOfFile (Sprint 049): a mapping's handle, holding host descriptor fd
+ * and the mapping's size; and a mapping's descriptor and size by handle (0 when h names no mapping). */
+u64 w2m_object_mapping(u64 api, u64 fd, u64 size) { return handle_for(api, new_object(api, MAPPING, (s64)fd, (s64)size)); }
+int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size) {
     struct object *o = object_of(h);
-    if (!o) return 0;
-    o->kind = FREE;
+    if (!o || o->kind != MAPPING) return 0;
+    *fd = (u64)o->count;
+    *size = (u64)o->max;
+    return 1;
+}
+
+/* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. */
+int w2m_object_close(u64 h) {
+    int i = slot_of(h);
+    if (i < 0) return 0;
+    struct object *o = &objects[handle_object[i] - 1];
+    handle_object[i] = 0;
+    if (--o->refs == 0) {
+        if (o->kind == MAPPING) w2m_host(W2M_FILE_CLOSE, (u64)o->count, 0, 0, 0, 0);   /* the views keep their copy */
+        o->kind = FREE;
+    }
     return 1;
 }
 
@@ -136,7 +172,10 @@ u64 k32_ReleaseMutex(u64 h) {
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }
 
-static int signaled(struct object *o) { return o->kind == MUTEX || o->count > 0; }   /* one thread owns every mutex */
+static int signaled(struct object *o) {
+    if (o->kind == THREAD || o->kind == PROCESS) return 0;   /* running: signaled when it ends (row wait.own_thread) */
+    return o->kind == MUTEX || o->count > 0;              /* one thread owns every mutex */
+}
 
 static void take(struct object *o) {
     if (o->kind == MUTEX) o->count++;
@@ -191,8 +230,92 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
 }
 
 /* Sleep: the time passes on the guest counter (10 MHz); one thread, so nothing else runs meanwhile. */
-u64 k32_Sleep(u64 ms) {
+W2M_VOID u64 k32_Sleep(u64 ms) {
     u64 until = w2m_counter_now() + (u64)(u32)ms * 10000;
     while (w2m_counter_now() < until) {}
     return w2m_logged(W2M_API_Sleep, (u32)ms, 0);
 }
+
+/* DuplicateHandle, OpenThread, GetThreadId, GetProcessId, CreateSemaphoreW (Sprint 049, family "thread handles"), as
+ * contracts/windows.handle.thread_handles records Windows answering (Server 2025 and 2022):
+ *   - the pseudo-handles are -1 (the process) and -2 (the thread); DuplicateHandle of either gives a real handle,
+ *     a new one each time, naming the current thread or process (GetThreadId, GetProcessId); a thread's handle
+ *     does not signal while it runs
+ *   - a duplicate of an event names the same event; with DUPLICATE_CLOSE_SOURCE the copy takes the source's value
+ *   - a source that is no handle: FALSE, ERROR_INVALID_HANDLE, *lpTargetHandle NULL; success leaves the last error
+ *   - OpenThread(THREAD_ALL_ACCESS, FALSE, the current thread's id): a real handle; an id no thread has: NULL, 87
+ *   - CreateSemaphoreW: success sets the last error to 0; an initial count above the maximum: NULL, 87 */
+#define CURRENT_PROCESS (~0ull)
+#define CURRENT_THREAD (~0ull - 1)
+#define DUPLICATE_CLOSE_SOURCE 1u
+#define DUPLICATE_SAME_ACCESS 2u
+#define ERROR_INVALID_PARAMETER 87u
+
+int w2m_is_file_handle(u64 h);       /* file.c */
+int w2m_is_std_handle(u64 h);        /* console.c */
+
+static u32 current_tid(void) { return *(const u32 *)(W2M_TEB_VA + 0x48); }
+static u32 current_pid(void) { return *(const u32 *)(W2M_TEB_VA + 0x40); }
+
+/* DuplicateHandle(hSourceProcessHandle, hSourceHandle, hTargetProcessHandle, lpTargetHandle, dwDesiredAccess,
+ * bInheritHandle, dwOptions): the last three on the guest's stack at RSP + 0x28, + 0x30, + 0x38. */
+u64 k32_DuplicateHandle(u64 source_process, u64 source, u64 target_process, u64 out, u64 rsp) {
+    u32 inherit = *(u32 *)(rsp + 0x30), options = *(u32 *)(rsp + 0x38);
+    if (source_process != CURRENT_PROCESS || target_process != CURRENT_PROCESS || !out || inherit
+        || (options & ~(DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) || !(options & DUPLICATE_SAME_ACCESS))
+        w2m_unimplemented(W2M_API_DuplicateHandle, options);
+    u64 h;
+    if (source == CURRENT_THREAD || source == CURRENT_PROCESS) {
+        if (options & DUPLICATE_CLOSE_SOURCE) w2m_unimplemented(W2M_API_DuplicateHandle, source);
+        h = source == CURRENT_THREAD ? handle_for(W2M_API_DuplicateHandle, new_object(W2M_API_DuplicateHandle, THREAD, current_tid(), 0))
+                                     : handle_for(W2M_API_DuplicateHandle, new_object(W2M_API_DuplicateHandle, PROCESS, current_pid(), 0));
+    } else {
+        int i = slot_of(source);
+        if (i < 0) {
+            if (w2m_is_file_handle(source) || w2m_is_std_handle(source))   /* a file's or the console's: not in the rows */
+                w2m_unimplemented(W2M_API_DuplicateHandle, source);
+            *(u64 *)out = 0;
+            set_error(ERROR_INVALID_HANDLE);
+            return w2m_logged(W2M_API_DuplicateHandle, source, 0);
+        }
+        if (options & DUPLICATE_CLOSE_SOURCE) h = source;          /* the copy keeps the slot (row dup.close_source) */
+        else h = handle_for(W2M_API_DuplicateHandle, handle_object[i] - 1);
+    }
+    *(u64 *)out = h;
+    return w2m_logged(W2M_API_DuplicateHandle, source, 1);
+}
+
+/* OpenThread(dwDesiredAccess, bInheritHandle, dwThreadId): one thread runs, so only its id names a thread. */
+u64 k32_OpenThread(u64 access, u64 inherit, u64 tid) {
+    (void)access;
+    if ((u32)inherit) w2m_unimplemented(W2M_API_OpenThread, inherit);
+    if ((u32)tid != current_tid()) {
+        set_error(ERROR_INVALID_PARAMETER);
+        return w2m_logged(W2M_API_OpenThread, tid, 0);
+    }
+    return w2m_logged(W2M_API_OpenThread, tid, handle_for(W2M_API_OpenThread, new_object(W2M_API_OpenThread, THREAD, current_tid(), 0)));
+}
+
+u64 k32_GetThreadId(u64 h) {
+    if (h == CURRENT_THREAD) return w2m_logged(W2M_API_GetThreadId, h, current_tid());
+    struct object *o = object_of(h);
+    if (!o || o->kind != THREAD) w2m_unimplemented(W2M_API_GetThreadId, h);           /* not in the rows */
+    return w2m_logged(W2M_API_GetThreadId, h, (u64)o->count);
+}
+
+u64 k32_GetProcessId(u64 h) {
+    if (h == CURRENT_PROCESS) return w2m_logged(W2M_API_GetProcessId, h, current_pid());
+    struct object *o = object_of(h);
+    if (!o || o->kind != PROCESS) w2m_unimplemented(W2M_API_GetProcessId, h);         /* not in the rows */
+    return w2m_logged(W2M_API_GetProcessId, h, (u64)o->count);
+}
+
+u64 k32_CreateSemaphoreW(u64 attributes, u64 initial, u64 maximum, u64 name) {
+    if (attributes || name || (s32)maximum <= 0 || (s32)initial < 0) w2m_unimplemented(W2M_API_CreateSemaphoreW, name);
+    if ((s32)initial > (s32)maximum) {
+        set_error(ERROR_INVALID_PARAMETER);
+        return w2m_logged(W2M_API_CreateSemaphoreW, initial, 0);
+    }
+    return make(W2M_API_CreateSemaphoreW, SEMAPHORE, (s32)initial, (s32)maximum);
+}
+

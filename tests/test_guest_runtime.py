@@ -28,9 +28,22 @@ def _skeleton() -> bytes:
 
 
 def test_api_ids_match_the_services() -> None:
-    internal = {"Exception", "Cpuid"}                          # ring entries that are not kernel32 services
+    internal = set(guest_runtime.INTERNAL_APIS)                # ring entries that are not services
     other_dlls = {fn for services in vm_backend.DLL_SERVICES.values() for fn in services}   # SHELL32 (Sprint 047)
-    assert set(guest_runtime.api_ids().values()) - internal == set(vm_backend.SERVICES) | other_dlls
+    ids = guest_runtime.api_ids()
+    assert set(ids.values()) - internal == set(vm_backend.SERVICES) | other_dlls
+    assert sorted(ids) == list(range(1, len(ids) + 1))        # 1 up, no gaps (api_ids.h, Sprint 049)
+
+
+def test_service_table_reads_definitions_not_prototypes() -> None:
+    """A prototype of another file's service (`u64 k32_X(...);`) is not a definition; W2M_VOID marks RAX left."""
+    text = ("u64 k32_GetModuleFileNameW(u64 module, u64 buffer, u64 size);\n"
+            "W2M_VOID u64 k32_Sleep(u64 ms) {\n    return 0;\n}\n"
+            "u64 shell32_CommandLineToArgvW(u64 line,\n                               u64 count) {\n    return 0;\n}\n"
+            "static u64 k32_helper(void) { return 0; }\n")
+    table = guest_runtime.service_table({"x.c": text})
+    assert table == {"KERNEL32": {"Sleep": ("k32_Sleep", False)},
+                     "SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)}}
 
 
 def test_every_api_id_has_a_call_counter() -> None:

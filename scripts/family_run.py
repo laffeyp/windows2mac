@@ -61,6 +61,7 @@ class Plant:
     new: str
     reach: tuple[str, ...]  # the rows it changes, named before it runs (fnmatch patterns allowed)
     host: str | None = None  # a host module (w2m.vm_backend) to patch instead of the family's guest file
+    file: str | None = None  # another guest runtime file (time_and_error_mode.c) to patch instead (Sprint 049)
 
 
 @dataclass(frozen=True)
@@ -1203,7 +1204,7 @@ FAMILIES: dict[str, Family] = {
             "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
             "(user32 1,007 against 1,041).",),
         plants={
-            "loadlibraryw_not_found": Plant("    u64 h = find(name, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
     "known_folders": Family(
@@ -1340,6 +1341,410 @@ FAMILIES: dict[str, Family] = {
                                                "    return w2m_logged(W2M_API_GetSidSubAuthority", ("sub_authority",)),
             "short_buffer_accepted": Plant("if ((u32)length < LABEL_SIZE || !info)", "if (!info)",
                                            ("short_buffer",))}),
+    "critical_section_flags": Family(
+        name="critical_section_flags",
+        contract_id="windows.critical_section.flags",
+        version="0.1.0",
+        summary=("InitializeCriticalSectionEx's flags, as mono's start-up passes CRITICAL_SECTION_NO_DEBUG_INFO with spin 0: "
+                 "spin 0 gives 2000 with the dynamic-spin flag, NO_DEBUG_INFO adds its bit (0x030007D0), DYNAMIC_SPIN "
+                 "with spin 0 changes nothing; a nonzero spin keeps the flags; STATIC_INIT alone answers TRUE and leaves "
+                 "every byte; the last error is left."),
+        probe="critical_section_flags", guest_file="critical_section.c",
+        runs={
+              "38113796820": Run("windows-2025", "78f7203b0f64375e7a55f06cbadde9d67f2a91c32ab0674d0775934545c69a3f", "critical_section_flags-1791695270-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38113797868": Run("windows-2022", "eab7ad8bdc971a686c4cd9ba5dddb919be7207ae1e2a18d00ad415498eb23c38", "critical_section_flags-1791695270-1", "AMD EPYC 9V74 80-Core Processor"),
+        },
+        documented=(
+            documented("ms-initializecriticalsectionex", "api/synchapi/nf-synchapi-initializecriticalsectionex",
+                       "2018-12-05", "CRITICAL_SECTION_NO_DEBUG_INFO: The critical section is created without debug "
+                       "information."),),
+        open_questions=(
+            "STATIC_INIT and DYNAMIC_SPIN are not documented for this call; the rows record what Windows does with "
+            "them alone and with NO_DEBUG_INFO; other combinations stop the run.",),
+        plants={
+            "no_debug_dropped_at_spin0": Plant("DEFAULT_SPIN | (flags & NO_DEBUG_INFO)", "DEFAULT_SPIN",
+                                               ("spin0.no_debug_info", "spin0.no_debug_dynamic")),
+            "static_init_initializes": Plant(
+                "    if (flags == STATIC_INIT) return w2m_logged(W2M_API_InitializeCriticalSectionEx, cs, 1);\n",
+                "    if (flags == STATIC_INIT) flags = 0;\n", ("spin0.static_init",))}),
+    "module_names_ansi": Family(
+        name="module_names_ansi",
+        contract_id="windows.module.names_ansi",
+        version="0.1.0",
+        summary=("GetModuleFileNameA answers GetModuleFileNameW's text narrowed and its length; a buffer too small gets "
+                 "nSize - 1 bytes and a NUL, the answer nSize and error 122; success sets error 0. GetModuleHandleA finds "
+                 "kernel32 under any case and without its extension, NULL is the image, a missing name is NULL and 126; "
+                 "success leaves the last error."),
+        probe="module_names_ansi", guest_file="module.c", host_files=("src/w2m/modules.py",),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("file.image", "file.exact", "file.short", "file.one")
+                                         and (k == "w_len" or (k == "ret" and r["s"] != "file.one")))}
+                                for r in printed],
+        runs={
+              "38113666467": Run("windows-2025", "101395b58178b3fc6fbda6647f30e73123f1728782a9b92c59d5925ecd777a4a", "module_names_ansi-1791695127-0", "AMD EPYC 7763 64-Core Processor"),
+              "38113667870": Run("windows-2022", "c131bd9f752c01b7966c229dc45cc0c7986bdb904a118c55ce10168e9493695c", "module_names_ansi-1791695127-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
+        documented=(
+            documented("ms-getmodulefilenamea", "api/libloaderapi/nf-libloaderapi-getmodulefilenamea", "2018-12-05",
+                       "If the buffer is too small to hold the module name, the string is truncated to nSize characters "
+                       "including the terminating null character, the function returns nSize, and the function sets the "
+                       "last error to ERROR_INSUFFICIENT_BUFFER."),),
+        open_questions=(
+            "The image's path length is the runner's (38); the derive drops it (w_len, and ret where ret is that "
+            "length) from file.image, file.exact, file.short and file.one, and keeps ret_is_w_len.",
+            "Only ASCII paths and names are probed; w2m stops at another byte.",),
+        plants={
+            "short_returns_size_minus_one": Plant("return w2m_logged(W2M_API_GetModuleFileNameA, module, size);",
+                                                  "return w2m_logged(W2M_API_GetModuleFileNameA, module, size - 1);",
+                                                  ("file.short", "file.one")),
+            "missing_handle_no_error": Plant("    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_GetModuleHandleA",
+                                             "    return w2m_logged(W2M_API_GetModuleHandleA", ("handle.missing",))}),
+    "function_tables": Family(
+        name="function_tables",
+        contract_id="windows.exception.function_tables",
+        version="0.1.0",
+        summary=("ntdll's growable function tables as mono's JIT registers its code: RtlAddGrowableFunctionTable answers "
+                 "0 and a table, also for zero entries; RtlLookupFunctionEntry answers the entry whose [RangeBase + "
+                 "BeginAddress, RangeBase + EndAddress) holds the address among the first EntryCount, with RangeBase as "
+                 "the image base, else NULL with the image base untouched; RtlGrowFunctionTable raises the count; "
+                 "RtlDeleteGrowableFunctionTable removes the table; no call touches the last error."),
+        probe="function_tables", guest_file="function_tables.c",
+        runs={
+              "38114067866": Run("windows-2025", "d228185b9db008604eab043294136e6eb76bded19fa5e4ce724156145356fc5f", "function_tables-1791695574-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38114069629": Run("windows-2022", "0b7bc93d8c5d8fc730ccb613a581c8dbdf86565d666563f32d1b54e9ac67ae70", "function_tables-1791695574-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-rtladdgrowablefunctiontable", "api/winnt/nf-winnt-rtladdgrowablefunctiontable", "2018-12-05",
+                       "The entries in this array must remain sorted in ascending order of the BeginAddress members. ... "
+                       "This function returns zero on success. ... This table is used for dispatching exceptions "
+                       "through runtime-generated code and for collecting stack backtraces."),),
+        open_questions=(
+            "RtlLookupFunctionEntry over an image's own .pdata is not served: an address in a loaded image stops the "
+            "run. Exception dispatch will need it.",),
+        plants={
+            "end_inclusive": Plant("            else if (pc >= tb->base + f[mid].end) lo = mid + 1;",
+                                   "            else if (pc > tb->base + f[mid].end) lo = mid + 1;", ("find.first_end",)),
+            "grow_ignored": Plant("    tb->count = (u32)count;\n", "", ("find.second", "find.third")),
+            "miss_writes_image": Plant("        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
+                                       "        *(u64 *)image = tb->base;\n        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
+                                       ("find.first_end", "find.second_before_grow", "find.gap",
+                                        "find.fourth_beyond_count", "find.empty"))}),
+    "vectored_handlers": Family(
+        name="vectored_handlers",
+        contract_id="windows.exception.vectored_handlers",
+        version="0.1.0",
+        summary=("AddVectoredExceptionHandler answers a new non-NULL handle each call, the same handler again included; "
+                 "RemoveVectoredExceptionHandler answers 1 for a registered handle and 0 for it again or for any other "
+                 "value; neither touches the last error. Dispatch (excluded until w2m dispatches): handlers added first "
+                 "run before those added last, CONTINUE_EXECUTION ends the search and RaiseException returns, the "
+                 "handler sees the code and flags 0x80."),
+        probe="vectored_handlers", guest_file="vectored_handlers.c",
+        runs={
+              "38114204685": Run("windows-2025", "ee140359e6683f4072a35535c52483aa788b381c6f44f9cdf883e45e48a03682", "vectored_handlers-1791695726-0", "AMD EPYC 7763 64-Core Processor"),
+              "38114206477": Run("windows-2022", "62adbf5d647a07f02182ceecc86b535ee508163913152ea86b9ffe9e82d7bc18", "vectored_handlers-1791695726-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
+        documented=(
+            documented("ms-addvectoredexceptionhandler", "api/errhandlingapi/nf-errhandlingapi-addvectoredexceptionhandler",
+                       "2018-12-05", "If the First parameter is nonzero, the handler is the first handler to be "
+                       "called until a subsequent call to AddVectoredExceptionHandler is used to specify a different "
+                       "handler as the first handler."),),
+        open_questions=(
+            "The list's order is not judged yet: only dispatch shows it, and its rows are excluded; a plant that puts "
+            "First handlers at the back changes no included row (tried 2026-10-11).",
+            "Excluded rows: see sections.excluded."),
+        excluded={"dispatch.continue": "RaiseException and dispatch to guest handlers: not built (the exceptions "
+                                       "family); the probe writes its registration rows first",
+                  "dispatch.after_remove": "as dispatch.continue"},
+        expected_stop="Unimplemented: import KERNEL32.dll!RaiseException",
+        plants={
+            "remove_answers_one": Plant("    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 0);",
+                                        "    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 1);",
+                                        ("remove.again", "remove.unknown"))}),
+    "thread_stack": Family(
+        name="thread_stack",
+        contract_id="windows.memory.thread_stack",
+        version="0.1.0",
+        summary=("The main thread's stack, as mono's collector queries it: one MEM_PRIVATE reservation of "
+                 "SizeOfStackReserve from TEB.DeallocationStack, allocation protection read-write; reserved below "
+                 "StackLimit - 3 pages, those 3 pages committed with PAGE_GUARD, committed read-write from StackLimit "
+                 "to StackBase; VirtualQuery's BaseAddress is the queried page; GetCurrentThreadStackLimits answers "
+                 "DeallocationStack and StackBase; the last error is left."),
+        probe="thread_stack", guest_file="thread_queries.c", host_files=("src/w2m/virtual_memory.py",),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("query.sp", "query.base_minus_one") and k == "base_address")}
+                                for r in printed],
+        runs={
+              "38114444717": Run("windows-2025", "09f0d8199eb9748f2ebd1855df859eeed84a7028982ffc6fe7091e7ccfb44091", "thread_stack-1791696004-0", "AMD EPYC 7763 64-Core Processor"),
+              "38114446614": Run("windows-2022", "d39ae9f9aa57c21fdc3a440f5e0acc4df8b073df4def00ef03b21a5ad047e7dd", "thread_stack-1791696004-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-thread-stack-size", "procthread/thread-stack-size", "2025-07-14",
+                       "The system commits additional pages from the reserved stack memory as they are needed, until "
+                       "either the stack reaches the reserved size minus one page (which is used as a guard page to "
+                       "prevent stack overflow) or the system is so low on memory that the operation fails."),),
+        open_questions=(
+            "Where the stack pointer's page lies above StackLimit depends on how far the runner's stack had grown "
+            "(2 or 3 pages in runs 38114383995, 38114385651, 38114444717, 38114446614); the derive drops base_address "
+            "from query.sp and query.base_minus_one, and query.limit and query.below_limit keep the layout.",
+            "w2m commits all but 4 pages of the 1 MB at the start and never moves StackLimit; Windows commits on "
+            "demand through the guard pages. A program that reads StackLimit to size its stack sees more room in "
+            "w2m.",
+            "The page speaks of one guard page; every run shows a 3-page PAGE_GUARD region below StackLimit "
+            "(query.below_limit, query.below_guard). The rows are followed."),
+        plants={
+            # the expression, not the constant: host_patched rebinds changed objects by identity, and small ints are shared
+            "guard_one_page": Plant("        guard = limit - STACK_GUARD_PAGES * PAGE", "        guard = limit - 1 * PAGE",
+                                    ("query.below_guard", "query.dealloc"), host="w2m.virtual_memory"),
+            "limits_swapped": Plant("    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x1478);",
+                                    "    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x10);", ("limits",))}),
+    "thread_handles": Family(
+        name="thread_handles",
+        contract_id="windows.handle.thread_handles",
+        version="0.1.0",
+        summary=("DuplicateHandle as mono calls it: the pseudo-handles -1 and -2 become real handles, new ones each "
+                 "time, naming the current process and thread; a thread's handle does not signal while it runs; a "
+                 "duplicate of an event names the same event, and with DUPLICATE_CLOSE_SOURCE takes the source's value; "
+                 "a source that is no handle: FALSE, 6, the target NULL; success leaves the last error. OpenThread on "
+                 "the current thread's id gives a real handle, on an id no thread has NULL and 87. CreateSemaphoreW "
+                 "sets error 0 on success; an initial count above the maximum is NULL and 87."),
+        probe="thread_handles", guest_file="sync_objects.c",
+        host_files=("tools/guest_runtime/file.c", "tools/guest_runtime/console.c"),
+        runs={
+              "38114820680": Run("windows-2025", "42e42696025a5ee2c71994db9a47d4be2fe667d8b769e65a617b68359cf65703", "thread_handles-1791696424-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38114822014": Run("windows-2022", "6b75ead1c4597d8c4b1ec8426c3e775e4b8fbd9e859d861ef6a249f8a51c56a6", "thread_handles-1791696424-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-duplicatehandle", "api/handleapi/nf-handleapi-duplicatehandle", "2018-12-05",
+                       "DUPLICATE_CLOSE_SOURCE: Closes the source handle. This occurs regardless of any error status "
+                       "returned."),),
+        open_questions=(
+            "One thread runs in w2m: OpenThread answers only the current thread's id, and waiting without a timeout on "
+            "a running thread stops the run.",
+            "Windows reuses a closed handle's value; w2m gives a CLOSE_SOURCE copy the source's slot and otherwise the "
+            "lowest free slot. Which value a later handle gets is not in the rows."),
+        plants={
+            "close_source_new_slot": Plant("        if (options & DUPLICATE_CLOSE_SOURCE) h = source;          /* the copy keeps the slot (row dup.close_source) */\n        else h",
+                                           "        h", ("dup.close_source",)),
+            "thread_signals": Plant("    if (o->kind == THREAD || o->kind == PROCESS) return 0;",
+                                    "    if (o->kind == THREAD || o->kind == PROCESS) return 1;", ("wait.own_thread",)),
+            "semaphore_leaves_error": Plant("    u64 h = handle_for(api, new_object(api, kind, count, max));\n    set_error(0);",
+                                            "    u64 h = handle_for(api, new_object(api, kind, count, max));",
+                                            ("semaphore.zero", "semaphore.one"))}),
+    "heap_query": Family(
+        name="heap_query",
+        contract_id="windows.memory.heap_query",
+        version="0.1.0",
+        summary=("The process heap as mono's collector queries it: a block's region belongs to one MEM_PRIVATE "
+                 "reservation whose base is the heap's handle (64 KB aligned), allocation protection read-write; "
+                 "committed read-write where blocks lie, reserved after; BaseAddress is the queried page; the last "
+                 "error is left."),
+        probe="heap_query", guest_file="heap.c", host_files=("src/w2m/virtual_memory.py",),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("query.small", "query.after_small_region")
+                                         and k == "allocation_base_below_block")}
+                                for r in printed],
+        runs={
+              "38115120174": Run("windows-2025", "5b2e6d18b8335848996effd91796cf03bc4e055ddc6e740f0d696a4c2f05b871", "heap_query-1791696755-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38115121838": Run("windows-2022", "90374fedfe0602d20ca0cab4e4cab1bb5ef0da0dea4e6ff7ebb0087b957cdde9", "heap_query-1791696755-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "Whether a 64-byte block lies within 64 KB of the heap's base depends on where Windows put it (it differs "
+            "between a run's two executions); the derive drops that relation for query.small and "
+            "query.after_small_region.",
+            "Excluded rows: see sections.excluded."),
+        excluded={"query.big": "Windows gives a 1 MB block an allocation of its own (allocation_base_is_heap 0); "
+                               "w2m's heap.c serves every size from its one reservation. The threshold is not probed; "
+                               "the allocator that replaces heap.c (review F5) takes it up"},
+        plants={
+            "all_committed": Plant("        committed = _up(max(used, base + PAGE), PAGE)",
+                                   "        committed = base + size", ("query.after_small_region",), host="w2m.virtual_memory"),
+            "base_is_page": Plant("            return Info(page, base, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)",
+                                  "            return Info(page, page, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)",
+                                  ("query.small",), host="w2m.virtual_memory")}),
+    "files_more": Family(
+        name="files_more",
+        contract_id="windows.file.files_more",
+        version="0.1.0",
+        summary=("The game's remaining file calls (specs/work_list.json). GetFileInformationByHandleEx: FileBasicInfo "
+                 "(0x28 bytes, the pad zeroed) holds GetFileAttributesExW's times, a change time not before the write "
+                 "time, and FILE_ATTRIBUTE_ARCHIVE; FileStandardInfo (0x18) one link, not deleting, not a directory, "
+                 "the size, and an allocation of 8-byte units up to 720 bytes and 4096-byte clusters from 740 on, kept "
+                 "in clusters after the file shrinks; a smaller buffer is ERROR_BAD_LENGTH with nothing written. "
+                 "GetFileSize: the low 32 bits, the high ones through the pointer. SetHandleInformation: the mask's "
+                 "INHERIT and PROTECT_FROM_CLOSE bits, other bits ignored. GetWindowsDirectoryW: C:\\Windows, 10; 11 "
+                 "for a short buffer, left unwritten. GetTempFileNameW: <dir as given>\\<prefix's first 3><hex, upper "
+                 "case, no leading zeros>.tmp, ERROR_DIRECTORY for a missing directory; uUnique 0 creates the empty "
+                 "file and sets the last error to 0. A handle opened with no access answers every query; a closed one "
+                 "is ERROR_INVALID_HANDLE; every other success leaves the last error."),
+        probe="files_more", guest_file="file.c",
+        derive=lambda printed: [{**r, "s": f"standard.sweep.{r['size']}"} if r.get("s") == "standard.sweep" else r
+                                for r in printed],                       # one row per swept size
+        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/system_info.c", "tools/guest_runtime/paths.c"),
+        runs={
+              "38119625685": Run("windows-2025", "4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8", "files_more-1791701711-0", "AMD EPYC 7763 64-Core Processor"),
+              "38119627458": Run("windows-2022", "17d996052924c712ba56fb559c8b0f851988187a4ee4da56c368ac66ee9b02f0", "files_more-1791701711-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-gettempfilenamew", "api/fileapi/nf-fileapi-gettempfilenamew", "2025-09-24",
+                       "If uUnique is zero, the function attempts to form a unique file name using the current system "
+                       "time. If the file already exists, the number is increased by one ... Only the lower 16 bits of "
+                       "the uUnique parameter are used."),
+            documented("ms-getfileinformationbyhandleex", "api/winbase/nf-winbase-getfileinformationbyhandleex",
+                       "2018-12-05", "FileBasicInfo (0) FILE_BASIC_INFO; FileStandardInfo (1) FILE_STANDARD_INFO ... "
+                       "If the function fails, the return value is zero.")),
+        open_questions=(
+            "The GetTempFileNameW page gives the form <path>\\<pre><uuuu>.TMP; both builds write \".tmp\" in lower case "
+            "and the number without leading zeros (rows temp_name.long_prefix: abc1.tmp). w2m follows the rows.",
+            "Where NTFS stops keeping data in the file record lies between 721 and 739 bytes and depends on what else "
+            "the record holds (the name's length among it); w2m keeps 720 and below there, the largest size a row "
+            "holds resident.",
+            "uUnique 0 takes its number from GetTickCount's milliseconds in w2m; the page says \"the current system "
+            "time\" and the rows print the number only as matching the name. A uUnique whose low 16 bits are 0, a "
+            "directory past MAX_PATH-14 (the page's ERROR_BUFFER_OVERFLOW), other information classes, and handles "
+            "of other kinds (pipes, events, the console) are not in the rows and stop the run.",
+            "CloseHandle on a handle with PROTECT_FROM_CLOSE is not probed (Windows raises under a debugger); w2m "
+            "stops."),
+        plants={
+            "unknown_bits_kept": Plant("    u32 m = (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE);",
+                                       "    u32 m = (u32)mask;", ("set.unknown_bit",)),
+            "short_buffers_taken": Plant("    if (size < (info_class == FILE_BASIC_INFO_CLASS ? 0x28u : 0x18u)) {",
+                                         "    if (size < (info_class == FILE_BASIC_INFO_CLASS ? 0x24u : 0x16u)) {",
+                                         ("basic.short", "basic.exact_less_pad", "standard.short",
+                                          "standard.exact_less_pad")),
+            "record_holds_740": Plant("#define RESIDENT_MAX 720u", "#define RESIDENT_MAX 740u", ("standard.sweep.740",)),
+            "temp_error_left": Plant("        set_error(0);\n        return w2m_logged(W2M_API_GetTempFileNameW",
+                                     "        return w2m_logged(W2M_API_GetTempFileNameW",
+                                     ("temp_name.zero", "temp_name.cwd_full", "temp_name.second"))}),
+    "locale": Family(
+        name="locale",
+        contract_id="windows.locale.locale",
+        version="0.1.0",
+        summary=("The locale and local time the game asks for (specs/work_list.json), en-US in UTC as on the runners. "
+                 "SystemTimeToTzSpecificLocalTime(NULL): the universal time with wDayOfWeek computed; a date or time "
+                 "out of range (month 0 or 13, day 0, February 29 of 2025, hour 24, 1000 ms, years 1600 and 30828) is "
+                 "ERROR_INVALID_PARAMETER with nothing written. GetThreadLocale: 0x409. GetLocaleInfoA: \"en\" and "
+                 "\"US\", 3, for 0x409, LOCALE_USER_DEFAULT and LOCALE_SYSTEM_DEFAULT; a short buffer gets what fits "
+                 "without a NUL and ERROR_INSUFFICIENT_BUFFER; size 0 gives 3; a negative size is "
+                 "ERROR_INVALID_PARAMETER. GetUserDefaultLocaleName: \"en-US\", 6; a short buffer gets size - 1 units "
+                 "and a NUL, and it and size 0 answer 0 with error 266. Success leaves the last error."),
+        probe="locale", guest_file="locale.c", host_files=("tools/guest_runtime/time_and_error_mode.c",),
+        runs={
+              "38120346754": Run("windows-2025", "acbe1c6e43d39d53f83d838bf64f81750c95b6b45302c98238e58e4b1c15785d", "locale-1791702485-0", "AMD EPYC 7763 64-Core Processor"),
+              "38120348019": Run("windows-2022", "cc344b3608f76dfe67851701a49772a4f967fb08ff02defe066c43367758c03d", "locale-1791702485-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getlocaleinfoa", "api/winnls/nf-winnls-getlocaleinfoa", "2018-12-05",
+                       "If the function succeeds and the value of cchData is 0, the return value is the required size, "
+                       "in characters including a null character, for the locale data buffer. ... "
+                       "ERROR_INSUFFICIENT_BUFFER. A supplied buffer size was not large enough"),
+            documented("ms-getuserdefaultlocalename", "api/winnls/nf-winnls-getuserdefaultlocalename", "2018-12-05",
+                       "Returns the size of the buffer containing the locale name, including the terminating null "
+                       "character, if successful. ... ERROR_INSUFFICIENT_BUFFER. A supplied buffer size was not large "
+                       "enough, or it was incorrectly set to NULL.")),
+        open_questions=(
+            "GetUserDefaultLocaleName's page names ERROR_INSUFFICIENT_BUFFER (122) for a short buffer; both builds set "
+            "266 (ERROR_CANNOT_COPY) and write size - 1 units and a NUL. w2m follows the rows.",
+            "GetLocaleInfoA's short buffer receives the chars that fit with no NUL before the failure (row "
+            "info.language_short); the page does not say.",
+            "The runners' locale (en-US) and zone (UTC) are w2m's profile, not a property of Windows; other LCIDs, "
+            "LCTYPEs and an explicit time zone are not in the rows and stop the run. The eight locale imports the "
+            "captures never call (CompareStringEx, EnumSystemLocalesEx, GetDateFormatEx, GetLocaleInfoEx, "
+            "GetTimeFormatEx, IsValidLocaleName, LCIDToLocaleName, LocaleNameToLCID) stop the run by name."),
+        plants={
+            "day_of_week_kept": Plant("    to_systemtime(v, (u16 *)out);\n    return w2m_logged(W2M_API_SystemTimeToTzSpecificLocalTime",
+                                      "    for (int i = 0; i < 8; i++) ((u16 *)out)[i] = ((const u16 *)in)[i];\n"
+                                      "    return w2m_logged(W2M_API_SystemTimeToTzSpecificLocalTime",
+                                      ("local.day_of_week_ignored", "local.last_day"),
+                                      file="time_and_error_mode.c"),
+            "short_ansi_unwritten": Plant("    for (u32 i = 0; i < need && i < (u32)cch; i++) out[i] = value[i];",
+                                          "    for (u32 i = 0; i < need && (u32)cch >= need; i++) out[i] = value[i];",
+                                          ("info.language_short",)),
+            "locale_name_error_122": Plant("        set_error(ERROR_CANNOT_COPY);", "        set_error(ERROR_INSUFFICIENT_BUFFER);",
+                                           ("user_name.short", "user_name.size_zero"))}),
+    "file_mapping": Family(
+        name="file_mapping",
+        contract_id="windows.file.file_mapping",
+        version="0.1.0",
+        summary=("CreateFileMappingW and MapViewOfFile in mono's read-only form (specs/work_list.json: five assemblies "
+                 "per run, never unmapped). A PAGE_READONLY mapping of a file opened for reading succeeds and sets the "
+                 "last error to 0; an empty file is ERROR_FILE_INVALID, a size past the file ERROR_NOT_ENOUGH_MEMORY, no "
+                 "read access or PAGE_READWRITE on a read handle ERROR_ACCESS_DENIED, a closed handle "
+                 "ERROR_INVALID_HANDLE. A FILE_MAP_READ or FILE_MAP_COPY view starts on a 64 KB boundary, holds the "
+                 "file's bytes and zeros to its last page's end, outlives the file's and the mapping's handles, and "
+                 "VirtualQuery reports it MEM_MAPPED, committed PAGE_READONLY, its pages rounded; the rest of the 64 KB "
+                 "granule is free. Mapping more bytes than the file, or FILE_MAP_WRITE, is ERROR_ACCESS_DENIED."),
+        probe="file_mapping", guest_file="file.c",
+        host_files=("src/w2m/file_bridge.py", "src/w2m/virtual_memory.py", "src/w2m/vm_backend.py",
+                    "tools/guest_runtime/sync_objects.c"),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("query.after_view", "query.granule_end") and k == "region_size")}
+                                for r in printed],
+        runs={
+              "38120624307": Run("windows-2025", "0407e57fcef44dd02237f541b902804fe843d8e6cef4f76163811c7331893c87", "file_mapping-1791702788-0", "AMD EPYC 7763 64-Core Processor"),
+              "38120626017": Run("windows-2022", "fa3540a10d0b61f3c0ce0e96dfca6caca497edb8208b9ebf9040a0cddd382e51", "file_mapping-1791702788-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "The free region after a view runs to whatever Windows placed next (110,592 bytes in one execution, "
+            "138,958,864,691,200 in another); the derive drops its RegionSize and keeps its state, protection and type.",
+            "A view in w2m is a copy made when MapViewOfFile runs: a write through another handle afterwards is not "
+            "seen in it, as it would be on Windows. mono writes no file it maps in the captures; writable mappings, "
+            "named mappings, offsets and UnmapViewOfFile are not in the rows and stop the run."),
+        plants={
+            "view_private": Plant("        r = Reservation(base, pages, protect, type=MEM_MAPPED)",
+                                  "        r = Reservation(base, pages, protect, type=MEM_PRIVATE)",
+                                  ("query.view", "query.view_middle", "query.whole_file", "query.small"),
+                                  host="w2m.virtual_memory"),
+            "mapping_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_CreateFileMappingW, file, h);",
+                                        "    return w2m_logged(W2M_API_CreateFileMappingW, file, h);",
+                                        ("map.game_form", "map.again", "map.small")),
+            "empty_file_mapped": Plant("    if (!error && size == 0 && file_size == 0) error = ERROR_FILE_INVALID;\n", "",
+                                       ("map.empty_file",)),
+            "copy_refused": Plant("    if (access == FILE_MAP_WRITE || bytes > size) {",
+                                  "    if (access != FILE_MAP_READ || bytes > size) {", ("view.copy_access",))}),
+    "format_message": Family(
+        name="format_message",
+        contract_id="windows.messages.format_message",
+        version="0.1.0",
+        summary=("FormatMessageW from the system message table in mono's form (FROM_SYSTEM | IGNORE_INSERTS with "
+                 "ALLOCATE_BUFFER, LANG_USER_DEFAULT; ids 2 and 3 in the captures, 44 each): the text with its CR LF, "
+                 "inserts such as %1 kept, the length in units, a NUL after it; 0x8007xxxx names id xxxx; LANG_NEUTRAL "
+                 "and en-US answer alike, de-DE is ERROR_RESOURCE_LANG_NOT_FOUND, an id the table lacks "
+                 "ERROR_MR_MID_NOT_FOUND, each with the allocated pointer overwritten; a caller's buffer shorter than "
+                 "text and NUL is ERROR_INSUFFICIENT_BUFFER; FORMAT_MESSAGE_MAX_WIDTH_MASK makes the closing CR LF one "
+                 "space. Success leaves the last error. The table itself (rows \"dump\", ids 0-16383) is "
+                 "specs/system_messages.json, from build 26100."),
+        probe="format_message", guest_file="messages.c",
+        host_files=("src/w2m/system_messages.py", "specs/system_messages.json", "tools/guest_runtime/local_memory.c"),
+        derive=lambda printed: [r for r in printed if r.get("s") != "dump"],
+        runs={
+              "38120951889": Run("windows-2025", "4224a823b406642df21fc8778e5fbd0182890b8063d6a1c28e0861c0dcabb926", "format_message-1791703140-0", "AMD EPYC 7763 64-Core Processor"),
+              "38120953179": Run("windows-2022", "a2ecf6240cd728247b4cd842f563485d3124b0e20573b702a12da4bca9d5a31e", "format_message-1791703140-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-formatmessagew", "api/winbase/nf-winbase-formatmessagew", "2022-08-04",
+                       "If the function succeeds, the return value is the number of TCHARs stored in the output buffer, "
+                       "excluding the terminating null character. ... FORMAT_MESSAGE_MAX_WIDTH_MASK 0x000000FF The "
+                       "function ignores regular line breaks in the message definition text."),),
+        open_questions=(
+            "The system message tables differ between builds: Server 2025 (26100) answers 4,493 ids from 0 to 16383, "
+            "Server 2022 (20348) 4,427, and 109 texts are worded otherwise (id 334: \"The specified operation is not "
+            "supported on a resident file.\" against \"An operation is not supported on a resident file.\"). w2m "
+            "carries build 26100's; the contract rows are the forms, on which the builds agree.",
+            "A failed call with ALLOCATE_BUFFER overwrites the caller's pointer (rows form.language_de_de, "
+            "form.unknown_id print only that it changed); w2m writes NULL.",
+            "A short caller's buffer: the rows show its first unit written ('T'); w2m writes as many units as fit.",
+            "MAX_WIDTH_MASK on a message with a line break inside, other widths, inserts without IGNORE_INSERTS, "
+            "FROM_STRING and FROM_HMODULE, and other languages are not in the rows and stop the run."),
+        plants={
+            "width_keeps_cr": Plant("    if (space) out[len - 1] = ' ';", "    if (space) out[len - 1] = '\\r';",
+                                    ("form.max_width",)),
+            "short_buffer_untouched": Plant(
+                "            for (u32 i = 0; i < size && i < len; i++) out[i] = (unsigned char)text[i];\n", "",
+                ("form.buffer_short",)),
+            "pointer_left_on_failure": Plant("        if (flags & ALLOCATE_BUFFER) *(u64 *)buffer = 0;      /* the rows: the pointer is not left as it was */\n",
+                                             "", ("form.language_de_de", "form.unknown_id"))}),
 }
 
 
@@ -1470,9 +1875,10 @@ def host_patched(module_name: str, old: str, new: str) -> Iterator[None]:
 
 def planted_sources(f: Family, name: str) -> dict[str, str]:
     p = f.plants[name]
-    text = (GUEST / f.guest_file).read_text()
-    assert text.count(p.old) == 1, f"plant {name}: its target text is not in {f.guest_file} exactly once"
-    return {f.guest_file: text.replace(p.old, p.new)}
+    target = p.file or f.guest_file
+    text = (GUEST / target).read_text()
+    assert text.count(p.old) == 1, f"plant {name}: its target text is not in {target} exactly once"
+    return {target: text.replace(p.old, p.new)}
 
 
 def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
@@ -1500,11 +1906,15 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
     def judge(run: str) -> Callable[[Any], AsyncIterator[msgspec.Struct]]:
         async def go(_inp: dict[str, Any]) -> AsyncIterator[msgspec.Struct]:
             r = f.runs[run]
-            out, stop, _ = run_in_vm(r.binary, sources, f)
+            from w2m.guest_runtime import BuildError
+            try:
+                out, stop, _ = run_in_vm(r.binary, sources, f)
+            except BuildError as e:                       # a candidate that does not build is rejected, on the record
+                out, stop = b"", f"the guest runtime did not build: {str(e)[:400]}"
             cmp = compare_exact_rows(c, derived_output(f, out), f"cmp-{cand}-{run}", f"{r.execution}-1",
                                      f"managed_vm-{cand}-{run}")
             expected = f.expected_stop is not None and stop.startswith(f.expected_stop)
-            if stop != "ExitProcess" and not expected and cmp.verdict == "conforms":
+            if stop != "ExitProcess" and not expected and (cmp.verdict == "conforms" or not out):
                 cmp = msgspec.structs.replace(cmp, verdict="discrepancy", first_divergence=f"run stopped: {stop}")
             state["verdicts"][run] = cmp.verdict
             state["divergence"][run] = cmp.first_divergence or (stop if stop != "ExitProcess" else None)
@@ -1605,12 +2015,18 @@ def main(argv: list[str]) -> int:
         print(json.dumps(s, indent=1))
     if a.plants:
         binary = next(iter(f.runs.values())).binary
+        from w2m.guest_runtime import BuildError
         for name, p in f.plants.items():
-            if p.host is not None:
-                with host_patched(p.host, p.old, p.new):
-                    out, stop, _ = run_in_vm(binary, None, f)
-            else:
-                out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
+            try:
+                if p.host is not None:
+                    with host_patched(p.host, p.old, p.new):
+                        out, stop, _ = run_in_vm(binary, None, f)
+                else:
+                    out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
+            except BuildError as e:                       # a plant that does not build tests nothing
+                print(f"{name}: the planted runtime did not build: {str(e)[:300]}")
+                failed = True
+                continue
             rows, named = unequal_rows(f, out), named_reach(f, p)
             verdict = "as named" if rows == named else f"NOT as named: named {named}"
             failed |= rows != named

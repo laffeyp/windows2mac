@@ -166,152 +166,13 @@ struct w2m_exception_area {
 };
 #define W2M_EXCEPTION_MAGIC 0x7832774E4F495445ull     /* "ETIONw2x" */
 
-/* API identifiers in the ring; src/w2m/guest_runtime.py reads these lines. */
-#define W2M_API_GetCurrentThreadId 1
-#define W2M_API_SetLastError 2
-#define W2M_API_GetLastError 3
-#define W2M_API_GetStdHandle 4
-#define W2M_API_WriteFile 5
-#define W2M_API_ExitProcess 6
-#define W2M_API_QueryPerformanceCounter 7
-#define W2M_API_Exception 8
-#define W2M_API_Cpuid 9
-#define W2M_API_CreateFileW 10
-#define W2M_API_CloseHandle 11
-#define W2M_API_DeleteFileW 12
-#define W2M_API_ReadFile 13
-#define W2M_API_SetFilePointerEx 14
-#define W2M_API_GetSystemTimeAsFileTime 15
-#define W2M_API_GetCurrentProcessId 16
-#define W2M_API_QueryPerformanceFrequency 17
-#define W2M_API_IsProcessorFeaturePresent 18
-#define W2M_API_InitializeSListHead 19
-#define W2M_API_GetStartupInfoW 20
-#define W2M_API_IsDebuggerPresent 21
-#define W2M_API_LoadLibraryExW 22
-#define W2M_API_GetModuleHandleW 23
-#define W2M_API_GetModuleHandleExW 24
-#define W2M_API_GetModuleFileNameW 25
-#define W2M_API_GetProcAddress 26
-#define W2M_API_FreeLibrary 27
-#define W2M_API_InitializeCriticalSectionEx 28
-#define W2M_API_InitializeCriticalSectionAndSpinCount 29
-#define W2M_API_InitializeCriticalSection 30
-#define W2M_API_EnterCriticalSection 31
-#define W2M_API_TryEnterCriticalSection 32
-#define W2M_API_LeaveCriticalSection 33
-#define W2M_API_DeleteCriticalSection 34
-#define W2M_API_TlsAlloc 35
-#define W2M_API_TlsGetValue 36
-#define W2M_API_TlsSetValue 37
-#define W2M_API_TlsFree 38
-#define W2M_API_FlsAlloc 39
-#define W2M_API_FlsGetValue 40
-#define W2M_API_FlsSetValue 41
-#define W2M_API_FlsFree 42
-#define W2M_API_GetProcessHeap 43
-#define W2M_API_HeapAlloc 44
-#define W2M_API_HeapFree 45
-#define W2M_API_HeapSize 46
-#define W2M_API_HeapReAlloc 47
-#define W2M_API_SetStdHandle 48
-#define W2M_API_GetFileType 49
-#define W2M_API_GetConsoleMode 50
-#define W2M_API_GetConsoleCP 51
-#define W2M_API_WriteConsoleW 52
-#define W2M_API_FlushFileBuffers 53
-#define W2M_API_GetCommandLineW 54
-#define W2M_API_GetCommandLineA 55
-#define W2M_API_GetACP 56
-#define W2M_API_GetOEMCP 57
-#define W2M_API_IsValidCodePage 58
-#define W2M_API_GetCPInfo 59
-#define W2M_API_MultiByteToWideChar 60
-#define W2M_API_WideCharToMultiByte 61
-#define W2M_API_GetStringTypeW 62
-#define W2M_API_LCMapStringW 63
-#define W2M_API_LCMapStringEx 64
-#define W2M_API_GetEnvironmentStringsW 65
-#define W2M_API_FreeEnvironmentStringsW 66
-#define W2M_API_lstrlenW 67
-#define W2M_API_SetUnhandledExceptionFilter 68
-#define W2M_API_EncodePointer 69
-#define W2M_API_DecodePointer 70
-#define W2M_API_InitializeSRWLock 71
-#define W2M_API_InitializeConditionVariable 72
-#define W2M_API_AcquireSRWLockExclusive 73
-#define W2M_API_TryAcquireSRWLockExclusive 74
-#define W2M_API_ReleaseSRWLockExclusive 75
-#define W2M_API_AcquireSRWLockShared 76
-#define W2M_API_TryAcquireSRWLockShared 77
-#define W2M_API_ReleaseSRWLockShared 78
-#define W2M_API_SleepConditionVariableSRW 79
-#define W2M_API_WakeConditionVariable 80
-#define W2M_API_WakeAllConditionVariable 81
-#define W2M_API_GetCurrentThread 82
-#define W2M_API_GetThreadTimes 83
-#define W2M_API_GetThreadPriority 84
-#define W2M_API_GetNativeSystemInfo 85
-#define W2M_API_GetSystemInfo 86
-#define W2M_API_GetVersionExW 87
-#define W2M_API_GlobalMemoryStatusEx 88
-#define W2M_API_GetTickCount 89
-#define W2M_API_GetSystemDirectoryW 90
-#define W2M_API_VirtualAlloc 91
-#define W2M_API_VirtualFree 92
-#define W2M_API_VirtualProtect 93
-#define W2M_API_VirtualQuery 94
-#define W2M_API_CreateSemaphoreExW 95
-#define W2M_API_CreateEventW 96
-#define W2M_API_CreateEventA 97
-#define W2M_API_CreateEventExW 98
-#define W2M_API_CreateMutexA 99
-#define W2M_API_SetEvent 100
-#define W2M_API_ResetEvent 101
-#define W2M_API_ReleaseSemaphore 102
-#define W2M_API_ReleaseMutex 103
-#define W2M_API_WaitForSingleObject 104
-#define W2M_API_WaitForSingleObjectEx 105
-#define W2M_API_WaitForMultipleObjects 106
-#define W2M_API_Sleep 107
-#define W2M_API_FlsGetValue2 108
-#define W2M_API_TlsGetValue2 109
-#define W2M_API_AreFileApisANSI 110
-#define W2M_API_GetSystemTime 111
-#define W2M_API_GetLocalTime 112
-#define W2M_API_GetTimeZoneInformation 113
-#define W2M_API_SystemTimeToFileTime 114
-#define W2M_API_FileTimeToSystemTime 115
-#define W2M_API_GetErrorMode 116
-#define W2M_API_SetErrorMode 117
-#define W2M_API_CommandLineToArgvW 118   /* SHELL32 (Sprint 047) */
-#define W2M_API_LocalFree 119
-#define W2M_API_BCryptGenRandom 120   /* bcrypt (Sprint 047) */
-#define W2M_API_GetLogicalProcessorInformationEx 121
-#define W2M_API_GetLogicalProcessorInformation 122
-#define W2M_API_GetActiveProcessorCount 123
-#define W2M_API_GetCurrentProcess 124
-#define W2M_API_GetProcessAffinityMask 125
-#define W2M_API_SetThreadAffinityMask 126
-#define W2M_API_GetNumaHighestNodeNumber 127
-#define W2M_API_GetFileAttributesExW 128
-#define W2M_API_GetFileAttributesW 129
-#define W2M_API_GetFullPathNameW 130
-#define W2M_API_GetCurrentDirectoryW 131
-#define W2M_API_SetCurrentDirectoryW 132
-#define W2M_API_CreateDirectoryW 133
-#define W2M_API_RemoveDirectoryW 134
-#define W2M_API_GetHandleInformation 135
-#define W2M_API_LoadLibraryW 136
-#define W2M_API_SHGetKnownFolderPath 137   /* SHELL32 (Sprint 048) */
-#define W2M_API_CoTaskMemFree 138   /* ole32 (Sprint 048) */
-#define W2M_API_GetEnvironmentVariableW 139
-#define W2M_API_SetEnvironmentVariableW 140
-#define W2M_API_GetTempPathW 141
-#define W2M_API_LocalAlloc 142
-#define W2M_API_OpenProcessToken 143   /* ADVAPI32 (Sprint 048) */
-#define W2M_API_GetTokenInformation 144
-#define W2M_API_GetSidSubAuthority 145
+/* API identifiers in the ring: W2M_API_<Name> for every service the runtime's C files define and for the
+ * internal entries Cpuid and Exception, 1 up in name order; src/w2m/guest_runtime.py writes them at build
+ * (api_header) from the definitions themselves (Sprint 049), so a new service needs no line here. */
+#include "api_ids.h"
+
+/* Marks a service Windows declares void: the bridge leaves the guest's RAX as it was (vm_backend sets_rax). */
+#define W2M_VOID
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
@@ -338,7 +199,8 @@ u64 w2m_unhandled_exception_filter(void);                               /* excep
 
 /* Host file primitives (src/w2m/file_bridge.py). */
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,
-       W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR };   /* 24: Sprint 047; 25, 26: 048 */
+       W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR,      /* 24: Sprint 047; 25, 26: 048 */
+       W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW };                                         /* 27-29: Sprint 049 */
 
 /* The contract surface a candidate may implement (contracts/windows.thread.last_error.set_get).
  * The default is tools/guest_runtime/last_error.c. */

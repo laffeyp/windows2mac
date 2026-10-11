@@ -1,0 +1,5 @@
+{"s":"blocks","small_above_heap":1,"big_non_null":1}
+{"s":"query.small","ret_is_size":1,"err":57005,"base_is_page":1,"allocation_base_is_heap":1,"allocation_base_below_block":1,"allocation_base_64k":1,"allocation_protect":4,"state":4096,"protect":4,"type":131072}
+{"s":"query.heap","ret_is_size":1,"err":57005,"base_is_page":1,"allocation_base_is_heap":1,"allocation_base_below_block":1,"allocation_base_64k":1,"allocation_protect":4,"state":4096,"protect":4,"type":131072}
+{"s":"query.big","ret_is_size":1,"err":57005,"base_is_page":1,"allocation_base_is_heap":0,"allocation_base_below_block":1,"allocation_base_64k":1,"allocation_protect":4,"state":4096,"protect":4,"type":131072}
+{"s":"query.after_small_region","ret_is_size":1,"err":57005,"base_is_page":1,"allocation_base_is_heap":1,"allocation_base_below_block":1,"allocation_base_64k":1,"allocation_protect":4,"state":8192,"protect":0,"type":131072}

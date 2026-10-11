@@ -1,0 +1,477 @@
+{
+ "contract_id": "windows.locale.locale",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The locale and local time the game asks for (specs/work_list.json), en-US in UTC as on the runners. SystemTimeToTzSpecificLocalTime(NULL): the universal time with wDayOfWeek computed; a date or time out of range (month 0 or 13, day 0, February 29 of 2025, hour 24, 1000 ms, years 1600 and 30828) is ERROR_INVALID_PARAMETER with nothing written. GetThreadLocale: 0x409. GetLocaleInfoA: \"en\" and \"US\", 3, for 0x409, LOCALE_USER_DEFAULT and LOCALE_SYSTEM_DEFAULT; a short buffer gets what fits without a NUL and ERROR_INSUFFICIENT_BUFFER; size 0 gives 3; a negative size is ERROR_INVALID_PARAMETER. GetUserDefaultLocaleName: \"en-US\", 6; a short buffer gets size - 1 units and a NUL, and it and size 0 answer 0 with error 266. Success leaves the last error.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/locale/locale.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "local.game_form",
+    "ret": 1,
+    "err": 57005,
+    "in": [
+     2026,
+     10,
+     0,
+     11,
+     6,
+     51,
+     41,
+     378
+    ],
+    "out": [
+     2026,
+     10,
+     0,
+     11,
+     6,
+     51,
+     41,
+     378
+    ]
+   },
+   {
+    "s": "local.day_of_week_ignored",
+    "ret": 1,
+    "err": 57005,
+    "in": [
+     2026,
+     10,
+     5,
+     11,
+     6,
+     51,
+     41,
+     378
+    ],
+    "out": [
+     2026,
+     10,
+     0,
+     11,
+     6,
+     51,
+     41,
+     378
+    ]
+   },
+   {
+    "s": "local.first_day",
+    "ret": 1,
+    "err": 57005,
+    "in": [
+     1601,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     1601,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "s": "local.last_day",
+    "ret": 1,
+    "err": 57005,
+    "in": [
+     30827,
+     12,
+     0,
+     31,
+     23,
+     59,
+     59,
+     999
+    ],
+    "out": [
+     30827,
+     12,
+     5,
+     31,
+     23,
+     59,
+     59,
+     999
+    ]
+   },
+   {
+    "s": "local.leap_day",
+    "ret": 1,
+    "err": 57005,
+    "in": [
+     2024,
+     2,
+     4,
+     29,
+     12,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     2024,
+     2,
+     4,
+     29,
+     12,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "s": "local.not_leap_day",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     2025,
+     2,
+     0,
+     29,
+     12,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.month_13",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     2026,
+     13,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.month_0",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     2026,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.day_0",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     2026,
+     10,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.hour_24",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     2026,
+     10,
+     0,
+     11,
+     24,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.ms_1000",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     2026,
+     10,
+     0,
+     11,
+     0,
+     0,
+     0,
+     1000
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.year_1600",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     1600,
+     12,
+     0,
+     31,
+     0,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "local.year_30828",
+    "ret": 0,
+    "err": 87,
+    "in": [
+     30828,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "out": [
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405,
+     42405
+    ]
+   },
+   {
+    "s": "thread_locale",
+    "ret": 1033,
+    "err": 57005
+   },
+   {
+    "s": "info.language",
+    "ret": 3,
+    "err": 57005,
+    "buf": "656e00a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.country",
+    "ret": 3,
+    "err": 57005,
+    "buf": "555300a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.language_exact",
+    "ret": 3,
+    "err": 57005,
+    "buf": "656e00a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.language_short",
+    "ret": 0,
+    "err": 122,
+    "buf": "656ea5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.language_size_zero",
+    "ret": 3,
+    "err": 57005
+   },
+   {
+    "s": "info.country_size_zero",
+    "ret": 3,
+    "err": 57005
+   },
+   {
+    "s": "info.user_default",
+    "ret": 3,
+    "err": 57005,
+    "buf": "656e00a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.system_default",
+    "ret": 3,
+    "err": 57005,
+    "buf": "555300a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.thread_locale",
+    "ret": 3,
+    "err": 57005,
+    "buf": "555300a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "info.negative_size",
+    "ret": 0,
+    "err": 87,
+    "buf": "a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "user_name.game_form",
+    "ret": 6,
+    "err": 57005,
+    "buf": "65006e002d00550053000000a5a5a5a5"
+   },
+   {
+    "s": "user_name.exact",
+    "ret": 6,
+    "err": 57005,
+    "buf": "65006e002d00550053000000a5a5a5a5"
+   },
+   {
+    "s": "user_name.short",
+    "ret": 0,
+    "err": 266,
+    "buf": "65006e002d0055000000a5a5a5a5a5a5"
+   },
+   {
+    "s": "user_name.size_zero",
+    "ret": 0,
+    "err": 266
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38120346754: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:acbe1c6e43d39d53f83d838bf64f81750c95b6b45302c98238e58e4b1c15785d; run 38120348019: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:cc344b3608f76dfe67851701a49772a4f967fb08ff02defe066c43367758c03d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "locale-1791702485-0-1",
+    "locale-1791702485-0-2",
+    "locale-1791702485-1-1",
+    "locale-1791702485-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getlocaleinfoa",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getlocaleinfoa (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "If the function succeeds and the value of cchData is 0, the return value is the required size, in characters including a null character, for the locale data buffer. ... ERROR_INSUFFICIENT_BUFFER. A supplied buffer size was not large enough"
+  },
+  {
+   "evidence_id": "ms-getuserdefaultlocalename",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getuserdefaultlocalename (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "Returns the size of the buffer containing the locale name, including the terminating null character, if successful. ... ERROR_INSUFFICIENT_BUFFER. A supplied buffer size was not large enough, or it was incorrectly set to NULL."
+  }
+ ],
+ "open_questions": [
+  "GetUserDefaultLocaleName's page names ERROR_INSUFFICIENT_BUFFER (122) for a short buffer; both builds set 266 (ERROR_CANNOT_COPY) and write size - 1 units and a NUL. w2m follows the rows.",
+  "GetLocaleInfoA's short buffer receives the chars that fit with no NUL before the failure (row info.language_short); the page does not say.",
+  "The runners' locale (en-US) and zone (UTC) are w2m's profile, not a property of Windows; other LCIDs, LCTYPEs and an explicit time zone are not in the rows and stop the run. The eight locale imports the captures never call (CompareStringEx, EnumSystemLocalesEx, GetDateFormatEx, GetLocaleInfoEx, GetTimeFormatEx, IsValidLocaleName, LCIDToLocaleName, LocaleNameToLCID) stop the run by name."
+ ],
+ "sections": {
+  "probe": "probes/locale (Sprint 044)",
+  "implementation": "tools/guest_runtime/locale.c",
+  "rows": "scripts/family_run.py locale",
+  "excluded": "none"
+ }
+}

@@ -1,0 +1,154 @@
+{
+ "contract_id": "windows.messages.format_message",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "FormatMessageW from the system message table in mono's form (FROM_SYSTEM | IGNORE_INSERTS with ALLOCATE_BUFFER, LANG_USER_DEFAULT; ids 2 and 3 in the captures, 44 each): the text with its CR LF, inserts such as %1 kept, the length in units, a NUL after it; 0x8007xxxx names id xxxx; LANG_NEUTRAL and en-US answer alike, de-DE is ERROR_RESOURCE_LANG_NOT_FOUND, an id the table lacks ERROR_MR_MID_NOT_FOUND, each with the allocated pointer overwritten; a caller's buffer shorter than text and NUL is ERROR_INSUFFICIENT_BUFFER; FORMAT_MESSAGE_MAX_WIDTH_MASK makes the closing CR LF one space. Success leaves the last error. The table itself (rows \"dump\", ids 0-16383) is specs/system_messages.json, from build 26100.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/format_message/format_message.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "form.game_2",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the file specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.game_3",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the path specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.id_0",
+    "ret": 39,
+    "err": 57005,
+    "text": "The operation completed successfully.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.insert_kept",
+    "ret": 38,
+    "err": 57005,
+    "text": "%1 is not a valid Win32 application.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.language_neutral",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the file specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.language_en_us",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the file specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.language_de_de",
+    "ret": 0,
+    "err": 15100,
+    "pointer_left": 0
+   },
+   {
+    "s": "form.unknown_id",
+    "ret": 0,
+    "err": 317,
+    "pointer_left": 0
+   },
+   {
+    "s": "form.hresult_win32",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the file specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.max_width",
+    "ret": 43,
+    "err": 57005,
+    "text": "The system cannot find the file specified. ",
+    "nul_after": 1
+   },
+   {
+    "s": "form.buffer",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the file specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.buffer_exact",
+    "ret": 44,
+    "err": 57005,
+    "text": "The system cannot find the file specified.\r\n",
+    "nul_after": 1
+   },
+   {
+    "s": "form.buffer_short",
+    "ret": 0,
+    "err": 122,
+    "first_unit": 84
+   },
+   {
+    "s": "form.buffer_zero",
+    "ret": 0,
+    "err": 122,
+    "first_unit": 42405
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38120951889: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:4224a823b406642df21fc8778e5fbd0182890b8063d6a1c28e0861c0dcabb926; run 38120953179: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:a2ecf6240cd728247b4cd842f563485d3124b0e20573b702a12da4bca9d5a31e",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "format_message-1791703140-0-1",
+    "format_message-1791703140-0-2",
+    "format_message-1791703140-1-1",
+    "format_message-1791703140-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-formatmessagew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessagew (page updated 2022-08-04; retrieved 2026-10-10)",
+   "quote": "If the function succeeds, the return value is the number of TCHARs stored in the output buffer, excluding the terminating null character. ... FORMAT_MESSAGE_MAX_WIDTH_MASK 0x000000FF The function ignores regular line breaks in the message definition text."
+  }
+ ],
+ "open_questions": [
+  "The system message tables differ between builds: Server 2025 (26100) answers 4,493 ids from 0 to 16383, Server 2022 (20348) 4,427, and 109 texts are worded otherwise (id 334: \"The specified operation is not supported on a resident file.\" against \"An operation is not supported on a resident file.\"). w2m carries build 26100's; the contract rows are the forms, on which the builds agree.",
+  "A failed call with ALLOCATE_BUFFER overwrites the caller's pointer (rows form.language_de_de, form.unknown_id print only that it changed); w2m writes NULL.",
+  "A short caller's buffer: the rows show its first unit written ('T'); w2m writes as many units as fit.",
+  "MAX_WIDTH_MASK on a message with a line break inside, other widths, inserts without IGNORE_INSERTS, FROM_STRING and FROM_HMODULE, and other languages are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/format_message (Sprint 044)",
+  "implementation": "tools/guest_runtime/messages.c",
+  "rows": "scripts/family_run.py format_message",
+  "excluded": "none"
+ }
+}

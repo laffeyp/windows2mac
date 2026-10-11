@@ -58,7 +58,7 @@ u64 k32_GetCurrentThreadId(void) {
 }
 
 /* "Sets the last-error code for the calling thread." Returns nothing: RAX is left as it was. */
-u64 k32_SetLastError(u64 code) {
+W2M_VOID u64 k32_SetLastError(u64 code) {
     w2m_set_last_error((u32)code);
     return w2m_logged(W2M_API_SetLastError, (u32)code, 0);
 }
@@ -84,7 +84,7 @@ u64 k32_WriteFile(u64 handle, u64 buffer, u64 count, u64 written, u64 rsp) {
 }
 
 /* "Ends the calling process and all its threads." */
-u64 k32_ExitProcess(u64 code) {
+W2M_VOID u64 k32_ExitProcess(u64 code) {
     w2m_logged(W2M_API_ExitProcess, (u32)code, 0);
     host_call(W2M_HOST_EXIT, (u32)code, 0);
     for (;;) {}
