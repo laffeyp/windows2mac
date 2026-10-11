@@ -256,7 +256,7 @@
 
 ## Sprint tail
 
-### Sprint 052 (2026-10-11, closed partial)
+### Sprint 052 (2026-10-11, closed partial: CI run 38128014124 success on 6d522115)
 - **Scope:** the com family, then (amended before the work) the network family's WSAStartup.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the com probe on two runners, then again with the notification rows; the com item run's SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; the same for network; families re-run to CANDIDATE_ACCEPTED; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for WS2_32.dll!#115, then, with network served, for KERNEL32.dll!RaiseException.
