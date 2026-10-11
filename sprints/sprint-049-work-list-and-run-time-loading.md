@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 049
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -56,3 +56,13 @@ Sprint 048 left the frontier at 2,668,647 instructions, at `MessageBoxA("Failed 
 mono-2.0-bdwgc.dll loads at run time inside w2m and the frontier passes "Failed to load mono"; the work list and the trace are committed, and every family this sprint adds comes from them.
 
 ## observed
+
+- **The frontier moved** from 2,668,647 instructions (`MessageBoxA("Failed to load mono")`) to 5,376,528: mono-2.0-bdwgc.dll loads at run time (mapped into the arena, relocated, bound, DllMain run from inside LoadLibraryW), starts, maps mscorlib and its other assemblies, and stops on legacy CVTDQ2PS (0f 5b) in its own code at 0x1180023e52, a class the mono census already lists (`store/census/class-census-mono-2026-10-11b.json`).
+- **The trace and the work list:** `tools/jit_capture` records each function's first 32 calls with arguments, return and last error (game runs 38113342549, 38113343972); `scripts/work_list.py` writes `specs/work_list.json` (164 unserved functions in 19 families at the start, 148 in 16 at the close). Every family this sprint added came from it, and probes took the game's own arguments from the trace.
+- **Services declared where they are written:** the API ids and service tables come from the guest C definitions (`guest_runtime.service_table()`, `api_ids.h`).
+- **The guest CPU is x86-64-v3** (user decision 2026-10-11). Case sets 049 (51 classes, 24,334 cases) and 049b (80 classes, 46,970 cases) judge the model and the VM equal to the Xeon 8573C (runs 38117654018, 38118493713; releases semantics-049, semantics-049b).
+- **Families accepted, each on Server 2025 and 2022 with plants of named reach,** among them known folders, temp path, integrity level, critical-section flags, module names, function tables, vectored handlers, thread stack, thread handles, heap query, files more, locale, file mapping and format message.
+- **Not done, deferred:** families ran one after another in this session, not in parallel worktrees (card item 5); the win32metadata reader (item 6) was not needed before the families (BLACKBOARD Deferred).
+- **Scope beyond the card:** the AVX profile and its two case sets came from the user's decision mid-sprint, and the families after mono loaded (locale, file mapping, format message) followed the frontier past the card's done criteria. The card was not amended when they began (KIT_DIARY #40).
+- **Defects found and fixed:** two invented citations in commits and docs (a run id and two page dates), corrected the same day (KIT_DIARY #39); a family candidate or plant that failed to build left the substrate run quiescent and never finalised, now rejected on its record; CI failed from 59d2405d on because it did not build the 049 case files; BLACKBOARD kept the superseded v2 CPU decision as the last word until d470850a.
+

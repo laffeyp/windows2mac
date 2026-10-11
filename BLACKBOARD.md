@@ -134,6 +134,8 @@
 
 - **2026-10-10 agent-resolved** — Sprint 045 (the transport) waits; 046 (several images) is next. 045's own condition is a measured call rate that needs it, and none does: over the launcher's whole start-up to `UnityMain` the host serves 17 requests (1 system time, 16 module lookups), and the hot services make no host exit (`tests/test_hot_services.py`). Grounds: plan row 045; the Sprint 044 frontier record `store/runs/frontier-643a6283510c-1791630008722386000`. Revisit if: a frontier or play run spends a measured share of its time in host round trips.
 
+- **2026-10-11 agent-resolved** — Which sprint follows 049: the plan's 050 (the Mono JIT region) or the instruction classes the frontier stops on? Decision: 050 is set 049c, the classes the mono and UnityPlayer censuses list as missing that w2m's CPUID profile can reach; the JIT region moves to 051 and milestone A to 052. Grounds: project — the frontier stops in mono's own code on CVTDQ2PS before any JIT code runs (`store/census/class-census-mono-2026-10-11b.json`), and the user's rule to plan from what is held (Decision 2026-10-10) favours one set from the censuses over a class per crash; SDD — AGENTS.md hard rule 6 (one concept per sprint); practice — none beyond the project's. Revisit if: the frontier reaches JIT code before the set is judged.
+
 ## Built
 
 - **2026-10-05** — Sprint 000 (Vocabulary Session) closed. `signals/0.1.json` (60 tags, 12 categories, 34 enums, 22 entities, 7 temporal invariants, 14 transition rules, 16 operators, 13 evidence constraints), `signals/0.1-rationale.md` (signed), `signals/proposals.json` (6 open, 1 rejected), plus `scripts/check_vocab.py` (structure gate, outside the card's file list; recorded in Sprint tail). v0.1 locked. 10 agent-resolved decisions recorded. Dual contract: signal vacuous (content sprint); artifact pass (all commands exit 0, four content assertions hold). Ready for Sprint 001.
@@ -187,6 +189,7 @@
 - **2026-10-10** — Sprint 046 (several images) closed. The loader maps UnityPlayer.dll (preferred base or relocated), binds imports between images, runs DllMain before the program's entry, writes PEB.Ldr and static TLS; ten families (loader, static TLS, pointer encoding, thread queries, slim locks, system information, virtual memory, sync objects, storage get2, time and error mode); case sets 046 to 046e; RCPPS and RSQRTPS from Intel's measured tables. Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — DllMain returns, the launcher enters UnityMain, and UnityPlayer stops at `SHELL32.dll!CommandLineToArgvW` after 403,044 instructions with every service before it judged.
 - **2026-10-10** — Sprint 047 (UnityMain's start-up) closed. The look-ahead; the arena at 512 GB, the code cache at 64 MB and the reconstruction table at 4 Mi entries; set 047 (PCMPISTRI, UNPCKHPD, narrow MUL, BTC, LFENCE, MFENCE) on the Xeon 8573C, release semantics-047, 237 classes; families command line arguments, generate random, processor topology, file attributes (25 in all); acceptance read from the record in class_run and family_run. Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — the frontier runs 2,522,889 instructions and stops at the first file call on an absolute path, every service before it judged.
 - **2026-10-10** — Sprint 048 (the guest's file namespace) closed. Drive C: with the game's directory at `C:\w2m\app` (read-only for the frontier) and the profile `C:\Users\w2m`; full paths in the guest (`paths.c`); FILE_MKDIR and FILE_RMDIR; system DLLs as modules with Server 2025's exports (`specs/windows_exports.json` 0.2.0); SHELL32, OLE32 and ADVAPI32 services; a mutable environment block; set 048 (prefetches) on the Xeon 8573C; eight families (paths, file security, local free, file access, system modules, known folders, temp path, integrity level), 33 in all; F1 measured and F3 relabelled. Dual contract: signal pass; artifact pass (gates 0; CI run 38099562363 success on 401deef); observation pass — the frontier reads boot.config and app.info, writes Player.log under LocalLow, and stops at `USER32.dll!MessageBoxA` ("Failed to load mono") after 2,668,647 instructions with every service before it judged.
+- **2026-10-11** — Sprint 049 (the work list and loading at run time) closed on CI run 38121563657 (d470850a). `tools/jit_capture` call trace, `scripts/work_list.py`, `specs/work_list.json`, services from the guest C (`guest_runtime.service_table`), run-time DLL loading (`VM._load_dll`, `module.c`), the x86-64-v3 profile with VEX, FMA and BMI lifting (`rules/_vex.py`, `x86fp.fma`), case sets 049 and 049b, `scripts/class_census.py --jit`, `src/w2m/system_messages.py`, 14 families. Dual contract: signal pass (item runs, frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED); artifact pass (gates 0, CI success). Observation: pass — mono loads and starts; the frontier runs 5,376,528 instructions.
 
 ## Deferred
 
@@ -204,6 +207,9 @@
 - **2026-10-08 (Agent) — RESOLVED 2026-10-08, Sprint 028 (witness in the trace; contract 0.3.1)** — The event probe's precondition (both waiters inside `WaitForSingleObject` when `SetEvent` runs) rests on `Sleep(200)` and is not witnessed (review §4.7). The 10/10 release of waiter a fits FIFO selection and fits waiter b sometimes not yet waiting. Candidate witness (unverified, needs a doc check): read each waiter thread's state and wait reason from `NtQuerySystemInformation(SystemProcessInformation)` just before `SetEvent` and record it in the trace. Re-visit at the next runner sprint for this contract; the contract's acceptance set {a},{b} is unaffected, its 'observed' evidence of FIFO-looking order is.
 
 ---
+
+- **2026-10-11** — Families in parallel worktrees (Sprint 049 card item 5, Decision 2026-10-10 point 2): Sprint 049 ran its families one after another in one session. Re-visit when a sprint opens three or more independent families at once.
+- **2026-10-11** — The win32metadata reader (Sprint 049 card item 6): no family needed a generated skeleton. Re-visit when a family's probe needs more than ten functions' signatures.
 
 ## Open questions
 
@@ -223,10 +229,19 @@
 - **Absolute timings drift between runs** (Sprint 011 observation 3). Compare MEASUREMENT_RECORDED values only within one record (same run, interleaved). Re-visit when a measurement must be compared across runs: pin QoS class / P-cores and record CPU frequency state in the baseline.
 - **Unresolvable reference_ref in comparisons** (Sprint 005 observation 1). Every COMPARISON_COMPLETED so far cites a placeholder reference. Re-visit at the first reference run on the rented x86-64 Windows instance; from then on reference_ref must name an EXECUTION_STARTED on a windows_reference profile (E4, E13).
 - **APPLICATION_LAUNCHED without a view pairing** (Sprint 000 observation 3). Re-visit at the first sprint that presents a Metal frame; ratify P2 then.
+- **2026-10-11** — The frontier reports a lift refusal as EXECUTION_COMPLETED (faulted) with the refusal text in `unobserved`; no tag names it. Watch: if two sprints plan from a lift-refusal stop, propose a tag (vocabulary change, grammar/PRINCIPLES.md).
 
 ---
 
 ## Sprint tail
+
+### Sprint 049 (2026-10-11, closed: CI run 38121563657 success on d470850a)
+- **Scope:** the work list from the game's own Windows run, loading DLLs at run time, and the families mono needs to start; widened mid-sprint by the user's AVX decision.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* per family, PROBE_AUTHORED and the probe run on Server 2025 and 2022, then the item run's SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; per frontier run, EXECUTION_STARTED then SERVICE_UNIMPLEMENTED naming the next unserved import, until the last run stopped on a lift refusal (EXECUTION_COMPLETED, faulted).
+  - *Observation 1 (payload anomaly):* a family run whose candidate failed to build emitted ProducerFailed and RunFinalised stuck_quiescent and no SESSION_COMPLETED. Disposition: resolved-here (a build failure becomes a rejected comparison).
+  - *Observation 2 (vocabulary gap, checked):* the final frontier stop is a lift refusal, which the frontier reports as EXECUTION_COMPLETED faulted with the refusal in `unobserved`; the vocabulary has no lift-refusal tag. Disposition: deferred to the Drift watchlist; the stop text names the class, and set 049c is planned from the census, not from the stop.
+  - *Observation 3 (decision record):* BLACKBOARD carried the superseded v2 CPU entry as the last word for most of the sprint. Disposition: resolved-here (d470850a); KIT_DIARY #40.
 
 ### Sprint 048 (2026-10-10, closed: CI run 38099562363 success on 401deef)
 - **Scope:** the guest's file namespace, then the families the frontier meets.

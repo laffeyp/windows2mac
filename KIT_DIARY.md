@@ -346,3 +346,19 @@
 
 **Kit change suggested:** when naming a plant's rows, read each row's printed fields, not only its call.
 
+### 2026-10-11 — Sprint 049: a citation written from memory
+
+**What happened:** a commit named run 38113744018 for a probe run whose id was 38113744326, and two documented() entries carried Microsoft Learn page dates (2023-02-08, 2021-01-07) that the pages do not show (2018-12-05, 2025-07-14). All three were written from recall, read like facts, and were corrected the same day. Every page date since came from fetching the page.
+
+**Finding (#39):** an identifier or a date in a record is evidence only when copied from its source in the same turn; written from memory it is a guess dressed as a citation.
+
+**Kit change suggested:** a record field that cites a run or a page is filled by a tool call's output, never typed.
+
+### 2026-10-11 — Sprint 049: a sprint that outgrew its card, and a decision left unwritten
+
+**What happened:** the user decided mid-sprint that the guest CPU reports AVX. The work followed at once (two case sets, 131 classes), but BLACKBOARD kept the earlier v2 entry as the last word on the CPU until the sprint's end, and the card was never amended: three families and the AVX sets ran past the card's done criteria under a card that did not name them.
+
+**Finding (#40):** a user decision changes the record in the turn it is made, before the work it starts; a sprint whose done criteria are met closes, and the work the frontier shows next opens a new card.
+
+**Kit change suggested:** at each frontier run, compare the stop with the open card's done criteria; when they are met, close before continuing.
+
