@@ -181,6 +181,12 @@ static void after(const char *prefix, HWND w) {
 
 void start(void) {
     self = GetModuleHandleW(NULL);
+    MONITORINFO mi;
+    for (unsigned i = 0; i < sizeof mi; i++) ((char *)&mi)[i] = 0;
+    mi.cbSize = sizeof mi;
+    POINT zero = {0, 0};
+    GetMonitorInfoW(MonitorFromPoint(zero, MONITOR_DEFAULTTOPRIMARY), &mi);
+    row("screen.work_area"); rect("rect", &mi.rcWork); end();     /* the runners' taskbars differ (rows display) */
     SetLastError(SENTINEL);
     HICON icon = LoadIconA(self, MAKEINTRESOURCEA(103));
     row("icon.own_103"); flag("non_null", icon != NULL); field("err", GetLastError()); end();
