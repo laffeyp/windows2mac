@@ -302,32 +302,47 @@ def test_vm_agrees_with_windows_on_every_041_fault() -> None:
 
 
 @pytest.mark.hvf
-def test_xgetbv_is_undefined_under_the_profile() -> None:
-    """XGETBV raises #UD while CR4.OSXSAVE is clear (SDM XGETBV), and the guest profile's
-    CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json): the model and the VM both end the process
-    with STATUS_ILLEGAL_INSTRUCTION at the instruction (Sprint 044). The runners' CPUs set OSXSAVE, so
-    the CPU cannot judge this class; the profile does, as for CPUID."""
+def test_xgetbv_reads_xcr0_under_the_profile() -> None:
+    """The guest profile reports OSXSAVE and XCR0 = x87 | SSE | AVX (specs/guest_cpuid.json 0.2.0, Sprint 049):
+    XGETBV with ECX 0 gives EDX:EAX = 0:7 in the model and the VM; ECX 1 (XGETBV1, not reported) is #GP, an
+    access violation at the instruction. The runners' CPUs have other XCR0 values, so the profile judges this
+    class, as it does CPUID."""
     from w2m.loader import GuestFault, Loaded, Memory
-    from w2m.runtime import STATUS_ILLEGAL_INSTRUCTION, Runtime
+    from w2m.runtime import Runtime
     from w2m.vm_backend import VM
 
     code_va, stack_va = 0x2000_0000, 0x4000_0000
+    # xor ecx,ecx; xgetbv; mov [0x40000000],eax; mov [0x40000004],edx; jmp $
+    read_xcr0 = bytes.fromhex("31c9" "0f01d0" "890425" "00000040" "891425" "04000040" "ebfe")
+    read_xcr1 = bytes.fromhex("b901000000" "0f01d0" "ebfe")                         # mov ecx,1; xgetbv; jmp $
 
-    def memory() -> Memory:
+    def memory(code: bytes) -> Memory:
         mem = Memory()
-        mem.map(code_va, 0x1000, "code").data[:3] = b"\x0f\x01\xd0"      # xgetbv
+        mem.map(code_va, 0x1000, "code").data[:len(code)] = code
         mem.map(stack_va, 0x10000, "stack")
         return mem
 
-    rt = Runtime(Loaded(None, memory(), code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
+    rt = Runtime(Loaded(None, memory(read_xcr0), code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
+    for _ in range(4):
+        rt.step()
+    assert rt.mem.read(stack_va, 8) == (7).to_bytes(8, "little")
+    vm = VM(Loaded(None, memory(read_xcr0), code_va, {}, stack_va + 0x10000))       # type: ignore[arg-type]
+    try:
+        vm.run(max_steps=20)
+        assert vm.mem.read(stack_va, 8) == (7).to_bytes(8, "little")
+    finally:
+        vm.close()
+
+    rt = Runtime(Loaded(None, memory(read_xcr1), code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
+    rt.step()
     with pytest.raises(GuestFault) as e:
         rt.step()
-    assert e.value.code == STATUS_ILLEGAL_INSTRUCTION and rt.th.rip == code_va
-    vm = VM(Loaded(None, memory(), code_va, {}, stack_va + 0x10000))       # type: ignore[arg-type]
+    assert e.value.code == 0xC000_0005 and rt.th.rip == code_va + 5
+    vm = VM(Loaded(None, memory(read_xcr1), code_va, {}, stack_va + 0x10000))       # type: ignore[arg-type]
     try:
-        r = vm.run(max_steps=100)
+        r = vm.run(max_steps=20)
         exc = vm.exception()
     finally:
         vm.close()
-    assert r.stop.startswith("UnhandledException 0xc000001d at x86 0x20000000"), r.stop
-    assert exc is not None and exc["code"] == STATUS_ILLEGAL_INSTRUCTION and exc["rip"] == code_va
+    assert r.stop.startswith("UnhandledException 0xc0000005 at x86 0x20000005"), r.stop
+    assert exc is not None and exc["rip"] == code_va + 5

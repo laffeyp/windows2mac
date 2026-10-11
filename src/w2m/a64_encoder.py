@@ -617,6 +617,17 @@ def fp_scalar(op: str, size: int, vd: int, vn: int, vm: int) -> int:
     return _FP2[op] | _FTYPE[size] << 22 | vm << 16 | vn << 5 | vd
 
 
+_FP3 = {"fmadd": (0, 0), "fmsub": (0, 1), "fnmadd": (1, 0), "fnmsub": (1, 1)}
+
+
+def fp_fused(op: str, size: int, vd: int, vn: int, vm: int, va: int) -> int:
+    """FMADD Dd = Da + Dn*Dm; FMSUB Da - Dn*Dm; FNMADD -Da - Dn*Dm; FNMSUB -Da + Dn*Dm (one rounding; Arm ARM
+    C7.2 FP data-processing, 3 source; Sprint 049)."""
+    _v(vd, vn, vm, va)
+    o1, o0 = _FP3[op]
+    return 0x1F000000 | _FTYPE[size] << 22 | o1 << 21 | vm << 16 | o0 << 15 | va << 10 | vn << 5 | vd
+
+
 _FPV = {"add": 0x4E20D400, "sub": 0x4EA0D400, "mul": 0x6E20DC00, "div": 0x6E20FC00,
         "min": 0x4EA0F400, "max": 0x4E20F400}
 

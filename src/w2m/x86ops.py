@@ -21,6 +21,7 @@ GPR8_REX = ["AL", "CL", "DL", "BL", "SPL", "BPL", "SIL", "DIL"] + [f"R{n}B" for 
 GPR8_LEGACY = ["AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"]
 SIZE = {"b": 8, "w": 16, "d": 32, "q": 64, "dq": 128}
 XMM = [f"XMM{n}" for n in range(16)]
+YMM = [f"YMM{n}" for n in range(16)]
 SEG = {0x64: "FS", 0x65: "GS"}
 
 
@@ -70,8 +71,21 @@ def operands(f: Fields) -> tuple[str, ...]:
     if not f.ops:
         raise OperandError("row has no operand template")
     out: list[str] = []
+    vec = YMM if f.vl else XMM                 # VEX.L (Sprint 049): Vx, Hx, Wx name YMM registers at 256 bits
     for t in f.ops.split(","):
-        if t == "V":                           # XMM register from ModRM.reg (Sprint 039)
+        if t == "Vx":                          # XMM or YMM from ModRM.reg, by VEX.L (SDM Table A-1 "x")
+            assert f.modrm is not None
+            out.append("R:" + vec[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])
+        elif t in ("H", "Hx"):                 # the register VEX.vvvv names (stored inverted); H alone is XMM
+            assert f.vvvv is not None
+            out.append("R:" + (vec if t == "Hx" else XMM)[f.vvvv ^ 0xF])
+        elif t == "Wx":                        # XMM or YMM from ModRM.r/m, or 16 or 32 bytes of memory
+            assert f.modrm is not None
+            if f.modrm >> 6 == 3:
+                out.append("R:" + vec[(f.modrm & 7) | (f.rex & 1) << 3])
+            else:
+                out.append(_mem(f, 32 if f.vl else 16))
+        elif t == "V":                         # XMM register from ModRM.reg (Sprint 039)
             assert f.modrm is not None
             out.append("R:" + XMM[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])
         elif t[0] == "W":                      # XMM register or memory of SIZE[t[1:]] bits from ModRM.r/m

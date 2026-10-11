@@ -107,6 +107,7 @@ class Case:
     xmm: list[int] = field(default_factory=lambda: [0] * 16)
     edge: bytes = bytes(EDGE)
     kind: int = 0                 # 0 ordinary, 1 fault placement
+    ymm_hi: list[int] = field(default_factory=lambda: [0] * 16)   # YMM bits 255:128 (format 3, Sprint 049)
 
 
 def _value(rng: random.Random) -> int:
@@ -144,7 +145,7 @@ def _mxcsr(rng: random.Random) -> int:
     return v
 
 
-def _state(rng: random.Random, sse: bool) -> Case:
+def _state(rng: random.Random, sse: bool, ymm: bool = False) -> Case:
     regs = [_value(rng) for _ in range(16)]
     regs[4] = STACK_VA + STACK_OFF + 0x20 + 8 * rng.randrange(4)      # push and pop stay inside the window
     rflags = 0x2 | sum(1 << b for b in FLAG_BITS.values() if rng.getrandbits(1))
@@ -153,8 +154,11 @@ def _state(rng: random.Random, sse: bool) -> Case:
         data = b"".join(_xmm(rng).to_bytes(16, "little") for _ in range(WINDOW // 16))
     else:
         data = rng.randbytes(WINDOW)
-    return Case(b"", regs, rflags, data, rng.randbytes(WINDOW), "", _mxcsr(rng),
-                [_xmm(rng) for _ in range(16)], rng.randbytes(EDGE))
+    c = Case(b"", regs, rflags, data, rng.randbytes(WINDOW), "", _mxcsr(rng),
+             [_xmm(rng) for _ in range(16)], rng.randbytes(EDGE))
+    if ymm:                                                    # format-3 sets only: older sets draw nothing more
+        c.ymm_hi = [_xmm(rng) for _ in range(16)]
+    return c
 
 
 def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = None) -> bool:
@@ -376,6 +380,17 @@ CLASSES_046E = frozenset(("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"))
 CLASSES_047 = frozenset(("PCMPISTRI", "PCMPISTRI64", "UNPCKHPD", "MUL", "BTC", "LFENCE", "MFENCE"))
 # Sprint 048: the prefetch hints the frontier meets (PREFETCHW at 0x18143e96c) and their siblings
 CLASSES_048 = frozenset(("PREFETCHW", "PREFETCHT0", "PREFETCHT1", "PREFETCHT2"))
+# Sprint 049: the guest profile is x86-64-v3; the VEX classes mono-2.0-bdwgc.dll reaches (its census, 2026-10-11),
+# the legacy forms they rest on, and FNSTCW, where mono's start-up stopped (3,020,967 instructions). Format 3:
+# the case and result records carry YMM0-15 bits 255:128
+CLASSES_049 = frozenset(("ORPD", "PCMPEQW", "CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "FNSTCW", "VZEROUPPER",
+                         "VMULSD", "VADDSD", "VSUBSD", "VDIVSD", "VMOVSD", "VMOVQ", "VMOVD", "VMOVAPD", "VMOVDQA",
+                         "VMOVDQU", "VCOMISD", "VUCOMISD", "VPAND", "VPOR", "VPXOR", "VXORPS", "VXORPD", "VORPD",
+                         "VANDPD", "VANDPS", "VPCMPEQB", "VPCMPEQW", "VPSUBQ", "VPSUBD", "VPADDQ", "VCVTDQ2PD",
+                         "VPSRLQ", "VPSLLQ", "VPSRLDQ", "VPMOVMSKB", "VCVTTPD2DQ", "VCVTPD2DQ", "VCMPSD", "VMOVLHPS",
+                         "VHADDPD", "VFMADD213SD", "VFMADD231SD", "VFMADD132SD", "VFNMADD231SD", "VFNMADD132SD",
+                         "VFNMADD213SD", "VFMSUB213SD", "VFMSUB132SD", "VFMADD132PD"))
+FORMAT_3 = frozenset(("049",))                     # sets whose records carry the YMM upper halves
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -392,7 +407,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "046d": (2026_10_10_463, CLASSES_046D, (), False),
     "046e": (2026_10_10_464, CLASSES_046E, (), False),
     "047": (2026_10_10_47, CLASSES_047, (), False),
-    "048": (2026_10_10_48, CLASSES_048, (), False)}
+    "048": (2026_10_10_48, CLASSES_048, (), False),
+    "049": (2026_10_11_49, CLASSES_049, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -409,6 +425,7 @@ def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
 def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039,
                 locked: tuple[str, ...] = (), control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
+    ymm = classes is CLASSES_049                     # format 3 (FORMAT_3): states carry YMM upper halves
     out: list[Case] = []
     skipped: Counter[str] = Counter()
     source = list(encgen_cases()) + list(_locked_variants(locked))
@@ -440,10 +457,10 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             skipped["control flow (fixed encodings instead)"] += 1
             continue
         raw = c.raw[:d.length]
-        sse = d.iclass in SSE
+        sse = d.iclass in SSE or (ymm and (d.iclass.startswith("V") or d.iclass == "FNSTCW"))
         placeable = True
         for _ in range(SSE_STATES if sse else STATES):
-            s = _state(rng, sse)
+            s = _state(rng, sse, ymm)
             if not _place(ins, s.regs, rng):
                 skipped["address not placeable (RIP-relative or absolute)"] += 1
                 placeable = False
@@ -455,7 +472,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             out.append(s)
         size = _memory_size(raw)
         if placeable and size is not None:
-            s = _state(rng, sse)
+            s = _state(rng, sse, ymm)
             target = PAGE_END - rng.randrange(1, size) if size > 1 else PAGE_END
             if _place(ins, s.regs, rng, lambda target=target: target):
                 s.code, s.label, s.kind = raw, d.iclass, 1
@@ -517,22 +534,34 @@ def cached_cases(case_set: str) -> list[Case]:
     return cases
 
 
-def write_cases(cases: list[Case], path: Path) -> None:
+def write_cases(cases: list[Case], path: Path, fmt: int = 2) -> None:
     with path.open("wb") as f:
-        f.write(b"W2MS" + struct.pack("<II", 2, len(cases)))
+        f.write(b"W2MS" + struct.pack("<II", fmt, len(cases)))
         for c in cases:
             f.write(bytes([len(c.code), c.kind]) + bytes(6) + c.code.ljust(CODE_BYTES, b"\0"))
             f.write(struct.pack("<16QQQ", *c.regs, c.rflags, c.mxcsr))
-            f.write(b"".join(x.to_bytes(16, "little") for x in c.xmm) + c.data + c.stack + c.edge)
+            f.write(b"".join(x.to_bytes(16, "little") for x in c.xmm))
+            if fmt == 3:
+                f.write(b"".join(x.to_bytes(16, "little") for x in c.ymm_hi))
+            f.write(c.data + c.stack + c.edge)
+
+
+def case_format(path: Path) -> int:
+    """2 or 3, from a case file's header (format 3: the records carry YMM upper halves; Sprint 049)."""
+    raw = path.read_bytes()[:8]
+    assert raw[:4] == b"W2MS"
+    return int(struct.unpack_from("<I", raw, 4)[0])
 
 
 def read_cases(path: Path) -> list[Case]:
     raw = path.read_bytes()
-    assert raw[:4] == b"W2MS" and struct.unpack_from("<I", raw, 4)[0] == 2
+    fmt = struct.unpack_from("<I", raw, 4)[0]
+    assert raw[:4] == b"W2MS" and fmt in (2, 3)
     count = struct.unpack_from("<I", raw, 8)[0]
+    size = CASE_SIZE + (256 if fmt == 3 else 0)
     out = []
     for n in range(count):
-        p = 12 + n * CASE_SIZE
+        p = 12 + n * size
         code = raw[p + 8:p + 8 + raw[p]]
         q = p + 8 + CODE_BYTES
         regs = list(struct.unpack_from("<16Q", raw, q))
@@ -540,8 +569,12 @@ def read_cases(path: Path) -> list[Case]:
         q += 144
         xmm = [int.from_bytes(raw[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
         q += 256
+        ymm_hi = [0] * 16
+        if fmt == 3:
+            ymm_hi = [int.from_bytes(raw[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
+            q += 256
         out.append(Case(code, regs, rflags, raw[q:q + WINDOW], raw[q + WINDOW:q + 2 * WINDOW], "", mxcsr, xmm,
-                        raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], raw[p + 1]))
+                        raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], raw[p + 1], ymm_hi))
     return out
 
 
@@ -572,20 +605,31 @@ class Result:
     mxcsr: int = fp.MXCSR_DEFAULT
     xmm: list[int] = field(default_factory=lambda: [0] * 16)
     edge: bytes = bytes(EDGE)
+    ymm_hi: list[int] | None = None       # format 3: YMM bits 255:128 after the case
 
 
-def read_results(path: Path) -> list[Result]:
+def read_results(path: Path, fmt: int = 2) -> list[Result]:
     raw = path.read_bytes()
-    out = []
-    for p in range(0, len(raw), RESULT_SIZE):
-        regs = list(struct.unpack_from("<16Q", raw, p))
-        rflags, marker, fault, fault_rip, mxcsr = struct.unpack_from("<5Q", raw, p + 128)
-        q = p + 168
-        xmm = [int.from_bytes(raw[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
+    return [parse_result(raw[p:p + result_size(fmt)], fmt) for p in range(0, len(raw), result_size(fmt))]
+
+
+def result_size(fmt: int) -> int:
+    return RESULT_SIZE + (256 if fmt == 3 else 0)
+
+
+def parse_result(rec: bytes, fmt: int = 2) -> Result:
+    """One result record (format 2, or 3 with YMM upper halves after the XMM registers)."""
+    regs = list(struct.unpack_from("<16Q", rec, 0))
+    rflags, marker, fault, fault_rip, mxcsr = struct.unpack_from("<5Q", rec, 128)
+    q = 168
+    xmm = [int.from_bytes(rec[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
+    q += 256
+    ymm_hi = None
+    if fmt == 3:
+        ymm_hi = [int.from_bytes(rec[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
         q += 256
-        out.append(Result(regs, rflags, marker, fault, raw[q:q + WINDOW], raw[q + WINDOW:q + 2 * WINDOW],
-                          fault_rip, mxcsr, xmm, raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE]))
-    return out
+    return Result(regs, rflags, marker, fault, rec[q:q + WINDOW], rec[q + WINDOW:q + 2 * WINDOW],
+                  fault_rip, mxcsr, xmm, rec[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], ymm_hi)
 
 
 def read_results_format1(path: Path) -> list[Result]:
@@ -625,6 +669,7 @@ def model(c: Case) -> ModelRun | str:
     th.df = bool(c.rflags >> DF_BIT & 1)
     th.mxcsr = c.mxcsr
     th.xmm = list(c.xmm)
+    th.ymm_hi = list(c.ymm_hi)
     try:
         rt.step()
     except GuestFault as e:
@@ -699,6 +744,10 @@ def judge(c: Case, r: Result, label: str) -> list[tuple[str, str]]:
     for i in range(16):
         if th.xmm[i] != r.xmm[i]:
             diffs.append((f"{label} xmm{i}", f"model {th.xmm[i]:032x}, cpu {r.xmm[i]:032x}"))
+    if r.ymm_hi is not None:                                    # format 3: bits 255:128
+        for i in range(16):
+            if th.ymm_hi[i] != r.ymm_hi[i]:
+                diffs.append((f"{label} ymm{i}.hi", f"model {th.ymm_hi[i]:032x}, cpu {r.ymm_hi[i]:032x}"))
     if rt.mem.read(DATA_VA + DATA_OFF, WINDOW) != r.data:
         diffs.append((f"{label} data", "data window differs"))
     if rt.mem.read(STACK_VA + STACK_OFF, WINDOW) != r.stack:
@@ -748,7 +797,7 @@ def main(argv: list[str]) -> int:
     if a.cases:
         seed, class_set, locked, control = CASE_SETS[a.set]
         cs, skipped = build_cases(seed, class_set, locked, control)
-        write_cases(cs, a.out)
+        write_cases(cs, a.out, 3 if a.set in FORMAT_3 else 2)
         labels = Counter(c.label for c in cs)
         print(f"{len(cs)} cases over {len(labels)} iclasses ({sum(c.kind for c in cs)} fault placements) -> "
               f"{a.out} ({a.out.stat().st_size} bytes); skipped {dict(skipped)}")
@@ -774,11 +823,13 @@ def judge_run(a: argparse.Namespace) -> int:
     profile = (a.judge / "profile.txt").read_text().strip()
     cpu = (a.judge / "cpu.txt").read_text().strip() if (a.judge / "cpu.txt").exists() else "unknown CPU"
     result_files = sorted(a.judge.glob("result-*.bin"))
-    runs = [read_results(p) for p in result_files]
+    fmt = case_format(a.out)
+    runs = [read_results(p, fmt) for p in result_files]
     assert all(len(r) == len(built) for r in runs), "result count differs from case count"
 
     def key(x: Result) -> tuple[Any, ...]:
-        return (tuple(x.regs), x.rflags, x.marker, x.fault, x.mxcsr, tuple(x.xmm), x.data, x.stack, x.edge)
+        return (tuple(x.regs), x.rflags, x.marker, x.fault, x.mxcsr, tuple(x.xmm), x.data, x.stack, x.edge,
+                tuple(x.ymm_hi or ()))
     unstable = sum(1 for i in range(len(built)) if len({key(x[i]) for x in runs}) > 1)
     classes: Counter[str] = Counter()
     example: dict[str, str] = {}

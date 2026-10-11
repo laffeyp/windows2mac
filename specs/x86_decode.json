@@ -1,6 +1,6 @@
 {
  "spec_id": "x86_64.decode",
- "version": "0.7.9",
+ "version": "0.8.0",
  "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
  "prefixes": {
   "legacy": [
@@ -4034,7 +4034,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "ORPD"
+   "iclass": "ORPD",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction page); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4318,7 +4320,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-3 (two-byte 0F opcode map)",
-   "iclass": "PCMPEQW"
+   "iclass": "PCMPEQW",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction page); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4777,7 +4781,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVDQA",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4789,7 +4795,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVDQA",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Wx,Vx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4801,7 +4809,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVDQU",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4813,7 +4823,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVDQU",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Wx,Vx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4825,7 +4837,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVAPD",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4837,7 +4851,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMOVAPD",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Wx,Vx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4848,7 +4864,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VADDSD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4859,7 +4877,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VMULSD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4870,7 +4890,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VSUBSD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4881,7 +4903,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VDIVSD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4893,7 +4917,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VCOMISD",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4905,7 +4931,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VCVTDQ2PD",
    "vvvv": "1111",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4918,7 +4946,9 @@
    "iclass": "VMOVQ",
    "vvvv": "1111",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4931,7 +4961,9 @@
    "iclass": "VMOVQ",
    "vvvv": "1111",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Wq,V",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4942,7 +4974,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPAND",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4953,7 +4987,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPOR",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4964,7 +5000,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPXOR",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4975,7 +5013,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPSUBQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4986,7 +5026,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPSUBD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -4997,7 +5039,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPADDQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5008,7 +5052,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPCMPEQB",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5019,7 +5065,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPCMPEQW",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5030,7 +5078,9 @@
    "vex": true,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPSRLQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5044,7 +5094,9 @@
    "iclass": "VMOVD",
    "vvvv": "1111",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,Ed",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5058,7 +5110,9 @@
    "iclass": "VMOVQ",
    "vvvv": "1111",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,Eq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5072,7 +5126,9 @@
    "iclass": "VMOVD",
    "vvvv": "1111",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Ed,V",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5086,7 +5142,9 @@
    "iclass": "VMOVQ",
    "vvvv": "1111",
    "l": 0,
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Eq,V",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5100,7 +5158,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPSRLQ",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
-   "form": "reg"
+   "form": "reg",
+   "ops": "Hx,Wx,Ib",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5114,7 +5174,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VPSLLQ",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
-   "form": "reg"
+   "form": "reg",
+   "ops": "Hx,Wx,Ib",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5139,7 +5201,9 @@
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VFMADD213SD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -5151,7 +5215,9 @@
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VFMADD231SD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -5163,7 +5229,9 @@
    "w": 1,
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "iclass": "VFMSUB213SD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -5322,7 +5390,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "VPSLLQ",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -6069,7 +6139,9 @@
    "vex": true,
    "iclass": "VPSRLDQ",
    "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
-   "form": "reg"
+   "form": "reg",
+   "ops": "Hx,Wx,Ib",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -6488,7 +6560,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "VXORPS",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -6499,7 +6573,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "VXORPD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -6510,7 +6586,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "VANDPS",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -6521,7 +6599,9 @@
    "src": "Intel SDM Vol 2A section 2.3 (VEX) with the legacy opcode row",
    "vex": true,
    "iclass": "VANDPD",
-   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)"
+   "src_validity": "Intel SDM Vol 2B/2C instruction pages, Opcode/Instruction column (VEX.L0/L1, NDS vs vvvv=1111)",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -9025,7 +9105,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page CMPSD (opcode line \"F2 0F C2 /r ib CMPSD xmm1, xmm2/m64, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpsd, retrieved 2026-10-09",
    "imm": "b",
-   "iclass": "CMPSD_XMM"
+   "iclass": "CMPSD_XMM",
+   "ops": "V,Wq,Ib",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction page); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f",
@@ -9044,7 +9126,9 @@
    "pfx": "f2",
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page CVTPD2DQ (opcode line \"F2 0F E6 /r CVTPD2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvtpd2dq, retrieved 2026-10-09",
-   "iclass": "CVTPD2DQ"
+   "iclass": "CVTPD2DQ",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction page); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f",
@@ -9053,7 +9137,9 @@
    "pfx": "66",
    "modrm": true,
    "src": "Intel SDM Vol 2 instruction page CVTTPD2DQ (opcode line \"66 0F E6 /r CVTTPD2DQ xmm1, xmm2/m128\"), as transcribed at https://www.felixcloutier.com/x86/cvttpd2dq, retrieved 2026-10-09",
-   "iclass": "CVTTPD2DQ"
+   "iclass": "CVTTPD2DQ",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction page); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11295,7 +11381,9 @@
    "src": "Intel SDM Vol 2 instruction page VCMPSD (opcode line \"VEX.LIG.F2.0F.WIG C2 /r ib VCMPSD xmm1, xmm2, xmm3/m64, imm8\"), as transcribed at https://www.felixcloutier.com/x86/cmpsd, retrieved 2026-10-09",
    "vex": true,
    "imm": "b",
-   "iclass": "VCMPSD"
+   "iclass": "VCMPSD",
+   "ops": "V,H,Wq,Ib",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11342,7 +11430,9 @@
    "vex": true,
    "l": 0,
    "vvvv": "1111",
-   "iclass": "VCVTPD2DQ"
+   "iclass": "VCVTPD2DQ",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11354,7 +11444,9 @@
    "vex": true,
    "l": 1,
    "vvvv": "1111",
-   "iclass": "VCVTPD2DQ"
+   "iclass": "VCVTPD2DQ",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11456,7 +11548,9 @@
    "vex": true,
    "l": 0,
    "vvvv": "1111",
-   "iclass": "VCVTTPD2DQ"
+   "iclass": "VCVTTPD2DQ",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11468,7 +11562,9 @@
    "vex": true,
    "l": 1,
    "vvvv": "1111",
-   "iclass": "VCVTTPD2DQ"
+   "iclass": "VCVTTPD2DQ",
+   "ops": "V,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11566,7 +11662,9 @@
    "vex": true,
    "w": 1,
    "l": 0,
-   "iclass": "VFMADD132PD"
+   "iclass": "VFMADD132PD",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -11578,7 +11676,9 @@
    "vex": true,
    "w": 1,
    "l": 1,
-   "iclass": "VFMADD132PD"
+   "iclass": "VFMADD132PD",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -11589,7 +11689,9 @@
    "src": "Intel SDM Vol 2 instruction page VFMADD132SD (opcode line \"VEX.LIG.66.0F38.W1 99 /r VFMADD132SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfmadd132sd:vfmadd213sd:vfmadd231sd, retrieved 2026-10-09",
    "vex": true,
    "w": 1,
-   "iclass": "VFMADD132SD"
+   "iclass": "VFMADD132SD",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -11646,7 +11748,9 @@
    "src": "Intel SDM Vol 2 instruction page VFMSUB132SD (opcode line \"VEX.LIG.66.0F38.W1 9B /r VFMSUB132SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfmsub132sd:vfmsub213sd:vfmsub231sd, retrieved 2026-10-09",
    "vex": true,
    "w": 1,
-   "iclass": "VFMSUB132SD"
+   "iclass": "VFMSUB132SD",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -11668,7 +11772,9 @@
    "src": "Intel SDM Vol 2 instruction page VFNMADD132SD (opcode line \"VEX.LIG.66.0F38.W1 9D /r VFNMADD132SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132sd:vfnmadd213sd:vfnmadd231sd, retrieved 2026-10-09",
    "vex": true,
    "w": 1,
-   "iclass": "VFNMADD132SD"
+   "iclass": "VFNMADD132SD",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -11679,7 +11785,9 @@
    "src": "Intel SDM Vol 2 instruction page VFNMADD213SD (opcode line \"VEX.LIG.66.0F38.W1 AD /r VFNMADD213SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132sd:vfnmadd213sd:vfnmadd231sd, retrieved 2026-10-09",
    "vex": true,
    "w": 1,
-   "iclass": "VFNMADD213SD"
+   "iclass": "VFNMADD213SD",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -11714,7 +11822,9 @@
    "src": "Intel SDM Vol 2 instruction page VFNMADD231SD (opcode line \"VEX.LIG.66.0F38.W1 BD /r VFNMADD231SD xmm1, xmm2, xmm3/m64\"), as transcribed at https://www.felixcloutier.com/x86/vfnmadd132sd:vfnmadd213sd:vfnmadd231sd, retrieved 2026-10-09",
    "vex": true,
    "w": 1,
-   "iclass": "VFNMADD231SD"
+   "iclass": "VFNMADD231SD",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11725,7 +11835,9 @@
    "src": "Intel SDM Vol 2 instruction page VHADDPD (opcode line \"VEX.128.66.0F.WIG 7C /r VHADDPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/haddpd, retrieved 2026-10-09",
    "vex": true,
    "l": 0,
-   "iclass": "VHADDPD"
+   "iclass": "VHADDPD",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11736,7 +11848,9 @@
    "src": "Intel SDM Vol 2 instruction page VHADDPD (opcode line \"VEX.256.66.0F.WIG 7C /r VHADDPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/haddpd, retrieved 2026-10-09",
    "vex": true,
    "l": 1,
-   "iclass": "VHADDPD"
+   "iclass": "VHADDPD",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f3a",
@@ -11832,7 +11946,9 @@
    "vex": true,
    "form": "reg",
    "l": 0,
-   "iclass": "VMOVLHPS"
+   "iclass": "VMOVLHPS",
+   "ops": "V,H,Wdq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11869,7 +11985,9 @@
    "src": "Intel SDM Vol 2 instruction page VMOVSD (opcode line \"VEX.LIG.F2.0F.WIG 10 /r VMOVSD xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movsd, retrieved 2026-10-09",
    "vex": true,
    "form": "reg",
-   "iclass": "VMOVSD"
+   "iclass": "VMOVSD",
+   "ops": "V,H,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11881,7 +11999,9 @@
    "vex": true,
    "form": "mem",
    "vvvv": "1111",
-   "iclass": "VMOVSD"
+   "iclass": "VMOVSD",
+   "ops": "V,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11892,7 +12012,9 @@
    "src": "Intel SDM Vol 2 instruction page VMOVSD (opcode line \"VEX.LIG.F2.0F.WIG 11 /r VMOVSD xmm1, xmm2, xmm3\"), as transcribed at https://www.felixcloutier.com/x86/movsd, retrieved 2026-10-09",
    "vex": true,
    "form": "reg",
-   "iclass": "VMOVSD"
+   "iclass": "VMOVSD",
+   "ops": "Wq,H,V",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -11904,7 +12026,9 @@
    "vex": true,
    "form": "mem",
    "vvvv": "1111",
-   "iclass": "VMOVSD"
+   "iclass": "VMOVSD",
+   "ops": "Wq,V",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -12015,7 +12139,9 @@
    "src": "Intel SDM Vol 2 instruction page VORPD (opcode line \"VEX.128.66.0F 56 /r VORPD xmm1,xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/orpd, retrieved 2026-10-09",
    "vex": true,
    "l": 0,
-   "iclass": "VORPD"
+   "iclass": "VORPD",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -12026,7 +12152,9 @@
    "src": "Intel SDM Vol 2 instruction page VORPD (opcode line \"VEX.256.66.0F 56 /r VORPD ymm1, ymm2, ymm3/m256\"), as transcribed at https://www.felixcloutier.com/x86/orpd, retrieved 2026-10-09",
    "vex": true,
    "l": 1,
-   "iclass": "VORPD"
+   "iclass": "VORPD",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -12225,7 +12353,9 @@
    "form": "reg",
    "l": 0,
    "vvvv": "1111",
-   "iclass": "VPMOVMSKB"
+   "iclass": "VPMOVMSKB",
+   "ops": "Gd,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -12238,7 +12368,9 @@
    "form": "reg",
    "l": 1,
    "vvvv": "1111",
-   "iclass": "VPMOVMSKB"
+   "iclass": "VPMOVMSKB",
+   "ops": "Gd,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -12402,7 +12534,9 @@
    "src": "Intel SDM Vol 2 instruction page VUCOMISD (opcode line \"VEX.LIG.66.0F.WIG 2E /r VUCOMISD xmm1, xmm2/m64\"), as transcribed at https://www.felixcloutier.com/x86/ucomisd, retrieved 2026-10-09",
    "vex": true,
    "vvvv": "1111",
-   "iclass": "VUCOMISD"
+   "iclass": "VUCOMISD",
+   "ops": "V,Wq",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, the instruction's VEX opcode line); notation Vol 2D Table A-1, x: XMM or YMM by VEX.L, H: the VEX.vvvv register (Sprint 049)"
   },
   {
    "map": "0f",
@@ -12581,7 +12715,7 @@
    "iclass": "MOVNTSD"
   }
  ],
- "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv; 0.7.1 (2026-10-09): operand templates for the legacy-SSE rows the model lifts (V, W, G, E with d, q, dq, y; scripts/sse_operand_templates.py; Sprint 039); 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044); 0.7.3 (2026-10-10): operand templates for the second SSE block, the classes UnityPlayer.dll reaches most without a rule and without floating-point exceptions (Sprint 046); 0.7.4 (2026-10-10): CMPXCHG8B/16B's template Mqdq (Sprint 046); 0.7.5 (2026-10-10): operand templates for the third SSE block (Sprint 046); 0.7.6 (2026-10-10): RCPPS, RSQRTPS, RCPSS, RSQRTSS (Sprint 046); 0.7.7 (2026-10-10): PCMPISTRI, UNPCKHPD (Sprint 047); 0.7.8 (2026-10-10): PREFETCHW, PREFETCHT0, PREFETCHT1, PREFETCHT2 (Sprint 048); 0.7.9 (2026-10-11): FNSTCW's operand template (Sprint 049)",
+ "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv; 0.7.1 (2026-10-09): operand templates for the legacy-SSE rows the model lifts (V, W, G, E with d, q, dq, y; scripts/sse_operand_templates.py; Sprint 039); 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044); 0.7.3 (2026-10-10): operand templates for the second SSE block, the classes UnityPlayer.dll reaches most without a rule and without floating-point exceptions (Sprint 046); 0.7.4 (2026-10-10): CMPXCHG8B/16B's template Mqdq (Sprint 046); 0.7.5 (2026-10-10): operand templates for the third SSE block (Sprint 046); 0.7.6 (2026-10-10): RCPPS, RSQRTPS, RCPSS, RSQRTSS (Sprint 046); 0.7.7 (2026-10-10): PCMPISTRI, UNPCKHPD (Sprint 047); 0.7.8 (2026-10-10): PREFETCHW, PREFETCHT0, PREFETCHT1, PREFETCHT2 (Sprint 048); 0.7.9 (2026-10-11): FNSTCW's operand template (Sprint 049); 0.8.0 (2026-10-11): operand templates for the VEX rows mono-2.0-bdwgc.dll reaches (Vx, Hx, Wx: XMM or YMM by VEX.L; H: VEX.vvvv), the guest profile now x86-64-v3; ORPD, PCMPEQW, CMPSD (scalar), CVTPD2DQ, CVTTPD2DQ (Sprint 049)",
  "identity": "iclass: XED instruction-class naming (github.com/intelxed/xed), assigned per row by rule; corrections recorded as spec revisions with XED as evidence. Fusion: LOCK prefix -> <ICLASS>_LOCK; REP -> REP_<ICLASS>; REPE -> REPE_<ICLASS>; REPNE -> REPNE_<ICLASS>.",
  "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08.",
  "validity": "Rows may carry `lock` (LOCK allowed on the memory form), `vvvv` ('1111' when the operand is unused), `l` (required VEX.L), `form`. An encoding outside these raises InvalidEncoding: the guest observes #UD (v0.2 section 5.1). Strict mandatory prefix: in the 0F/0F38/0F3A maps, an opcode whose rows include any mandatory-prefix row is an SSE-family opcode; a 66/F2/F3 prefix with no matching row means the bytes are a different instruction or invalid, never the unprefixed row. On opcodes with only unprefixed rows, 66 stays operand size."

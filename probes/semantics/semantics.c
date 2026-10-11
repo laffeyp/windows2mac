@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 /* semantics.c — run single x86-64 instructions from stated states on a real CPU (Sprint 037;
- * format 2 with MXCSR, XMM0-15, AF, DF, an edge window and the state at a fault, Sprint 039).
+ * format 2 with MXCSR, XMM0-15, AF, DF, an edge window and the state at a fault, Sprint 039; format 3 adds
+ * YMM0-15 bits 255:128, Sprint 049).
  *
  * Usage: semantics.exe <cases.bin> <results.bin>
  *
@@ -27,7 +28,10 @@
  * in encoding order), rflags, mxcsr (u64), xmm[16][16], data[64], stack[64], edge[32]. File:
  * "W2MS", u32 format 2, u32 count, then records. Result record (584 bytes): regs[16], rflags,
  * marker (0, 1, 2 = fault), fault code, fault rip, mxcsr, xmm[16][16], data[64], stack[64],
- * edge[32].
+ * edge[32]. Format 3 (Sprint 049): each case record has ymm_hi[16][16] (bits 255:128 of YMM0-15) after xmm,
+ * and each result record the same after its xmm; run_case inserts them with VINSERTF128 before the XMM loads
+ * (legacy MOVDQU leaves bits 255:128 alone) and the collectors extract them with VEXTRACTF128; at a fault they
+ * come from the CONTEXT's AVX state (LocateXStateFeature). Format 2 files run without any AVX instruction.
  */
 #include <windows.h>
 #include <stdio.h>
@@ -47,7 +51,8 @@ typedef unsigned long long u64;
 
 __attribute__((used)) u64 case_regs[16], case_rflags, out_regs[16], out_rflags, out_marker, out_fault, out_fault_rip;
 __attribute__((used)) unsigned int case_mxcsr, out_mxcsr, h_mxcsr;
-__attribute__((used, aligned(16))) u64 case_xmm[32], out_xmm[32], h_xmm[20];
+__attribute__((used, aligned(16))) u64 case_xmm[32], out_xmm[32], h_xmm[20], case_ymmhi[32], out_ymmhi[32];
+__attribute__((used)) unsigned char use_ymm;
 __attribute__((used)) u64 h_rsp, h_rbx, h_rbp, h_rsi, h_rdi, h_r12, h_r13, h_r14, h_r15;
 __attribute__((used)) void *code_ptr;
 __attribute__((used, aligned(16))) unsigned char flag_stack[256], collect_stack[256];
@@ -61,6 +66,8 @@ void fault_return(void);
 #define X16(M) M(0) M(1) M(2) M(3) M(4) M(5) M(6) M(7) M(8) M(9) M(10) M(11) M(12) M(13) M(14) M(15)
 #define LOAD_XMM(i) "  movdqu case_xmm+16*" #i "(%rip), %xmm" #i "\n"
 #define STORE_XMM(i) "  movdqu %xmm" #i ", out_xmm+16*" #i "(%rip)\n"
+#define LOAD_YMMHI(i) "  vinsertf128 $1, case_ymmhi+16*" #i "(%rip), %ymm" #i ", %ymm" #i "\n"
+#define STORE_YMMHI(i) "  vextractf128 $1, %ymm" #i ", out_ymmhi+16*" #i "(%rip)\n"
 
 __asm__(
     ".text\n"
@@ -75,6 +82,10 @@ __asm__(
     "  movdqu %xmm12, h_xmm+96(%rip)\n  movdqu %xmm13, h_xmm+112(%rip)\n  movdqu %xmm14, h_xmm+128(%rip)\n"
     "  movdqu %xmm15, h_xmm+144(%rip)\n"
     "  ldmxcsr case_mxcsr(%rip)\n"
+    "  cmpb $0, use_ymm(%rip)\n"
+    "  je 1f\n"
+    X16(LOAD_YMMHI)
+    "1:\n"
     X16(LOAD_XMM)
     "  leaq flag_stack+256(%rip), %rsp\n"
     "  pushq case_rflags(%rip)\n"
@@ -108,6 +119,9 @@ __asm__(
     "  movq %r13, out_regs+104(%rip)\n  movq %r14, out_regs+112(%rip)\n  movq %r15, out_regs+120(%rip)\n"
     "  stmxcsr out_mxcsr(%rip)\n"
     X16(STORE_XMM)
+    "  cmpb $0, use_ymm(%rip)\n"
+    "  je restore\n"
+    X16(STORE_YMMHI)
     "restore:\n"
     "  movq h_rsp(%rip), %rsp\n  movq h_rbx(%rip), %rbx\n  movq h_rbp(%rip), %rbp\n"
     "  movq h_rsi(%rip), %rsi\n  movq h_rdi(%rip), %rdi\n  movq h_r12(%rip), %r12\n"
@@ -117,6 +131,10 @@ __asm__(
     "  movdqu h_xmm+48(%rip), %xmm9\n  movdqu h_xmm+64(%rip), %xmm10\n  movdqu h_xmm+80(%rip), %xmm11\n"
     "  movdqu h_xmm+96(%rip), %xmm12\n  movdqu h_xmm+112(%rip), %xmm13\n  movdqu h_xmm+128(%rip), %xmm14\n"
     "  movdqu h_xmm+144(%rip), %xmm15\n"
+    "  cmpb $0, use_ymm(%rip)\n"
+    "  je 3f\n"
+    "  vzeroupper\n"
+    "3:\n"
     "  cld\n"
     "  retq\n"
     ".globl fault_return\n"
@@ -135,6 +153,12 @@ static LONG CALLBACK on_fault(EXCEPTION_POINTERS *ep) {
     for (int i = 0; i < 16; i++) {
         out_xmm[2 * i] = c->FltSave.XmmRegisters[i].Low;
         out_xmm[2 * i + 1] = (u64)c->FltSave.XmmRegisters[i].High;
+    }
+    if (use_ymm) {
+        DWORD len = 0;
+        void *avx = LocateXStateFeature(c, XSTATE_AVX, &len);
+        if (avx && len >= sizeof out_ymmhi) memcpy(out_ymmhi, avx, sizeof out_ymmhi);
+        else memset(out_ymmhi, 0xEE, sizeof out_ymmhi);           /* no AVX state in the CONTEXT: a visible mark */
     }
     c->Rip = (DWORD64)(ULONG_PTR)fault_return;
     c->EFlags &= ~0x400u;                                     /* DF clear for the harness */
@@ -170,10 +194,11 @@ int main(int argc, char **argv) {
     char magic[4];
     unsigned int format, count;
     if (fread(magic, 1, 4, in) != 4 || memcmp(magic, "W2MS", 4) || fread(&format, 4, 1, in) != 1 ||
-        format != 2 || fread(&count, 4, 1, in) != 1) {
-        fprintf(stderr, "semantics: not a format 2 case file\n");
+        (format != 2 && format != 3) || fread(&count, 4, 1, in) != 1) {
+        fprintf(stderr, "semantics: not a format 2 or 3 case file\n");
         return 2;
     }
+    use_ymm = format == 3;
     unsigned char *code = alloc_at(CODE_VA, 0x1000, PAGE_EXECUTE_READWRITE);
     unsigned char *data = alloc_at(DATA_VA, 0x1000, PAGE_READWRITE);
     unsigned char *stack = alloc_at(STACK_VA, 0x10000, PAGE_READWRITE);
@@ -191,6 +216,7 @@ int main(int argc, char **argv) {
         if (fread(head, 1, 8, in) != 8 || fread(bytes, 1, CODE_BYTES, in) != CODE_BYTES ||
             fread(case_regs, 8, 16, in) != 16 || fread(&case_rflags, 8, 1, in) != 1 ||
             fread(&mxcsr, 8, 1, in) != 1 || fread(case_xmm, 8, 32, in) != 32 ||
+            (use_ymm && fread(case_ymmhi, 8, 32, in) != 32) ||
             fread(data + DATA_OFF, 1, WINDOW, in) != WINDOW || fread(stack + STACK_OFF, 1, WINDOW, in) != WINDOW ||
             fread(data + EDGE_OFF, 1, EDGE, in) != EDGE) {
             fprintf(stderr, "semantics: case %u truncated\n", n);
@@ -206,6 +232,7 @@ int main(int argc, char **argv) {
         FlushInstructionCache(GetCurrentProcess(), code, 0x1000);
         memset(out_regs, 0, sizeof out_regs);
         memset(out_xmm, 0, sizeof out_xmm);
+        memset(out_ymmhi, 0, sizeof out_ymmhi);
         out_rflags = out_marker = out_fault = out_fault_rip = 0;
         out_mxcsr = 0;
         in_case = 1;
@@ -220,6 +247,7 @@ int main(int argc, char **argv) {
         fwrite(&out_fault_rip, 8, 1, out);
         fwrite(&mx, 8, 1, out);
         fwrite(out_xmm, 8, 32, out);
+        if (use_ymm) fwrite(out_ymmhi, 8, 32, out);
         fwrite(data + DATA_OFF, 1, WINDOW, out);
         fwrite(stack + STACK_OFF, 1, WINDOW, out);
         fwrite(data + EDGE_OFF, 1, EDGE, out);

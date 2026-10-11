@@ -38,8 +38,13 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("fence", kind)                 SFENCE "st": earlier stores before later ones; LFENCE "ld": earlier loads
                                   before later accesses; MFENCE "full": every access (Sprint 047)
   ("fcw", "st", loc)               FNSTCW (Sprint 049): the x87 control word to 2 bytes of memory
-  ("ud",)                         an instruction the guest profile makes undefined (#UD): XGETBV, since
-                                  the profile's CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json)
+  ("ud",)                         an instruction the guest profile makes undefined (#UD)
+  ("xgetbv",)                     XGETBV (Sprint 049): EDX:EAX = XCR0 (7) for ECX 0, #GP otherwise
+  ("vex", base, d, s1, s2, L, align, imm)  a VEX instruction as its legacy-SSE base (Sprint 049; rules/_vex.py): d =
+                                  base(s1, s2) on each 128-bit half; VEX.128 zeroes a register destination's bits
+                                  255:128; s1 None for two-operand forms
+  ("fma", ic, d, s2, s3, L)       VFMADD/VFMSUB/VFNMADD/VFNMSUB 132/213/231 (Sprint 049): one rounding
+  ("vzeroupper",)                 VZEROUPPER: every YMM's bits 255:128 to zero
   ("div", bits, t[, signed])      DIV r/m (unsigned), IDIV with signed True (Sprint 046): RDX:RAX (DX:AX, EDX:EAX;
                                   AX for 8 bits) by t; quotient
                                   to RAX/EAX/AX/AL, remainder to RDX/EDX/DX/AH; every flag undefined;
@@ -86,6 +91,9 @@ SSE = SSE_ALIGNED | {"MOVUPS", "MOVUPD", "MOVSS", "MOVSD_XMM", "MOVD", "MOVQ"} |
     f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") for t in ("SS", "SD")} | {
     "CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI", "CVTSI2SS", "CVTSI2SD", "CVTSS2SD", "CVTSD2SS",
     "UCOMISS", "UCOMISD", "COMISS", "COMISD"}
+# Sprint 049: the legacy forms mono's VEX classes rest on; the packed ones need 16-byte alignment, CMPSD's m64 does not
+SSE |= {"ORPD", "PCMPEQW", "CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD"}
+SSE_ALIGNED |= {"ORPD", "PCMPEQW", "CVTTPD2DQ", "CVTPD2DQ", "HADDPD"}
 # Sprint 044: the SSE2 integer block (operands V, W, G, Ib; no MXCSR flags); MOVDQA and MOVNTPS need
 # 16-byte alignment (SDM: #GP otherwise)
 SSE2_INT = {"MOVDQA", "MOVDQU", "MOVNTPS", "PAND", "POR", "ORPS", "PSUBD", "PSUBQ", "PSRLQ", "PSRLDQ", "PSLLDQ",
@@ -143,6 +151,8 @@ def _operand(b: _OpBuilder, s: str, next_ip: int, width_hint: int | None = None)
     p = s.split(":")
     if p[0] == "R" and p[1].startswith("XMM"):
         return "loc", ("x", int(p[1][3:])), 128
+    if p[0] == "R" and p[1].startswith("YMM"):                 # VEX.256 (Sprint 049): the XMM register is its low half
+        return "loc", ("x", int(p[1][3:])), 256
     if p[0] == "R":
         idx, bits, hi = REG[p[1]]
         return "loc", ("r", idx, bits, hi), bits
@@ -226,6 +236,10 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[1] == "st" else "load"
         if op[0] == "fcw":
             return "store"
+        if op[0] == "vex":                                    # ("vex", base, d, s1, s2, L, align, imm)
+            return "store" if op[2][0] == "m" else "load" if op[4][0] == "m" else None
+        if op[0] == "fma":                                    # ("fma", ic, d, s2, s3, L)
+            return "load" if op[4][0] == "m" else None
         if op[0] == "cx16":                                   # one atomic read-and-write (CMPXCHG16B)
             return "store"
         return None
@@ -233,7 +247,7 @@ def commit_order(ins: Lifted) -> str | None:
     def effect(op: Op) -> bool:
         return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid", "div") or (
             op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m") or (
-            op[0] == "mxcsr" and op[1] == "ld")
+            op[0] == "mxcsr" and op[1] == "ld") or (op[0] == "vex" and op[2][0] != "m") or op[0] in ("fma", "vzeroupper")
 
     last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
     if last_access < 0:
@@ -257,7 +271,7 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV",
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER",
                               *REP_STRING):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")

@@ -287,8 +287,14 @@ def sfence(ctx: Ctx) -> None:
 
 
 def undefined_by_profile(ctx: Ctx) -> None:
-    """XGETBV: #UD while CR4.OSXSAVE is clear, which the guest profile's CPUID.1:ECX.OSXSAVE reports."""
+    """An instruction the guest profile makes #UD (none since Sprint 049; XGETBV was one while OSXSAVE was clear)."""
     ctx.b.emit("ud")
+
+
+def xgetbv(ctx: Ctx) -> None:
+    """XGETBV (SDM): EDX:EAX = XCR[ECX]. The profile reports OSXSAVE and XCR0 = x87 | SSE | AVX (7) (Sprint 049,
+    specs/guest_cpuid.json 0.2.0); XGETBV1 is not reported, so any ECX but 0 is #GP."""
+    ctx.b.emit("xgetbv")
 
 
 def div(ctx: Ctx) -> None:

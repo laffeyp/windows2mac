@@ -39,7 +39,8 @@ class Fields:
     opsize: int          # 16, 32, or 64
     asize: int           # 32 or 64 (address size)
     ops: str | None      # the row's operand template (SDM Appendix A notation), if any
-    vvvv: int | None
+    vvvv: int | None     # as encoded (inverted): the register is vvvv ^ 15
+    vl: int = 0          # VEX.L (Sprint 049): 0 for 128-bit, 1 for 256-bit operands
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
             raise InvalidEncoding(f"REX {rex:02x} before VEX/EVEX/XOP")
     enc = "legacy"
     w = (rex >> 3) & 1
+    vex_rex = 0                                       # VEX's W, R, X, B as a REX byte, for the operand layer
     vl: int | None = None
     vvvv: int | None = None
     if b[i] == 0x62 and not rex:
@@ -139,6 +141,7 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
         if b[i] == 0xC5:
             p = b[i + 1]
             mp, pp, vl, vvvv = "0f", p & 3, (p >> 2) & 1, (p >> 3) & 0xF
+            vex_rex = 0x40 | ((~p >> 7) & 1) << 2                  # R, stored inverted (SDM Vol 2A 2.3.5)
             i += 2
         else:
             p1, p2 = b[i + 1], b[i + 2]
@@ -146,6 +149,7 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
                 raise DecodeError(f"VEX map field {p1 & 0x1F}")
             mp, pp, w, vl = VEX_MAP[p1 & 0x1F], p2 & 3, p2 >> 7, (p2 >> 2) & 1
             vvvv = (p2 >> 3) & 0xF
+            vex_rex = 0x40 | w << 3 | ((~p1 >> 5) & 7)              # W; R, X, B inverted
             i += 3
         mpfx = [VEX_PFX[pp]]
     else:
@@ -276,6 +280,8 @@ def _decode(b: bytes, features: frozenset[str] | None) -> Decoded:
             iclass = ("REPNE_" if mn[6:] in REPE_STRING else "REP_") + iclass
     # SDM Table A-1: d64 defaults to 64 bits (66 selects 16); f64 forces 64 (66 ignored, Intel)
     eff = 64 if osz64 == "f64" or (osz64 == "d64" and opsize == "32") else int(opsize)
-    fields = Fields(tuple(pfx), rex, enc, op, modrm, sib, disp, disp_size, imm_bytes, eff,
-                    32 if 0x67 in pfx else 64, opst, vvvv)
+    if enc == "vex":
+        eff = 64 if vex_rex & 8 else 32                 # VEX.W selects the 64-bit general-register form
+    fields = Fields(tuple(pfx), vex_rex if enc == "vex" else rex, enc, op, modrm, sib, disp, disp_size, imm_bytes,
+                    eff, 32 if 0x67 in pfx else 64, opst, vvvv, (vl or 0) if enc == "vex" else 0)
     return Decoded(i, mn, iclass, fields, row)

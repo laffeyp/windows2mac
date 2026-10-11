@@ -9,6 +9,7 @@ against, one instruction at a time (`step`).
 
 from __future__ import annotations
 
+import re
 import struct
 
 from collections.abc import Callable
@@ -23,6 +24,7 @@ from w2m.loader import GuestFault, Loaded
 STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero divisor
 STATUS_INTEGER_OVERFLOW = 0xC000_0095         # ntstatus.h; DIV #DE with a quotient too wide
 STATUS_ILLEGAL_INSTRUCTION = 0xC000_001D      # ntstatus.h; #UD
+XCR0 = 7                                      # x87 | SSE | AVX enabled (specs/guest_cpuid.json 0.2.0, leaf 0xD)
 
 __all__ = ["Result", "Runtime", "UndefinedFlag", "Unimplemented"]
 
@@ -337,9 +339,29 @@ class Runtime:
                 n = dst[2] // 8
             v = self._xread(src, n)
             self._xwrite(dst, v, n)                                           # to XMM: zero-extended
-        elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD"):
+        elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD", "ORPD"):
             a, c = x[dst[1]], self._xread(src, 16)
-            x[dst[1]] = a ^ c if ic.startswith("XOR") else a & c
+            x[dst[1]] = a ^ c if ic.startswith("XOR") else a | c if ic == "ORPD" else a & c
+        elif ic == "PCMPEQW":
+            a, c = x[dst[1]], self._xread(src, 16)
+            x[dst[1]] = fp.join([0xFFFF if p == q else 0 for p, q in zip(fp.lanes(a, 16, 8), fp.lanes(c, 16, 8))], 16)
+        elif ic in ("CVTTPD2DQ", "CVTPD2DQ"):                    # two doubles to two int32; bits 127:64 zeroed
+            v, env = self._xread(src, 16), fp.Env(th.mxcsr)
+            words = [fp.to_int(fp.F64, d, 32, ic == "CVTTPD2DQ", env) for d in fp.lanes(v, 64, 2)]
+            self._fp_check(env)
+            x[dst[1]] = fp.join(words, 32)
+        elif ic == "CMPSD_XMM":                                  # predicate imm on the low doubles; all ones or 0
+            assert imm is not None
+            env = fp.Env(th.mxcsr)
+            hit = fp.cmp_predicate(fp.F64, x[dst[1]] & _mask(64), self._xread(src, 8), imm, env)
+            self._fp_check(env)
+            x[dst[1]] = x[dst[1]] & ~_mask(64) & _mask(128) | (_mask(64) if hit else 0)
+        elif ic == "HADDPD":                                     # dst = (dst.lo + dst.hi, src.lo + src.hi)
+            a, c, env = x[dst[1]], self._xread(src, 16), fp.Env(th.mxcsr)
+            lo = fp.arith("add", fp.F64, a & _mask(64), a >> 64, env)
+            hi = fp.arith("add", fp.F64, c & _mask(64), c >> 64, env)
+            self._fp_check(env)
+            x[dst[1]] = lo | hi << 64
         elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"):
             v = self._xread(src, msize if src[0] == "m" else 16)
             out, th.mxcsr = self._fp(lambda: fp.execute(ic, x[dst[1]], v, th.mxcsr))
@@ -375,6 +397,74 @@ class Runtime:
             th.flags.update(Z=z, P=p, C=cf, O=False, S=False, A=False)
         else:
             raise LiftError(f"sse {ic}")
+
+    def _vex(self, base: str, d: Op, s1: Op | None, s2: Op, vl: int, align: int, imm: int | None) -> None:
+        """One VEX instruction (Sprint 049) as its legacy-SSE base: d = BASE(s1, s2) on the low 128 bits, the
+        same on bits 255:128 for VEX.256; a VEX.128 write to a register zeroes its bits 255:128 (SDM Vol 1
+        14.1.1). XMM 16 and 17 are the model's scratch (an operand that aliases the destination, the high
+        halves). A memory operand of 32 bytes is read whole before any write."""
+        x, hi = self.th.xmm, self.th.ymm_hi
+        while len(x) < 18:
+            x.append(0)
+        for loc in (d, s2):
+            if loc[0] == "m" and align and self._t[loc[1]] % align:
+                raise GuestFault(f"#GP: V{base} memory operand at 0x{self._t[loc[1]]:x} not {align}-byte aligned")
+        src_hi = 0
+        if vl:
+            if s2[0] == "x":
+                src_hi = hi[s2[1]]
+            elif s2[0] == "m":
+                src_hi = int.from_bytes(self.mem.read(self._t[s2[1]] + 16, 16), "little")
+        first_hi = hi[s1[1]] if vl and s1 is not None and s1[0] == "x" else hi[d[1]] if vl and d[0] == "x" else 0
+        low_src = s2
+        if s1 is not None and s1[0] == "x" and d[0] == "x" and s1[1] != d[1]:
+            if s2 == ("x", d[1]):
+                x[16] = x[d[1]]
+                low_src = ("x", 16)
+            x[d[1]] = x[s1[1]]
+        self._sse(base, d, low_src, 0, imm)
+        if d[0] == "x":
+            if vl:
+                x[16], x[17] = first_hi, src_hi
+                self._sse(base, ("x", 16), ("x", 17), 0, imm)
+                hi[d[1]] = x[16]
+            else:
+                hi[d[1]] = 0
+        elif d[0] == "m" and vl:                                  # a 256-bit store: the high half after the low
+            self.mem.write(self._t[d[1]] + 16, hi[s2[1]].to_bytes(16, "little"))
+        del x[16:]                                                # the scratch registers go
+
+    def _fma(self, ic: str, d: Op, s2: Op, s3: Op, vl: int) -> None:
+        """VFMADD/VFMSUB/VFNMADD/VFNMSUB 132/213/231 in SS/SD/PS/PD (SDM; Sprint 049): one rounding. Operand 1
+        is the destination, 2 VEX.vvvv, 3 r/m; 132 is o1*o3 + o2, 213 o2*o1 + o3, 231 o2*o3 + o1."""
+        th, x, hi = self.th, self.th.xmm, self.th.ymm_hi
+        m = re.fullmatch(r"V(FN?M(?:ADD|SUB))(132|213|231)([SP][SD])", ic)
+        if m is None:
+            raise LiftError(f"fma {ic}")
+        kind, order, form = m.groups()
+        neg_p, neg_a = {"FMADD": (False, False), "FMSUB": (False, True), "FNMADD": (True, False),
+                        "FNMSUB": (True, True)}[kind]
+        mul, add = {"132": ((0, 2), 1), "213": ((1, 0), 2), "231": ((1, 2), 0)}[order]
+        f = fp.F32 if form[1] == "S" else fp.F64
+        scalar = form[0] == "S"
+        nbytes = f.bits // 8 if scalar else 16
+        o1, o2 = x[d[1]], x[s2[1]]
+        o3 = self._xread(s3, nbytes)
+        env = fp.Env(th.mxcsr)
+        count = 1 if scalar else 128 // f.bits
+        a1, a2, a3 = (fp.lanes(v, f.bits, 128 // f.bits) for v in (o1, o2, o3))
+        out = list(a1)
+        for i in range(count):
+            out[i] = fp.fma_lane(f, (a1[i], a2[i], a3[i]), mul, add, neg_p, neg_a, env)
+        new_hi = 0
+        if vl and not scalar:
+            h3 = hi[s3[1]] if s3[0] == "x" else int.from_bytes(self.mem.read(self._t[s3[1]] + 16, 16), "little")
+            b1, b2, b3 = (fp.lanes(v, f.bits, 128 // f.bits) for v in (hi[d[1]], hi[s2[1]], h3))
+            new_hi = fp.join([fp.fma_lane(f, (b1[i], b2[i], b3[i]), mul, add, neg_p, neg_a, env)
+                              for i in range(count)], f.bits)
+        self._fp_check(env)
+        x[d[1]] = fp.join(out, f.bits)
+        hi[d[1]] = new_hi
 
     def _sse2_int(self, ic: str, dst: Op, src: Op, imm: int | None) -> None:
         """The SSE2 integer block (SDM pages of each; Sprint 044): no MXCSR flags."""
@@ -541,12 +631,14 @@ class Runtime:
         instruction's single memory store is all-or-nothing in Memory.write)."""
         th = self.th
         saved = (list(th.regs), dict(th.flags), list(th.xmm), th.mxcsr, th.df)
+        saved_hi = list(th.ymm_hi)
         try:
             self._exec_ops(ins)
         except (GuestFault, fp.SimdFault):
             mxcsr = th.mxcsr
             interrupted = list(th.regs)
             th.regs, th.flags, th.xmm, th.mxcsr, th.df = saved
+            th.ymm_hi = saved_hi
             if any(op[0] == "rep" for op in ins.ops):        # REP keeps its completed iterations (SDM
                 th.regs = interrupted                        # Vol 1 7.3.9): RCX, RSI, RDI as at the fault
             th.mxcsr = mxcsr                                  # MXCSR flags a fault sets survive it
@@ -582,6 +674,16 @@ class Runtime:
                     if v & ~0xFFFF:                                       # MXCSR_MASK 0xFFFF: reserved bits #GP
                         raise GuestFault(f"#GP: LDMXCSR 0x{v:x} sets reserved bits at 0x{ins.address:x}")
                     self.th.mxcsr = v
+            elif k == "vex":
+                self._vex(op[1], op[2], op[3], op[4], op[5], op[6], op[7] if len(op) > 7 else None)
+            elif k == "fma":
+                self._fma(op[1], op[2], op[3], op[4], op[5])
+            elif k == "vzeroupper":
+                self.th.ymm_hi = [0] * 16
+            elif k == "xgetbv":
+                if self.th.regs[1] & 0xFFFF_FFFF:                         # XCR0 is the only one (no XGETBV1)
+                    raise GuestFault(f"#GP: XGETBV ECX 0x{self.th.regs[1] & 0xFFFF_FFFF:x} at 0x{ins.address:x}")
+                self.th.regs[0], self.th.regs[2] = XCR0, 0
             elif k == "fcw":
                 self._store(op[2], self.th.fcw)
             elif k == "fence":

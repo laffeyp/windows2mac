@@ -74,6 +74,7 @@ MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits 
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
+YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
 FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
@@ -673,7 +674,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
-        elif k in ("mxcsr", "ud", "fcw"):                        # run by the model (hvc #11): MXCSR's fault rule
+        elif k in ("mxcsr", "ud", "fcw", "xgetbv"):              # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())
@@ -782,6 +783,9 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             if op[2][0] == "r" and op[2][2] == 32:              # a 32-bit destination is zero-extended anyway
                 a.emit(a64.mov32(op[2][1], op[2][1]))
             a.bind(end)
+        elif k in ("vex", "fma", "vzeroupper"):                  # VEX (src/w2m/rules/_vex.py; Sprint 049)
+            from w2m.rules import _vex
+            _vex.lower(a, op, reg_of, store)
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)
             from w2m.rules import registry
             lower = registry()[op[1]].lower
@@ -1446,6 +1450,8 @@ class VM:
         th = rt.th
         th.regs, th.rip, th.xmm, th.mxcsr, th.df = list(x[:16]), rip, list(xmm), mx, self.df()
         th.fcw = struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0]
+        th.ymm_hi = [int.from_bytes(self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16],
+                                    "little") for i in range(16)]
         th.flags = x86_flags(x, self)
         try:
             rt.step()
@@ -1462,6 +1468,8 @@ class VM:
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
         struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
+        for i, v in enumerate(th.ymm_hi):
+            self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
         return self.miss_va                                    # dispatch the next instruction
