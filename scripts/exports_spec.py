@@ -27,7 +27,7 @@ def build(run: Path, previous: dict[str, Any]) -> dict[str, Any]:
     modules: dict[str, list[str]] = {}
     forwarded: dict[str, list[str]] = {}
     for r in rows:
-        if "m" in r:
+        if "n" in r:
             modules.setdefault(r["m"], []).append(r["n"])
             if r["f"]:
                 forwarded.setdefault(r["m"], []).append(r["n"])

@@ -155,16 +155,16 @@ class Modules:
                 if key not in self._thunks:
                     self._thunks[key] = self.make_thunk(key)
                 return self._thunks[key]
-        if handle and handle == self.ntdll:
-            raise Unimplemented(f"GetProcAddress ntdll.dll!{name}: ntdll's exports are not listed")
         module = {self.kernel32: "kernel32", self.kernelbase: "kernelbase"}.get(handle)
+        if handle and handle == self.ntdll:
+            module = "ntdll"                            # its exports: specs/windows_exports.json 0.3.0 (Sprint 049)
         if module is None:
             raise Unimplemented(f"GetProcAddress on module 0x{handle:x}, which w2m did not hand out")
         if name not in self.exports[module]:
             return 0
         if module == "kernel32" and f"kernel32.dll!{name.lower()}" in self.imports:
             return self.imports[f"kernel32.dll!{name.lower()}"]
-        key = f"{module.upper()}.dll!{name}"
+        key = f"{'ntdll' if module == 'ntdll' else module.upper()}.dll!{name}"
         if key not in self._thunks:
             self._thunks[key] = self.make_thunk(key)
         return self._thunks[key]
