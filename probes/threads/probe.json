@@ -1,0 +1,11 @@
+{
+ "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:start -Wl,/subsystem:console",
+ "libs": "-lkernel32",
+ "mode": "stdout",
+ "dll": {
+  "name": "threads_dll",
+  "source": "probes/threads/threads_dll.c",
+  "cflags": "-O1 -Wall -Werror -fms-runtime-lib=static",
+  "libs": "-lkernel32"
+ }
+}
