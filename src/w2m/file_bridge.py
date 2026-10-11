@@ -23,9 +23,9 @@ guest's working directory:
 
 Paths arrive as UTF-16LE as the guest normalized them: full paths ("C:\\w2m\\app\\a.txt", tools/guest_runtime/paths.c)
 or, as before Sprint 048, names relative to the working directory. Drive C: is a host directory per run holding
-w2m\\app, where `root` (the working directory: the probe's, or the game's depot) is mounted; a read-only mount
-refuses every write by name. Components compare ASCII case-folded, as NTFS compares ASCII names (its upcase table;
-non-ASCII folding is not needed by any recorded row and is not done). Another drive, a UNC name, or a ".." the guest
+Users\\w2m (the profile, with AppData\\Local, LocalLow and Roaming) and w2m\\app, where `root` (the working
+directory: the probe's, or the game's depot) is mounted; a read-only mount refuses every write by name. Components compare ASCII case-folded, as NTFS compares
+ASCII names (its upcase table; non-ASCII folding is not needed by any recorded row and is not done). Another drive, a UNC name, or a ".." the guest
 did not resolve is Unimplemented: the run stops rather than guess.
 """
 
@@ -43,6 +43,9 @@ FILE_LOOKUP, FILE_OPEN, FILE_CLOSE, FILE_READ, FILE_WRITE, FILE_SIZE, FILE_TRUNC
 FILE_STAT, FILE_MKDIR, FILE_RMDIR = 24, 25, 26   # after the host requests 14-23 (vm_backend.py)
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
+# C:\Users\w2m and the AppData folders SHGetKnownFolderPath names, each an existing directory on Windows
+# (contracts/windows.shell.known_folder_path); fresh each run, like the rest of drive C:
+PROFILE_FOLDERS = ("Users/w2m/AppData/LocalLow", "Users/w2m/AppData/Local", "Users/w2m/AppData/Roaming")
 M64 = (1 << 64) - 1
 
 
@@ -82,6 +85,8 @@ class FileBridge:
         self._drive = tempfile.TemporaryDirectory(prefix="w2m-drive-c-")
         self.drive = Path(self._drive.name).resolve()   # C:\\, holding w2m (app is the mount)
         (self.drive / "w2m").mkdir()
+        for folder in PROFILE_FOLDERS:           # the user's profile (known_folders.c, Sprint 048)
+            (self.drive / folder).mkdir(parents=True)
         self.fds: dict[int, int] = {}            # guest-visible descriptor -> host fd
         self.read_only_fds: set[int] = set()     # descriptors of files under the mount (refused writes when read-only)
         self.next_fd = 3

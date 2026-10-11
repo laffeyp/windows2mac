@@ -222,8 +222,10 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True),
             "GetHandleInformation": ("k32_GetHandleInformation", True), "LoadLibraryW": ("k32_LoadLibraryW", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
-DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
-                "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047
+DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True),
+                                 "SHGetKnownFolderPath": ("shell32_SHGetKnownFolderPath", True)},   # Sprint 048
+                "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)},   # Sprint 047
+                "OLE32.DLL": {"CoTaskMemFree": ("ole32_CoTaskMemFree", False)}}       # Sprint 048
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py

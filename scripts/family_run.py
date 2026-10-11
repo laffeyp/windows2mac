@@ -1206,6 +1206,53 @@ FAMILIES: dict[str, Family] = {
             "loadlibraryw_not_found": Plant("    u64 h = find(name, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
+    "known_folders": Family(
+        name="known_folders",
+        contract_id="windows.shell.known_folder_path",
+        version="0.1.0",
+        summary=("SHELL32's SHGetKnownFolderPath as UnityPlayer calls it (FOLDERID_LocalAppDataLow, flags 0, no token): "
+                 "S_OK and a new block holding <profile>\\AppData\\LocalLow, an existing directory, no trailing "
+                 "backslash; the profile is C:\\Users\\<user>; LocalAppData and RoamingAppData are AppData\\Local and "
+                 "AppData\\Roaming; KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE give the same path; ole32's CoTaskMemFree "
+                 "frees it and leaves the last error, NULL included."),
+        probe="known_folders", guest_file="known_folders.c", host_files=("src/w2m/file_bridge.py",),
+        derive=lambda printed: [{k: v for k, v in r.items() if not ("hr" in r and k == "err")} for r in printed],
+        runs={
+              "38098265812": Run("windows-2025", "93fdcb0f8270b50ff9a2b03c38926f3ab49945806eca0c43fc4d53302cb2309a", "known_folders-1791678212-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38098267402": Run("windows-2022", "15d1d468c6c4e878e6eb1d5d5d20fde4dd250f793eb65915a75117026c5e1d0d", "known_folders-1791678212-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-shgetknownfolderpath", "api/shlobj_core/nf-shlobj_core-shgetknownfolderpath", "2018-12-05",
+                       "The calling process is responsible for freeing this resource once it is no longer needed by "
+                       "calling CoTaskMemFree, whether SHGetKnownFolderPath succeeds or not. The returned path does "
+                       "not include a trailing backslash. ... Not all KNOWNFOLDERID values are present on all "
+                       "systems."),
+            documented("ms-knownfolderid", "shell/knownfolderid", "2020-07-27",
+                       "FOLDERID_LocalAppDataLow ... GUID {A520A1A4-1780-4FF6-BD18-167343C5AF16} ... Default Path "
+                       "%USERPROFILE%\\AppData\\LocalLow")),
+        open_questions=(
+            "The last error after success is not part of the contract (the derive drops `err` from the "
+            "SHGetKnownFolderPath rows): Windows leaves 1008 (ERROR_NO_TOKEN) for the profile, Local, Roaming and "
+            "LocalLow with KF_FLAG_DONT_VERIFY, 0 for LocalLow, 183 after KF_FLAG_CREATE, on all four executions; "
+            "the rows show no rule, and w2m leaves the last error as it was.",
+            "w2m's profile is C:\\Users\\w2m on a drive made fresh each run: nothing the game writes there "
+            "outlives the run.",
+            "Excluded rows: see sections.excluded."),
+        excluded={"unregistered": "an unregistered GUID: 0x80070002, *ppszPath NULL, last error 0. Which GUIDs a "
+                  "system registers varies, so w2m serves its four folders and stops at any other GUID; the probe "
+                  "asks last",
+                  "unregistered.create": "as unregistered, with KF_FLAG_CREATE",
+                  "proc": "GetProcAddress(shell32, \"SHGetKnownFolderPath\") is not the import's address on Windows, "
+                  "though SHELL32 exports the name itself, not as a forwarder (exports run 38094046782); the cause is "
+                  "not established. w2m answers the import's address, as Windows does for CommandLineToArgvW "
+                  "(contracts/windows.module.system); nothing on the frontier compares the two"},
+        expected_stop="Unimplemented: SHGetKnownFolderPath",
+        plants={
+            "trailing_backslash": Plant("'L', 'o', 'w', 0};", "'L', 'o', 'w', '\\\\', 0};",
+                                        ("local_low", "local_low.dont_verify", "local_low.create")),
+            "free_sets_error": Plant("    if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);",
+                                     "    if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);\n    w2m_set_last_error(0);",
+                                     ("free.null", "free.path"))}),
 }
 
 

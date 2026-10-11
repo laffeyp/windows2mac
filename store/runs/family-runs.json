@@ -359,6 +359,26 @@
    "38041160693": "conforms"
   }
  },
+ "known_folders": {
+  "candidate_sha256": "sha256:9db0a145b0e26a0623ab9d65028b88a71559e7866b65733f7778e9d59a430434",
+  "divergence": {
+   "38098265812": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1",
+   "38098267402": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1"
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "known_folders",
+  "record": "store/runs/family-known_folders-1791678270396930000",
+  "verdicts": {
+   "38098265812": "conforms",
+   "38098267402": "conforms"
+  }
+ },
  "loader": {
   "candidate_sha256": "sha256:bf36d03abc2f74c7ea924373c4aebdfe63807d62cd836e10e9f1da2b3d4cc3d3",
   "divergence": {

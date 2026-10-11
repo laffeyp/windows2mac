@@ -15,7 +15,7 @@
 #define SENTINEL 0xDEADu
 #define MARK 0xA5A5u
 
-static char out[16384];
+static char out[4096];
 static unsigned n;
 static WCHAR cwd[MAX_PATH];
 static unsigned cwd_len;
@@ -53,7 +53,13 @@ static void text(const char *k, const WCHAR *s) {
 }
 static void row(const char *s) { put("{\"s\":\""); put(s); put("\""); }
 static void field(const char *k, unsigned long long v) { put(",\""); put(k); put("\":"); putu(v); }
-static void end(void) { put("}\n"); }
+/* Each row is written when it ends, so a fault leaves the rows before it. */
+static void end(void) {
+    put("}\n");
+    DWORD written;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
+    n = 0;
+}
 static void fill(void) { for (unsigned i = 0; i < 1024; i++) buf[i] = MARK; }
 
 static void set(const WCHAR *name, const WCHAR *value) { SetEnvironmentVariableW(name, value); }
@@ -177,7 +183,5 @@ void start(void) {
     put_set("set.new_mixed", L"Mid", L"3");
     block("order.after");
 
-    DWORD written;
-    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);
 }
