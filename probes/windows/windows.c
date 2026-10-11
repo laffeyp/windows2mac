@@ -257,10 +257,11 @@ void start(void) {
     if (play) after("play", play);
     /* Sprint 056 (review of 054): class names of 64, 256 and 257 units, and a window off the screen */
     static WCHAR long_class[300];
-    static const int lengths[3] = {64, 256, 257};
-    static const char *const names[3][2] = {{"class.name_64", "class.name_64_again"}, {"class.name_256", "class.name_256_again"},
+    static const int lengths[5] = {64, 254, 255, 256, 257};
+    static const char *const names[5][2] = {{"class.name_64", "class.name_64_again"}, {"class.name_254", "class.name_254_again"},
+                                            {"class.name_255", "class.name_255_again"}, {"class.name_256", "class.name_256_again"},
                                             {"class.name_257", "class.name_257_again"}};
-    for (int j = 0; j < 3; j++) {
+    for (int j = 0; j < 5; j++) {
         for (int i = 0; i < lengths[j]; i++) long_class[i] = (WCHAR)(L'A' + j);
         long_class[lengths[j]] = 0;
         hidden_class.lpszClassName = long_class;
