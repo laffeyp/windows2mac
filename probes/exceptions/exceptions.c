@@ -275,10 +275,15 @@ static void deep(void) {
     field("fp", saw_fp); field("big", saw_big); field("xmm", saw_xmm); end();
 }
 
+/* The faulting access is in a function of its own: clang's __try takes exceptions raised inside the calls it
+ * makes, not a fault in its own body (that needs -fasync-exceptions; run 38165825190 ended with 0xC0000005). */
+__declspec(noinline) static void write_at(volatile int *p) { *p = 1; }
+__declspec(noinline) static int read_at(volatile int *p) { return *p; }
+
 static void access_violations(void) {
     reset();
     __try {
-        *(volatile int *)0 = 1;
+        write_at((volatile int *)0);
     } __except (seen(GetExceptionInformation(), EXCEPTION_EXECUTE_HANDLER)) {
     }
     row("fault.write_null"); field("code", seen_code); field("flags", seen_flags); field("params", seen_params);
@@ -286,7 +291,7 @@ static void access_violations(void) {
     reset();
     int v = 0;
     __try {
-        v = *(volatile int *)0x10;
+        v = read_at((volatile int *)0x10);
     } __except (seen(GetExceptionInformation(), EXCEPTION_EXECUTE_HANDLER)) {
     }
     row("fault.read_low"); field("code", seen_code); field("flags", seen_flags); field("params", seen_params);
