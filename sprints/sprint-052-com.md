@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 052
-status: open
+status: closed (partial)
 phase: 5
 pass_kind: functional
 ---
@@ -51,3 +51,10 @@ Sprint 051 left the frontier at 20,590,160 instructions, at `ole32.dll!CoInitial
 The com family accepted; the frontier runs past the six CoCreateInstance calls.
 
 ## observed
+
+- **Closed partial:** the done criterion (the frontier past UnityPlayer's six CoCreateInstance calls, trace seq 1705) is not met. The frontier passes CoInitializeEx and WSAStartup and stops at `KERNEL32.dll!RaiseException` after 20,785,191 instructions (`store/runs/frontier-643a6283510c-1791710059997513000`): mono's thread 8 raises 0x406D1388 with three arguments, MSVC's thread-naming convention, which a `__try`/`__except` in mono catches when no debugger runs. Dispatching it needs structured exception handling (unwinding by .pdata, the language-specific handler, RtlUnwindEx), a concept of its own (hard rule 6); nothing else depends on the criterion, which moves to Sprint 053's (BLACKBOARD Deferred).
+- **The com family equals Windows** (contract windows.com.com 0.1.0, 29 rows, runs 38126872187 and 38126873913) with four plants of named reach: apartments, the audio device enumerator as one object with COM's own reference, no audio endpoint as on the runners, notification clients, PropVariantClear, CoCreateGuid, BSTRs, VariantClear.
+- **The network family equals Windows** (contract windows.network.network 0.1.0, 13 rows, runs 38127406287 and 38127407661) with two plants: WSAStartup's versions and WSADATA, WSACleanup's balance and last errors.
+- **Built:** COM vtables in the runtime image, filled with the services' thunks at the start (no guest allocation moves); imports by ordinal mapped for OLEAUT32 and WS2_32 from Wine's spec files; the service pattern reads a DLL prefix with an underscore (ws2_32).
+- **w2m's choice, recorded:** the game sees no audio endpoint, as on the runners (contract open question); sound output is later work.
+

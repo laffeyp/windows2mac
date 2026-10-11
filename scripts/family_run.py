@@ -1825,6 +1825,26 @@ FAMILIES: dict[str, Family] = {
             "guid_version_1": Plant("    g[7] = (u8)((g[7] & 0x0F) | 0x40);", "    g[7] = (u8)((g[7] & 0x0F) | 0x10);", ("guid",)),
             "implicit_mta_refused": Plant("    if (!w2m_thread_scratch()->com_inits && !process_mta)",
                                           "    if (!w2m_thread_scratch()->com_inits)", ("create.implicit_mta",))}),
+    "network": Family(
+        name="network",
+        contract_id="windows.network.network",
+        version="0.1.0",
+        summary=("WSAStartup and WSACleanup in the game's forms (mono 2.0, UnityPlayer 2.2): the version granted at "
+                 "most 2.2, wHighVersion 2.2, \"WinSock 2.0\" and \"Running\", socket limits 0 from 2.0 and 32767 and "
+                 "65467 for 1.1; 0.0 is WSAVERNOTSUPPORTED, a NULL WSADATA WSAEFAULT; each success owes one "
+                 "WSACleanup, which answers 0 and the last error 0, and SOCKET_ERROR with WSANOTINITIALISED after."),
+        probe="network", guest_file="network.c", host_files=("src/w2m/vm_backend.py",),
+        runs={
+              "38127406287": Run("windows-2025", "5b9775dd1e1878ccb61334b584054ca1f631a3e9b6ebdb6b8ccc0e8fa6a65d02", "network-1791709809-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38127407661": Run("windows-2022", "b5a4a5e85883bc29f7f7765b0630090d2bc50484645e45bfdf70c6352f0c0a9b", "network-1791709809-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("Sockets themselves (socket, connect, send) are not called in the captures and are not served.",),
+        plants={
+            "version_cap_9_9": Plant("major > 2 || (major == 2 && minor > 2) ? 0x0202u", "major > 9 || (major == 9 && minor > 9) ? 0x0202u",
+                                     ("startup.3_0",)),
+            "cleanup_leaves_error": Plant("    owed--;\n    set_error(0);", "    owed--;",
+                                          ("cleanup.1", "cleanup.2", "cleanup.3", "cleanup.4"))}),
 }
 
 

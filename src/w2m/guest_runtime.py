@@ -51,7 +51,8 @@ class Image:
 # imports, any other prefix the DLL of that name; W2M_VOID before it marks a function Windows declares void, whose
 # bridge leaves RAX as it was. The service tables (vm_backend.SERVICES, DLL_SERVICES) and the W2M_API_* ids are
 # derived from these definitions, so a family's C file is the one place its services are declared.
-SERVICE = re.compile(r"^(W2M_VOID\s+)?u64\s+([a-z0-9]+)_(\w+)\([^;{]*\)\s*\{", re.M)
+# a service's definition: u64 <dll prefix>_<import name>(...) {; WS2_32's prefix holds an underscore itself (Sprint 052)
+SERVICE = re.compile(r"^(W2M_VOID\s+)?u64\s+(ws2_32|[a-z0-9]+)_(\w+)\([^;{]*\)\s*\{", re.M)
 INTERNAL_APIS = ("Cpuid", "Exception")          # ring entries that are not services (runtime.c)
 
 

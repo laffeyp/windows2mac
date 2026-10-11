@@ -142,6 +142,9 @@
 
 - **2026-10-11 agent-resolved** — Which sprint follows 051: the plan's 052 (the Mono JIT region) or the com family, where the frontier stops (CoInitializeEx on mono's thread)? Decision: 052 is the com family (CoInitializeEx, CoCreateInstance and the rest of the work list's ten, with the classes the captures create); the JIT region moves to 053, milestone A to 054. Grounds: project — the frontier stop and the work list (Decision 2026-10-10); SDD — AGENTS.md hard rule 6; practice — none beyond the project's. Revisit if: stale translated code shows before COM lands.
 
+- **2026-10-11 agent-resolved** — What follows Sprint 052, closed partial at mono's thread-naming RaiseException (0x406D1388)? Decision: 053 is structured exceptions (RaiseException dispatched to vectored handlers and .pdata frames with their language-specific handlers, RtlUnwindEx), carrying 052's done criterion; the JIT region moves to 054, milestone A to 055. Grounds: project — the frontier stop, the plan's exceptions row, Sprint 040's CONTEXT and EXCEPTION_RECORD; SDD — AGENTS.md partial-pass rule and hard rule 6; practice — Microsoft Learn, x64 exception handling (the unwind data the dispatcher walks). Revisit if: the game needs a debugger's view of 0x406D1388 (it does not: the handler executes).
+- **2026-10-11 agent-resolved** — What audio the game sees. Decision: no endpoint, as the runners report (empty collections, GetDefaultAudioEndpoint E_NOTFOUND), until sound is a sprint of its own. Grounds: project — contract windows.com.com rows; the milestone A target (batch mode, unity.log) needs no sound; SDD — AGENTS.md resolve-and-record; practice — none beyond the project's. Revisit if: the game's start refuses to go on without an audio device.
+
 ## Built
 
 - **2026-10-05** — Sprint 000 (Vocabulary Session) closed. `signals/0.1.json` (60 tags, 12 categories, 34 enums, 22 entities, 7 temporal invariants, 14 transition rules, 16 operators, 13 evidence constraints), `signals/0.1-rationale.md` (signed), `signals/proposals.json` (6 open, 1 rejected), plus `scripts/check_vocab.py` (structure gate, outside the card's file list; recorded in Sprint tail). v0.1 locked. 10 agent-resolved decisions recorded. Dual contract: signal vacuous (content sprint); artifact pass (all commands exit 0, four content assertions hold). Ready for Sprint 001.
@@ -198,6 +201,7 @@
 - **2026-10-11** — Sprint 049 (the work list and loading at run time) closed on CI run 38121563657 (d470850a). `tools/jit_capture` call trace, `scripts/work_list.py`, `specs/work_list.json`, services from the guest C (`guest_runtime.service_table`), run-time DLL loading (`VM._load_dll`, `module.c`), the x86-64-v3 profile with VEX, FMA and BMI lifting (`rules/_vex.py`, `x86fp.fma`), case sets 049 and 049b, `scripts/class_census.py --jit`, `src/w2m/system_messages.py`, 14 families. Dual contract: signal pass (item runs, frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED); artifact pass (gates 0, CI success). Observation: pass — mono loads and starts; the frontier runs 5,376,528 instructions.
 - **2026-10-11** — Sprint 050 (mono's and UnityPlayer's remaining instruction classes) closed. Decode spec 0.8.2 (52 operand templates, Edb), 64 rule modules, `src/w2m/integer_model.py` behind the `x86` op, the model's `_sse_050` and eleven lane rules, case set 050 (`CLASSES_050`, `_fixed_050`), release semantics-050. Dual contract: signal pass (64 class runs; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED CreateThread); artifact pass (gates 0, CI on the closing commit). Observation: pass — model and VM equal the Xeon on 12,833 cases; the frontier runs 20,584,207 instructions.
 - **2026-10-11** — Sprint 051 (threads) closed. `src/w2m/scheduler.py`, `tools/guest_runtime/threads.c`, the VM's thread table, bridge epilogue (state.schedule, hvc #12) and time slices; per-thread TEBs, stacks and static TLS; blocking waits, mutexes, critical sections, SRW locks and condition variables; TLS callbacks at process start (loader); the walker's address-taken roots. Dual contract: signal pass (threads item run, five plants, 15 families re-recorded; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED CoInitializeEx); artifact pass (gates 0, CI on the closing commit). Observation: pass, partial on the game's collector path (not reached).
+- **2026-10-11** — Sprint 052 (COM and the audio device enumerator) closed partial. `tools/guest_runtime/com.c`, `tools/guest_runtime/network.c`, `probes/com`, `probes/network`, COM vtables (vm_backend `_com_vtables`), ORDINAL_NAMES, the ws2_32 service prefix. Dual contract: signal pass (two families' item runs and six plants; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED RaiseException); artifact pass (gates 0, CI on the closing commit). Observation: partial — both families equal Windows; the frontier stops before the done criterion's CoCreateInstance calls.
 
 ## Deferred
 
@@ -225,6 +229,9 @@
 - **2026-10-11** — The game's collector path (SuspendThread, GetThreadContext, ResumeThread on mono's threads): judged by the threads rows, not yet run by the game. Re-visit when the frontier reaches mono's first collection.
 - **2026-10-11** — A thread's stack with a guard page and commit on demand, as Windows lays it out; w2m commits it whole. Re-visit when a program probes another thread's stack pages or overflows a stack.
 
+- **2026-10-11** — Sprint 052's done criterion (the frontier past UnityPlayer's six CoCreateInstance calls) moves to Sprint 053: mono's thread-naming RaiseException comes first and needs structured exception dispatch. Re-visit at Sprint 053's close.
+- **2026-10-11** — An audio endpoint backed by the Mac's output (IMMDevice, IAudioClient): w2m answers as the runners, with no endpoint. Re-visit when sound becomes a sprint (milestone B or later), with rows from a Windows machine that has an output device.
+
 ## Open questions
 
 - **OQ-1.** Is `ACTLR_EL1.TSOEN` settable for a guest vCPU through public Hypervisor.framework on macOS 26, or only through a private path? Settled by a probe sprint, not by reading. — **Answered 2026-10-07 (Sprint 008):** public. `HV_SYS_REG_ACTLR_EL1` (macOS 15.0+, SDK header `hv_vcpu_types.h`: "only allows getting / setting of the ACTLR_EL1.EnTSO bit (index 1)"); on Mac17,7 / macOS 25F80 the bit sets, reads back 0x2, and survives an `hv_vcpu_run` exit. Still open: the ordering *effect* (a two-vCPU litmus test). — **Effect demonstrated 2026-10-07 (Sprint 009):** MP litmus, 2 vCPUs, guest MMU on with Normal WB memory: EnTSO off 2245 / 50,000,000 forbidden outcomes; EnTSO on 0 / 50,000,000 (95% upper bound 6.0e-08).
@@ -248,6 +255,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 052 (2026-10-11, closed partial)
+- **Scope:** the com family, then (amended before the work) the network family's WSAStartup.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the com probe on two runners, then again with the notification rows; the com item run's SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; the same for network; families re-run to CANDIDATE_ACCEPTED; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for WS2_32.dll!#115, then, with network served, for KERNEL32.dll!RaiseException.
+  - *Observation 1 (order violation, of the card):* WSAStartup lay between the stop and the done criterion. Disposition: resolved-here (the card amended before the work, KIT_DIARY #40 applied).
+  - *Observation 2 (vocabulary gap, checked):* none; the frontier's stop names the import.
+  - *Observation 3 (missing pair):* the done criterion has no matching event; the sprint closes partial with it deferred to 053 (recorded).
 
 ### Sprint 051 (2026-10-11, closed: CI run 38126051832 success on d73e4ade)
 - **Scope:** guest threads on one vCPU, from the work list's threads family.

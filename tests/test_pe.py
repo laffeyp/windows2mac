@@ -21,7 +21,7 @@ BINARIES = sorted((ROOT / "store" / "binaries").glob("*.exe"))
 PROBE_DLLS = {json.loads(p.read_text())["dll"]["name"] + ".dll" for p in (ROOT / "probes").glob("*/probe.json")
               if "dll" in json.loads(p.read_text())}
 # system DLLs a family probes (command_line_args, generate_random; known_folders; integrity_level)
-SYSTEM_DLLS = {"SHELL32.dll", "bcrypt.dll", "ole32.dll", "ADVAPI32.dll", "OLEAUT32.dll"}
+SYSTEM_DLLS = {"SHELL32.dll", "bcrypt.dll", "ole32.dll", "ADVAPI32.dll", "OLEAUT32.dll", "WS2_32.dll"}
 OBJDUMP = shutil.which("llvm-objdump") or (
     subprocess.run(["xcrun", "--find", "llvm-objdump"], capture_output=True, text=True).stdout.strip()
     if shutil.which("xcrun") else "")

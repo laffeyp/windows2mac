@@ -139,7 +139,8 @@ HOST_MAP_VIEW = 29                  # a view of a0 bytes of file descriptor a1 w
                                     # 24-28 are file primitives)
 # Exports a program imports by ordinal (Sprint 052): OLEAUT32's, as Wine's oleaut32.spec numbers them
 ORDINAL_NAMES = {"OLEAUT32.DLL": {"#2": "SysAllocString", "#6": "SysFreeString", "#7": "SysStringLen",
-                                  "#8": "VariantInit", "#9": "VariantClear"}}
+                                  "#8": "VariantInit", "#9": "VariantClear"},
+                 "WS2_32.DLL": {"#111": "WSAGetLastError", "#115": "WSAStartup", "#116": "WSACleanup"}}   # ws2_32.spec
 COM_VTABLES = {"w2m_enumerator_vtable": ("QueryInterface", "AddRef", "Release", "EnumAudioEndpoints",
                                          "GetDefaultAudioEndpoint", "GetDevice", "RegisterEndpointNotificationCallback",
                                          "UnregisterEndpointNotificationCallback"),
