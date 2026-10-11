@@ -1428,6 +1428,37 @@ FAMILIES: dict[str, Family] = {
                                        "        *(u64 *)image = tb->base;\n        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
                                        ("find.first_end", "find.second_before_grow", "find.gap",
                                         "find.fourth_beyond_count", "find.empty"))}),
+    "vectored_handlers": Family(
+        name="vectored_handlers",
+        contract_id="windows.exception.vectored_handlers",
+        version="0.1.0",
+        summary=("AddVectoredExceptionHandler answers a new non-NULL handle each call, the same handler again included; "
+                 "RemoveVectoredExceptionHandler answers 1 for a registered handle and 0 for it again or for any other "
+                 "value; neither touches the last error. Dispatch (excluded until w2m dispatches): handlers added first "
+                 "run before those added last, CONTINUE_EXECUTION ends the search and RaiseException returns, the "
+                 "handler sees the code and flags 0x80."),
+        probe="vectored_handlers", guest_file="vectored_handlers.c",
+        runs={
+              "38114204685": Run("windows-2025", "ee140359e6683f4072a35535c52483aa788b381c6f44f9cdf883e45e48a03682", "vectored_handlers-1791695726-0", "AMD EPYC 7763 64-Core Processor"),
+              "38114206477": Run("windows-2022", "62adbf5d647a07f02182ceecc86b535ee508163913152ea86b9ffe9e82d7bc18", "vectored_handlers-1791695726-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
+        documented=(
+            documented("ms-addvectoredexceptionhandler", "api/errhandlingapi/nf-errhandlingapi-addvectoredexceptionhandler",
+                       "2018-12-05", "If the First parameter is nonzero, the handler is the first handler to be "
+                       "called until a subsequent call to AddVectoredExceptionHandler is used to specify a different "
+                       "handler as the first handler."),),
+        open_questions=(
+            "The list's order is not judged yet: only dispatch shows it, and its rows are excluded; a plant that puts "
+            "First handlers at the back changes no included row (tried 2026-10-11).",
+            "Excluded rows: see sections.excluded."),
+        excluded={"dispatch.continue": "RaiseException and dispatch to guest handlers: not built (the exceptions "
+                                       "family); the probe writes its registration rows first",
+                  "dispatch.after_remove": "as dispatch.continue"},
+        expected_stop="Unimplemented: import KERNEL32.dll!RaiseException",
+        plants={
+            "remove_answers_one": Plant("    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 0);",
+                                        "    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 1);",
+                                        ("remove.again", "remove.unknown"))}),
 }
 
 

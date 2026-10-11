@@ -225,7 +225,9 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetEnvironmentVariableW": ("k32_GetEnvironmentVariableW", True),
             "SetEnvironmentVariableW": ("k32_SetEnvironmentVariableW", True), "GetTempPathW": ("k32_GetTempPathW", True),
             "LocalAlloc": ("k32_LocalAlloc", True), "GetModuleFileNameA": ("k32_GetModuleFileNameA", True),
-            "GetModuleHandleA": ("k32_GetModuleHandleA", True)}
+            "GetModuleHandleA": ("k32_GetModuleHandleA", True),
+            "AddVectoredExceptionHandler": ("k32_AddVectoredExceptionHandler", True),
+            "RemoveVectoredExceptionHandler": ("k32_RemoveVectoredExceptionHandler", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
 DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True),
                                  "SHGetKnownFolderPath": ("shell32_SHGetKnownFolderPath", True)},   # Sprint 048

@@ -1001,6 +1001,26 @@
    "38053116643": "conforms"
   }
  },
+ "vectored_handlers": {
+  "candidate_sha256": "sha256:e6be423933b36b429da93b721eb7f75b75a1d4da7ede4eca176905aafcd9fe69",
+  "divergence": {
+   "38114204685": "Unimplemented: import KERNEL32.dll!RaiseException",
+   "38114206477": "Unimplemented: import KERNEL32.dll!RaiseException"
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "vectored_handlers",
+  "record": "store/runs/family-vectored_handlers-1791695848070388000",
+  "verdicts": {
+   "38114204685": "conforms",
+   "38114206477": "conforms"
+  }
+ },
  "virtual_memory": {
   "candidate_sha256": "sha256:bd7a5e2238f4bc6d44f3d241ac9ad12e67e55252641eabbd19722a1476094aef",
   "divergence": {
