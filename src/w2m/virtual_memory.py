@@ -80,6 +80,8 @@ class VirtualMemory:
     reservations: dict[int, Reservation] = field(default_factory=dict)
     image_protect: dict[int, int] = field(default_factory=dict)       # page VA -> a protection VirtualProtect set
     stack: tuple[int, int, int] | None = None    # the main thread's (DeallocationStack, StackLimit, StackBase)
+    mapped: list[tuple[int, int]] = field(default_factory=list)   # every range the VM maps, (base, size): what is
+                                                 # outside all of them is free address space (Sprint 049)
     heap: tuple[int, int] | None = None          # the process heap's reservation (base, size); heap.c keeps its high
                                                  # water mark at base + 8
 
@@ -234,6 +236,11 @@ class VirtualMemory:
             return Info(page, base, IMAGE_ALLOCATION_PROTECT, end - page, MEM_COMMIT, p, MEM_IMAGE)
         if self._in_arena(address):
             nxt = min((r.base for r in self.reservations.values() if r.base > page), default=self.arena + self.arena_size)
+            return Info(page, 0, 0, nxt - page, MEM_FREE, PAGE_NOACCESS, 0)
+        if self.mapped and not any(b <= address < b + n for b, n in self.mapped):
+            # free address space, as a released range reads (contracts/windows.memory.virtual row query.released): no allocation, PAGE_NOACCESS, up
+            # to the next mapped range (Sprint 049: mono's collector walks past the stack's top)
+            nxt = min((b for b, _ in self.mapped if b > page), default=1 << 47)
             return Info(page, 0, 0, nxt - page, MEM_FREE, PAGE_NOACCESS, 0)
         raise Unimplemented(f"VirtualQuery at 0x{address:x}, outside the arena and the images")
 

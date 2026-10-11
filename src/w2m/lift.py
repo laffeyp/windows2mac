@@ -37,6 +37,7 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
                                   a reserved bit (16-31) set faults before any write (Sprint 044)
   ("fence", kind)                 SFENCE "st": earlier stores before later ones; LFENCE "ld": earlier loads
                                   before later accesses; MFENCE "full": every access (Sprint 047)
+  ("fcw", "st", loc)               FNSTCW (Sprint 049): the x87 control word to 2 bytes of memory
   ("ud",)                         an instruction the guest profile makes undefined (#UD): XGETBV, since
                                   the profile's CPUID.1:ECX.OSXSAVE is clear (specs/guest_cpuid.json)
   ("div", bits, t[, signed])      DIV r/m (unsigned), IDIV with signed True (Sprint 046): RDX:RAX (DX:AX, EDX:EAX;
@@ -223,6 +224,8 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[2][0] == "m" else "load"
         if op[0] == "mxcsr":
             return "store" if op[1] == "st" else "load"
+        if op[0] == "fcw":
+            return "store"
         if op[0] == "cx16":                                   # one atomic read-and-write (CMPXCHG16B)
             return "store"
         return None

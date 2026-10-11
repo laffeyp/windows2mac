@@ -74,6 +74,7 @@ MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits 
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
+FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
@@ -672,7 +673,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
-        elif k in ("mxcsr", "ud"):                               # run by the model (hvc #11): MXCSR's fault rule
+        elif k in ("mxcsr", "ud", "fcw"):                        # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())
@@ -977,6 +978,7 @@ class VM:
                                      read=lambda va, n: bytes(self.mem.read(va, n)))
         self.virtual.stack = self._stack
         self.virtual.heap = (HEAP_VA, HEAP_SIZE)
+        self.virtual.mapped = [(va, size) for va, _, size in maps] + [(THUNK_BASE, 1 << 32)]
         self.virtual.snapshot()
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
 
@@ -1443,6 +1445,7 @@ class VM:
         rt = Runtime(Loaded(None, self.mem, rip, {}, 0))       # type: ignore[arg-type]
         th = rt.th
         th.regs, th.rip, th.xmm, th.mxcsr, th.df = list(x[:16]), rip, list(xmm), mx, self.df()
+        th.fcw = struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0]
         th.flags = x86_flags(x, self)
         try:
             rt.step()
@@ -1458,6 +1461,7 @@ class VM:
         x[REG_UNDEFINED_FLAGS] = sum(1 << FLAG_BIT[f] for f in "CZSOPA" if th.flags[f] is None)
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
+        struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
         return self.miss_va                                    # dispatch the next instruction
@@ -1634,6 +1638,8 @@ class VM:
         self._cmd = cmd
         if struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0] == 0:
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
+        if struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0] == 0:
+            struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, 0x27F)        # as a Windows thread starts
         cmd(f"vset {' '.join('0' * 32 for _ in range(16))} "
             f"{fpcr_for(struct.unpack_from('<I', self.mm, MONITOR_DATA + MXCSR_OFF)[0]):x} 0")
         for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),

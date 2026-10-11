@@ -47,6 +47,8 @@ class Thread:
     last_error: int = 0
     xmm: list[int] = field(default_factory=lambda: [0] * 16)           # 128-bit values (Sprint 039)
     mxcsr: int = 0x1F80                                               # reset value, SDM Vol 1 10.2.3
+    fcw: int = 0x27F                                                  # x87 control word as a Windows thread starts
+                                                                      # (53-bit precision; specs/guest_state.json)
     df: bool = False
 
 

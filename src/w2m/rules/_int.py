@@ -274,6 +274,13 @@ def mxcsr(ctx: Ctx) -> None:
     ctx.b.emit("mxcsr", "st" if ctx.ic == "STMXCSR" else "ld", loc)
 
 
+def fpu_control(ctx: Ctx) -> None:
+    """FNSTCW m2byte (SDM FSTCW/FNSTCW; Sprint 049): the x87 control word to memory, with no check for pending
+    x87 exceptions (the N form); w2m runs no x87 arithmetic, so none is ever pending."""
+    _, loc, _ = _operand(ctx.b, ctx.ops[0], ctx.nxt)
+    ctx.b.emit("fcw", "st", loc)
+
+
 def sfence(ctx: Ctx) -> None:
     """SFENCE, LFENCE, MFENCE (SDM): the ordering each gives, as one fence kind (Sprint 047)."""
     ctx.b.emit("fence", {"SFENCE": "st", "LFENCE": "ld", "MFENCE": "full"}[ctx.ic])

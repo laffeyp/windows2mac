@@ -582,6 +582,8 @@ class Runtime:
                     if v & ~0xFFFF:                                       # MXCSR_MASK 0xFFFF: reserved bits #GP
                         raise GuestFault(f"#GP: LDMXCSR 0x{v:x} sets reserved bits at 0x{ins.address:x}")
                     self.th.mxcsr = v
+            elif k == "fcw":
+                self._store(op[2], self.th.fcw)
             elif k == "fence":
                 pass
             elif k == "ud":
