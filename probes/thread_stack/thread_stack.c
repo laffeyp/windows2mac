@@ -70,6 +70,8 @@ void start(void) {
 
     query("query.sp", sp);
     query("query.below_limit", limit - 1);
+    query("query.limit", limit);                    /* between the guard and the stack pointer's region */
+    query("query.below_guard", limit - 2 * 4096);   /* between the reserved region and the guard */
     query("query.dealloc", dealloc);
     query("query.base_minus_one", base - 1);
 
