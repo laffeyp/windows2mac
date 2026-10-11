@@ -27,25 +27,36 @@
 #define ERROR_INVALID_HANDLE 6u
 #define ERROR_NOT_OWNER 288u
 #define ERROR_TOO_MANY_POSTS 298u
+#define ERROR_ALREADY_EXISTS 183u
 #define CREATE_EVENT_MANUAL_RESET 1u
 #define CREATE_EVENT_INITIAL_SET 2u
 
-enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PROCESS, MAPPING };   /* TOKEN: token.c;
+enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PROCESS, MAPPING,   /* TOKEN: token.c;
                                                                           * THREAD, PROCESS, MAPPING: Sprint 049 */
+            SHARED_EVENT = W2M_OBJECT_SHARED_EVENT, PIPE_READ = W2M_OBJECT_PIPE_READ,
+            PIPE_WRITE = W2M_OBJECT_PIPE_WRITE, REMOTE_THREAD = W2M_OBJECT_REMOTE_THREAD };
+            /* Sprint 055 (processes.c): a named event, a pipe's ends and another process's thread, each the host's
+             * object (src/w2m/kernel.py) whose id `count` holds; a PROCESS's `count` is its id, this one or another */
 
 /* Objects, and the handles that name them (Sprint 049: DuplicateHandle gives a second handle to one object, which
  * lives until its last handle closes). count: semaphore count, event 0/1, mutex recursion, a thread's id, a file
  * mapping's host descriptor (its own; closed with the mapping); max: a mapping's size. */
 static struct object { u32 kind; s64 count, max; u32 refs; } objects[OBJECTS];
 static int handle_object[OBJECTS];              /* handle slot -> object index + 1; 0: the slot is free */
+static u32 handle_flags[OBJECTS];               /* HANDLE_FLAG_INHERIT, HANDLE_FLAG_PROTECT_FROM_CLOSE (Sprint 055) */
+static int inherited_ready;
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 static u32 current_tid(void);
 
+static void inherit_init(void);
+
 static u64 handle_for(u64 api, int object) {
+    inherit_init();
     for (int i = 0; i < OBJECTS; i++)
         if (!handle_object[i]) {
             handle_object[i] = object + 1;
+            handle_flags[i] = 0;
             objects[object].refs++;
             return OBJECT_BASE + 4 * (u64)i;
         }
@@ -70,6 +81,7 @@ static u64 make(u64 api, u32 kind, s64 count, s64 max) {
 }
 
 static int slot_of(u64 h) {
+    inherit_init();
     if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || (h - OBJECT_BASE) / 4 >= OBJECTS) return -1;
     int i = (int)((h - OBJECT_BASE) / 4);
     return handle_object[i] ? i : -1;
@@ -105,6 +117,9 @@ int w2m_object_close(u64 h) {
     handle_object[i] = 0;
     if (--o->refs == 0) {
         if (o->kind == MAPPING) w2m_host(W2M_FILE_CLOSE, (u64)o->count, 0, 0, 0, 0);   /* the views keep their copy */
+        if (o->kind == SHARED_EVENT || o->kind == PIPE_READ || o->kind == PIPE_WRITE ||
+            (o->kind == PROCESS && (u32)o->count != (u32)w2m_teb()->client_process))
+            w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_CLOSE, (u64)o->count, 0, 0, 0);   /* the host's handle count */
         o->kind = FREE;
     }
     return 1;
@@ -117,9 +132,19 @@ u64 k32_CreateSemaphoreExW(u64 attributes, u64 initial, u64 maximum, u64 name, u
     return make(W2M_API_CreateSemaphoreExW, SEMAPHORE, (s32)initial, (s32)maximum);
 }
 
+/* A named event is the host's, so other processes open it by name (rows event.create_*, child.event_*: a name
+ * that exists answers a new handle to the same event and ERROR_ALREADY_EXISTS; a new one sets the last error 0). */
 static u64 create_event(u64 api, u64 attributes, u64 manual, u64 initial, u64 name) {
-    if (attributes || name) w2m_unimplemented(api, name);
-    return make(api, manual ? EVENT_MANUAL : EVENT_AUTO, initial ? 1 : 0, 1);
+    if (attributes) w2m_unimplemented(api, attributes);
+    if (!name) return make(api, manual ? EVENT_MANUAL : EVENT_AUTO, initial ? 1 : 0, 1);
+    if (api != W2M_API_CreateEventW && api != W2M_API_CreateEventExW) w2m_unimplemented(api, name);   /* ANSI names */
+    u64 chars = 0;
+    while (((const unsigned short *)name)[chars]) chars++;
+    u64 existed = 0;
+    u64 id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_OPEN, name, chars, (manual ? 1 : 0) | (initial ? 2 : 0), &existed);
+    u64 h = handle_for(api, new_object(api, SHARED_EVENT, (s64)id, 0));
+    set_error(existed ? ERROR_ALREADY_EXISTS : 0);
+    return w2m_logged(api, existed, h);
 }
 
 u64 k32_CreateEventW(u64 attributes, u64 manual, u64 initial, u64 name) {
@@ -149,11 +174,18 @@ static struct object *must(u64 api, u64 h, u32 kind1, u32 kind2) {
 }
 
 u64 k32_SetEvent(u64 h) {
-    must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 1;
+    struct object *o = object_of(h);
+    if (o && o->kind == SHARED_EVENT) w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
+    else must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 1;
     w2m_signal();
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
-u64 k32_ResetEvent(u64 h) { must(W2M_API_ResetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 0; return w2m_logged(W2M_API_ResetEvent, h, 1); }
+u64 k32_ResetEvent(u64 h) {
+    struct object *o = object_of(h);
+    if (o && o->kind == SHARED_EVENT) w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_RESET, (u64)o->count, 0, 0, 0);
+    else must(W2M_API_ResetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 0;
+    return w2m_logged(W2M_API_ResetEvent, h, 1);
+}
 
 u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     struct object *o = must(W2M_API_ReleaseSemaphore, h, SEMAPHORE, SEMAPHORE);
@@ -187,7 +219,11 @@ int w2m_thread_ended(u32 tid);        /* threads.c */
  * thread owns it or this one does (`max` holds its owner's id, `count` the recursion). */
 static int signaled(struct object *o) {
     if (o->kind == THREAD) return w2m_thread_ended((u32)o->count);
-    if (o->kind == PROCESS) return 0;                          /* this process: still running */
+    if (o->kind == PROCESS)                                    /* this process runs; another's is the host's */
+        return (u32)o->count != (u32)w2m_teb()->client_process &&
+               w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_PROCESS_STATE, (u64)o->count, 0, 0, 0) != 259;
+    if (o->kind == SHARED_EVENT) return (int)w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_STATE, (u64)o->count, 0, 0, 0);
+    if (o->kind == PIPE_READ || o->kind == PIPE_WRITE || o->kind == REMOTE_THREAD) w2m_unimplemented(W2M_API_WaitForSingleObject, o->kind);
     if (o->kind == MUTEX) return o->count == 0 || (u32)o->max == current_tid();
     return o->count > 0;
 }
@@ -198,6 +234,8 @@ static void take(struct object *o) {
         o->max = current_tid();
     } else if (o->kind == SEMAPHORE || o->kind == EVENT_AUTO) {
         o->count--;
+    } else if (o->kind == SHARED_EVENT) {
+        w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_TAKE, (u64)o->count, 0, 0, 0);
     }
 }
 
@@ -271,6 +309,53 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
 }
 
 /* Sleep: threads.c (Sprint 051), which lets other threads run while it waits. */
+
+/* For processes.c (Sprint 055): a new handle on a new object; a handle's kind (0: no object) and `count`; its
+ * flags; the inheritable handles; and the handles a parent passed, installed at their values on first use. */
+u64 w2m_object_new(u64 api, u32 kind, s64 count, u32 flags) {
+    u64 h = handle_for(api, new_object(api, kind, count, 0));
+    handle_flags[(h - OBJECT_BASE) / 4] = flags;
+    return h;
+}
+u32 w2m_object_kind(u64 h, s64 *count) {
+    struct object *o = object_of(h);
+    if (!o) return 0;
+    *count = o->count;
+    return o->kind;
+}
+u32 *w2m_object_flags(u64 h) {
+    int i = slot_of(h);
+    return i < 0 ? 0 : &handle_flags[i];
+}
+int w2m_object_inheritable(u64 (*out)[3], int room) {
+    int n = 0;
+    for (int i = 0; i < OBJECTS && n < room; i++)
+        if (handle_object[i] && (handle_flags[i] & 1)) {
+            struct object *o = &objects[handle_object[i] - 1];
+            if (o->kind != SHARED_EVENT && o->kind != PIPE_READ && o->kind != PIPE_WRITE && o->kind != PROCESS)
+                w2m_unimplemented(W2M_API_CreateProcessW, o->kind);    /* inheriting such a handle: not in the rows */
+            out[n][0] = OBJECT_BASE + 4 * (u64)i;
+            out[n][1] = o->kind;
+            out[n][2] = (u64)o->count;
+            n++;
+        }
+    return n;
+}
+
+static void inherit_init(void) {
+    if (inherited_ready) return;
+    inherited_ready = 1;
+    const u64 *t = (const u64 *)W2M_INHERIT_VA;              /* count, the three standard handles, then entries */
+    for (u64 k = 0; k < t[0]; k++) {
+        u64 h = t[4 + 3 * k], kind = t[5 + 3 * k], id = t[6 + 3 * k];
+        int i = (int)((h - OBJECT_BASE) / 4);
+        if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || i >= OBJECTS) w2m_unimplemented(W2M_API_CreateProcessW, h);
+        int o = new_object(W2M_API_CreateProcessW, (u32)kind, (s64)id, 0);
+        handle_object[i] = o + 1;
+        handle_flags[i] = 1;                                    /* inherited handles stay inheritable */
+        objects[o].refs = 1;
+    }
+}
 
 /* DuplicateHandle, OpenThread, GetThreadId, GetProcessId, CreateSemaphoreW (Sprint 049, family "thread handles"), as
  * contracts/windows.handle.thread_handles records Windows answering (Server 2025 and 2022):

@@ -1,0 +1,220 @@
+{
+ "contract_id": "windows.process.processes",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A second process as UnityPlayer starts its crash handler: named events shared by name (ERROR_ALREADY_EXISTS, one object), CreatePipe and SetHandleInformation, CreateProcessW with inherited handles and the pipe as the child's standard input, framed writes and reads, ERROR_BROKEN_PIPE when the writer is gone, OpenProcess by id, waits on a process (WAIT_TIMEOUT, STILL_ACTIVE, then the exit code), WaitForMultipleObjectsEx; SetConsoleCtrlHandler.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/processes/processes.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "event.create_0",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "event.create_1",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "event.create_2",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "event.create_again",
+    "non_null": true,
+    "same_handle": false,
+    "err": 183
+   },
+   {
+    "s": "event.one_object",
+    "wait_first_handle": 0
+   },
+   {
+    "s": "pipe.create",
+    "ret": 1,
+    "err": 57005,
+    "distinct": true,
+    "read_type": 3,
+    "write_type": 3
+   },
+   {
+    "s": "pipe.write_inherit_before",
+    "flags": 1
+   },
+   {
+    "s": "pipe.write_inherit_cleared",
+    "ret": 1,
+    "err": 57005,
+    "flags": 0
+   },
+   {
+    "s": "process.create",
+    "ret": 1,
+    "err": 0,
+    "process": true,
+    "thread": true,
+    "id_differs": true,
+    "thread_id": true
+   },
+   {
+    "s": "process.running",
+    "wait_0": 258,
+    "exit_code": 259
+   },
+   {
+    "s": "pipe.write_0",
+    "header": true,
+    "body": true,
+    "err": 57005
+   },
+   {
+    "s": "pipe.write_1",
+    "header": true,
+    "body": true,
+    "err": 57005
+   },
+   {
+    "s": "pipe.write_2",
+    "header": true,
+    "body": true,
+    "err": 57005
+   },
+   {
+    "s": "process.response",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "process.exited",
+    "wait": 1,
+    "wait_0": 0,
+    "exit_code": 7
+   },
+   {
+    "s": "ctrl.add",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "ctrl.remove",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "ctrl.remove_again",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "child.command_line",
+    "tail": "child <id>"
+   },
+   {
+    "s": "child.open_parent",
+    "non_null": true,
+    "err": 57005
+   },
+   {
+    "s": "child.event_0",
+    "non_null": true,
+    "err": 183
+   },
+   {
+    "s": "child.event_1",
+    "non_null": true,
+    "err": 183
+   },
+   {
+    "s": "child.event_2",
+    "non_null": true,
+    "err": 183
+   },
+   {
+    "s": "child.std_handles",
+    "input": true,
+    "input_type": 3,
+    "output_null": true,
+    "error_null": true
+   },
+   {
+    "s": "child.record_0",
+    "header": true,
+    "header_err": 57005,
+    "kind": 1,
+    "size": 31,
+    "body": true,
+    "first": 97
+   },
+   {
+    "s": "child.record_1",
+    "header": true,
+    "header_err": 57005,
+    "kind": 2,
+    "size": 12,
+    "body": true,
+    "first": 104
+   },
+   {
+    "s": "child.record_2",
+    "header": true,
+    "header_err": 57005,
+    "kind": 3,
+    "size": 1,
+    "body": true,
+    "first": 120
+   },
+   {
+    "s": "child.record_3",
+    "header": false,
+    "header_err": 109
+   },
+   {
+    "s": "child.wait_parent_or_term",
+    "ret": 1,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38178401014: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:2dc24b52d929259b223fdd69df721779b652416d8ad58edbbed39ece4b68147e; run 38178402797: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:c319ac016f85d9bb6e7104cef6987ea4fd6069740e743ae8900eca6d418ceeb0",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "processes-1791755781-0-1",
+    "processes-1791755781-0-2",
+    "processes-1791755781-1-1",
+    "processes-1791755781-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "Each process is a VM of its own; the objects they share are the host's (src/w2m/kernel.py).",
+  "An application name, an environment, a directory, creation flags other than NORMAL_PRIORITY_CLASS, a child with no standard handles, and a write no process reads are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/processes (Sprint 044)",
+  "implementation": "tools/guest_runtime/processes.c",
+  "rows": "scripts/family_run.py processes",
+  "excluded": "none"
+ }
+}

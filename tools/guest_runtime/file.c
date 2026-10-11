@@ -273,6 +273,7 @@ static void note_size(u64 id, u64 size);           /* FileStandardInfo's allocat
 /* WriteFile on a file handle, after runtime.c zeroed *written. */
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written) {
     struct open_file *f = file_of(handle);
+    if (!f && w2m_pipe_write(handle, buffer, count, written) == 1) return 1;     /* processes.c (Sprint 055) */
     if (!f) {
         set_error(ERROR_INVALID_HANDLE);
         return 0;
@@ -299,6 +300,9 @@ u64 k32_ReadFile(u64 handle, u64 buffer, u64 count, u64 read, u64 rsp) {
     *(u32 *)read = 0;
     struct open_file *f = file_of(handle);
     if (!f) {
+        int p = w2m_pipe_read(handle, buffer, count, read);                      /* processes.c (Sprint 055) */
+        if (p == -1) return 0;                                                   /* blocked: retried, no return */
+        if (p >= 0) return w2m_logged(W2M_API_ReadFile, handle, (u64)p);
         set_error(ERROR_INVALID_HANDLE);
         return w2m_logged(W2M_API_ReadFile, handle, 0);
     }
@@ -326,7 +330,13 @@ static struct open_file *file_or_stop(u64 api, u64 handle) {
 
 /* GetHandleInformation on a file handle (Sprint 048, contracts/windows.file.security): HANDLE_FLAG_INHERIT (1) as
  * CreateFileW's SECURITY_ATTRIBUTES set it, and both flags as SetHandleInformation set them (Sprint 049). */
+u32 *w2m_object_flags(u64 h);          /* sync_objects.c (Sprint 055): a pipe's or an event's handle */
+
 u64 k32_GetHandleInformation(u64 handle, u64 flags) {
+    if (!file_of(handle) && w2m_is_pipe(handle)) {
+        *(u32 *)flags = *w2m_object_flags(handle);
+        return w2m_logged(W2M_API_GetHandleInformation, handle, 1);
+    }
     struct open_file *f = file_or_stop(W2M_API_GetHandleInformation, handle);
     if (!f) return w2m_logged(W2M_API_GetHandleInformation, handle, 0);
     *(u32 *)flags = f->flags;
@@ -336,6 +346,11 @@ u64 k32_GetHandleInformation(u64 handle, u64 flags) {
 /* SetHandleInformation(hObject, dwMask, dwFlags): the mask's bits of INHERIT and PROTECT_FROM_CLOSE take dwFlags'
  * values; other bits are ignored, and the answer is still TRUE (row set.unknown_bit). */
 u64 k32_SetHandleInformation(u64 handle, u64 mask, u64 flags) {
+    if (!file_of(handle) && w2m_is_pipe(handle)) {
+        u32 m = (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE), *f = w2m_object_flags(handle);
+        *f = (*f & ~m) | ((u32)flags & m);
+        return w2m_logged(W2M_API_SetHandleInformation, handle, 1);
+    }
     struct open_file *f = file_or_stop(W2M_API_SetHandleInformation, handle);
     if (!f) return w2m_logged(W2M_API_SetHandleInformation, handle, 0);
     u32 m = (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE);

@@ -39,6 +39,7 @@ from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.compare import compare_exact_rows  # noqa: E402
 from w2m.contract import Contract, ExactRows, load_contract  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
+from w2m.kernel import Machine, spawner  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.record import producer, run_with_provenance  # noqa: E402
 
@@ -245,6 +246,14 @@ def display_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def processes_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The child's command line ends in the parent's process id, which differs by run: the row keeps that it is the
+    word "child" and a number."""
+    import re
+    return [r | {"tail": "child <id>" if re.fullmatch(r"child \d+", r["tail"]) else r["tail"]}
+            if r.get("s") == "child.command_line" else r for r in printed]
+
+
 def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
     windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
@@ -306,10 +315,13 @@ TIME_RUNS = {
 
 
 def time_rows(start: str) -> Callable[[list[dict[str, Any]]], list[dict[str, Any]]]:
-    """The probe's parent prints its rows, then its child's one row; w2m runs each alone (it serves no
-    CreateProcessW), so the parent's family drops the child's row and the child's keeps only it."""
+    """The probe's parent prints its rows, then its child's one row. Since Sprint 055 w2m starts the child as
+    Windows does, and the parent's family judges every row; the child's family, started alone with "child", keeps
+    only its own."""
     def derive(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [r for r in printed if (r.get("s") == "error_mode.child_inherited") == (start == "child")]
+        if start == "child":
+            return [r for r in printed if r.get("s") == "error_mode.child_inherited"]
+        return printed
     return derive
 
 
@@ -321,12 +333,14 @@ def time_family(start: str, summary: str) -> Family:
         "february_29_always": Plant("    return days[m - 1] + (m == 2 && leap(y));",
                                     "    return days[m - 1] + (m == 2);", ("system_to_file.fixed", "file_to_system.fixed")),
         "time_zone_leaves_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_GetTimeZoneInformation",
-                                        "    return w2m_logged(W2M_API_GetTimeZoneInformation", ("time_zone",))}
+                                        "    return w2m_logged(W2M_API_GetTimeZoneInformation", ("time_zone",)),
+        "error_mode_not_inherited": Plant("    list[n][2] = w2m_error_mode();", "    list[n][2] = 0x8003;",
+                                          ("error_mode.child_inherited",), file="processes.c")}
     return Family(
         name="time_and_error_mode" + ("_child" if child else ""),
         contract_id="windows.time.error_mode_child" if child else "windows.time.local_and_error_mode",
-        version="0.1.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
-        runs=TIME_RUNS,
+        version="0.1.0" if child else "0.2.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
+        runs=TIME_RUNS, host_files=("tools/guest_runtime/processes.c", "src/w2m/kernel.py", "src/w2m/vm_backend.py"),
         documented=(
             documented("ms-seterrormode", "api/errhandlingapi/nf-errhandlingapi-seterrormode", "2024-02-22",
                        "Each process has an associated error mode ... A child process inherits the error mode of its "
@@ -2094,6 +2108,58 @@ FAMILIES: dict[str, Family] = {
                                              ("class.register_ex_again",)),
             "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
                                      ("icon.own_103",))}),
+    "winrt": Family(
+        name="winrt",
+        contract_id="windows.winrt.winrt",
+        version="0.1.0",
+        summary=("RoInitialize as UnityPlayer reaches it: the winrt, com and winrt-string API sets load as combase.dll, "
+                 "whose RoInitialize is the COM apartment (S_OK, S_FALSE, RPC_E_CHANGED_MODE, E_INVALIDARG for another "
+                 "type) and RoUninitialize balances it."),
+        probe="winrt", guest_file="com.c", host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py"),
+        runs={
+              "38178400798": Run("windows-2025", "3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5", "winrt-1791755781-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38178402576": Run("windows-2022", "11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d", "winrt-1791755781-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("The rest of the winrt family (RoActivateInstance, HSTRINGs) is not in these rows.",),
+        plants={
+            "type_unchecked": Plant("    if ((u32)type > 1) return w2m_logged(W2M_API_RoInitialize, type, E_INVALIDARG);", "",
+                                    ("init.bad_type",)),
+            "single_as_multi": Plant("    return init(W2M_API_RoInitialize, (u32)type ? MTA : STA);",
+                                     "    return init(W2M_API_RoInitialize, MTA);", ("init.multi_after_single", "init.multi"))}),
+    "processes": Family(
+        name="processes",
+        contract_id="windows.process.processes",
+        version="0.1.0",
+        summary=("A second process as UnityPlayer starts its crash handler: named events shared by name "
+                 "(ERROR_ALREADY_EXISTS, one object), CreatePipe and SetHandleInformation, CreateProcessW with inherited "
+                 "handles and the pipe as the child's standard input, framed writes and reads, ERROR_BROKEN_PIPE when the "
+                 "writer is gone, OpenProcess by id, waits on a process (WAIT_TIMEOUT, STILL_ACTIVE, then the exit code), "
+                 "WaitForMultipleObjectsEx; SetConsoleCtrlHandler."),
+        probe="processes", guest_file="processes.c",
+        host_files=("src/w2m/vm_backend.py", "src/w2m/kernel.py", "src/w2m/file_bridge.py",
+                    "tools/guest_runtime/sync_objects.c", "tools/guest_runtime/file.c", "tools/guest_runtime/console.c"),
+        runs={
+              "38178401014": Run("windows-2025", "2dc24b52d929259b223fdd69df721779b652416d8ad58edbbed39ece4b68147e", "processes-1791755781-0", "AMD EPYC 7763 64-Core Processor"),
+              "38178402797": Run("windows-2022", "c319ac016f85d9bb6e7104cef6987ea4fd6069740e743ae8900eca6d418ceeb0", "processes-1791755781-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("Each process is a VM of its own; the objects they share are the host's (src/w2m/kernel.py).",
+                        "An application name, an environment, a directory, creation flags other than "
+                        "NORMAL_PRIORITY_CLASS, a child with no standard handles, and a write no process reads are not "
+                        "in the rows and stop the run."),
+        derive=processes_rows,
+        plants={
+            "broken_pipe_as_end_of_file": Plant("        set_error(ERROR_BROKEN_PIPE);\n        return 0;", "        return 1;",
+                                                ("child.record_3",)),
+            "exists_unreported": Plant("    set_error(existed ? ERROR_ALREADY_EXISTS : 0);", "    set_error(0);", ("event.create_again", "child.event_0", "child.event_1", "child.event_2"),
+                                       file="sync_objects.c"),
+            "exit_code_unread": Plant("    u64 code = (u32)pid == current_pid() ? STILL_ACTIVE\n                                          : w2m_host(",
+                                      "    u64 code = (u32)pid != 0 ? STILL_ACTIVE\n                                          : w2m_host(", ("process.exited",)),
+            "remove_missing_accepted": Plant("    set_error(ERROR_INVALID_PARAMETER);\n    return w2m_logged(W2M_API_SetConsoleCtrlHandler, routine, 0);",
+                                             "    return w2m_logged(W2M_API_SetConsoleCtrlHandler, routine, 1);", ("ctrl.remove_again",)),
+            "create_error_left": Plant("    set_error(0);                                                     /* row process.create */", "",
+                                       ("process.create",))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",
@@ -2213,6 +2279,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
     t0 = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="w2m-family-") as d:
         files = FileBridge(Path(d))
+        # the program's own file at its path, as on the runner (Sprint 055: a probe that starts itself reads it)
+        (Path(d) / "probe.exe").write_bytes((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes())
         line = None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}'
         if dll is None and f is not None and f.dll_name is not None:
             dll = next(r.dll for r in f.runs.values() if r.binary == binary)
@@ -2221,12 +2289,19 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         def dlls(name: str) -> bytes | None:
             return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None
 
+        environment = () if f is None else f.environment
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes(), dlls, "probe.exe"), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
-                gui=f is not None and f.gui, command_line=line, environment=() if f is None else f.environment)
+                gui=f is not None and f.gui, command_line=line, environment=environment)
+        # every probe runs on a kernel.Machine: a probe that starts a process gets it (Sprint 055)
+        machine = Machine(spawner(files, environment, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
         try:
-            r = vm.run(max_steps=1 << 40, timeout_ms=60_000)    # the clock probes spin until time advances
+            r = machine.run(vm)                                  # the clock probes spin until time advances
         finally:
+            for other in machine.processes.values():
+                if other.vm is not vm:
+                    other.vm.close()
+                    other.vm.files.close_all()
             vm.close()
             files.close_all()
         out = r.stdout

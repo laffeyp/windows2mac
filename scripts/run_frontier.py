@@ -37,6 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
+from w2m.kernel import Machine, spawner  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.vm_backend import USER_ENVIRONMENT, VM  # noqa: E402
 from w2m.record import producer, run_with_provenance  # noqa: E402
@@ -73,10 +74,22 @@ def main(argv: list[str]) -> int:
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
                 image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
                 command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}')
+        # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
+        machine = Machine(spawner(files, USER_ENVIRONMENT), max_steps=a.max_steps, timeout_ms=60_000)
         try:
-            r = vm.run(max_steps=a.max_steps, timeout_ms=60_000)
+            r = machine.run(vm)
             totals = vm.calls_total()
+            state["faults"] = vm.faults()
+            state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
+                                          dict(sorted(p.vm.calls_total().items())),
+                                          {t.tid: (t.status, p.vm.ld.thunks.get(t.x[17], hex(t.x[17])) if t.x else "running")
+                                           for t in p.vm.threads.values()})
+                                  for p in machine.processes.values() if p.vm is not vm}
         finally:
+            for other in machine.processes.values():
+                if other.vm is not vm:
+                    other.vm.close()
+                    other.vm.files.close_all()
             vm.close()
             files.close_all()
             log = files.drive / "w2m" / "unity.log"
@@ -120,6 +133,10 @@ def main(argv: list[str]) -> int:
             print(e["kind"], {k: v for k, v in e["payload"].items() if k not in ("vocab_version", "harness_version")})
     print(f"stop: {state.get('stop')}; {state.get('instructions')} instructions; calls {state.get('calls')}")
     print(f"host requests by op {state.get('host_requests')}; calls by service {state.get('calls_total')}")
+    count, first = state.get("faults", (0, []))
+    print(f"faults dispatched {count}: " + "; ".join(f"0x{c:x} at 0x{rip:x} ({i0}, 0x{i1:x})" for c, rip, i0, i1 in first))
+    for pid, (name, code, calls, threads) in state.get("processes", {}).items():
+        print(f"process {pid} {name}: exit code {code}; threads {threads}; calls by service {calls}")
     print(f"record {result.record_root}")
     return 0
 

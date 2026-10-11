@@ -44,6 +44,10 @@ from w2m.kernel32 import Unimplemented
 ROOT = Path(__file__).resolve().parents[2]
 EXPORTS = ROOT / "specs" / "windows_exports.json"
 APP_DIRECTORY = "C:\\w2m\\app\\"
+# API sets whose host is not kernelbase, as LoadLibraryExW answered on Server 2025 and 2022 (Sprint 055, rows
+# load.api_sets): each is the module GetModuleHandleW("combase.dll") then names
+API_SET_HOSTS = {"api-ms-win-core-winrt-l1-1-0.dll": "combase.dll", "api-ms-win-core-com-l1-1-1.dll": "combase.dll",
+                 "api-ms-win-core-winrt-string-l1-1-0.dll": "combase.dll"}
 
 
 def _canonical(name: str) -> str:
@@ -94,6 +98,8 @@ class Modules:
             return self.kernelbase
         if c == self.image_name.lower():
             return self.image_base
+        if c in API_SET_HOSTS:                          # the winrt sets are combase's (rows windows.winrt.winrt)
+            return self.module(API_SET_HOSTS[c], loading)
         if c.startswith("api-ms-win-core-"):
             return self.kernelbase
         if c.startswith(("api-ms-", "ext-ms-")):

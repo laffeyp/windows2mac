@@ -72,7 +72,7 @@ struct w2m_transport {
 /* Ring buffer: one record per service call, in order, for the first `capacity` calls; `per_api`
  * counts every call by API id, past capacity too (Sprint 044: the hot services make millions of
  * calls, and the totals must stay exact). The host reads both after the run, without an exit. */
-#define W2M_RING_APIS 256                /* above every W2M_API_* id (tests/test_guest_runtime.py) */
+#define W2M_RING_APIS 512                /* above every W2M_API_* id (tests/test_guest_runtime.py) */
 struct w2m_ring_record {
     u64 api;
     u64 arg0;
@@ -272,7 +272,24 @@ enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FI
        W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW,                                           /* 27-29: Sprint 049 */
        W2M_HOST_THREAD,                                                                           /* 30: Sprint 051 */
        W2M_HOST_EXCEPTION,                                                                        /* 31: Sprint 053 */
-       W2M_FILE_LIST };                                                                           /* 32: Sprint 054 */
+       W2M_FILE_LIST,                                                                             /* 32: Sprint 054 */
+       W2M_HOST_KERNEL };                                                                         /* 33: Sprint 055 */
+
+/* W2M_HOST_KERNEL's sub-operations (src/w2m/kernel.py): the objects processes share. */
+enum { W2M_KERNEL_EVENT_OPEN = 1, W2M_KERNEL_EVENT_STATE, W2M_KERNEL_EVENT_TAKE, W2M_KERNEL_EVENT_SET,
+       W2M_KERNEL_EVENT_RESET, W2M_KERNEL_CLOSE, W2M_KERNEL_PIPE_CREATE, W2M_KERNEL_PIPE_READ, W2M_KERNEL_PIPE_WRITE,
+       W2M_KERNEL_PROCESS_CREATE, W2M_KERNEL_PROCESS_STATE, W2M_KERNEL_REF };
+/* sync_objects.c's object kinds for the host's objects (kernel.py KIND_*; PROCESS is 7) */
+#define W2M_OBJECT_SHARED_EVENT 9
+#define W2M_OBJECT_PIPE_READ 10
+#define W2M_OBJECT_PIPE_WRITE 11
+#define W2M_OBJECT_REMOTE_THREAD 12
+#define W2M_INHERIT_STANDARD 100              /* an inherited-list entry naming a standard handle */
+#define W2M_INHERIT_ERROR_MODE 101            /* ... the parent's error mode, which the child inherits */
+u32 w2m_error_mode(void);                                               /* time_and_error_mode.c */
+int w2m_pipe_read(u64 handle, u64 buffer, u64 count, u64 read);        /* processes.c */
+int w2m_pipe_write(u64 handle, u64 buffer, u64 count, u64 written);
+int w2m_is_pipe(u64 handle);
 
 /* W2M_HOST_EXCEPTION's first argument (exceptions.c): the x86 stubs' page; XMM0-15 copied to a CONTEXT's. */
 enum { W2M_EXCEPTION_STUBS = 1, W2M_EXCEPTION_CAPTURE_XMM };

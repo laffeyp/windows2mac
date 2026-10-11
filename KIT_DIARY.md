@@ -402,3 +402,11 @@
 **Finding (#45):** a capture tool that stands in for a program changes the program's inputs; every property Windows reads from the image (manifest, resources, subsystem, PE flags) must be carried over, or the capture's answers for them are the tool's.
 
 **Kit change suggested:** a stand-in launcher copies the original image's manifest and resources at build time, and the capture records a hash of what it carried.
+
+### 2026-10-11 — Sprint 055: a planted fault that reached half the system
+
+**What happened:** the processes probe starts itself as a child, and its rows hold both processes' answers. The first plant run caught the parent's plants and changed no child row at all: the family runner built the parent's VM from the planted runtime, while the child's VM, built by the kernel's spawner, used the runtime as committed. A plant on child-side code would have passed with the fault in place.
+
+**Finding (#46):** a planted fault is judged only where the system under test runs the planted build; when the system starts more of itself (a child process, a worker, a plugin host), each part must be built from the same planted source, or the plant tests nothing there.
+
+**Kit change suggested:** a plant run asserts that every process or module it observed was built from the planted source (a hash in each part's record), and fails otherwise.
