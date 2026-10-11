@@ -90,15 +90,19 @@ class GuestMemory(Protocol):
 class FileBridge:
     """POSIX primitives under `root` for one guest process."""
 
-    def __init__(self, root: Path, read_only: bool = False) -> None:
+    def __init__(self, root: Path, read_only: bool = False, drive: Path | None = None) -> None:
         import tempfile
         self.root = root.resolve()               # C:\\w2m\\app, the working directory
         self.read_only = read_only               # the game's depot: nothing under it may change
-        self._drive = tempfile.TemporaryDirectory(prefix="w2m-drive-c-")
-        self.drive = Path(self._drive.name).resolve()   # C:\\, holding w2m (app is the mount)
-        (self.drive / "w2m").mkdir()
-        for folder in PROFILE_FOLDERS:           # the user's profile (known_folders.c, Sprint 048)
-            (self.drive / folder).mkdir(parents=True)
+        if drive is None:
+            self._drive: tempfile.TemporaryDirectory[str] | None = tempfile.TemporaryDirectory(prefix="w2m-drive-c-")
+            self.drive = Path(self._drive.name).resolve()   # C:\\, holding w2m (app is the mount)
+            (self.drive / "w2m").mkdir()
+            for folder in PROFILE_FOLDERS:       # the user's profile (known_folders.c, Sprint 048)
+                (self.drive / folder).mkdir(parents=True)
+        else:                                    # another process of the same machine: the same drive (Sprint 055)
+            self._drive = None
+            self.drive = drive
         self.fds: dict[int, int] = {}            # guest-visible descriptor -> host fd
         self.read_only_fds: set[int] = set()     # descriptors of files under the mount (refused writes when read-only)
         self.next_fd = 3
@@ -259,4 +263,5 @@ class FileBridge:
             os.close(host)
         self.fds.clear()
         self.read_only_fds.clear()
-        self._drive.cleanup()
+        if self._drive is not None:              # the drive's owner removes it; another process's bridge shares it
+            self._drive.cleanup()

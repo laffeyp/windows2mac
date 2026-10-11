@@ -110,10 +110,14 @@ static int error_mode_ready;
 static u32 current_error_mode(void) {
     if (!error_mode_ready) {
         error_mode_ready = 1;
-        error_mode = *(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_START_MODE_OFF) == 1 ? 0 : 0x8003;
+        const u64 *inherit = (const u64 *)W2M_INHERIT_VA;  /* a child inherits its parent's (Sprint 055) */
+        if (inherit[511] == 1 && inherit[510]) error_mode = (u32)(inherit[510] - 1);
+        else error_mode = *(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_START_MODE_OFF) == 1 ? 0 : 0x8003;
     }
     return error_mode;
 }
+
+u32 w2m_error_mode(void) { return current_error_mode(); }
 
 u64 k32_GetErrorMode(void) { return w2m_logged(W2M_API_GetErrorMode, 0, current_error_mode()); }
 

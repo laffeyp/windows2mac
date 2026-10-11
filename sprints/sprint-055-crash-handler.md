@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 055
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -64,3 +64,30 @@ The handler is a full program: UnityCrashHandler64.exe imports 195 functions fro
 ## done criteria
 
 As amended in item 5.
+
+## observed
+
+- **The criteria are met.** The processes family (29 rows, 5 plants; runs 38178401014, 38178402797) and winrt (7 rows,
+  2 plants; 38178400798, 38178402576) equal Windows. In the batch frontier the game starts UnityCrashHandler64.exe as
+  a second process (a second VM), which opens the game by id and the three named events, reads the game's records
+  from its standard input (20 reads: 10 records) and ends the run with its main thread in WaitForMultipleObjectsEx and
+  its reader in ReadFile, where the Windows capture holds them. The game runs on past SetConsoleCtrlHandler (seq 419)
+  and every function the batch trace calls up to seq 1720 is served.
+- **The next stop:** 57,411,545 instructions, `KERNEL32.dll!GetCurrentDirectoryA`, which no Windows run calls
+  (`store/runs/frontier-643a6283510c-1791757748625534000`). The new fault log shows why: one access violation, a read
+  of address 8 at UnityPlayer RVA 0x143a6ca, `mov rcx, [PEB+0x20]; cmp dword [rcx+8], 0`: PEB.ProcessParameters, which
+  w2m leaves NULL and every Windows process has. Unity's crash path follows (GetLocalTime, GetModuleFileNameA,
+  GetCurrentDirectoryA). ProcessParameters is Sprint 056.
+- **The captures** (game run 38176899195): jit_capture records name strings and traces the handler from inside it
+  (handler_trace.dll queued as an APC); the handler's 411 calls, its events' names, its command line, and the game's
+  first registry key, `Software\NSS\Hail to the Rainbow`; unity.log equal to run 38113342549's but for timings.
+- **Built:** `src/w2m/kernel.py` (named events, pipes, process records; the Machine that runs several VMs and wakes
+  blocked threads across them; the spawner), VM.steps (a generator; VM.run drives it), `tools/guest_runtime/processes.c`
+  (CreatePipe, CreateProcessW, OpenProcess, GetExitCodeProcess, WaitForMultipleObjectsEx, SetConsoleCtrlHandler, pipe
+  reads and writes), named events and inherited handles in sync_objects.c, RoInitialize, the winrt API sets as
+  combase's, a fault log in the process area (the first 64 faults dispatched), every probe run on a Machine with its
+  exe at its path, the call counters raised to 512.
+- **Defects found and fixed:** the plants of a probe that starts itself reached only the parent (the child VM was
+  built from the unplanted runtime; KIT_DIARY #46); a process not yet started never got a turn (no threads read as not
+  ready); the time_and_error_mode family had judged its parent and child apart because w2m served no CreateProcessW:
+  version 0.2.0 judges both in one run (error mode inherited, plant error_mode_not_inherited caught).

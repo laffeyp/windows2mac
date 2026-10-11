@@ -259,6 +259,12 @@ void w2m_exception(void) {
     }
     context_from_state(&e->context, st);
     w2m_logged(W2M_API_Exception, r->code, rip);
+    u64 *log = (u64 *)W2M_FAULT_LOG_VA;                /* the first 64 faults, for the host (Sprint 055) */
+    if (log[0] < 64) {
+        u64 *f = log + 1 + 4 * log[0];
+        f[0] = r->code; f[1] = rip; f[2] = r->information[0]; f[3] = r->information[1];
+    }
+    log[0]++;
     if (w2m_dispatch_fault(r, &e->context)) return;
     e->magic = W2M_EXCEPTION_MAGIC;                    /* no room on the stack: the process ends */
     host_call(W2M_HOST_EXIT, r->code, 0);

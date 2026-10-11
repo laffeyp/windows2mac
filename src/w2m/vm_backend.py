@@ -36,14 +36,15 @@ import subprocess
 import tempfile
 import time
 from bisect import bisect_right
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
+from w2m.kernel import KIND_ERROR_MODE, KIND_STANDARD
 from w2m.file_bridge import (FILE_DUP, FILE_FSTAT, FILE_LIST, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
                              FileBridge)
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
@@ -107,7 +108,7 @@ MONITOR_SIZE = (RECON_TABLE + 16 * RECON_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   #
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
 RING_SIZE = 0x40000                 # 10,922 records; Sprint 042 probe makes 1,275 calls (shared-memory rings: Sprint 044)
-RING_APIS = 256                     # per-API call counters after the ring's count and capacity (runtime.h)
+RING_APIS = 512                     # per-API call counters after the ring's count and capacity (runtime.h)
 RING_HEADER = 16 + 8 * RING_APIS
 EXCEPTION_OFF = RING_OFF + RING_SIZE             # the last unhandled exception: record and CONTEXT (runtime.h)
 EXCEPTION_MAGIC = 0x7832774E4F495445
@@ -123,7 +124,9 @@ LOADER_DATA_SIZE = 0x4000
 SYSTEM_IMAGES_OFF = LOADER_DATA_OFF + LOADER_DATA_SIZE   # one page per other system DLL imported (modules.py; Sprint 048)
 SYSTEM_IMAGES = 32
 LDR_ENTRY_SIZE = 0x120
-PROCESS_SIZE = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000
+INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited handles (sync_objects.c; Sprint 055)
+FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
+PROCESS_SIZE = FAULT_LOG_OFF + 0x1000
 STDOUT_HANDLE = 0x74
 # The services the guest runtime defines (Sprint 049: derived from its C files, guest_runtime.service_table):
 # kernel32 import name -> (C symbol, sets RAX), and for each other system DLL (upper case) the same
@@ -147,6 +150,7 @@ COM_VTABLES = {"w2m_enumerator_vtable": ("QueryInterface", "AddRef", "Release", 
                                          "UnregisterEndpointNotificationCallback"),
                "w2m_collection_vtable": ("QueryInterface", "AddRef", "Release", "GetCount", "Item")}
 HOST_THREAD = 30                    # threads.c's requests: a0 the W2M_THREAD_* sub-operation (scheduler.py; Sprint 051)
+HOST_KERNEL = 33                    # kernel.py's shared objects (Sprint 055): a0 the sub-operation
 HOST_EXCEPTION = 31                 # exceptions.c's requests (Sprint 053): a0 1, the x86 stubs' page; 2, XMM0-15 to a1
 EXCEPTION_STUBS, EXCEPTION_CAPTURE_XMM = 1, 2
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
@@ -180,6 +184,9 @@ U_CF, U_ZF, U_SF, U_OF, U_PF, U_AF = (1 << FLAG_BIT[f] for f in "CZSOPA")   # bi
 FLAG_REG = {"C": REG_CF, "Z": REG_ZF, "S": REG_SF, "O": REG_OF, "P": REG_PF}
 MAX_BLOCK_INSNS = 64
 ASYNC_STOP_RULE = "forward"     # "backward" exists only so a test can show the forward rule is what saves the count
+
+
+IDLE: list[int] = []                       # _switch: no thread of this VM can run (a kernel.Machine runs another); compared by identity
 
 
 class StopRun(Exception):
@@ -503,6 +510,8 @@ def runtime_defines() -> dict[str, int]:
         "W2M_TLS_EXPANSION_VA": PROCESS_VA + TLS_EXPANSION_OFF, "W2M_TLS_TAKEN": TLS_TAKEN,
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
+        "W2M_INHERIT_VA": PROCESS_VA + INHERIT_OFF,
+        "W2M_FAULT_LOG_VA": PROCESS_VA + FAULT_LOG_OFF,
         "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
         "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
@@ -955,7 +964,8 @@ class VM:
                  files: FileBridge | None = None, file_source: str | None = None,
                  runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe",
                  gui: bool = False, command_line: str | None = None,
-                 environment: tuple[str, ...] = ()) -> None:
+                 environment: tuple[str, ...] = (), process_id: int = 0,
+                 inherited: list[tuple[int, int, int]] | None = None) -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
@@ -964,6 +974,8 @@ class VM:
         self.gui = gui                     # the Steam-like start: no standard handles (console.c)
         self.command_line = command_line if command_line is not None else f'"C:\\w2m\\app\\{image_name}"'
         self.environment = environment     # the block's entries, in order ("NAME=value"; "=C:=..." too)
+        self.process_id = process_id or PROCESS_ID   # TEB.ClientId.UniqueProcess; a child's from kernel.Machine
+        self.inherited = inherited         # a child's handles from its parent (kernel.py PROCESS_CREATE); None: none
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
@@ -1018,6 +1030,8 @@ class VM:
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
         self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
+        self.machine: Any = None                         # the kernel.Machine running this VM among others (Sprint 055)
+        self._idle: tuple[GuestThread, int, bool] | None = None   # where _switch found no thread to run
         self._max_steps = 0
         self.current_tid = tid
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
@@ -1066,7 +1080,17 @@ class VM:
         # the stack as Windows lays it out (contracts/windows.memory.thread_stack): DeallocationStack at the
         # reservation's bottom, one reserved page, the 3-page guard, then StackLimit; w2m commits the rest
         limit = stack.base + (1 + STACK_GUARD_PAGES) * 0x1000
-        for field_off, value in ((0x08, self.ld.stack_top), (0x10, limit), (0x30, teb), (0x40, PROCESS_ID),
+        if self.inherited is not None:     # objects, then the standard handles (KIND_STANDARD), then the mark
+            entries = [e for e in self.inherited if e[1] < KIND_STANDARD]
+            std = {w: h for w, k, h in self.inherited if k == KIND_STANDARD}
+            mode = [h for _, k, h in self.inherited if k == KIND_ERROR_MODE]
+            page = self._process(INHERIT_OFF)
+            struct.pack_into("<QQQQ", self.mm, page, len(entries), std.get(0, 0), std.get(1, 0), std.get(2, 0))
+            for i, e in enumerate(entries):
+                struct.pack_into("<QQQ", self.mm, page + 32 + 24 * i, *e)
+            # [509] standard handles given, [510] the error mode + 1 (0: none), [511] a child's page
+            struct.pack_into("<QQQ", self.mm, page + 0xFE8, 1 if std else 0, mode[0] + 1 if mode else 0, 1)
+        for field_off, value in ((0x08, self.ld.stack_top), (0x10, limit), (0x30, teb), (0x40, self.process_id),
                                  (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb), (0x1478, stack.base)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
         self._stack = (stack.base, limit, self.ld.stack_top)
@@ -1279,7 +1303,7 @@ class VM:
         if err:
             raise Unimplemented(f"a thread's TEB: VirtualAlloc error {err}")
         peb = PROCESS_VA + PEB_OFF
-        for off, value in ((0x08, top), (0x10, limit), (0x30, teb), (0x40, PROCESS_ID), (0x48, tid),
+        for off, value in ((0x08, top), (0x10, limit), (0x30, teb), (0x40, self.process_id), (0x48, tid),
                            (0x58, self._thread_static_tls()), (0x60, peb), (0x1478, dealloc), (0x1780, teb + 0x2000)):
             self.mem.write(teb + off, value.to_bytes(8, "little"))
         stub = self._code_page(attach_stub(self._thread_callbacks(), start, parameter,
@@ -1361,7 +1385,8 @@ class VM:
     def _set_budget(self) -> None:
         """The step budget the block entries check: the run's limit, or with more than one thread a time slice."""
         executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
-        limit = self._max_steps if len(self.threads) < 2 else min(self._max_steps, executed + TIME_SLICE)
+        shared = len(self.threads) > 1 or (self.machine is not None and len(self.machine.vms) > 1)
+        limit = min(self._max_steps, executed + TIME_SLICE) if shared else self._max_steps
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, limit)
 
     def _read_guest(self, va: int, n: int) -> bytes:
@@ -1407,6 +1432,11 @@ class VM:
             cur.deadline = struct.unpack_from("<Q", self._read_guest(cur.teb + SCRATCH_OFF, 8))[0]
         if all(t.status == "ended" for t in self.threads.values()):
             return None                                       # the last thread ended: the process ends with it
+        return self._switch(x, cur, schedule)
+
+    def _switch(self, x: list[int], cur: GuestThread, schedule: int) -> list[int] | None:
+        """The next thread's state after cur's (x): IDLE, in a machine of several VMs, when none of this VM's
+        threads can run (the driver runs another VM and resumes this one when a thread is ready again)."""
         order = sorted(self.threads)
         i = order.index(cur.tid)
         rotation = order[i + 1:] + order[:i + 1]
@@ -1415,6 +1445,9 @@ class VM:
         if nxt is None:
             timed = [self.threads[k] for k in rotation if self.threads[k].status == "blocked"
                      and self.threads[k].suspend == 0 and self.threads[k].deadline != M64]
+            if self.machine is not None:
+                self._idle = (cur, schedule, bool(timed))
+                return IDLE
             if not timed:
                 raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
             time.sleep(0.001)
@@ -1428,6 +1461,41 @@ class VM:
         self._save_thread(cur, x)
         self.current_tid = nxt.tid
         return self._load_thread(nxt)
+
+    def read_bytes(self, va: int, n: int) -> bytes:
+        return _GuestView(self).read(va, n) if n else b""
+
+    def write_bytes(self, va: int, data: bytes) -> None:
+        _GuestView(self).write(va, data)
+
+    def read_text(self, va: int, chars: int) -> str:
+        return self.read_bytes(va, 2 * chars).decode("utf-16-le", errors="replace")
+
+    def _resume_idle(self, x: list[int]) -> list[int] | None:
+        """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
+        deadline runs to check it."""
+        assert self._idle is not None
+        cur, schedule, _ = self._idle
+        self._idle = None
+        if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()):
+            timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
+            if timed:
+                timed[0].status = "ready"
+        return self._switch(x, cur, schedule)
+
+    def ready(self) -> bool:
+        """Whether a thread of this VM can run now (kernel.Machine): a process not yet started can."""
+        return not self.threads or any(t.status == "ready" and t.suspend == 0 for t in self.threads.values())
+
+    def waits_with_deadline(self) -> bool:
+        return any(t.status == "blocked" and t.suspend == 0 and t.deadline != M64 for t in self.threads.values())
+
+    def wake_all(self) -> None:
+        """A shared object was signaled (kernel.py): every blocked thread checks its wait again."""
+        for t in self.threads.values():
+            if t.status == "blocked":
+                t.status = "ready"
+        self._publish_blocked()
 
     def _bridge(self, import_name: str, thunk: int) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
@@ -1496,6 +1564,13 @@ class VM:
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
             result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
+            struct.pack_into("<QQ", self.mm, t + 48, second, result)
+            return True
+        if op == HOST_KERNEL:
+            if self.machine is None:
+                raise Unimplemented("an object other processes share (a named event, a pipe, a process): this run "
+                                    "has no kernel.Machine")
+            result, second = self.machine.request(self, list(struct.unpack_from("<4Q", self.mm, t + 8)))
             struct.pack_into("<QQ", self.mm, t + 48, second, result)
             return True
         if op == HOST_WRITE:
@@ -1671,6 +1746,12 @@ class VM:
         names = guest_runtime.api_ids()
         base = self._process(RING_OFF) + RING_HEADER
         return [names[struct.unpack_from("<Q", self.mm, base + 24 * i)[0]] for i in range(min(count, capacity))]
+
+    def faults(self) -> tuple[int, list[tuple[int, int, int, int]]]:
+        """Faults the guest dispatched (runtime.c): how many, and the first 64 as (code, RIP, info 0, info 1)."""
+        off = self._process(FAULT_LOG_OFF)
+        count = struct.unpack_from("<Q", self.mm, off)[0]
+        return count, [struct.unpack_from("<4Q", self.mm, off + 8 + 32 * i) for i in range(min(count, 64))]
 
     def calls_total(self) -> dict[str, int]:
         """Every service call by name, counted in the guest (exact past the ring's capacity)."""
@@ -1968,7 +2049,24 @@ class VM:
             interrupt_every_ms: int | None = None,
             on_boundary: Callable[[VM, list[int], int], None] | None = None,
             on_unimplemented: Callable[[VM, list[int], str], bool] | None = None) -> Result:
-        """Run until the guest exits or stops. `on_dispatch` sees (and may rewrite) the register
+        """Run alone until the guest exits or stops (steps(), driven to its end)."""
+        gen = self.steps(max_steps, timeout_ms, on_dispatch, on_exception, interrupt_every_ms, on_boundary,
+                         on_unimplemented)
+        try:
+            while True:
+                next(gen)
+        except StopIteration as done:
+            result: Result = done.value
+            return result
+
+    def steps(self, max_steps: int = 1_000_000, timeout_ms: int = 10_000,
+            on_dispatch: Callable[[VM, list[int]], None] | None = None,
+            on_exception: Callable[[VM, dict[str, int]], bool] | None = None,
+            interrupt_every_ms: int | None = None,
+            on_boundary: Callable[[VM, list[int], int], None] | None = None,
+            on_unimplemented: Callable[[VM, list[int], str], bool] | None = None) -> Generator[str, None, Result]:
+        """Run until the guest exits or stops, yielding to a kernel.Machine (Sprint 055): "idle" when no thread of
+        this VM can run, "slice" when a time slice ends and another VM may want the vCPU time. `on_dispatch` sees (and may rewrite) the register
         snapshot at each dispatch miss; x[17] is the x86 address about to run. An unhandled
         guest exception ends the process, as on Windows; `on_exception` sees its records and, by
         returning True, has the VM go on at the next dispatch miss instead (the oracle's driver).
@@ -2110,9 +2208,18 @@ class VM:
                         stop = "max_steps"
                         break
                     self._set_budget()
-                    if len(self.threads) > 1:                   # the time slice ran out: another thread's turn
+                    if self.machine is not None and self.machine.others_ready(self):
+                        x[17] = where
+                        self._save_thread(self.threads[self.current_tid], x)
+                        yield "slice"                            # another VM's turn; this thread goes on after
+                        x = self._load_thread(self.threads[self.current_tid])
+                        pc = self.miss_va
+                    elif len(self.threads) > 1:                 # the time slice ran out: another thread's turn
                         x[17] = where
                         switched = self._schedule(x, 0)
+                        while switched is IDLE:
+                            yield "idle"
+                            switched = self._resume_idle(x)
                         assert switched is not None
                         x = switched
                         pc = self.miss_va
@@ -2123,6 +2230,9 @@ class VM:
                     schedule = struct.unpack_from("<I", self.mm, st + STATE_SCHEDULE)[0]
                     struct.pack_into("<I", self.mm, st + STATE_SCHEDULE, 0)
                     switched = self._schedule(x, schedule)
+                    while switched is IDLE:
+                        yield "idle"
+                        switched = self._resume_idle(x)
                     if switched is None:
                         self.exit_code = self.threads[self.current_tid].exit_code
                         stop = "ExitProcess"
@@ -2371,7 +2481,6 @@ def record_translations(vm: VM, image_sha256: str, runs_root: Path, profile: str
     """
     import time
     from collections.abc import AsyncIterator
-    from typing import Any
 
     import msgspec
     from substrate.api import threshold_count

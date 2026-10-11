@@ -45,6 +45,9 @@ static void std_init(void) {
     if (std_ready) return;
     std_ready = 1;
     std_handles[1] = gui_start() ? 0 : STDOUT_HANDLE;   /* the GUI start: none of the three */
+    const u64 *inherit = (const u64 *)W2M_INHERIT_VA;    /* a child's standard handles from its parent (Sprint 055) */
+    if (inherit[511] == 1 && inherit[509] == 1)          /* a child given standard handles (the host's marks) */
+        for (int i = 0; i < 3; i++) std_handles[i] = inherit[1 + i];
 }
 
 u64 k32_GetStdHandle(u64 which) {
@@ -68,6 +71,7 @@ u64 k32_GetFileType(u64 handle) {
         return w2m_logged(W2M_API_GetFileType, handle, FILE_TYPE_UNKNOWN);
     }
     if (w2m_file_is_open(handle)) return w2m_logged(W2M_API_GetFileType, handle, FILE_TYPE_DISK);
+    if (w2m_is_pipe(handle)) return w2m_logged(W2M_API_GetFileType, handle, 3);      /* FILE_TYPE_PIPE (Sprint 055) */
     /* the console start's standard output: the runner's cmd redirected it into a file (> out\body-N.jsonl) */
     if (handle == STDOUT_HANDLE && !gui_start()) return w2m_logged(W2M_API_GetFileType, handle, FILE_TYPE_DISK);
     w2m_unimplemented(W2M_API_GetFileType, handle);
