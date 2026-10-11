@@ -242,6 +242,46 @@ def _strings(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
             yield s
 
 
+def _fixed_050(classes: frozenset[str], rng: random.Random) -> Iterator[Case]:
+    """Set 050's fixed encodings (Sprint 050). LOOP, LOOPE, LOOPNE, JRCXZ with displacement 0x0E (taken: path 1) and
+    RCX 0, 1, 2 or random; LEAVE with RBP in the stack window, one state in four at the data page's end (the load
+    faults before RSP moves); POPFQ of a quadword with random arithmetic flags and DF and TF, NT, AC, ID clear; the
+    single string forms with RDI in the data window and RSI in the stack window, DF either way, one state in four
+    with the pointer that reads or writes first at the data page's end."""
+    for label in sorted(FIXED_050):
+        if label not in classes:
+            continue
+        code = bytes.fromhex(FIXED_050[label])
+        for i in range(STRING_STATES):
+            s = _state(rng, False)
+            if label in ("LOOP", "LOOPE", "LOOPNE", "JRCXZ"):
+                s.regs[1] = (0, 1, 2, _value(rng))[i % 4]
+            elif label == "LEAVE":
+                if i % 4 == 3:
+                    s.regs[5], s.kind = PAGE_END - rng.randrange(1, 8), 1
+                else:
+                    s.regs[5] = STACK_VA + STACK_OFF + 8 * rng.randrange(WINDOW // 8)
+            elif label == "POPFQ":
+                v = 0x2 | sum(1 << b for b in FLAG_BITS.values() if rng.getrandbits(1)) | rng.getrandbits(1) << DF_BIT
+                off = s.regs[4] - (STACK_VA + STACK_OFF)
+                s.stack = s.stack[:off] + v.to_bytes(8, "little") + s.stack[off + 8:]
+            else:
+                size = 4 if label.endswith("D") else 1
+                df = rng.getrandbits(1)
+                s.rflags = (s.rflags & ~(1 << DF_BIT)) | df << DF_BIT
+                s.regs[7] = DATA_VA + DATA_OFF + rng.randrange(0, WINDOW - size + 1)
+                s.regs[6] = STACK_VA + STACK_OFF + rng.randrange(0, WINDOW - size + 1)
+                if i % 4 == 3:                                 # the first access runs off the data page
+                    edge = PAGE_END - rng.randrange(1, size + 1) if size > 1 else PAGE_END
+                    if label in ("LODSB", "CMPSB", "CMPSD", "MOVSB", "MOVSD"):
+                        s.regs[6] = edge
+                    else:
+                        s.regs[7] = edge
+                    s.kind = 1
+            s.code, s.label = code, label
+            yield s
+
+
 CX16_ENCODINGS = {"CMPXCHG16B": "480fc70e", "CMPXCHG16B_LOCK": "f0480fc70e"}    # cmpxchg16b [rsi]
 CX16_STATES = 24
 
@@ -404,6 +444,20 @@ CLASSES_049B = frozenset((
     "VPERMD", "VPBROADCASTD", "VPBROADCASTQ", "VBROADCASTSS", "VBROADCASTF128", "VINSERTF128", "VINSERTI128",
     "VEXTRACTF128", "VEXTRACTI128", "VZEROALL", "VFMADD213SS", "VFMADD231SS", "VFMSUB213SS", "VFMADD231PS",
     "VFNMADD231PS", "VLDMXCSR", "VSTMXCSR", "ANDN", "SHLX", "SHRX", "RORX", "MULX"))
+# Sprint 050: the remaining classes mono's and UnityPlayer's censuses list (2026-10-11), where the frontier stopped at
+# CVTDQ2PS in mono (5,376,528 instructions): legacy SSE, then integer; MMX, x87 and the CPUID-withheld classes are not in it
+CLASSES_050 = frozenset((
+    "CVTDQ2PS", "CVTPS2DQ", "CVTTPS2DQ", "CVTPS2PD", "CVTPD2PS", "CMPPS", "CMPPD", "CMPSS", "SHUFPD", "MOVLPS",
+    "MOVHPD", "PSHUFB", "PALIGNR", "PSADBW", "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB",
+    "PINSRD", "PUNPCKHQDQ", "PMULHW", "PMULLD", "PADDUSB", "PADDB", "PAVGB", "PABSW", "PCMPGTB", "PCMPGTW",
+    "PCMPEQQ", "PMAXUD", "PMAXUW", "PMAXSW", "PMINSD", "PMOVSXDQ", "PMOVZXWD", "PSLLW", "MOVNTDQ",
+    "SHRD", "SHLD", "RCR", "STC", "CLC", "CMC", "MOVBE", "POPCNT", "SAHF", "PUSHFQ", "POPFQ", "LEAVE", "LOOP", "LOOPE",
+    "LOOPNE", "JRCXZ", "PAUSE", "LODSB", "SCASB", "SCASD", "STOSB", "MOVSB", "MOVSD", "CMPSB", "CMPSD"))
+# set 050's classes with implicit pointers or a branch: fixed encodings over controlled states (_fixed_050), not the
+# generator's random registers
+FIXED_050 = {"LOOP": "e20e", "LOOPE": "e10e", "LOOPNE": "e00e", "JRCXZ": "e30e", "LEAVE": "c9", "POPFQ": "9d",
+             "LODSB": "ac", "STOSB": "aa", "MOVSB": "a4", "MOVSD": "a5", "SCASB": "ae", "SCASD": "af", "CMPSB": "a6",
+             "CMPSD": "a7"}
 FORMAT_3 = frozenset(("049", "049b"))              # sets whose records carry the YMM upper halves
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
@@ -423,7 +477,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "047": (2026_10_10_47, CLASSES_047, (), False),
     "048": (2026_10_10_48, CLASSES_048, (), False),
     "049": (2026_10_11_49, CLASSES_049, (), False),
-    "049b": (2026_10_11_491, CLASSES_049B, (), False)}
+    "049b": (2026_10_11_491, CLASSES_049B, (), False),
+    "050": (2026_10_11_50, CLASSES_050, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -468,8 +523,14 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             # frozen file stays what the runners ran (KIT_DIARY #23), and set 047 holds them
             skipped["MUL narrower than 64 bits (set 047)"] += 1
             continue
-        if any(op[0] == "br" for op in ins.ops):
-            skipped["control flow (fixed encodings instead)"] += 1
+        if classes is CLASSES_050 and d.iclass in ("STC", "CLC", "CMC", "SAHF", "PUSHFQ", "POPFQ") and d.fields is not None and \
+                0x67 in d.fields.prefixes:
+            # lifted since run 38122967607 (a 67 STC in UnityPlayer); set 050 keeps the refusal so its frozen file
+            # stays what the runner ran (KIT_DIARY #23)
+            skipped["67-prefixed flag instruction (lifted after set 050 ran)"] += 1
+            continue
+        if any(op[0] == "br" for op in ins.ops) or (classes is CLASSES_050 and d.iclass in FIXED_050):
+            skipped["control flow or implicit pointers (fixed encodings instead)"] += 1
             continue
         raw = c.raw[:d.length]
         sse = d.iclass in SSE or (ymm and (d.iclass.startswith("V") or d.iclass == "FNSTCW"))
@@ -484,7 +545,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                 placeable = False
                 break
             s.code, s.label = raw, d.iclass
-            if classes is CLASSES_049B and not STACK_VA + 0x1000 <= s.regs[4] < STACK_VA + STACK_SIZE:
+            if classes in (CLASSES_049B, CLASSES_050) and not STACK_VA + 0x1000 <= s.regs[4] < STACK_VA + STACK_SIZE:
                 # RSP off the stack (a memory operand based on RSP): no #XM may be raised, since Windows dispatches
                 # it on this stack; the model's word that none is raised is not enough (run 38118279292 died on
                 # VMULPS ymm, [rsp+rbp] with UE unmasked). The flags are still compared.
@@ -506,6 +567,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             else:
                 skipped["fault placement not solvable ([r + r*scale])"] += 1
     out.extend(_strings(classes, rng))                         # only sets with REP classes (044b on)
+    out.extend(_fixed_050(classes, rng))                      # only set 050
     out.extend(_cmpxchg16b(classes, rng))                     # only sets with CMPXCHG16B (046c on)
     out.extend(_string_compares(classes, rng))                # only sets with PCMPISTRI (047 on)
     if "RET_NEAR" in classes and not control_flow:              # 044e: RET imm16 (039 holds C3)

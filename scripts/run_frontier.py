@@ -44,7 +44,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
     ap.add_argument("--runs", type=Path, default=ROOT / "runs")
-    ap.add_argument("--max-steps", type=int, default=10_000_000)
+    ap.add_argument("--max-steps", type=int, default=1_000_000_000)    # a run goes to its stop (Sprint 050: 20.6 M)
     a = ap.parse_args(argv)
     data = a.exe.read_bytes()
     sha = "sha256:" + hashlib.sha256(data).hexdigest()

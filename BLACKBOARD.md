@@ -136,6 +136,8 @@
 
 - **2026-10-11 agent-resolved** — Which sprint follows 049: the plan's 050 (the Mono JIT region) or the instruction classes the frontier stops on? Decision: 050 is set 049c, the classes the mono and UnityPlayer censuses list as missing that w2m's CPUID profile can reach; the JIT region moves to 051 and milestone A to 052. Grounds: project — the frontier stops in mono's own code on CVTDQ2PS before any JIT code runs (`store/census/class-census-mono-2026-10-11b.json`), and the user's rule to plan from what is held (Decision 2026-10-10) favours one set from the censuses over a class per crash; SDD — AGENTS.md hard rule 6 (one concept per sprint); practice — none beyond the project's. Revisit if: the frontier reaches JIT code before the set is judged.
 
+- **2026-10-11 agent-resolved** — Which sprint follows 050: the plan's 051 (the Mono JIT region) or threads, where the frontier stops (CreateThread after 20,584,207 instructions)? Decision: 051 is threads, from the work list's threads family (CreateThread and the ten functions with it) and the M:N scheduler the plan's "exceptions and threads" row names; the JIT region moves to 052, milestone A to 053. Grounds: project — the frontier stop and the user's rule to plan from the work list (Decision 2026-10-10); SDD — AGENTS.md hard rule 6; practice — none beyond the project's. Revisit if: stale translated code shows before threads land (a rewritten call site run as it was).
+
 ## Built
 
 - **2026-10-05** — Sprint 000 (Vocabulary Session) closed. `signals/0.1.json` (60 tags, 12 categories, 34 enums, 22 entities, 7 temporal invariants, 14 transition rules, 16 operators, 13 evidence constraints), `signals/0.1-rationale.md` (signed), `signals/proposals.json` (6 open, 1 rejected), plus `scripts/check_vocab.py` (structure gate, outside the card's file list; recorded in Sprint tail). v0.1 locked. 10 agent-resolved decisions recorded. Dual contract: signal vacuous (content sprint); artifact pass (all commands exit 0, four content assertions hold). Ready for Sprint 001.
@@ -190,6 +192,7 @@
 - **2026-10-10** — Sprint 047 (UnityMain's start-up) closed. The look-ahead; the arena at 512 GB, the code cache at 64 MB and the reconstruction table at 4 Mi entries; set 047 (PCMPISTRI, UNPCKHPD, narrow MUL, BTC, LFENCE, MFENCE) on the Xeon 8573C, release semantics-047, 237 classes; families command line arguments, generate random, processor topology, file attributes (25 in all); acceptance read from the record in class_run and family_run. Dual contract: signal pass; artifact pass (gates 0; CI on the closing commit); observation pass — the frontier runs 2,522,889 instructions and stops at the first file call on an absolute path, every service before it judged.
 - **2026-10-10** — Sprint 048 (the guest's file namespace) closed. Drive C: with the game's directory at `C:\w2m\app` (read-only for the frontier) and the profile `C:\Users\w2m`; full paths in the guest (`paths.c`); FILE_MKDIR and FILE_RMDIR; system DLLs as modules with Server 2025's exports (`specs/windows_exports.json` 0.2.0); SHELL32, OLE32 and ADVAPI32 services; a mutable environment block; set 048 (prefetches) on the Xeon 8573C; eight families (paths, file security, local free, file access, system modules, known folders, temp path, integrity level), 33 in all; F1 measured and F3 relabelled. Dual contract: signal pass; artifact pass (gates 0; CI run 38099562363 success on 401deef); observation pass — the frontier reads boot.config and app.info, writes Player.log under LocalLow, and stops at `USER32.dll!MessageBoxA` ("Failed to load mono") after 2,668,647 instructions with every service before it judged.
 - **2026-10-11** — Sprint 049 (the work list and loading at run time) closed on CI run 38121563657 (d470850a). `tools/jit_capture` call trace, `scripts/work_list.py`, `specs/work_list.json`, services from the guest C (`guest_runtime.service_table`), run-time DLL loading (`VM._load_dll`, `module.c`), the x86-64-v3 profile with VEX, FMA and BMI lifting (`rules/_vex.py`, `x86fp.fma`), case sets 049 and 049b, `scripts/class_census.py --jit`, `src/w2m/system_messages.py`, 14 families. Dual contract: signal pass (item runs, frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED); artifact pass (gates 0, CI success). Observation: pass — mono loads and starts; the frontier runs 5,376,528 instructions.
+- **2026-10-11** — Sprint 050 (mono's and UnityPlayer's remaining instruction classes) closed. Decode spec 0.8.2 (52 operand templates, Edb), 64 rule modules, `src/w2m/integer_model.py` behind the `x86` op, the model's `_sse_050` and eleven lane rules, case set 050 (`CLASSES_050`, `_fixed_050`), release semantics-050. Dual contract: signal pass (64 class runs; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED CreateThread); artifact pass (gates 0, CI on the closing commit). Observation: pass — model and VM equal the Xeon on 12,833 cases; the frontier runs 20,584,207 instructions.
 
 ## Deferred
 
@@ -210,6 +213,9 @@
 
 - **2026-10-11** — Families in parallel worktrees (Sprint 049 card item 5, Decision 2026-10-10 point 2): Sprint 049 ran its families one after another in one session. Re-visit when a sprint opens three or more independent families at once.
 - **2026-10-11** — The win32metadata reader (Sprint 049 card item 6): no family needed a generated skeleton. Re-visit when a family's probe needs more than ten functions' signatures.
+
+- **2026-10-11** — Native lowerings for set 050's classes: all 64 run in the model inside the VM (hvc #10, #11), as the VEX classes of 049 and 049b partly do. Re-visit when a frontier or play run measures a share of its time in model steps.
+- **2026-10-11** — MMX and x87 (the MMX-register forms of MOVD, MOVQ, PADDW, PUNPCKLBW and the rest, EMMS, MOVDQ2Q; FLDCW, FNCLEX, FNSTSW, FWAIT, FISTP, FIADD, FADD, FIDIVR): one register file, one later set. Re-visit when the frontier reaches one.
 
 ## Open questions
 
@@ -234,6 +240,13 @@
 ---
 
 ## Sprint tail
+
+### Sprint 050 (2026-10-11, closed: CI run 38123808878 success on 3b709e65)
+- **Scope:** set 050, the 64 classes the censuses list as missing that the guest profile reaches, in one case set.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* per class, the class run's SESSION_INIT, CANDIDATE_GENERATED, the model's and the VM's COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED (64 classes); the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED naming KERNEL32.dll!CreateThread after 20,584,207 instructions.
+  - *Observation 1 (payload anomaly):* the first judge found 18 integer classes unequal, among them SDM-undefined results the Xeon gives the same way in three runs. Disposition: resolved-here (fitted from the cases, the fit stated in integer_model.py); KIT_DIARY #41.
+  - *Observation 2 (order violation, of the frozen-file rule):* a rule fix after the run changed set 050's case file; the judge's hash check stopped the comparison. Disposition: resolved-here (the builder keeps the old refusal for set 050).
 
 ### Sprint 049 (2026-10-11, closed: CI run 38121563657 success on d470850a)
 - **Scope:** the work list from the game's own Windows run, loading DLLs at run time, and the families mono needs to start; widened mid-sprint by the user's AVX decision.

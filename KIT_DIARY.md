@@ -362,3 +362,11 @@
 
 **Kit change suggested:** at each frontier run, compare the stop with the open card's done criteria; when they are met, close before continuing.
 
+### 2026-10-11 — Sprint 050: undefined in the manual, fixed on the CPU
+
+**What happened:** the SDM leaves a 16-bit SHLD or SHRD with a count over 16 undefined. The model first wrote 0 there; the Xeon 8573C gave the same non-zero value in all three runs, and a rule fitted from six cases (shift the 48 bits dst:src:dst) then held for every SHLD and SHRD case, register and memory. A count of 0, which the SDM says changes nothing, still zero-extends a 32-bit register on the Xeon.
+
+**Finding (#41):** "undefined" in a manual means the vendor promises nothing, not that the part varies; a program that ran on the part depends on what it does. The reference CPU's repeated answer is the specification to model, and the fit is written down with the cases that fixed it.
+
+**Kit change suggested:** a semantics judge reports undefined-per-manual differences apart from defined ones, so the fit is a decision, not an accident.
+

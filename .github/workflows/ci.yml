@@ -46,16 +46,18 @@ jobs:
           git -C substrate log --oneline -1
       - name: sync
         run: uv sync --all-extras
-      - name: case files (sets 039, 041, 049 and 049b are built here, not committed)
+      - name: case files (sets 039, 041, 049, 049b and 050 are built here, not committed)
         run: |
           uv run python scripts/semantics_differential.py --cases --set 039 --out probes/semantics/cases.bin
           uv run python scripts/semantics_differential.py --cases --set 041 --out probes/semantics_041/cases.bin
           uv run python scripts/semantics_differential.py --cases --set 049 --out probes/semantics_049/cases.bin
           uv run python scripts/semantics_differential.py --cases --set 049b --out probes/semantics_049b/cases.bin
+          uv run python scripts/semantics_differential.py --cases --set 050 --out probes/semantics_050/cases.bin
           echo "$(cat store/probe-runs/38011862284/cases.sha256)  probes/semantics/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38029980267/cases.sha256)  probes/semantics_041/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38117654018/cases.sha256)  probes/semantics_049/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38118493713/cases.sha256)  probes/semantics_049b/cases.bin" | sha256sum -c -
+          echo "$(cat store/probe-runs/38122967607/cases.sha256)  probes/semantics_050/cases.bin" | sha256sum -c -
       - name: vocabulary
         run: |
           python3 scripts/check_vocab.py

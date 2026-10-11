@@ -48,7 +48,7 @@ from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, comp
 from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 
-RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042", "044": "semantics-044", "044b": "semantics-044b", "044c": "semantics-044c", "044d": "semantics-044d", "044e": "semantics-044e", "046": "semantics-046", "046b": "semantics-046b", "046c": "semantics-046c", "046d": "semantics-046d", "046e": "semantics-046e", "047": "semantics-047", "048": "semantics-048", "049": "semantics-049", "049b": "semantics-049b"}
+RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042", "044": "semantics-044", "044b": "semantics-044b", "044c": "semantics-044c", "044d": "semantics-044d", "044e": "semantics-044e", "046": "semantics-046", "046b": "semantics-046b", "046c": "semantics-046c", "046d": "semantics-046d", "046e": "semantics-046e", "047": "semantics-047", "048": "semantics-048", "049": "semantics-049", "049b": "semantics-049b", "050": "semantics-050"}
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
 
 

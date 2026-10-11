@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from w2m import vm_backend as vb
-from w2m.lift import SSE_ALIGNED, Op, _operand
+from w2m.lift import SSE_050, SSE_ALIGNED, Op, _operand
 from w2m.rules import Ctx
 from w2m.vm_backend import (AF_OPERANDS, FP_CLASSES, HVC_SLOW_SSE, MXCSR_OFF, REG_CF, REG_OF, REG_PF, REG_SF,
                             REG_ZF, U_AF, U_CF, U_OF, U_PF, U_SF, U_ZF, Assembler, CompileError, _mark_defined)
@@ -37,6 +37,22 @@ def int_rule(ctx: Ctx) -> None:
     has_memory = dst[0] == "m" or src[0] == "m"
     align = 16 if has_memory and ic in SSE_ALIGNED else 0
     b.emit("sse", ic, dst, src, align) if imm is None else b.emit("sse", ic, dst, src, align, imm)
+
+
+def memory_only_rule(ctx: Ctx) -> None:
+    """MOVLPS, MOVHPD, MOVNTDQ (Sprint 050): the SDM lists memory forms only; a register operand is #UD."""
+    if any(o.startswith("R:XMM") for o in ctx.ops) and all(not o.startswith("M:") for o in ctx.ops):
+        ctx.b.emit("ud")
+        return
+    int_rule(ctx)
+
+
+def register_only_rule(ctx: Ctx) -> None:
+    """PEXTRW 66 0F C5 (Sprint 050): its source is an XMM register only (SDM: 0F C5 /r with mod 11); memory is #UD."""
+    if any(o.startswith("M:") for o in ctx.ops):
+        ctx.b.emit("ud")
+        return
+    int_rule(ctx)
 
 
 def _sse_src(a: Assembler, loc: Op, size: int, reg_of: Callable[[int], int], scratch: int = 31) -> int:
@@ -295,8 +311,8 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
     elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD", "ORPD"):
         v = _sse_src(a, src, 16, reg_of)
         a.emit((a64.eor_v if ic.startswith("XOR") else a64.orr_v if ic == "ORPD" else a64.and_v)(dst[1], dst[1], v))
-    elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD"):  # in the model (x86fp; Sprint 049), whole
-        a.emit(a64.hvc(HVC_SLOW_SSE))
+    elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD") or ic in SSE_050:  # in the model (x86fp; Sprints
+        a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
         kind, form = ic[:-2].lower(), ic[-2:]
         n = 4 if form in ("SS", "PS") else 8

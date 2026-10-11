@@ -55,6 +55,10 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
                                   ("x", index) for an XMM register; align 16 when a memory operand
                                   must be 16-byte aligned (#GP otherwise); the runtime computes it
                                   with x86fp, after every read and before any write
+  ("x86", ic, dst, srcs, bits)    one integer instruction the model computes whole (Sprint 050; integer_model.py):
+                                  dst a loc or None, srcs the temporaries it reads (operand values, a branch
+                                  target); implicit operands (RSI, RDI, RCX, the stack, the flags) are read by the
+                                  model; the VM runs it as one model step (hvc #11)
 Semantics follow Intel SDM Vol 2 instruction pages; a 32-bit register write zero-extends to 64
 bits and 8/16-bit writes keep the other bits (SDM Vol 1 3.4.1.1).
 """
@@ -115,7 +119,19 @@ SSE_ALIGNED |= {"RCPPS", "RSQRTPS"}
 SSE2_INT |= {"PCMPISTRI", "PCMPISTRI64"}
 SSE2_INT |= {"UNPCKHPD"}
 SSE_ALIGNED |= {"UNPCKHPD"}
+# Sprint 050 (set 050): the remaining legacy-SSE classes of mono's and UnityPlayer's censuses (2026-10-11), run in the
+# model for now (rules/_sse.py). Packed m128 operands need 16-byte alignment (SDM: #GP otherwise); the m64, m32 and m8
+# forms (CVTPS2PD, CMPSS, MOVLPS, MOVHPD, PINSRB, PINSRD, PMOVSXDQ, PMOVZXWD) and PEXTRW's register do not
+SSE_050 = {"CVTDQ2PS", "CVTPS2DQ", "CVTTPS2DQ", "CVTPS2PD", "CVTPD2PS", "CMPPS", "CMPPD", "CMPSS", "SHUFPD", "MOVLPS",
+           "MOVHPD", "PSHUFB", "PALIGNR", "PSADBW", "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB",
+           "PINSRD", "PUNPCKHQDQ", "PMULHW", "PMULLD", "PADDUSB", "PADDB", "PAVGB", "PABSW", "PCMPGTB", "PCMPGTW",
+           "PCMPEQQ", "PMAXUD", "PMAXUW", "PMAXSW", "PMINSD", "PMOVSXDQ", "PMOVZXWD", "PSLLW", "MOVNTDQ"}
+SSE |= SSE_050
+SSE_ALIGNED |= SSE_050 - {"CVTPS2PD", "CMPSS", "MOVLPS", "MOVHPD", "PINSRB", "PINSRD", "PMOVSXDQ", "PMOVZXWD", "PEXTRW"}
 SSE |= SSE2_INT
+# Sprint 050: integer classes whose operands are all implicit (flags, the stack, RSI and RDI)
+IMPLICIT_050 = {"STC", "CLC", "CMC", "SAHF", "PUSHFQ", "POPFQ", "LEAVE", "PAUSE", "LODSB", "SCASB", "SCASD", "STOSB",
+                "MOVSB", "MOVSD", "CMPSB", "CMPSD"}
 ALU = {"ADD": "add", "SUB": "sub", "AND": "and", "OR": "or", "XOR": "xor", "CMP": "sub", "TEST": "and"}
 
 Op = tuple[Any, ...]
@@ -244,12 +260,14 @@ def commit_order(ins: Lifted) -> str | None:
             return "load" if op[4][0] == "m" else None
         if op[0] == "cx16":                                   # one atomic read-and-write (CMPXCHG16B)
             return "store"
+        if op[0] == "x86":                                    # ("x86", ic, dst, sources, bits): the model's (Sprint 050)
+            return "store" if op[2] is not None and op[2][0] == "m" else None
         return None
 
     def effect(op: Op) -> bool:
         return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid", "div") or (
             op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m") or (
-            op[0] == "mxcsr" and op[1] == "ld") or (op[0] in ("vex", "vexs") and op[2][0] != "m") or op[0] in ("fma", "vzeroupper")
+            op[0] == "mxcsr" and op[1] == "ld") or (op[0] in ("vex", "vexs") and op[2][0] != "m") or op[0] in ("fma", "vzeroupper", "x86")
 
     last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
     if last_access < 0:
@@ -274,7 +292,7 @@ def lift(code: bytes, address: int) -> Lifted:
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
     if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER", "VZEROALL",
-                              *REP_STRING):
+                              *REP_STRING, *IMPLICIT_050):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)

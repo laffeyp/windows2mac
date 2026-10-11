@@ -91,6 +91,12 @@ def operands(f: Fields) -> tuple[str, ...]:
         elif t == "V":                         # XMM register from ModRM.reg (Sprint 039)
             assert f.modrm is not None
             out.append("R:" + XMM[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])
+        elif t == "Edb":                       # r32 or m8 from ModRM.r/m (PINSRB; Sprint 050)
+            assert f.modrm is not None
+            if f.modrm >> 6 == 3:
+                out.append("R:" + _reg((f.modrm & 7) | (f.rex & 1) << 3, 32, f.rex))
+            else:
+                out.append(_mem(f, 1))
         elif t[0] == "W":                      # XMM register or memory of SIZE[t[1:]] bits from ModRM.r/m
             assert f.modrm is not None
             if f.modrm >> 6 == 3:

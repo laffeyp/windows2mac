@@ -463,6 +463,8 @@ def _temps_read(op: Op) -> list[int]:
         return [op[1], op[3]] + ([op[2][1]] if op[2][0] == "m" else [])
     if k == "cmov":
         return [op[3]] + ([op[2][1]] if op[2][0] == "m" else [])
+    if k == "x86":                                      # ("x86", ic, dst, srcs, bits): the model's (Sprint 050)
+        return list(op[3]) + ([op[2][1]] if op[2] is not None and op[2][0] == "m" else [])
     return []
 
 
@@ -798,6 +800,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             if op[2][0] == "r" and op[2][2] == 32:              # a 32-bit destination is zero-extended anyway
                 a.emit(a64.mov32(op[2][1], op[2][1]))
             a.bind(end)
+        elif k == "x86":                                         # the model runs the instruction (Sprint 050;
+            a.emit(a64.hvc(HVC_SLOW_STEP))                      # integer_model.py) and dispatches from its RIP
         elif k in ("vex", "vexs", "fma", "vzeroupper"):          # VEX (src/w2m/rules/_vex.py; Sprint 049)
             from w2m.rules import _vex
             _vex.lower(a, op, reg_of, store)
