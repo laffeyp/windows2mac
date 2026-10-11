@@ -114,6 +114,16 @@ static void default_endpoint(const char *name, void *e, int flow, int role) {
     end();
 }
 
+/* a notification client (IMMNotificationClient: IUnknown and five notifications), counting its references */
+static volatile LONG client_refs = 1;
+static HRESULT WINAPI client_query(void *self, const GUID *iid, void **out) { (void)iid; *out = self; client_refs++; return S_OK; }
+static ULONG WINAPI client_add_ref(void *self) { (void)self; return (ULONG)++client_refs; }
+static ULONG WINAPI client_release(void *self) { (void)self; return (ULONG)--client_refs; }
+static HRESULT WINAPI client_notify(void *self) { (void)self; return S_OK; }
+static void *client_vtbl[8] = {(void *)client_query, (void *)client_add_ref, (void *)client_release, (void *)client_notify,
+                               (void *)client_notify, (void *)client_notify, (void *)client_notify, (void *)client_notify};
+static struct { void **v; } client = {client_vtbl};
+
 static volatile HRESULT worker_hr;
 static DWORD WINAPI worker(LPVOID p) {
     (void)p;
@@ -173,6 +183,13 @@ void start(void) {
         default_endpoint("default.render_console", e, 0, 0);
         default_endpoint("default.render_multimedia", e, 0, 1);
         default_endpoint("default.capture_console", e, 1, 0);
+        hr = VT(e, EnumeratorVtbl)->RegisterEndpointNotificationCallback(e, &client);
+        LONG refs_registered = client_refs;
+        HRESULT hu = VT(e, EnumeratorVtbl)->UnregisterEndpointNotificationCallback(e, &client);
+        row("notification"); field("register_hr", (DWORD)hr); field("refs_registered", (DWORD)refs_registered);
+        field("unregister_hr", (DWORD)hu); field("refs_after", (DWORD)client_refs); end();
+        hu = VT(e, EnumeratorVtbl)->UnregisterEndpointNotificationCallback(e, &client);
+        row("notification.unregister_again"); field("hr", (DWORD)hu); end();
         ULONG last = VT(e, UnknownVtbl)->Release(e);
         row("release.last"); field("count", last); end();
     }
