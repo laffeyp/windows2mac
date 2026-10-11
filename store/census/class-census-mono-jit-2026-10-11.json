@@ -1,0 +1,717 @@
+[
+ {
+  "file": "jit_capture.bin (JIT code: 9624 regions, 351 stopped at an undecoded byte)",
+  "reachable_instructions": 390844,
+  "undecoded": 351,
+  "classes": 124,
+  "lifted": 82,
+  "partly_lifted": 2,
+  "missing": 40,
+  "by_class": {
+   "MOV": {
+    "instances": 195161,
+    "lifted": 195148,
+    "refusals": {
+     "no operand template for MOV": 13
+    }
+   },
+   "CALL_NEAR": {
+    "instances": 32943,
+    "lifted": 32943,
+    "refusals": {}
+   },
+   "LEA": {
+    "instances": 20105,
+    "lifted": 20105,
+    "refusals": {}
+   },
+   "MOVSXD": {
+    "instances": 14475,
+    "lifted": 14474,
+    "refusals": {
+     "FS-relative memory operand M:FS:RBP:INVALID:1:-24:4: the FS base is not modeled": 1
+    }
+   },
+   "CMP": {
+    "instances": 13276,
+    "lifted": 13276,
+    "refusals": {}
+   },
+   "ADD": {
+    "instances": 12630,
+    "lifted": 12630,
+    "refusals": {}
+   },
+   "NOP": {
+    "instances": 12109,
+    "lifted": 12109,
+    "refusals": {}
+   },
+   "TEST": {
+    "instances": 10856,
+    "lifted": 10856,
+    "refusals": {}
+   },
+   "JMP": {
+    "instances": 10505,
+    "lifted": 10505,
+    "refusals": {}
+   },
+   "JZ": {
+    "instances": 7600,
+    "lifted": 7600,
+    "refusals": {}
+   },
+   "SUB": {
+    "instances": 5957,
+    "lifted": 5957,
+    "refusals": {}
+   },
+   "MOVSS": {
+    "instances": 5066,
+    "lifted": 5066,
+    "refusals": {}
+   },
+   "XOR": {
+    "instances": 4993,
+    "lifted": 4993,
+    "refusals": {}
+   },
+   "JNZ": {
+    "instances": 4889,
+    "lifted": 4889,
+    "refusals": {}
+   },
+   "MOVZX": {
+    "instances": 4832,
+    "lifted": 4832,
+    "refusals": {}
+   },
+   "RET_NEAR": {
+    "instances": 4663,
+    "lifted": 4663,
+    "refusals": {}
+   },
+   "POP": {
+    "instances": 4052,
+    "lifted": 4052,
+    "refusals": {}
+   },
+   "PUSH": {
+    "instances": 4012,
+    "lifted": 4012,
+    "refusals": {}
+   },
+   "JBE": {
+    "instances": 3476,
+    "lifted": 3476,
+    "refusals": {}
+   },
+   "CVTSS2SD": {
+    "instances": 3375,
+    "lifted": 3375,
+    "refusals": {}
+   },
+   "CVTSD2SS": {
+    "instances": 2841,
+    "lifted": 2841,
+    "refusals": {}
+   },
+   "MOVSD_XMM": {
+    "instances": 2384,
+    "lifted": 2384,
+    "refusals": {}
+   },
+   "INC": {
+    "instances": 1134,
+    "lifted": 1134,
+    "refusals": {}
+   },
+   "AND": {
+    "instances": 937,
+    "lifted": 937,
+    "refusals": {}
+   },
+   "JL": {
+    "instances": 910,
+    "lifted": 910,
+    "refusals": {}
+   },
+   "IMUL": {
+    "instances": 866,
+    "lifted": 866,
+    "refusals": {}
+   },
+   "SETZ": {
+    "instances": 861,
+    "lifted": 861,
+    "refusals": {}
+   },
+   "SHL": {
+    "instances": 592,
+    "lifted": 592,
+    "refusals": {}
+   },
+   "JLE": {
+    "instances": 434,
+    "lifted": 434,
+    "refusals": {}
+   },
+   "DEC": {
+    "instances": 429,
+    "lifted": 429,
+    "refusals": {}
+   },
+   "XORPD": {
+    "instances": 353,
+    "lifted": 353,
+    "refusals": {}
+   },
+   "JNL": {
+    "instances": 349,
+    "lifted": 349,
+    "refusals": {}
+   },
+   "OR": {
+    "instances": 323,
+    "lifted": 323,
+    "refusals": {}
+   },
+   "JNB": {
+    "instances": 297,
+    "lifted": 297,
+    "refusals": {}
+   },
+   "SETNBE": {
+    "instances": 275,
+    "lifted": 275,
+    "refusals": {}
+   },
+   "COMISD": {
+    "instances": 249,
+    "lifted": 249,
+    "refusals": {}
+   },
+   "JNLE": {
+    "instances": 240,
+    "lifted": 240,
+    "refusals": {}
+   },
+   "MULSD": {
+    "instances": 197,
+    "lifted": 197,
+    "refusals": {}
+   },
+   "JB": {
+    "instances": 173,
+    "lifted": 173,
+    "refusals": {}
+   },
+   "JP": {
+    "instances": 158,
+    "lifted": 158,
+    "refusals": {}
+   },
+   "MOVSX": {
+    "instances": 131,
+    "lifted": 131,
+    "refusals": {}
+   },
+   "SAR": {
+    "instances": 115,
+    "lifted": 115,
+    "refusals": {}
+   },
+   "ADDSD": {
+    "instances": 114,
+    "lifted": 114,
+    "refusals": {}
+   },
+   "SUBSD": {
+    "instances": 112,
+    "lifted": 112,
+    "refusals": {}
+   },
+   "MOVDQU": {
+    "instances": 108,
+    "lifted": 108,
+    "refusals": {}
+   },
+   "JNBE": {
+    "instances": 104,
+    "lifted": 104,
+    "refusals": {}
+   },
+   "CVTSI2SS": {
+    "instances": 92,
+    "lifted": 92,
+    "refusals": {}
+   },
+   "DIVSD": {
+    "instances": 85,
+    "lifted": 85,
+    "refusals": {}
+   },
+   "IDIV": {
+    "instances": 85,
+    "lifted": 85,
+    "refusals": {}
+   },
+   "SHR": {
+    "instances": 79,
+    "lifted": 79,
+    "refusals": {}
+   },
+   "CMOVNZ": {
+    "instances": 78,
+    "lifted": 78,
+    "refusals": {}
+   },
+   "INT3": {
+    "instances": 76,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INT3": 76
+    }
+   },
+   "SETL": {
+    "instances": 60,
+    "lifted": 60,
+    "refusals": {}
+   },
+   "CMOVZ": {
+    "instances": 50,
+    "lifted": 50,
+    "refusals": {}
+   },
+   "CDQ": {
+    "instances": 50,
+    "lifted": 50,
+    "refusals": {}
+   },
+   "SETNLE": {
+    "instances": 45,
+    "lifted": 45,
+    "refusals": {}
+   },
+   "INT": {
+    "instances": 42,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for INT": 42
+    }
+   },
+   "CQO": {
+    "instances": 37,
+    "lifted": 37,
+    "refusals": {}
+   },
+   "CMOVL": {
+    "instances": 27,
+    "lifted": 27,
+    "refusals": {}
+   },
+   "CMPXCHG_LOCK": {
+    "instances": 26,
+    "lifted": 26,
+    "refusals": {}
+   },
+   "CVTTSD2SI": {
+    "instances": 26,
+    "lifted": 26,
+    "refusals": {}
+   },
+   "CVTSI2SD": {
+    "instances": 21,
+    "lifted": 21,
+    "refusals": {}
+   },
+   "CMOVNLE": {
+    "instances": 19,
+    "lifted": 19,
+    "refusals": {}
+   },
+   "CLD": {
+    "instances": 19,
+    "lifted": 19,
+    "refusals": {}
+   },
+   "REP_STOSQ": {
+    "instances": 18,
+    "lifted": 18,
+    "refusals": {}
+   },
+   "SETB": {
+    "instances": 18,
+    "lifted": 18,
+    "refusals": {}
+   },
+   "ADC": {
+    "instances": 17,
+    "lifted": 17,
+    "refusals": {}
+   },
+   "XCHG": {
+    "instances": 15,
+    "lifted": 15,
+    "refusals": {}
+   },
+   "ROR": {
+    "instances": 13,
+    "lifted": 13,
+    "refusals": {}
+   },
+   "JO": {
+    "instances": 12,
+    "lifted": 12,
+    "refusals": {}
+   },
+   "ENTER": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for ENTER": 10
+    }
+   },
+   "FLD": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FLD": 9
+    }
+   },
+   "FSTP": {
+    "instances": 9,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FSTP": 9
+    }
+   },
+   "CVTPS2PD": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPS2PD": 8
+    }
+   },
+   "SLDT": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SLDT": 8
+    }
+   },
+   "SBB": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "DIV": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "LOOPNE": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOPNE": 7
+    }
+   },
+   "NEG": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "XLAT": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for XLAT": 6
+    }
+   },
+   "MOVUPS": {
+    "instances": 6,
+    "lifted": 6,
+    "refusals": {}
+   },
+   "CMC": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMC": 6
+    }
+   },
+   "FMUL": {
+    "instances": 5,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FMUL": 5
+    }
+   },
+   "LEAVE": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LEAVE": 4
+    }
+   },
+   "CLC": {
+    "instances": 4,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CLC": 4
+    }
+   },
+   "CMOVNL": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "CMOVNBE": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "FADD": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FADD": 3
+    }
+   },
+   "IN": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for IN": 3
+    }
+   },
+   "INT1": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INT1": 3
+    }
+   },
+   "FSQRT": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FSQRT": 3
+    }
+   },
+   "FCOS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FCOS": 3
+    }
+   },
+   "FSIN": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FSIN": 3
+    }
+   },
+   "CMPSB": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPSB": 3
+    }
+   },
+   "OUTSB": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUTSB": 2
+    }
+   },
+   "ROL": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "OUT": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUT": 2
+    }
+   },
+   "JNS": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "STOSB": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STOSB": 2
+    }
+   },
+   "CWDE": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "ADD_LOCK": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "NOT": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "FISTTP": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for FISTTP": 2
+    }
+   },
+   "ANDPD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "LOOP": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOP": 1
+    }
+   },
+   "RET_FAR": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for RET_FAR": 1
+    }
+   },
+   "HLT": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for HLT": 1
+    }
+   },
+   "CLI": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CLI": 1
+    }
+   },
+   "POPFQ": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for POPFQ": 1
+    }
+   },
+   "STI": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STI": 1
+    }
+   },
+   "STC": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STC": 1
+    }
+   },
+   "CMOVBE": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "BSWAP": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "SCASD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SCASD": 1
+    }
+   },
+   "RCR": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for RCR": 1
+    }
+   },
+   "MOVSD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVSD": 1
+    }
+   },
+   "CMPSD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPSD": 1
+    }
+   },
+   "SCASB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SCASB": 1
+    }
+   },
+   "JNO": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "LOOPE": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOPE": 1
+    }
+   },
+   "MUL": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "PUSHFQ": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PUSHFQ": 1
+    }
+   },
+   "SAHF": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SAHF": 1
+    }
+   },
+   "LODSD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LODSD": 1
+    }
+   }
+  }
+ }
+]

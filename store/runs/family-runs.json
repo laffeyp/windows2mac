@@ -308,7 +308,7 @@
   }
  },
  "file_mapping": {
-  "candidate_sha256": "sha256:b13a1e76a0b88b964c6dba8178743a56b467c764f0b0374f7702e418ecf70f9b",
+  "candidate_sha256": "sha256:582fdd73aead662e145aa06718447596e8225fa8fb9ef5f2a13ba241f767e96a",
   "divergence": {
    "38120624307": null,
    "38120626017": null
@@ -321,7 +321,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_mapping",
-  "record": "store/runs/family-file_mapping-1791702965257174000",
+  "record": "store/runs/family-file_mapping-1791703596644921000",
   "verdicts": {
    "38120624307": "conforms",
    "38120626017": "conforms"
@@ -367,6 +367,26 @@
    "38119627458": "conforms"
   }
  },
+ "format_message": {
+  "candidate_sha256": "sha256:49690b0e3cb7b55566de2127bae517c098e5155dc32674cc6d25226a8c26d599",
+  "divergence": {
+   "38120951889": null,
+   "38120953179": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "format_message",
+  "record": "store/runs/family-format_message-1791703681974625000",
+  "verdicts": {
+   "38120951889": "conforms",
+   "38120953179": "conforms"
+  }
+ },
  "function_tables": {
   "candidate_sha256": "sha256:8fa1d58a4578ef21987b92ff5f07f3c1d5ff1af3d3282f55f0d85c7523a26848",
   "divergence": {
@@ -388,7 +408,7 @@
   }
  },
  "generate_random": {
-  "candidate_sha256": "sha256:53ddef822765bc15a54f5fc989ebba850b960eb3e4009536e5ce0791f65fb3f0",
+  "candidate_sha256": "sha256:c5abe00a13498b3a4c0c6314647bc449797f587383d445bb1b7d78d5ca438f62",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -401,7 +421,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791702997053796000",
+  "record": "store/runs/family-generate_random-1791703595731903000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -500,7 +520,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:1666a21c6df047b9b86f31a552cbdc93dc9a177fd1893e33c75711ebf0eb74fb",
+  "candidate_sha256": "sha256:d7852b848364776e34cc184231e0e4a8f4e21dc1033b80ec93d4358aea6316bc",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -527,7 +547,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791702991465616000",
+  "record": "store/runs/family-loader-1791703590095582000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -778,7 +798,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:5a5a2dfba5ef913214e9ee649b5451ac11e64d89b6dd2265c93a58951944006b",
+  "candidate_sha256": "sha256:e2b6132c0ac90d917ca881e7bd34b4c3d1d1077009aeb16d43c4837c198263d5",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -805,7 +825,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791702994755776000",
+  "record": "store/runs/family-static_tls-1791703593182148000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -922,7 +942,7 @@
   }
  },
  "system_modules": {
-  "candidate_sha256": "sha256:76960bd47afef7b9a52292866862920262a37523cb0b443ebbc804a454fa0a34",
+  "candidate_sha256": "sha256:36acd557e498903759f55d030bb1873c18e3b9c99c4dc7b2d699e42f1ab7606d",
   "divergence": {
    "38094160385": null,
    "38094162181": null
@@ -935,7 +955,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_modules",
-  "record": "store/runs/family-system_modules-1791702999296512000",
+  "record": "store/runs/family-system_modules-1791703596191184000",
   "verdicts": {
    "38094160385": "conforms",
    "38094162181": "conforms"
@@ -1142,7 +1162,7 @@
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:e7528cf5c651c2247420ae90a2eb8a5851b1d6835df97a73278058de6938afa8",
+  "candidate_sha256": "sha256:ff6c2ae1f9d593e1550c0ec9c8439a12132f20627bbb431735a5221a8a042c66",
   "divergence": {
    "38050561886": null,
    "38050563770": null,
@@ -1165,7 +1185,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791702992827630000",
+  "record": "store/runs/family-virtual_memory-1791703591675052000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

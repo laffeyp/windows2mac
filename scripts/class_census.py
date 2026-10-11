@@ -8,7 +8,12 @@ w2m's own decoder names each one's iclass; w2m's lifter then lifts it or refuses
 lifted when every reachable instance lifts, partly lifted when some do (a form the rule refuses, as
 RET imm16 was), and missing when none do. The census is the count, by file, with instances.
 
+Sprint 049: `--jit capture.bin` counts the code mono's JIT generated in a captured run (tools/jit_capture: every
+compiled method and code buffer), decoded linearly from each region's start; a region stops at the first byte w2m's
+decoder refuses (data after the code), and a specific trampoline at its first call (src/w2m/jit_capture.py).
+
 Usage: uv run python scripts/class_census.py <file.exe|file.dll> ... [--json out.json]
+       uv run python scripts/class_census.py --jit <capture.bin> [--json out.json]
 """
 
 from __future__ import annotations
@@ -59,12 +64,53 @@ def census(path: Path) -> dict[str, Any]:
             "by_class": classes}
 
 
+def jit_census(path: Path) -> dict[str, Any]:
+    from w2m import jit_capture
+    cap = jit_capture.parse(path.read_bytes())
+    instances: Counter[str] = Counter()
+    lifted: Counter[str] = Counter()
+    refusals: dict[str, Counter[str]] = defaultdict(Counter)
+    stopped = total = 0
+    regions = cap.regions()
+    for r in regions:
+        at = 0
+        while at < len(r.code):
+            window = r.code[at:at + 15]
+            try:
+                d = decode(window + bytes(15))
+            except DecodeError:
+                stopped += 1
+                break
+            if at + d.length > len(r.code):
+                stopped += 1
+                break
+            total += 1
+            instances[d.iclass] += 1
+            try:
+                lift(r.code[at:at + d.length] + b"\x90" * 15, r.start + at)
+                lifted[d.iclass] += 1
+            except LiftError as e:
+                refusals[d.iclass][str(e).split(" at ")[0]] += 1
+            at += d.length
+            if r.code_ends_at_first_call and d.iclass.startswith("CALL"):
+                break
+    classes: dict[str, dict[str, Any]] = {ic: {"instances": n, "lifted": lifted[ic],
+                    "refusals": dict(refusals[ic].most_common(3))} for ic, n in instances.most_common()}
+    return {"file": f"{path.name} (JIT code: {len(regions)} regions, {stopped} stopped at an undecoded byte)",
+            "reachable_instructions": total, "undecoded": stopped, "classes": len(classes),
+            "lifted": sum(1 for c in classes.values() if c["lifted"] == c["instances"]),
+            "partly_lifted": sum(1 for c in classes.values() if 0 < c["lifted"] < c["instances"]),
+            "missing": sum(1 for c in classes.values() if c["lifted"] == 0),
+            "by_class": classes}
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("files", nargs="+", type=Path)
+    ap.add_argument("files", nargs="*", type=Path)
+    ap.add_argument("--jit", type=Path, action="append", default=[])
     ap.add_argument("--json", type=Path)
     a = ap.parse_args(argv)
-    out = [census(p) for p in a.files]
+    out = [census(p) for p in a.files] + [jit_census(p) for p in a.jit]
     for c in out:
         missing = [(ic, v["instances"]) for ic, v in c["by_class"].items() if v["lifted"] == 0]
         partly = [(ic, v["lifted"], v["instances"]) for ic, v in c["by_class"].items() if 0 < v["lifted"] < v["instances"]]

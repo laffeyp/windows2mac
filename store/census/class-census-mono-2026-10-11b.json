@@ -1,0 +1,1188 @@
+[
+ {
+  "file": "mono-2.0-bdwgc.dll",
+  "reachable_instructions": 606946,
+  "undecoded": 0,
+  "classes": 227,
+  "lifted": 207,
+  "partly_lifted": 2,
+  "missing": 18,
+  "by_class": {
+   "MOV": {
+    "instances": 229742,
+    "lifted": 229740,
+    "refusals": {
+     "no operand template for MOV": 2
+    }
+   },
+   "CALL_NEAR": {
+    "instances": 54287,
+    "lifted": 54287,
+    "refusals": {}
+   },
+   "LEA": {
+    "instances": 43056,
+    "lifted": 43056,
+    "refusals": {}
+   },
+   "CMP": {
+    "instances": 30284,
+    "lifted": 30284,
+    "refusals": {}
+   },
+   "TEST": {
+    "instances": 29538,
+    "lifted": 29538,
+    "refusals": {}
+   },
+   "JZ": {
+    "instances": 26228,
+    "lifted": 26228,
+    "refusals": {}
+   },
+   "JNZ": {
+    "instances": 21380,
+    "lifted": 21380,
+    "refusals": {}
+   },
+   "ADD": {
+    "instances": 20384,
+    "lifted": 20384,
+    "refusals": {}
+   },
+   "XOR": {
+    "instances": 17441,
+    "lifted": 17441,
+    "refusals": {}
+   },
+   "JMP": {
+    "instances": 16522,
+    "lifted": 16522,
+    "refusals": {}
+   },
+   "POP": {
+    "instances": 14469,
+    "lifted": 14469,
+    "refusals": {}
+   },
+   "SUB": {
+    "instances": 13151,
+    "lifted": 13151,
+    "refusals": {}
+   },
+   "PUSH": {
+    "instances": 11761,
+    "lifted": 11761,
+    "refusals": {}
+   },
+   "RET_NEAR": {
+    "instances": 9839,
+    "lifted": 9839,
+    "refusals": {}
+   },
+   "MOVZX": {
+    "instances": 7481,
+    "lifted": 7481,
+    "refusals": {}
+   },
+   "INC": {
+    "instances": 5772,
+    "lifted": 5772,
+    "refusals": {}
+   },
+   "AND": {
+    "instances": 5730,
+    "lifted": 5730,
+    "refusals": {}
+   },
+   "OR": {
+    "instances": 4646,
+    "lifted": 4646,
+    "refusals": {}
+   },
+   "MOVSXD": {
+    "instances": 3948,
+    "lifted": 3948,
+    "refusals": {}
+   },
+   "NOP": {
+    "instances": 3859,
+    "lifted": 3859,
+    "refusals": {}
+   },
+   "SHR": {
+    "instances": 2820,
+    "lifted": 2820,
+    "refusals": {}
+   },
+   "JB": {
+    "instances": 2584,
+    "lifted": 2584,
+    "refusals": {}
+   },
+   "SHL": {
+    "instances": 2390,
+    "lifted": 2390,
+    "refusals": {}
+   },
+   "MOVUPS": {
+    "instances": 2263,
+    "lifted": 2263,
+    "refusals": {}
+   },
+   "JBE": {
+    "instances": 2076,
+    "lifted": 2076,
+    "refusals": {}
+   },
+   "JNBE": {
+    "instances": 1853,
+    "lifted": 1853,
+    "refusals": {}
+   },
+   "JNB": {
+    "instances": 1582,
+    "lifted": 1582,
+    "refusals": {}
+   },
+   "JL": {
+    "instances": 1413,
+    "lifted": 1413,
+    "refusals": {}
+   },
+   "JLE": {
+    "instances": 1300,
+    "lifted": 1300,
+    "refusals": {}
+   },
+   "SAR": {
+    "instances": 1102,
+    "lifted": 1102,
+    "refusals": {}
+   },
+   "MOVSX": {
+    "instances": 945,
+    "lifted": 945,
+    "refusals": {}
+   },
+   "DEC": {
+    "instances": 894,
+    "lifted": 894,
+    "refusals": {}
+   },
+   "INT3": {
+    "instances": 887,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for INT3": 887
+    }
+   },
+   "MOVSD_XMM": {
+    "instances": 883,
+    "lifted": 883,
+    "refusals": {}
+   },
+   "MOVAPS": {
+    "instances": 879,
+    "lifted": 879,
+    "refusals": {}
+   },
+   "IMUL": {
+    "instances": 788,
+    "lifted": 788,
+    "refusals": {}
+   },
+   "CMOVNZ": {
+    "instances": 686,
+    "lifted": 686,
+    "refusals": {}
+   },
+   "JNLE": {
+    "instances": 610,
+    "lifted": 610,
+    "refusals": {}
+   },
+   "JS": {
+    "instances": 604,
+    "lifted": 604,
+    "refusals": {}
+   },
+   "JNL": {
+    "instances": 603,
+    "lifted": 603,
+    "refusals": {}
+   },
+   "CMOVZ": {
+    "instances": 580,
+    "lifted": 580,
+    "refusals": {}
+   },
+   "OR_LOCK": {
+    "instances": 540,
+    "lifted": 540,
+    "refusals": {}
+   },
+   "MULSD": {
+    "instances": 486,
+    "lifted": 486,
+    "refusals": {}
+   },
+   "BT": {
+    "instances": 480,
+    "lifted": 480,
+    "refusals": {}
+   },
+   "JNS": {
+    "instances": 442,
+    "lifted": 442,
+    "refusals": {}
+   },
+   "NEG": {
+    "instances": 436,
+    "lifted": 436,
+    "refusals": {}
+   },
+   "SETZ": {
+    "instances": 421,
+    "lifted": 421,
+    "refusals": {}
+   },
+   "ADDSD": {
+    "instances": 389,
+    "lifted": 389,
+    "refusals": {}
+   },
+   "CMPXCHG_LOCK": {
+    "instances": 342,
+    "lifted": 342,
+    "refusals": {}
+   },
+   "NOT": {
+    "instances": 300,
+    "lifted": 300,
+    "refusals": {}
+   },
+   "SETNZ": {
+    "instances": 294,
+    "lifted": 294,
+    "refusals": {}
+   },
+   "CDQE": {
+    "instances": 280,
+    "lifted": 280,
+    "refusals": {}
+   },
+   "SBB": {
+    "instances": 273,
+    "lifted": 273,
+    "refusals": {}
+   },
+   "BTS": {
+    "instances": 250,
+    "lifted": 250,
+    "refusals": {}
+   },
+   "ROL": {
+    "instances": 241,
+    "lifted": 241,
+    "refusals": {}
+   },
+   "MOVDQU": {
+    "instances": 199,
+    "lifted": 199,
+    "refusals": {}
+   },
+   "SUBSD": {
+    "instances": 195,
+    "lifted": 195,
+    "refusals": {}
+   },
+   "XORPS": {
+    "instances": 186,
+    "lifted": 186,
+    "refusals": {}
+   },
+   "MOVDQA": {
+    "instances": 185,
+    "lifted": 185,
+    "refusals": {}
+   },
+   "ROR": {
+    "instances": 183,
+    "lifted": 183,
+    "refusals": {}
+   },
+   "DIV": {
+    "instances": 163,
+    "lifted": 163,
+    "refusals": {}
+   },
+   "DEC_LOCK": {
+    "instances": 154,
+    "lifted": 154,
+    "refusals": {}
+   },
+   "INC_LOCK": {
+    "instances": 147,
+    "lifted": 147,
+    "refusals": {}
+   },
+   "PREFETCHW": {
+    "instances": 147,
+    "lifted": 147,
+    "refusals": {}
+   },
+   "BTR": {
+    "instances": 111,
+    "lifted": 111,
+    "refusals": {}
+   },
+   "CMOVB": {
+    "instances": 109,
+    "lifted": 109,
+    "refusals": {}
+   },
+   "CMOVNBE": {
+    "instances": 102,
+    "lifted": 102,
+    "refusals": {}
+   },
+   "CMOVNLE": {
+    "instances": 101,
+    "lifted": 101,
+    "refusals": {}
+   },
+   "MOVQ": {
+    "instances": 97,
+    "lifted": 97,
+    "refusals": {}
+   },
+   "MOVD": {
+    "instances": 97,
+    "lifted": 97,
+    "refusals": {}
+   },
+   "COMISD": {
+    "instances": 95,
+    "lifted": 95,
+    "refusals": {}
+   },
+   "CDQ": {
+    "instances": 85,
+    "lifted": 85,
+    "refusals": {}
+   },
+   "MOVAPD": {
+    "instances": 79,
+    "lifted": 79,
+    "refusals": {}
+   },
+   "VMULSD": {
+    "instances": 78,
+    "lifted": 78,
+    "refusals": {}
+   },
+   "DIVSD": {
+    "instances": 77,
+    "lifted": 77,
+    "refusals": {}
+   },
+   "XADD_LOCK": {
+    "instances": 76,
+    "lifted": 76,
+    "refusals": {}
+   },
+   "XCHG": {
+    "instances": 75,
+    "lifted": 75,
+    "refusals": {}
+   },
+   "VFMADD213SD": {
+    "instances": 68,
+    "lifted": 68,
+    "refusals": {}
+   },
+   "MOVSS": {
+    "instances": 67,
+    "lifted": 67,
+    "refusals": {}
+   },
+   "VMOVSD": {
+    "instances": 66,
+    "lifted": 66,
+    "refusals": {}
+   },
+   "IDIV": {
+    "instances": 65,
+    "lifted": 65,
+    "refusals": {}
+   },
+   "CVTSI2SD": {
+    "instances": 64,
+    "lifted": 64,
+    "refusals": {}
+   },
+   "CVTDQ2PD": {
+    "instances": 58,
+    "lifted": 58,
+    "refusals": {}
+   },
+   "VADDSD": {
+    "instances": 58,
+    "lifted": 58,
+    "refusals": {}
+   },
+   "CVTTSD2SI": {
+    "instances": 53,
+    "lifted": 53,
+    "refusals": {}
+   },
+   "MUL": {
+    "instances": 52,
+    "lifted": 52,
+    "refusals": {}
+   },
+   "VSUBSD": {
+    "instances": 48,
+    "lifted": 48,
+    "refusals": {}
+   },
+   "PSRLDQ": {
+    "instances": 48,
+    "lifted": 48,
+    "refusals": {}
+   },
+   "CQO": {
+    "instances": 47,
+    "lifted": 47,
+    "refusals": {}
+   },
+   "UCOMISD": {
+    "instances": 43,
+    "lifted": 43,
+    "refusals": {}
+   },
+   "JP": {
+    "instances": 41,
+    "lifted": 41,
+    "refusals": {}
+   },
+   "SETNBE": {
+    "instances": 40,
+    "lifted": 40,
+    "refusals": {}
+   },
+   "SETBE": {
+    "instances": 40,
+    "lifted": 40,
+    "refusals": {}
+   },
+   "CMOVS": {
+    "instances": 39,
+    "lifted": 39,
+    "refusals": {}
+   },
+   "VMOVQ": {
+    "instances": 38,
+    "lifted": 38,
+    "refusals": {}
+   },
+   "CMOVL": {
+    "instances": 37,
+    "lifted": 37,
+    "refusals": {}
+   },
+   "VMOVAPD": {
+    "instances": 33,
+    "lifted": 33,
+    "refusals": {}
+   },
+   "SETB": {
+    "instances": 30,
+    "lifted": 30,
+    "refusals": {}
+   },
+   "CMOVBE": {
+    "instances": 28,
+    "lifted": 28,
+    "refusals": {}
+   },
+   "SETNLE": {
+    "instances": 27,
+    "lifted": 27,
+    "refusals": {}
+   },
+   "BSR": {
+    "instances": 27,
+    "lifted": 27,
+    "refusals": {}
+   },
+   "CMOVNB": {
+    "instances": 24,
+    "lifted": 24,
+    "refusals": {}
+   },
+   "POR": {
+    "instances": 18,
+    "lifted": 18,
+    "refusals": {}
+   },
+   "VMOVDQA": {
+    "instances": 18,
+    "lifted": 18,
+    "refusals": {}
+   },
+   "CMOVLE": {
+    "instances": 18,
+    "lifted": 18,
+    "refusals": {}
+   },
+   "PCMPEQB": {
+    "instances": 17,
+    "lifted": 17,
+    "refusals": {}
+   },
+   "AND_LOCK": {
+    "instances": 17,
+    "lifted": 17,
+    "refusals": {}
+   },
+   "ADC": {
+    "instances": 17,
+    "lifted": 16,
+    "refusals": {
+     "FS-relative memory operand M:FS:RAX:INVALID:1:0:1: the FS base is not modeled": 1
+    }
+   },
+   "SETL": {
+    "instances": 16,
+    "lifted": 16,
+    "refusals": {}
+   },
+   "VCOMISD": {
+    "instances": 16,
+    "lifted": 16,
+    "refusals": {}
+   },
+   "VFMADD231SD": {
+    "instances": 16,
+    "lifted": 16,
+    "refusals": {}
+   },
+   "VPAND": {
+    "instances": 15,
+    "lifted": 15,
+    "refusals": {}
+   },
+   "PMOVMSKB": {
+    "instances": 15,
+    "lifted": 15,
+    "refusals": {}
+   },
+   "COMISS": {
+    "instances": 10,
+    "lifted": 10,
+    "refusals": {}
+   },
+   "RCR": {
+    "instances": 10,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for RCR": 10
+    }
+   },
+   "ANDPD": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "VPOR": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "VXORPS": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "ORPD": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "VORPD": {
+    "instances": 9,
+    "lifted": 9,
+    "refusals": {}
+   },
+   "MOVNTPS": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "PSRLQ": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "XORPD": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "VCVTDQ2PD": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "VDIVSD": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "PSHUFD": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "CVTPS2PD": {
+    "instances": 8,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPS2PD": 8
+    }
+   },
+   "VFNMADD231SD": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "CMOVNL": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "SETNB": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "VXORPD": {
+    "instances": 8,
+    "lifted": 8,
+    "refusals": {}
+   },
+   "ADD_LOCK": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "STMXCSR": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "PAND": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "PCMPISTRI": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "CPUID": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "SETS": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "BTC": {
+    "instances": 7,
+    "lifted": 7,
+    "refusals": {}
+   },
+   "CVTDQ2PS": {
+    "instances": 7,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTDQ2PS": 7
+    }
+   },
+   "INT": {
+    "instances": 6,
+    "lifted": 0,
+    "refusals": {
+     "no lifting rule for INT": 6
+    }
+   },
+   "VPSRLQ": {
+    "instances": 6,
+    "lifted": 6,
+    "refusals": {}
+   },
+   "VZEROUPPER": {
+    "instances": 6,
+    "lifted": 6,
+    "refusals": {}
+   },
+   "VPMOVMSKB": {
+    "instances": 6,
+    "lifted": 6,
+    "refusals": {}
+   },
+   "REP_STOSQ": {
+    "instances": 6,
+    "lifted": 6,
+    "refusals": {}
+   },
+   "VFMSUB213SD": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "BSF": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "VANDPD": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "SETNL": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "CVTSS2SD": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "SETNS": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "MULSS": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "CVTTSS2SI": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "CMOVNS": {
+    "instances": 5,
+    "lifted": 5,
+    "refusals": {}
+   },
+   "LDMXCSR": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "PSUBQ": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "PSHUFLW": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "VPCMPEQW": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "PCMPEQW": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "VPCMPEQB": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "SQRTSD": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "CVTTPD2DQ": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "MULPD": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "ANDPS": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "REP_STOSD": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "CWDE": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "MINSD": {
+    "instances": 4,
+    "lifted": 4,
+    "refusals": {}
+   },
+   "PSUBD": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VPSUBQ": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VPXOR": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VPADDQ": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VPSUBD": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "REP_STOSW": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "CVTPD2PS": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CVTPD2PS": 3
+    }
+   },
+   "PXOR": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "CVTSD2SS": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VFMADD132SD": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VFNMADD132SD": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VMOVDQU": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "MOVHLPS": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "PADDQ": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "VUCOMISD": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "SETLE": {
+    "instances": 3,
+    "lifted": 3,
+    "refusals": {}
+   },
+   "LODSB": {
+    "instances": 3,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LODSB": 3
+    }
+   },
+   "REP_STOSB": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "PREFETCHNTA": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VPSLLQ": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VCVTTPD2DQ": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "MOVLHPS": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "XGETBV": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "BSWAP": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CVTSI2SS": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "UNPCKLPD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "CMPSD_XMM": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VCMPSD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "VMOVD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "PADDD": {
+    "instances": 2,
+    "lifted": 2,
+    "refusals": {}
+   },
+   "STC": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STC": 2
+    }
+   },
+   "CLC": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CLC": 2
+    }
+   },
+   "IN": {
+    "instances": 2,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for IN": 2
+    }
+   },
+   "PUNPCKLBW": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "REP_MOVSB": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "SFENCE": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "FNSTCW": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VPSRLDQ": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "ADDPD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "SUBPD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "PSLLQ": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VFMSUB132SD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VANDPS": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VMOVLHPS": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VFMADD132PD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VHADDPD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VFNMADD213SD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CVTPD2DQ": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "VCVTPD2DQ": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "JNO": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "PINSRB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for PINSRB": 1
+    }
+   },
+   "DIVSS": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "SCASD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for SCASD": 1
+    }
+   },
+   "STOSB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for STOSB": 1
+    }
+   },
+   "MOVSB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for MOVSB": 1
+    }
+   },
+   "CMPSB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPSB": 1
+    }
+   },
+   "OUTSB": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for OUTSB": 1
+    }
+   },
+   "LOOPE": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for LOOPE": 1
+    }
+   },
+   "SUBSS": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "MAXSD": {
+    "instances": 1,
+    "lifted": 1,
+    "refusals": {}
+   },
+   "CMPSD": {
+    "instances": 1,
+    "lifted": 0,
+    "refusals": {
+     "no operand template for CMPSD": 1
+    }
+   }
+  }
+ }
+]

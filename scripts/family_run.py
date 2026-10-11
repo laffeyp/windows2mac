@@ -1703,6 +1703,48 @@ FAMILIES: dict[str, Family] = {
                                        ("map.empty_file",)),
             "copy_refused": Plant("    if (access == FILE_MAP_WRITE || bytes > size) {",
                                   "    if (access != FILE_MAP_READ || bytes > size) {", ("view.copy_access",))}),
+    "format_message": Family(
+        name="format_message",
+        contract_id="windows.messages.format_message",
+        version="0.1.0",
+        summary=("FormatMessageW from the system message table in mono's form (FROM_SYSTEM | IGNORE_INSERTS with "
+                 "ALLOCATE_BUFFER, LANG_USER_DEFAULT; ids 2 and 3 in the captures, 44 each): the text with its CR LF, "
+                 "inserts such as %1 kept, the length in units, a NUL after it; 0x8007xxxx names id xxxx; LANG_NEUTRAL "
+                 "and en-US answer alike, de-DE is ERROR_RESOURCE_LANG_NOT_FOUND, an id the table lacks "
+                 "ERROR_MR_MID_NOT_FOUND, each with the allocated pointer overwritten; a caller's buffer shorter than "
+                 "text and NUL is ERROR_INSUFFICIENT_BUFFER; FORMAT_MESSAGE_MAX_WIDTH_MASK makes the closing CR LF one "
+                 "space. Success leaves the last error. The table itself (rows \"dump\", ids 0-16383) is "
+                 "specs/system_messages.json, from build 26100."),
+        probe="format_message", guest_file="messages.c",
+        host_files=("src/w2m/system_messages.py", "specs/system_messages.json", "tools/guest_runtime/local_memory.c"),
+        derive=lambda printed: [r for r in printed if r.get("s") != "dump"],
+        runs={
+              "38120951889": Run("windows-2025", "4224a823b406642df21fc8778e5fbd0182890b8063d6a1c28e0861c0dcabb926", "format_message-1791703140-0", "AMD EPYC 7763 64-Core Processor"),
+              "38120953179": Run("windows-2022", "a2ecf6240cd728247b4cd842f563485d3124b0e20573b702a12da4bca9d5a31e", "format_message-1791703140-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-formatmessagew", "api/winbase/nf-winbase-formatmessagew", "2022-08-04",
+                       "If the function succeeds, the return value is the number of TCHARs stored in the output buffer, "
+                       "excluding the terminating null character. ... FORMAT_MESSAGE_MAX_WIDTH_MASK 0x000000FF The "
+                       "function ignores regular line breaks in the message definition text."),),
+        open_questions=(
+            "The system message tables differ between builds: Server 2025 (26100) answers 4,493 ids from 0 to 16383, "
+            "Server 2022 (20348) 4,427, and 109 texts are worded otherwise (id 334: \"The specified operation is not "
+            "supported on a resident file.\" against \"An operation is not supported on a resident file.\"). w2m "
+            "carries build 26100's; the contract rows are the forms, on which the builds agree.",
+            "A failed call with ALLOCATE_BUFFER overwrites the caller's pointer (rows form.language_de_de, "
+            "form.unknown_id print only that it changed); w2m writes NULL.",
+            "A short caller's buffer: the rows show its first unit written ('T'); w2m writes as many units as fit.",
+            "MAX_WIDTH_MASK on a message with a line break inside, other widths, inserts without IGNORE_INSERTS, "
+            "FROM_STRING and FROM_HMODULE, and other languages are not in the rows and stop the run."),
+        plants={
+            "width_keeps_cr": Plant("    if (space) out[len - 1] = ' ';", "    if (space) out[len - 1] = '\\r';",
+                                    ("form.max_width",)),
+            "short_buffer_untouched": Plant(
+                "            for (u32 i = 0; i < size && i < len; i++) out[i] = (unsigned char)text[i];\n", "",
+                ("form.buffer_short",)),
+            "pointer_left_on_failure": Plant("        if (flags & ALLOCATE_BUFFER) *(u64 *)buffer = 0;      /* the rows: the pointer is not left as it was */\n",
+                                             "", ("form.language_de_de", "form.unknown_id"))}),
 }
 
 
@@ -1973,12 +2015,18 @@ def main(argv: list[str]) -> int:
         print(json.dumps(s, indent=1))
     if a.plants:
         binary = next(iter(f.runs.values())).binary
+        from w2m.guest_runtime import BuildError
         for name, p in f.plants.items():
-            if p.host is not None:
-                with host_patched(p.host, p.old, p.new):
-                    out, stop, _ = run_in_vm(binary, None, f)
-            else:
-                out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
+            try:
+                if p.host is not None:
+                    with host_patched(p.host, p.old, p.new):
+                        out, stop, _ = run_in_vm(binary, None, f)
+                else:
+                    out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
+            except BuildError as e:                       # a plant that does not build tests nothing
+                print(f"{name}: the planted runtime did not build: {str(e)[:300]}")
+                failed = True
+                continue
             rows, named = unequal_rows(f, out), named_reach(f, p)
             verdict = "as named" if rows == named else f"NOT as named: named {named}"
             failed |= rows != named
