@@ -5,8 +5,8 @@
  * No C runtime. UnityPlayer.dll calls GetTempPathW(260, buffer) after SHGetKnownFolderPath (frontier 2026-10-10,
  * 2,641,240 instructions); it and mono-2.0-bdwgc.dll import GetEnvironmentVariableW, SetEnvironmentVariableW and
  * GetEnvironmentStringsW. Microsoft documents GetTempPathW's order: TMP, TEMP, USERPROFILE, the Windows directory.
- * A runner's environment is not w2m's, so the probe first deletes every variable its block holds (the names that
- * failed are printed), then sets the variables each row needs. Paths under the working directory print as
+ * A runner's environment is not w2m's, so the probe first deletes every variable its block holds but W2M_KEEP (the
+ * names that failed are printed), then sets the variables each row needs. Paths under the working directory print as
  * "<cwd>". Rows: each call's return, last error (after SetLastError(0xDEAD)) and text; a buffer too small is
  * filled with 0xA5A5 first, and the row says whether it was left so.
  */
@@ -116,7 +116,10 @@ static void block(const char *name) {
 void start(void) {
     cwd_len = GetCurrentDirectoryW(MAX_PATH, cwd);
 
-    /* Delete every variable: names run to the first '=' after the first character ("=C:=C:\x" is "=C:"). */
+    /* Delete every variable but W2M_KEEP (GetEnvironmentStringsW faulted, 0xC0000005, once every variable was
+     * deleted: runs 38098511094, 38098565802); names run to the first '=' after the first character
+     * ("=C:=C:\x" is "=C:"). */
+    SetEnvironmentVariableW(L"W2M_KEEP", L"1");
     WCHAR *b = GetEnvironmentStringsW();
     static WCHAR names[64][128];
     unsigned count = 0;
@@ -132,7 +135,7 @@ void start(void) {
     row("clear"); put(",\"failed\":[");
     unsigned failed = 0;
     for (unsigned i = 0; i < count; i++)
-        if (!SetEnvironmentVariableW(names[i], NULL)) { if (failed++) put(","); put("\""); raw(names[i]); put("\""); }
+        if (!starts(names[i], L"W2M_KEEP", 9) && !SetEnvironmentVariableW(names[i], NULL)) { if (failed++) put(","); put("\""); raw(names[i]); put("\""); }
     put("]"); end();
     block("cleared");
 
