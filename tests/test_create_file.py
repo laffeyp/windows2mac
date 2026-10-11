@@ -136,4 +136,5 @@ def test_path_with_a_nul_stops_the_run_by_name() -> None:
     text = file_run.FILE_C.read_text().replace("return w2m_host(W2M_FILE_LOOKUP, (u64)path, chars, 0, 0, id);",
                                                "return w2m_host(W2M_FILE_LOOKUP, (u64)path, chars + 1, 0, 0, id);")
     out, stop, _ = file_run.run_in_vm(file_run.RUNS["38031352273"][1], text)
-    assert stop.startswith("BridgeRequestError: path of 13 characters has a NUL at character 12")
+    # the full path since Sprint 048: "C:\\w2m\\app\\w2m-cf-a.txt" is 23 characters, the NUL the 24th
+    assert stop.startswith("BridgeRequestError: path of 24 characters has a NUL at character 23")

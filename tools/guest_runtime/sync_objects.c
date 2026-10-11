@@ -30,7 +30,7 @@
 #define CREATE_EVENT_MANUAL_RESET 1u
 #define CREATE_EVENT_INITIAL_SET 2u
 
-enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX };
+enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN };   /* TOKEN: token.c (Sprint 048) */
 
 static struct object { u32 kind; s64 count, max; } objects[OBJECTS];   /* count: semaphore count, event 0/1, mutex recursion */
 
@@ -54,6 +54,18 @@ static struct object *object_of(u64 h) {
 }
 
 /* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. */
+/* For token.c: a process token's handle, from this table so CloseHandle closes it; and whether h is one. */
+u64 w2m_object_token(u64 api) {
+    for (int i = 0; i < OBJECTS; i++)
+        if (objects[i].kind == FREE) {
+            objects[i] = (struct object){TOKEN, 0, 0};           /* the last error is left (row open) */
+            return OBJECT_BASE + 4 * (u64)i;
+        }
+    w2m_unimplemented(api, OBJECTS);
+    return 0;
+}
+int w2m_object_is_token(u64 h) { struct object *o = object_of(h); return o && o->kind == TOKEN; }
+
 int w2m_object_close(u64 h) {
     struct object *o = object_of(h);
     if (!o) return 0;

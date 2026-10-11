@@ -1,0 +1,407 @@
+{
+ "contract_id": "windows.file.paths",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetCurrentDirectoryW, GetFullPathNameW over 26 names (relative, rooted, drive-relative, other drives, \\\\?\\, UNC, dots, slashes, blanks, wildcards), SetCurrentDirectoryW, CreateDirectoryW and RemoveDirectoryW with their errors; paths printed against <cwd>, <parent> and <root>.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/paths/paths.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "cwd",
+    "len_is_text": 1,
+    "drive_form": 1,
+    "trailing_backslash": 0
+   },
+   {
+    "s": "cwd.small_buffer",
+    "ret_is_len_plus_1": 1,
+    "err": 57005
+   },
+   {
+    "s": "cwd.null_buffer",
+    "ret_is_len_plus_1": 1,
+    "err": 57005
+   },
+   {
+    "s": "full.relative",
+    "in": "a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.dot_relative",
+    "in": ".\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.dotdot",
+    "in": "..\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<parent>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.sub_dotdot",
+    "in": "x\\..\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.slashes",
+    "in": "x/y/a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\x\\y\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.doubled",
+    "in": "x\\\\y\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\x\\y\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.trailing_dot",
+    "in": "a.txt.",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.trailing_dots_spaces",
+    "in": "a.txt. . ",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.inner_trailing_dot",
+    "in": "x.\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\x\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.trailing_backslash",
+    "in": "x\\",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\x\\",
+    "part_from_end": null
+   },
+   {
+    "s": "full.dot",
+    "in": ".",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>"
+   },
+   {
+    "s": "full.dotdot_alone",
+    "in": "..",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<parent>"
+   },
+   {
+    "s": "full.rooted",
+    "in": "\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<root>a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.rooted_dotdot",
+    "in": "\\..\\..\\a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<root>a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.drive_relative",
+    "in": "<d>:a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.absolute",
+    "in": "<root>w2m_probe\\app\\Data\\boot.config",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<root>w2m_probe\\app\\Data\\boot.config",
+    "part_from_end": -11
+   },
+   {
+    "s": "full.absolute_dotdot",
+    "in": "<root>w2m_probe\\app\\..\\x",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<root>w2m_probe\\x",
+    "part_from_end": -1
+   },
+   {
+    "s": "full.absolute_lower",
+    "in": "<root>W2M_PROBE\\app",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<root>W2M_PROBE\\app",
+    "part_from_end": -3
+   },
+   {
+    "s": "full.other_drive",
+    "in": "Q:\\x",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "Q:\\x",
+    "part_from_end": -1
+   },
+   {
+    "s": "full.other_drive_relative",
+    "in": "Q:x",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "Q:\\x",
+    "part_from_end": -1
+   },
+   {
+    "s": "full.device_prefix",
+    "in": "\\\\?\\<d>:\\x\\..\\y",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "\\\\?\\<d>:\\y",
+    "part_from_end": -1
+   },
+   {
+    "s": "full.unc",
+    "in": "\\\\server\\share\\x\\..\\y",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "\\\\server\\share\\y",
+    "part_from_end": -1
+   },
+   {
+    "s": "full.empty",
+    "in": "",
+    "ret_zero": 1,
+    "err": 123,
+    "buffer_untouched": true
+   },
+   {
+    "s": "full.spaces_only",
+    "in": "   ",
+    "ret_zero": 1,
+    "err": 123,
+    "buffer_untouched": true
+   },
+   {
+    "s": "full.wildcard",
+    "in": "x\\*.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\x\\*.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "full.small_buffer",
+    "in": "a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_need": 1,
+    "buffer_untouched": false
+   },
+   {
+    "s": "full.zero_buffer",
+    "in": "a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_need": 1,
+    "buffer_untouched": true
+   },
+   {
+    "s": "dir.create",
+    "call": "CreateDirectoryW",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "dir.create_again",
+    "call": "CreateDirectoryW",
+    "ret": 0,
+    "err": 183
+   },
+   {
+    "s": "dir.create_missing_parent",
+    "call": "CreateDirectoryW",
+    "ret": 0,
+    "err": 3
+   },
+   {
+    "s": "dir.create_trailing_backslash",
+    "call": "CreateDirectoryW",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "dir.chdir",
+    "call": "SetCurrentDirectoryW",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "full.after_chdir",
+    "in": "a.txt",
+    "ret_zero": 0,
+    "err": 57005,
+    "ret_is_len": 1,
+    "out": "<cwd>\\w2m_paths_dir\\a.txt",
+    "part_from_end": -5
+   },
+   {
+    "s": "cwd.after_chdir",
+    "text": "<cwd>\\w2m_paths_dir",
+    "len_grew_by": 14
+   },
+   {
+    "s": "dir.chdir_back",
+    "call": "SetCurrentDirectoryW",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "dir.chdir_missing",
+    "call": "SetCurrentDirectoryW",
+    "ret": 0,
+    "err": 2
+   },
+   {
+    "s": "dir.chdir_file",
+    "call": "SetCurrentDirectoryW",
+    "ret": 0,
+    "err": 267
+   },
+   {
+    "s": "dir.remove_not_empty",
+    "call": "RemoveDirectoryW",
+    "ret": 0,
+    "err": 145
+   },
+   {
+    "s": "dir.remove_file",
+    "call": "RemoveDirectoryW",
+    "ret": 0,
+    "err": 267
+   },
+   {
+    "s": "dir.remove",
+    "call": "RemoveDirectoryW",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "dir.remove_again",
+    "call": "RemoveDirectoryW",
+    "ret": 0,
+    "err": 2
+   },
+   {
+    "s": "dir.remove_trailing_backslash",
+    "call": "RemoveDirectoryW",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "dir.remove_cwd",
+    "call": "RemoveDirectoryW",
+    "ret": 0,
+    "err": 32
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38090281974: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:a720b00e8a38dcb0482217ade8c02b84281782fa011fafcd9f8fa613ef59bdd1; run 38090284442: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:22e3d64701297ce3aa758740cfd378a143b49475321683ed7bfbf2d4e29ba2a4",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "paths-1791670095-0-1",
+    "paths-1791670095-0-2",
+    "paths-1791670095-1-1",
+    "paths-1791670095-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getfullpathnamew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfullpathnamew (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "GetFullPathName merges the name of the current drive and directory with a specified file name to determine the full path and file name of a specified file. ... This function does not verify that the resulting path and file name are valid, or that they see an existing file on the associated volume."
+  }
+ ],
+ "open_questions": [
+  "\"x\\CON\": a device (\\\\.\\CON) on Server 2022, an ordinary name on 2025; excluded, and w2m answers as 2025.",
+  "Each drive's own working directory (\"Q:x\" while on C:) is not modelled; the rows show Q:\\x, as for a drive never visited."
+ ],
+ "sections": {
+  "probe": "probes/paths (Sprint 044)",
+  "implementation": "tools/guest_runtime/paths.c",
+  "rows": "scripts/family_run.py paths",
+  "excluded": "full.device_name: Server 2022 maps x\\CON to the device \\\\.\\CON; 2025 does not"
+ }
+}

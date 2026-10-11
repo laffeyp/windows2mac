@@ -374,6 +374,8 @@ CLASSES_046E = frozenset(("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"))
 # Sprint 047: the classes UnityMain's start-up stops on (scripts/frontier_lookahead.py): PCMPISTRI (also constructed
 # over every control byte), UNPCKHPD, MUL's 8-, 16- and 32-bit forms, BTC, LFENCE and MFENCE
 CLASSES_047 = frozenset(("PCMPISTRI", "PCMPISTRI64", "UNPCKHPD", "MUL", "BTC", "LFENCE", "MFENCE"))
+# Sprint 048: the prefetch hints the frontier meets (PREFETCHW at 0x18143e96c) and their siblings
+CLASSES_048 = frozenset(("PREFETCHW", "PREFETCHT0", "PREFETCHT1", "PREFETCHT2"))
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -389,7 +391,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "046c": (2026_10_10_462, CLASSES_046C, LOCKABLE_046C, False),
     "046d": (2026_10_10_463, CLASSES_046D, (), False),
     "046e": (2026_10_10_464, CLASSES_046E, (), False),
-    "047": (2026_10_10_47, CLASSES_047, (), False)}
+    "047": (2026_10_10_47, CLASSES_047, (), False),
+    "048": (2026_10_10_48, CLASSES_048, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:

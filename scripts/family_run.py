@@ -275,6 +275,23 @@ def topology_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def paths_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Paths (Sprint 048): the file part of "." and ".." is the length of the working directory's own last name,
+    the machine's (a runner's "windows2mac", w2m's "app"), so it is dropped; the drive after "\\\\?\\" is the
+    machine's letter (D: on the runners, C: in w2m) and is written <d>."""
+    out = []
+    for r in printed:
+        r = dict(r)
+        if r.get("s") in ("full.dot", "full.dotdot_alone"):
+            r.pop("part_from_end", None)
+        for k in ("in", "out"):
+            v = r.get(k)
+            if isinstance(v, str) and v.startswith("\\\\?\\") and v[5:6] == ":":
+                r[k] = v[:4] + "<d>" + v[5:]
+        out.append(r)
+    return out
+
+
 FAMILIES: dict[str, Family] = {
     "loader": Family(
         name="loader",
@@ -1042,6 +1059,287 @@ FAMILIES: dict[str, Family] = {
                                           ("ex.empty", "plain.empty")),
             "wildcard_looked_up": Plant("        if (s[n] == '*' || s[n] == '?') return ERROR_INVALID_NAME;", "        ;",
                                         ("ex.wildcard", "plain.wildcard"))}),
+    "paths": Family(
+        name="paths",
+        contract_id="windows.file.paths",
+        version="0.1.0",
+        summary=("GetCurrentDirectoryW, GetFullPathNameW over 26 names (relative, rooted, drive-relative, other drives, "
+                 "\\\\?\\, UNC, dots, slashes, blanks, wildcards), SetCurrentDirectoryW, CreateDirectoryW and "
+                 "RemoveDirectoryW with their errors; paths printed against <cwd>, <parent> and <root>."),
+        probe="paths", guest_file="paths.c",
+        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/file.c"),
+        runs={
+              "38090281974": Run("windows-2025", "a720b00e8a38dcb0482217ade8c02b84281782fa011fafcd9f8fa613ef59bdd1", "paths-1791670095-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38090284442": Run("windows-2022", "22e3d64701297ce3aa758740cfd378a143b49475321683ed7bfbf2d4e29ba2a4", "paths-1791670095-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getfullpathnamew", "api/fileapi/nf-fileapi-getfullpathnamew", "2018-12-05",
+                       "GetFullPathName merges the name of the current drive and directory with a specified file name "
+                       "to determine the full path and file name of a specified file. ... This function does not verify "
+                       "that the resulting path and file name are valid, or that they see an existing file on the "
+                       "associated volume."),),
+        open_questions=(
+            "\"x\\CON\": a device (\\\\.\\CON) on Server 2022, an ordinary name on 2025; excluded, and w2m answers as 2025.",
+            "Each drive's own working directory (\"Q:x\" while on C:) is not modelled; the rows show Q:\\x, as for a "
+            "drive never visited."),
+        derive=paths_rows,
+        excluded={"full.device_name": "Server 2022 maps x\\CON to the device \\\\.\\CON; 2025 does not"},
+        plants={
+            "inner_dots_kept": Plant(
+                "        while (len && (in[start + len - 1] == '.' || in[start + len - 1] == ' ')) len--;",
+                "        while (!in[i] && len && (in[start + len - 1] == '.' || in[start + len - 1] == ' ')) len--;",
+                ("full.inner_trailing_dot",)),
+            "dotdot_past_root": Plant(
+                "            if (n > root) {                             /* drop the last \"component\\\" */",
+                "            if (n > 0) {                                /* drop the last \"component\\\" */",
+                ("full.rooted_dotdot",)),
+            "working_directory_removed": Plant(
+                "    if (same(scratch, working())) {", "    if (same(scratch, working()) && 0) {", ("dir.remove_cwd",))}),
+    "file_security": Family(
+        name="file_security",
+        contract_id="windows.file.security",
+        version="0.1.0",
+        summary=("CreateFileW with SECURITY_ATTRIBUTES and no descriptor: nLength unchecked (0, 12, 1000 open), "
+                 "bInheritHandle nonzero sets HANDLE_FLAG_INHERIT (GetHandleInformation), the open's result and error "
+                 "as with no attributes."),
+        probe="file_security", guest_file="file.c", host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/paths.c"),
+        runs={
+              "38090863707": Run("windows-2025", "54f99a38848d08f519159a5e922708481f6859da345febe832e457e753c46364", "file_security-1791670645-0", "AMD EPYC 7763 64-Core Processor"),
+              "38090865352": Run("windows-2022", "30a17799849fecb415ae48da8d6a5ca42c71478579f4b263c9b007c5f245d8e8", "file_security-1791670645-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-createfilew", "api/fileapi/nf-fileapi-createfilew", "2022-08-16",
+                       "lpSecurityAttributes ... If this parameter is NULL, the handle returned by CreateFile cannot be "
+                       "inherited by any child processes the application may create and the file or device associated "
+                       "with the returned handle gets a default security descriptor."),),
+        open_questions=(
+            "A security descriptor is not probed; w2m stops on one by name.",
+            "Inheritance matters only to a child process; w2m creates none yet (CreateProcessW stops by name)."),
+        plants={
+            "inherit_ignored": Plant("    u32 inherit = security ? *(u32 *)(security + 16) != 0 : 0;", "    u32 inherit = 0;",
+                                     ("inherit.existing", "length_*.existing", "inherit_2.existing")),
+            "length_checked": Plant(
+                "    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);",
+                "    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);\n"
+                "    if (security && *(u32 *)security != 24) { set_error(87); return w2m_logged(W2M_API_CreateFileW, name, INVALID_HANDLE_VALUE); }",
+                ("length_*",))}),
+    "local_free": Family(
+        name="local_free",
+        contract_id="windows.memory.local_free",
+        version="0.1.0",
+        summary=("LocalFree as UnityPlayer calls it on argv + 1: NULL and a block's start answer NULL; a pointer 8 bytes "
+                 "past a 16-byte boundary (argv + 1, a HeapAlloc block + 8) answers itself with ERROR_INVALID_HANDLE and "
+                 "the block stays intact; the last error is left on success. A pointer 16 bytes in ends the process "
+                 "(STATUS_HEAP_CORRUPTION), recorded by the probe's parent and excluded."),
+        probe="local_free", guest_file="local_memory.c", arguments="safe",
+        runs={
+              "38092775612": Run("windows-2025", "ac9257dab2fa346fe224a45462b87a9d2ad1ad687f37f4b065a9fb336906f44c", "local_free-1791672496-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38092777429": Run("windows-2022", "ac655d2145982f7850a7e9c30d8afab979bcc651e15faf68f3bb8d9c99be395d", "local_free-1791672496-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-localfree", "api/winbase/nf-winbase-localfree", "2018-12-05",
+                       "If the function succeeds, the return value is NULL. If the function fails, the return value is "
+                       "equal to a handle to the local memory object. To get extended error information, call "
+                       "GetLastError."),),
+        open_questions=(
+            "Windows ends the process for a 16-aligned pointer inside a block (exit.argv_plus_2, 0xC0000374); w2m stops "
+            "the run there by name instead.",),
+        excluded={"exit.safe": "the parent's row: w2m runs the probe's safe child, which prints no exit codes",
+                  "exit.argv_plus_2": "the parent's row: the 16-byte case ends its child with STATUS_HEAP_CORRUPTION"},
+        plants={
+            "interior_error_left": Plant("        w2m_set_last_error(6);\n", "",
+                                         ("argv_plus_1", "heap_block_plus_8")),
+            "interior_answers_null": Plant("        return w2m_logged(W2M_API_LocalFree, block, block);",
+                                           "        return w2m_logged(W2M_API_LocalFree, block, 0);",
+                                           ("argv_plus_1", "heap_block_plus_8"))}),
+    "file_access": Family(
+        name="file_access",
+        contract_id="windows.file.access",
+        version="0.1.0",
+        summary=("CreateFileW's access masks (13): reading with GENERIC_READ, FILE_GENERIC_READ or FILE_READ_DATA; writing "
+                 "with GENERIC_WRITE, FILE_GENERIC_WRITE, FILE_WRITE_DATA or FILE_APPEND_DATA; both with FILE_ALL_ACCESS, "
+                 "GENERIC_ALL or MAXIMUM_ALLOWED, which also carry DELETE into sharing; FILE_READ_ATTRIBUTES, SYNCHRONIZE "
+                 "and 0 open with no data access and no part in sharing."),
+        probe="file_access", guest_file="file.c", host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/paths.c"),
+        runs={
+              "38093116676": Run("windows-2025", "0ee5b17f1b2961169e640617187689155381e46c2a8207c2966ffd6a76aa885e", "file_access-1791672842-0", "AMD EPYC 7763 64-Core Processor"),
+              "38093118511": Run("windows-2022", "96bb232d78a05bf731dde8f6eba9671e7d06bcdf1ef95524aebf39923c3af8da", "file_access-1791672842-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-file-access-rights", "fileio/file-access-rights-constants", "2018-05-31",
+                       "FILE_APPEND_DATA ... For a file object, the right to append data to the file."),),
+        open_questions=(
+            "ReadFile and WriteFile are checked against data access only; the attribute rights' own calls "
+            "(GetFileInformationByHandle, SetFileAttributesW) are not served yet.",
+            "An append-only handle (FILE_APPEND_DATA without FILE_WRITE_DATA) writes at the end of the file, as the "
+            "access-rights page says; no row reads the file back, so that rule rests on the page alone."),
+        plants={
+            "append_gives_no_write": Plant("(desired & (GENERIC_WRITE | FILE_WRITE_DATA | FILE_APPEND_DATA) ? W : 0)",
+                                           "(desired & (GENERIC_WRITE | FILE_WRITE_DATA) ? W : 0)",
+                                           ("open.append_data", "share.none.append_data", "share.read.append_data")),
+            "maximum_without_delete": Plant("    u32 all = desired & (GENERIC_ALL | MAXIMUM_ALLOWED) ? R | W | D : 0;",
+                                            "    u32 all = desired & GENERIC_ALL ? R | W | D : desired & MAXIMUM_ALLOWED ? R | W : 0;",
+                                            ("share.read_write.maximum_allowed",))}),
+    "system_modules": Family(
+        name="system_modules",
+        contract_id="windows.module.system",
+        version="0.1.0",
+        summary=("A system DLL imported statically (SHELL32): LoadLibraryW and GetModuleHandleW find it under any "
+                 "spelling (case, no extension, full path); GetModuleFileNameW gives C:\\Windows\\System32\\SHELL32.dll; "
+                 "GetProcAddress gives the import's address for an imported name, an address for another export, NULL "
+                 "and 127 for a name it does not export; FreeLibrary succeeds and the module stays."),
+        probe="system_modules", guest_file="module.c", host_files=("src/w2m/modules.py", "src/w2m/vm_backend.py"),
+        runs={
+              "38094160385": Run("windows-2025", "202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815", "system_modules-1791673893-0", "AMD EPYC 7763 64-Core Processor"),
+              "38094162181": Run("windows-2022", "fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff", "system_modules-1791673893-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getmodulehandlew", "api/libloaderapi/nf-libloaderapi-getmodulehandlew", "2024-12-09",
+                       "Retrieves a module handle for the specified module. The module must have been loaded by the "
+                       "calling process."),),
+        open_questions=(
+            "The system DLLs are not in PEB.Ldr's lists in w2m; Windows lists them. Nothing on the frontier walks the "
+            "lists for them yet.",
+            "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
+            "(user32 1,007 against 1,041).",),
+        plants={
+            "loadlibraryw_not_found": Plant("    u64 h = find(name, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+                                            "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+                                            ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
+    "known_folders": Family(
+        name="known_folders",
+        contract_id="windows.shell.known_folder_path",
+        version="0.1.0",
+        summary=("SHELL32's SHGetKnownFolderPath as UnityPlayer calls it (FOLDERID_LocalAppDataLow, flags 0, no token): "
+                 "S_OK and a new block holding <profile>\\AppData\\LocalLow, an existing directory, no trailing "
+                 "backslash; the profile is C:\\Users\\<user>; LocalAppData and RoamingAppData are AppData\\Local and "
+                 "AppData\\Roaming; KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE give the same path; ole32's CoTaskMemFree "
+                 "frees it and leaves the last error, NULL included."),
+        probe="known_folders", guest_file="known_folders.c", host_files=("src/w2m/file_bridge.py",),
+        derive=lambda printed: [{k: v for k, v in r.items() if not ("hr" in r and k == "err")} for r in printed],
+        runs={
+              "38098265812": Run("windows-2025", "93fdcb0f8270b50ff9a2b03c38926f3ab49945806eca0c43fc4d53302cb2309a", "known_folders-1791678212-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38098267402": Run("windows-2022", "15d1d468c6c4e878e6eb1d5d5d20fde4dd250f793eb65915a75117026c5e1d0d", "known_folders-1791678212-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-shgetknownfolderpath", "api/shlobj_core/nf-shlobj_core-shgetknownfolderpath", "2018-12-05",
+                       "The calling process is responsible for freeing this resource once it is no longer needed by "
+                       "calling CoTaskMemFree, whether SHGetKnownFolderPath succeeds or not. The returned path does "
+                       "not include a trailing backslash. ... Not all KNOWNFOLDERID values are present on all "
+                       "systems."),
+            documented("ms-knownfolderid", "shell/knownfolderid", "2020-07-27",
+                       "FOLDERID_LocalAppDataLow ... GUID {A520A1A4-1780-4FF6-BD18-167343C5AF16} ... Default Path "
+                       "%USERPROFILE%\\AppData\\LocalLow")),
+        open_questions=(
+            "The last error after success is not part of the contract (the derive drops `err` from the "
+            "SHGetKnownFolderPath rows): Windows leaves 1008 (ERROR_NO_TOKEN) for the profile, Local, Roaming and "
+            "LocalLow with KF_FLAG_DONT_VERIFY, 0 for LocalLow, 183 after KF_FLAG_CREATE, on all four executions; "
+            "the rows show no rule, and w2m leaves the last error as it was.",
+            "w2m's profile is C:\\Users\\w2m on a drive made fresh each run: nothing the game writes there "
+            "outlives the run.",
+            "Excluded rows: see sections.excluded."),
+        excluded={"unregistered": "an unregistered GUID: 0x80070002, *ppszPath NULL, last error 0. Which GUIDs a "
+                  "system registers varies, so w2m serves its four folders and stops at any other GUID; the probe "
+                  "asks last",
+                  "unregistered.create": "as unregistered, with KF_FLAG_CREATE",
+                  "proc": "GetProcAddress(shell32, \"SHGetKnownFolderPath\") is not the import's address on Windows, "
+                  "though SHELL32 exports the name itself, not as a forwarder (exports run 38094046782); the cause is "
+                  "not established. w2m answers the import's address, as Windows does for CommandLineToArgvW "
+                  "(contracts/windows.module.system); nothing on the frontier compares the two"},
+        expected_stop="Unimplemented: SHGetKnownFolderPath",
+        plants={
+            "trailing_backslash": Plant("'L', 'o', 'w', 0};", "'L', 'o', 'w', '\\\\', 0};",
+                                        ("local_low", "local_low.dont_verify", "local_low.create")),
+            "free_sets_error": Plant("    if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);",
+                                     "    if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);\n    w2m_set_last_error(0);",
+                                     ("free.null", "free.path"))}),
+    "temp_path": Family(
+        name="temp_path",
+        contract_id="windows.environment.temp_path",
+        version="0.1.0",
+        summary=("GetTempPathW over an environment the probe sets: the first of TMP, TEMP and USERPROFILE made full "
+                 "(relative, '/', '..') with one trailing backslash, a missing directory included, else C:\\Windows\\; "
+                 "a 303-character TMP is skipped; an empty TMP answers 1 and writes nothing; a short buffer gets "
+                 "size - 1 units and a NUL, the answer the size needed. GetEnvironmentVariableW: case-insensitive "
+                 "names, 203 for a missing one, a NUL at [0] of a short buffer, 0 for an empty value. "
+                 "SetEnvironmentVariableW: 87 for an empty name or '=' inside one, TRUE for deleting a missing name, "
+                 "a replaced name keeps its spelling, new entries in upper-cased name order. The last error is left "
+                 "on every success."),
+        probe="temp_path", guest_file="environment.c",
+        derive=lambda printed: [{k: v for k, v in r.items() if not (r.get("s") == "temp.relative" and k == "ret")}
+                                for r in printed],
+        runs={
+              "38098847298": Run("windows-2025", "ff7714fa701c3870ceac7080865aaac604719f71d7318a1ca00b371236dfdba1", "temp_path-1791678823-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38098848806": Run("windows-2022", "4c25a456e35e5b7cf5461baa1e2a1dba6c79451c8e5b6fbc3e932ef36d3f3e20", "temp_path-1791678823-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-gettemppathw", "api/fileapi/nf-fileapi-gettemppathw", "2018-12-05",
+                       "The GetTempPath function checks for the existence of environment variables in the following "
+                       "order and uses the first path found: The path specified by the TMP environment variable. The "
+                       "path specified by the TEMP environment variable. The path specified by the USERPROFILE "
+                       "environment variable. The Windows directory. Note that the function does not verify that the "
+                       "path exists ... The maximum possible return value is MAX_PATH+1 (261)."),
+            documented("ms-getenvironmentvariablew", "api/processenv/nf-processenv-getenvironmentvariablew",
+                       "2022-08-05", "If lpBuffer is not large enough to hold the data, the return value is the buffer "
+                       "size, in characters, required to hold the string and its terminating null character and the "
+                       "contents of lpBuffer are undefined. ... If the specified environment variable was not found in "
+                       "the environment block, GetLastError returns ERROR_ENVVAR_NOT_FOUND."),
+            documented("ms-setenvironmentvariablew", "api/processenv/nf-processenv-setenvironmentvariablew",
+                       "2022-08-05", "If this parameter is NULL, the variable is deleted from the current process's "
+                       "environment.")),
+        open_questions=(
+            "temp.relative's return is the length of a path under the runner's working directory; the derive drops "
+            "it and keeps the path (<cwd>\\rel\\).",
+            "Where a long variable stops being skipped is not probed: w2m skips a value or path past MAX_PATH (260), "
+            "from the page's maximum return of 261; the rows hold 303 (skipped) and 24 (used).",
+            "An empty TMP answers 1 and writes nothing (temp.tmp_empty); the page says nothing of it, and w2m does "
+            "the same for an empty TEMP or USERPROFILE without a row.",
+            "Names compare by ASCII upper case in w2m; non-ASCII names are not probed.",
+            "The first probe run faulted (0xC0000005) inside its own row writer: a runner's block held more than "
+            "the 64 names one pass deleted, and the rest overflowed the output buffer (runs 38098431870, "
+            "38098511094, 38098565802, 38098627044); the probe now deletes in passes."),
+        plants={
+            "temp_before_tmp": Plant("ORDER[] = {TMP, TEMP, PROFILE};", "ORDER[] = {TEMP, TMP, PROFILE};",
+                                     # not temp.size_zero: it prints a length, and C:\t\ is as long as C:\m\
+                                     ("temp.tmp", "temp.size_exact", "temp.size_short", "temp.tmp_backslash",
+                                      "temp.relative", "temp.forward", "temp.dots", "temp.missing_dir",
+                                      "temp.tmp_empty")),
+            "replace_respells": Plant("        keep = e;\n", "",
+                                      ("order.before", "order.after")),
+            "new_entries_last": Plant("        if (c > 0) break;\n", "",
+                                      ("order.before", "order.after"))}),
+    "integrity_level": Family(
+        name="integrity_level",
+        contract_id="windows.token.integrity_level",
+        version="0.1.0",
+        summary=("UnityPlayer's low-integrity test: OpenProcessToken(current, TOKEN_QUERY) answers a handle, a "
+                 "multiple of 4; GetTokenInformation(TokenIntegrityLevel) answers 122 and 28 bytes with no buffer or "
+                 "one byte short, then a TOKEN_MANDATORY_LABEL (attributes 0x60, the SID at offset 16, revision 1, "
+                 "one sub-authority, authority 16) whose RID is not low; GetSidSubAuthority answers the field's "
+                 "address and last error 0; CloseHandle closes the token. LocalAlloc (LMEM_FIXED, LPTR) gives a "
+                 "16-aligned process-heap block of the size asked, LPTR zeroed; LocalFree answers NULL."),
+        probe="integrity_level", guest_file="token.c",
+        host_files=("tools/guest_runtime/local_memory.c", "tools/guest_runtime/sync_objects.c"),
+        derive=lambda printed: [({k: v for k, v in r.items() if k != "rid"} | {"low": r["rid"] == 0x1000})
+                                if "rid" in r else r for r in printed],
+        runs={
+              "38099150504": Run("windows-2025", "6d84a44be6a006613661b693b1677cb0b096a17ceca4c5773975f329822f7456", "integrity_level-1791679146-0", "AMD EPYC 7763 64-Core Processor"),
+              "38099152338": Run("windows-2022", "06e41e1e27336675a83949d6e2956998ed18b60a11742e5c006577a58091aac5", "integrity_level-1791679146-1", "AMD EPYC 9V45 96-Core Processor"),
+        },
+        documented=(
+            documented("ms-mandatory-integrity-control", "secauthz/mandatory-integrity-control", "2025-07-08",
+                       "Windows defines four integrity levels: low, medium, high, and system. Standard users receive "
+                       "medium, elevated users receive high."),),
+        open_questions=(
+            "A runner's process is elevated and its RID is 0x3000 (high) on all four executions; w2m answers 0x2000 "
+            "(medium), a standard user's level. The derive keeps whether the RID is low (0x1000), UnityPlayer's "
+            "question at 0x180525de0.",),
+        plants={
+            "rid_low": Plant("#define MEDIUM_RID 0x2000u", "#define MEDIUM_RID 0x1000u", ("info",)),
+            "sub_authority_keeps_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_GetSidSubAuthority",
+                                               "    return w2m_logged(W2M_API_GetSidSubAuthority", ("sub_authority",)),
+            "short_buffer_accepted": Plant("if ((u32)length < LABEL_SIZE || !info)", "if (!info)",
+                                           ("short_buffer",))}),
 }
 
 

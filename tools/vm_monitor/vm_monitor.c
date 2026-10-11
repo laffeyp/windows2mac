@@ -16,6 +16,7 @@
  *          (time limit reached), fail (hv_vcpu_run error; syndrome = hv_return_t)
  *   vget                                -> v <q0> ... <q15> <fpcr> <fpsr>  (q as 32 hex digits, low byte last)
  *   vset <q0> ... <q15> <fpcr> <fpsr>   -> ok   (Sprint 041: XMM i lives in V i)
+ *   spin <n>                            resume through n HVC exits in C   -> spin <taken> <ns>  (Sprint 048)
  *   quit
  * VTIMER exits are masked and the run continues (the guest never enables the timer).
  */
@@ -193,6 +194,20 @@ int main(int argc, char **argv) {
             else printf("ok\n");
         } else if (!strncmp(p, "run ", 4)) {
             run(strtol(p + 4, NULL, 10), ex);
+        } else if (!strncmp(p, "spin ", 5)) {
+            /* the raw cost of a VM exit (Sprint 048; review 2026-10-10 F1): run until n HVC exits, resuming each in
+             * C with no reply on the pipe; prints the exits taken and the nanoseconds (CLOCK_MONOTONIC_RAW) */
+            long want = strtol(p + 5, NULL, 10), took = 0;
+            struct timespec t0, t1;
+            clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
+            while (took < want) {
+                hv_return_t r = hv_vcpu_run(vcpu);
+                if (r != HV_SUCCESS || ex->reason != HV_EXIT_REASON_EXCEPTION ||
+                    ((ex->exception.syndrome >> 26) & 0x3f) != 0x16) break;
+                took++;
+            }
+            clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
+            printf("spin %ld %lld\n", took, (long long)((t1.tv_sec - t0.tv_sec) * 1000000000LL + (t1.tv_nsec - t0.tv_nsec)));
         } else if (!strncmp(p, "quit", 4)) {
             break;
         } else {

@@ -2516,6 +2516,74 @@
   }
  },
  {
+  "iclass": "PREFETCHT0",
+  "record": "store/runs/class-prefetcht0-1791673543582413000",
+  "rule_sha256": "sha256:dedae5fef63429dd9489c94d1f2c9452ba94658ba198d4689cdc05556f498cbf",
+  "cases": 155,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PREFETCHT1",
+  "record": "store/runs/class-prefetcht1-1791673545079070000",
+  "rule_sha256": "sha256:a8279b58f39d6db19d9e2f253ec4efb42023b2f4bbfa59b90e3b37cad9db94ad",
+  "cases": 160,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PREFETCHT2",
+  "record": "store/runs/class-prefetcht2-1791673546611586000",
+  "rule_sha256": "sha256:dca8038b7fa8f311cecb898b84db42b2f58c8ad2355ef51823f9ad57fe71577a",
+  "cases": 165,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PREFETCHW",
+  "record": "store/runs/class-prefetchw-1791673542110118000",
+  "rule_sha256": "sha256:dd4a3ccae03732460373d0cd9676d8c5f30933f83e30f2f5b8256a12d3fe92c7",
+  "cases": 195,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "PSHUFD",
   "record": "store/runs/class-pshufd-1791663805942623000",
   "rule_sha256": "sha256:b9611ae597bde26a37dba0680bcd3e30e0c02c9c4617f43998c432e453f304a9",

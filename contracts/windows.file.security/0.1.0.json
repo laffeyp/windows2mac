@@ -1,0 +1,135 @@
+{
+ "contract_id": "windows.file.security",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "CreateFileW with SECURITY_ATTRIBUTES and no descriptor: nLength unchecked (0, 12, 1000 open), bInheritHandle nonzero sets HANDLE_FLAG_INHERIT (GetHandleInformation), the open's result and error as with no attributes.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/file_security/file_security.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "none.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 0
+   },
+   {
+    "s": "none.missing",
+    "valid": 0,
+    "err": 2
+   },
+   {
+    "s": "inherit.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 1
+   },
+   {
+    "s": "inherit.missing",
+    "valid": 0,
+    "err": 2
+   },
+   {
+    "s": "no_inherit.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 0
+   },
+   {
+    "s": "no_inherit.missing",
+    "valid": 0,
+    "err": 2
+   },
+   {
+    "s": "length_0.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 1
+   },
+   {
+    "s": "length_0.missing",
+    "valid": 0,
+    "err": 2
+   },
+   {
+    "s": "length_12.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 1
+   },
+   {
+    "s": "length_12.missing",
+    "valid": 0,
+    "err": 2
+   },
+   {
+    "s": "length_1000.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 1
+   },
+   {
+    "s": "length_1000.missing",
+    "valid": 0,
+    "err": 2
+   },
+   {
+    "s": "inherit_2.existing",
+    "valid": 1,
+    "err": 0,
+    "inherit": 1
+   },
+   {
+    "s": "inherit_2.missing",
+    "valid": 0,
+    "err": 2
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38090863707: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:54f99a38848d08f519159a5e922708481f6859da345febe832e457e753c46364; run 38090865352: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:30a17799849fecb415ae48da8d6a5ca42c71478579f4b263c9b007c5f245d8e8",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "file_security-1791670645-0-1",
+    "file_security-1791670645-0-2",
+    "file_security-1791670645-1-1",
+    "file_security-1791670645-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-createfilew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew (page updated 2022-08-16; retrieved 2026-10-10)",
+   "quote": "lpSecurityAttributes ... If this parameter is NULL, the handle returned by CreateFile cannot be inherited by any child processes the application may create and the file or device associated with the returned handle gets a default security descriptor."
+  }
+ ],
+ "open_questions": [
+  "A security descriptor is not probed; w2m stops on one by name.",
+  "Inheritance matters only to a child process; w2m creates none yet (CreateProcessW stops by name)."
+ ],
+ "sections": {
+  "probe": "probes/file_security (Sprint 044)",
+  "implementation": "tools/guest_runtime/file.c",
+  "rows": "scripts/family_run.py file_security",
+  "excluded": "none"
+ }
+}

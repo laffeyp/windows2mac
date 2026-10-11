@@ -44,7 +44,7 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
-from w2m.file_bridge import FILE_LOOKUP, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
+from w2m.file_bridge import FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
 from w2m.virtual_memory import VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
@@ -113,8 +113,10 @@ ENVIRONMENT_SIZE = 0x4000
 NTDLL_IMAGE_OFF = ENVIRONMENT_OFF + ENVIRONMENT_SIZE   # synthetic ntdll image, one page (modules.py; Sprint 046)
 LOADER_DATA_OFF = NTDLL_IMAGE_OFF + 0x1000     # PEB.Ldr: PEB_LDR_DATA, the LDR_DATA_TABLE_ENTRYs, their names
 LOADER_DATA_SIZE = 0x4000
+SYSTEM_IMAGES_OFF = LOADER_DATA_OFF + LOADER_DATA_SIZE   # one page per other system DLL imported (modules.py; Sprint 048)
+SYSTEM_IMAGES = 32
 LDR_ENTRY_SIZE = 0x120
-PROCESS_SIZE = LOADER_DATA_OFF + LOADER_DATA_SIZE
+PROCESS_SIZE = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000
 STDOUT_HANDLE = 0x74
 # kernel32 services in the guest runtime: import name -> (C symbol, sets RAX)
 SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastError": ("k32_SetLastError", False),
@@ -216,10 +218,20 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "GetErrorMode": ("k32_GetErrorMode", True),
             "SetErrorMode": ("k32_SetErrorMode", True), "LocalFree": ("k32_LocalFree", True),
             "GetLogicalProcessorInformationEx": ("k32_GetLogicalProcessorInformationEx", True), "GetLogicalProcessorInformation": ("k32_GetLogicalProcessorInformation", True), "GetActiveProcessorCount": ("k32_GetActiveProcessorCount", True), "GetCurrentProcess": ("k32_GetCurrentProcess", True), "GetProcessAffinityMask": ("k32_GetProcessAffinityMask", True), "SetThreadAffinityMask": ("k32_SetThreadAffinityMask", True), "GetNumaHighestNodeNumber": ("k32_GetNumaHighestNodeNumber", True),
-            "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True)}
+            "GetFileAttributesExW": ("k32_GetFileAttributesExW", True), "GetFileAttributesW": ("k32_GetFileAttributesW", True),
+            "GetFullPathNameW": ("k32_GetFullPathNameW", True), "GetCurrentDirectoryW": ("k32_GetCurrentDirectoryW", True), "SetCurrentDirectoryW": ("k32_SetCurrentDirectoryW", True), "CreateDirectoryW": ("k32_CreateDirectoryW", True), "RemoveDirectoryW": ("k32_RemoveDirectoryW", True),
+            "GetHandleInformation": ("k32_GetHandleInformation", True), "LoadLibraryW": ("k32_LoadLibraryW", True),
+            "GetEnvironmentVariableW": ("k32_GetEnvironmentVariableW", True),
+            "SetEnvironmentVariableW": ("k32_SetEnvironmentVariableW", True), "GetTempPathW": ("k32_GetTempPathW", True),
+            "LocalAlloc": ("k32_LocalAlloc", True)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
-DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True)},
-                "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)}}   # Sprint 047
+DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True),
+                                 "SHGetKnownFolderPath": ("shell32_SHGetKnownFolderPath", True)},   # Sprint 048
+                "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)},   # Sprint 047
+                "OLE32.DLL": {"CoTaskMemFree": ("ole32_CoTaskMemFree", False)},       # Sprint 048
+                "ADVAPI32.DLL": {"OpenProcessToken": ("advapi32_OpenProcessToken", True),
+                                 "GetTokenInformation": ("advapi32_GetTokenInformation", True),
+                                 "GetSidSubAuthority": ("advapi32_GetSidSubAuthority", True)}}
 HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2, 3, 4, 5
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
@@ -229,6 +241,11 @@ VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py)
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
+# The block w2m starts a game with (run_frontier.py; Sprint 048): the profile and its temporary directory, which
+# GetTempPathW reads (environment.c), in the block's sorted order. w2m's choice of variables; each directory exists
+# on drive C: (file_bridge.py PROFILE_FOLDERS).
+USER_ENVIRONMENT = ("TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp", "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
+                    "USERPROFILE=C:\\Users\\w2m")
 TLS_TAKEN = 16                      # the TLS index besides 0 a fresh Windows process holds: set from the rows
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
@@ -552,7 +569,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_TLS_EXPANSION_VA": PROCESS_VA + TLS_EXPANSION_OFF, "W2M_TLS_TAKEN": TLS_TAKEN,
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
-        "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF,
+        "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -1128,6 +1145,24 @@ class VM:
             return self.files is not None and any(e.lower() == name for e in os.listdir(self.files.root))
 
         spec = json.loads(EXPORTS_SPEC.read_text())
+        own = {d.name.lower() for d in self.ld.images[1:]}
+        spellings: dict[str, str] = {}
+        for n in self.ld.thunks.values():
+            dll = n.split("!", 1)[0]
+            c = dll.lower() if "." in dll else dll.lower() + ".dll"
+            if c not in own and c not in ("kernel32.dll", "kernelbase.dll", "ntdll.dll") and c[:-4] in spec["modules"]:
+                spellings.setdefault(c, dll)
+        if len(spellings) > SYSTEM_IMAGES:
+            raise CompileError(f"{len(spellings)} system DLLs imported; the process area holds {SYSTEM_IMAGES}")
+        system: dict[str, tuple[int, str]] = {}
+        for i, (c, spelling) in enumerate(sorted(spellings.items())):
+            off = SYSTEM_IMAGES_OFF + 0x1000 * i
+            page = self._process(off)
+            self.mm[page:page + 2] = b"MZ"
+            struct.pack_into("<I", self.mm, page + 0x3C, 0x80)
+            self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
+            struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)
+            system[c] = (PROCESS_VA + off, spelling)
         dlls = {d.name.lower(): (d.base, d.pe.size_of_image, {n: d.base + rva for n, rva in d.pe.exports})
                 for d in self.ld.images[1:]}
         modules = Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
@@ -1135,7 +1170,7 @@ class VM:
                           image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
                           imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
                           in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
-                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]})
+                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system)
         if self.ld.images:                       # a program from loader.load (tests build bare ones)
             self._write_loader_data(modules)
         return modules
@@ -1223,7 +1258,7 @@ class VM:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
-        if FILE_LOOKUP <= op <= FILE_UNLINK or op == FILE_STAT:
+        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR):
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
             result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
@@ -1545,6 +1580,40 @@ class VM:
         return self.pc_map[i][1] if i >= 0 else 0
 
     # run -------------------------------------------------------------------------------------
+    def measure_exits(self, n: int = 100_000, through_pipe: int = 10_000) -> dict[str, float]:
+        """The cost of a VM exit (Sprint 048; review 2026-10-10 F1): guest code that loops on `hvc #0x7e` runs n exits
+        resumed by the monitor in C (`spin`), then `through_pipe` exits each resumed from here over the monitor's text
+        pipe, as every host request is today. Returns nanoseconds per exit for both."""
+        proc = subprocess.Popen([str(build_monitor()), self.path, f"{IPA_BASE:x}", f"{self.size:x}"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        assert proc.stdin and proc.stdout
+        pin, pout = proc.stdin, proc.stdout
+
+        def cmd(c: str) -> list[str]:
+            pin.write(c + "\n")
+            pin.flush()
+            return pout.readline().split()
+
+        try:
+            for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
+                            ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
+                cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
+            at = self.code_cursor
+            self._write_words(at, [a64.hvc(0x7E), a64.b(-4)])            # hvc #0x7e; b . - 4
+            cmd(f"set {MONITOR_VA + at:x} {CPSR_EL1H:x} " + " ".join("0" for _ in range(31)))
+            taken, ns = (int(v) for v in cmd(f"spin {n}")[1:3])
+            t0 = time.perf_counter_ns()
+            for _ in range(through_pipe):
+                reply = cmd("run 1000")
+                assert reply[0] == "exit" and reply[1] == "hvc", reply
+            pipe = (time.perf_counter_ns() - t0) / through_pipe
+        finally:
+            cmd("quit")
+            proc.wait(timeout=5)
+        if taken != n:
+            raise RuntimeError(f"spin took {taken} of {n} exits")
+        return {"raw_ns": ns / n, "pipe_ns": pipe}
+
     def run(self, max_steps: int = 1_000_000, timeout_ms: int = 10_000,
             on_dispatch: Callable[[VM, list[int]], None] | None = None,
             on_exception: Callable[[VM, dict[str, int]], bool] | None = None,

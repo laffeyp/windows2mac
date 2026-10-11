@@ -26,7 +26,10 @@ def main() -> int:
             assert_replayable(d, "2")
         except Exception as e:                               # noqa: BLE001 — every failure is reported
             failed.append(f"{d.name}: {type(e).__name__}: {e}")
-    print(f"{len(records)} records under {STORE}; {len(records) - len(failed)} replay at level 2")
+    # level 2 checks each record's integrity (the stream, its counts, every trigger's input hash; substrate docs/api.md);
+    # it re-runs nothing, so it says nothing about whether w2m still behaves as recorded (review 2026-10-10 F3)
+    print(f"{len(records)} records under {STORE}; {len(records) - len(failed)} intact (substrate replay level 2: "
+          f"stream, counts and trigger inputs; nothing re-run)")
     for f in failed:
         print(f"  {f}")
     return 1 if failed else 0

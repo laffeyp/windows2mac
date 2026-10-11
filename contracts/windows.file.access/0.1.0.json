@@ -1,0 +1,422 @@
+{
+ "contract_id": "windows.file.access",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "CreateFileW's access masks (13): reading with GENERIC_READ, FILE_GENERIC_READ or FILE_READ_DATA; writing with GENERIC_WRITE, FILE_GENERIC_WRITE, FILE_WRITE_DATA or FILE_APPEND_DATA; both with FILE_ALL_ACCESS, GENERIC_ALL or MAXIMUM_ALLOWED, which also carry DELETE into sharing; FILE_READ_ATTRIBUTES, SYNCHRONIZE and 0 open with no data access and no part in sharing.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/file_access/file_access.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "open.generic_read",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 1,
+    "read_err": 57005,
+    "read_bytes": 2,
+    "write_ok": 0,
+    "write_err": 5
+   },
+   {
+    "s": "open.file_generic_read",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 1,
+    "read_err": 57005,
+    "read_bytes": 2,
+    "write_ok": 0,
+    "write_err": 5
+   },
+   {
+    "s": "open.read_data",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 1,
+    "read_err": 57005,
+    "read_bytes": 2,
+    "write_ok": 0,
+    "write_err": 5
+   },
+   {
+    "s": "open.read_attributes",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 0,
+    "write_err": 5
+   },
+   {
+    "s": "open.generic_write",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.file_generic_write",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.write_data",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.append_data",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.file_all_access",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 1,
+    "read_err": 57005,
+    "read_bytes": 2,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.generic_all",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 1,
+    "read_err": 57005,
+    "read_bytes": 2,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.maximum_allowed",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 1,
+    "read_err": 57005,
+    "read_bytes": 2,
+    "write_ok": 1,
+    "write_err": 57005
+   },
+   {
+    "s": "open.synchronize",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 0,
+    "write_err": 5
+   },
+   {
+    "s": "open.zero",
+    "valid": 1,
+    "err": 0,
+    "read_ok": 0,
+    "read_err": 5,
+    "read_bytes": 99,
+    "write_ok": 0,
+    "write_err": 5
+   },
+   {
+    "s": "share.none.generic_read",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.file_generic_read",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.read_data",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.read_attributes",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.none.generic_write",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.file_generic_write",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.write_data",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.append_data",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.file_all_access",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.generic_all",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.maximum_allowed",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.none.synchronize",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.none.zero",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read.generic_read",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read.file_generic_read",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read.read_data",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read.read_attributes",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read.generic_write",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.file_generic_write",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.write_data",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.append_data",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.file_all_access",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.generic_all",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.maximum_allowed",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read.synchronize",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read.zero",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.generic_read",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.file_generic_read",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.read_data",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.read_attributes",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.generic_write",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.file_generic_write",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.write_data",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.append_data",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.file_all_access",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read_write.generic_all",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read_write.maximum_allowed",
+    "first_valid": 1,
+    "valid": 0,
+    "err": 32
+   },
+   {
+    "s": "share.read_write.synchronize",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   },
+   {
+    "s": "share.read_write.zero",
+    "first_valid": 1,
+    "valid": 1,
+    "err": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38093116676: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:0ee5b17f1b2961169e640617187689155381e46c2a8207c2966ffd6a76aa885e; run 38093118511: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:96bb232d78a05bf731dde8f6eba9671e7d06bcdf1ef95524aebf39923c3af8da",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "file_access-1791672842-0-1",
+    "file_access-1791672842-0-2",
+    "file_access-1791672842-1-1",
+    "file_access-1791672842-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-file-access-rights",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/fileio/file-access-rights-constants (page updated 2018-05-31; retrieved 2026-10-10)",
+   "quote": "FILE_APPEND_DATA ... For a file object, the right to append data to the file."
+  }
+ ],
+ "open_questions": [
+  "ReadFile and WriteFile are checked against data access only; the attribute rights' own calls (GetFileInformationByHandle, SetFileAttributesW) are not served yet.",
+  "An append-only handle (FILE_APPEND_DATA without FILE_WRITE_DATA) writes at the end of the file, as the access-rights page says; no row reads the file back, so that rule rests on the page alone."
+ ],
+ "sections": {
+  "probe": "probes/file_access (Sprint 044)",
+  "implementation": "tools/guest_runtime/file.c",
+  "rows": "scripts/family_run.py file_access",
+  "excluded": "none"
+ }
+}

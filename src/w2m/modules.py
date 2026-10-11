@@ -12,6 +12,11 @@ It asks the host only what w2m's process holds:
                         base, path C:\\w2m\\app\\<name>, GetProcAddress its exports
   kernel32, kernelbase  synthetic images in the process area, one page each with DOS and PE headers;
                         their export names are Windows's (specs/windows_exports.json, Server 2025)
+  system DLLs           each other system DLL an image imports statically (SHELL32, USER32, ...; Sprint 048): a
+                        synthetic image of one page, loaded from the start as on Windows (contracts/windows.module.
+                        system: LoadLibraryW and GetModuleHandleW find it under any spelling, its path is
+                        C:\\Windows\\System32\\<the import's spelling>, GetProcAddress gives the import's own thunk for an
+                        imported name, a thunk per name for another export, NULL and 127 for a name it does not export)
   ntdll                 a synthetic image too (it is in every process's loader list, contracts/
                         windows.loader.static_import); its exports are not listed, so GetProcAddress on it stops
   api-ms-win-core-*     kernelbase, as Windows maps api-ms-win-core-synch-l1-2-0 (the modules rows)
@@ -62,6 +67,7 @@ class Modules:
     _thunks: dict[str, int] = field(default_factory=dict)
 
     dll_names: dict[str, str] = field(default_factory=dict)   # canonical name -> the name as loaded
+    system: dict[str, tuple[int, str]] = field(default_factory=dict)   # canonical name -> handle, the import's spelling
 
     def __post_init__(self) -> None:
         spec = json.loads(EXPORTS.read_text())
@@ -91,6 +97,8 @@ class Modules:
             return self.ntdll
         if c in self.dlls:
             return self.dlls[c][0]
+        if c in self.system:
+            return self.system[c][0]
         if not loading:
             return 0                                    # not loaded in a process of only these modules
         if c in self.system32 or self.in_app_directory(c):
@@ -107,12 +115,15 @@ class Modules:
         for name, (base, _, _) in self.dlls.items():
             if handle == base:
                 return APP_DIRECTORY + self.dll_names[name]
+        for h, spelling in self.system.values():
+            if handle == h:
+                return "C:\\Windows\\System32\\" + spelling
         return None
 
     def containing(self, address: int) -> int:
         if self.image_base <= address < self.image_base + self.image_size:
             return self.image_base
-        for h in (self.kernel32, self.kernelbase, self.ntdll):
+        for h in (self.kernel32, self.kernelbase, self.ntdll, *(h for h, _ in self.system.values())):
             if h and h <= address < h + 0x1000:
                 return h
         for base, size, _ in self.dlls.values():
@@ -127,6 +138,17 @@ class Modules:
         for base, _, exports in self.dlls.values():
             if handle == base:
                 return exports.get(name, 0)
+        for c, (h, spelling) in self.system.items():
+            if handle == h:
+                stem = c[:-4]                                # "shell32"
+                if name not in self.exports.get(stem, frozenset()):
+                    return 0
+                if f"{c}!{name.lower()}" in self.imports:   # Windows answers the import's address (proc.imported)
+                    return self.imports[f"{c}!{name.lower()}"]
+                key = f"{spelling}!{name}"
+                if key not in self._thunks:
+                    self._thunks[key] = self.make_thunk(key)
+                return self._thunks[key]
         if handle and handle == self.ntdll:
             raise Unimplemented(f"GetProcAddress ntdll.dll!{name}: ntdll's exports are not listed")
         module = {self.kernel32: "kernel32", self.kernelbase: "kernelbase"}.get(handle)

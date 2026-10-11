@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-/* command_line_args.c — SHELL32's CommandLineToArgvW and KERNEL32's LocalFree (Sprint 047, family
- * "command line arguments").
+/* command_line_args.c — SHELL32's CommandLineToArgvW (Sprint 047, family "command line arguments"); its block is
+ * freed by LocalFree (local_memory.c).
  *
  * As contracts/windows.shell.command_line_to_argv records Windows answering (Server 2025 and 2022, identical):
  *   - the program name (argv[0]): a quoted name runs to the next quote, which ends it even when a
@@ -105,9 +105,4 @@ u64 shell32_CommandLineToArgvW(u64 line, u64 count) {
     *(int *)count = (int)argc;
     w2m_set_last_error(0);                               /* every row: the last error is 0 after success */
     return w2m_logged(W2M_API_CommandLineToArgvW, line, block);
-}
-
-u64 k32_LocalFree(u64 block) {
-    if (block) w2m_heap_release(W2M_API_LocalFree, block);
-    return w2m_logged(W2M_API_LocalFree, block, 0);      /* NULL: freed (row local_free_null) */
 }

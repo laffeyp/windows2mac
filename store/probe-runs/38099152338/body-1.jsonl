@@ -1,0 +1,9 @@
+{"s":"open","ret":1,"err":57005,"handle_non_null":1,"handle_multiple_of_4":1}
+{"s":"size_query","ret":0,"err":122,"size":28}
+{"s":"local_alloc","non_null":1,"err":57005,"aligned_16":1,"zeroed":1,"heap_size":28}
+{"s":"short_buffer","ret":0,"err":122,"size":28}
+{"s":"info","ret":1,"err":57005,"size":28,"attributes":96,"sid_offset":16,"revision":1,"count":1,"authority":[0,0,0,0,0,16],"rid":12288}
+{"s":"sub_authority","is_field":1,"err":0}
+{"s":"close","ret":1,"err":57005}
+{"s":"local_free","null":1,"err":57005}
+{"s":"local_alloc.fixed","non_null":1,"err":57005,"aligned_16":1,"heap_size":40}

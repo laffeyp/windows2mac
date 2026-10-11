@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-/* exports.c — the names kernel32.dll and kernelbase.dll export on this Windows (Sprint 044).
+/* exports.c — the names system DLLs export on this Windows (Sprint 044: kernel32.dll and kernelbase.dll;
+ * Sprint 048: every other DLL UnityPlayer.dll imports, loaded with LoadLibraryW).
  *
  * No C runtime. Walks each module's export directory in memory (PE/COFF, "The .edata Section") and
  * prints one JSON row per name, in the directory's order (sorted by the linker): {"m":module,
@@ -18,6 +19,8 @@ static void put(const char *s) { while (*s) out[n++] = *s++; }
 
 static void dump(const WCHAR *wname, const char *name) {
     unsigned char *base = (unsigned char *)GetModuleHandleW(wname);
+    if (!base) base = (unsigned char *)LoadLibraryW(wname);
+    if (!base) { put("{\"m\":\""); put(name); put("\",\"missing\":true}\n"); return; }
     IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_DATA_DIRECTORY d = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     IMAGE_EXPORT_DIRECTORY *e = (IMAGE_EXPORT_DIRECTORY *)(base + d.VirtualAddress);
@@ -47,6 +50,23 @@ static void system32(void) {
 void start(void) {
     dump(L"kernel32.dll", "kernel32");
     dump(L"kernelbase.dll", "kernelbase");
+    dump(L"advapi32.dll", "advapi32");
+    dump(L"crypt32.dll", "crypt32");
+    dump(L"gdi32.dll", "gdi32");
+    dump(L"hid.dll", "hid");
+    dump(L"imm32.dll", "imm32");
+    dump(L"oleaut32.dll", "oleaut32");
+    dump(L"opengl32.dll", "opengl32");
+    dump(L"setupapi.dll", "setupapi");
+    dump(L"shell32.dll", "shell32");
+    dump(L"shlwapi.dll", "shlwapi");
+    dump(L"user32.dll", "user32");
+    dump(L"version.dll", "version");
+    dump(L"winhttp.dll", "winhttp");
+    dump(L"winmm.dll", "winmm");
+    dump(L"ws2_32.dll", "ws2_32");
+    dump(L"bcrypt.dll", "bcrypt");
+    dump(L"ole32.dll", "ole32");
     system32();
     DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);

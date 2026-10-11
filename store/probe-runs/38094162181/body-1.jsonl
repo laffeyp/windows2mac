@@ -1,0 +1,14 @@
+{"s":"first","non_null":1}
+{"s":"load.lower","same":1,"err":57005}
+{"s":"load.upper","same":1,"err":57005}
+{"s":"load.no_extension","same":1,"err":57005}
+{"s":"load.full_path","same":1,"err":57005}
+{"s":"handle.upper","same":1,"err":57005}
+{"s":"handle.no_extension","same":1,"err":57005}
+{"s":"handle.full_path","same":1,"err":57005}
+{"s":"file_name","len_is_text":1,"path":"C:\\Windows\\System32\\SHELL32.dll","err":0}
+{"s":"proc.imported","is_import":1,"non_null":1,"err":57005}
+{"s":"proc.other_export","non_null":1,"err":57005}
+{"s":"proc.missing","non_null":0,"err":127}
+{"s":"free","ret":1,"err":57005}
+{"s":"after_free","still_loaded":1}

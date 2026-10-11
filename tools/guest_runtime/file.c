@@ -55,6 +55,7 @@ enum { LOOKUP_ABSENT, LOOKUP_FILE, LOOKUP_DIRECTORY, LOOKUP_PARENT_MISSING };
 /* Access and share as R=1, W=2 (share also D=4). */
 #define R 1u
 #define W 2u
+#define D 4u                         /* delete access; matches FILE_SHARE_DELETE (Sprint 048) */
 
 #define HANDLES 64
 #define HANDLE_BASE 0x1000ull          /* file handles: HANDLE_BASE + 4*slot, clear of the stdout value */
@@ -64,6 +65,8 @@ struct open_file {
     u32 used;
     u32 access;
     u32 share;
+    u32 inherit;                   /* SECURITY_ATTRIBUTES.bInheritHandle != 0 (Sprint 048; HANDLE_FLAG_INHERIT) */
+    u32 append_only;               /* FILE_APPEND_DATA without FILE_WRITE_DATA: every write goes to the end (Sprint 048) */
     u32 pad;
     u64 fd;                        /* the host bridge's descriptor */
     u64 id;                        /* the host file id: handles on one file share it */
@@ -82,24 +85,26 @@ static struct open_file *file_of(u64 handle) {
     return &files[slot];
 }
 
-/* Copy the name into `path`, Win32-normalized: the last component loses trailing dots and spaces
- * unless it is "." or ".." (Microsoft Learn, Naming Files). Returns the length in characters. */
+u64 w2m_full_path(const unsigned short *in, unsigned short *out, long *part);   /* paths.c (Sprint 048) */
+
+/* The name made full into `path` as GetFullPathNameW makes it (paths.c: the working directory C:\w2m\app,
+ * "." and "..", every component's trailing dots and spaces); before Sprint 048 the last component lost its
+ * trailing dots and spaces and the name stayed relative. Returns the length in characters. */
 static u64 normalize(u64 name) {
-    const unsigned short *s = (const unsigned short *)name;
-    u64 n = 0;
-    while (s[n]) {
-        if (n == MAX_PATH_CHARS) w2m_unimplemented(W2M_API_CreateFileW, n);
-        path[n] = s[n];
-        n++;
-    }
-    u64 start = n;
-    while (start && path[start - 1] != '\\' && path[start - 1] != '/') start--;
-    u64 len = n - start;
-    int dots = (len == 1 && path[start] == '.') || (len == 2 && path[start] == '.' && path[start + 1] == '.');
-    if (!dots)
-        while (n > start && (path[n - 1] == '.' || path[n - 1] == ' ')) n--;
-    path[n] = 0;
+    static unsigned short full[1024];
+    long part;
+    if (!*(const unsigned short *)name) return 0;       /* the empty name: callers answer ERROR_PATH_NOT_FOUND (name.empty) */
+    u64 n = w2m_full_path((const unsigned short *)name, full, &part);
+    if (!n || n > MAX_PATH_CHARS) w2m_unimplemented(W2M_API_CreateFileW, n);    /* blanks only, or too long: not in the rows */
+    for (u64 k = 0; k <= n; k++) path[k] = full[k];
     return n;
+}
+
+/* For paths.c (Sprint 048): FILE_STAT on a full path. */
+u64 w2m_file_stat_full(const unsigned short *full, u64 out) {
+    u64 n = 0;
+    while (full[n]) n++;
+    return w2m_host(W2M_FILE_STAT, (u64)full, n, out, 0, 0);
 }
 
 static u64 lookup(u64 chars, u64 *id) {
@@ -113,8 +118,21 @@ u64 w2m_file_stat(u64 name, u64 out) {
     return w2m_host(W2M_FILE_STAT, (u64)path, chars, out, 0, 0);
 }
 
+/* Data and delete access from a mask (contracts/windows.file.access, Sprint 048): reading with GENERIC_READ or
+ * FILE_READ_DATA; writing with GENERIC_WRITE, FILE_WRITE_DATA or FILE_APPEND_DATA; GENERIC_ALL and MAXIMUM_ALLOWED
+ * give both and DELETE, as FILE_ALL_ACCESS does through its bits. Attribute, extended-attribute, control and
+ * SYNCHRONIZE rights give no data access and take no part in sharing. */
+#define FILE_READ_DATA 0x1u
+#define FILE_WRITE_DATA 0x2u
+#define FILE_APPEND_DATA 0x4u
+#define DELETE_ACCESS 0x10000u
+#define GENERIC_ALL 0x10000000u
+#define MAXIMUM_ALLOWED 0x02000000u
+#define KNOWN_ACCESS (0x1FFu | 0x1F0000u | GENERIC_READ | GENERIC_WRITE | GENERIC_ALL | MAXIMUM_ALLOWED)
 static u32 access_of(u32 desired) {
-    return (desired & GENERIC_READ ? R : 0) | (desired & GENERIC_WRITE ? W : 0);
+    u32 all = desired & (GENERIC_ALL | MAXIMUM_ALLOWED) ? R | W | D : 0;
+    return all | (desired & (GENERIC_READ | FILE_READ_DATA) ? R : 0) |
+           (desired & (GENERIC_WRITE | FILE_WRITE_DATA | FILE_APPEND_DATA) ? W : 0) | (desired & DELETE_ACCESS ? D : 0);
 }
 
 /* The sharing rule over every handle open on file `id`. */
@@ -135,11 +153,14 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
     u64 template_file = *(u64 *)(rsp + 0x38);
     desired = (u32)desired;
     share = (u32)share;
-    if (desired == 0 || (desired & ~(u64)(GENERIC_READ | GENERIC_WRITE)))
-        w2m_unimplemented(W2M_API_CreateFileW, desired);
+    if (desired & ~(u64)KNOWN_ACCESS) w2m_unimplemented(W2M_API_CreateFileW, desired);
     if (share & ~(u64)(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE))
         w2m_unimplemented(W2M_API_CreateFileW, share);
-    if (security || template_file || (flags != 0 && flags != FILE_ATTRIBUTE_NORMAL))
+    /* SECURITY_ATTRIBUTES (contracts/windows.file.security, Sprint 048): nLength is not checked (0, 12 and 1000 all
+     * open); a descriptor is not in the rows; bInheritHandle sets the handle's inherit flag when nonzero */
+    if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);
+    u32 inherit = security ? *(u32 *)(security + 16) != 0 : 0;
+    if (template_file || (flags != 0 && flags != FILE_ATTRIBUTE_NORMAL))
         w2m_unimplemented(W2M_API_CreateFileW, flags);
 
     u32 access = access_of((u32)desired);
@@ -178,6 +199,8 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
     f->used = 1;
     f->access = access;
     f->share = (u32)share;
+    f->inherit = inherit;
+    f->append_only = (desired & FILE_APPEND_DATA) && !(desired & (GENERIC_WRITE | FILE_WRITE_DATA | GENERIC_ALL | MAXIMUM_ALLOWED));
     f->fd = fd;
     f->id = id;
     f->pos = 0;
@@ -234,6 +257,9 @@ u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written) {
         set_error(ERROR_ACCESS_DENIED);
         return 0;
     }
+    /* file-access-rights-constants: "write operations will not overwrite existing data if this flag is specified
+     * without FILE_WRITE_DATA" */
+    if (f->append_only) f->pos = (long long)w2m_host(W2M_FILE_SIZE, f->fd, 0, 0, 0, 0);
     u64 done = w2m_host(W2M_FILE_WRITE, f->fd, buffer, count, (u64)f->pos, 0);
     f->pos += (long long)done;
     *(u32 *)written = (u32)done;
@@ -259,6 +285,15 @@ u64 k32_ReadFile(u64 handle, u64 buffer, u64 count, u64 read, u64 rsp) {
     f->pos += (long long)done;
     *(u32 *)read = (u32)done;
     return w2m_logged(W2M_API_ReadFile, handle, 1);
+}
+
+/* GetHandleInformation on a file handle (Sprint 048, contracts/windows.file.security): HANDLE_FLAG_INHERIT (1) as
+ * CreateFileW's SECURITY_ATTRIBUTES set it; other handles are not in the rows. */
+u64 k32_GetHandleInformation(u64 handle, u64 flags) {
+    struct open_file *f = file_of(handle);
+    if (!f) w2m_unimplemented(W2M_API_GetHandleInformation, handle);
+    *(u32 *)flags = f->inherit;
+    return w2m_logged(W2M_API_GetHandleInformation, handle, 1);
 }
 
 /* SetFilePointerEx(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod): nonzero on success; a

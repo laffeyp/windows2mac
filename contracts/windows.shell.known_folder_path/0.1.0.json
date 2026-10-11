@@ -1,0 +1,122 @@
+{
+ "contract_id": "windows.shell.known_folder_path",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "SHELL32's SHGetKnownFolderPath as UnityPlayer calls it (FOLDERID_LocalAppDataLow, flags 0, no token): S_OK and a new block holding <profile>\\AppData\\LocalLow, an existing directory, no trailing backslash; the profile is C:\\Users\\<user>; LocalAppData and RoamingAppData are AppData\\Local and AppData\\Roaming; KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE give the same path; ole32's CoTaskMemFree frees it and leaves the last error, NULL included.",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 9V45 96-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/known_folders/known_folders.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "profile",
+    "hr": "0x00000000",
+    "untouched": 0,
+    "null": 0,
+    "path": "C:\\Users\\<user>",
+    "directory": 1
+   },
+   {
+    "s": "local_low",
+    "hr": "0x00000000",
+    "untouched": 0,
+    "null": 0,
+    "path": "<profile>\\AppData\\LocalLow",
+    "directory": 1
+   },
+   {
+    "s": "local",
+    "hr": "0x00000000",
+    "untouched": 0,
+    "null": 0,
+    "path": "<profile>\\AppData\\Local",
+    "directory": 1
+   },
+   {
+    "s": "roaming",
+    "hr": "0x00000000",
+    "untouched": 0,
+    "null": 0,
+    "path": "<profile>\\AppData\\Roaming",
+    "directory": 1
+   },
+   {
+    "s": "local_low.dont_verify",
+    "hr": "0x00000000",
+    "untouched": 0,
+    "null": 0,
+    "path": "<profile>\\AppData\\LocalLow",
+    "directory": 1
+   },
+   {
+    "s": "local_low.create",
+    "hr": "0x00000000",
+    "untouched": 0,
+    "null": 0,
+    "path": "<profile>\\AppData\\LocalLow",
+    "directory": 1
+   },
+   {
+    "s": "free.null",
+    "err": 57005
+   },
+   {
+    "s": "free.path",
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38098265812: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:93fdcb0f8270b50ff9a2b03c38926f3ab49945806eca0c43fc4d53302cb2309a; run 38098267402: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:15d1d468c6c4e878e6eb1d5d5d20fde4dd250f793eb65915a75117026c5e1d0d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "known_folders-1791678212-0-1",
+    "known_folders-1791678212-0-2",
+    "known_folders-1791678212-1-1",
+    "known_folders-1791678212-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-shgetknownfolderpath",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "The calling process is responsible for freeing this resource once it is no longer needed by calling CoTaskMemFree, whether SHGetKnownFolderPath succeeds or not. The returned path does not include a trailing backslash. ... Not all KNOWNFOLDERID values are present on all systems."
+  },
+  {
+   "evidence_id": "ms-knownfolderid",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid (page updated 2020-07-27; retrieved 2026-10-10)",
+   "quote": "FOLDERID_LocalAppDataLow ... GUID {A520A1A4-1780-4FF6-BD18-167343C5AF16} ... Default Path %USERPROFILE%\\AppData\\LocalLow"
+  }
+ ],
+ "open_questions": [
+  "The last error after success is not part of the contract (the derive drops `err` from the SHGetKnownFolderPath rows): Windows leaves 1008 (ERROR_NO_TOKEN) for the profile, Local, Roaming and LocalLow with KF_FLAG_DONT_VERIFY, 0 for LocalLow, 183 after KF_FLAG_CREATE, on all four executions; the rows show no rule, and w2m leaves the last error as it was.",
+  "w2m's profile is C:\\Users\\w2m on a drive made fresh each run: nothing the game writes there outlives the run.",
+  "Excluded rows: see sections.excluded."
+ ],
+ "sections": {
+  "probe": "probes/known_folders (Sprint 044)",
+  "implementation": "tools/guest_runtime/known_folders.c",
+  "rows": "scripts/family_run.py known_folders",
+  "excluded": "proc: GetProcAddress(shell32, \"SHGetKnownFolderPath\") is not the import's address on Windows, though SHELL32 exports the name itself, not as a forwarder (exports run 38094046782); the cause is not established. w2m answers the import's address, as Windows does for CommandLineToArgvW (contracts/windows.module.system); nothing on the frontier compares the two; unregistered: an unregistered GUID: 0x80070002, *ppszPath NULL, last error 0. Which GUIDs a system registers varies, so w2m serves its four folders and stops at any other GUID; the probe asks last; unregistered.create: as unregistered, with KF_FLAG_CREATE"
+ }
+}

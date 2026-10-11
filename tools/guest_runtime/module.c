@@ -57,6 +57,15 @@ u64 k32_LoadLibraryExW(u64 name, u64 file, u64 flags) {
     return w2m_logged(W2M_API_LoadLibraryExW, name, h);
 }
 
+/* LoadLibraryW(lpLibFileName): LoadLibraryExW with no file and no flags (Sprint 048; contracts/windows.module.system:
+ * a system DLL the program imports statically is found under any spelling, as GetModuleHandleW finds it). */
+u64 k32_LoadLibraryW(u64 name) {
+    if (name == 0) w2m_unimplemented(W2M_API_LoadLibraryW, 0);
+    u64 h = find(name, 1);
+    if (!h) set_error(ERROR_MOD_NOT_FOUND);
+    return w2m_logged(W2M_API_LoadLibraryW, name, h);
+}
+
 /* GetModuleHandleW(lpModuleName): NULL means the image; a module not loaded: NULL, the error. */
 u64 k32_GetModuleHandleW(u64 name) {
     u64 h = name ? find(name, 0) : image_base();
