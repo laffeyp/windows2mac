@@ -70,11 +70,8 @@ void start(void) {
     SetLastError(SENTINEL);
     ok = DuplicateHandle(me, e2, me, &e3, 0, FALSE, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
     err = GetLastError();
-    SetLastError(SENTINEL);
-    BOOL closed_again = CloseHandle(e2);
-    DWORD err2 = GetLastError();
-    row("dup.close_source"); field("ret", ok != 0); field("err", err); field("source_close_ret", closed_again != 0);
-    field("source_close_err", err2); field("copy_signaled", WaitForSingleObject(e3, 0) == WAIT_OBJECT_0); end();
+    row("dup.close_source"); field("ret", ok != 0); field("err", err); field("copy_is_source_value", e3 == e2);
+    field("copy_signaled", WaitForSingleObject(e3, 0) == WAIT_OBJECT_0); end();
 
     HANDLE bad = (HANDLE)0x1234, out_h = (HANDLE)0x5A5A;
     SetLastError(SENTINEL);
