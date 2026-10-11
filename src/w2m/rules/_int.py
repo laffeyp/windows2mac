@@ -590,3 +590,86 @@ def locked(base: Callable[[Ctx], None]) -> Callable[[Ctx], None]:
         ctx.ic = ctx.ic.removesuffix("_LOCK")
         base(ctx)
     return rule
+
+
+def _model(ctx: Ctx, dst: Any, srcs: tuple[int, ...], bits: int) -> None:
+    """One instruction the model computes whole (Sprint 050; integer_model.py): the VM runs it as a model step."""
+    ctx.b.emit("x86", ctx.ic, dst, srcs, bits)
+
+
+def double_shift(ctx: Ctx) -> None:
+    """SHLD, SHRD r/m, r, imm8 or CL (SDM SHLD/SHRD)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    ck, cnt, _ = _operand(b, ops[2], nxt)
+    _model(ctx, dst, (_val(b, dk, dst), _val(b, sk, src), _val(b, ck, cnt)), bits)
+
+
+def rcr(ctx: Ctx) -> None:
+    """RCR r/m, 1, CL or imm8 (SDM RCL/RCR/ROL/ROR): rotate right through CF."""
+    b = ctx.b
+    dk, dst, bits = _operand(b, ctx.ops[0], ctx.nxt)
+    ck, cx = _count(ctx, bits)
+    _model(ctx, dst, (_val(b, dk, dst), _val(b, ck, cx)), bits)
+
+
+def implicit(ctx: Ctx) -> None:
+    """STC, CLC, CMC, SAHF, PUSHFQ, POPFQ, and the single string forms (SDM, each page): every operand implicit. A
+    0x67 prefix (32-bit RSI and RDI) or a 66 prefix on PUSHF and POPF is not lifted."""
+    f = ctx.f
+    if f is not None and (0x67 in f.prefixes or (0x66 in f.prefixes and ctx.ic in ("PUSHFQ", "POPFQ"))):
+        raise LiftError(f"{ctx.ic} with a 66 or 67 prefix at 0x{ctx.address:x}")
+    _model(ctx, None, (), 64)
+
+
+def popcnt(ctx: Ctx) -> None:
+    """POPCNT r, r/m (SDM POPCNT; reported by the guest profile)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    _, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    _model(ctx, dst, (_val(b, sk, src),), bits)
+
+
+def loop(ctx: Ctx) -> None:
+    """LOOP, LOOPE, LOOPNE, JRCXZ rel8 (SDM LOOPcc, Jcc): RCX in 64-bit mode; ECX (a 0x67 prefix) is not lifted."""
+    f = ctx.f
+    if f is not None and 0x67 in f.prefixes:
+        raise LiftError(f"{ctx.ic} on ECX at 0x{ctx.address:x}")
+    _, target, _ = _operand(ctx.b, ctx.ops[0], ctx.nxt)
+    _model(ctx, None, (cast(int, target),), 64)
+
+
+def leave(ctx: Ctx) -> None:
+    """LEAVE (SDM LEAVE): RSP = RBP, then RBP = the popped quadword; the load first (commit rule). A 66 prefix
+    (16-bit LEAVE) is not lifted."""
+    b, f = ctx.b, ctx.f
+    if f is not None and f.opsize == 16:
+        raise LiftError(f"LEAVE with 16-bit operands at 0x{ctx.address:x}")
+    rbp, v, eight, nsp = b.t(), b.t(), b.t(), b.t()
+    b.emit("ld", rbp, ("r", 5, 64, False))
+    b.emit("ld", v, ("m", rbp, 8))
+    b.emit("imm", eight, 8)
+    b.emit("alu", nsp, "add", rbp, eight, 64)
+    b.emit("st", ("r", RSP, 64, False), nsp)
+    b.emit("st", ("r", 5, 64, False), v)
+
+
+def movbe(ctx: Ctx) -> None:
+    """MOVBE r, m and m, r (SDM MOVBE): the bytes reversed on the way; a register in the memory operand's place
+    is #UD. 16 bits: the two bytes swapped (a rotate by 8)."""
+    b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
+    memory = 1 if ctx.f is not None and ctx.f.opcode == 0xF0 else 0
+    if not ops[memory].startswith("M:"):
+        b.emit("ud")
+        return
+    dk, dst, bits = _operand(b, ops[0], nxt)
+    sk, src, _ = _operand(b, ops[1], nxt, bits)
+    v, r = _val(b, sk, src), b.t()
+    if bits == 16:
+        eight = b.t()
+        b.emit("imm", eight, 8)
+        b.emit("alu", r, "rol", v, eight, 16)
+    else:
+        b.emit("alu", r, "bswap", v, v, bits)
+    b.emit("st", dst, r)

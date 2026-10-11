@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 from w2m import cpuid
 from w2m import approximate, string_compare, x86fp as fp
+from w2m import integer_model
 from w2m.kernel32 import M64, HandlerFailed, Kernel32, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RBX, RCX, RDI, RDX, RSI, SSE2_INT, Lifted, LiftError, Op, lift
 from w2m.loader import GuestFault, Loaded
@@ -78,6 +79,20 @@ LANE_ARITH: dict[str, tuple[int, Callable[[int, int, int], int]]] = {
 LANE_ARITH["PADDB"] = (8, lambda p, q, w: p + q)                                      # Sprint 049
 LANE_ARITH["PCMPEQQ"] = (64, lambda p, q, w: _mask(w) if p == q else 0)
 LANE_ARITH["PMULUDQ"] = (64, lambda p, q, w: (p & 0xFFFF_FFFF) * (q & 0xFFFF_FFFF))
+# Sprint 050 (set 050): the remaining lane-by-lane classes (SDM, each page); PABSW reads only the source
+LANE_ARITH["PADDUSB"] = (8, lambda p, q, w: min(p + q, 0xFF))
+LANE_ARITH["PAVGB"] = (8, lambda p, q, w: (p + q + 1) >> 1)
+LANE_ARITH["PCMPGTB"] = (8, lambda p, q, w: _mask(w) if _signed(p, w) > _signed(q, w) else 0)
+LANE_ARITH["PCMPGTW"] = (16, lambda p, q, w: _mask(w) if _signed(p, w) > _signed(q, w) else 0)
+LANE_ARITH["PMAXUD"] = (32, lambda p, q, w: max(p, q))
+LANE_ARITH["PMAXUW"] = (16, lambda p, q, w: max(p, q))
+LANE_ARITH["PMAXSW"] = (16, lambda p, q, w: max(_signed(p, w), _signed(q, w)))
+LANE_ARITH["PMINSD"] = (32, lambda p, q, w: min(_signed(p, w), _signed(q, w)))
+LANE_ARITH["PMULHW"] = (16, lambda p, q, w: (_signed(p, w) * _signed(q, w)) >> 16)
+LANE_ARITH["PMULLD"] = (32, lambda p, q, w: p * q)
+LANE_ARITH["PABSW"] = (16, lambda p, q, w: abs(_signed(q, w)))
+SSE_050_NEW = {"CVTPS2DQ", "CVTPD2PS", "CMPPS", "CMPPD", "CMPSS", "SHUFPD", "MOVLPS", "MOVHPD", "MOVNTDQ", "PSADBW",
+           "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB", "PMOVZXWD", "PSLLW"}
 INTERLEAVE = {"PUNPCKHQDQ": (64, True), "PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "UNPCKHPD": (64, True), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
               "PUNPCKHWD": (16, True), "PUNPCKLWD": (16, False)}
 
@@ -336,6 +351,8 @@ class Runtime:
             self._xwrite(dst, v, 16)
         elif ic in SSE_049B:
             self._sse_049b(ic, dst, src, imm)
+        elif ic in SSE_050_NEW:
+            self._sse_050(ic, dst, src, imm)
         elif ic in SSE2_INT or ic in LANE_ARITH or ic in INTERLEAVE:
             self._sse2_int(ic, dst, src, imm)
         elif ic in ("MOVSS", "MOVSD_XMM"):
@@ -494,6 +511,95 @@ class Runtime:
             env.flags = flags
             self._fp_check(env)
             x[dst[1]] = pack(out, 32)
+        else:
+            raise LiftError(f"sse {ic}")
+
+    def _sse_050(self, ic: str, dst: Op, src: Op, imm: int | None) -> None:
+        """The set-050 legacy-SSE classes (Intel SDM Vol 2, each page; Sprint 050), on 128 bits."""
+        th, x = self.th, self.th.xmm
+
+        def lanes(v: int, w: int) -> list[int]:
+            return [(v >> (w * i)) & _mask(w) for i in range(128 // w)]
+
+        def pack(ls: list[int], w: int) -> int:
+            return sum((n & _mask(w)) << (w * i) for i, n in enumerate(ls))
+
+        def saturate(v: int, w: int) -> int:
+            return max(-(1 << (w - 1)), min((1 << (w - 1)) - 1, v))
+
+        if ic in ("MOVLPS", "MOVHPD"):                           # one quadword, memory to or from a register's half
+            shift = 0 if ic == "MOVLPS" else 64
+            if dst[0] == "x":
+                q = self._xread(src, 8)
+                x[dst[1]] = x[dst[1]] & ~(_mask(64) << shift) & _mask(128) | q << shift
+            else:
+                self._xwrite(dst, x[src[1]] >> shift & _mask(64), 8)
+            return
+        if ic == "MOVNTDQ":                                      # a non-temporal 16-byte store
+            self._xwrite(dst, x[src[1]], 16)
+            return
+        if ic == "PEXTRW":                                       # word imm & 7, zero-extended to the register
+            assert imm is not None
+            self._wr(dst[1], 32, False, x[src[1]] >> (16 * (imm & 7)) & 0xFFFF)
+            return
+        a = x[dst[1]]
+        if ic == "PINSRB":                                       # the source's low byte into byte imm & 15
+            assert imm is not None
+            byte = self._xread(src, 1) & 0xFF
+            lane = imm & 15
+            x[dst[1]] = a & ~(0xFF << 8 * lane) & _mask(128) | byte << 8 * lane
+            return
+        if ic == "PMOVZXWD":                                     # four words zero-extended to dwords
+            x[dst[1]] = pack(lanes(self._xread(src, 8), 16)[:4], 32)
+            return
+        if ic == "CMPSS":                                        # predicate imm8[2:0] on the low floats
+            assert imm is not None
+            env = fp.Env(th.mxcsr)
+            hit = fp.cmp_predicate(fp.F32, a & _mask(32), self._xread(src, 4) & _mask(32), imm & 7, env)
+            self._fp_check(env)
+            x[dst[1]] = a & ~_mask(32) & _mask(128) | (_mask(32) if hit else 0)
+            return
+        v = self._xread(src, 16)
+        if ic == "PSLLW":                                        # by imm8 or the source's low quadword
+            count = imm if imm is not None else v & _mask(64)
+            x[dst[1]] = 0 if count > 15 else pack([w << count for w in lanes(a, 16)], 16)
+        elif ic == "SHUFPD":
+            assert imm is not None
+            x[dst[1]] = (a >> (64 * (imm & 1)) & _mask(64)) | (v >> (64 * (imm >> 1 & 1)) & _mask(64)) << 64
+        elif ic == "PSADBW":                                     # per quadword: the sum of |a - v| over its bytes
+            ab, vb = lanes(a, 8), lanes(v, 8)
+            x[dst[1]] = pack([sum(abs(ab[i] - vb[i]) for i in range(h, h + 8)) for h in (0, 8)], 64)
+        elif ic in ("PACKSSWB", "PACKSSDW"):                     # signed, saturated: the destination's half first
+            w = 16 if ic == "PACKSSWB" else 32
+            x[dst[1]] = pack([saturate(_signed(n, w), w // 2) for n in lanes(a, w) + lanes(v, w)], w // 2)
+        elif ic == "PMADDWD":                                    # signed word products, adjacent pairs added
+            aw, vw = [_signed(n, 16) for n in lanes(a, 16)], [_signed(n, 16) for n in lanes(v, 16)]
+            x[dst[1]] = pack([aw[2 * i] * vw[2 * i] + aw[2 * i + 1] * vw[2 * i + 1] for i in range(4)], 32)
+        elif ic == "PMADDUBSW":                                  # unsigned dst bytes by signed src bytes, saturated
+            ab, vb = lanes(a, 8), [_signed(n, 8) for n in lanes(v, 8)]
+            x[dst[1]] = pack([saturate(ab[2 * i] * vb[2 * i] + ab[2 * i + 1] * vb[2 * i + 1], 16) for i in range(8)], 16)
+        elif ic in ("CVTPS2DQ", "CVTPD2PS", "CMPPS", "CMPPD"):
+            env, flags, out = fp.Env(th.mxcsr), 0, []
+            if ic == "CVTPD2PS":                                 # two doubles to two floats; bits 127:64 zeroed
+                for d in lanes(v, 64):
+                    env.flags = 0
+                    out.append(fp.convert(fp.F64, fp.F32, d, env))
+                    flags |= env.flags
+                result = pack(out, 32)
+            else:
+                f, w = (fp.F64, 64) if ic == "CMPPD" else (fp.F32, 32)
+                for p, q in zip(lanes(a, w), lanes(v, w)):
+                    env.flags = 0
+                    if ic == "CVTPS2DQ":
+                        out.append(fp.to_int(fp.F32, q, 32, False, env))
+                    else:
+                        assert imm is not None
+                        out.append(_mask(w) if fp.cmp_predicate(f, p, q, imm & 7, env) else 0)
+                    flags |= env.flags
+                result = pack(out, w)
+            env.flags = flags
+            self._fp_check(env)
+            x[dst[1]] = result
         else:
             raise LiftError(f"sse {ic}")
 
@@ -971,6 +1077,11 @@ class Runtime:
                 self.th.regs[0], self.th.regs[3], self.th.regs[1], self.th.regs[2] = a, b, c, d
             elif k == "sse":
                 self._sse(op[1], op[2], op[3], op[4], op[5] if len(op) > 5 else None)
+            elif k == "x86":                                      # ("x86", ic, dst, srcs, bits) (Sprint 050)
+                target = integer_model.execute(self, op[1], op[2], [t[v] for v in op[3]], op[4])
+                if target is not None:
+                    self.th.rip = target
+                    return
             elif k == "br":
                 if self._cond(op[1]):
                     self.th.rip = t[op[2]]

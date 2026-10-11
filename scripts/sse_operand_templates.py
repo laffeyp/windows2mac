@@ -103,6 +103,32 @@ MANUAL = {("PSRLQ", "66", 0x73, 2): "Wdq,Ib", ("PSRLDQ", "66", 0x73, 3): "Wdq,Ib
           # prefetch hints the frontier meets (Sprint 048): PREFETCHW 0F 0D /1, PREFETCHT0-T2 0F 18 /1-/3
           ("PREFETCHW", "none", 0x0D, 1): "Mcl", ("PREFETCHT0", "none", 0x18, 1): "Mcl",
           ("PREFETCHT1", "none", 0x18, 2): "Mcl", ("PREFETCHT2", "none", 0x18, 3): "Mcl"}
+# Sprint 050 (set 050): the legacy-SSE classes the mono and UnityPlayer censuses of 2026-10-11 list as missing, each from
+# its SDM line; the NP (MMX-register) rows of PMULHW, PABSW and PMADDUBSW stay without a template. W of a memory-only
+# operand (MOVLPS, MOVHPD, MOVNTDQ) and of a register-only one (PEXTRW 0F C5) reads both forms; the rule refuses the
+# other (#UD). Edb: PINSRB's r32/m8 (a 32-bit register, or one byte of memory).
+MANUAL_050 = {
+    ("CVTDQ2PS", "none", 0x5B, None): "V,Wdq", ("CVTPS2DQ", "66", 0x5B, None): "V,Wdq",
+    ("CVTTPS2DQ", "f3", 0x5B, None): "V,Wdq", ("CVTPS2PD", "none", 0x5A, None): "V,Wq",
+    ("CVTPD2PS", "66", 0x5A, None): "V,Wdq", ("CMPPS", "none", 0xC2, None): "V,Wdq,Ib",
+    ("CMPPD", "66", 0xC2, None): "V,Wdq,Ib", ("CMPSS", "f3", 0xC2, None): "V,Wd,Ib",
+    ("SHUFPD", "66", 0xC6, None): "V,Wdq,Ib", ("MOVLPS", "none", 0x12, None): "V,Wq", ("MOVLPS", "none", 0x13, None): "Wq,V",
+    ("MOVHPD", "66", 0x16, None): "V,Wq", ("MOVHPD", "66", 0x17, None): "Wq,V",
+    ("PSHUFB", "66", 0x00, None): "V,Wdq", ("PALIGNR", "66", 0x0F, None): "V,Wdq,Ib", ("PSADBW", "66", 0xF6, None): "V,Wdq",
+    ("PACKSSWB", "66", 0x63, None): "V,Wdq", ("PACKSSDW", "66", 0x6B, None): "V,Wdq",
+    ("PMADDUBSW", "66", 0x04, None): "V,Wdq", ("PMADDWD", "66", 0xF5, None): "V,Wdq",
+    ("PEXTRW", "66", 0xC5, None): "Gd,Wdq,Ib", ("PINSRB", "66", 0x20, None): "V,Edb,Ib", ("PINSRD", "66", 0x22, None): "V,Ed,Ib",
+    ("PUNPCKHQDQ", "66", 0x6D, None): "V,Wdq", ("PMULHW", "66", 0xE5, None): "V,Wdq", ("PMULLD", "66", 0x40, None): "V,Wdq",
+    ("PADDUSB", "66", 0xDC, None): "V,Wdq", ("PADDB", "66", 0xFC, None): "V,Wdq", ("PAVGB", "66", 0xE0, None): "V,Wdq",
+    ("PABSW", "66", 0x1D, None): "V,Wdq", ("PCMPGTB", "66", 0x64, None): "V,Wdq", ("PCMPGTW", "66", 0x65, None): "V,Wdq",
+    ("PCMPEQQ", "66", 0x29, None): "V,Wdq", ("PMAXUD", "66", 0x3F, None): "V,Wdq", ("PMAXUW", "66", 0x3E, None): "V,Wdq",
+    ("PMAXSW", "66", 0xEE, None): "V,Wdq", ("PMINSD", "66", 0x39, None): "V,Wdq",
+    ("PMOVSXDQ", "66", 0x25, None): "V,Wq", ("PMOVZXWD", "66", 0x33, None): "V,Wq",
+    ("PSLLW", "66", 0xF1, None): "V,Wdq", ("PSLLW", "66", 0x71, 6): "Wdq,Ib", ("MOVNTDQ", "66", 0xE7, None): "Wdq,V",
+    # integer (Sprint 050): MOVBE's operands are memory only (the rule refuses a register, #UD)
+    ("POPCNT", "f3", 0xB8, None): "Gv,Ev", ("MOVBE", "none", 0xF0, None): "Gv,Ev", ("MOVBE", "none", 0xF1, None): "Ev,Gv",
+    ("LOOP", "none", 0xE2, None): "Jb", ("LOOPE", "none", 0xE1, None): "Jb", ("LOOPNE", "none", 0xE0, None): "Jb",
+    ("JRCXZ", "none", 0xE3, None): "Jb"}
 MMX_FORMS = {"PSRLQ", "PUNPCKLBW", "PMOVMSKB", "PSHUFD"}       # their NP rows use mm registers: not lifted
 
 
@@ -198,6 +224,13 @@ def main(argv: list[str]) -> int:
                 lines_by_key.setdefault(key, []).append(ln)
     written = 0
     for e in spec["entries"]:
+        new_050 = MANUAL_050.get((e["iclass"], e["pfx"], e["op"], e.get("reg")))
+        if new_050 and not e.get("vex") and not e.get("evex") and not e.get("enc") and not e.get("ops"):
+            e["ops"] = new_050
+            e["src_ops"] = f"written by hand from the row's SDM line ({e['src']}); notation Vol 2D Table A-1 (Sprint 050)"
+            written += 1
+            print(f"{e['iclass']:10} {e['pfx']:4} {e['map']} {e['op']:02X} /{e.get('reg', 'r')} {e['ops']} (by hand, 050)")
+            continue
         manual = MANUAL.get((e["iclass"], e["pfx"], e["op"], e.get("reg")))
         if manual and e["map"] in ("0f", "0f3a") and not e.get("vex") and not e.get("evex") and not e.get("ops"):
             e["ops"] = manual
@@ -224,7 +257,11 @@ def main(argv: list[str]) -> int:
         print(f"{e['iclass']:10} {e['pfx']:4} 0F {e['op']:02X} {'w' + str(e['w']) if 'w' in e else '  '} {e['ops']}")
     print(f"{written} rows")
     if a.write:
-        if spec["version"] == "0.7.1":
+        if spec["version"] == "0.8.1":
+            spec["version"] = "0.8.2"
+            spec["revision"] += ("; 0.8.2 (2026-10-11): operand templates for set 050, the legacy-SSE and integer classes "
+                                 "the mono and UnityPlayer censuses of 2026-10-11 list as missing (Edb: r32 or m8) (Sprint 050)")
+        elif spec["version"] == "0.7.1":
             spec["version"] = "0.7.2"
             spec["revision"] += ("; 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C "
                                  "runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044)")
