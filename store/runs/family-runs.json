@@ -48,7 +48,7 @@
   }
  },
  "com": {
-  "candidate_sha256": "sha256:0d92e087d9dcf69e59fdc463c1aeb8865c5fd4e5b041e34616d3c172592439f9",
+  "candidate_sha256": "sha256:966f303a745ce652f9a3b7e68c9d2bb0d51fda183f38fb8b731ec19f3c35ef7f",
   "divergence": {
    "38126872187": null,
    "38126873913": null
@@ -61,7 +61,7 @@
    "SESSION_INIT": 1
   },
   "family": "com",
-  "record": "store/runs/family-com-1791751978448937000",
+  "record": "store/runs/family-com-1791752740601646000",
   "verdicts": {
    "38126872187": "conforms",
    "38126873913": "conforms"
@@ -157,6 +157,26 @@
    "38039755720": "conforms",
    "38039757756": "conforms",
    "38039759979": "conforms"
+  }
+ },
+ "display": {
+  "candidate_sha256": "sha256:3ab22ef459de65575ba2d1bdf7611c5702f3381549f5b94fa5e4986430546ad7",
+  "divergence": {
+   "38174316653": null,
+   "38174318347": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "display",
+  "record": "store/runs/family-display-1791752598882741000",
+  "verdicts": {
+   "38174316653": "conforms",
+   "38174318347": "conforms"
   }
  },
  "environment_empty": {
@@ -267,7 +287,7 @@
    "SESSION_INIT": 1
   },
   "family": "exception_filter",
-  "record": "store/runs/family-exception_filter-1791697674088017000",
+  "record": "store/runs/family-exception_filter-1791752357464629000",
   "verdicts": {
    "38045461436": "conforms",
    "38045463327": "conforms",
@@ -288,7 +308,7 @@
   }
  },
  "exceptions": {
-  "candidate_sha256": "sha256:819a4ce908b3e646ce387ce727c1491753a446271a5daeef48090c30b64445fa",
+  "candidate_sha256": "sha256:c6570840851680837d61f00ba667797ed24a521dc8a89758c49d2a5bb1707f44",
   "divergence": {
    "38165931122": null,
    "38165933249": null
@@ -301,7 +321,7 @@
    "SESSION_INIT": 1
   },
   "family": "exceptions",
-  "record": "store/runs/family-exceptions-1791751980238343000",
+  "record": "store/runs/family-exceptions-1791752339766972000",
   "verdicts": {
    "38165931122": "conforms",
    "38165933249": "conforms"
@@ -348,7 +368,7 @@
   }
  },
  "file_mapping": {
-  "candidate_sha256": "sha256:b0ac0fb15d6e6d005dc2ba009719a2c022d7ceb717985fff0a40912c35d4cae4",
+  "candidate_sha256": "sha256:7b6758ac7ae41a5779fc19d903ddbd239cef79b62896eb12c7b0551c9f0e4362",
   "divergence": {
    "38120624307": null,
    "38120626017": null
@@ -361,14 +381,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_mapping",
-  "record": "store/runs/family-file_mapping-1791751977393128000",
+  "record": "store/runs/family-file_mapping-1791752739550196000",
   "verdicts": {
    "38120624307": "conforms",
    "38120626017": "conforms"
   }
  },
  "file_search": {
-  "candidate_sha256": "sha256:702999925e4fec68345af31749e07be8bbeabaa9049aea331119686df7195953",
+  "candidate_sha256": "sha256:196e04523e1739fbe3d95b9ffb73dcf5067e9a12e2c270960d31fbd7c7ff2ded",
   "divergence": {
    "38173241103": null,
    "38173242874": null
@@ -381,7 +401,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_search",
-  "record": "store/runs/family-file_search-1791751979640822000",
+  "record": "store/runs/family-file_search-1791752741781817000",
   "verdicts": {
    "38173241103": "conforms",
    "38173242874": "conforms"
@@ -461,14 +481,14 @@
    "SESSION_INIT": 1
   },
   "family": "function_tables",
-  "record": "store/runs/family-function_tables-1791745568384126000",
+  "record": "store/runs/family-function_tables-1791752353507923000",
   "verdicts": {
    "38114067866": "conforms",
    "38114069629": "conforms"
   }
  },
  "generate_random": {
-  "candidate_sha256": "sha256:f67af5852747defddef691fd71da8c6417ec568e030655b8e1d1e0c129f6731d",
+  "candidate_sha256": "sha256:a153de42361cdbde139f00251dfc3f2fa5c2576e05de65882379a9ed43417b5a",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -481,7 +501,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791751974515570000",
+  "record": "store/runs/family-generate_random-1791752738979630000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -580,7 +600,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:26c4bbd7b92d7b53106eb321e73ca5f5eeb23bb521b7c8bc4714c6fdc7a8a58a",
+  "candidate_sha256": "sha256:c62b576482f3cd5d6ee6e6d7f4e130dfd01394c695bc832bc20834de151520a9",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -607,7 +627,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791751968677904000",
+  "record": "store/runs/family-loader-1791752734668379000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -716,7 +736,7 @@
   }
  },
  "network": {
-  "candidate_sha256": "sha256:b0b6fe3b39e81dc81ff5ae0c5cb08ce1d3527e09d33b67dc7ec6e2cf224e7ed2",
+  "candidate_sha256": "sha256:fc5394a5ce5ef7be502d6b66be07e9693abfe4e0aa12b89d9b508dda0e2bcdc6",
   "divergence": {
    "38127406287": null,
    "38127407661": null
@@ -729,7 +749,7 @@
    "SESSION_INIT": 1
   },
   "family": "network",
-  "record": "store/runs/family-network-1791751979960064000",
+  "record": "store/runs/family-network-1791752742479960000",
   "verdicts": {
    "38127406287": "conforms",
    "38127407661": "conforms"
@@ -854,7 +874,7 @@
   }
  },
  "registry": {
-  "candidate_sha256": "sha256:ddac3f3bee8cec0495b11636bb4d267baa21bc2da2c5f52ccd3443803d0dc460",
+  "candidate_sha256": "sha256:a7131072e723fb65cff603b9e1fe256a28b470a1721d9490f0ff5f002a4c8ddc",
   "divergence": {
    "38173241012": null,
    "38173242936": null
@@ -867,7 +887,7 @@
    "SESSION_INIT": 1
   },
   "family": "registry",
-  "record": "store/runs/family-registry-1791751979351931000",
+  "record": "store/runs/family-registry-1791752741501359000",
   "verdicts": {
    "38173241012": "conforms",
    "38173242936": "conforms"
@@ -898,7 +918,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:b8304f496cc42e0d6c57f5ebc52fba55208d4e767dbbac35346c4d210a435cbd",
+  "candidate_sha256": "sha256:5e35c448dbbc37338d4522021b963c90bfae6b212c2b21b1fe936622887f6648",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -925,7 +945,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791751972069870000",
+  "record": "store/runs/family-static_tls-1791752736496560000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -1042,7 +1062,7 @@
   }
  },
  "system_modules": {
-  "candidate_sha256": "sha256:b5cfb3aed886d5a1ace73c69ad9ed34af3dd1ab9a5482ceb671eafcc539c1c86",
+  "candidate_sha256": "sha256:b0d37ef28b41561aba996e28c764e59f697c456fcfa0ab2a0360314d84eb5a5e",
   "divergence": {
    "38094160385": null,
    "38094162181": null
@@ -1055,7 +1075,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_modules",
-  "record": "store/runs/family-system_modules-1791751976094870000",
+  "record": "store/runs/family-system_modules-1791752739265243000",
   "verdicts": {
    "38094160385": "conforms",
    "38094162181": "conforms"
@@ -1178,7 +1198,7 @@
   }
  },
  "threads": {
-  "candidate_sha256": "sha256:97fced7dfdf9b9eb5e02ef672d777133813f13b13d738dae9cb5d09d9e3297e0",
+  "candidate_sha256": "sha256:cadf6ec48e9ce22f78d53c1b14d6c6c3fd44e7b671a5a0a33e8ec18133ca5ab0",
   "divergence": {
    "38124576301": null,
    "38124578332": null
@@ -1191,14 +1211,14 @@
    "SESSION_INIT": 1
   },
   "family": "threads",
-  "record": "store/runs/family-threads-1791751977698214000",
+  "record": "store/runs/family-threads-1791752739855575000",
   "verdicts": {
    "38124576301": "conforms",
    "38124578332": "conforms"
   }
  },
  "time": {
-  "candidate_sha256": "sha256:4af66f75cd0873ea872f9ad31d4054bc8020160ad8daa75cdbebe1229440e9f5",
+  "candidate_sha256": "sha256:4eeeb2a9dcce815aa6e5af9badcc741453552b5da98dee780782789c7523f34e",
   "divergence": {
    "38173127764": null,
    "38173129974": null
@@ -1211,7 +1231,7 @@
    "SESSION_INIT": 1
   },
   "family": "time",
-  "record": "store/runs/family-time-1791751978814681000",
+  "record": "store/runs/family-time-1791752740967612000",
   "verdicts": {
    "38173127764": "conforms",
    "38173129974": "conforms"
@@ -1295,14 +1315,14 @@
    "SESSION_INIT": 1
   },
   "family": "vectored_handlers",
-  "record": "store/runs/family-vectored_handlers-1791745155984545000",
+  "record": "store/runs/family-vectored_handlers-1791752350674785000",
   "verdicts": {
    "38114204685": "conforms",
    "38114206477": "conforms"
   }
  },
  "version": {
-  "candidate_sha256": "sha256:ef43521167890deb7402590c51c0e3d6715e91078901ec3cf85484c9bf6c57ac",
+  "candidate_sha256": "sha256:e7cf5bd1a06f7ee4e661155a8a068c5c668ca2eee07895fb04927f094db54ebd",
   "divergence": {
    "38173733146": null,
    "38173735116": null
@@ -1315,14 +1335,14 @@
    "SESSION_INIT": 1
   },
   "family": "version",
-  "record": "store/runs/family-version-1791751839573692000",
+  "record": "store/runs/family-version-1791752742100519000",
   "verdicts": {
    "38173733146": "conforms",
    "38173735116": "conforms"
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:4c0c96e1f8e269cd1d2616131e783097e7210c3312cc5327555251b4270b8990",
+  "candidate_sha256": "sha256:58b9a297f1d2260cfae62c34e5781f8fa443ba36197cab61a9fcef358b6a750d",
   "divergence": {
    "38172734444": null,
    "38172736319": null
@@ -1335,10 +1355,30 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791751971702659000",
+  "record": "store/runs/family-virtual_memory-1791752736127446000",
   "verdicts": {
    "38172734444": "conforms",
    "38172736319": "conforms"
+  }
+ },
+ "windows": {
+  "candidate_sha256": "sha256:cfa35933eb5e26bc9b2b8e1bae20fd1e9e443799204b9faddf67b9721f55ffd2",
+  "divergence": {
+   "38174244880": null,
+   "38174246839": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "windows",
+  "record": "store/runs/family-windows-1791752604253367000",
+  "verdicts": {
+   "38174244880": "conforms",
+   "38174246839": "conforms"
   }
  }
 }

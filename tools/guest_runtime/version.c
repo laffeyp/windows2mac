@@ -14,7 +14,7 @@
  *     (160); TRUE leaves the last error
  * The version is w2m's profile, Windows Server 2025: 10.0 build 26100, no service pack, platform 2, product type 3
  * (server), suite mask 0x190. ntdll answers it to every program; kernel32 tells it only to a program whose manifest
- * names Windows 10 (manifest.c), the rest 6.2 build 9200, whose VerifyVersionInfoW no row records (it stops the run).
+ * names Windows 10 (resources.c), the rest 6.2 build 9200, whose VerifyVersionInfoW no row records (it stops the run).
  * The suite conditions (VER_AND, VER_OR) are not in the rows and stop the run.
  */
 #include "runtime.h"

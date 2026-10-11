@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-/* manifest.c — what the program's manifest asks of Windows (Sprint 054).
+/* resources.c — a module's resources, and what the program's manifest asks of Windows (Sprint 054).
+ *
+ * w2m_resource finds a resource by type and id in a mapped image, as FindResource does (PE Format, "The .rsrc
+ * Section": type, name and language directories; the first language). LoadIconA (windows.c) reads icon groups with
+ * it.
  *
  * Windows answers some questions by the running exe's manifest (its RT_MANIFEST resource, id 1): a program that
  * names Windows 10 among its supportedOS is told version 10.0, one that does not 6.2 build 9200 (contracts
@@ -42,24 +46,31 @@ static u32 entry(u64 root, u32 dir, u32 id) {
     return 0;
 }
 
-static u32 read_flags(void) {
-    u64 base = *(const volatile u64 *)(W2M_PEB_VA + 0x10);            /* PEB.ImageBaseAddress */
+u64 w2m_resource(u64 base, u32 type, u32 id, u32 *size, u32 *missing) {
     const u8 *nt = (const u8 *)base + *(const u32 *)(base + 0x3c);
     const u8 *opt = nt + 24;
-    if (*(const u32 *)(opt + 108) <= 2) return 0;                    /* NumberOfRvaAndSizes */
-    u32 rva = *(const u32 *)(opt + 112 + 2 * 8);
-    if (!rva) return 0;
+    u32 rva = *(const u32 *)(opt + 108) > 2 ? *(const u32 *)(opt + 112 + 2 * 8) : 0;
+    if (!rva) { *missing = W2M_RESOURCE_NO_DIRECTORY; return 0; }
     u64 root = base + rva;
-    u32 type = entry(root, 0, RT_MANIFEST);
-    if (!(type & 0x80000000u)) return 0;
-    u32 name = entry(root, type & 0x7FFFFFFFu, 1);
-    if (!(name & 0x80000000u)) return 0;
-    u32 lang = entry(root, name & 0x7FFFFFFFu, 0);
-    if (!lang || (lang & 0x80000000u)) return 0;
+    u32 t = entry(root, 0, type);
+    if (!(t & 0x80000000u)) { *missing = W2M_RESOURCE_NO_TYPE; return 0; }
+    u32 n = entry(root, t & 0x7FFFFFFFu, id);
+    if (!(n & 0x80000000u)) { *missing = W2M_RESOURCE_NO_NAME; return 0; }
+    u32 lang = entry(root, n & 0x7FFFFFFFu, 0);
+    if (!lang || (lang & 0x80000000u)) { *missing = W2M_RESOURCE_NO_NAME; return 0; }
     const u32 *data = (const u32 *)(root + lang);                     /* IMAGE_RESOURCE_DATA_ENTRY: RVA, size */
-    const u8 *text = (const u8 *)(base + data[0]);
-    return (contains(text, data[1], WINDOWS_10) ? W2M_MANIFEST_WINDOWS_10 : 0) |
-           (contains(text, data[1], PER_MONITOR_V2) ? W2M_MANIFEST_PER_MONITOR_V2 : 0);
+    *size = data[1];
+    *missing = 0;
+    return base + data[0];
+}
+
+static u32 read_flags(void) {
+    u64 base = *(const volatile u64 *)(W2M_PEB_VA + 0x10);            /* PEB.ImageBaseAddress */
+    u32 size = 0, missing = 0;
+    const u8 *text = (const u8 *)w2m_resource(base, RT_MANIFEST, 1, &size, &missing);
+    if (!text) return 0;
+    return (contains(text, size, WINDOWS_10) ? W2M_MANIFEST_WINDOWS_10 : 0) |
+           (contains(text, size, PER_MONITOR_V2) ? W2M_MANIFEST_PER_MONITOR_V2 : 0);
 }
 
 u32 w2m_manifest(void) {

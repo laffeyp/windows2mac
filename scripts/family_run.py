@@ -218,6 +218,33 @@ def version_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if "version_low" in r else r for r in printed]
 
 
+def display_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The runners' taskbars differ (the work area ends at 720 on Server 2025, 728 on 2022), and with it
+    SM_CYFULLSCREEN (17: the work area's height less the caption, 23) and SM_CYMAXIMIZED (62: the work area's height
+    and 16); the rows keep those as relations to the work area, and the work area's bottom as lying above the
+    screen's. Index 93 has no SM_ name and differs from run to run (5852, 6552, 7696): its row keeps no value. The
+    adapter's registry key ends in a GUID that differs by machine: the row keeps the key's form."""
+    import re
+    info = next((r for r in printed if r["s"] == "info.wide" and "work_bottom" in r), None)
+    work = info["work_bottom"] - info["work_top"] if info else 0
+    out = []
+    for r in printed:
+        r = dict(r)
+        s = r["s"]
+        if s == "metric.17":
+            r["value"] = r["value"] - (work - 23)
+        elif s == "metric.62":
+            r["value"] = r["value"] - (work + 16)
+        elif s == "metric.93":
+            r.pop("value", None)
+        if "work_bottom" in r:
+            r["work_bottom"] = r["work_bottom"] < r.get("monitor_bottom", 768)
+        if s == "devices.adapter_0" and "key" in r:
+            r["key"] = re.sub(r"\{[0-9A-F-]{36}\}", "{GUID}", r["key"])
+        out.append(r)
+    return out
+
+
 def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
     windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
@@ -1967,7 +1994,7 @@ FAMILIES: dict[str, Family] = {
                  "ERROR_OLD_WIN_VERSION; a type mask of 0 STATUS_INVALID_PARAMETER, ERROR_BAD_ARGUMENTS); GetVersionExW "
                  "10.0, platform 2, product 3, suite 0x190; SHELL32's DllGetVersion 10.0.10586."),
         probe="version", guest_file="version.c",
-        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/manifest.c", "tools/guest_runtime/system_info.c"),
+        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/resources.c", "tools/guest_runtime/system_info.c"),
         runs={
               "38173733146": Run("windows-2025", "3a49efbae6b80ad79bc6226b6d41c39241097745e032f0848118c10d034fef4f", "version-1791751693-0", "AMD EPYC 9V45 96-Core Processor"),
               "38173735116": Run("windows-2022", "a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c11f7", "version-1791751693-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1992,6 +2019,81 @@ FAMILIES: dict[str, Family] = {
                                           file="system_info.c"),
             "shell32_system_build": Plant("#define SHELL32_BUILD 10586u", "#define SHELL32_BUILD 26100u",
                                           ("dll_get_version.info", "dll_get_version.info2"))}),
+    "display": Family(
+        name="display",
+        contract_id="windows.display.display",
+        version="0.1.0",
+        summary=("The display as the game queries it, under its manifest (PerMonitorV2): GetSystemMetrics 0-99, the "
+                 "Hyper-V adapter and its one monitor (EnumDisplayDevicesA), EnumDisplayMonitors' one callback, "
+                 "GetMonitorInfoA and W, MonitorFromPoint, Rect and Window, shcore's GetDpiForMonitor (96 x 96), "
+                 "EnumDisplaySettingsW's current settings and 13 modes; one 1024 x 768 monitor, the work area above the "
+                 "taskbar."),
+        probe="display", guest_file="display.c",
+        host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py", "tools/guest_runtime/guest_calls.c",
+                    "tools/guest_runtime/windows.c"),
+        runs={
+              "38174316653": Run("windows-2025", "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c", "display-1791752210-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38174318347": Run("windows-2022", "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b", "display-1791752210-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(),
+        open_questions=("w2m's display is the runners' (one 1024 x 768 monitor at 96 DPI, Server 2025's taskbar) until "
+                        "the game's window is a Mac window (phase 6).",
+                        "GetSystemMetrics(93), which has no SM_ name, answers a different value on each run; w2m "
+                        "answers 0."),
+        derive=display_rows,
+        plants={
+            "metrics_unaware": Plant("    1024, 768, 17, 17, 23, 1, 1, 3, 3,", "    1280, 768, 17, 17, 23, 1, 1, 3, 3,", ("metric.0",)),
+            "monitor_string": Plant("        copy(d + 36, \"Generic PnP Monitor\", 128);", "        copy(d + 36, \"Generic Monitor\", 128);",
+                                    ("devices.adapter_0_monitor_0",)),
+            "callback_rect_work": Plant("    f->rect[3] = SCREEN_H;", "    f->rect[3] = WORK_H;", ("enum_monitors.callback",)),
+            "dpi_scaled": Plant("    *(u32 *)x = 96; *(u32 *)y = 96;", "    *(u32 *)x = 144; *(u32 *)y = 144;",
+                                ("dpi.effective", "dpi.angular")),
+            "null_window_null": Plant("    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return outside(",
+                                      "    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return flags == 2 ? w2m_logged(W2M_API_MonitorFromWindow, 0, 0) : outside(",
+                                      ("from_window.null_nearest",)),
+            "one_mode_short": Plant("    else if (m >= 0 && m < 13) {", "    else if (m >= 0 && m < 12) {",
+                                    ("settings.mode_12", "settings.mode_count"))}),
+    "windows": Family(
+        name="windows",
+        contract_id="windows.windows.windows",
+        version="0.1.0",
+        summary=("Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, "
+                 "CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, "
+                 "WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default "
+                 "size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the "
+                 "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW)."),
+        probe="windows", guest_file="windows.c",
+        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/guest_calls.c", "tools/guest_runtime/display.c",
+                    "tools/guest_runtime/resources.c", "src/w2m/guest_stubs.py"),
+        runs={
+              "38174244880": Run("windows-2025", "e8636f8cc0657e52431d57380477f3ee148f3842bdda1064466fc9d621e2995c", "windows-1791752145-0", "AMD EPYC 7763 64-Core Processor"),
+              "38174246839": Run("windows-2022", "220412c9aaa756201ef395b341336f0260bc3f634643ab7e7f005b626b412966", "windows-1791752145-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("Where CW_USEDEFAULT places a window depends on the windows the desktop made before (52, 78, 130 "
+                        "seen for a probe's first); w2m's cascade starts at 52.",
+                        "The default height is fitted: 3/4 of the work area's height less 21 on both runners (519, 525).",
+                        "Windows are records; nothing is drawn, and ShowWindow, the message loop and every message after "
+                        "WM_CREATE are later work."),
+        derive=windows_rows,
+        plants={
+            "minmax_not_sent": Plant("    w2m_call_guest(&f->call, w->procedure, h, WM_GETMINMAXINFO, 0, (u64)f->minmax);",
+                                     "    f->step = 1;\n    w2m_call_guest(&f->call, w->procedure, h, WM_NCCREATE, 0, (u64)f->create);",
+                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*",
+                                      "create.play", "play.window_rect")),
+            "frame_thin": Plant("#define FRAME_TOP 31 ", "#define FRAME_TOP 26 ",
+                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect")),
+            "height_from_screen": Plant("        cy = (work[3] - work[1]) * 3 / 4 - 21;", "        cy = 768 * 3 / 4 - 21;",
+                                        ("msg.batch.2", "batch.client_rect", "batch.window_rect")),
+            "no_edge_in_create": Plant("    *(u32 *)(cs + 72) = ((u32)style & WS_CAPTION) == WS_CAPTION ? WS_EX_WINDOWEDGE : 0;",
+                                       "    *(u32 *)(cs + 72) = 0;", ("msg.play.1", "msg.play.3")),
+            "extra_unbounded": Plant("        if (index + 8 > classes[w->cls].extra) return 0;", "        if (index + 8 > EXTRA) return 0;",
+                                     ("batch.long_ptr_8", "play.long_ptr_8")),
+            "duplicate_class_allowed": Plant("        if (classes[k].instance != instance) w2m_unimplemented(api, instance);        /* another module's: no row */\n        set_error(ERROR_CLASS_ALREADY_EXISTS);\n        return w2m_logged(api, name, 0);",
+                                             "        if (classes[k].instance != instance) w2m_unimplemented(api, instance);        /* another module's: no row */\n        return w2m_logged(api, name, classes[k].atom);",
+                                             ("class.register_ex_again",)),
+            "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
+                                     ("icon.own_103",))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",
