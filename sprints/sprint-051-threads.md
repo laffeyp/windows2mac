@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 051
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -53,3 +53,11 @@ Sprint 050 left the frontier at 20,584,207 instructions, at `KERNEL32.dll!Create
 The threads family accepted; the frontier runs past CreateThread with more than one guest thread scheduled.
 
 ## observed
+
+- **The frontier passes CreateThread** (`store/runs/frontier-643a6283510c-1791708222148046000`): mono's first thread (id 8) is created, scheduled and running when the run stops at `ole32.dll!CoInitializeEx` after 20,590,160 instructions (46 s on the Mac); in the capture mono's new thread makes the same call (the com family).
+- **The threads family equals Windows** (contract windows.thread.threads 0.1.0, 31 rows, runs 38124576301 and 38124578332, equal on Server 2025 and 2022) with five plants of named reach: creation, the attach and detach calls, the last error 187 a thread starts with, per-thread TLS and static TLS, exit codes, waits, suspension counts, GetThreadContext of a suspended spinning thread, CREATE_SUSPENDED, ExitThread, priorities, descriptions, SleepEx, AppPolicyGetThreadInitializationType.
+- **The scheduler, one vCPU** (Decision 2026-10-11): each thread its own TEB (the runtime reads it from the state block's GS base), stack, static TLS and saved state; a wait that cannot complete retries its call through the bridge (state.schedule, hvc #12); time slices of 200,000 instructions once a second thread exists; waits, mutexes, critical sections, SRW locks and condition variables block instead of stopping the run.
+- **Every earlier family still conforms** with threads in the runtime (15 re-recorded, all accepted).
+- **Defects found and fixed:** the loader never called a DLL's TLS callbacks at process start, only its DllMain, since Sprint 046 (the static C runtime's TLS callback of UnityPlayer and mono among them); the probe's event log showed it (KIT_DIARY #42). The reference walker missed functions reached only through a pointer (a thread's start routine) and now roots address-taken code.
+- **Not reached:** mono's collector suspending threads and reading their context in the game; the frontier stops before its first collection. The rows judge both calls; the game's use waits for the frontier.
+

@@ -1745,6 +1745,53 @@ FAMILIES: dict[str, Family] = {
                 ("form.buffer_short",)),
             "pointer_left_on_failure": Plant("        if (flags & ALLOCATE_BUFFER) *(u64 *)buffer = 0;      /* the rows: the pointer is not left as it was */\n",
                                              "", ("form.language_de_de", "form.unknown_id"))}),
+    "threads": Family(
+        name="threads",
+        contract_id="windows.thread.threads",
+        version="0.1.0",
+        summary=("Guest threads in the game's forms (specs/work_list.json), sequenced by events so every run prints "
+                 "the same rows. CreateThread: a handle (a multiple of 4), a new id, the last error left; the new "
+                 "thread runs each module's TLS callback then DllMain with DLL_THREAD_ATTACH, then its routine with "
+                 "the last error 187, empty TLS slots and its own static TLS (the template's 41), and at its end the "
+                 "same with DLL_THREAD_DETACH; created suspended, none of it until resumed. GetExitCodeThread: 259 "
+                 "while it runs, then its return or ExitThread's code. SuspendThread and ResumeThread answer the "
+                 "previous count; a suspended thread runs no instruction; on an ended thread SuspendThread fails with "
+                 "5 and ResumeThread answers 0. GetThreadContext: TRUE, ContextFlags as asked, RIP in the image, RSP "
+                 "in the thread's stack, CS 0x33, SS 0x2B. Priorities -2 and 0 read back, 100 is error 87; the "
+                 "description calls answer 0x10000000; SleepEx answers 0; AppPolicyGetThreadInitializationType gives "
+                 "policy 0."),
+        probe="threads", guest_file="threads.c", dll_name="threads_dll.dll",
+        host_files=("src/w2m/scheduler.py", "src/w2m/vm_backend.py", "tools/guest_runtime/sync_objects.c",
+                    "tools/guest_runtime/thread_queries.c", "tools/guest_runtime/runtime.h"),
+        runs={
+              "38124576301": Run("windows-2025", "d71f0b8e07328ab48fb4e9023a07174c087dddd55d9654111c741513e202af8e", "threads-1791706952-0", "AMD EPYC 7763 64-Core Processor", dll="b8e8ccaaa31a472a4f845004cca183336414bd99cf8515f4efb4e4eb479cebce"),
+              "38124578332": Run("windows-2022", "ba552c63ffe0fceef05c663c390ce1dd3a3c6670bab915e9165b13c6951e7a21", "threads-1791706952-1", "AMD EPYC 7763 64-Core Processor", dll="f119bb2d52de7ed7f7763790c0b4304796d2fb26fa42789c552dbf4f546f3dac"),
+        },
+        documented=(),
+        open_questions=(
+            "The order of the TLS callbacks and DllMain calls between modules is not in the rows (the probe has one "
+            "DLL); w2m calls each DLL's in load order, the program's TLS callbacks last.",
+            "SwitchToThread's answer depends on what else is ready on the CPU; the row keeps only that it is TRUE or "
+            "FALSE.",
+            "A thread's stack in w2m is all committed above StackLimit with no guard pages, where Windows commits on "
+            "demand behind a guard page; threads.c and VirtualQuery show the difference only to code that probes "
+            "another thread's stack pages."),
+        plants={
+            "start_last_error_kept": Plant('    code += b"\\x65\\xc7\\x04\\x25\\x68\\x00\\x00\\x00" + struct.pack("<I", START_LAST_ERROR)',
+                                           '    code += b"\\x65\\xc7\\x04\\x25\\x68\\x00\\x00\\x00" + struct.pack("<I", 0)',
+                                           ("worker.start",), host="w2m.scheduler"),
+            "detach_as_attach": Plant("    code = b\"\".join(_call(fn, base, DLL_THREAD_DETACH) for base, fn in callbacks)",
+                                      "    code = b\"\".join(_call(fn, base, DLL_THREAD_ATTACH) for base, fn in callbacks)",
+                                      ("events.worker_ended", "events.spinner", "events.suspended_ran", "events.exiter"),
+                                      host="w2m.scheduler"),
+            "suspend_answers_new_count": Plant("            t.suspend += 1\n            return t.suspend - 1",
+                                               "            t.suspend += 1\n            return t.suspend",
+                                               ("suspend",), host="w2m.vm_backend"),
+            "context_cs_32_bit": Plant('        struct.pack_into("<H", buf, 56, CS)', '        struct.pack_into("<H", buf, 56, CS - 0x10)',
+                                       ("context",), host="w2m.scheduler"),
+            "exited_suspend_error": Plant("        set_error(ERROR_ACCESS_DENIED);\n        return w2m_logged(W2M_API_SuspendThread",
+                                          "        set_error(6);\n        return w2m_logged(W2M_API_SuspendThread",
+                                          ("suspend.exited",))}),
 }
 
 

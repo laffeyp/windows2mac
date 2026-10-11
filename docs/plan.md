@@ -59,8 +59,9 @@ Then: the 32-bit profile (BioShock 2 Remastered), and further profiles.
 | **— exceptions and threads** (was 047) | VEH dispatch to guest handlers over the CONTEXT built in 040, SEH unwinding, C++ exceptions; the M:N scheduler (moved from 040) with waits, events and suspension. | Sprint 028's event contract and Sprint 034's own probe (the C runtime and all) conform under w2m: the vectored handler's CONTEXT and write-back, GetThreadContext and SetThreadContext on a suspended thread. |
 | **— memory and files** (was 048) | VirtualAlloc/Protect at 4 KB, file mapping, file I/O over the 15.6 GB of assets. | The game reads its first asset bundle; page-protection faults match the runner. |
 | **050 — mono's and UnityPlayer's remaining instruction classes** (closed 2026-10-11: set 050, 64 classes, equal to the Xeon in model and VM; the frontier runs 20,584,207 instructions and stops at CreateThread) | Set 050: the 64 classes the censuses of 2026-10-11 list as missing and not behind a CPUID feature w2m withholds (legacy SSE conversions and compares, MMX-register forms, SHRD, SHLD, RCR, string and flag instructions, x87 control), judged on the Xeon 8573C. | The model and the VM equal the CPU on every case of set 050; the frontier passes CVTDQ2PS at 0x1180023e52. |
-| **051 — the Mono JIT region** | Write detection on RWX regions, invalidation and retranslation, `TRANSLATION_INVALIDATED`. | Mono's first managed method runs; a rewritten call site is retranslated, never stale. |
-| **052 — milestone A** | The game under w2m in batch mode. | Its `unity.log` matches the runner's 168 lines. |
+| **051 — threads** (closed 2026-10-11: the scheduler on one vCPU; mono's first thread runs; the frontier stops at CoInitializeEx after 20,590,160 instructions) | The work list's threads family; per-thread TEBs, stacks and static TLS; blocking waits and locks; time slices. | The threads family equals Windows; the frontier passes CreateThread with two threads scheduled. |
+| **052 — the Mono JIT region** | Write detection on RWX regions, invalidation and retranslation, `TRANSLATION_INVALIDATED`. | Mono's first managed method runs; a rewritten call site is retranslated, never stale. |
+| **053 — milestone A** | The game under w2m in batch mode. | Its `unity.log` matches the runner's 168 lines. |
 
 ## Phase 6: milestone B, first frame
 

@@ -1,0 +1,245 @@
+{
+ "contract_id": "windows.thread.threads",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "Guest threads in the game's forms (specs/work_list.json), sequenced by events so every run prints the same rows. CreateThread: a handle (a multiple of 4), a new id, the last error left; the new thread runs each module's TLS callback then DllMain with DLL_THREAD_ATTACH, then its routine with the last error 187, empty TLS slots and its own static TLS (the template's 41), and at its end the same with DLL_THREAD_DETACH; created suspended, none of it until resumed. GetExitCodeThread: 259 while it runs, then its return or ExitThread's code. SuspendThread and ResumeThread answer the previous count; a suspended thread runs no instruction; on an ended thread SuspendThread fails with 5 and ResumeThread answers 0. GetThreadContext: TRUE, ContextFlags as asked, RIP in the image, RSP in the thread's stack, CS 0x33, SS 0x2B. Priorities -2 and 0 read back, 100 is error 87; the description calls answer 0x10000000; SleepEx answers 0; AppPolicyGetThreadInitializationType gives policy 0.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/threads/threads.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "events.start",
+    "events": [
+     "tls:1:main",
+     "dllmain:1:main"
+    ]
+   },
+   {
+    "s": "create",
+    "handle_nonzero": 1,
+    "handle_mod_4": 0,
+    "err": 57005,
+    "tid_nonzero": 1,
+    "tid_not_main": 1
+   },
+   {
+    "s": "worker.start",
+    "tid_matches": 1,
+    "last_error": 187,
+    "tls": 0,
+    "static_tls": 41
+   },
+   {
+    "s": "exit_code.running",
+    "ret": 1,
+    "code": 259,
+    "err": 57005
+   },
+   {
+    "s": "main.after_worker",
+    "last_error": 57005,
+    "tls": 85,
+    "static_tls": 1000
+   },
+   {
+    "s": "events.worker_started",
+    "events": [
+     "tls:2:worker",
+     "dllmain:2:worker"
+    ]
+   },
+   {
+    "s": "wait.worker",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "exit_code.returned",
+    "ret": 1,
+    "code": 23130,
+    "err": 57005
+   },
+   {
+    "s": "events.worker_ended",
+    "events": [
+     "tls:3:worker",
+     "dllmain:3:worker"
+    ]
+   },
+   {
+    "s": "wait.again",
+    "ret": 0
+   },
+   {
+    "s": "suspend",
+    "first": 0,
+    "second": 1,
+    "err": 57005
+   },
+   {
+    "s": "suspend.frozen",
+    "count_unchanged": 1
+   },
+   {
+    "s": "context",
+    "ret": 1,
+    "err": 57005,
+    "flags": 1048579,
+    "rip_in_image": 1,
+    "rsp_in_stack": 1,
+    "seg_cs": 51,
+    "seg_ss": 43
+   },
+   {
+    "s": "resume",
+    "first": 2,
+    "second": 1,
+    "third": 0,
+    "err": 57005
+   },
+   {
+    "s": "suspend.exited",
+    "ret": 4294967295,
+    "err": 5,
+    "code": 3
+   },
+   {
+    "s": "resume.exited",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "events.spinner",
+    "events": [
+     "tls:2:spinner",
+     "dllmain:2:spinner",
+     "tls:3:spinner",
+     "dllmain:3:spinner"
+    ]
+   },
+   {
+    "s": "create_suspended",
+    "ran_before_resume": 0
+   },
+   {
+    "s": "events.created_suspended",
+    "events": []
+   },
+   {
+    "s": "priority",
+    "set_lowest": 1,
+    "get_lowest": -2,
+    "set_normal": 1,
+    "get_normal": 0,
+    "err": 57005
+   },
+   {
+    "s": "priority.invalid",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "description.set",
+    "hr": 268435456,
+    "err": 57005
+   },
+   {
+    "s": "description.get",
+    "hr": 268435456,
+    "matches": 1
+   },
+   {
+    "s": "resume.created_suspended",
+    "ret": 1,
+    "err": 57005,
+    "ran": 1,
+    "code": 4
+   },
+   {
+    "s": "events.suspended_ran",
+    "events": [
+     "tls:2:suspended",
+     "dllmain:2:suspended",
+     "tls:3:suspended",
+     "dllmain:3:suspended"
+    ]
+   },
+   {
+    "s": "exit_thread",
+    "code": 77
+   },
+   {
+    "s": "events.exiter",
+    "events": [
+     "tls:2:exiter",
+     "dllmain:2:exiter",
+     "tls:3:exiter",
+     "dllmain:3:exiter"
+    ]
+   },
+   {
+    "s": "sleep_ex",
+    "zero": 0,
+    "one": 0,
+    "err": 57005
+   },
+   {
+    "s": "switch_to_thread",
+    "ret_is_bool": 1,
+    "err": 57005
+   },
+   {
+    "s": "app_policy",
+    "found": 1,
+    "ret": 0,
+    "policy": 0,
+    "err": 57005
+   },
+   {
+    "s": "current",
+    "pseudo_handle": 1,
+    "thread_id_of_pseudo_is_main": 1
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38124576301: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:d71f0b8e07328ab48fb4e9023a07174c087dddd55d9654111c741513e202af8e; run 38124578332: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:ba552c63ffe0fceef05c663c390ce1dd3a3c6670bab915e9165b13c6951e7a21",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "threads-1791706952-0-1",
+    "threads-1791706952-0-2",
+    "threads-1791706952-1-1",
+    "threads-1791706952-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "The order of the TLS callbacks and DllMain calls between modules is not in the rows (the probe has one DLL); w2m calls each DLL's in load order, the program's TLS callbacks last.",
+  "SwitchToThread's answer depends on what else is ready on the CPU; the row keeps only that it is TRUE or FALSE.",
+  "A thread's stack in w2m is all committed above StackLimit with no guard pages, where Windows commits on demand behind a guard page; threads.c and VirtualQuery show the difference only to code that probes another thread's stack pages."
+ ],
+ "sections": {
+  "probe": "probes/threads (Sprint 044)",
+  "implementation": "tools/guest_runtime/threads.c",
+  "rows": "scripts/family_run.py threads",
+  "excluded": "none"
+ }
+}

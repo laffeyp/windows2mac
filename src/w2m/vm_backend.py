@@ -1326,6 +1326,13 @@ class VM:
         limit = self._max_steps if len(self.threads) < 2 else min(self._max_steps, executed + TIME_SLICE)
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, limit)
 
+    def _read_guest(self, va: int, n: int) -> bytes:
+        """Guest memory, the process area (the first thread's TEB, the PEB) included."""
+        off = va - PROCESS_VA
+        if 0 <= off and off + n <= PROCESS_SIZE:
+            return bytes(self.mm[self._process(off):self._process(off) + n])
+        return bytes(self.mem.read(va, n))
+
     def _publish_blocked(self) -> None:
         """The number of blocked threads, where threads.c's w2m_signal reads it."""
         n = sum(1 for t in self.threads.values() if t.status == "blocked")
@@ -1359,7 +1366,7 @@ class VM:
                     t.status = "ready"
         elif schedule & SCHEDULE_RETRY:
             cur.status = "blocked"
-            cur.deadline = struct.unpack_from("<Q", self.mem.read(cur.teb + SCRATCH_OFF, 8))[0]
+            cur.deadline = struct.unpack_from("<Q", self._read_guest(cur.teb + SCRATCH_OFF, 8))[0]
         if all(t.status == "ended" for t in self.threads.values()):
             return None                                       # the last thread ended: the process ends with it
         order = sorted(self.threads)
