@@ -265,7 +265,7 @@
 
 ## Sprint tail
 
-### Sprint 055 (2026-10-11, closed: CI on the closing commit, recorded at merge)
+### Sprint 055 (2026-10-11, closed: CI run 38180806466 success on 3e0dea6d)
 - **Scope:** captures with names and the handler's calls; the processes and winrt families; a second process as a second VM.
 - **Rubber Duck Pass:**
   - *Sequence narration:* game run 38176899195 (DISTRIBUTION and EVIDENCE as the capture's ingest gives them); the processes and winrt probes on two runners; their item runs SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; every family re-run on a Machine to CANDIDATE_ACCEPTED (time_and_error_mode at 0.2.0); the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for GetCurrentDirectoryA after 57,411,545 instructions, with one fault logged.

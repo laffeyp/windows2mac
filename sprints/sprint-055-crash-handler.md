@@ -91,3 +91,4 @@ As amended in item 5.
   built from the unplanted runtime; KIT_DIARY #46); a process not yet started never got a turn (no threads read as not
   ready); the time_and_error_mode family had judged its parent and child apart because w2m served no CreateProcessW:
   version 0.2.0 judges both in one run (error mode inherited, plant error_mode_not_inherited caught).
+- **Closed on CI run 38180806466** (success on 3e0dea6d).
