@@ -183,6 +183,10 @@ static int untraced(const char *fn) {
     return 0;
 }
 
+/* TEB.LastErrorValue (gs:[0x68]) written directly: clang 20 for x86_64-pc-windows-msvc declares __writegsdword
+ * but links no definition (run 38113277206); volatile asm also keeps the call before it from becoming a tail call. */
+static void set_teb_error(DWORD e) { __asm__ volatile("movl %0, %%gs:0x68" : : "r"(e) : "memory"); }
+
 static uint64_t traced(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t s4, uint64_t s5, uint64_t s6,
                        uint64_t s7, uint64_t s8, uint64_t s9, uint64_t s10, uint64_t s11, uint64_t s12, uint64_t s13,
                        uint64_t s14, uint64_t s15) {
@@ -190,7 +194,7 @@ static uint64_t traced(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint6
     fn16 f = (fn16)h->original;
     if (InterlockedIncrement(&h->traced) > TRACE_CALLS) {
         uint64_t r = f(a0, a1, a2, a3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15);
-        __writegsdword(0x68, __readgsdword(0x68));        /* no tail call: the stack slots stay ours */
+        set_teb_error(__readgsdword(0x68));               /* no tail call: the stack slots stay ours */
         return r;
     }
     LONG64 seq = InterlockedIncrement64(&sequence);
@@ -208,7 +212,7 @@ static uint64_t traced(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint6
         c->ret = r;
         InterlockedExchange(&c->ready, 1);
     }
-    __writegsdword(0x68, err);
+    set_teb_error(err);
     return r;
 }
 
