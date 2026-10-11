@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// The game's manifest and an icon group with the game's id, 103 (Sprint 054)
+1 24 "games/hail-to-the-rainbow/manifest.xml"
+103 ICON "probes/windows/probe.ico"
