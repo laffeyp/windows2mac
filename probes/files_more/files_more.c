@@ -173,13 +173,16 @@ static void temp_name(const char *name, const WCHAR *dir, const WCHAR *prefix, U
         static const WCHAR hex[] = L"0123456789ABCDEF";
         unsigned k = 0, j = 0;
         while (wbuf[k]) k++;
-        /* the last four characters before ".TMP" are the number's hex digits */
+        /* the characters before ".tmp" are the number's hex digits, as many as it has (run 38119521556: 0xABC
+         * prints as three) */
+        unsigned digits = 1;
+        while (digits < 8 && r >> (4 * digits)) digits++;
         for (unsigned i = 0; i < k; i++) {
-            int digit = !unique && k >= 8 && i >= k - 8 && i < k - 4;
-            if (digit && i == k - 8) {
+            int digit = !unique && k >= digits + 4 && i >= k - digits - 4 && i < k - 4;
+            if (digit && i == k - digits - 4) {
                 int match = 1;
-                for (unsigned d = 0; d < 4; d++)
-                    if (!same(wbuf[i + d], hex[(r >> (12 - 4 * d)) & 15])) match = 0;
+                for (unsigned d = 0; d < digits; d++)
+                    if (!same(wbuf[i + d], hex[(r >> (4 * (digits - 1 - d))) & 15])) match = 0;
                 const WCHAR *u = match ? L"<u>" : L"<?>";
                 while (*u) shown[j++] = *u++;
             }
@@ -258,13 +261,27 @@ void start(void) {
         row("standard.sweep"); field("size", sizes[i]); field("ret", r != 0); field("allocation", q(0)); end();
         CloseHandle(h);
     }
-    DeleteFileW(L"fm_sweep.dat");
-    h = make(L"fm_sweep.dat", 4000);                   /* grown past the record, then cut back */
-    SetFilePointer(h, 100, NULL, FILE_BEGIN);
-    SetEndOfFile(h);
+    /* fm_sweep.dat now holds 8192 bytes in clusters: cut to 0 by CREATE_ALWAYS, then by TRUNCATE_EXISTING, each time
+     * rewritten to 5 bytes; and 5 more bytes appended through a second handle */
+    h = make(L"fm_sweep.dat", 5);
     CloseHandle(h);
     h = open_read(L"fm_sweep.dat");
-    standard("standard.shrunk", h, 0x18);
+    standard("standard.recreated", h, 0x18);
+    CloseHandle(h);
+    h = make(L"fm_sweep.dat", 8192);
+    CloseHandle(h);
+    h = CreateFileW(L"fm_sweep.dat", GENERIC_WRITE, 0, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD done;
+    WriteFile(h, "abcde", 5, &done, NULL);
+    CloseHandle(h);
+    h = open_read(L"fm_sweep.dat");
+    standard("standard.truncated", h, 0x18);
+    CloseHandle(h);
+    h = CreateFileW(L"fm_sweep.dat", FILE_APPEND_DATA, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    WriteFile(h, "abcde", 5, &done, NULL);
+    CloseHandle(h);
+    h = open_read(L"fm_sweep.dat");
+    standard("standard.appended", h, 0x18);
     CloseHandle(h);
     DeleteFileW(L"fm_sweep.dat");
 
