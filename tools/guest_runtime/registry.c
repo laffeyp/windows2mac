@@ -30,24 +30,28 @@ typedef unsigned short u16;
 /* The keys that exist, as paths below HKEY_CURRENT_USER in lower case ("" is the root). */
 static const char *const existing[] = {"", "software"};
 
-static struct { int open; char path[PATH]; } keys[KEYS];
+/* Paths are kept as UTF-16, a key's name folded to lower case for ASCII letters only: a unit above ASCII is never
+ * narrowed (the review of Sprint 054 found U+0173 read as 's' and U+0100 as the name's end), so no such name meets
+ * an ASCII key. */
+static struct { int open; u16 path[PATH]; } keys[KEYS];
 
-static char lower(u16 c) { return c >= 'A' && c <= 'Z' ? (char)(c + 32) : (char)c; }
+static u16 lower(u16 c) { return c >= 'A' && c <= 'Z' ? (u16)(c + 32) : c; }
 
 /* path of handle h into out; 0: h names no open key */
-static int path_of(u64 h, char *out) {
+static int path_of(u64 h, u16 *out) {
     if (h == HKEY_CURRENT_USER) { out[0] = 0; return 1; }
     if (h < KEY_BASE || (h - KEY_BASE) % 4 || (h - KEY_BASE) / 4 >= KEYS || !keys[(h - KEY_BASE) / 4].open) return 0;
-    const char *p = keys[(h - KEY_BASE) / 4].path;
+    const u16 *p = keys[(h - KEY_BASE) / 4].path;
     int i = 0;
     while ((out[i] = p[i])) i++;
     return 1;
 }
 
-static int exists(const char *path) {
+static int exists(const u16 *path) {
     for (unsigned k = 0; k < sizeof existing / sizeof *existing; k++) {
-        const char *a = existing[k], *b = path;
-        while (*a && *a == *b) a++, b++;
+        const char *a = existing[k];
+        const u16 *b = path;
+        while (*a && (u16)(unsigned char)*a == *b) a++, b++;
         if (!*a && !*b) return 1;
     }
     return 0;
@@ -59,7 +63,7 @@ u64 advapi32_RegOpenKeyExW(u64 root, u64 sub, u64 options, u64 access, u64 rsp) 
     u64 result = *(const u64 *)(rsp + 0x28);
     if ((u32)options) w2m_unimplemented(W2M_API_RegOpenKeyExW, options);        /* REG_OPTION_OPEN_LINK: not in the rows */
     if (root >= 0xFFFFFFFF80000000ull && root != HKEY_CURRENT_USER) w2m_unimplemented(W2M_API_RegOpenKeyExW, root);
-    char path[PATH];
+    u16 path[PATH];
     if (!path_of(root, path)) {
         *(u64 *)result = 0;
         return w2m_logged(W2M_API_RegOpenKeyExW, root, ERROR_INVALID_HANDLE);
@@ -96,7 +100,7 @@ u64 advapi32_RegOpenKeyExW(u64 root, u64 sub, u64 options, u64 access, u64 rsp) 
 
 u64 advapi32_RegCloseKey(u64 h) {
     if (h == HKEY_CURRENT_USER) return w2m_logged(W2M_API_RegCloseKey, h, ERROR_SUCCESS);
-    char path[PATH];
+    u16 path[PATH];
     if (!path_of(h, path)) return w2m_logged(W2M_API_RegCloseKey, h, ERROR_INVALID_HANDLE);
     keys[(h - KEY_BASE) / 4].open = 0;
     return w2m_logged(W2M_API_RegCloseKey, h, ERROR_SUCCESS);

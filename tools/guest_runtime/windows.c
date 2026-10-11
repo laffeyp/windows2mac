@@ -4,7 +4,8 @@
  * specs/work_list.json).
  *
  * contracts/windows.windows.windows records Windows (Server 2025 and 2022) under the game's manifest:
- *   - RegisterClassExW and RegisterClassW answer atoms from 0xC000 up, in order, the last error left; a class
+ *   - RegisterClassExW and RegisterClassW answer atoms from 0xC000 up, in order, the last error left; a name of 256
+ *     units or more answers 0 with ERROR_INVALID_PARAMETER (Sprint 056), one of 255 registers whole; a class
  *     registered again by the same module answers 0 with ERROR_CLASS_ALREADY_EXISTS (1410); CreateWindowExW of a
  *     class never registered NULL with ERROR_CANNOT_FIND_WND_CLASS (1407)
  *   - CreateWindowExW sends the window procedure four messages, in order: WM_GETMINMAXINFO (the maximized size, the
@@ -32,6 +33,7 @@
 typedef unsigned short u16;
 
 #define ERROR_INVALID_INDEX 1413u
+#define ERROR_INVALID_PARAMETER 87u
 #define ERROR_CLASS_ALREADY_EXISTS 1410u
 #define ERROR_CANNOT_FIND_WND_CLASS 1407u
 #define ERROR_RESOURCE_DATA_NOT_FOUND 1812u
@@ -63,9 +65,13 @@ typedef unsigned short u16;
 #define WINDOW_BASE 0x20010ull               /* window handles: WINDOW_BASE + 0x10*slot */
 #define ICON_BASE 0x30000ull                 /* an icon from a module: ICON_BASE | its group id */
 
+#define CLASS_NAME 255                       /* the longest class name: 255 units register, 256 answer 87 (rows class.name_*;
+                                              * Microsoft Learn's "maximum length ... is 256" counts the NUL) */
+#define TITLE 512                            /* a title kept for the window; a longer one stops the run */
+
 static struct window_class {
     u16 atom;
-    u16 name[64];
+    u16 name[CLASS_NAME + 1];
     u64 instance, procedure, icon, cursor, background;
     u32 style;
     s32 extra;
@@ -79,7 +85,7 @@ static struct window {
     u32 style, ex_style;
     s32 rect[4], client[4];                  /* screen coordinates */
     u8 extra[EXTRA];
-    u16 title[128];
+    u16 title[TITLE];
 } windows[WINDOWS];
 static s32 cascade = CASCADE_START;
 
@@ -109,6 +115,12 @@ static struct window *window_of(u64 h) {
 }
 
 int w2m_is_window(u64 h) { return window_of(h) != 0; }
+int w2m_window_rect(u64 h, s32 r[4]) {
+    struct window *w = window_of(h);
+    if (!w) return 0;
+    for (int i = 0; i < 4; i++) r[i] = w->rect[i];
+    return 1;
+}
 
 static u64 register_class(u64 api, u32 style, u64 procedure, s32 class_extra, s32 extra, u64 instance, u64 icon,
                           u64 cursor, u64 background, u64 name) {
@@ -124,8 +136,12 @@ static u64 register_class(u64 api, u32 style, u64 procedure, s32 class_extra, s3
             struct window_class *c = &classes[i];
             const u16 *s = (const u16 *)name;
             int n = 0;
-            for (; s[n] && n < 63; n++) c->name[n] = s[n];
-            c->name[n] = 0;
+            while (s[n]) n++;
+            if (n > CLASS_NAME) {
+                set_error(ERROR_INVALID_PARAMETER);
+                return w2m_logged(api, (u64)n, 0);
+            }
+            for (int i = 0; i <= n; i++) c->name[i] = s[i];               /* whole: a cut name is never found again */
             c->atom = next_atom++;
             c->style = style; c->procedure = procedure; c->extra = extra; c->instance = instance;
             c->icon = icon; c->cursor = cursor; c->background = background;
@@ -261,7 +277,9 @@ u64 user32_DefWindowProcW(u64 h, u64 msg, u64 wparam, u64 lparam) {
     case WM_NCCREATE: {
         const u16 *t = (const u16 *)*(const u64 *)(lparam + 56);
         int n = 0;
-        if (t) for (; t[n] && n < 127; n++) w->title[n] = t[n];
+        if (t) while (t[n]) n++;
+        if (n >= TITLE) w2m_unimplemented(W2M_API_DefWindowProcW, (u64)n);   /* kept whole or not at all */
+        for (int i = 0; i < n; i++) w->title[i] = t[i];
         w->title[n] = 0;
         return w2m_logged(W2M_API_DefWindowProcW, msg, 1);
     }

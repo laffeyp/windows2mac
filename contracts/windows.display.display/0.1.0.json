@@ -876,7 +876,8 @@
     "s": "settings.mode_count",
     "value": 13
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py display_rows: The runners' taskbars differ (the work area ends at 720 on Server 2025, 728 on 2022), and with it SM_CYFULLSCREEN (17: the work area's height less the caption, 23) and SM_CYMAXIMIZED (62: the work area's height and 16); the rows keep those as relations to the work area, and the work area's bottom as lying above the screen's. Index 93 has no SM_ name and differs from run to run (5852, 6552, 7696): its row keeps no value. The adapter's registry key ends in a GUID that differs by machine: the row keeps the key's form."
  },
  "evidence": [
   {

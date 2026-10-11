@@ -178,7 +178,8 @@
     "ret_nonzero": 0,
     "err": 6
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py file_mapping_rows: Drops `region_size` from query.after_view and query.granule_end."
  },
  "evidence": [
   {

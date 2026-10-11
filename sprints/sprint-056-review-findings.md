@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 056
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -63,3 +63,26 @@ An outside review of Sprint 054 (2026-10-11, on 3e0dea6d) found seven defects; e
 ## done criteria
 
 All eight fixed and checked; the three families re-accepted with the new rows; the gate in place.
+
+## observed
+
+- **All eight fixed, each checked first.** `tests/test_runtime_native.py` holds a native harness per finding (the
+  runtime's C under AddressSanitizer, its calls into w2m stubbed) and a bridge test for the mount; all eight failed on
+  243b8ad9's code for the reason each names (the listing check first failed on a wrong expectation of its own: "." and
+  ".." come first below a drive's root) and pass now.
+- **Windows decided four answers** (runs 38182330078, 38182331638; 38182330015, 38182331619; 38182422811,
+  38182424645): a key name with letters above ASCII is a missing key, `ſoftware` (U+017F) included, so ASCII-only folding
+  is Windows's here; a 200-unit name is found by a 1-unit pattern and by itself; a window at (2000, 2000) is on no
+  monitor for MONITOR_DEFAULTTONULL and on the primary for the other flags; a class name of 255 units registers and
+  one of 256 or 257 answers 0 with ERROR_INVALID_PARAMETER: Microsoft Learn's "maximum length ... is 256" counts the NUL.
+- **registry, file_search and windows 0.2.0 equal Windows** with the new rows; their plants (five, six and nine) are
+  caught as named, the new ones among them (narrowed_again, name_cut_short, class_limit_256, monitor_ignores_window).
+- **The audit** of the runtime for the three patterns found a ninth defect, GetCommandLineA's 1,024-byte buffer cutting
+  a longer line silently (now 2,048, the process page's bound); the other `w2m_heap_take` callers and `(char)` casts
+  are sound; the host now refuses a child's inherited list longer than its page. `tests/test_runtime_patterns.py`
+  refuses an unchecked `w2m_heap_take` and a u16-to-char narrowing, and found all four of 243b8ad9's instances.
+- **The claims:** the three comments corrected; `ExactRows` gains `derivation`, and the 24 contracts whose rows are
+  derived name the function and what it keeps (rows unchanged); a derive function without a description is refused;
+  file_search and display list heap.c and guest_stubs.py (derived lists are Sprint 057).
+- **Not done here:** a review of Sprint 055 (Sprint 058); the pipe's buffer, which grows without bound where Windows's
+  blocks a writer, is left to it.

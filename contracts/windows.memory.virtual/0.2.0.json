@@ -362,7 +362,8 @@
     "err": 57005,
     "old": 4
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py virtual_memory_rows: A released region's size is the distance to the next allocation, which differs between executions on Windows; the row keeps that it covers at least the reservation (0x1FFFF000 bytes)."
  },
  "evidence": [
   {

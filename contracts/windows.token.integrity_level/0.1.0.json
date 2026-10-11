@@ -90,7 +90,8 @@
     "aligned_16": 1,
     "heap_size": 40
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py integrity_level_rows: Replaces `rid` with `low`: whether it is 0x1000 (SECURITY_MANDATORY_LOW_RID)."
  },
  "evidence": [
   {

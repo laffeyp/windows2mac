@@ -196,7 +196,10 @@ class FileBridge:
             kind, path = self._resolve(self._path(mem, arg[0], arg[1]))
             if kind != IS_DIRECTORY:
                 return 0, kind
-            names = b"".join(e.encode("utf-16-le") + b"\0\0" for e in sorted(os.listdir(path))) + b"\0\0"
+            entries = set(os.listdir(path))
+            if path == self.drive / "w2m":               # the mount _resolve finds there is listed too (review of 054)
+                entries = {e for e in entries if self.fold(e) != "app"} | {"app"}
+            names = b"".join(e.encode("utf-16-le") + b"\0\0" for e in sorted(entries)) + b"\0\0"
             if len(names) <= arg[3]:
                 mem.write(arg[2], names)
             return len(names), kind

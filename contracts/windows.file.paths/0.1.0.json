@@ -371,7 +371,8 @@
     "ret": 0,
     "err": 32
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py paths_rows: Paths (Sprint 048): the file part of \".\" and \"..\" is the length of the working directory's own last name, the machine's (a runner's \"windows2mac\", w2m's \"app\"), so it is dropped; the drive after \"\\\\?\\\" is the machine's letter (D: on the runners, C: in w2m) and is written <d>."
  },
  "evidence": [
   {

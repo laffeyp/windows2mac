@@ -1,0 +1,189 @@
+{
+ "contract_id": "windows.registry.registry",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; a key closes once; the last error is left.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/registry/registry.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "open.missing",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_two_levels",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_case",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_case",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_below_software_handle",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.root_null_subkey",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": true
+   },
+   {
+    "s": "open.root_empty_subkey",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": true
+   },
+   {
+    "s": "open.not_a_key",
+    "ret": 6,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.u0173_oftware",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_u0100_x",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.long_s_oftware",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_dotless_i",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "close.software",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.software_case",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.software_again",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "close.root_null_subkey",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.root_empty_subkey",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.not_a_key",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "close.null",
+    "ret": 6,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38182330078: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b9b66037b6a7f2f230bb3009c2dc5f1a083234466555848cbfd6d9a1311685af; run 38182331638: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:07bfa9e5709c4d41c7ea02ab298b4c1c92df5e68159b782325b0eb00bfd9d653",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "registry-1791759336-0-1",
+    "registry-1791759336-0-2",
+    "registry-1791759336-1-1",
+    "registry-1791759336-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run."
+ ],
+ "sections": {
+  "probe": "probes/registry (Sprint 044)",
+  "implementation": "tools/guest_runtime/registry.c",
+  "rows": "scripts/family_run.py registry",
+  "excluded": "none"
+ }
+}

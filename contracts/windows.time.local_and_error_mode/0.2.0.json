@@ -105,7 +105,8 @@
     "value": 0,
     "err": 57005
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py time_rows.derive: The child's family keeps only error_mode.child_inherited; the parent's keeps every row (time_rows)."
  },
  "evidence": [
   {

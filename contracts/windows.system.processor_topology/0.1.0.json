@@ -433,7 +433,8 @@
     "err": 57005,
     "highest": 0
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py topology_rows: Processor topology (Sprint 047): `smt` is the runner's hardware (every runner's cores run two threads; w2m's one processor has one core and no SMT) and `modules` and `size_other` in the RelationAll row are the OS's (Server 2025 lists a processor module, 2022 does not; relationship 7 is excluded below), so both fields are dropped."
  },
  "evidence": [
   {

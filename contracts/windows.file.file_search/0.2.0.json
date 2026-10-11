@@ -1,0 +1,302 @@
+{
+ "contract_id": "windows.file.file_search",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "FindFirstFileExW in UnityPlayer's form (FindExInfoBasic, name match, no filter or flags), FindNextFileW and FindClose: a folder's entries \".\" and \"..\" first, then by name without case; attributes 0x10 with size 0 for a folder, 0x20 and the size for a file; times as GetFileAttributesExW's; no short name; * and ? without case; a plain name found as stored; ERROR_NO_MORE_FILES at the end; ERROR_PATH_NOT_FOUND for a missing folder, ERROR_FILE_NOT_FOUND for no match; FindClose of INVALID_HANDLE_VALUE ERROR_INVALID_HANDLE.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/file_search/file_search.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "all",
+    "invalid": false,
+    "err": 57005,
+    "name": ".",
+    "short": "",
+    "attributes": 16,
+    "size_high": 0,
+    "size": 0,
+    "write_time_set": true
+   },
+   {
+    "s": "all.next0",
+    "ret": 1,
+    "err": 57005,
+    "name": "..",
+    "short": "",
+    "attributes": 16,
+    "size_high": 0,
+    "size": 0,
+    "write_time_set": true
+   },
+   {
+    "s": "all.next1",
+    "ret": 1,
+    "err": 57005,
+    "name": "a.dat",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 0,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "all.next2",
+    "ret": 1,
+    "err": 57005,
+    "name": "b.txt",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 5,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "all.next3",
+    "ret": 1,
+    "err": 57005,
+    "name": "Sub",
+    "short": "",
+    "attributes": 16,
+    "size_high": 0,
+    "size": 0,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "all.next4",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "all.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "pattern_txt",
+    "invalid": false,
+    "err": 57005,
+    "name": "b.txt",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 5,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "pattern_txt.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "pattern_txt.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "pattern_question",
+    "invalid": false,
+    "err": 57005,
+    "name": "a.dat",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 0,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "pattern_question.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "pattern_question.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "exact",
+    "invalid": false,
+    "err": 57005,
+    "name": "b.txt",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 5,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "exact.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "exact.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "exact_other_case",
+    "invalid": false,
+    "err": 57005,
+    "name": "b.txt",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 5,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "exact_other_case.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "exact_other_case.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "folder_itself",
+    "invalid": false,
+    "err": 57005,
+    "name": "w2m_find",
+    "short": "",
+    "attributes": 16,
+    "size_high": 0,
+    "size": 0,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "folder_itself.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "folder_itself.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "missing_folder",
+    "invalid": true,
+    "err": 3
+   },
+   {
+    "s": "long_name",
+    "invalid": false,
+    "err": 57005,
+    "name": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqr",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 3,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "long_name.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "long_name.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "long_name_exact",
+    "invalid": false,
+    "err": 57005,
+    "name": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqr",
+    "short": "",
+    "attributes": 32,
+    "size_high": 0,
+    "size": 3,
+    "write_time_matches": true,
+    "creation_time_matches": true,
+    "write_time_set": true
+   },
+   {
+    "s": "long_name_exact.next0",
+    "ret": 0,
+    "err": 18
+   },
+   {
+    "s": "long_name_exact.close",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "missing_pattern",
+    "invalid": true,
+    "err": 2
+   },
+   {
+    "s": "missing_file",
+    "invalid": true,
+    "err": 2
+   },
+   {
+    "s": "close.invalid",
+    "ret": 0,
+    "err": 6
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38182330015: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:664269b73531514ae7e205d5f4f0f2ba62b5c2d6f6351779f6ed39fa015e86f2; run 38182331619: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:bd4cb3db57c693ffa810b711cd6b873ce8394565cb19f17688708783d78abc44",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "file_search-1791759336-0-1",
+    "file_search-1791759336-0-2",
+    "file_search-1791759336-1-1",
+    "file_search-1791759336-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "FindExInfoStandard (short names), other search operations, flags, filters, the DOS wildcards and \"*.*\" are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/file_search (Sprint 044)",
+  "implementation": "tools/guest_runtime/file_search.c",
+  "rows": "scripts/family_run.py file_search",
+  "excluded": "none"
+ }
+}

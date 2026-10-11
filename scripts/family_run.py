@@ -65,6 +65,19 @@ class Plant:
     file: str | None = None  # another guest runtime file (time_and_error_mode.c) to patch instead (Sprint 049)
 
 
+def described(doc: str, fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
+              name: str) -> Callable[[list[dict[str, Any]]], list[dict[str, Any]]]:
+    """A derivation with the name and description its contract records (Sprint 056)."""
+    fn.__doc__ = doc
+    fn.__name__ = name
+    return fn
+
+
+def raw_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The rows as the probe printed them."""
+    return printed
+
+
 @dataclass(frozen=True)
 class Family:
     name: str
@@ -76,7 +89,7 @@ class Family:
     runs: dict[str, Run]
     documented: tuple[dict[str, str], ...]
     open_questions: tuple[str, ...]
-    derive: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] = lambda printed: printed
+    derive: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] = raw_rows
     plants: dict[str, Plant] = field(default_factory=dict)
     excluded: dict[str, str] = field(default_factory=dict)    # row -> why the runners may differ on it
     expected_stop: str | None = None      # the stop an excluded row causes in w2m (a prefix of the stop text)
@@ -145,6 +158,7 @@ def child_rows(prefix: str) -> Callable[[list[dict[str, Any]]], list[dict[str, A
     starts = ("set.", "empty.")
 
     def derive(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keeps the rows of one start, unprefixed (child_rows)."""
         out = []
         for r in printed:
             name = r.get("s", "")
@@ -319,6 +333,7 @@ def time_rows(start: str) -> Callable[[list[dict[str, Any]]], list[dict[str, Any
     Windows does, and the parent's family judges every row; the child's family, started alone with "child", keeps
     only its own."""
     def derive(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The child's family keeps only error_mode.child_inherited; the parent's keeps every row (time_rows)."""
         if start == "child":
             return [r for r in printed if r.get("s") == "error_mode.child_inherited"]
         return printed
@@ -1311,7 +1326,7 @@ FAMILIES: dict[str, Family] = {
                  "AppData\\Roaming; KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE give the same path; ole32's CoTaskMemFree "
                  "frees it and leaves the last error, NULL included."),
         probe="known_folders", guest_file="known_folders.c", host_files=("src/w2m/file_bridge.py",),
-        derive=lambda printed: [{k: v for k, v in r.items() if not ("hr" in r and k == "err")} for r in printed],
+        derive=described("Drops `err` from every row that holds `hr`.", lambda printed: [{k: v for k, v in r.items() if not ("hr" in r and k == "err")} for r in printed], "known_folders_rows"),
         runs={
               "38098265812": Run("windows-2025", "93fdcb0f8270b50ff9a2b03c38926f3ab49945806eca0c43fc4d53302cb2309a", "known_folders-1791678212-0", "AMD EPYC 9V45 96-Core Processor"),
               "38098267402": Run("windows-2022", "15d1d468c6c4e878e6eb1d5d5d20fde4dd250f793eb65915a75117026c5e1d0d", "known_folders-1791678212-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
@@ -1361,8 +1376,8 @@ FAMILIES: dict[str, Family] = {
                  "a replaced name keeps its spelling, new entries in upper-cased name order. The last error is left "
                  "on every success."),
         probe="temp_path", guest_file="environment.c",
-        derive=lambda printed: [{k: v for k, v in r.items() if not (r.get("s") == "temp.relative" and k == "ret")}
-                                for r in printed],
+        derive=described("Drops `ret` from temp.relative.", lambda printed: [{k: v for k, v in r.items() if not (r.get("s") == "temp.relative" and k == "ret")}
+                                for r in printed], "temp_path_rows"),
         runs={
               "38098847298": Run("windows-2025", "ff7714fa701c3870ceac7080865aaac604719f71d7318a1ca00b371236dfdba1", "temp_path-1791678823-0", "AMD EPYC 9V45 96-Core Processor"),
               "38098848806": Run("windows-2022", "4c25a456e35e5b7cf5461baa1e2a1dba6c79451c8e5b6fbc3e932ef36d3f3e20", "temp_path-1791678823-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1415,8 +1430,8 @@ FAMILIES: dict[str, Family] = {
                  "16-aligned process-heap block of the size asked, LPTR zeroed; LocalFree answers NULL."),
         probe="integrity_level", guest_file="token.c",
         host_files=("tools/guest_runtime/local_memory.c", "tools/guest_runtime/sync_objects.c"),
-        derive=lambda printed: [({k: v for k, v in r.items() if k != "rid"} | {"low": r["rid"] == 0x1000})
-                                if "rid" in r else r for r in printed],
+        derive=described("Replaces `rid` with `low`: whether it is 0x1000 (SECURITY_MANDATORY_LOW_RID).", lambda printed: [({k: v for k, v in r.items() if k != "rid"} | {"low": r["rid"] == 0x1000})
+                                if "rid" in r else r for r in printed], "integrity_level_rows"),
         runs={
               "38099150504": Run("windows-2025", "6d84a44be6a006613661b693b1677cb0b096a17ceca4c5773975f329822f7456", "integrity_level-1791679146-0", "AMD EPYC 7763 64-Core Processor"),
               "38099152338": Run("windows-2022", "06e41e1e27336675a83949d6e2956998ed18b60a11742e5c006577a58091aac5", "integrity_level-1791679146-1", "AMD EPYC 9V45 96-Core Processor"),
@@ -1470,10 +1485,10 @@ FAMILIES: dict[str, Family] = {
                  "kernel32 under any case and without its extension, NULL is the image, a missing name is NULL and 126; "
                  "success leaves the last error."),
         probe="module_names_ansi", guest_file="module.c", host_files=("src/w2m/modules.py",),
-        derive=lambda printed: [{k: v for k, v in r.items()
+        derive=described("Drops `w_len` from file.image, file.exact, file.short and file.one, and `ret` from the first three.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("file.image", "file.exact", "file.short", "file.one")
                                          and (k == "w_len" or (k == "ret" and r["s"] != "file.one")))}
-                                for r in printed],
+                                for r in printed], "module_names_ansi_rows"),
         runs={
               "38113666467": Run("windows-2025", "101395b58178b3fc6fbda6647f30e73123f1728782a9b92c59d5925ecd777a4a", "module_names_ansi-1791695127-0", "AMD EPYC 7763 64-Core Processor"),
               "38113667870": Run("windows-2022", "c131bd9f752c01b7966c229dc45cc0c7986bdb904a118c55ce10168e9493695c", "module_names_ansi-1791695127-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
@@ -1558,9 +1573,9 @@ FAMILIES: dict[str, Family] = {
                  "to StackBase; VirtualQuery's BaseAddress is the queried page; GetCurrentThreadStackLimits answers "
                  "DeallocationStack and StackBase; the last error is left."),
         probe="thread_stack", guest_file="thread_queries.c", host_files=("src/w2m/virtual_memory.py",),
-        derive=lambda printed: [{k: v for k, v in r.items()
+        derive=described("Drops `base_address` from query.sp and query.base_minus_one.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("query.sp", "query.base_minus_one") and k == "base_address")}
-                                for r in printed],
+                                for r in printed], "thread_stack_rows"),
         runs={
               "38114444717": Run("windows-2025", "09f0d8199eb9748f2ebd1855df859eeed84a7028982ffc6fe7091e7ccfb44091", "thread_stack-1791696004-0", "AMD EPYC 7763 64-Core Processor"),
               "38114446614": Run("windows-2022", "d39ae9f9aa57c21fdc3a440f5e0acc4df8b073df4def00ef03b21a5ad047e7dd", "thread_stack-1791696004-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
@@ -1627,10 +1642,10 @@ FAMILIES: dict[str, Family] = {
                  "committed read-write where blocks lie, reserved after; BaseAddress is the queried page; the last "
                  "error is left."),
         probe="heap_query", guest_file="heap.c", host_files=("src/w2m/virtual_memory.py",),
-        derive=lambda printed: [{k: v for k, v in r.items()
+        derive=described("Drops `allocation_base_below_block` from query.small and query.after_small_region.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("query.small", "query.after_small_region")
                                          and k == "allocation_base_below_block")}
-                                for r in printed],
+                                for r in printed], "heap_query_rows"),
         runs={
               "38115120174": Run("windows-2025", "5b2e6d18b8335848996effd91796cf03bc4e055ddc6e740f0d696a4c2f05b871", "heap_query-1791696755-0", "AMD EPYC 9V74 80-Core Processor"),
               "38115121838": Run("windows-2022", "90374fedfe0602d20ca0cab4e4cab1bb5ef0da0dea4e6ff7ebb0087b957cdde9", "heap_query-1791696755-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1666,8 +1681,8 @@ FAMILIES: dict[str, Family] = {
                  "file and sets the last error to 0. A handle opened with no access answers every query; a closed one "
                  "is ERROR_INVALID_HANDLE; every other success leaves the last error."),
         probe="files_more", guest_file="file.c",
-        derive=lambda printed: [{**r, "s": f"standard.sweep.{r['size']}"} if r.get("s") == "standard.sweep" else r
-                                for r in printed],                       # one row per swept size
+        derive=described("Names each standard.sweep row by its size, standard.sweep.<size>.", lambda printed: [{**r, "s": f"standard.sweep.{r['size']}"} if r.get("s") == "standard.sweep" else r
+                                for r in printed], "files_more_rows"),                       # one row per swept size
         host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/system_info.c", "tools/guest_runtime/paths.c"),
         runs={
               "38119625685": Run("windows-2025", "4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8", "files_more-1791701711-0", "AMD EPYC 7763 64-Core Processor"),
@@ -1765,9 +1780,9 @@ FAMILIES: dict[str, Family] = {
         probe="file_mapping", guest_file="file.c",
         host_files=("src/w2m/file_bridge.py", "src/w2m/virtual_memory.py", "src/w2m/vm_backend.py",
                     "tools/guest_runtime/sync_objects.c"),
-        derive=lambda printed: [{k: v for k, v in r.items()
+        derive=described("Drops `region_size` from query.after_view and query.granule_end.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("query.after_view", "query.granule_end") and k == "region_size")}
-                                for r in printed],
+                                for r in printed], "file_mapping_rows"),
         runs={
               "38120624307": Run("windows-2025", "0407e57fcef44dd02237f541b902804fe843d8e6cef4f76163811c7331893c87", "file_mapping-1791702788-0", "AMD EPYC 7763 64-Core Processor"),
               "38120626017": Run("windows-2022", "fa3540a10d0b61f3c0ce0e96dfca6caca497edb8208b9ebf9040a0cddd382e51", "file_mapping-1791702788-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1805,7 +1820,7 @@ FAMILIES: dict[str, Family] = {
                  "specs/system_messages.json, from build 26100."),
         probe="format_message", guest_file="messages.c",
         host_files=("src/w2m/system_messages.py", "specs/system_messages.json", "tools/guest_runtime/local_memory.c"),
-        derive=lambda printed: [r for r in printed if r.get("s") != "dump"],
+        derive=described("Drops the dump rows.", lambda printed: [r for r in printed if r.get("s") != "dump"], "format_message_rows"),
         runs={
               "38120951889": Run("windows-2025", "4224a823b406642df21fc8778e5fbd0182890b8063d6a1c28e0861c0dcabb926", "format_message-1791703140-0", "AMD EPYC 7763 64-Core Processor"),
               "38120953179": Run("windows-2022", "a2ecf6240cd728247b4cd842f563485d3124b0e20573b702a12da4bca9d5a31e", "format_message-1791703140-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1945,58 +1960,62 @@ FAMILIES: dict[str, Family] = {
     "registry": Family(
         name="registry",
         contract_id="windows.registry.registry",
-        version="0.1.0",
+        version="0.2.0",
         summary=("RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software "
                  "that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a "
                  "NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; "
                  "a key closes once; the last error is left."),
         probe="registry", guest_file="registry.c", host_files=("src/w2m/vm_backend.py",),
         runs={
-              "38173241012": Run("windows-2025", "77693426a875153bdbf03f4930875bdb62c3e6b382aa02a4160415cad9c14cd5", "registry-1791751265-0", "Intel(R) Xeon(R) 6973P-C"),
-              "38173242936": Run("windows-2022", "18132de8c453d0f2b319cef8e53346b35e086dba9602e6cc468607eb7ea923f5", "registry-1791751265-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38182330078": Run("windows-2025", "b9b66037b6a7f2f230bb3009c2dc5f1a083234466555848cbfd6d9a1311685af", "registry-1791759336-0", "AMD EPYC 7763 64-Core Processor"),
+              "38182331638": Run("windows-2022", "07bfa9e5709c4d41c7ea02ab298b4c1c92df5e68159b782325b0eb00bfd9d653", "registry-1791759336-1", "AMD EPYC 7763 64-Core Processor"),
         },
         documented=(),
         open_questions=("w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not "
                         "exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run.",),
         plants={
             "missing_untouched": Plant("    if (!exists(path)) {\n        *(u64 *)result = 0;", "    if (!exists(path)) {",
-                                       ("open.missing", "open.missing_two_levels", "open.missing_case",
-                                        "open.missing_below_software_handle")),
-            "case_kept": Plant("return c >= 'A' && c <= 'Z' ? (char)(c + 32) : (char)c;", "return (char)c;",
+                                       ("open.missing", "open.missing_two_levels", "open.missing_case", "open.missing_below_software_handle", "open.u0173_oftware", "open.software_u0100_x", "open.long_s_oftware", "open.software_dotless_i")),
+            "case_kept": Plant("return c >= 'A' && c <= 'Z' ? (u16)(c + 32) : c;", "return c;",
                                ("open.software", "open.software_case", "open.missing_below_software_handle",
                                 "close.software", "close.software_case", "close.software_again")),
             "close_twice_succeeds": Plant("    keys[(h - KEY_BASE) / 4].open = 0;", "", ("close.software_again",)),
+            "narrowed_again": Plant("return c >= 'A' && c <= 'Z' ? (u16)(c + 32) : c;",
+                                    "return c >= 'A' && c <= 'Z' ? (u16)(c + 32) : (u16)(u8)c;",
+                                    ("open.u0173_oftware", "open.software_u0100_x")),
             "root_new_handle": Plant("        *(u64 *)result = root;\n", "        *(u64 *)result = KEY_BASE + 0x100;\n",
                                      ("open.root_null_subkey", "open.root_empty_subkey", "close.root_null_subkey",
                                       "close.root_empty_subkey"))}),
     "file_search": Family(
         name="file_search",
         contract_id="windows.file.file_search",
-        version="0.1.0",
+        version="0.2.0",
         summary=("FindFirstFileExW in UnityPlayer's form (FindExInfoBasic, name match, no filter or flags), FindNextFileW "
                  "and FindClose: a folder's entries \".\" and \"..\" first, then by name without case; attributes 0x10 with "
                  "size 0 for a folder, 0x20 and the size for a file; times as GetFileAttributesExW's; no short name; * and ? "
                  "without case; a plain name found as stored; ERROR_NO_MORE_FILES at the end; ERROR_PATH_NOT_FOUND for a "
                  "missing folder, ERROR_FILE_NOT_FOUND for no match; FindClose of INVALID_HANDLE_VALUE ERROR_INVALID_HANDLE."),
         probe="file_search", guest_file="file_search.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/file_bridge.py", "tools/guest_runtime/file.c", "tools/guest_runtime/paths.c"),
+        host_files=("src/w2m/vm_backend.py", "src/w2m/file_bridge.py", "tools/guest_runtime/file.c", "tools/guest_runtime/paths.c",
+                    "tools/guest_runtime/heap.c"),
         runs={
-              "38173241103": Run("windows-2025", "8ab37a462d1a658a2e983372c45fde028a1dfae3ed7b321a0fb744ba3dce704e", "file_search-1791751265-0", "AMD EPYC 7763 64-Core Processor"),
-              "38173242874": Run("windows-2022", "298c4f783acb7f1bd199f95118728cc8465837fa3130ea0692d645a05339b2f8", "file_search-1791751265-1", "AMD EPYC 7763 64-Core Processor"),
+              "38182330015": Run("windows-2025", "664269b73531514ae7e205d5f4f0f2ba62b5c2d6f6351779f6ed39fa015e86f2", "file_search-1791759336-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38182331619": Run("windows-2022", "bd4cb3db57c693ffa810b711cd6b873ce8394565cb19f17688708783d78abc44", "file_search-1791759336-1", "AMD EPYC 7763 64-Core Processor"),
         },
         documented=(),
         open_questions=("FindExInfoStandard (short names), other search operations, flags, filters, the DOS wildcards and "
                         "\"*.*\" are not in the rows and stop the run.",),
         plants={
+            "name_cut_short": Plant("#define NAME 255 ", "#define NAME 100 ", ("long_name*", "missing_pattern", "missing_file", "close.invalid")),
             "order_with_case": Plant("    return upper(*a) < upper(*b);", "    return *a < *b;", ("all.next1", "all.next2", "all.next3")),
             "folder_size_4096": Plant("    if (kind != 2) { *(u32 *)(d + 28)", "    if (1) { *(u32 *)(d + 28)",
                                       ("all", "all.next0", "all.next3", "folder_itself")),
             "case_matters": Plant("upper(*p) == upper(*s)", "*p == *s",
                                   ("exact_other_case", "exact_other_case.next0", "exact_other_case.close")),
             "end_error_left": Plant("        set_error(ERROR_NO_MORE_FILES);\n", "",
-                                    ("all.next4", "pattern_txt.next0", "pattern_question.next0", "exact.next0",
-                                     "exact_other_case.next0", "folder_itself.next0")),
-            "missing_folder_as_file": Plant("        set_error(ERROR_PATH_NOT_FOUND);", "        set_error(ERROR_FILE_NOT_FOUND);",
+                                    ("all.next4", "pattern_txt.next0", "pattern_question.next0", "exact.next0", "exact_other_case.next0", "folder_itself.next0", "long_name.next0", "long_name_exact.next0")),
+            "missing_folder_as_file": Plant("    if (kind != 2) {\n        set_error(ERROR_PATH_NOT_FOUND);",
+                                            "    if (kind != 2) {\n        set_error(ERROR_FILE_NOT_FOUND);",
                                             ("missing_folder",))}),
     "version": Family(
         name="version",
@@ -2044,7 +2063,7 @@ FAMILIES: dict[str, Family] = {
                  "taskbar."),
         probe="display", guest_file="display.c",
         host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py", "tools/guest_runtime/guest_calls.c",
-                    "tools/guest_runtime/windows.c"),
+                    "tools/guest_runtime/windows.c", "src/w2m/guest_stubs.py"),
         runs={
               "38174316653": Run("windows-2025", "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c", "display-1791752210-0", "AMD EPYC 9V74 80-Core Processor"),
               "38174318347": Run("windows-2022", "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b", "display-1791752210-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
@@ -2070,7 +2089,7 @@ FAMILIES: dict[str, Family] = {
     "windows": Family(
         name="windows",
         contract_id="windows.windows.windows",
-        version="0.1.0",
+        version="0.2.0",
         summary=("Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, "
                  "CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, "
                  "WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default "
@@ -2080,8 +2099,8 @@ FAMILIES: dict[str, Family] = {
         host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/guest_calls.c", "tools/guest_runtime/display.c",
                     "tools/guest_runtime/resources.c", "src/w2m/guest_stubs.py"),
         runs={
-              "38174244880": Run("windows-2025", "e8636f8cc0657e52431d57380477f3ee148f3842bdda1064466fc9d621e2995c", "windows-1791752145-0", "AMD EPYC 7763 64-Core Processor"),
-              "38174246839": Run("windows-2022", "220412c9aaa756201ef395b341336f0260bc3f634643ab7e7f005b626b412966", "windows-1791752145-1", "AMD EPYC 7763 64-Core Processor"),
+              "38182422811": Run("windows-2025", "97ad55015dfa144bb7322a90a651722686d5bb1df8d8e1df74180ac8afcdc09f", "windows-1791759423-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38182424645": Run("windows-2022", "f1655d9fd40c36838ab28f1d1de7aea5839ca99ea55fd91ed8e5c23408befdcd", "windows-1791759423-1", "AMD EPYC 7763 64-Core Processor"),
         },
         documented=(),
         open_questions=("Where CW_USEDEFAULT places a window depends on the windows the desktop made before (52, 78, 130 "
@@ -2093,19 +2112,23 @@ FAMILIES: dict[str, Family] = {
         plants={
             "minmax_not_sent": Plant("    w2m_call_guest(&f->call, w->procedure, h, WM_GETMINMAXINFO, 0, (u64)f->minmax);",
                                      "    f->step = 1;\n    w2m_call_guest(&f->call, w->procedure, h, WM_NCCREATE, 0, (u64)f->create);",
-                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*",
-                                      "create.play", "play.window_rect")),
+                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*", "create.play", "play.window_rect", "msg.offscreen.*", "create.offscreen")),
             "frame_thin": Plant("#define FRAME_TOP 31 ", "#define FRAME_TOP 26 ",
-                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect")),
+                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect", "msg.offscreen.2")),
             "height_from_screen": Plant("        cy = (work[3] - work[1]) * 3 / 4 - 21;", "        cy = 768 * 3 / 4 - 21;",
                                         ("msg.batch.2", "batch.client_rect", "batch.window_rect")),
             "no_edge_in_create": Plant("    *(u32 *)(cs + 72) = ((u32)style & WS_CAPTION) == WS_CAPTION ? WS_EX_WINDOWEDGE : 0;",
-                                       "    *(u32 *)(cs + 72) = 0;", ("msg.play.1", "msg.play.3")),
+                                       "    *(u32 *)(cs + 72) = 0;", ("msg.play.1", "msg.play.3", "msg.offscreen.1", "msg.offscreen.3")),
             "extra_unbounded": Plant("        if (index + 8 > classes[w->cls].extra) return 0;", "        if (index + 8 > EXTRA) return 0;",
                                      ("batch.long_ptr_8", "play.long_ptr_8")),
             "duplicate_class_allowed": Plant("        if (classes[k].instance != instance) w2m_unimplemented(api, instance);        /* another module's: no row */\n        set_error(ERROR_CLASS_ALREADY_EXISTS);\n        return w2m_logged(api, name, 0);",
                                              "        if (classes[k].instance != instance) w2m_unimplemented(api, instance);        /* another module's: no row */\n        return w2m_logged(api, name, classes[k].atom);",
-                                             ("class.register_ex_again",)),
+                                             ("class.register_ex_again", "class.name_64_again", "class.name_254_again", "class.name_255_again")),
+            "class_limit_256": Plant("#define CLASS_NAME 255 ", "#define CLASS_NAME 256 ",
+                                     ("class.name_256", "class.name_256_again")),
+            "monitor_ignores_window": Plant("        if (r[0] < SCREEN_W && r[2] > 0 && r[1] < SCREEN_H && r[3] > 0)\n            return w2m_logged(W2M_API_MonitorFromWindow",
+                                            "        if (1)\n            return w2m_logged(W2M_API_MonitorFromWindow",
+                                            ("offscreen.monitor",), file="display.c"),
             "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
                                      ("icon.own_103",))}),
     "winrt": Family(
@@ -2254,7 +2277,9 @@ def build_contract(f: Family) -> dict[str, Any]:
         "scenario": {"initial": {"process": "started by the runner's cmd with standard output redirected"},
                      "execution": {"main": f"probes/{f.probe}/{f.probe}.c, top to bottom"},
                      "observation": {"phase": "after each call"}},
-        "acceptance": {"relation": "exact_rows", "key": "s", "rows": first},
+        "acceptance": {"relation": "exact_rows", "key": "s", "rows": first,
+                       **({"derivation": f"scripts/family_run.py {derivation_name(f)}: "
+                                         + " ".join((f.derive.__doc__ or "").split())} if f.derive is not raw_rows else {})},
         "evidence": [
             {"evidence_id": "runner-rows", "category": "observed",
              "source_ref": "; ".join(f"run {k}: {r.image}, {r.cpu}, probe sha256:{r.binary}" for k, r in f.runs.items()),
@@ -2265,6 +2290,12 @@ def build_contract(f: Family) -> dict[str, Any]:
         "sections": {"probe": f"probes/{f.probe} (Sprint 044)", "implementation": f"tools/guest_runtime/{f.guest_file}",
                      "rows": "scripts/family_run.py " + f.name,
                      "excluded": "; ".join(f"{k}: {v}" for k, v in sorted(f.excluded.items())) or "none"}}
+
+
+def derivation_name(f: Family) -> str:
+    if not (f.derive.__doc__ or "").strip():
+        raise ValueError(f"{f.name}: its derive function says nothing of what it keeps (Sprint 056)")
+    return f.derive.__qualname__.replace(".<locals>.", ".") if "<locals>" in f.derive.__qualname__ else f.derive.__name__
 
 
 def contract(f: Family) -> Contract:

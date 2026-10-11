@@ -212,6 +212,7 @@
 - **2026-10-11** — Sprint 053 (structured exceptions) closed partial. `tools/guest_runtime/exceptions.c` (dispatch, the UNWIND_INFO unwinder, RtlUnwindEx, RaiseException, the Rtl* queries), `src/w2m/exception_stubs.py`, host request 31, faults dispatched from the exception entry, `probes/exceptions`, contracts windows.exception.exceptions 0.1.0 and vectored_handlers 0.2.0. Dual contract: signal pass (two families' item runs and nine plants; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED VerSetConditionMask); artifact pass (gates 0, CI on the closing commit). Observation: partial — both families equal Windows, the fault oracle and 436 classes hold; the frontier runs 41,315,682 instructions and stops before the CoCreateInstance criterion, which moves to 054.
 - **2026-10-11** — Sprint 054 (the version check, the display and the game window) closed. `tools/guest_runtime/guest_calls.c` (services call the guest's code; exception dispatch moved onto it), `windows.c`, `display.c`, `version.c`, `time.c`, `registry.c`, `file_search.c`, `resources.c`; `src/w2m/guest_stubs.py`; FILE_LIST; PE resources; system DLLs loaded by name; six probes and contracts (version, display, windows, time, registry, file_search 0.1.0) and virtual_memory 0.2.0; the frontier given the batch run's arguments. Dual contract: signal pass (seven families' item runs, 34 plants caught as named; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED at the named CreateEventW); artifact pass (gates 0, CI on the closing commit). Observation: pass against the amended criterion — the crash handler (a second process) is Sprint 055.
 - **2026-10-11** — Sprint 055 (the crash handler: a second process) closed. `src/w2m/kernel.py`, VM.steps, `tools/guest_runtime/processes.c`, named events and inherited handles, RoInitialize, the fault log, `tools/jit_capture/call_trace.h` and `handler_trace.c`, game run 38176899195, contracts windows.process.processes and windows.winrt.winrt 0.1.0 and windows.time.local_and_error_mode 0.2.0. Dual contract: signal pass (item runs and plants of three families; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED GetCurrentDirectoryA with a fault logged); artifact pass (gates 0, CI on the closing commit). Observation: pass — the handler runs as a second VM and waits as on Windows; the next stop is a NULL PEB.ProcessParameters (Sprint 056).
+- **2026-10-11** — Sprint 056 (the review's findings) closed. `tests/test_runtime_native.py`, `tests/test_runtime_patterns.py`; fixes in file_search.c, registry.c, windows.c, display.c, console.c, file_bridge.py, vm_backend.py; contracts registry, file_search and windows 0.2.0; `derivation` in 24 contracts. Dual contract: signal pass (three families' item runs, 20 plants caught as named, 28 families re-run to CANDIDATE_ACCEPTED); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 
 ## Deferred
 
@@ -265,6 +266,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 056 (2026-10-11, closed: CI on the closing commit, recorded at merge)
+- **Scope:** the eight verified findings of the review of Sprint 054, the audit for their patterns, the claims.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the native checks fail on 243b8ad9; the registry, file_search and windows probes run on two runners twice (the class-name boundary asked again at 254 and 255); fixes; the three families' item runs SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; 28 families re-run to CANDIDATE_ACCEPTED.
+  - *Observation 1 (order violation, of the judge):* one native check failed first for a wrong expectation, not the defect. Disposition: resolved-here (each check's failure read before any fix).
+  - *Observation 2 (missing pair, of the documentation):* Microsoft Learn's class-name maximum of 256 is off by one against Windows (256 answers 87). Disposition: resolved-here (the rows decide; the comment cites both).
+  - *Observation 3 (vocabulary gap, checked):* none.
 
 ### Sprint 055 (2026-10-11, closed: CI run 38180806466 success on 3e0dea6d)
 - **Scope:** captures with names and the handler's calls; the processes and winrt families; a second process as a second VM.

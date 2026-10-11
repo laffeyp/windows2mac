@@ -28,7 +28,7 @@
 
 static u64 std_handles[3];
 static int std_ready;
-static char command_line_a[1024];
+static char command_line_a[2048];           /* the process page holds 2047 units and a NUL (vm_backend.py) */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 

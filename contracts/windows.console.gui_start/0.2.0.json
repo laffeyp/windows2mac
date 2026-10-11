@@ -112,7 +112,8 @@
     "same_characters_as_wide": true,
     "same_pointer": true
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py console_rows: The title's length is the runner's path length (D:\\a\\w2m\\w2m\\probe.exe); the row keeps only that the title is the module's path."
  },
  "evidence": [
   {

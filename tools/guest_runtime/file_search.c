@@ -5,9 +5,11 @@
  *
  * contracts/windows.file.file_search records Windows (Server 2025 and 2022, equal) for UnityPlayer's form,
  * FindFirstFileExW(name, FindExInfoBasic, &data, FindExSearchNameMatch, NULL, 0):
- *   - a folder's entries come "." and ".." first, then by name compared without case ("a.dat", "b.txt", "Sub");
+ *   - a folder's entries come "." and ".." first, then by name compared without case ("a.dat", "b.txt", "Sub"): NTFS's
+ *     order on the runners (FindFirstFileEx itself "does no sorting", Microsoft Learn); w2m's folders keep it
  *     a folder has FILE_ATTRIBUTE_DIRECTORY (0x10) and size 0, a file FILE_ATTRIBUTE_ARCHIVE (0x20) and its size;
- *     the times are GetFileAttributesExW's; FindExInfoBasic leaves the short name empty
+ *     the creation and write times are GetFileAttributesExW's (the access time is not compared); FindExInfoBasic leaves
+ *     the short name empty; a name runs to NTFS's 255 units, and a match longer than its pattern is found
  *   - "*" and "?" match without case; a name without them finds that one entry, spelled as stored; a folder's own
  *     name finds the folder
  *   - past the last entry FindNextFileW answers FALSE with ERROR_NO_MORE_FILES (18); success leaves the last error
@@ -31,7 +33,9 @@ typedef unsigned short u16;
 #define INVALID_HANDLE 0xFFFFFFFFFFFFFFFFull
 #define SEARCH_BASE 0x4000ull                       /* search handles: SEARCH_BASE + 4*slot */
 #define SEARCHES 16
-#define FULL 1024
+#define FULL 1024                                    /* a search's folder: fewer units than this (w2m_full_path's bound) */
+#define NAME 255                                     /* NTFS's longest name, in UTF-16 units */
+#define LISTING_TRIES 8
 
 u64 w2m_full_path(const u16 *in, u16 *out, long *part);       /* paths.c */
 u64 w2m_file_stat_full(const u16 *full, u64 out);              /* file.c */
@@ -63,10 +67,19 @@ static int before(const u16 *a, const u16 *b) {
 
 static u64 length(const u16 *s) { u64 n = 0; while (s[n]) n++; return n; }
 
+/* A name's length in a listing that ends at `end` (exclusive): its NUL must lie before it. */
+static u64 bounded_length(const u16 *s, const u16 *end) {
+    u64 n = 0;
+    while (s + n < end && s[n]) n++;
+    if (s + n >= end) w2m_unimplemented(W2M_API_FindFirstFileExW, n);       /* a listing without its NUL: a host defect */
+    return n;
+}
+
 /* The entry for `name` in the search's folder into WIN32_FIND_DATAW `data`. */
 static void fill(const struct search *f, const u16 *name, u64 data) {
-    u16 full[FULL];
+    u16 full[FULL + 1 + NAME + 1];                       /* folder, separator, name, NUL (review of Sprint 054) */
     u64 n = length(f->folder);
+    if (n >= FULL || length(name) > NAME) w2m_unimplemented(W2M_API_FindFirstFileExW, length(name));
     for (u64 i = 0; i <= n; i++) full[i] = f->folder[i];
     int dot = name[0] == '.' && (!name[1] || (name[1] == '.' && !name[2]));
     if (!dot) {
@@ -121,17 +134,32 @@ u64 k32_FindFirstFileExW(u64 name, u64 level, u64 data, u64 op, u64 rsp) {
         set_error(ERROR_PATH_NOT_FOUND);
         return w2m_logged(W2M_API_FindFirstFileExW, kind, INVALID_HANDLE);
     }
-    u64 listing = w2m_heap_take(need + 8);
-    w2m_host(W2M_FILE_LIST, (u64)f->folder, folder, listing, need, &kind);
+    /* the folder is listed again until the listing fits: it can grow between the requests (review of Sprint 054) */
+    u64 listing = 0;
+    for (int tries = 0;; tries++) {
+        if (tries == LISTING_TRIES) w2m_unimplemented(W2M_API_FindFirstFileExW, need);   /* a folder that keeps growing */
+        listing = w2m_heap_take(need);
+        if (!listing) w2m_unimplemented(W2M_API_FindFirstFileExW, need);
+        u64 got = w2m_host(W2M_FILE_LIST, (u64)f->folder, folder, listing, need, &kind);
+        if (kind != 2) {                                 /* the folder went away between the requests */
+            w2m_heap_release(W2M_API_FindFirstFileExW, listing);
+            set_error(ERROR_PATH_NOT_FOUND);
+            return w2m_logged(W2M_API_FindFirstFileExW, kind, INVALID_HANDLE);
+        }
+        if (got <= need) { need = got; break; }
+        w2m_heap_release(W2M_API_FindFirstFileExW, listing);
+        need = got;
+    }
     static const u16 dots[] = {'.', 0, '.', '.', 0};
     u64 total = 0, count = 0;
     for (int pass = 0; pass < 2; pass++) {                /* sizes, then the copy */
         const u16 *list[2] = {dots, (const u16 *)listing};
+        const u16 *ends[2] = {dots + 5, (const u16 *)(listing + need)};
         u16 *to = pass ? (u16 *)f->names : 0;
         for (int which = folder > 3 ? 0 : 1; which < 2; which++)
-            for (const u16 *s = list[which]; (which || s < dots + 5) && *s; s += length(s) + 1) {
+            for (const u16 *s = list[which]; s < ends[which] && *s; s += bounded_length(s, ends[which]) + 1) {
                 if (!matches(pattern, s)) continue;
-                u64 k = length(s) + 1;
+                u64 k = bounded_length(s, ends[which]) + 1;
                 if (pass) { for (u64 i = 0; i < k; i++) *to++ = s[i]; }
                 else { total += k; count++; }
             }
@@ -142,11 +170,13 @@ u64 k32_FindFirstFileExW(u64 name, u64 level, u64 data, u64 op, u64 rsp) {
                 return w2m_logged(W2M_API_FindFirstFileExW, 0, INVALID_HANDLE);
             }
             f->names = w2m_heap_take(2 * total + 8);
+            if (!f->names) w2m_unimplemented(W2M_API_FindFirstFileExW, total);
         }
     }
     w2m_heap_release(W2M_API_FindFirstFileExW, listing);
     /* order: the dot entries as listed first, then insertion by name without case */
     u16 **order = (u16 **)w2m_heap_take(8 * count);
+    if (!order) w2m_unimplemented(W2M_API_FindFirstFileExW, count);
     u64 dotted = 0, k = 0;
     for (u16 *s = (u16 *)f->names; k < count; s += length(s) + 1, k++) {
         order[k] = s;
