@@ -394,3 +394,11 @@
 **Finding (#44):** a reference trace judges a run only when both were given the same inputs: command line, working directory, environment. The inputs belong in the record beside the trace, and the run that is judged reads its inputs from there.
 
 **Kit change suggested:** a reference capture stores its process inputs (arguments, directory, environment) as a file the local run loads, never retypes.
+
+### 2026-10-11 — Sprint 054: the reference process ran another exe
+
+**What happened:** the game captures of Sprint 049 replace the game's exe with jit_capture.exe, which loads UnityPlayer and calls UnityMain itself. The exe a process runs decides some of Windows's answers: its manifest (the version Windows reports, DPI awareness, Common Controls 6) and its resources (the icon UnityPlayer loads, id 103). jit_capture.exe had neither, so the reference trace shows LoadIconA failing with 1812 and an unmanifested process, where the real game gets an icon and version 10.0. The game's exe was in the depot all along; reading its resources at the start of 054 showed the difference.
+
+**Finding (#45):** a capture tool that stands in for a program changes the program's inputs; every property Windows reads from the image (manifest, resources, subsystem, PE flags) must be carried over, or the capture's answers for them are the tool's.
+
+**Kit change suggested:** a stand-in launcher copies the original image's manifest and resources at build time, and the capture records a hash of what it carried.

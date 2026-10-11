@@ -208,6 +208,7 @@
 - **2026-10-11** — Sprint 051 (threads) closed. `src/w2m/scheduler.py`, `tools/guest_runtime/threads.c`, the VM's thread table, bridge epilogue (state.schedule, hvc #12) and time slices; per-thread TEBs, stacks and static TLS; blocking waits, mutexes, critical sections, SRW locks and condition variables; TLS callbacks at process start (loader); the walker's address-taken roots. Dual contract: signal pass (threads item run, five plants, 15 families re-recorded; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED CoInitializeEx); artifact pass (gates 0, CI on the closing commit). Observation: pass, partial on the game's collector path (not reached).
 - **2026-10-11** — Sprint 052 (COM and the audio device enumerator) closed partial. `tools/guest_runtime/com.c`, `tools/guest_runtime/network.c`, `probes/com`, `probes/network`, COM vtables (vm_backend `_com_vtables`), ORDINAL_NAMES, the ws2_32 service prefix. Dual contract: signal pass (two families' item runs and six plants; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED RaiseException); artifact pass (gates 0, CI on the closing commit). Observation: partial — both families equal Windows; the frontier stops before the done criterion's CoCreateInstance calls.
 - **2026-10-11** — Sprint 053 (structured exceptions) closed partial. `tools/guest_runtime/exceptions.c` (dispatch, the UNWIND_INFO unwinder, RtlUnwindEx, RaiseException, the Rtl* queries), `src/w2m/exception_stubs.py`, host request 31, faults dispatched from the exception entry, `probes/exceptions`, contracts windows.exception.exceptions 0.1.0 and vectored_handlers 0.2.0. Dual contract: signal pass (two families' item runs and nine plants; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED VerSetConditionMask); artifact pass (gates 0, CI on the closing commit). Observation: partial — both families equal Windows, the fault oracle and 436 classes hold; the frontier runs 41,315,682 instructions and stops before the CoCreateInstance criterion, which moves to 054.
+- **2026-10-11** — Sprint 054 (the version check, the display and the game window) closed. `tools/guest_runtime/guest_calls.c` (services call the guest's code; exception dispatch moved onto it), `windows.c`, `display.c`, `version.c`, `time.c`, `registry.c`, `file_search.c`, `resources.c`; `src/w2m/guest_stubs.py`; FILE_LIST; PE resources; system DLLs loaded by name; six probes and contracts (version, display, windows, time, registry, file_search 0.1.0) and virtual_memory 0.2.0; the frontier given the batch run's arguments. Dual contract: signal pass (seven families' item runs, 34 plants caught as named; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED at the named CreateEventW); artifact pass (gates 0, CI on the closing commit). Observation: pass against the amended criterion — the crash handler (a second process) is Sprint 055.
 
 ## Deferred
 
@@ -261,6 +262,20 @@
 ---
 
 ## Sprint tail
+
+### Sprint 054 (2026-10-11, closed: CI on the closing commit, recorded at merge)
+- **Scope:** the version, display, windows, time, registry and file_search families; amended before the work to give the frontier the batch run's arguments, fix VirtualAlloc(NULL, MEM_COMMIT) and stop at the crash handler's start.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* seven probes on two runners each (version, time, display and windows rerun after build or row fixes); each family's item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; 27 other families re-run to CANDIDATE_ACCEPTED; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for CreateEventW (a named event) after 421,498 instructions.
+  - *Observation 1 (order violation, of the record):* the frontier ran the play path while its criteria came from the batch trace. Disposition: resolved-here (the batch arguments; KIT_DIARY #44).
+  - *Observation 2 (missing pair, of the reference):* the batch capture ran jit_capture.exe in the game exe's place, so its LoadIconA failure (1812) and its unmanifested version answers are the capture's, not the game's. Disposition: resolved-here (probes under the game's manifest and an icon judge; jit_capture linked with the manifest; KIT_DIARY #45).
+  - *Observation 3 (vocabulary gap, checked):* none; every stop names its import.
+
+### Sprint 053 (2026-10-11, closed partial: CI run 38166790366 success on 539c238c; this entry written at Sprint 054's close, 053 closed without one)
+- **Scope:** structured exceptions: dispatch, RtlUnwindEx, faults dispatched, the Rtl* queries.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the exceptions probe on two runners after three failed builds and runs (link errors, STATUS_BAD_STACK, a fault in a __try body); the exceptions and vectored_handlers item runs to CANDIDATE_ACCEPTED; ten families re-run; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for VerSetConditionMask.
+  - *Observation 1 (order violation, of the criterion):* the frontier criterion sat 20 unserved functions past the stop. Disposition: deferred to 054 (KIT_DIARY #43).
 
 ### Sprint 052 (2026-10-11, closed partial: CI run 38128014124 success on 6d522115)
 - **Scope:** the com family, then (amended before the work) the network family's WSAStartup.

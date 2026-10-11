@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 054
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -77,3 +77,36 @@ w2m's display is the runners' (one 1024×768 monitor, 96 DPI) until the game's w
 ## done criteria
 
 The six families accepted; virtual_memory re-accepted with the commit-at-NULL row; the batch frontier at the crash handler's start (seq 6).
+
+## observed
+
+- **The six families equal Windows** on Server 2025 and 2022, each with plants caught by exactly the rows named:
+  version (98 rows, 5 plants; runs 38173733146, 38173735116), display (147 rows, 6; 38174316653, 38174318347), windows
+  (36 rows, 7; 38174244880, 38174246839), time (12 rows, 4; 38173127764, 38173129974), registry (16 rows, 4;
+  38173241012, 38173242936), file_search (26 rows, 5; 38173241103, 38173242874). virtual_memory 0.2.0 equals Windows
+  with the commit-at-NULL rows (38172734444, 38172736319; plant commit_null_refused, 8 rows).
+- **The frontier, given the batch run's arguments, passes seq 2 and stops at the crash handler's start**: seq 6,
+  `CreateEventW` with a name, after 421,498 instructions (`store/runs/frontier-643a6283510c-1791752756583708000`), as
+  the amended criterion says. The 21 functions of the scope come after it on the batch path; they are served and
+  judged by their rows.
+- **Windows facts the rows fixed:** under the game's manifest GetVersionExW answers 10.0 (6.2 without one) and suite
+  mask 0x190; VerSetConditionMask always sets bit 63 and answers 0 for a type mask of 0; RtlVerifyVersionInfo compares
+  major, minor and the service pack as one version and skips a type whose condition is 0; shell32 reports 10.0.10586
+  on both runners. A window's creation sends exactly WM_GETMINMAXINFO, WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE;
+  CREATESTRUCT keeps cx and cy as given (CW_USEDEFAULT) with x and y resolved; CW_USEDEFAULT cascades in steps of 26
+  from a start the desktop's earlier windows set (52, 78, 130 seen) and sizes 3/4 of the work area, less 21 in height
+  (519 on 2025's 720, 525 on 2022's 728). A find lists "." and "..", then names compared without case, a folder with
+  size 0 (GetFileAttributesExW says 4096). A NULL or empty registry subkey returns the root's predefined handle.
+  LoadIconA of a missing id is 1813 when the module has resources and 1812 when it has none.
+- **Defects found and fixed:** the frontier gave the game no arguments (the play path) while every criterion since
+  052 was read from the batch run (KIT_DIARY #44); `VirtualAlloc(NULL, n, MEM_COMMIT)` failed in w2m and reserves and
+  commits on Windows, which sent UnityPlayer around its crash handler; modules.py compared lowercased names with
+  System32's spellings, so `LoadLibrary("shcore.dll")` would have answered ERROR_MOD_NOT_FOUND; a system DLL the
+  program does not import could not be loaded at all; the reference captures ran jit_capture.exe in the game exe's
+  place, unmanifested and without its icons (KIT_DIARY #45); link.exe's /manifestinput needs mt.exe, which the
+  runners lack (manifests now go in as resources through llvm-rc).
+- **Built:** `tools/guest_runtime/guest_calls.c` (a service calls the guest's code and resumes; exception dispatch moved
+  onto it, its four families conforming with every plant as named), `windows.c`, `display.c`, `version.c`, `time.c`,
+  `registry.c`, `file_search.c`, `resources.c`; `src/w2m/guest_stubs.py` (was exception_stubs.py); FILE_LIST (host
+  request 32); PE resource parsing (`pe.py`); system DLLs loaded by name at run time; `scripts/store_probe_runs.py`;
+  the probe workflow's `rc` (llvm-rc); `games/hail-to-the-rainbow/manifest.xml`.
