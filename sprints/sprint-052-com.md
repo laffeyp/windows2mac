@@ -15,6 +15,7 @@ Sprint 051 left the frontier at 20,590,160 instructions, at `ole32.dll!CoInitial
 
 1. **The rows.** A com probe on Server 2025 and 2022: the apartment calls (first, repeated, mixed models, uninitialized), CoCreateInstance of the enumerator and an unknown class, the enumerator's methods as the runner answers them (EnumAudioEndpoints, the collection's GetCount, GetDefaultAudioEndpoint, and a device's property store if there is one), reference counts, QueryInterface, PropVariantClear, CoCreateGuid's version and variant bits, and the three OLEAUT32 calls.
 2. **COM in the guest runtime:** apartments per thread, class creation by CLSID, objects whose vtables are service thunks taking `this`, and the enumerator answering as the runner does.
+3. **Amended 2026-10-11, before the work (KIT_DIARY #40):** with COM served, the frontier stops at `WS2_32.dll!#115` (WSAStartup) after 20,705,122 instructions: mono's call at trace seq 1283 comes before UnityPlayer's CoCreateInstance calls (seq 1705), so the done criteria need the network family's WSAStartup too (mono: version 2.0, UnityPlayer: 2.2, both answering 0; if_nametoindex is never called). A network probe gives its rows.
 
 ## prerequisites
 
