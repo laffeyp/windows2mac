@@ -49,6 +49,8 @@ struct w2m_thread_scratch {
     u64 wait_generation;             /* its wake count when the wait began */
     u32 exit_code;                   /* ExitThread's code, for the detach stub's end */
     u32 phase;                       /* a retried call's progress (SleepConditionVariableSRW: 1 released, 2 woken) */
+    u32 com_inits;                   /* CoInitialize(Ex) calls not yet balanced by CoUninitialize (com.c; Sprint 052) */
+    u32 com_model;                   /* their apartment: 1 multithreaded, 2 single-threaded */
 };
 #define W2M_THREAD_SCRATCH_OFF 0x1900
 static inline struct w2m_thread_scratch *w2m_thread_scratch(void) {

@@ -1,0 +1,206 @@
+{
+ "contract_id": "windows.com.com",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "COM as the game uses it (specs/work_list.json): apartments per thread (S_OK, S_FALSE, RPC_E_CHANGED_MODE; the process's multithreaded apartment serves a thread without one; CO_E_NOTINITIALIZED with none); CoCreateInstance of the audio device enumerator, one object COM keeps a reference to, REGDB_E_CLASSNOTREG for an unknown class, E_NOINTERFACE for an interface it lacks, E_INVALIDARG for a NULL out pointer; no audio endpoint on the runners (empty collections, GetDefaultAudioEndpoint E_NOTFOUND); notification clients registered without AddRef; PropVariantClear, CoCreateGuid (version 4, variant 10), BSTRs and VariantClear.",
+ "applicability": "windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/com/com.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "create.before_init",
+    "hr": 2147746288,
+    "out_null": 1
+   },
+   {
+    "s": "init.mta",
+    "hr": 0
+   },
+   {
+    "s": "init.mta_again",
+    "hr": 1
+   },
+   {
+    "s": "init.sta_after_mta",
+    "hr": 2147549446
+   },
+   {
+    "s": "create.implicit_mta",
+    "hr": 0
+   },
+   {
+    "s": "create.enumerator",
+    "hr": 0,
+    "out_nonnull": 1
+   },
+   {
+    "s": "create.inproc",
+    "hr": 0,
+    "out_nonnull": 1,
+    "same_object": 1
+   },
+   {
+    "s": "create.unknown_class",
+    "hr": 2147746132,
+    "out_null": 1
+   },
+   {
+    "s": "create.null_out",
+    "hr": 2147942487
+   },
+   {
+    "s": "create.unknown_interface",
+    "hr": 2147500034,
+    "out_null": 1
+   },
+   {
+    "s": "refcount",
+    "add_ref": 3,
+    "release": 2
+   },
+   {
+    "s": "query.unknown",
+    "hr": 0,
+    "same": 1
+   },
+   {
+    "s": "query.nothing",
+    "hr": 2147500034,
+    "out_null": 1
+   },
+   {
+    "s": "endpoints.render_active",
+    "hr": 0,
+    "collection": 1,
+    "count_hr": 0,
+    "count": 0
+   },
+   {
+    "s": "endpoints.capture_active",
+    "hr": 0,
+    "collection": 1,
+    "count_hr": 0,
+    "count": 0
+   },
+   {
+    "s": "endpoints.render_all",
+    "hr": 0,
+    "collection": 1,
+    "count_hr": 0,
+    "count": 0
+   },
+   {
+    "s": "default.render_console",
+    "hr": 2147943568,
+    "device_null": 1,
+    "device_untouched": 0
+   },
+   {
+    "s": "default.render_multimedia",
+    "hr": 2147943568,
+    "device_null": 1,
+    "device_untouched": 0
+   },
+   {
+    "s": "default.capture_console",
+    "hr": 2147943568,
+    "device_null": 1,
+    "device_untouched": 0
+   },
+   {
+    "s": "notification",
+    "register_hr": 0,
+    "refs_registered": 1,
+    "unregister_hr": 0,
+    "refs_after": 1
+   },
+   {
+    "s": "notification.unregister_again",
+    "hr": 2147943568
+   },
+   {
+    "s": "release.last",
+    "count": 1
+   },
+   {
+    "s": "propvariant.clear_empty",
+    "hr": 0,
+    "vt": 0
+   },
+   {
+    "s": "guid",
+    "hr1": 0,
+    "hr2": 0,
+    "version": 4,
+    "variant": 2,
+    "differ": 1
+   },
+   {
+    "s": "bstr",
+    "nonnull": 1,
+    "len": 3,
+    "byte_len": 6,
+    "nul": 1
+   },
+   {
+    "s": "variant.clear_bstr",
+    "hr": 0,
+    "vt": 0
+   },
+   {
+    "s": "bstr.empty",
+    "nonnull": 1,
+    "len": 0
+   },
+   {
+    "s": "bstr.free_null",
+    "ok": 1
+   },
+   {
+    "s": "create.after_uninit",
+    "hr": 2147746288,
+    "out_null": 1
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38126872187: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:da7ca465e5f2b4e226c8f49a2d20f159c20e88b37d89e449dacf621fab691f09; run 38126873913: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:a6e5f68b6d7b952199acac0418054346609592ff7cd382c32d6608d6d9e8c229",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "com-1791709273-0-1",
+    "com-1791709273-0-2",
+    "com-1791709273-1-1",
+    "com-1791709273-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "The runners have no audio endpoint, and w2m answers as they do: the game's audio code sees no device. An endpoint backed by the Mac's output is later work (sound), with rows from a machine that has one.",
+  "UnityPlayer's first CoInitialize answers S_FALSE in the capture (the main thread already in an apartment by then, from a call the capture does not show); w2m answers S_OK.",
+  "GetDevice, an endpoint collection's Item, aggregation, other class contexts and other VARIANT types are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/com (Sprint 044)",
+  "implementation": "tools/guest_runtime/com.c",
+  "rows": "scripts/family_run.py com",
+  "excluded": "none"
+ }
+}

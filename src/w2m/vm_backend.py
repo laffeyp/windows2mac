@@ -137,6 +137,14 @@ INIT_STUB_SLOT = 0x80                # where module.c keeps LoadLibrary's return
 HOST_RANDOM = 23                    # a0 bytes of the host's CSPRNG (os.urandom) at guest address a1 (bcrypt.c)
 HOST_MAP_VIEW = 29                  # a view of a0 bytes of file descriptor a1 with protection a2 (file.c; Sprint 049;
                                     # 24-28 are file primitives)
+# Exports a program imports by ordinal (Sprint 052): OLEAUT32's, as Wine's oleaut32.spec numbers them
+ORDINAL_NAMES = {"OLEAUT32.DLL": {"#2": "SysAllocString", "#6": "SysFreeString", "#7": "SysStringLen",
+                                  "#8": "VariantInit", "#9": "VariantClear"},
+                 "WS2_32.DLL": {"#111": "WSAGetLastError", "#115": "WSAStartup", "#116": "WSACleanup"}}   # ws2_32.spec
+COM_VTABLES = {"w2m_enumerator_vtable": ("QueryInterface", "AddRef", "Release", "EnumAudioEndpoints",
+                                         "GetDefaultAudioEndpoint", "GetDevice", "RegisterEndpointNotificationCallback",
+                                         "UnregisterEndpointNotificationCallback"),
+               "w2m_collection_vtable": ("QueryInterface", "AddRef", "Release", "GetCount", "Item")}
 HOST_THREAD = 30                    # threads.c's requests: a0 the W2M_THREAD_* sub-operation (scheduler.py; Sprint 051)
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
     THREAD_SIGNAL = range(1, 9)
@@ -1004,6 +1012,7 @@ class VM:
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
+        self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
         self._max_steps = 0
         self.current_tid = tid
@@ -1217,6 +1226,15 @@ class VM:
         self.mem.write(va, code)
         return va
 
+    def _com_vtables(self) -> None:
+        """Each COM class's vtable (com.c, in the runtime image) filled with its methods' thunks: the services
+        MMDEVAPI!W2mEnumerator<Method> and MMDEVAPI!W2mCollection<Method> (Sprint 052)."""
+        for symbol, methods in COM_VTABLES.items():
+            prefix = "W2mEnumerator" if "enumerator" in symbol else "W2mCollection"
+            at = self.runtime.symbols[symbol] - MONITOR_VA
+            for i, method in enumerate(methods):
+                struct.pack_into("<Q", self.mm, at + 8 * i, self._import_thunk(f"MMDEVAPI.dll!{prefix}{method}"))
+
     def _import_thunk(self, name: str) -> int:
         key = name.lower()
         m = self.modules
@@ -1401,6 +1419,7 @@ class VM:
         `thunk`, so the thread re-enters it; any schedule bit exits with hvc #12 to the scheduler."""
         dll, fn = import_name.split("!", 1)
         a = Assembler(MONITOR_VA + self.code_cursor)
+        fn = ORDINAL_NAMES.get(dll.upper(), {}).get(fn, fn)
         service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
                    else DLL_SERVICES.get(dll.upper(), {}).get(fn))
         state = PROCESS_VA + STATE_OFF

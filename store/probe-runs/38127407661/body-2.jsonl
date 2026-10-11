@@ -1,0 +1,13 @@
+{"s":"cleanup.before_startup","ret":4294967295,"err":10093,"wsa_err":10093}
+{"s":"startup.2_0","ret":0,"err":0,"version":2,"high_version":514,"description":"WinSock 2.0","status":"Running","max_sockets":0,"max_udp":0,"vendor_info_null":0}
+{"s":"startup.2_2","ret":0,"err":57005,"version":514,"high_version":514,"description":"WinSock 2.0","status":"Running","max_sockets":0,"max_udp":0,"vendor_info_null":0}
+{"s":"startup.1_1","ret":0,"err":57005,"version":257,"high_version":514,"description":"WinSock 2.0","status":"Running","max_sockets":32767,"max_udp":65467,"vendor_info_null":0}
+{"s":"startup.3_0","ret":0,"err":57005,"version":514,"high_version":514,"description":"WinSock 2.0","status":"Running","max_sockets":0,"max_udp":0,"vendor_info_null":0}
+{"s":"startup.0_0","ret":10092,"err":57005}
+{"s":"startup.null_data","ret":10014,"err":0}
+{"s":"cleanup.1","ret":0,"err":0}
+{"s":"cleanup.2","ret":0,"err":0}
+{"s":"cleanup.3","ret":0,"err":0}
+{"s":"cleanup.4","ret":0,"err":0}
+{"s":"cleanup.5","ret":4294967295,"err":10093}
+{"s":"cleanup.6","ret":4294967295,"err":10093}
