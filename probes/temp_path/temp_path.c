@@ -3,12 +3,12 @@
 /* temp_path.c — GetTempPathW and the environment variables it reads (Sprint 048, family "temp path").
  *
  * No C runtime. UnityPlayer.dll calls GetTempPathW(260, buffer) after SHGetKnownFolderPath (frontier 2026-10-10,
- * 2,641,240 instructions); it and mono-2.0-bdwgc.dll import GetEnvironmentVariableW, SetEnvironmentVariableW and
- * GetEnvironmentStringsW. Microsoft documents GetTempPathW's order: TMP, TEMP, USERPROFILE, the Windows directory.
+ * 2,641,240 instructions); it imports SetEnvironmentVariableW and GetEnvironmentStringsW, and mono-2.0-bdwgc.dll
+ * GetEnvironmentVariableW too. Microsoft documents GetTempPathW's order: TMP, TEMP, USERPROFILE, the Windows directory.
  * A runner's environment is not w2m's, so the probe first deletes every variable its block holds but W2M_KEEP (the
  * names that failed are printed), then sets the variables each row needs. Paths under the working directory print as
  * "<cwd>". Rows: each call's return, last error (after SetLastError(0xDEAD)) and text; every buffer is filled with
- * 0xA5A5 first, and where a call returns no string terminated at its return value the row holds the first four units.
+ * 0xA5A5 first, and where a call returns no string terminated at its return value the row holds the first eight units.
  */
 #include <windows.h>
 
@@ -61,10 +61,10 @@ static void end(void) {
     n = 0;
 }
 static void fill(void) { for (unsigned i = 0; i < 1024; i++) buf[i] = MARK; }
-/* The buffer's first four units, hex: what a call left when it did not return a terminated string. */
+/* The buffer's first eight units, hex: what a call left when it did not return a terminated string. */
 static void head(void) {
     put(",\"head\":[");
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
         if (i) put(",");
         put("\"");
         for (int sh = 12; sh >= 0; sh -= 4) out[n++] = "0123456789abcdef"[(buf[i] >> sh) & 15];
