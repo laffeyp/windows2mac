@@ -5,7 +5,7 @@
  * No C runtime. UnityPlayer.dll gets SHGetKnownFolderPath from SHELL32 by GetProcAddress and calls it with
  * FOLDERID_LocalAppDataLow, flags 0 and no token (look-ahead 2026-10-10, 2,594,701 instructions); it imports
  * ole32's CoTaskMemFree, which frees the path. This probe makes that call, the same for three other per-user
- * folders, LocalLow with KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE, and an unregistered GUID.
+ * folders, LocalLow with KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE, and, last, an unregistered GUID.
  * A runner's user is not w2m's, so every path printed has the profile folder's last component replaced by
  * "<user>" and every path under the profile begins "<profile>"; the rows hold on any machine.
  * Rows: the HRESULT, whether *ppszPath is NULL (it is set to a marker first), the path, whether it names an
@@ -98,8 +98,6 @@ void start(void) {
     known("roaming", &ROAMING, 0);
     known("local_low.dont_verify", &LOCAL_LOW, KF_FLAG_DONT_VERIFY);
     known("local_low.create", &LOCAL_LOW, KF_FLAG_CREATE);
-    known("unregistered", &UNREGISTERED, 0);
-    known("unregistered.create", &UNREGISTERED, KF_FLAG_CREATE);
 
     HMODULE shell32 = GetModuleHandleW(L"shell32.dll");     /* UnityPlayer's route to it */
     FARPROC proc = GetProcAddress(shell32, "SHGetKnownFolderPath");
@@ -113,6 +111,10 @@ void start(void) {
     SetLastError(SENTINEL);
     CoTaskMemFree(q);
     row("free.path"); field("err", GetLastError()); end();
+
+    /* Last: w2m answers only the folders above, and stops at another GUID (any may be registered). */
+    known("unregistered", &UNREGISTERED, 0);
+    known("unregistered.create", &UNREGISTERED, KF_FLAG_CREATE);
 
     DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);

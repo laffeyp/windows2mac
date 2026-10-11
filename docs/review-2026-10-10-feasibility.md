@@ -32,7 +32,7 @@ Each Windows family's contract holds Windows's rows as its acceptance (`exact_ro
 
 ### F5 — The process heap is a bump allocator with an unsplit free list
 
-`heap.c` takes the first free block at least as large as the request (a 1 MB free block serves a 16-byte request whole), never splits or coalesces, scans the free list linearly, has no lock, and rejects any heap handle but the process heap. It passes its contract's rows. The measured impact is small today — UnityPlayer called HeapAlloc 1,346 times in 180 s on the runner (Unity allocates mostly through VirtualAlloc, 1,064 calls) — but several threads will break it, and the replacement is off the shelf (dlmalloc runs freestanding).
+`heap.c` takes the first free block at least as large as the request (a 1 MB free block serves a 16-byte request whole), never splits or coalesces, scans the free list linearly, has no lock, and rejects any heap handle but the process heap. It passes its contract's rows. UnityPlayer called HeapAlloc only 1,346 times in 180 s on the runner, but Mono called it 987,170 times and HeapFree 870,525 times in the same run (`jit_capture.bin.imports.tsv`; correction 2026-10-10: an earlier draft counted UnityPlayer alone and called the impact small). An unsplit first-fit list under a million allocate-free pairs fragments and scans; several threads will break it outright; the replacement is off the shelf (dlmalloc runs freestanding).
 
 ## 3. Cargo-culted
 
