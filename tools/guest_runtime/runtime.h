@@ -231,6 +231,9 @@ u64 w2m_counter_now(void);                                              /* proce
 u64 w2m_filetime_now(void);                                             /* process.c: the system time */
 u64 w2m_filetime_start(void);                                           /* process.c: its first reading */
 u64 w2m_unhandled_exception_filter(void);                               /* exception_filter.c: the current one */
+#define W2M_MANIFEST_WINDOWS_10 1u          /* the exe's manifest names Windows 10 among its supportedOS */
+#define W2M_MANIFEST_PER_MONITOR_V2 2u      /* ... and the PerMonitorV2 DPI awareness */
+u32 w2m_manifest(void);                                                 /* manifest.c: the two, as flags */
 struct w2m_exception_record;
 struct w2m_context;
 int w2m_dispatch_fault(const struct w2m_exception_record *rec, const struct w2m_context *ctx);   /* exceptions.c */

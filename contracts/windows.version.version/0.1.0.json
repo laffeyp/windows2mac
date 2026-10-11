@@ -1,0 +1,517 @@
+{
+ "contract_id": "windows.version.version",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The version check under the game's manifest: VerSetConditionMask's three bits per type and bit 63; RtlVerifyVersionInfo and VerifyVersionInfoW comparing major, minor and service pack as one version, build, platform and product type alone, a condition of 0 skipped (STATUS_REVISION_MISMATCH, ERROR_OLD_WIN_VERSION; a type mask of 0 STATUS_INVALID_PARAMETER, ERROR_BAD_ARGUMENTS); GetVersionExW 10.0, platform 2, product 3, suite 0x190; SHELL32's DllGetVersion 10.0.10586.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V45 96-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/version/version.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "mask.game_major",
+    "mask": 9223372036854775832
+   },
+   {
+    "s": "mask.game_minor",
+    "mask": 9223372036854775835
+   },
+   {
+    "s": "mask.game_sp_major",
+    "mask": 9223372036854874139
+   },
+   {
+    "s": "mask.game_sp_minor",
+    "mask": 9223372036854886427
+   },
+   {
+    "s": "mask.game_platform",
+    "mask": 9223372036854886939
+   },
+   {
+    "s": "mask.type_0_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_0_condition_1",
+    "mask": 9223372036854775809
+   },
+   {
+    "s": "mask.type_0_condition_2",
+    "mask": 9223372036854775810
+   },
+   {
+    "s": "mask.type_0_condition_3",
+    "mask": 9223372036854775811
+   },
+   {
+    "s": "mask.type_0_condition_4",
+    "mask": 9223372036854775812
+   },
+   {
+    "s": "mask.type_0_condition_5",
+    "mask": 9223372036854775813
+   },
+   {
+    "s": "mask.type_0_condition_6",
+    "mask": 9223372036854775814
+   },
+   {
+    "s": "mask.type_0_condition_7",
+    "mask": 9223372036854775815
+   },
+   {
+    "s": "mask.type_1_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_1_condition_1",
+    "mask": 9223372036854775816
+   },
+   {
+    "s": "mask.type_1_condition_2",
+    "mask": 9223372036854775824
+   },
+   {
+    "s": "mask.type_1_condition_3",
+    "mask": 9223372036854775832
+   },
+   {
+    "s": "mask.type_1_condition_4",
+    "mask": 9223372036854775840
+   },
+   {
+    "s": "mask.type_1_condition_5",
+    "mask": 9223372036854775848
+   },
+   {
+    "s": "mask.type_1_condition_6",
+    "mask": 9223372036854775856
+   },
+   {
+    "s": "mask.type_1_condition_7",
+    "mask": 9223372036854775864
+   },
+   {
+    "s": "mask.type_2_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_2_condition_1",
+    "mask": 9223372036854775872
+   },
+   {
+    "s": "mask.type_2_condition_2",
+    "mask": 9223372036854775936
+   },
+   {
+    "s": "mask.type_2_condition_3",
+    "mask": 9223372036854776000
+   },
+   {
+    "s": "mask.type_2_condition_4",
+    "mask": 9223372036854776064
+   },
+   {
+    "s": "mask.type_2_condition_5",
+    "mask": 9223372036854776128
+   },
+   {
+    "s": "mask.type_2_condition_6",
+    "mask": 9223372036854776192
+   },
+   {
+    "s": "mask.type_2_condition_7",
+    "mask": 9223372036854776256
+   },
+   {
+    "s": "mask.type_3_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_3_condition_1",
+    "mask": 9223372036854776320
+   },
+   {
+    "s": "mask.type_3_condition_2",
+    "mask": 9223372036854776832
+   },
+   {
+    "s": "mask.type_3_condition_3",
+    "mask": 9223372036854777344
+   },
+   {
+    "s": "mask.type_3_condition_4",
+    "mask": 9223372036854777856
+   },
+   {
+    "s": "mask.type_3_condition_5",
+    "mask": 9223372036854778368
+   },
+   {
+    "s": "mask.type_3_condition_6",
+    "mask": 9223372036854778880
+   },
+   {
+    "s": "mask.type_3_condition_7",
+    "mask": 9223372036854779392
+   },
+   {
+    "s": "mask.type_4_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_4_condition_1",
+    "mask": 9223372036854779904
+   },
+   {
+    "s": "mask.type_4_condition_2",
+    "mask": 9223372036854784000
+   },
+   {
+    "s": "mask.type_4_condition_3",
+    "mask": 9223372036854788096
+   },
+   {
+    "s": "mask.type_4_condition_4",
+    "mask": 9223372036854792192
+   },
+   {
+    "s": "mask.type_4_condition_5",
+    "mask": 9223372036854796288
+   },
+   {
+    "s": "mask.type_4_condition_6",
+    "mask": 9223372036854800384
+   },
+   {
+    "s": "mask.type_4_condition_7",
+    "mask": 9223372036854804480
+   },
+   {
+    "s": "mask.type_5_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_5_condition_1",
+    "mask": 9223372036854808576
+   },
+   {
+    "s": "mask.type_5_condition_2",
+    "mask": 9223372036854841344
+   },
+   {
+    "s": "mask.type_5_condition_3",
+    "mask": 9223372036854874112
+   },
+   {
+    "s": "mask.type_5_condition_4",
+    "mask": 9223372036854906880
+   },
+   {
+    "s": "mask.type_5_condition_5",
+    "mask": 9223372036854939648
+   },
+   {
+    "s": "mask.type_5_condition_6",
+    "mask": 9223372036854972416
+   },
+   {
+    "s": "mask.type_5_condition_7",
+    "mask": 9223372036855005184
+   },
+   {
+    "s": "mask.type_6_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_6_condition_1",
+    "mask": 9223372036855037952
+   },
+   {
+    "s": "mask.type_6_condition_2",
+    "mask": 9223372036855300096
+   },
+   {
+    "s": "mask.type_6_condition_3",
+    "mask": 9223372036855562240
+   },
+   {
+    "s": "mask.type_6_condition_4",
+    "mask": 9223372036855824384
+   },
+   {
+    "s": "mask.type_6_condition_5",
+    "mask": 9223372036856086528
+   },
+   {
+    "s": "mask.type_6_condition_6",
+    "mask": 9223372036856348672
+   },
+   {
+    "s": "mask.type_6_condition_7",
+    "mask": 9223372036856610816
+   },
+   {
+    "s": "mask.type_7_condition_0",
+    "mask": 9223372036854775808
+   },
+   {
+    "s": "mask.type_7_condition_1",
+    "mask": 9223372036856872960
+   },
+   {
+    "s": "mask.type_7_condition_2",
+    "mask": 9223372036858970112
+   },
+   {
+    "s": "mask.type_7_condition_3",
+    "mask": 9223372036861067264
+   },
+   {
+    "s": "mask.type_7_condition_4",
+    "mask": 9223372036863164416
+   },
+   {
+    "s": "mask.type_7_condition_5",
+    "mask": 9223372036865261568
+   },
+   {
+    "s": "mask.type_7_condition_6",
+    "mask": 9223372036867358720
+   },
+   {
+    "s": "mask.type_7_condition_7",
+    "mask": 9223372036869455872
+   },
+   {
+    "s": "mask.two_types_at_once",
+    "mask": 9223372036854775816
+   },
+   {
+    "s": "mask.no_type",
+    "mask": 0
+   },
+   {
+    "s": "mask.replace",
+    "mask": 9223372036854775848
+   },
+   {
+    "s": "rtl_verify.found",
+    "value": true
+   },
+   {
+    "s": "verify.game_10_0",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.game_6_1",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.game_6_2",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.game_10_1",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.game_11_0",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.game_sp_1",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.game_with_platform_1",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.game_with_platform_2",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.ge_10_0",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.equal_major_10",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.equal_major_6",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.less_major_11",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.build_ge_20348",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.build_ge_99999",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.product_server",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "verify.product_workstation",
+    "status": 3221225561,
+    "verify": 0,
+    "err": 1150
+   },
+   {
+    "s": "verify.no_type",
+    "status": 3221225485,
+    "verify": 0,
+    "err": 160
+   },
+   {
+    "s": "verify.type_without_condition",
+    "status": 0,
+    "verify": 1,
+    "err": 57005
+   },
+   {
+    "s": "get_version.ex",
+    "ret": 1,
+    "err": 57005,
+    "major": 10,
+    "minor": 0,
+    "build_at_least_20348": true,
+    "build_at_most_26100": true,
+    "build_is_a_runner_build": true,
+    "platform": 2,
+    "csd_first": 0,
+    "sp_major": 0,
+    "sp_minor": 0,
+    "suite": 400,
+    "product": 3
+   },
+   {
+    "s": "get_version.plain",
+    "ret": 1,
+    "major": 10,
+    "minor": 0,
+    "build_at_least_20348": true,
+    "build_at_most_26100": true,
+    "build_is_a_runner_build": true
+   },
+   {
+    "s": "dll_get_version.found",
+    "library": true,
+    "function": true
+   },
+   {
+    "s": "dll_get_version.info",
+    "hr": 0,
+    "size": 20,
+    "major": 10,
+    "minor": 0,
+    "build_at_least_20348": false,
+    "build_at_most_26100": true,
+    "build_is_a_runner_build": false,
+    "build": 10586,
+    "platform": 2
+   },
+   {
+    "s": "dll_get_version.info2",
+    "hr": 0,
+    "major": 10,
+    "minor": 0,
+    "build_at_least_20348": false,
+    "build_at_most_26100": true,
+    "build_is_a_runner_build": false,
+    "platform": 2,
+    "flags": 0,
+    "version_major": 10,
+    "version_minor": 0,
+    "version_build_is_info_build": true,
+    "version_low_set": true
+   },
+   {
+    "s": "dll_get_version.short_size",
+    "hr": 2147942487,
+    "major": 0
+   },
+   {
+    "s": "dll_get_version.free",
+    "ret": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38173733146: windows-2025, AMD EPYC 9V45 96-Core Processor, probe sha256:3a49efbae6b80ad79bc6226b6d41c39241097745e032f0848118c10d034fef4f; run 38173735116: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c11f7",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "version-1791751693-0-1",
+    "version-1791751693-0-2",
+    "version-1791751693-1-1",
+    "version-1791751693-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "The build is w2m's profile (Server 2025, 26100); Server 2022 answers 20348, and the rows keep the build as relations to the two.",
+  "VerifyVersionInfoW for a program whose manifest does not name Windows 10, and the suite conditions, are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/version (Sprint 044)",
+  "implementation": "tools/guest_runtime/version.c",
+  "rows": "scripts/family_run.py version",
+  "excluded": "none"
+ }
+}

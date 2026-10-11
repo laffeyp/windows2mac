@@ -1113,14 +1113,22 @@ class VM:
         if len(spellings) > SYSTEM_IMAGES:
             raise CompileError(f"{len(spellings)} system DLLs imported; the process area holds {SYSTEM_IMAGES}")
         system: dict[str, tuple[int, str]] = {}
-        for i, (c, spelling) in enumerate(sorted(spellings.items())):
-            off = SYSTEM_IMAGES_OFF + 0x1000 * i
+
+        def system_image(c: str, spelling: str) -> int:
+            """A synthetic system image, one page with DOS and PE headers, in the next free slot."""
+            if len(system) >= SYSTEM_IMAGES:
+                raise Unimplemented(f"{c}: the process area holds {SYSTEM_IMAGES} system DLLs")
+            off = SYSTEM_IMAGES_OFF + 0x1000 * len(system)
             page = self._process(off)
             self.mm[page:page + 2] = b"MZ"
             struct.pack_into("<I", self.mm, page + 0x3C, 0x80)
             self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
             struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)
             system[c] = (PROCESS_VA + off, spelling)
+            return PROCESS_VA + off
+
+        for c, spelling in sorted(spellings.items()):
+            system_image(c, spelling)
         dlls = {d.name.lower(): (d.base, d.pe.size_of_image, {n: d.base + rva for n, rva in d.pe.exports})
                 for d in self.ld.images[1:]}
         modules = Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
@@ -1129,7 +1137,7 @@ class VM:
                           imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
                           in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
                           dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system,
-                          load_dll=self._load_dll)
+                          load_dll=self._load_dll, load_system=system_image)
         if self.ld.images:                       # a program from loader.load (tests build bare ones)
             self._write_loader_data(modules)
         return modules

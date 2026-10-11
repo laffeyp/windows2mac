@@ -211,6 +211,13 @@ def virtual_memory_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def version_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """DLLVERSIONINFO2's ullVersion ends in shell32's file revision, which differs by image (33438 on Server 2025, 5499
+    on 2022); the row keeps that it is set."""
+    return [{k: v for k, v in r.items() if k != "version_low"} | {"version_low_set": r["version_low"] != 0}
+            if "version_low" in r else r for r in printed]
+
+
 TIME_RUNS = {
               "38053043702": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-0", "AMD EPYC 7763 64-Core Processor"),
               "38053047590": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-1", "AMD EPYC 9V74 80-Core Processor"),
@@ -1903,6 +1910,41 @@ FAMILIES: dict[str, Family] = {
                                      "exact_other_case.next0", "folder_itself.next0")),
             "missing_folder_as_file": Plant("        set_error(ERROR_PATH_NOT_FOUND);", "        set_error(ERROR_FILE_NOT_FOUND);",
                                             ("missing_folder",))}),
+    "version": Family(
+        name="version",
+        contract_id="windows.version.version",
+        version="0.1.0",
+        summary=("The version check under the game's manifest: VerSetConditionMask's three bits per type and bit 63; "
+                 "RtlVerifyVersionInfo and VerifyVersionInfoW comparing major, minor and service pack as one version, "
+                 "build, platform and product type alone, a condition of 0 skipped (STATUS_REVISION_MISMATCH, "
+                 "ERROR_OLD_WIN_VERSION; a type mask of 0 STATUS_INVALID_PARAMETER, ERROR_BAD_ARGUMENTS); GetVersionExW "
+                 "10.0, platform 2, product 3, suite 0x190; SHELL32's DllGetVersion 10.0.10586."),
+        probe="version", guest_file="version.c",
+        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/manifest.c", "tools/guest_runtime/system_info.c"),
+        runs={
+              "38173733146": Run("windows-2025", "3a49efbae6b80ad79bc6226b6d41c39241097745e032f0848118c10d034fef4f", "version-1791751693-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38173735116": Run("windows-2022", "a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c11f7", "version-1791751693-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("The build is w2m's profile (Server 2025, 26100); Server 2022 answers 20348, and the rows keep "
+                        "the build as relations to the two.",
+                        "VerifyVersionInfoW for a program whose manifest does not name Windows 10, and the suite "
+                        "conditions, are not in the rows and stop the run."),
+        derive=version_rows,
+        plants={
+            "mask_no_high_bit": Plant("    return w2m_logged(W2M_API_VerSetConditionMask, t, mask | 1ull << 63);",
+                                      "    return w2m_logged(W2M_API_VerSetConditionMask, t, mask);",
+                                      ("mask.game_*", "mask.type_*", "mask.two_types_at_once", "mask.replace")),
+            "fields_apart": Plant("        if (!decided) ok = holds(0, 0, c, api);", "        if (!decided) ok = holds(0, 0, c, api);\n        for (int i = 0; i < 4; i++) if (types & order[i] && !holds(have[i], want[i], c, api)) ok = 0;",
+                                  ("verify.game_6_1", "verify.game_6_2")),
+            "condition_zero_checked": Plant("    if (c) {\n        int decided",
+                                            "    if (!c && types & 0x33) return STATUS_REVISION_MISMATCH;\n    if (c) {\n        int decided",
+                                            ("verify.type_without_condition",)),
+            "unmanifested_version": Plant("    int windows_10 = (w2m_manifest() & W2M_MANIFEST_WINDOWS_10) != 0;",
+                                          "    int windows_10 = 0;", ("get_version.ex", "get_version.plain"),
+                                          file="system_info.c"),
+            "shell32_system_build": Plant("#define SHELL32_BUILD 10586u", "#define SHELL32_BUILD 26100u",
+                                          ("dll_get_version.info", "dll_get_version.info2"))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",

@@ -8,7 +8,8 @@
  *   - SYSTEM_INFO: architecture 9 (x64), page 4096, addresses 0x10000 to 0x7FFFFFFEFFFF, type 8664,
  *     granularity 65536, level and revision from CPUID (family; model and stepping), the processor count
  *     equal to the mask's bits; GetSystemInfo equals GetNativeSystemInfo; the last error is left
- *   - GetVersionExW without a manifest: 6.2 build 9200, platform 2, no service pack, product type 3 (the
+ *   - GetVersionExW without a manifest: 6.2 build 9200 (with one naming Windows 10: 10.0, the runners' build, suite
+ *     mask 0x190; contracts/windows.version.version, Sprint 054), platform 2, no service pack, product type 3 (the
  *     runners are Server; a desktop says 1); a size that is neither structure's: FALSE, ERROR_INSUFFICIENT_BUFFER
  *   - GlobalMemoryStatusEx: dwLength 64 or FALSE with ERROR_INVALID_PARAMETER; total virtual
  *     0x7FFFFFFE0000, extended 0; the rest as relations
@@ -58,15 +59,16 @@ u64 k32_GetVersionExW(u64 vi) {
         set_error(ERROR_INSUFFICIENT_BUFFER);
         return w2m_logged(W2M_API_GetVersionExW, size, 0);
     }
-    *(u32 *)(p + 4) = 6;
-    *(u32 *)(p + 8) = 2;
-    *(u32 *)(p + 12) = 9200;
+    int windows_10 = (w2m_manifest() & W2M_MANIFEST_WINDOWS_10) != 0;   /* contracts windows.version.version (Sprint 054) */
+    *(u32 *)(p + 4) = windows_10 ? 10 : 6;
+    *(u32 *)(p + 8) = windows_10 ? 0 : 2;
+    *(u32 *)(p + 12) = windows_10 ? 26100 : 9200;
     *(u32 *)(p + 16) = 2;                             /* VER_PLATFORM_WIN32_NT */
     for (int i = 0; i < 128; i++) *(u16 *)(p + 20 + 2 * i) = 0;   /* szCSDVersion: empty */
     if (size == 284) {
         *(u16 *)(p + 276) = 0;                        /* service pack major, minor */
         *(u16 *)(p + 278) = 0;
-        *(u16 *)(p + 280) = 0;                        /* suite mask: not in the rows */
+        *(u16 *)(p + 280) = 0x190;                    /* suite mask: the runners' (row get_version.ex) */
         p[282] = 3;                                   /* VER_NT_SERVER, as the runners answer */
         p[283] = 0;
     }
