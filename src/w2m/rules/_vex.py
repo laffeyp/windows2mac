@@ -128,6 +128,12 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         return
     low_src = s2
     hi_src = 29
+    if s1 is not None and s2[0] == "m" and d[0] == "x":             # memory first: a fault leaves every register
+        n = min(int(s2[2]), 16)                                      # as it was (set 049, Xeon 8573C)
+        if vl:
+            a.emit(a64.ldr_v(16, 27, reg_of(s2[1]), 16))
+        a.emit(a64.ldr_v(n, 29, reg_of(s2[1])))
+        low_src, hi_src = ("x", 29), 27
     if s1 is not None and s1[0] == "x" and d[0] == "x" and s1[1] != d[1]:
         if s2 == ("x", d[1]):                                        # s2 is d: keep it before d takes s1
             a.emit(a64.mov_v(29, int(d[1])))
@@ -139,7 +145,7 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
             a.emit(a64.ldr_v(16, 28, 16, 16 * int(s1[1])))
         if s2[0] == "x":
             a.emit(a64.ldr_v(16, hi_src, 16, 16 * int(s2[1])))
-        elif s2[0] == "m":
+        elif s2[0] == "m" and s1 is None:
             a.emit(a64.ldr_v(16, hi_src, reg_of(s2[1]), 16))
     rest = (imm,) if imm is not None else ()
     if d[0] == "m" and vl:                                           # a 256-bit store: the upper half first, so a

@@ -680,6 +680,23 @@
   }
  },
  {
+  "iclass": "CMPSD_XMM",
+  "record": "store/runs/class-cmpsd_xmm-1791699876363626000",
+  "rule_sha256": "sha256:e79d7e5689571df2f72b3139dcbcbc9c554e6de88eb2fee5126ed29262f7b077",
+  "cases": 367,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "CMPXCHG",
   "record": "store/runs/class-cmpxchg-1791663802432627000",
   "rule_sha256": "sha256:99f09f370e739bf4b59978fe204b907ca3777a270b371216ae7cbcd6d5227861",
@@ -816,6 +833,23 @@
   }
  },
  {
+  "iclass": "CVTPD2DQ",
+  "record": "store/runs/class-cvtpd2dq-1791699876355435000",
+  "rule_sha256": "sha256:dba70a5a5a70b249350f536bb15ab480009fa995bd54397fb43056ba780a6737",
+  "cases": 345,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "CVTSD2SI",
   "record": "store/runs/class-cvtsd2si-1791663802677459000",
   "rule_sha256": "sha256:0e687c160c5a007e779c1e85b2ab1e971d003f587bfc4517f6367596e9f97e85",
@@ -905,6 +939,23 @@
   "record": "store/runs/class-cvtss2si-1791663802974851000",
   "rule_sha256": "sha256:dfe69f84c6b5fb6562d69ef6633fbe8dd5acc7f07853367c273b64955b1879c8",
   "cases": 272,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "CVTTPD2DQ",
+  "record": "store/runs/class-cvttpd2dq-1791699876356631000",
+  "rule_sha256": "sha256:798956dacba052174c3621fd39596c54b64575152f89366485c056b703be2fca",
+  "cases": 205,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"
@@ -1075,6 +1126,23 @@
   "record": "store/runs/class-divss-1791663803343626000",
   "rule_sha256": "sha256:492be7d9586b7531f7ed5d23785e46d20df3af2d40ad7f0305f4b436ef3cad7d",
   "cases": 426,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "FNSTCW",
+  "record": "store/runs/class-fnstcw-1791699876360972000",
+  "rule_sha256": "sha256:87e627f5fd346f1ac8de986b248940cb3c9f5c5a2ec8e66f1a59bf422eeb57f3",
+  "cases": 297,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"
@@ -2142,6 +2210,23 @@
   }
  },
  {
+  "iclass": "ORPD",
+  "record": "store/runs/class-orpd-1791699876367824000",
+  "rule_sha256": "sha256:d1f6b517abf2555116b7e84b9721a7e0f494024a18ebdc702d893272263d302a",
+  "cases": 262,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
   "iclass": "ORPS",
   "record": "store/runs/class-orps-1791663805418553000",
   "rule_sha256": "sha256:55cf17def9c1d942ec71cc68f26521a6243ceca276e8a7eab799bc1ca20f51e0",
@@ -2333,6 +2418,23 @@
   "record": "store/runs/class-pcmpeqd-1791663805811344000",
   "rule_sha256": "sha256:dc398dbb09f71fe4273f06f77978093db19fede569ce9b4c5bd9d032fd902789",
   "cases": 144,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "PCMPEQW",
+  "record": "store/runs/class-pcmpeqw-1791699876359825000",
+  "rule_sha256": "sha256:a18ff2b37707a70ba1e9c360755e088215dd2888763dc65f047bc786c6d2d5ab",
+  "cases": 172,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"
@@ -3965,6 +4067,771 @@
   "record": "store/runs/class-unpcklps-1791663808570115000",
   "rule_sha256": "sha256:de386ad2cdd021efd37b37449068ac906e97b24c90781284f1faad01c1642524",
   "cases": 103,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VADDSD",
+  "record": "store/runs/class-vaddsd-1791699876344217000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 422,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VANDPD",
+  "record": "store/runs/class-vandpd-1791699876358793000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 413,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VANDPS",
+  "record": "store/runs/class-vandps-1791699876852036000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 447,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VCMPSD",
+  "record": "store/runs/class-vcmpsd-1791699876858358000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 418,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VCOMISD",
+  "record": "store/runs/class-vcomisd-1791699876896961000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 267,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VCVTDQ2PD",
+  "record": "store/runs/class-vcvtdq2pd-1791699876933937000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 148,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VCVTPD2DQ",
+  "record": "store/runs/class-vcvtpd2dq-1791699876932677000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 251,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VCVTTPD2DQ",
+  "record": "store/runs/class-vcvttpd2dq-1791699876942941000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 290,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VDIVSD",
+  "record": "store/runs/class-vdivsd-1791699876945774000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 421,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFMADD132PD",
+  "record": "store/runs/class-vfmadd132pd-1791699876967832000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 865,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFMADD132SD",
+  "record": "store/runs/class-vfmadd132sd-1791699877271990000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 438,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFMADD213SD",
+  "record": "store/runs/class-vfmadd213sd-1791699877273897000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 409,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFMADD231SD",
+  "record": "store/runs/class-vfmadd231sd-1791699877291441000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 421,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFMSUB132SD",
+  "record": "store/runs/class-vfmsub132sd-1791699877333007000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 373,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFMSUB213SD",
+  "record": "store/runs/class-vfmsub213sd-1791699877344289000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 433,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFNMADD132SD",
+  "record": "store/runs/class-vfnmadd132sd-1791699877374935000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 428,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFNMADD213SD",
+  "record": "store/runs/class-vfnmadd213sd-1791699877389499000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 403,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VFNMADD231SD",
+  "record": "store/runs/class-vfnmadd231sd-1791699877733452000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 430,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VHADDPD",
+  "record": "store/runs/class-vhaddpd-1791699877733587000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 832,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVAPD",
+  "record": "store/runs/class-vmovapd-1791699877742645000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 546,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVD",
+  "record": "store/runs/class-vmovd-1791699877750194000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 598,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVDQA",
+  "record": "store/runs/class-vmovdqa-1791699877781885000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 520,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVDQU",
+  "record": "store/runs/class-vmovdqu-1791699877802913000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 624,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVLHPS",
+  "record": "store/runs/class-vmovlhps-1791699877828464000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 424,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVQ",
+  "record": "store/runs/class-vmovq-1791699877837816000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 1239,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMOVSD",
+  "record": "store/runs/class-vmovsd-1791699878073416000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 1454,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VMULSD",
+  "record": "store/runs/class-vmulsd-1791699878189972000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 434,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VORPD",
+  "record": "store/runs/class-vorpd-1791699878100488000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 873,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPADDQ",
+  "record": "store/runs/class-vpaddq-1791699878113675000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 378,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPAND",
+  "record": "store/runs/class-vpand-1791699878134452000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 452,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPCMPEQB",
+  "record": "store/runs/class-vpcmpeqb-1791699878164022000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 422,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPCMPEQW",
+  "record": "store/runs/class-vpcmpeqw-1791699878316789000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 431,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPMOVMSKB",
+  "record": "store/runs/class-vpmovmskb-1791699878386239000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 632,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPOR",
+  "record": "store/runs/class-vpor-1791699878522541000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 442,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPSLLQ",
+  "record": "store/runs/class-vpsllq-1791699878556900000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 842,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPSRLDQ",
+  "record": "store/runs/class-vpsrldq-1791699878582666000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 392,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPSRLQ",
+  "record": "store/runs/class-vpsrlq-1791699878626525000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 857,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPSUBD",
+  "record": "store/runs/class-vpsubd-1791699878528089000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 418,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPSUBQ",
+  "record": "store/runs/class-vpsubq-1791699878723330000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 412,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VPXOR",
+  "record": "store/runs/class-vpxor-1791699878728912000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 452,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VSUBSD",
+  "record": "store/runs/class-vsubsd-1791699878826162000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 372,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VUCOMISD",
+  "record": "store/runs/class-vucomisd-1791699878931026000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 268,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VXORPD",
+  "record": "store/runs/class-vxorpd-1791699878939371000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 425,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VXORPS",
+  "record": "store/runs/class-vxorps-1791699879005984000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 406,
+  "verdicts": {
+   "model": "conforms",
+   "managed_vm": "conforms"
+  },
+  "events": {
+   "SESSION_INIT": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "CANDIDATE_ACCEPTED": 1,
+   "SESSION_COMPLETED": 1
+  }
+ },
+ {
+  "iclass": "VZEROUPPER",
+  "record": "store/runs/class-vzeroupper-1791699879112856000",
+  "rule_sha256": "sha256:66ad39c36bbd26b96be2da70b0403040a2368f896dd6890f78372353e0f75a89",
+  "cases": 264,
   "verdicts": {
    "model": "conforms",
    "managed_vm": "conforms"

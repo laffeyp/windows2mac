@@ -452,9 +452,11 @@ def fma(f: Fmt, a: int, b: int, c: int, negate_product: bool, negate_addend: boo
 def fma_lane(f: Fmt, ops: tuple[int, int, int], mul: tuple[int, int], add: int, negate_product: bool,
              negate_addend: bool, env: Env) -> int:
     """One lane of an FMA form: `ops` are (operand 1, operand 2, operand 3) of the instruction, the destination
-    first; `mul` and `add` index them. A NaN operand: the first in operand order, quieted; an SNaN sets IE."""
+    first; `mul` and `add` index them. A NaN operand: the first of the two multiplicands, then the addend,
+    quieted, an SNaN not outranking a QNaN (Intel Xeon 8573C, set 049: 132, 231, SNaN addend against a QNaN
+    multiplicand); an SNaN sets IE."""
     srcs = tuple(env.src(f, x) for x in ops)
-    nans = [x for x in srcs if is_nan(f, x)]
+    nans = [srcs[i] for i in (*mul, add) if is_nan(f, srcs[i])]
     if nans:
         if any(is_snan(f, x) for x in nans):
             env.flags |= IE

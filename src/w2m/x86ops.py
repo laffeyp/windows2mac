@@ -76,6 +76,9 @@ def operands(f: Fields) -> tuple[str, ...]:
         if t == "Vx":                          # XMM or YMM from ModRM.reg, by VEX.L (SDM Table A-1 "x")
             assert f.modrm is not None
             out.append("R:" + vec[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])
+        elif t[0] == "B":                      # a general register VEX.vvvv names (BMI: ANDN, MULX, SHLX; Sprint 049)
+            assert f.vvvv is not None
+            out.append("R:" + _reg(f.vvvv ^ 0xF, _bits(t[1], f), 1))
         elif t in ("H", "Hx"):                 # the register VEX.vvvv names (stored inverted); H alone is XMM
             assert f.vvvv is not None
             out.append("R:" + (vec if t == "Hx" else XMM)[f.vvvv ^ 0xF])

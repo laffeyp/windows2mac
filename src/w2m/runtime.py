@@ -25,6 +25,8 @@ STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero 
 STATUS_INTEGER_OVERFLOW = 0xC000_0095         # ntstatus.h; DIV #DE with a quotient too wide
 STATUS_ILLEGAL_INSTRUCTION = 0xC000_001D      # ntstatus.h; #UD
 XCR0 = 7                                      # x87 | SSE | AVX enabled (specs/guest_cpuid.json 0.2.0, leaf 0xD)
+SHIFT_BY_COUNT = {"PSRLQ", "PSLLQ", "PSRLD", "PSLLD", "PSRAD", "PSRLW", "PSRAW"}   # VEX.256: one count, both halves
+VEX_FP = {"HADDPD", "CVTTPD2DQ", "CVTPD2DQ", "CMPPS_VEX", "CVTDQ2PS", "CVTTPS2DQ"}  # FP bases beyond ADD..MAX
 
 __all__ = ["Result", "Runtime", "UndefinedFlag", "Unimplemented"]
 
@@ -420,7 +422,17 @@ class Runtime:
                 src_hi = hi[s2[1]]
             elif s2[0] == "m":
                 src_hi = int.from_bytes(self.mem.read(self._t[s2[1]] + 16, 16), "little")
+        if vl and base in SHIFT_BY_COUNT and imm is None:             # the count is s2's low quadword, both halves
+            src_hi = x[s2[1]] if s2[0] == "x" else int.from_bytes(self.mem.read(self._t[s2[1]], 16), "little")
         first_hi = hi[s1[1]] if vl and s1 is not None and s1[0] == "x" else hi[d[1]] if vl and d[0] == "x" else 0
+        if vl and d[0] == "m":                                    # a 256-bit store: all 32 bytes or none
+            self.mem.write(self._t[d[1]], x[s2[1]].to_bytes(16, "little") + hi[s2[1]].to_bytes(16, "little"))
+            del x[16:]
+            return
+        fp_both = vl and base[:-2] in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") or (vl and base in VEX_FP)
+        mxcsr_in = self.th.mxcsr
+        if fp_both:                                               # both halves' flags, then one check (an unmasked
+            self.th.mxcsr = (mxcsr_in & ~0x3F) | 0x1F80           # exception faults with no lane committed)
         low_src = s2
         if s1 is not None and s1[0] == "x" and d[0] == "x" and s1[1] != d[1]:
             if s2 == ("x", d[1]):
@@ -440,9 +452,11 @@ class Runtime:
                 hi[d[1]] = x[16]
             else:
                 hi[d[1]] = 0
-        elif d[0] == "m" and vl:                                  # a 256-bit store: all 32 bytes or none
-            low = int.from_bytes(self.mem.read(self._t[d[1]], 16), "little")
-            self.mem.write(self._t[d[1]], low.to_bytes(16, "little") + hi[s2[1]].to_bytes(16, "little"))
+        if fp_both:
+            env = fp.Env(mxcsr_in)
+            env.flags = self.th.mxcsr & 0x3F                      # this instruction's flags, sticky ones included
+            self.th.mxcsr = mxcsr_in
+            self._fp_check(env)
         del x[16:]                                                # the scratch registers go
 
     def _fma(self, ic: str, d: Op, s2: Op, s3: Op, vl: int) -> None:

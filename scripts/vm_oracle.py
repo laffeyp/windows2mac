@@ -48,7 +48,7 @@ from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, comp
 from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
 
-RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042", "044": "semantics-044", "044b": "semantics-044b", "044c": "semantics-044c", "044d": "semantics-044d", "044e": "semantics-044e", "046": "semantics-046", "046b": "semantics-046b", "046c": "semantics-046c", "046d": "semantics-046d", "046e": "semantics-046e", "047": "semantics-047", "048": "semantics-048"}
+RELEASES = {"039": "semantics-039", "041": "semantics-041", "042": "semantics-042", "044": "semantics-044", "044b": "semantics-044b", "044c": "semantics-044c", "044d": "semantics-044d", "044e": "semantics-044e", "046": "semantics-046", "046b": "semantics-046b", "046c": "semantics-046c", "046d": "semantics-046d", "046e": "semantics-046e", "047": "semantics-047", "048": "semantics-048", "049": "semantics-049"}
 EFLAGS_FAULT_MASK = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800   # CF 1 PF AF ZF SF IF DF OF
 
 
@@ -261,7 +261,7 @@ def main(argv: list[str]) -> int:
     cases = sd.cached_cases(a.set)
     built = ROOT / "build" / "probe-runs" / f"semantics-{a.set}-cases.bin"
     built.parent.mkdir(parents=True, exist_ok=True)
-    sd.write_cases(cases, built)
+    sd.write_cases(cases, built, 3 if a.set in sd.FORMAT_3 else 2)
     sha = hashlib.sha256(built.read_bytes()).hexdigest()
     ran = (store / "cases.sha256").read_text().strip().split()[0].lower()
     if sha != ran:
