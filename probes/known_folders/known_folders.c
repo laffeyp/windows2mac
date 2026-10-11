@@ -112,11 +112,13 @@ void start(void) {
     CoTaskMemFree(q);
     row("free.path"); field("err", GetLastError()); end();
 
-    /* Last: w2m answers only the folders above, and stops at another GUID (any may be registered). */
+    /* Last, after the rows above are written: w2m answers only the folders above and stops at another GUID
+     * (any may be registered). */
+    DWORD written;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
+    n = 0;
     known("unregistered", &UNREGISTERED, 0);
     known("unregistered.create", &UNREGISTERED, KF_FLAG_CREATE);
-
-    DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);
 }
