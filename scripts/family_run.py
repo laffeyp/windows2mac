@@ -1203,7 +1203,7 @@ FAMILIES: dict[str, Family] = {
             "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
             "(user32 1,007 against 1,041).",),
         plants={
-            "loadlibraryw_not_found": Plant("    u64 h = find(name, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
     "known_folders": Family(
@@ -1489,12 +1489,46 @@ FAMILIES: dict[str, Family] = {
             "demand through the guard pages. A program that reads StackLimit to size its stack sees more room in "
             "w2m.",
             "The page speaks of one guard page; every run shows a 3-page PAGE_GUARD region below StackLimit "
-            "(query.below_limit, query.below_guard). The rows are followed.",
-            "The layout lives in src/w2m/virtual_memory.py, which family_run's plants cannot patch (they patch the "
-            "guest C file): a planted guard size is not tried; limits_swapped covers the C side."),
+            "(query.below_limit, query.below_guard). The rows are followed."),
         plants={
+            # the expression, not the constant: host_patched rebinds changed objects by identity, and small ints are shared
+            "guard_one_page": Plant("        guard = limit - STACK_GUARD_PAGES * PAGE", "        guard = limit - 1 * PAGE",
+                                    ("query.below_guard", "query.dealloc"), host="w2m.virtual_memory"),
             "limits_swapped": Plant("    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x1478);",
                                     "    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x10);", ("limits",))}),
+    "thread_handles": Family(
+        name="thread_handles",
+        contract_id="windows.handle.thread_handles",
+        version="0.1.0",
+        summary=("DuplicateHandle as mono calls it: the pseudo-handles -1 and -2 become real handles, new ones each "
+                 "time, naming the current process and thread; a thread's handle does not signal while it runs; a "
+                 "duplicate of an event names the same event, and with DUPLICATE_CLOSE_SOURCE takes the source's value; "
+                 "a source that is no handle: FALSE, 6, the target NULL; success leaves the last error. OpenThread on "
+                 "the current thread's id gives a real handle, on an id no thread has NULL and 87. CreateSemaphoreW "
+                 "sets error 0 on success; an initial count above the maximum is NULL and 87."),
+        probe="thread_handles", guest_file="sync_objects.c",
+        host_files=("tools/guest_runtime/file.c", "tools/guest_runtime/console.c"),
+        runs={
+              "38114820680": Run("windows-2025", "42e42696025a5ee2c71994db9a47d4be2fe667d8b769e65a617b68359cf65703", "thread_handles-1791696424-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38114822014": Run("windows-2022", "6b75ead1c4597d8c4b1ec8426c3e775e4b8fbd9e859d861ef6a249f8a51c56a6", "thread_handles-1791696424-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-duplicatehandle", "api/handleapi/nf-handleapi-duplicatehandle", "2018-12-05",
+                       "DUPLICATE_CLOSE_SOURCE: Closes the source handle. This occurs regardless of any error status "
+                       "returned."),),
+        open_questions=(
+            "One thread runs in w2m: OpenThread answers only the current thread's id, and waiting without a timeout on "
+            "a running thread stops the run.",
+            "Windows reuses a closed handle's value; w2m gives a CLOSE_SOURCE copy the source's slot and otherwise the "
+            "lowest free slot. Which value a later handle gets is not in the rows."),
+        plants={
+            "close_source_new_slot": Plant("        if (options & DUPLICATE_CLOSE_SOURCE) h = source;          /* the copy keeps the slot (row dup.close_source) */\n        else h",
+                                           "        h", ("dup.close_source",)),
+            "thread_signals": Plant("    if (o->kind == THREAD || o->kind == PROCESS) return 0;",
+                                    "    if (o->kind == THREAD || o->kind == PROCESS) return 1;", ("wait.own_thread",)),
+            "semaphore_leaves_error": Plant("    u64 h = handle_for(api, new_object(api, kind, count, max));\n    set_error(0);",
+                                            "    u64 h = handle_for(api, new_object(api, kind, count, max));",
+                                            ("semaphore.zero", "semaphore.one"))}),
 }
 
 

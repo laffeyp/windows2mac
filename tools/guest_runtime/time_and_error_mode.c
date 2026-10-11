@@ -62,8 +62,8 @@ static void to_systemtime(u64 t, u16 *st) {
 
 static void now_systemtime(u64 out) { to_systemtime(w2m_filetime_now(), (u16 *)out); }
 
-u64 k32_GetSystemTime(u64 out) { now_systemtime(out); return w2m_logged(W2M_API_GetSystemTime, out, 0); }
-u64 k32_GetLocalTime(u64 out) { now_systemtime(out); return w2m_logged(W2M_API_GetLocalTime, out, 0); }   /* UTC */
+W2M_VOID u64 k32_GetSystemTime(u64 out) { now_systemtime(out); return w2m_logged(W2M_API_GetSystemTime, out, 0); }
+W2M_VOID u64 k32_GetLocalTime(u64 out) { now_systemtime(out); return w2m_logged(W2M_API_GetLocalTime, out, 0); }   /* UTC */
 
 u64 k32_GetTimeZoneInformation(u64 tz) {
     u8 *p = (u8 *)tz;

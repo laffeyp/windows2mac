@@ -1,0 +1,14 @@
+{"s":"pseudo","process_is_minus_1":1,"thread_is_minus_2":1}
+{"s":"dup.thread","ret":1,"real":1,"err":57005,"thread_id_is_current":1}
+{"s":"dup.thread_again","distinct":1,"thread_id_is_current":1}
+{"s":"wait.own_thread","ret":258,"err":57005}
+{"s":"dup.process","ret":1,"real":1,"err":57005,"process_id_is_current":1}
+{"s":"dup.event","ret":1,"distinct":1,"err":57005,"set_through_copy_seen":1}
+{"s":"dup.close_source","ret":1,"err":57005,"copy_is_source_value":1,"copy_signaled":1}
+{"s":"dup.bad_source","ret":0,"err":6,"out_untouched":0,"out_null":1}
+{"s":"close.thread","ret":1,"err":57005}
+{"s":"semaphore.zero","real":1,"err":0,"wait":258}
+{"s":"semaphore.one","real":1,"err":0,"wait":0}
+{"s":"semaphore.initial_above_max","null":1,"err":87}
+{"s":"open.current","real":1,"err":57005,"thread_id_is_current":1}
+{"s":"open.missing","null":1,"err":87}

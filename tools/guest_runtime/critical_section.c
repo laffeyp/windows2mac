@@ -63,7 +63,7 @@ u64 k32_InitializeCriticalSectionAndSpinCount(u64 cs, u64 spin) {
     return w2m_logged(W2M_API_InitializeCriticalSectionAndSpinCount, cs, 1);
 }
 
-u64 k32_InitializeCriticalSection(u64 cs) {
+W2M_VOID u64 k32_InitializeCriticalSection(u64 cs) {
     initialize((struct critical_section *)cs, DEFAULT_SPIN);
     return w2m_logged(W2M_API_InitializeCriticalSection, cs, 0);
 }
@@ -83,7 +83,7 @@ static int acquire(struct critical_section *cs) {
     return 0;
 }
 
-u64 k32_EnterCriticalSection(u64 cs) {
+W2M_VOID u64 k32_EnterCriticalSection(u64 cs) {
     if (!acquire((struct critical_section *)cs)) w2m_unimplemented(W2M_API_EnterCriticalSection, cs);
     return w2m_logged(W2M_API_EnterCriticalSection, cs, 0);
 }
@@ -94,7 +94,7 @@ u64 k32_TryEnterCriticalSection(u64 cs) {
     return w2m_logged(W2M_API_TryEnterCriticalSection, cs, 1);
 }
 
-u64 k32_LeaveCriticalSection(u64 cs) {
+W2M_VOID u64 k32_LeaveCriticalSection(u64 cs) {
     struct critical_section *c = (struct critical_section *)cs;
     if (c->recursion_count <= 0 || c->owning_thread != thread_id())
         w2m_unimplemented(W2M_API_LeaveCriticalSection, cs);          /* not owned: undefined */
@@ -105,7 +105,7 @@ u64 k32_LeaveCriticalSection(u64 cs) {
     return w2m_logged(W2M_API_LeaveCriticalSection, cs, 0);
 }
 
-u64 k32_DeleteCriticalSection(u64 cs) {
+W2M_VOID u64 k32_DeleteCriticalSection(u64 cs) {
     u8 *b = (u8 *)cs;
     for (int i = 0; i < 40; i++) b[i] = 0;
     return w2m_logged(W2M_API_DeleteCriticalSection, cs, 0);

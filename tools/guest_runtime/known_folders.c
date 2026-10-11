@@ -75,7 +75,7 @@ u64 shell32_SHGetKnownFolderPath(u64 id, u64 flags, u64 token, u64 out) {
 }
 
 /* CoTaskMemFree(pv): frees a block w2m's services return; NULL is no block; the last error is left (rows free.*). */
-u64 ole32_CoTaskMemFree(u64 p) {
+W2M_VOID u64 ole32_CoTaskMemFree(u64 p) {
     if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);
     return w2m_logged(W2M_API_CoTaskMemFree, p, 0);
 }

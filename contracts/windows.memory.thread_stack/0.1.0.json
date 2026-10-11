@@ -131,8 +131,7 @@
  "open_questions": [
   "Where the stack pointer's page lies above StackLimit depends on how far the runner's stack had grown (2 or 3 pages in runs 38114383995, 38114385651, 38114444717, 38114446614); the derive drops base_address from query.sp and query.base_minus_one, and query.limit and query.below_limit keep the layout.",
   "w2m commits all but 4 pages of the 1 MB at the start and never moves StackLimit; Windows commits on demand through the guard pages. A program that reads StackLimit to size its stack sees more room in w2m.",
-  "The page speaks of one guard page; every run shows a 3-page PAGE_GUARD region below StackLimit (query.below_limit, query.below_guard). The rows are followed.",
-  "The layout lives in src/w2m/virtual_memory.py, which family_run's plants cannot patch (they patch the guest C file): a planted guard size is not tried; limits_swapped covers the C side."
+  "The page speaks of one guard page; every run shows a 3-page PAGE_GUARD region below StackLimit (query.below_limit, query.below_guard). The rows are followed."
  ],
  "sections": {
   "probe": "probes/thread_stack (Sprint 044)",

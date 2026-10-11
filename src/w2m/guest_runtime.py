@@ -47,10 +47,47 @@ class Image:
         return max(va + len(data) for va, data in self.segments)
 
 
+# A service is a definition `u64 <dll>_<Name>(...) {` in a runtime file (Sprint 049): `k32` serves KERNEL32's
+# imports, any other prefix the DLL of that name; W2M_VOID before it marks a function Windows declares void, whose
+# bridge leaves RAX as it was. The service tables (vm_backend.SERVICES, DLL_SERVICES) and the W2M_API_* ids are
+# derived from these definitions, so a family's C file is the one place its services are declared.
+SERVICE = re.compile(r"^(W2M_VOID\s+)?u64\s+([a-z0-9]+)_(\w+)\([^;{]*\)\s*\{", re.M)
+INTERNAL_APIS = ("Cpuid", "Exception")          # ring entries that are not services (runtime.c)
+
+
+def _texts() -> dict[str, str]:
+    return {p.name: p.read_text() for p in sorted(SOURCE.glob("*.c"))}
+
+
+def service_table(texts: dict[str, str] | None = None) -> dict[str, dict[str, tuple[str, bool]]]:
+    """DLL ("KERNEL32", "SHELL32.DLL", ...) -> import name -> (C symbol, sets RAX)."""
+    out: dict[str, dict[str, tuple[str, bool]]] = {}
+    for file, text in sorted((texts or _texts()).items()):
+        for void, prefix, name in SERVICE.findall(text):
+            if prefix == "w2m":
+                continue
+            dll = "KERNEL32" if prefix == "k32" else f"{prefix.upper()}.DLL"
+            table = out.setdefault(dll, {})
+            if name in table:
+                raise BuildError(f"{file}: {prefix}_{name} is defined twice")
+            table[name] = (f"{prefix}_{name}", not void)
+    return out
+
+
+def api_names(texts: dict[str, str] | None = None) -> list[str]:
+    names = [n for table in service_table(texts).values() for n in table] + list(INTERNAL_APIS)
+    if len(set(names)) != len(names):
+        raise BuildError("two services share an import name: their W2M_API_ ids would collide")
+    return sorted(names)
+
+
 def api_ids() -> dict[int, str]:
-    """W2M_API_<name> numbers from runtime.h: the ring's api field."""
-    text = (SOURCE / "runtime.h").read_text()
-    return {int(n): name for name, n in re.findall(r"#define W2M_API_(\w+) (\d+)", text)}
+    """W2M_API_<name> numbers: the ring's api field, 1 up in name order (api_ids.h, written at build)."""
+    return {i + 1: name for i, name in enumerate(api_names())}
+
+
+def api_header(texts: dict[str, str] | None = None) -> str:
+    return "".join(f"#define W2M_API_{n} {i + 1}\n" for i, n in enumerate(api_names(texts)))
 
 
 def _parse(data: bytes) -> tuple[list[tuple[int, bytes]], dict[str, int]]:
@@ -108,6 +145,7 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
         work.mkdir(exist_ok=True)
         (work / "cpuid_table.h").write_text(cpuid_table)
         (work / "code_page_tables.h").write_text(code_page_table)
+        (work / "api_ids.h").write_text(api_header(texts))
         objs = []
         for name, text in sorted(texts.items()):
             src = work / name

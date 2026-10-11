@@ -85,6 +85,9 @@ static struct open_file *file_of(u64 handle) {
     return &files[slot];
 }
 
+/* For sync_objects.c's DuplicateHandle (Sprint 049): whether h names an open file. */
+int w2m_is_file_handle(u64 h) { return file_of(h) != 0; }
+
 u64 w2m_full_path(const unsigned short *in, unsigned short *out, long *part);   /* paths.c (Sprint 048) */
 
 /* The name made full into `path` as GetFullPathNameW makes it (paths.c: the working directory C:\w2m\app,
