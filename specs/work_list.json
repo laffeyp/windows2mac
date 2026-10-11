@@ -1,0 +1,2013 @@
+{
+ "version": "0.1.0",
+ "sources": [
+  "store/game-runs/38113342549",
+  "store/game-runs/38113343972"
+ ],
+ "families": [
+  {
+   "name": "processes",
+   "first_seq": 9,
+   "functions": [
+    {
+     "name": "CreatePipe",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 9,
+     "dynamic": false
+    },
+    {
+     "name": "CreateProcessW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 18,
+     "dynamic": false
+    },
+    {
+     "name": "SetConsoleCtrlHandler",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 419,
+     "dynamic": false
+    },
+    {
+     "name": "GetConsoleOutputCP",
+     "dll": "KERNEL32.DLL",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 2250,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "files_more",
+   "first_seq": 10,
+   "functions": [
+    {
+     "name": "SetHandleInformation",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 10,
+     "dynamic": false
+    },
+    {
+     "name": "GetFileInformationByHandleEx",
+     "dll": "KERNELBASE.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 12,
+     "first_seq": 917,
+     "dynamic": true
+    },
+    {
+     "name": "GetWindowsDirectoryW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2777,
+     "dynamic": false
+    },
+    {
+     "name": "GetFileSize",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2905,
+     "dynamic": false
+    },
+    {
+     "name": "GetTempFileNameW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 3420,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "winrt",
+   "first_seq": 75,
+   "functions": [
+    {
+     "name": "RoInitialize",
+     "dll": "combase.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 75,
+     "dynamic": true
+    },
+    {
+     "name": "RoActivateInstance",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "RoGetActivationFactory",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "RoGetAgileReference",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "RoUninitialize",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "WindowsCompareStringOrdinal",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "WindowsCreateString",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "WindowsCreateStringReference",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "WindowsDeleteString",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "WindowsDuplicateString",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "WindowsGetStringRawBuffer",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "exceptions",
+   "first_seq": 789,
+   "functions": [
+    {
+     "name": "AddVectoredExceptionHandler",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": 789,
+     "dynamic": false
+    },
+    {
+     "name": "RaiseException",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": null,
+     "dynamic": false
+    },
+    {
+     "name": "RtlUnwindEx",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": null,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "threads",
+   "first_seq": 809,
+   "functions": [
+    {
+     "name": "DuplicateHandle",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 6,
+     "first_seq": 809,
+     "dynamic": false
+    },
+    {
+     "name": "CreateSemaphoreW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 7,
+     "first_seq": 852,
+     "dynamic": false
+    },
+    {
+     "name": "OpenThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 3,
+     "first_seq": 1141,
+     "dynamic": false
+    },
+    {
+     "name": "CreateThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll",
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 28,
+     "first_seq": 1250,
+     "dynamic": false
+    },
+    {
+     "name": "SetThreadPriority",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll",
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 37,
+     "first_seq": 1278,
+     "dynamic": false
+    },
+    {
+     "name": "SetThreadDescription",
+     "dll": "KERNEL32.DLL",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 24,
+     "first_seq": 1391,
+     "dynamic": true
+    },
+    {
+     "name": "AppPolicyGetThreadInitializationType",
+     "dll": "kernel.appcore.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1766,
+     "dynamic": true
+    },
+    {
+     "name": "GetExitCodeThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2166,
+     "dynamic": false
+    },
+    {
+     "name": "SuspendThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2167,
+     "dynamic": false
+    },
+    {
+     "name": "GetThreadContext",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2168,
+     "dynamic": false
+    },
+    {
+     "name": "ResumeThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2187,
+     "dynamic": false
+    },
+    {
+     "name": "SleepEx",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 41341,
+     "first_seq": 2583,
+     "dynamic": false
+    },
+    {
+     "name": "SwitchToThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 475374,
+     "first_seq": 2984,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "locale",
+   "first_seq": 919,
+   "functions": [
+    {
+     "name": "SystemTimeToTzSpecificLocalTime",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 18,
+     "first_seq": 919,
+     "dynamic": false
+    },
+    {
+     "name": "GetThreadLocale",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2214,
+     "dynamic": false
+    },
+    {
+     "name": "GetLocaleInfoA",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2215,
+     "dynamic": false
+    },
+    {
+     "name": "GetUserDefaultLocaleName",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 3203,
+     "dynamic": true
+    },
+    {
+     "name": "CompareStringEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "EnumSystemLocalesEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetDateFormatEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetLocaleInfoEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetTimeFormatEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "IsValidLocaleName",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "LCIDToLocaleName",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "LocaleNameToLCID",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "file_mapping",
+   "first_seq": 929,
+   "functions": [
+    {
+     "name": "CreateFileMappingW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 5,
+     "first_seq": 929,
+     "dynamic": false
+    },
+    {
+     "name": "MapViewOfFile",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 5,
+     "first_seq": 930,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "messages",
+   "first_seq": 949,
+   "functions": [
+    {
+     "name": "FormatMessageW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 238,
+     "first_seq": 949,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "com",
+   "first_seq": 1279,
+   "functions": [
+    {
+     "name": "CoInitializeEx",
+     "dll": "ole32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1279,
+     "dynamic": false
+    },
+    {
+     "name": "CoInitialize",
+     "dll": "ole32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 6,
+     "first_seq": 1578,
+     "dynamic": false
+    },
+    {
+     "name": "CoCreateInstance",
+     "dll": "ole32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 7,
+     "first_seq": 1694,
+     "dynamic": false
+    },
+    {
+     "name": "OLEAUT32.dll!#2",
+     "dll": "OLEAUT32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 1695,
+     "dynamic": false
+    },
+    {
+     "name": "CoSetProxyBlanket",
+     "dll": "ole32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1696,
+     "dynamic": false
+    },
+    {
+     "name": "OLEAUT32.dll!#9",
+     "dll": "OLEAUT32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1698,
+     "dynamic": false
+    },
+    {
+     "name": "OLEAUT32.dll!#6",
+     "dll": "OLEAUT32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 1699,
+     "dynamic": false
+    },
+    {
+     "name": "CoUninitialize",
+     "dll": "ole32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 5,
+     "first_seq": 1701,
+     "dynamic": false
+    },
+    {
+     "name": "PropVariantClear",
+     "dll": "ole32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 1743,
+     "dynamic": false
+    },
+    {
+     "name": "CoCreateGuid",
+     "dll": "ole32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2729,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "network",
+   "first_seq": 1283,
+   "functions": [
+    {
+     "name": "WS2_32.dll!#115",
+     "dll": "WS2_32.dll",
+     "callers": [
+      "UnityPlayer.dll",
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1283,
+     "dynamic": false
+    },
+    {
+     "name": "if_nametoindex",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "version",
+   "first_seq": 1522,
+   "functions": [
+    {
+     "name": "VerSetConditionMask",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 23,
+     "first_seq": 1522,
+     "dynamic": false
+    },
+    {
+     "name": "RtlVerifyVersionInfo",
+     "dll": "ntdll.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1527,
+     "dynamic": true
+    },
+    {
+     "name": "DllGetVersion",
+     "dll": "SHELL32.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1660,
+     "dynamic": true
+    },
+    {
+     "name": "VerifyVersionInfoW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 6,
+     "first_seq": 1705,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "windows",
+   "first_seq": 1529,
+   "functions": [
+    {
+     "name": "GetSystemMetrics",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 13,
+     "first_seq": 1529,
+     "dynamic": false
+    },
+    {
+     "name": "EnumDisplayDevicesA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 3,
+     "first_seq": 1534,
+     "dynamic": false
+    },
+    {
+     "name": "EnumDisplayMonitors",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1537,
+     "dynamic": false
+    },
+    {
+     "name": "GetMonitorInfoA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1538,
+     "dynamic": false
+    },
+    {
+     "name": "LoadIconA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1655,
+     "dynamic": false
+    },
+    {
+     "name": "RegisterClassExW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1656,
+     "dynamic": false
+    },
+    {
+     "name": "CreateWindowExW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1657,
+     "dynamic": false
+    },
+    {
+     "name": "DefWindowProcW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 568,
+     "first_seq": 1661,
+     "dynamic": false
+    },
+    {
+     "name": "RegisterClassW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1662,
+     "dynamic": false
+    },
+    {
+     "name": "SetWindowLongPtrW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1667,
+     "dynamic": false
+    },
+    {
+     "name": "GetClientRect",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1668,
+     "dynamic": false
+    },
+    {
+     "name": "MonitorFromWindow",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 12,
+     "first_seq": 1670,
+     "dynamic": false
+    },
+    {
+     "name": "GetDpiForMonitor",
+     "dll": "shcore.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1671,
+     "dynamic": true
+    },
+    {
+     "name": "SetWindowTextW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1672,
+     "dynamic": false
+    },
+    {
+     "name": "LoadCursorA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1681,
+     "dynamic": false
+    },
+    {
+     "name": "SetWindowLongPtrA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2593,
+     "dynamic": false
+    },
+    {
+     "name": "SetWindowPos",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2673,
+     "dynamic": false
+    },
+    {
+     "name": "ClipCursor",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 7,
+     "first_seq": 2674,
+     "dynamic": false
+    },
+    {
+     "name": "RegisterDeviceNotificationW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2722,
+     "dynamic": false
+    },
+    {
+     "name": "GetMonitorInfoW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 11,
+     "first_seq": 2728,
+     "dynamic": false
+    },
+    {
+     "name": "EnumDisplaySettingsW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 5,
+     "first_seq": 2729,
+     "dynamic": false
+    },
+    {
+     "name": "GetParent",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2761,
+     "dynamic": false
+    },
+    {
+     "name": "GetWindowLongA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 5,
+     "first_seq": 2762,
+     "dynamic": false
+    },
+    {
+     "name": "SetWindowLongA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2763,
+     "dynamic": false
+    },
+    {
+     "name": "LoadIconW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2769,
+     "dynamic": false
+    },
+    {
+     "name": "SendMessageW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2770,
+     "dynamic": false
+    },
+    {
+     "name": "GetWindowPlacement",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 3,
+     "first_seq": 2773,
+     "dynamic": false
+    },
+    {
+     "name": "AdjustWindowRectEx",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 3,
+     "first_seq": 2777,
+     "dynamic": false
+    },
+    {
+     "name": "GetActiveWindow",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2794,
+     "dynamic": false
+    },
+    {
+     "name": "GetWindowRect",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2798,
+     "dynamic": false
+    },
+    {
+     "name": "IsIconic",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2811,
+     "dynamic": false
+    },
+    {
+     "name": "SetFocus",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2815,
+     "dynamic": false
+    },
+    {
+     "name": "UnregisterDeviceNotification",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 3,
+     "first_seq": 2846,
+     "dynamic": false
+    },
+    {
+     "name": "GetFocus",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2848,
+     "dynamic": false
+    },
+    {
+     "name": "ShowWindow",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2899,
+     "dynamic": false
+    },
+    {
+     "name": "PeekMessageA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 13705,
+     "first_seq": 2900,
+     "dynamic": false
+    },
+    {
+     "name": "GetMessageExtraInfo",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 531,
+     "first_seq": 2907,
+     "dynamic": false
+    },
+    {
+     "name": "TranslateMessage",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 529,
+     "first_seq": 2908,
+     "dynamic": false
+    },
+    {
+     "name": "DispatchMessageA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 529,
+     "first_seq": 2909,
+     "dynamic": false
+    },
+    {
+     "name": "ValidateRect",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2922,
+     "dynamic": false
+    },
+    {
+     "name": "IsWindowVisible",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 54805,
+     "first_seq": 2929,
+     "dynamic": false
+    },
+    {
+     "name": "GetKeyboardLayout",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 3197,
+     "dynamic": false
+    },
+    {
+     "name": "GetCursorPos",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 590,
+     "first_seq": 3230,
+     "dynamic": false
+    },
+    {
+     "name": "ScreenToClient",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 592,
+     "first_seq": 3231,
+     "dynamic": false
+    },
+    {
+     "name": "GetAsyncKeyState",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 10,
+     "first_seq": 3233,
+     "dynamic": false
+    },
+    {
+     "name": "LoadImageW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 3421,
+     "dynamic": false
+    },
+    {
+     "name": "SetCursor",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 65,
+     "first_seq": 3501,
+     "dynamic": false
+    },
+    {
+     "name": "TrackMouseEvent",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 3502,
+     "dynamic": false
+    },
+    {
+     "name": "ShowCursor",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 3515,
+     "dynamic": false
+    },
+    {
+     "name": "GetKeyState",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1740,
+     "first_seq": 3632,
+     "dynamic": false
+    },
+    {
+     "name": "MonitorFromRect",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 3949,
+     "dynamic": false
+    },
+    {
+     "name": "SystemParametersInfoW",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 3955,
+     "dynamic": false
+    },
+    {
+     "name": "ClientToScreen",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 3993,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "time",
+   "first_seq": 1601,
+   "functions": [
+    {
+     "name": "GetSystemTimePreciseAsFileTime",
+     "dll": "KERNELBASE.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1601,
+     "dynamic": true
+    },
+    {
+     "name": "timeGetTime",
+     "dll": "WINMM.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 51501,
+     "first_seq": 1707,
+     "dynamic": false
+    },
+    {
+     "name": "timeBeginPeriod",
+     "dll": "WINMM.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2905,
+     "dynamic": false
+    },
+    {
+     "name": "GetTickCount64",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": 3444,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "registry",
+   "first_seq": 1651,
+   "functions": [
+    {
+     "name": "RegOpenKeyExW",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "GetProcAddress",
+      "UnityPlayer.dll"
+     ],
+     "calls": 29,
+     "first_seq": 1651,
+     "dynamic": true
+    },
+    {
+     "name": "RegCreateKeyW",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 90,
+     "first_seq": 2661,
+     "dynamic": false
+    },
+    {
+     "name": "RegSetValueExA",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 83,
+     "first_seq": 2667,
+     "dynamic": false
+    },
+    {
+     "name": "RegCloseKey",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 118,
+     "first_seq": 2668,
+     "dynamic": false
+    },
+    {
+     "name": "RegQueryValueExA",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 50,
+     "first_seq": 2670,
+     "dynamic": false
+    },
+    {
+     "name": "RegDeleteValueA",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 14,
+     "first_seq": 2891,
+     "dynamic": false
+    },
+    {
+     "name": "RegQueryValueExW",
+     "dll": "ADVAPI32.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 10,
+     "first_seq": 3609,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "input",
+   "first_seq": 1658,
+   "functions": [
+    {
+     "name": "ImmGetContext",
+     "dll": "IMM32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 568,
+     "first_seq": 1658,
+     "dynamic": false
+    },
+    {
+     "name": "ImmReleaseContext",
+     "dll": "IMM32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1659,
+     "dynamic": false
+    },
+    {
+     "name": "ImmAssociateContext",
+     "dll": "IMM32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 1660,
+     "dynamic": false
+    },
+    {
+     "name": "GetPointerDevices",
+     "dll": "USER32.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 2,
+     "first_seq": 2696,
+     "dynamic": true
+    },
+    {
+     "name": "RegisterRawInputDevices",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 8,
+     "first_seq": 2700,
+     "dynamic": false
+    },
+    {
+     "name": "GetRawInputDeviceList",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2701,
+     "dynamic": false
+    },
+    {
+     "name": "HidD_GetHidGuid",
+     "dll": "HID.DLL",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2706,
+     "dynamic": false
+    },
+    {
+     "name": "SetupDiGetClassDevsA",
+     "dll": "SETUPAPI.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2707,
+     "dynamic": false
+    },
+    {
+     "name": "SetupDiEnumDeviceInterfaces",
+     "dll": "SETUPAPI.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 8,
+     "first_seq": 2708,
+     "dynamic": false
+    },
+    {
+     "name": "SetupDiEnumDeviceInfo",
+     "dll": "SETUPAPI.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2709,
+     "dynamic": false
+    },
+    {
+     "name": "SetupDiGetDeviceInterfaceDetailW",
+     "dll": "SETUPAPI.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 8,
+     "first_seq": 2710,
+     "dynamic": false
+    },
+    {
+     "name": "SetupDiDestroyDeviceInfoList",
+     "dll": "SETUPAPI.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 4,
+     "first_seq": 2713,
+     "dynamic": false
+    },
+    {
+     "name": "XInputGetState",
+     "dll": "xinput1_4.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 16,
+     "first_seq": 2715,
+     "dynamic": true
+    },
+    {
+     "name": "RegisterTouchWindow",
+     "dll": "USER32.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 2884,
+     "dynamic": true
+    },
+    {
+     "name": "MapVirtualKeyExA",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 212,
+     "first_seq": 3198,
+     "dynamic": false
+    },
+    {
+     "name": "GetRawInputData",
+     "dll": "USER32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 384,
+     "first_seq": 3628,
+     "dynamic": false
+    },
+    {
+     "name": "GetCurrentInputMessageSource",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetPointerPenInfo",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "XInputGetCapabilities",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "XInputSetState",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "file_search",
+   "first_seq": 1673,
+   "functions": [
+    {
+     "name": "FindFirstFileExW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 2,
+     "first_seq": 1673,
+     "dynamic": false
+    },
+    {
+     "name": "FindNextFileW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 348,
+     "first_seq": 2783,
+     "dynamic": false
+    },
+    {
+     "name": "FindClose",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 1,
+     "first_seq": 2825,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "run_time_loading",
+   "first_seq": 1685,
+   "functions": [
+    {
+     "name": "LoadLibraryA",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 5,
+     "first_seq": 1685,
+     "dynamic": false
+    },
+    {
+     "name": "EnumProcessModules",
+     "dll": "PSAPI.DLL",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 2,
+     "first_seq": 2149,
+     "dynamic": false
+    },
+    {
+     "name": "SetDllDirectoryW",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 14,
+     "first_seq": 2909,
+     "dynamic": false
+    },
+    {
+     "name": "AddDllDirectory",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "graphics",
+   "first_seq": 1687,
+   "functions": [
+    {
+     "name": "CreateDXGIFactory2",
+     "dll": "dxgi.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1687,
+     "dynamic": true
+    },
+    {
+     "name": "D3D11CreateDevice",
+     "dll": "d3d11.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 2,
+     "first_seq": 1688,
+     "dynamic": true
+    },
+    {
+     "name": "CreateDXGIFactory",
+     "dll": "dxgi.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 2,
+     "first_seq": 1691,
+     "dynamic": true
+    }
+   ]
+  },
+  {
+   "name": "interlocked_lists",
+   "first_seq": 2704,
+   "functions": [
+    {
+     "name": "InterlockedPopEntrySList",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 9326,
+     "first_seq": 2704,
+     "dynamic": false
+    },
+    {
+     "name": "InterlockedFlushSList",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 40875,
+     "first_seq": 2983,
+     "dynamic": false
+    },
+    {
+     "name": "InterlockedPushEntrySList",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 40423,
+     "first_seq": 3209,
+     "dynamic": false
+    }
+   ]
+  }
+ ],
+ "game_exports": [
+  "SteamAPI_Init",
+  "SteamAPI_RestartAppIfNecessary",
+  "UnityGetAudioEffectDefinitions",
+  "UnityPluginLoad",
+  "UnityPluginUnload",
+  "UnityRenderEvent",
+  "UnityRenderingExtEvent",
+  "UnityRenderingExtQuery",
+  "UnitySetEventQueue",
+  "UnitySetGraphicsDevice",
+  "UnityShaderCompilerExtEvent",
+  "mono_add_internal_call",
+  "mono_array_addr_with_size",
+  "mono_array_class_get",
+  "mono_array_element_size",
+  "mono_array_new",
+  "mono_assembly_close",
+  "mono_assembly_fill_assembly_name",
+  "mono_assembly_foreach",
+  "mono_assembly_get_image",
+  "mono_assembly_get_object",
+  "mono_assembly_load_from",
+  "mono_assembly_load_from_full",
+  "mono_assembly_loaded",
+  "mono_assembly_name_free",
+  "mono_assembly_name_parse",
+  "mono_assembly_open",
+  "mono_class_array_element_size",
+  "mono_class_enum_basetype",
+  "mono_class_from_mono_type",
+  "mono_class_from_name",
+  "mono_class_from_name_case",
+  "mono_class_get_byref_type",
+  "mono_class_get_element_class",
+  "mono_class_get_field_from_name",
+  "mono_class_get_fields",
+  "mono_class_get_flags",
+  "mono_class_get_image",
+  "mono_class_get_interfaces",
+  "mono_class_get_method_from_name",
+  "mono_class_get_methods",
+  "mono_class_get_name",
+  "mono_class_get_namespace",
+  "mono_class_get_nested_types",
+  "mono_class_get_nesting_type",
+  "mono_class_get_parent",
+  "mono_class_get_properties",
+  "mono_class_get_property_from_name",
+  "mono_class_get_rank",
+  "mono_class_get_type",
+  "mono_class_get_type_token",
+  "mono_class_get_userdata",
+  "mono_class_get_userdata_offset",
+  "mono_class_instance_size",
+  "mono_class_is_blittable",
+  "mono_class_is_enum",
+  "mono_class_is_generic",
+  "mono_class_is_inflated",
+  "mono_class_is_subclass_of",
+  "mono_class_is_valuetype",
+  "mono_class_set_userdata",
+  "mono_class_vtable",
+  "mono_config_parse",
+  "mono_custom_attrs_construct",
+  "mono_custom_attrs_construct_by_type",
+  "mono_custom_attrs_free",
+  "mono_custom_attrs_from_assembly",
+  "mono_custom_attrs_from_class",
+  "mono_custom_attrs_from_field",
+  "mono_custom_attrs_from_method",
+  "mono_custom_attrs_from_property",
+  "mono_custom_attrs_get_attr",
+  "mono_custom_attrs_get_attrs",
+  "mono_custom_attrs_has_attr",
+  "mono_debug_find_method",
+  "mono_debug_free_method_jit_info",
+  "mono_debug_free_source_location",
+  "mono_debug_init",
+  "mono_debug_lookup_source_location",
+  "mono_debug_lookup_source_location_by_il",
+  "mono_debug_open_image_from_memory",
+  "mono_dl_fallback_register",
+  "mono_dl_fallback_unregister",
+  "mono_domain_assembly_open",
+  "mono_domain_create_appdomain",
+  "mono_domain_finalize",
+  "mono_domain_get",
+  "mono_domain_get_id",
+  "mono_domain_set",
+  "mono_domain_unload",
+  "mono_error_cleanup",
+  "mono_error_get_error_code",
+  "mono_error_get_message",
+  "mono_error_init",
+  "mono_error_ok",
+  "mono_exception_from_name_msg",
+  "mono_exception_from_name_two_strings",
+  "mono_field_get_flags",
+  "mono_field_get_name",
+  "mono_field_get_offset",
+  "mono_field_get_parent",
+  "mono_field_get_type",
+  "mono_field_get_value",
+  "mono_field_set_value",
+  "mono_field_static_get_value",
+  "mono_gc_collect",
+  "mono_gc_collect_a_little",
+  "mono_gc_get_heap_size",
+  "mono_gc_get_max_time_slice_ns",
+  "mono_gc_get_used_size",
+  "mono_gc_is_incremental",
+  "mono_gc_max_generation",
+  "mono_gc_set_incremental",
+  "mono_gc_set_max_time_slice_ns",
+  "mono_gc_wbarrier_generic_store",
+  "mono_gc_wbarrier_set_field",
+  "mono_gchandle_free",
+  "mono_gchandle_get_target",
+  "mono_gchandle_is_in_domain",
+  "mono_gchandle_new",
+  "mono_gchandle_new_weakref",
+  "mono_get_array_class",
+  "mono_get_boolean_class",
+  "mono_get_byte_class",
+  "mono_get_char_class",
+  "mono_get_corlib",
+  "mono_get_double_class",
+  "mono_get_enum_class",
+  "mono_get_exception_argument_null",
+  "mono_get_exception_class",
+  "mono_get_int16_class",
+  "mono_get_int32_class",
+  "mono_get_int64_class",
+  "mono_get_object_class",
+  "mono_get_root_domain",
+  "mono_get_single_class",
+  "mono_get_string_class",
+  "mono_image_close",
+  "mono_image_get_assembly",
+  "mono_image_get_filename",
+  "mono_image_get_name",
+  "mono_image_get_table_rows",
+  "mono_image_loaded",
+  "mono_image_open_from_data_full",
+  "mono_image_open_from_data_with_name",
+  "mono_is_debugger_attached",
+  "mono_jit_info_get_code_size",
+  "mono_jit_info_get_code_start",
+  "mono_jit_info_table_find",
+  "mono_jit_init_version",
+  "mono_jit_parse_options",
+  "mono_metadata_signature_equal",
+  "mono_metadata_type_equal",
+  "mono_method_full_name",
+  "mono_method_get_class",
+  "mono_method_get_last_managed",
+  "mono_method_get_name",
+  "mono_method_get_object",
+  "mono_method_signature",
+  "mono_method_signature_checked",
+  "mono_object_get_class",
+  "mono_object_get_size",
+  "mono_object_get_virtual_method",
+  "mono_object_isinst",
+  "mono_object_new",
+  "mono_object_new_alloc_specific",
+  "mono_object_new_specific",
+  "mono_object_unbox",
+  "mono_parse_default_optimizations",
+  "mono_pmip",
+  "mono_profiler_create",
+  "mono_profiler_enable_coverage",
+  "mono_profiler_get_all_coverage_data",
+  "mono_profiler_get_coverage_data",
+  "mono_profiler_install",
+  "mono_profiler_install_gc",
+  "mono_profiler_load",
+  "mono_profiler_reset_all_coverage",
+  "mono_profiler_reset_coverage",
+  "mono_profiler_set_coverage_filter_callback",
+  "mono_profiler_set_events",
+  "mono_property_get_get_method",
+  "mono_raise_exception",
+  "mono_reflection_get_custom_attrs_by_type",
+  "mono_runtime_cleanup",
+  "mono_runtime_delegate_invoke",
+  "mono_runtime_exec_main",
+  "mono_runtime_invoke",
+  "mono_runtime_invoke_array",
+  "mono_runtime_is_shutting_down",
+  "mono_runtime_object_init",
+  "mono_runtime_set_shutting_down",
+  "mono_runtime_unhandled_exception_policy_set",
+  "mono_set_assemblies_path_null_separated",
+  "mono_set_crash_chaining",
+  "mono_set_defaults",
+  "mono_set_dirs",
+  "mono_set_find_plugin_callback",
+  "mono_set_ignore_version_and_key_when_finding_assemblies_already_loaded",
+  "mono_set_signal_chaining",
+  "mono_signature_get_param_count",
+  "mono_signature_get_params",
+  "mono_signature_get_return_type",
+  "mono_signature_is_instance",
+  "mono_stack_walk",
+  "mono_stack_walk_no_il",
+  "mono_string_from_utf16",
+  "mono_string_new_len",
+  "mono_string_new_utf16",
+  "mono_string_new_wrapper",
+  "mono_string_to_utf16",
+  "mono_string_to_utf8",
+  "mono_stringify_assembly_name",
+  "mono_thread_attach",
+  "mono_thread_current",
+  "mono_thread_detach",
+  "mono_thread_exit",
+  "mono_thread_pool_cleanup",
+  "mono_thread_pop_appdomain_ref",
+  "mono_thread_push_appdomain_ref",
+  "mono_thread_set_main",
+  "mono_thread_suspend_all_other_threads",
+  "mono_threads_set_shutting_down",
+  "mono_trace_set_level_string",
+  "mono_trace_set_mask_string",
+  "mono_type_get_attrs",
+  "mono_type_get_class",
+  "mono_type_get_name",
+  "mono_type_get_name_full",
+  "mono_type_get_object",
+  "mono_type_get_type",
+  "mono_type_is_byref",
+  "mono_unity_allocation_granularity",
+  "mono_unity_array_new_2d",
+  "mono_unity_array_new_3d",
+  "mono_unity_array_object_header_size",
+  "mono_unity_assembly_mempool_chunk_foreach",
+  "mono_unity_capture_memory_snapshot",
+  "mono_unity_class_field_is_literal",
+  "mono_unity_class_for_each",
+  "mono_unity_class_get",
+  "mono_unity_class_get_data_size",
+  "mono_unity_class_get_generic_type_definition",
+  "mono_unity_class_is_abstract",
+  "mono_unity_class_is_interface",
+  "mono_unity_class_is_open_constructed_type",
+  "mono_unity_class_try_get_vtable",
+  "mono_unity_domain_mempool_chunk_foreach",
+  "mono_unity_domain_set_config",
+  "mono_unity_error_convert_to_exception",
+  "mono_unity_free_captured_memory_snapshot",
+  "mono_unity_g_free",
+  "mono_unity_gc_disable",
+  "mono_unity_gc_enable",
+  "mono_unity_gc_handles_foreach_get_target",
+  "mono_unity_gc_heap_foreach",
+  "mono_unity_gc_is_disabled",
+  "mono_unity_image_set_mempool_chunk_foreach",
+  "mono_unity_install_unitytls_interface",
+  "mono_unity_jit_cleanup",
+  "mono_unity_liveness_calculation_begin",
+  "mono_unity_liveness_calculation_end",
+  "mono_unity_liveness_calculation_from_root",
+  "mono_unity_liveness_calculation_from_statics",
+  "mono_unity_liveness_finalize",
+  "mono_unity_liveness_free_struct",
+  "mono_unity_liveness_start_gc_world",
+  "mono_unity_liveness_stop_gc_world",
+  "mono_unity_loader_get_last_error_and_error_prepare_exception",
+  "mono_unity_lock_dynamic_function_access_tables64",
+  "mono_unity_managed_callstack",
+  "mono_unity_object_header_size",
+  "mono_unity_offset_of_array_bounds_in_array_object_header",
+  "mono_unity_offset_of_array_length_in_array_object_header",
+  "mono_unity_root_domain_mempool_chunk_foreach",
+  "mono_unity_runtime_set_main_args",
+  "mono_unity_set_data_dir",
+  "mono_unity_set_embeddinghostname",
+  "mono_unity_set_vprintf_func",
+  "mono_unity_start_gc_world",
+  "mono_unity_stop_gc_world",
+  "mono_unity_string_empty_wrapper",
+  "mono_unity_type_get_name_full_chunked",
+  "mono_unity_type_is_pointer_type",
+  "mono_unity_type_is_static",
+  "mono_unity_unlock_dynamic_function_access_tables64",
+  "mono_unity_vtable_get_static_field_data",
+  "mono_value_box",
+  "unity_mono_method_is_generic",
+  "unity_mono_method_is_inflated",
+  "unity_mono_reflection_method_get_method"
+ ],
+ "unserved": 164
+}
