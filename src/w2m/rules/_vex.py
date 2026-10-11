@@ -18,6 +18,7 @@ from typing import Any, cast
 from w2m import a64_encoder as a64
 from w2m.lift import LiftError, Op, _operand
 from w2m.rules import Ctx
+from w2m.runtime import SHIFT_BY_COUNT
 from w2m.vm_backend import (FP_CLASSES, HVC_SLOW_SSE, MXCSR_OFF, SPILL, YMM_HI_OFF, Assembler, CompileError)
 
 # VEX iclass -> the legacy base whose semantics it has (the model's _sse and the base's lowering)
@@ -52,7 +53,7 @@ FMA = {f"V{k}{o}{t}" for k in ("FMADD", "FMSUB", "FNMADD", "FNMSUB") for o in ("
        for t in ("SS", "SD", "PS", "PD")}
 L0_ONLY = {"VCVTDQ2PD", "VCVTTPD2DQ", "VCVTPD2DQ"}                 # their 256-bit forms change operand widths
 ALIGNED = {"VMOVAPD", "VMOVDQA", "VMOVAPS"}                                     # the only VEX forms that fault on alignment
-NO_WRITE = {"COMISD", "UCOMISD"}                                     # flags only: the destination is a source
+NO_WRITE = {"COMISD", "UCOMISD", "COMISS", "UCOMISS"}                                     # flags only: the destination is a source
 SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
         "ANDNPD", "CVTDQ2PS", "CVTTPS2DQ", "CMPPS_VEX", "ROUNDSD", "PBLENDD", "CVTPS2PD", "PMOVSXDQ", "PERMILPS_VAR",
         "PADDB", "PMULUDQ", "PUNPCKHQDQ", "PCMPEQQ", "CVTSS2SI", "CVTSI2SS", "CVTTSD2SI", "RCPPS", "RSQRTPS"}              # in the model (x86fp) for now
@@ -167,24 +168,26 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         base_lower(a, ("sse", base, d, s2, 0), reg_of, store)
         a.emit(a64.ldr(8, 16, 28, SPILL), a64.orr(rd, rd, 16))
         return
+    # a shift by count shifts both halves by s2's low quadword (an XMM register or m128; SDM PSLLD, VEX.256 form)
+    count = bool(vl) and base in SHIFT_BY_COUNT and imm is None
     low_src = s2
-    hi_src = 29
+    hi_src = 29 if not count or s2[0] != "x" else int(s2[1])
     if s1 is not None and s2[0] == "m" and d[0] == "x":             # memory first: a fault leaves every register
         n = min(int(s2[2]), 16)                                      # as it was (set 049, Xeon 8573C)
-        if vl:
+        if vl and not count:
             a.emit(a64.ldr_v(16, 27, reg_of(s2[1]), 16))
         a.emit(a64.ldr_v(n, 29, reg_of(s2[1])))
-        low_src, hi_src = ("x", 29), 27
+        low_src, hi_src = ("x", 29), (29 if count else 27)
     if s1 is not None and s1[0] == "x" and d[0] == "x" and s1[1] != d[1]:
         if s2 == ("x", d[1]):                                        # s2 is d: keep it before d takes s1
             a.emit(a64.mov_v(29, int(d[1])))
-            low_src, hi_src = ("x", 29), 27
+            low_src, hi_src = ("x", 29), (29 if count else 27)
         a.emit(a64.mov_v(int(d[1]), int(s1[1])))
     if vl and d[0] == "x":                                           # stage both upper halves before d changes
         a.emit(a64.addi(16, 28, YMM_HI_OFF))
         if s1 is not None:
             a.emit(a64.ldr_v(16, 28, 16, 16 * int(s1[1])))
-        if s2[0] == "x":
+        if s2[0] == "x" and not count:                               # (a shift's count stays in s2's low half)
             a.emit(a64.ldr_v(16, hi_src, 16, 16 * int(s2[1])))
         elif s2[0] == "m" and s1 is None:
             a.emit(a64.ldr_v(16, hi_src, reg_of(s2[1]), 16))
@@ -197,9 +200,9 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         if not vl:
             _clear_upper(a, int(d[1]))
         else:
-            if s1 is None:                                           # a 256-bit load or move: the source's upper half
+            if s1 is None and imm is None:                           # a 256-bit load or move: the source's upper half
                 a.emit(a64.mov_v(28, hi_src))
-            else:
+            else:                                                    # (PSHUFD's imm8 permutes each half alike)
                 base_lower(a, ("sse", base, ("x", 28), ("x", hi_src), 0, *rest), reg_of, store)
             a.emit(a64.addi(16, 28, YMM_HI_OFF), a64.str_v(16, 28, 16, 16 * int(d[1])))
 

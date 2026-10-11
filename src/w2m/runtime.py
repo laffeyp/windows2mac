@@ -383,7 +383,11 @@ class Runtime:
             x[dst[1]] = sums[0] | sums[1] << 64
         elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"):
             v = self._xread(src, msize if src[0] == "m" else 16)
-            out, th.mxcsr = self._fp(lambda: fp.execute(ic, x[dst[1]], v, th.mxcsr))
+            if self._defer_fp:                                    # VEX.256: flags of both halves, one check
+                out, flags = fp.execute(ic, x[dst[1]], v, th.mxcsr, check=False)
+                self._deferred_flags |= flags
+            else:
+                out, th.mxcsr = self._fp(lambda: fp.execute(ic, x[dst[1]], v, th.mxcsr))
             x[dst[1]] = out
         elif ic in ("CVTTSS2SI", "CVTTSD2SI", "CVTSS2SI", "CVTSD2SI"):
             f = fp.F32 if "SS" in ic else fp.F64
@@ -583,8 +587,9 @@ class Runtime:
             return
         fp_both = vl and base[:-2] in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX") or (vl and base in VEX_FP)
         mxcsr_in = self.th.mxcsr
-        if fp_both:                                               # both halves' flags, then one check (an unmasked
-            self.th.mxcsr = (mxcsr_in & ~0x3F) | 0x1F80           # exception faults with no lane committed)
+        if fp_both:                                               # both halves with the real MXCSR, their flags
+            self._defer_fp, self._deferred_flags = True, 0        # collected, then one check (an unmasked
+                                                                  # exception faults with no lane committed)
         low_src = s2
         if s1 is not None and s1[0] == "x" and d[0] == "x" and s1[1] != d[1]:
             if s2 == ("x", d[1]):
@@ -595,7 +600,7 @@ class Runtime:
         if base == "PMOVMSKB" and vl:                            # 32 sign bits: the upper half's 16 above
             self._wr(d[1], d[2], False, self._rd(d[1], d[2], False) | sum(((src_hi >> (8 * i + 7)) & 1) << (16 + i)
                                                                           for i in range(16)))
-        elif d[0] == "x" and base in ("COMISD", "UCOMISD"):
+        elif d[0] == "x" and base in ("COMISD", "UCOMISD", "COMISS", "UCOMISS"):
             pass                                                  # flags only: d is a source
         elif d[0] == "x":
             if vl:
@@ -606,7 +611,8 @@ class Runtime:
                 hi[d[1]] = 0
         if fp_both:
             env = fp.Env(mxcsr_in)
-            env.flags = self.th.mxcsr & 0x3F                      # this instruction's flags, sticky ones included
+            env.flags = self._deferred_flags                      # this instruction's flags, both halves
+            self._defer_fp = False
             self.th.mxcsr = mxcsr_in
             self._fp_check(env)
         del x[16:]                                                # the scratch registers go
@@ -803,7 +809,13 @@ class Runtime:
             self.th.mxcsr |= e.flags                          # flags at an unmasked fault (oracle)
             raise
 
+    _defer_fp = False                                             # VEX.256 halves: collect flags, check once
+    _deferred_flags = 0
+
     def _fp_check(self, env: fp.Env) -> None:
+        if self._defer_fp:
+            self._deferred_flags |= env.flags
+            return
         try:
             env.check()
         except fp.SimdFault as e:
@@ -825,6 +837,7 @@ class Runtime:
             interrupted = list(th.regs)
             th.regs, th.flags, th.xmm, th.mxcsr, th.df = saved
             th.ymm_hi = saved_hi
+            self._defer_fp = False
             if any(op[0] == "rep" for op in ins.ops):        # REP keeps its completed iterations (SDM
                 th.regs = interrupted                        # Vol 1 7.3.9): RCX, RSI, RDI as at the fault
             th.mxcsr = mxcsr                                  # MXCSR flags a fault sets survive it

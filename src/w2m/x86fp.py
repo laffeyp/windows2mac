@@ -460,10 +460,9 @@ def fma_lane(f: Fmt, ops: tuple[int, int, int], mul: tuple[int, int], add: int, 
     if nans:
         if any(is_snan(f, x) for x in nans):
             env.flags |= IE
-        a, b = srcs[mul[0]], srcs[mul[1]]
-        if (is_inf(f, a) and is_zero(f, b)) or (is_inf(f, b) and is_zero(f, a)):
-            env.flags |= IE                                    # inf * 0 is invalid whatever the addend
-        env.flags &= ~DE
+        env.flags &= ~DE                                       # inf * 0 plus a QNaN addend is not Invalid (Xeon
+                                                               # 8573C, set 049b cases 25743, 27363; IEEE 754-2008
+                                                               # 7.2(c) leaves it to the implementation)
         return _quiet(f, nans[0])
     return fma(f, srcs[mul[0]], srcs[mul[1]], srcs[add], negate_product, negate_addend, env)
 
@@ -501,7 +500,7 @@ def cmp_predicate(f: Fmt, a: int, b: int, imm: int, env: Env) -> bool:
 def round_to_integer(f: Fmt, b: int, imm: int, env: Env) -> int:
     """ROUNDSD/ROUNDSS (SDM): b to an integral value; imm bit 2 takes MXCSR.RC, else imm bits 1:0 (nearest, down,
     up, toward zero); imm bit 3 suppresses Precision. An SNaN sets IE and is quieted; inf and zero pass."""
-    b = env.src(f, b)
+    b = env.src(f, b, denormal_flag=False)
     if is_nan(f, b):
         if is_snan(f, b):
             env.flags |= IE
@@ -511,7 +510,7 @@ def round_to_integer(f: Fmt, b: int, imm: int, env: Env) -> int:
         return b
     v = value(f, b)
     negative = v < 0
-    rc = env.rc if imm & 4 else imm & 3
+    rc = env.rc if imm & 4 else imm & 3                # ROUNDSD reports Invalid and Precision only, never Denormal
     n = _round_int(-v if negative else v, negative, rc)
     if Fraction(-n if negative else n) != v and not imm & 8:
         env.flags |= PE
@@ -531,7 +530,7 @@ def join(parts: list[int], width: int) -> int:
 ARITH = {"ADD": "add", "SUB": "sub", "MUL": "mul", "DIV": "div"}
 
 
-def execute(name: str, dst: int, src: int, mxcsr: int) -> tuple[int, int]:
+def execute(name: str, dst: int, src: int, mxcsr: int, check: bool = True) -> tuple[int, int]:
     """One legacy-SSE arithmetic instruction (ADD/SUB/MUL/DIV/SQRT/MIN/MAX in SS/SD/PS/PD) on a
     128-bit destination and a source (128-bit, or the scalar in its low bits). Returns the new
     destination and MXCSR; raises SimdFault (MXCSR flags already merged into .flags) when an
@@ -555,5 +554,7 @@ def execute(name: str, dst: int, src: int, mxcsr: int) -> tuple[int, int]:
             raise ValueError(name)
         lane_flags |= env.flags
     env.flags = lane_flags
+    if not check:                                       # the caller checks several halves at once (VEX.256)
+        return join(out, f.bits), lane_flags
     env.check()
     return join(out, f.bits), mxcsr | lane_flags

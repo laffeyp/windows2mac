@@ -236,7 +236,8 @@ def test_cpuid_profile_is_the_same_in_model_vm_and_table() -> None:
     assert model_out == want
     assert vm_out == want
     assert calls.count("Cpuid") == len(inputs)
-    assert want[inputs.index((0x40000000, 0))] == cpuid.lookup(7, 0)      # above max basic: highest basic leaf
+    highest = cpuid.lookup(0, 0)[0]                                        # leaf 0's EAX: the highest basic leaf
+    assert want[inputs.index((0x40000000, 0))] == cpuid.lookup(highest, 0)  # above max basic: highest basic leaf
 
 
 def _sse_subset(labels: set[str]) -> tuple[list[sd.Case], list[sd.Result]]:
