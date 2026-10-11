@@ -53,7 +53,7 @@ from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
 from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
-from w2m import exception_stubs
+from w2m import guest_stubs
 from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
                             detach_stub, write_context)
 
@@ -1017,7 +1017,7 @@ class VM:
         self.modules = self._modules(image_name)
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
-        self._exception_page = 0                         # exception_stubs.py's page, once written (Sprint 053)
+        self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
         self._max_steps = 0
         self.current_tid = tid
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
@@ -1239,12 +1239,12 @@ class VM:
         self.mem.write(va, code)
         return va
 
-    def _exception_stubs(self) -> int:
-        """The x86 stubs exception dispatch calls handlers and resumes contexts through (exception_stubs.py), on a
-        page of the arena written at the first exception, so a process that raises none keeps its address space."""
-        if not self._exception_page:
-            self._exception_page = self._code_page(exception_stubs.page(self._import_thunk("KERNEL32.dll!W2mExceptionResume")))
-        return self._exception_page
+    def _guest_stubs(self) -> int:
+        """The x86 stubs services call guest code and resume contexts through (guest_stubs.py), on a
+        page of the arena written at the first use, so a process that needs none keeps its address space."""
+        if not self._stub_page:
+            self._stub_page = self._code_page(guest_stubs.page(self._import_thunk("KERNEL32.dll!W2mGuestReturn")))
+        return self._stub_page
 
     def _com_vtables(self) -> None:
         """Each COM class's vtable (com.c, in the runtime image) filled with its methods' thunks: the services
@@ -1516,7 +1516,7 @@ class VM:
             result = self._thread_request(a0, a1, a2, a3) & M64
         elif op == HOST_EXCEPTION:
             if a0 == EXCEPTION_STUBS:
-                result = self._exception_stubs()
+                result = self._guest_stubs()
             elif a0 == EXCEPTION_CAPTURE_XMM:
                 xmm, _, _ = self.vectors()
                 self.mem.write(a1, b"".join(q.to_bytes(16, "little") for q in xmm))

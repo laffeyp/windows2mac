@@ -218,6 +218,53 @@ def version_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if "version_low" in r else r for r in printed]
 
 
+def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
+    windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
+    work area's less 21 (519 on Server 2025's 720, 525 on 2022's 728: the taskbars differ). The rows keep each
+    window's geometry from its own origin, positions as relations (x = y, a multiple of 26, the second window 26 past
+    the first), the batch window's heights as their excess over that default, and the work area's bottom as lying
+    above the screen's."""
+    work = next((r for r in printed if r["s"] == "screen.work_area"), None)
+    default_height = (work["rect_bottom"] - work["rect_top"]) * 3 // 4 - 21 if work else 0
+    origin: dict[str, tuple[int, int]] = {}
+    for r in printed:
+        if r["s"] in ("msg.batch.1", "msg.play.1") and "x" in r:
+            origin[r["s"].split(".")[1]] = (r["x"], r["y"])
+    out = []
+    for r in printed:
+        s = r["s"]
+        if s == "screen.work_area":
+            out.append({"s": s, "left": r["rect_left"], "top": r["rect_top"], "right": r["rect_right"],
+                        "bottom_above_768": r["rect_bottom"] < 768})
+            continue
+        which = "batch" if s.startswith(("msg.batch.", "batch.")) else "play" if s.startswith(("msg.play.", "play.")) else None
+        if which is None or which not in origin:
+            out.append(r)
+            continue
+        x, y = origin[which]
+        tall = which == "batch"                     # CW_USEDEFAULT height: from the work area
+        r = dict(r)
+        if "x" in r:
+            first = origin.get("batch", (x, y))[0]
+            r |= {"x": None, "y": None}
+            r = {k: v for k, v in r.items() if v is not None} | {
+                "x_equals_y": x == y, "x_in_cascade": x > 0 and x % 26 == 0, "past_first": x - first}
+        for prefix in ("in", "out", "rect"):
+            if f"{prefix}_left" not in r:
+                continue
+            left, top, right, bottom = (r.pop(f"{prefix}_{k}") for k in ("left", "top", "right", "bottom"))
+            if s.endswith(".client_rect"):
+                left0, top0 = 0, 0
+            else:
+                left0, top0 = x, y
+            height = bottom - top0
+            r |= {f"{prefix}_left": left - left0, f"{prefix}_top": top - top0, f"{prefix}_right": right - left0,
+                  f"{prefix}_bottom": height - default_height if tall else height}
+        out.append(r)
+    return out
+
+
 TIME_RUNS = {
               "38053043702": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-0", "AMD EPYC 7763 64-Core Processor"),
               "38053047590": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-1", "AMD EPYC 9V74 80-Core Processor"),
@@ -1979,7 +2026,7 @@ FAMILIES: dict[str, Family] = {
                  "address; RtlCaptureContext, RtlLookupFunctionEntry, RtlVirtualUnwind and RtlPcToFileHeader answer "
                  "for the probe's own code; an exception no frame takes reaches the top-level filter."),
         probe="exceptions", guest_file="exceptions.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/exception_stubs.py"),
+        host_files=("src/w2m/vm_backend.py", "src/w2m/guest_stubs.py", "tools/guest_runtime/guest_calls.c"),
         runs={
               "38165931122": Run("windows-2025", "a71f491c4e8b9c1a563597497a004b74add2cf9caca0c7a9d3b36b041f34553a", "exceptions-1791745002-0", "AMD EPYC 7763 64-Core Processor"),
               "38165933249": Run("windows-2022", "55369a03c431c6c2448a9ddbe99ebcfe452227a2fcb79c184015697bc57cb6b3", "exceptions-1791745002-1", "AMD EPYC 7763 64-Core Processor"),

@@ -238,6 +238,24 @@ struct w2m_exception_record;
 struct w2m_context;
 int w2m_dispatch_fault(const struct w2m_exception_record *rec, const struct w2m_context *ctx);   /* exceptions.c */
 
+/* Services that call the guest's x86 code and resume when it returns (guest_calls.c, Sprint 054). A frame starts
+ * with this; the guest's answer goes to `resume`, which calls the guest again (w2m_call_guest) or returns to the
+ * service's own caller (w2m_return_to). */
+struct w2m_guest_call {
+    u64 magic;
+    void (*resume)(struct w2m_guest_call *, u64 answer);
+};
+#define W2M_GUEST_CALL_MAGIC 0x6c6c616374736567ull     /* "guestcal" */
+#define W2M_STUB_RETURN 0x00                         /* guest_stubs.py: ret */
+#define W2M_STUB_CALL 0x10                           /* call rax; then W2mGuestReturn with the answer in RCX */
+#define W2M_STUB_CALL_RETURN 0x12                    /* the return address the called code sees */
+#define W2M_STUB_RESTORE 0x40                        /* rcx = CONTEXT: the context resumed whole */
+u64 w2m_guest_stubs(void);                                               /* the stubs' page */
+void *w2m_guest_frame(u64 rsp, u64 size, void (*resume)(struct w2m_guest_call *, u64));   /* zeroed, below rsp */
+void w2m_call_guest(struct w2m_guest_call *c, u64 fn, u64 a0, u64 a1, u64 a2, u64 a3);
+void w2m_return_to(u64 rsp, u64 value);           /* the service entered with stack pointer rsp returns value */
+struct w2m_guest_call *w2m_guest_call_at(u64 rsp);   /* the frame a stub call at rsp belongs to, or 0 */
+
 /* Monitor data word: the process's start (console.c): 0 a console program with redirected standard
  * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */
 #define W2M_START_MODE_OFF 0x68
