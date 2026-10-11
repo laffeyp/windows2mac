@@ -426,6 +426,10 @@ def _temps_read(op: Op) -> list[int]:
     k = op[0]
     if k == "sse":
         return [loc[1] for loc in (op[2], op[3]) if loc[0] == "m"]
+    if k == "vex":                                      # ("vex", base, d, s1, s2, L, align, imm) (Sprint 049)
+        return [loc[1] for loc in (op[2], op[4]) if loc[0] == "m"]
+    if k == "fma":                                      # ("fma", ic, d, s2, s3, L)
+        return [op[4][1]] if op[4][0] == "m" else []
     if k == "ld":
         return [op[2][1]] if op[2][0] == "m" else []
     if k == "st":
