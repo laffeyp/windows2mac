@@ -263,7 +263,7 @@
 
 ## Sprint tail
 
-### Sprint 054 (2026-10-11, closed: CI on the closing commit, recorded at merge)
+### Sprint 054 (2026-10-11, closed: CI run 38175121068 success on 2b02046a)
 - **Scope:** the version, display, windows, time, registry and file_search families; amended before the work to give the frontier the batch run's arguments, fix VirtualAlloc(NULL, MEM_COMMIT) and stop at the crash handler's start.
 - **Rubber Duck Pass:**
   - *Sequence narration:* seven probes on two runners each (version, time, display and windows rerun after build or row fixes); each family's item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; 27 other families re-run to CANDIDATE_ACCEPTED; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for CreateEventW (a named event) after 421,498 instructions.

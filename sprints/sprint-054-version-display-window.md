@@ -110,3 +110,4 @@ The six families accepted; virtual_memory re-accepted with the commit-at-NULL ro
   `registry.c`, `file_search.c`, `resources.c`; `src/w2m/guest_stubs.py` (was exception_stubs.py); FILE_LIST (host
   request 32); PE resource parsing (`pe.py`); system DLLs loaded by name at run time; `scripts/store_probe_runs.py`;
   the probe workflow's `rc` (llvm-rc); `games/hail-to-the-rainbow/manifest.xml`.
+- **Closed on CI run 38175121068** (success on 2b02046a).
