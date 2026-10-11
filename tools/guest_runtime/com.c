@@ -86,6 +86,20 @@ W2M_VOID u64 ole32_CoUninitialize(void) {
     return w2m_logged(W2M_API_CoUninitialize, sc->com_inits, 0);
 }
 
+/* combase's RoInitialize(initType) (Sprint 055; contracts/windows.winrt.winrt): the COM apartment by another name,
+ * RO_INIT_SINGLETHREADED (0) an STA, RO_INIT_MULTITHREADED (1) the MTA, S_OK then S_FALSE, RPC_E_CHANGED_MODE for the
+ * other model; another type E_INVALIDARG. RoUninitialize balances it as CoUninitialize does. */
+u64 combase_RoInitialize(u64 type) {
+    if ((u32)type > 1) return w2m_logged(W2M_API_RoInitialize, type, E_INVALIDARG);
+    return init(W2M_API_RoInitialize, (u32)type ? MTA : STA);
+}
+
+W2M_VOID u64 combase_RoUninitialize(void) {
+    struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    if (sc->com_inits && --sc->com_inits == 0 && sc->com_model == MTA) process_mta--;
+    return w2m_logged(W2M_API_RoUninitialize, sc->com_inits, 0);
+}
+
 /* The objects: a vtable, a reference count, and for the enumerator its registered notification clients. */
 struct object { u64 vtable; s64 refs; };
 static struct object enumerator;                /* one for the process (rows create.inproc: the same object) */

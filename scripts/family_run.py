@@ -2094,6 +2094,25 @@ FAMILIES: dict[str, Family] = {
                                              ("class.register_ex_again",)),
             "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
                                      ("icon.own_103",))}),
+    "winrt": Family(
+        name="winrt",
+        contract_id="windows.winrt.winrt",
+        version="0.1.0",
+        summary=("RoInitialize as UnityPlayer reaches it: the winrt, com and winrt-string API sets load as combase.dll, "
+                 "whose RoInitialize is the COM apartment (S_OK, S_FALSE, RPC_E_CHANGED_MODE, E_INVALIDARG for another "
+                 "type) and RoUninitialize balances it."),
+        probe="winrt", guest_file="com.c", host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py"),
+        runs={
+              "38178400798": Run("windows-2025", "3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5", "winrt-1791755781-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38178402576": Run("windows-2022", "11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d", "winrt-1791755781-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("The rest of the winrt family (RoActivateInstance, HSTRINGs) is not in these rows.",),
+        plants={
+            "type_unchecked": Plant("    if ((u32)type > 1) return w2m_logged(W2M_API_RoInitialize, type, E_INVALIDARG);", "",
+                                    ("init.bad_type",)),
+            "single_as_multi": Plant("    return init(W2M_API_RoInitialize, (u32)type ? MTA : STA);",
+                                     "    return init(W2M_API_RoInitialize, MTA);", ("init.multi_after_single", "init.multi"))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",

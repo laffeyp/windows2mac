@@ -1,0 +1,85 @@
+{
+ "contract_id": "windows.winrt.winrt",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "RoInitialize as UnityPlayer reaches it: the winrt, com and winrt-string API sets load as combase.dll, whose RoInitialize is the COM apartment (S_OK, S_FALSE, RPC_E_CHANGED_MODE, E_INVALIDARG for another type) and RoUninitialize balances it.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/winrt/winrt.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "load.api_sets",
+    "winrt": true,
+    "com": true,
+    "winrt_string": true,
+    "winrt_is_combase": true,
+    "com_is_combase": true,
+    "string_is_combase": true
+   },
+   {
+    "s": "proc",
+    "init": true,
+    "uninit": true,
+    "init_in_combase": true
+   },
+   {
+    "s": "init.single",
+    "hr": 0
+   },
+   {
+    "s": "init.single_again",
+    "hr": 1
+   },
+   {
+    "s": "init.multi_after_single",
+    "hr": 2147549446
+   },
+   {
+    "s": "init.multi",
+    "hr": 0
+   },
+   {
+    "s": "init.bad_type",
+    "hr": 2147942487
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38178400798: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5; run 38178402576: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "winrt-1791755781-0-1",
+    "winrt-1791755781-0-2",
+    "winrt-1791755781-1-1",
+    "winrt-1791755781-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "The rest of the winrt family (RoActivateInstance, HSTRINGs) is not in these rows."
+ ],
+ "sections": {
+  "probe": "probes/winrt (Sprint 044)",
+  "implementation": "tools/guest_runtime/com.c",
+  "rows": "scripts/family_run.py winrt",
+  "excluded": "none"
+ }
+}

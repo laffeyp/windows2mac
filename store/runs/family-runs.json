@@ -1380,5 +1380,25 @@
    "38174244880": "conforms",
    "38174246839": "conforms"
   }
+ },
+ "winrt": {
+  "candidate_sha256": "sha256:522412065faee5d3a60b113fc31b43b40cf6846fa82854c34a7b28126aadb18c",
+  "divergence": {
+   "38178400798": null,
+   "38178402576": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "winrt",
+  "record": "store/runs/family-winrt-1791755915716321000",
+  "verdicts": {
+   "38178400798": "conforms",
+   "38178402576": "conforms"
+  }
  }
 }
