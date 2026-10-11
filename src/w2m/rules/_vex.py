@@ -27,14 +27,14 @@ BASE = {"VMULSD": "MULSD", "VADDSD": "ADDSD", "VSUBSD": "SUBSD", "VDIVSD": "DIVS
         "VXORPS": "XORPS", "VXORPD": "XORPD", "VORPD": "ORPD", "VANDPD": "ANDPD", "VANDPS": "ANDPS",
         "VPCMPEQB": "PCMPEQB", "VPCMPEQW": "PCMPEQW", "VPSUBQ": "PSUBQ", "VPSUBD": "PSUBD", "VPADDQ": "PADDQ",
         "VCVTDQ2PD": "CVTDQ2PD", "VPSRLQ": "PSRLQ", "VPSLLQ": "PSLLQ", "VPSRLDQ": "PSRLDQ", "VPMOVMSKB": "PMOVMSKB",
-        "VCVTTPD2DQ": "CVTTPD2DQ", "VCVTPD2DQ": "CVTPD2DQ", "VCMPSD": "CMPSD_XMM", "VMOVLHPS": "MOVLHPS",
+        "VCVTTPD2DQ": "CVTTPD2DQ", "VCVTPD2DQ": "CVTPD2DQ", "VCMPSD": "CMPSD_XMM_VEX", "VMOVLHPS": "MOVLHPS",
         "VHADDPD": "HADDPD"}
 FMA = {f"V{k}{o}{t}" for k in ("FMADD", "FMSUB", "FNMADD", "FNMSUB") for o in ("132", "213", "231")
        for t in ("SS", "SD", "PS", "PD")}
 L0_ONLY = {"VCVTDQ2PD", "VCVTTPD2DQ", "VCVTPD2DQ"}                 # their 256-bit forms change operand widths
 ALIGNED = {"VMOVAPD", "VMOVDQA"}                                     # the only VEX forms that fault on alignment
 NO_WRITE = {"COMISD", "UCOMISD"}                                     # flags only: the destination is a source
-SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD"}              # in the model (x86fp) for now
+SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM_VEX", "HADDPD"}              # in the model (x86fp) for now
 NATIVE_256 = {"PXOR", "XORPS", "XORPD", "PAND", "POR", "ORPD", "ANDPD", "ANDPS", "PCMPEQB", "PCMPEQW", "PSUBQ",
               "PSUBD", "PADDQ", "MOVDQU", "MOVDQA", "MOVAPD", "PMOVMSKB"}
 FUSED = {"FMADD": "fmadd", "FMSUB": "fnmsub", "FNMADD": "fmsub", "FNMSUB": "fnmadd"}
@@ -42,7 +42,10 @@ FUSED = {"FMADD": "fmadd", "FMSUB": "fnmsub", "FNMADD": "fmsub", "FNMSUB": "fnma
 
 def rule(ctx: Ctx) -> None:
     b, ic, ops, nxt = ctx.b, ctx.ic, ctx.ops, ctx.nxt
-    vl = ctx.f.vl if ctx.f is not None else 0
+    template = ctx.f.ops if ctx.f is not None and ctx.f.ops else ""
+    # VEX.L counts only for templates with x-forms; a scalar row ignores it (LIG: SDM Vol 2A 2.3.6.2), and its
+    # destination's bits 255:128 are zeroed whatever L is
+    vl = ctx.f.vl if ctx.f is not None and "x" in template else 0
     if ic == "VZEROUPPER":
         b.emit("vzeroupper")
         return
@@ -51,10 +54,10 @@ def rule(ctx: Ctx) -> None:
     if ic in FMA:
         b.emit("fma", ic, locs[0], locs[1], locs[2], vl)
         return
-    if ic in L0_ONLY and vl:
+    if ic in L0_ONLY and ctx.f is not None and ctx.f.vl:        # the encoded L: their 256-bit forms differ in width
         raise LiftError(f"{ic} at 0x{ctx.address:x}: the 256-bit form is not lifted")
     base = BASE[ic]
-    if imm is not None and len(locs) == 2 and ctx.f is not None and ctx.f.ops == "Hx,Wx,Ib":
+    if imm is not None and len(locs) == 2 and template == "Hx,Wx,Ib":
         d, s1, s2 = locs[0], locs[1], locs[1]                       # shift by imm8: vvvv = shift(r/m)
     elif len(locs) == 3:
         d, s1, s2 = locs
@@ -139,6 +142,9 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         elif s2[0] == "m":
             a.emit(a64.ldr_v(16, hi_src, reg_of(s2[1]), 16))
     rest = (imm,) if imm is not None else ()
+    if d[0] == "m" and vl:                                           # a 256-bit store: the upper half first, so a
+        a.emit(a64.addi(16, 28, YMM_HI_OFF), a64.ldr_v(16, 28, 16, 16 * int(s2[1])),   # fault on the next page
+               a64.str_v(16, 28, reg_of(d[1]), 16))                                   # leaves memory as it was
     base_lower(a, ("sse", base, d, low_src, 0, *rest), reg_of, store)
     if d[0] == "x" and base not in NO_WRITE:
         if not vl:
@@ -149,9 +155,6 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
             else:
                 base_lower(a, ("sse", base, ("x", 28), ("x", hi_src), 0, *rest), reg_of, store)
             a.emit(a64.addi(16, 28, YMM_HI_OFF), a64.str_v(16, 28, 16, 16 * int(d[1])))
-    elif d[0] == "m" and vl:                                         # a 256-bit store: the upper half after the low
-        a.emit(a64.addi(16, 28, YMM_HI_OFF), a64.ldr_v(16, 28, 16, 16 * int(s2[1])),
-               a64.str_v(16, 28, reg_of(d[1]), 16))
 
 
 def _lower_fma(a: Assembler, op: Op, reg_of: Callable[[int], int]) -> None:

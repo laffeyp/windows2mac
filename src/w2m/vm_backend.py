@@ -1380,6 +1380,15 @@ class VM:
     def set_vectors(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
         self._cmd("vset " + " ".join(f"{q:032x}" for q in xmm) + f" {fpcr:x} {fpsr:x}")
 
+    def ymm_hi(self) -> list[int]:
+        """YMM0-15 bits 255:128 (the monitor data page's slots; Sprint 049)."""
+        return [int.from_bytes(self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16],
+                               "little") for i in range(16)]
+
+    def set_ymm_hi(self, values: list[int]) -> None:
+        for i, v in enumerate(values):
+            self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
+
     def mxcsr(self) -> int:
         """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
         stored = struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]

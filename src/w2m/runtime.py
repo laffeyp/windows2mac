@@ -350,18 +350,23 @@ class Runtime:
             words = [fp.to_int(fp.F64, d, 32, ic == "CVTTPD2DQ", env) for d in fp.lanes(v, 64, 2)]
             self._fp_check(env)
             x[dst[1]] = fp.join(words, 32)
-        elif ic == "CMPSD_XMM":                                  # predicate imm on the low doubles; all ones or 0
+        elif ic in ("CMPSD_XMM", "CMPSD_XMM_VEX"):             # predicate on the low doubles; all ones or 0
             assert imm is not None
             env = fp.Env(th.mxcsr)
-            hit = fp.cmp_predicate(fp.F64, x[dst[1]] & _mask(64), self._xread(src, 8), imm, env)
+            pred = imm & (31 if ic.endswith("VEX") else 7)       # legacy: imm8[2:0]; VEX: imm8[4:0] (SDM CMPSD)
+            hit = fp.cmp_predicate(fp.F64, x[dst[1]] & _mask(64), self._xread(src, 8), pred, env)
             self._fp_check(env)
             x[dst[1]] = x[dst[1]] & ~_mask(64) & _mask(128) | (_mask(64) if hit else 0)
         elif ic == "HADDPD":                                     # dst = (dst.lo + dst.hi, src.lo + src.hi)
-            a, c, env = x[dst[1]], self._xread(src, 16), fp.Env(th.mxcsr)
-            lo = fp.arith("add", fp.F64, a & _mask(64), a >> 64, env)
-            hi = fp.arith("add", fp.F64, c & _mask(64), c >> 64, env)
+            a, c = x[dst[1]], self._xread(src, 16)
+            env, flags, sums = fp.Env(th.mxcsr), 0, []
+            for p, q in ((a & _mask(64), a >> 64), (c & _mask(64), c >> 64)):
+                env.flags = 0                                    # each lane's flags, then all of them (as execute)
+                sums.append(fp.arith("add", fp.F64, p, q, env))
+                flags |= env.flags
+            env.flags = flags
             self._fp_check(env)
-            x[dst[1]] = lo | hi << 64
+            x[dst[1]] = sums[0] | sums[1] << 64
         elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"):
             v = self._xread(src, msize if src[0] == "m" else 16)
             out, th.mxcsr = self._fp(lambda: fp.execute(ic, x[dst[1]], v, th.mxcsr))
@@ -423,15 +428,21 @@ class Runtime:
                 low_src = ("x", 16)
             x[d[1]] = x[s1[1]]
         self._sse(base, d, low_src, 0, imm)
-        if d[0] == "x":
+        if base == "PMOVMSKB" and vl:                            # 32 sign bits: the upper half's 16 above
+            self._wr(d[1], d[2], False, self._rd(d[1], d[2], False) | sum(((src_hi >> (8 * i + 7)) & 1) << (16 + i)
+                                                                          for i in range(16)))
+        elif d[0] == "x" and base in ("COMISD", "UCOMISD"):
+            pass                                                  # flags only: d is a source
+        elif d[0] == "x":
             if vl:
                 x[16], x[17] = first_hi, src_hi
                 self._sse(base, ("x", 16), ("x", 17), 0, imm)
                 hi[d[1]] = x[16]
             else:
                 hi[d[1]] = 0
-        elif d[0] == "m" and vl:                                  # a 256-bit store: the high half after the low
-            self.mem.write(self._t[d[1]] + 16, hi[s2[1]].to_bytes(16, "little"))
+        elif d[0] == "m" and vl:                                  # a 256-bit store: all 32 bytes or none
+            low = int.from_bytes(self.mem.read(self._t[d[1]], 16), "little")
+            self.mem.write(self._t[d[1]], low.to_bytes(16, "little") + hi[s2[1]].to_bytes(16, "little"))
         del x[16:]                                                # the scratch registers go
 
     def _fma(self, ic: str, d: Op, s2: Op, s3: Op, vl: int) -> None:
@@ -454,14 +465,23 @@ class Runtime:
         count = 1 if scalar else 128 // f.bits
         a1, a2, a3 = (fp.lanes(v, f.bits, 128 // f.bits) for v in (o1, o2, o3))
         out = list(a1)
+        flags = 0
+
+        def lane(ops: tuple[int, int, int]) -> int:            # each lane's flags, then all of them (as execute)
+            nonlocal flags
+            env.flags = 0
+            r = fp.fma_lane(f, ops, mul, add, neg_p, neg_a, env)
+            flags |= env.flags
+            return r
+
         for i in range(count):
-            out[i] = fp.fma_lane(f, (a1[i], a2[i], a3[i]), mul, add, neg_p, neg_a, env)
+            out[i] = lane((a1[i], a2[i], a3[i]))
         new_hi = 0
         if vl and not scalar:
             h3 = hi[s3[1]] if s3[0] == "x" else int.from_bytes(self.mem.read(self._t[s3[1]] + 16, 16), "little")
             b1, b2, b3 = (fp.lanes(v, f.bits, 128 // f.bits) for v in (hi[d[1]], hi[s2[1]], h3))
-            new_hi = fp.join([fp.fma_lane(f, (b1[i], b2[i], b3[i]), mul, add, neg_p, neg_a, env)
-                              for i in range(count)], f.bits)
+            new_hi = fp.join([lane((b1[i], b2[i], b3[i])) for i in range(count)], f.bits)
+        env.flags = flags
         self._fp_check(env)
         x[d[1]] = fp.join(out, f.bits)
         hi[d[1]] = new_hi

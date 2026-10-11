@@ -161,9 +161,10 @@ def _state(rng: random.Random, sse: bool, ymm: bool = False) -> Case:
     return c
 
 
-def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = None) -> bool:
+def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = None, size: int = 0) -> bool:
     """Point each memory operand into the data window (or at `target_of(size)`). False for forms
-    whose address is not placeable (RIP-relative and absolute)."""
+    whose address is not placeable (RIP-relative and absolute). `size` (format-3 sets, Sprint 049): an
+    operand wider than 24 bytes starts where all of it lies in the window (offsets 0, 8, ... 64 - size)."""
     for op in ins.ops:
         if op[0] != "addr":
             continue
@@ -171,7 +172,8 @@ def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = No
         if base is None:
             return False
         mask = M64 if abits == 64 else 0xFFFF_FFFF
-        target = target_of() if target_of else DATA_VA + DATA_OFF + 8 * rng.randrange(6)
+        slots = (WINDOW - size) // 8 + 1 if size > 24 else 6
+        target = target_of() if target_of else DATA_VA + DATA_OFF + 8 * rng.randrange(slots)
         if index is not None and index != base:
             regs[index] = 0
         if index == base:                                            # [r + r*scale]: solve r*(1+scale)
@@ -459,9 +461,10 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
         raw = c.raw[:d.length]
         sse = d.iclass in SSE or (ymm and (d.iclass.startswith("V") or d.iclass == "FNSTCW"))
         placeable = True
+        wide = (_memory_size(c.raw[:d.length]) or 0) if ymm else 0
         for _ in range(SSE_STATES if sse else STATES):
             s = _state(rng, sse, ymm)
-            if not _place(ins, s.regs, rng):
+            if not _place(ins, s.regs, rng, size=wide):
                 skipped["address not placeable (RIP-relative or absolute)"] += 1
                 placeable = False
                 break

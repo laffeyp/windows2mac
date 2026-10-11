@@ -90,7 +90,7 @@ def cases_for(iclass: str) -> tuple[list[str], list[sd.Case], list[sd.Result]]:
     sets, cases, results = case_sets_of(iclass), [], []
     for case_set in sets:
         built = _built(case_set)
-        ran = sd.read_results(vm_oracle.result_file(REFERENCES[case_set], case_set))
+        ran = sd.read_results(vm_oracle.result_file(REFERENCES[case_set], case_set), sd.case_format(sd.case_file(case_set)))
         keep = [i for i, c in enumerate(built) if iclass_of(c) == iclass]
         cases += [built[i] for i in keep]
         results += [ran[i] for i in keep]

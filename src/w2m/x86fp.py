@@ -423,7 +423,7 @@ def fma(f: Fmt, a: int, b: int, c: int, negate_product: bool, negate_addend: boo
     a, b, c = env.src(f, a), env.src(f, b), env.src(f, c)
     if any(is_nan(f, x) for x in (a, b, c)):
         raise ValueError("fma: NaN operands are resolved by fma_lane")
-    sp = bool(a & f.sign) != bool(b & f.sign) != negate_product
+    sp = bool(a & f.sign) ^ bool(b & f.sign) ^ negate_product      # XOR: != chains in Python
     sc = bool(c & f.sign) != negate_addend
     ia, ib, ic = is_inf(f, a), is_inf(f, b), is_inf(f, c)
     za, zb = is_zero(f, a), is_zero(f, b)

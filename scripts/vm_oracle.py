@@ -74,23 +74,13 @@ def read_fault_results(path: Path) -> dict[int, sd.Result]:
     assert raw[:4] == b"W2MF"
     count = struct.unpack_from("<I", raw, 4)[0]
     out = {}
-    step = 4 + sd.RESULT_SIZE
+    fmt = 3 if len(raw) > 8 and count and (len(raw) - 8) // count == 4 + sd.result_size(3) else 2
+    step = 4 + sd.result_size(fmt)
     for n in range(count):
         p = 8 + n * step
         index = struct.unpack_from("<I", raw, p)[0]
-        tmp = raw[p + 4:p + step]
-        out[index] = _result(tmp)
+        out[index] = sd.parse_result(raw[p + 4:p + step], fmt)
     return out
-
-
-def _result(rec: bytes) -> sd.Result:
-    regs = list(struct.unpack_from("<16Q", rec, 0))
-    rflags, marker, fault, fault_rip, mxcsr = struct.unpack_from("<5Q", rec, 128)
-    q = 168
-    xmm = [int.from_bytes(rec[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
-    q += 256
-    return sd.Result(regs, rflags, marker, fault, rec[q:q + sd.WINDOW], rec[q + sd.WINDOW:q + 2 * sd.WINDOW],
-                     fault_rip, mxcsr, xmm, rec[q + 2 * sd.WINDOW:q + 2 * sd.WINDOW + sd.EDGE])
 
 
 def vm_compiles(code: bytes) -> str | None:
@@ -103,7 +93,7 @@ def vm_compiles(code: bytes) -> str | None:
     return None
 
 
-def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory) -> list[tuple[str, str]]:
+def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory, vm: VM | None = None) -> list[tuple[str, str]]:
     diffs = []
     if r.marker != 2:
         return [("vm fault, cpu completed", f"vm 0x{exc['code']:x} at 0x{exc['rip']:x}")]
@@ -123,6 +113,10 @@ def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory) -> l
     for i in range(16):
         if exc[f"xmm{i}"] != r.xmm[i]:
             diffs.append((f"fault xmm{i}", f"vm {exc[f'xmm{i}']:032x}, cpu {r.xmm[i]:032x}"))
+    if r.ymm_hi is not None and vm is not None:                 # format 3: the slots as the fault left them
+        for i, v in enumerate(vm.ymm_hi()):
+            if v != r.ymm_hi[i]:
+                diffs.append((f"fault ymm{i}.hi", f"vm {v:032x}, cpu {r.ymm_hi[i]:032x}"))
     diffs += windows(mem, r)
     return diffs
 
@@ -150,6 +144,10 @@ def judge_done(c: sd.Case, r: sd.Result, vm: VM, x: list[int], mem: Memory) -> l
     for i in range(16):
         if xmm[i] != r.xmm[i]:
             diffs.append((f"xmm{i}", f"vm {xmm[i]:032x}, cpu {r.xmm[i]:032x}"))
+    if r.ymm_hi is not None:                                    # format 3 (Sprint 049)
+        for i, v in enumerate(vm.ymm_hi()):
+            if v != r.ymm_hi[i]:
+                diffs.append((f"ymm{i}.hi", f"vm {v:032x}, cpu {r.ymm_hi[i]:032x}"))
     diffs += windows(mem, r)
     return diffs
 
@@ -220,6 +218,7 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
         x[24] = 0
         v.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1))
         v.set_mxcsr(c.mxcsr, list(c.xmm))
+        v.set_ymm_hi(list(c.ymm_hi))
 
     def on_dispatch(v: VM, x: list[int]) -> None:
         if state["current"] >= 0:
@@ -231,7 +230,7 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
     def on_exception(v: VM, exc: dict[str, int]) -> bool:
         i = state["current"]
         state["faults"] += 1
-        note(i, judge_fault(cases[i], results[i], exc, v.mem))
+        note(i, judge_fault(cases[i], results[i], exc, v.mem, v))
         state["current"] = -1
         return True
 
@@ -267,7 +266,7 @@ def main(argv: list[str]) -> int:
     ran = (store / "cases.sha256").read_text().strip().split()[0].lower()
     if sha != ran:
         raise SystemExit(f"the cases built here (sha256 {sha}) are not the ones run {a.run} ran ({ran})")
-    results = sd.read_results(result_file(a.run, a.set))
+    results = sd.read_results(result_file(a.run, a.set), sd.case_format(sd.case_file(a.set)))
     assert len(results) == len(cases), "result count differs from case count"
     cpu = (store / "cpu.txt").read_text().strip()
     profile = (store / "profile.txt").read_text().strip()
