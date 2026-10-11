@@ -98,6 +98,20 @@ void start(void) {
     search("exact_other_case", L"w2m_find\\B.TXT", L"w2m_find");
     search("folder_itself", L"w2m_find", L".");
     search("missing_folder", L"w2m_missing\\*", L"w2m_missing");
+    /* Sprint 056 (review of 054): a long name under a deeper folder, found by a short pattern */
+    static WCHAR long_name[260];
+    int k = 0;
+    for (const WCHAR *p = L"w2m_find\\Deep\\"; *p; p++) long_name[k++] = *p;
+    int base = k;
+    for (int i = 0; i < 200; i++) long_name[k++] = (WCHAR)(L'a' + i % 26);
+    long_name[k] = 0;
+    CreateDirectoryW(L"w2m_find\\Deep", NULL);
+    make_file(long_name, 3);
+    search("long_name", L"w2m_find\\Deep\\a*", L"w2m_find\\Deep");
+    search("long_name_exact", long_name, L"w2m_find\\Deep");
+    (void)base;
+    DeleteFileW(long_name);
+    RemoveDirectoryW(L"w2m_find\\Deep");
     search("missing_pattern", L"w2m_find\\nothing*", L"w2m_find");
     search("missing_file", L"w2m_find\\nothing.txt", L"w2m_find");
     SetLastError(SENTINEL);
