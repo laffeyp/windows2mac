@@ -231,6 +231,10 @@ DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArg
                                  "SHGetKnownFolderPath": ("shell32_SHGetKnownFolderPath", True)},   # Sprint 048
                 "BCRYPT.DLL": {"BCryptGenRandom": ("bcrypt_BCryptGenRandom", True)},   # Sprint 047
                 "OLE32.DLL": {"CoTaskMemFree": ("ole32_CoTaskMemFree", False)},       # Sprint 048
+                "NTDLL.DLL": {"RtlAddGrowableFunctionTable": ("ntdll_RtlAddGrowableFunctionTable", True),   # Sprint 049
+                              "RtlGrowFunctionTable": ("ntdll_RtlGrowFunctionTable", False),
+                              "RtlDeleteGrowableFunctionTable": ("ntdll_RtlDeleteGrowableFunctionTable", False),
+                              "RtlLookupFunctionEntry": ("ntdll_RtlLookupFunctionEntry", True)},
                 "ADVAPI32.DLL": {"OpenProcessToken": ("advapi32_OpenProcessToken", True),
                                  "GetTokenInformation": ("advapi32_GetTokenInformation", True),
                                  "GetSidSubAuthority": ("advapi32_GetSidSubAuthority", True)}}

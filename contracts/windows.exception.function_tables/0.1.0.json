@@ -1,0 +1,144 @@
+{
+ "contract_id": "windows.exception.function_tables",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "ntdll's growable function tables as mono's JIT registers its code: RtlAddGrowableFunctionTable answers 0 and a table, also for zero entries; RtlLookupFunctionEntry answers the entry whose [RangeBase + BeginAddress, RangeBase + EndAddress) holds the address among the first EntryCount, with RangeBase as the image base, else NULL with the image base untouched; RtlGrowFunctionTable raises the count; RtlDeleteGrowableFunctionTable removes the table; no call touches the last error.",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/function_tables/function_tables.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "procs",
+    "all": 1
+   },
+   {
+    "s": "add",
+    "status": 0,
+    "table_set": 1,
+    "err": 57005
+   },
+   {
+    "s": "find.first",
+    "entry": 0,
+    "in_table": 1,
+    "image": "range",
+    "err": 57005
+   },
+   {
+    "s": "find.first_end",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   },
+   {
+    "s": "find.second_before_grow",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   },
+   {
+    "s": "find.gap",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   },
+   {
+    "s": "find.past_range",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   },
+   {
+    "s": "grow",
+    "err": 57005
+   },
+   {
+    "s": "find.second",
+    "entry": 1,
+    "in_table": 1,
+    "image": "range",
+    "err": 57005
+   },
+   {
+    "s": "find.third",
+    "entry": 2,
+    "in_table": 1,
+    "image": "range",
+    "err": 57005
+   },
+   {
+    "s": "find.fourth_beyond_count",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   },
+   {
+    "s": "delete",
+    "err": 57005
+   },
+   {
+    "s": "find.after_delete",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   },
+   {
+    "s": "add.empty",
+    "status": 0,
+    "table_set": 1,
+    "err": 57005
+   },
+   {
+    "s": "find.empty",
+    "entry": null,
+    "image": "untouched",
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38114067866: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:d228185b9db008604eab043294136e6eb76bded19fa5e4ce724156145356fc5f; run 38114069629: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:0b7bc93d8c5d8fc730ccb613a581c8dbdf86565d666563f32d1b54e9ac67ae70",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "function_tables-1791695574-0-1",
+    "function_tables-1791695574-0-2",
+    "function_tables-1791695574-1-1",
+    "function_tables-1791695574-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-rtladdgrowablefunctiontable",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtladdgrowablefunctiontable (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "The entries in this array must remain sorted in ascending order of the BeginAddress members. ... This function returns zero on success. ... This table is used for dispatching exceptions through runtime-generated code and for collecting stack backtraces."
+  }
+ ],
+ "open_questions": [
+  "RtlLookupFunctionEntry over an image's own .pdata is not served: an address in a loaded image stops the run. Exception dispatch will need it."
+ ],
+ "sections": {
+  "probe": "probes/function_tables (Sprint 044)",
+  "implementation": "tools/guest_runtime/function_tables.c",
+  "rows": "scripts/family_run.py function_tables",
+  "excluded": "none"
+ }
+}

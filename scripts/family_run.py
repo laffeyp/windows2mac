@@ -1398,6 +1398,36 @@ FAMILIES: dict[str, Family] = {
                                                   ("file.short", "file.one")),
             "missing_handle_no_error": Plant("    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_GetModuleHandleA",
                                              "    return w2m_logged(W2M_API_GetModuleHandleA", ("handle.missing",))}),
+    "function_tables": Family(
+        name="function_tables",
+        contract_id="windows.exception.function_tables",
+        version="0.1.0",
+        summary=("ntdll's growable function tables as mono's JIT registers its code: RtlAddGrowableFunctionTable answers "
+                 "0 and a table, also for zero entries; RtlLookupFunctionEntry answers the entry whose [RangeBase + "
+                 "BeginAddress, RangeBase + EndAddress) holds the address among the first EntryCount, with RangeBase as "
+                 "the image base, else NULL with the image base untouched; RtlGrowFunctionTable raises the count; "
+                 "RtlDeleteGrowableFunctionTable removes the table; no call touches the last error."),
+        probe="function_tables", guest_file="function_tables.c",
+        runs={
+              "38114067866": Run("windows-2025", "d228185b9db008604eab043294136e6eb76bded19fa5e4ce724156145356fc5f", "function_tables-1791695574-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38114069629": Run("windows-2022", "0b7bc93d8c5d8fc730ccb613a581c8dbdf86565d666563f32d1b54e9ac67ae70", "function_tables-1791695574-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-rtladdgrowablefunctiontable", "api/winnt/nf-winnt-rtladdgrowablefunctiontable", "2018-12-05",
+                       "The entries in this array must remain sorted in ascending order of the BeginAddress members. ... "
+                       "This function returns zero on success. ... This table is used for dispatching exceptions "
+                       "through runtime-generated code and for collecting stack backtraces."),),
+        open_questions=(
+            "RtlLookupFunctionEntry over an image's own .pdata is not served: an address in a loaded image stops the "
+            "run. Exception dispatch will need it.",),
+        plants={
+            "end_inclusive": Plant("            else if (pc >= tb->base + f[mid].end) lo = mid + 1;",
+                                   "            else if (pc > tb->base + f[mid].end) lo = mid + 1;", ("find.first_end",)),
+            "grow_ignored": Plant("    tb->count = (u32)count;\n", "", ("find.second", "find.third")),
+            "miss_writes_image": Plant("        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
+                                       "        *(u64 *)image = tb->base;\n        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
+                                       ("find.first_end", "find.second_before_grow", "find.gap",
+                                        "find.fourth_beyond_count", "find.empty"))}),
 }
 
 

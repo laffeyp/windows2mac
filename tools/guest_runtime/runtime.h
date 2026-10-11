@@ -314,6 +314,13 @@ struct w2m_exception_area {
 #define W2M_API_GetSidSubAuthority 145
 #define W2M_API_GetModuleFileNameA 146   /* Sprint 049 */
 #define W2M_API_GetModuleHandleA 147
+#define W2M_API_RtlAddGrowableFunctionTable 148   /* ntdll (Sprint 049) */
+#define W2M_API_RtlGrowFunctionTable 149
+#define W2M_API_RtlDeleteGrowableFunctionTable 150
+#define W2M_API_RtlLookupFunctionEntry 151
+
+/* Marks a service Windows declares void: the bridge leaves the guest's RAX as it was (vm_backend sets_rax). */
+#define W2M_VOID
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);

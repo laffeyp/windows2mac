@@ -327,6 +327,26 @@
    "38090865352": "conforms"
   }
  },
+ "function_tables": {
+  "candidate_sha256": "sha256:8fa1d58a4578ef21987b92ff5f07f3c1d5ff1af3d3282f55f0d85c7523a26848",
+  "divergence": {
+   "38114067866": null,
+   "38114069629": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "function_tables",
+  "record": "store/runs/family-function_tables-1791695676819822000",
+  "verdicts": {
+   "38114067866": "conforms",
+   "38114069629": "conforms"
+  }
+ },
  "generate_random": {
   "candidate_sha256": "sha256:3b16468cd3f970010fdcda440638e94be0b881c4be126477a3b8bfa4fcc628f6",
   "divergence": {
