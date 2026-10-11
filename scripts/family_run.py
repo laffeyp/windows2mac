@@ -1131,7 +1131,7 @@ FAMILIES: dict[str, Family] = {
                  "past a 16-byte boundary (argv + 1, a HeapAlloc block + 8) answers itself with ERROR_INVALID_HANDLE and "
                  "the block stays intact; the last error is left on success. A pointer 16 bytes in ends the process "
                  "(STATUS_HEAP_CORRUPTION), recorded by the probe's parent and excluded."),
-        probe="local_free", guest_file="command_line_args.c", arguments="safe",
+        probe="local_free", guest_file="local_memory.c", arguments="safe",
         runs={
               "38092775612": Run("windows-2025", "ac9257dab2fa346fe224a45462b87a9d2ad1ad687f37f4b065a9fb336906f44c", "local_free-1791672496-0", "AMD EPYC 9V45 96-Core Processor"),
               "38092777429": Run("windows-2022", "ac655d2145982f7850a7e9c30d8afab979bcc651e15faf68f3bb8d9c99be395d", "local_free-1791672496-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1308,6 +1308,38 @@ FAMILIES: dict[str, Family] = {
                                       ("order.before", "order.after")),
             "new_entries_last": Plant("        if (c > 0) break;\n", "",
                                       ("order.before", "order.after"))}),
+    "integrity_level": Family(
+        name="integrity_level",
+        contract_id="windows.token.integrity_level",
+        version="0.1.0",
+        summary=("UnityPlayer's low-integrity test: OpenProcessToken(current, TOKEN_QUERY) answers a handle, a "
+                 "multiple of 4; GetTokenInformation(TokenIntegrityLevel) answers 122 and 28 bytes with no buffer or "
+                 "one byte short, then a TOKEN_MANDATORY_LABEL (attributes 0x60, the SID at offset 16, revision 1, "
+                 "one sub-authority, authority 16) whose RID is not low; GetSidSubAuthority answers the field's "
+                 "address and last error 0; CloseHandle closes the token. LocalAlloc (LMEM_FIXED, LPTR) gives a "
+                 "16-aligned process-heap block of the size asked, LPTR zeroed; LocalFree answers NULL."),
+        probe="integrity_level", guest_file="token.c",
+        host_files=("tools/guest_runtime/local_memory.c", "tools/guest_runtime/sync_objects.c"),
+        derive=lambda printed: [({k: v for k, v in r.items() if k != "rid"} | {"low": r["rid"] == 0x1000})
+                                if "rid" in r else r for r in printed],
+        runs={
+              "38099150504": Run("windows-2025", "6d84a44be6a006613661b693b1677cb0b096a17ceca4c5773975f329822f7456", "integrity_level-1791679146-0", "AMD EPYC 7763 64-Core Processor"),
+              "38099152338": Run("windows-2022", "06e41e1e27336675a83949d6e2956998ed18b60a11742e5c006577a58091aac5", "integrity_level-1791679146-1", "AMD EPYC 9V45 96-Core Processor"),
+        },
+        documented=(
+            documented("ms-mandatory-integrity-control", "secauthz/mandatory-integrity-control", "2025-07-08",
+                       "Windows defines four integrity levels: low, medium, high, and system. Standard users receive "
+                       "medium, elevated users receive high."),),
+        open_questions=(
+            "A runner's process is elevated and its RID is 0x3000 (high) on all four executions; w2m answers 0x2000 "
+            "(medium), a standard user's level. The derive keeps whether the RID is low (0x1000), UnityPlayer's "
+            "question at 0x180525de0.",),
+        plants={
+            "rid_low": Plant("#define MEDIUM_RID 0x2000u", "#define MEDIUM_RID 0x1000u", ("info",)),
+            "sub_authority_keeps_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_GetSidSubAuthority",
+                                               "    return w2m_logged(W2M_API_GetSidSubAuthority", ("sub_authority",)),
+            "short_buffer_accepted": Plant("if ((u32)length < LABEL_SIZE || !info)", "if (!info)",
+                                           ("short_buffer",))}),
 }
 
 

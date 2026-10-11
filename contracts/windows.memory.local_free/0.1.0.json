@@ -79,7 +79,7 @@
  ],
  "sections": {
   "probe": "probes/local_free (Sprint 044)",
-  "implementation": "tools/guest_runtime/command_line_args.c",
+  "implementation": "tools/guest_runtime/local_memory.c",
   "rows": "scripts/family_run.py local_free",
   "excluded": "exit.argv_plus_2: the parent's row: the 16-byte case ends its child with STATUS_HEAP_CORRUPTION; exit.safe: the parent's row: w2m runs the probe's safe child, which prints no exit codes"
  }

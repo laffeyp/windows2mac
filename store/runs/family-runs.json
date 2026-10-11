@@ -48,7 +48,7 @@
   }
  },
  "command_line_args": {
-  "candidate_sha256": "sha256:32e80b6a18c545bfb8cabfe886e67e8caf60480bd146ef459cd1f615eedc28ba",
+  "candidate_sha256": "sha256:63ba250214437b5199875b0a876e6c64aa69bbefb481203d16690429fc443095",
   "divergence": {
    "38084317468": null,
    "38084319695": null
@@ -61,7 +61,7 @@
    "SESSION_INIT": 1
   },
   "family": "command_line_args",
-  "record": "store/runs/family-command_line_args-1791679039186931000",
+  "record": "store/runs/family-command_line_args-1791679292621899000",
   "verdicts": {
    "38084317468": "conforms",
    "38084319695": "conforms"
@@ -359,6 +359,26 @@
    "38041160693": "conforms"
   }
  },
+ "integrity_level": {
+  "candidate_sha256": "sha256:417faf797d64b14225cfcea88e38531d4faa784ebd7a003eaed7b7c8059c2265",
+  "divergence": {
+   "38099150504": null,
+   "38099152338": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "integrity_level",
+  "record": "store/runs/family-integrity_level-1791679281260859000",
+  "verdicts": {
+   "38099150504": "conforms",
+   "38099152338": "conforms"
+  }
+ },
  "known_folders": {
   "candidate_sha256": "sha256:b22c0c4a9afe82196bbb4e8dbdf040f1c5651268e9e5fa8965ae3ef074747c91",
   "divergence": {
@@ -428,7 +448,7 @@
   }
  },
  "local_free": {
-  "candidate_sha256": "sha256:32e80b6a18c545bfb8cabfe886e67e8caf60480bd146ef459cd1f615eedc28ba",
+  "candidate_sha256": "sha256:ced6bdd32eeef652fc21643ccdb3405486d18cd392b386342738fb17e2b5016f",
   "divergence": {
    "38092775612": null,
    "38092777429": null
@@ -441,7 +461,7 @@
    "SESSION_INIT": 1
   },
   "family": "local_free",
-  "record": "store/runs/family-local_free-1791679041315486000",
+  "record": "store/runs/family-local_free-1791679290821762000",
   "verdicts": {
    "38092775612": "conforms",
    "38092777429": "conforms"

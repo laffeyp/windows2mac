@@ -308,6 +308,10 @@ struct w2m_exception_area {
 #define W2M_API_GetEnvironmentVariableW 139
 #define W2M_API_SetEnvironmentVariableW 140
 #define W2M_API_GetTempPathW 141
+#define W2M_API_LocalAlloc 142
+#define W2M_API_OpenProcessToken 143   /* ADVAPI32 (Sprint 048) */
+#define W2M_API_GetTokenInformation 144
+#define W2M_API_GetSidSubAuthority 145
 
 /* Shared by runtime.c and file.c. */
 u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
