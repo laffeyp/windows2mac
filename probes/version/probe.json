@@ -1,0 +1,5 @@
+{
+ "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:start -Wl,/subsystem:console -Wl,/manifest:embed -Wl,/manifestinput:games/hail-to-the-rainbow/manifest.xml",
+ "libs": "-lkernel32",
+ "mode": "stdout"
+}

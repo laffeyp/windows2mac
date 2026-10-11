@@ -39,7 +39,10 @@ jobs:
         shell: pwsh
         run: |
           clang --version
-          clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c "-Wl,/subsystem:windows"
+          # the game's own manifest (games/<game>/manifest.xml, its RT_MANIFEST; Sprint 054): Windows answers the
+          # version, DPI and common-controls questions by the manifest of the exe the process runs
+          $m = @(); if (Test-Path "games/${{ inputs.game }}/manifest.xml") { $m = @("-Wl,/manifest:embed", "-Wl,/manifestinput:games/${{ inputs.game }}/manifest.xml") }
+          clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c "-Wl,/subsystem:windows" @m
       - name: disk
         shell: pwsh
         run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free

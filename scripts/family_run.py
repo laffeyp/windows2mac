@@ -753,24 +753,15 @@ FAMILIES: dict[str, Family] = {
     "virtual_memory": Family(
         name="virtual_memory",
         contract_id="windows.memory.virtual",
-        version="0.1.0",
+        version="0.2.0",
         summary=("VirtualAlloc, VirtualFree, VirtualProtect and VirtualQuery on one thread: 64 KB-aligned reservations "
                  "above 4 GB, zeroed commits, queries reporting the run of equal pages, the error codes (87, 50, 487), "
+                 "MEM_COMMIT alone at NULL reserving and committing (UnityPlayer's form, Sprint 054), "
                  "and an image's pages (headers read-only, code execute-read, data copy-on-write until written)."),
         probe="virtual_memory", guest_file="virtual_memory.c",
         runs={
-              "38050561886": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633783-0", "AMD EPYC 7763 64-Core Processor"),
-              "38050563770": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633783-1", "AMD EPYC 7763 64-Core Processor"),
-              "38050565681": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633783-2", "AMD EPYC 7763 64-Core Processor"),
-              "38050567245": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633783-3", "AMD EPYC 9V74 80-Core Processor"),
-              "38050618749": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633842-0", "AMD EPYC 7763 64-Core Processor"),
-              "38050620683": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633842-1", "AMD EPYC 7763 64-Core Processor"),
-              "38050622465": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633842-2", "AMD EPYC 7763 64-Core Processor"),
-              "38050624259": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633842-3", "AMD EPYC 7763 64-Core Processor"),
-              "38050676216": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633900-0", "AMD EPYC 7763 64-Core Processor"),
-              "38050678382": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633900-1", "AMD EPYC 7763 64-Core Processor"),
-              "38050680580": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633900-2", "AMD EPYC 7763 64-Core Processor"),
-              "38050682385": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633900-3", "AMD EPYC 7763 64-Core Processor"),
+              "38172734444": Run("windows-2025", "af77fd8015671e678be7df19b74160d4cc93ce8691c64127412da3572cf73955", "virtual_memory-1791750828-0", "AMD EPYC 7763 64-Core Processor"),
+              "38172736319": Run("windows-2022", "8385bc74e8db79d6ef5c62d4ebd0dc161e7985f85f4d763dc73dd42bed2a137d", "virtual_memory-1791750828-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(
             documented("ms-virtualquery", "api/memoryapi/nf-memoryapi-virtualquery", "2024-02-22",
@@ -789,7 +780,9 @@ FAMILIES: dict[str, Family] = {
         derive=virtual_memory_rows, host_files=("src/w2m/virtual_memory.py", "src/w2m/vm_backend.py"),
         plants={"commit_null_refused": Plant("        if kind & MEM_RESERVE or not address:     # MEM_COMMIT alone at NULL reserves too (row alloc.commit_null)",
                                              "        if kind & MEM_RESERVE:",
-                                             ("alloc.commit_null",), host="w2m.virtual_memory"),
+                                             ("alloc.commit_null", "query.commit_null", "protect.commit_null_middle",
+                                              "query.commit_null_middle", "query.commit_null_last", "free.commit_null",
+                                              "image.section._data", "image.rdata_after"), host="w2m.virtual_memory"),
                 "bad_protect_parameter": Plant("            return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)",
                                                 "            return 0, ERROR_INVALID_PARAMETER",
                                                 ("alloc.bad_protect",), host="w2m.virtual_memory"),

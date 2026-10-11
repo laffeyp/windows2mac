@@ -1,0 +1,406 @@
+{
+ "contract_id": "windows.memory.virtual",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "VirtualAlloc, VirtualFree, VirtualProtect and VirtualQuery on one thread: 64 KB-aligned reservations above 4 GB, zeroed commits, queries reporting the run of equal pages, the error codes (87, 50, 487), MEM_COMMIT alone at NULL reserving and committing (UnityPlayer's form, Sprint 054), and an image's pages (headers read-only, code execute-read, data copy-on-write until written).",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/virtual_memory/virtual_memory.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "reserve",
+    "non_null": true,
+    "err": 57005,
+    "aligned_64k": true,
+    "above_4gb": true,
+    "is_expected": false
+   },
+   {
+    "s": "query.reserved",
+    "ret": 48,
+    "err": 57005,
+    "state": 8192,
+    "protect": 0,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 536866816,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "commit_inside",
+    "non_null": true,
+    "err": 57005,
+    "aligned_64k": true,
+    "above_4gb": true,
+    "is_expected": true
+   },
+   {
+    "s": "commit_inside.zeroed",
+    "value": true
+   },
+   {
+    "s": "query.committed",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 4,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 61440,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "query.after_committed",
+    "ret": 48,
+    "err": 57005,
+    "state": 8192,
+    "protect": 0,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 536801280,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "commit_unaligned_inside",
+    "non_null": true,
+    "err": 57005,
+    "aligned_64k": true,
+    "above_4gb": true,
+    "is_expected": true
+   },
+   {
+    "s": "query.unaligned_commit",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 4,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "protect.readonly",
+    "ret": 1,
+    "err": 57005,
+    "old": 4
+   },
+   {
+    "s": "query.readonly",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 2,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "protect.back",
+    "ret": 1,
+    "err": 57005,
+    "old": 2
+   },
+   {
+    "s": "protect.two_protections",
+    "ret": 1,
+    "err": 57005,
+    "old": 4
+   },
+   {
+    "s": "query.after_two",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 32,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 8192,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "protect.reserved_page",
+    "ret": 0,
+    "err": 487,
+    "old": 1
+   },
+   {
+    "s": "alloc.size_zero",
+    "non_null": false,
+    "err": 87
+   },
+   {
+    "s": "alloc.reserve_taken",
+    "non_null": false,
+    "err": 487
+   },
+   {
+    "s": "alloc.bad_protect",
+    "non_null": false,
+    "err": 50
+   },
+   {
+    "s": "alloc.little_block",
+    "non_null": true,
+    "err": 57005,
+    "aligned_64k": true,
+    "above_4gb": true,
+    "is_expected": false
+   },
+   {
+    "s": "query.little_block",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 4,
+    "allocation_protect": 4,
+    "type": 131072,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "alloc.commit_null",
+    "non_null": true,
+    "err": 57005,
+    "aligned_64k": true,
+    "above_4gb": true,
+    "is_expected": false
+   },
+   {
+    "s": "query.commit_null",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 1,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 12288,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "protect.commit_null_middle",
+    "ret": 1,
+    "err": 57005,
+    "old": 1
+   },
+   {
+    "s": "query.commit_null_middle",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 4,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "query.commit_null_last",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 1,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "free.commit_null",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "free.decommit",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "query.decommitted",
+    "ret": 48,
+    "err": 57005,
+    "state": 8192,
+    "protect": 0,
+    "allocation_protect": 1,
+    "type": 131072,
+    "region_size": 131072,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "free.release_with_size",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "free.release_inside",
+    "ret": 0,
+    "err": 487
+   },
+   {
+    "s": "free.release",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "query.released",
+    "ret": 48,
+    "err": 57005,
+    "state": 65536,
+    "protect": 1,
+    "allocation_protect": 0,
+    "type": 0,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true,
+    "region_covers_reservation": true
+   },
+   {
+    "s": "free.release_again",
+    "ret": 0,
+    "err": 487
+   },
+   {
+    "s": "free.little_block",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "image.headers",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 2,
+    "allocation_protect": 128,
+    "type": 16777216,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "image.section._text",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 32,
+    "allocation_protect": 128,
+    "type": 16777216,
+    "region_size": 8192,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "image.section._rdata",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 2,
+    "allocation_protect": 128,
+    "type": 16777216,
+    "region_size": 4096,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "image.section._data",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 4,
+    "allocation_protect": 128,
+    "type": 16777216,
+    "region_size": 8192,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "image.protect_rdata_rw",
+    "ret": 1,
+    "err": 57005,
+    "old": 2
+   },
+   {
+    "s": "image.rdata_after",
+    "ret": 48,
+    "err": 57005,
+    "state": 4096,
+    "protect": 4,
+    "allocation_protect": 128,
+    "type": 16777216,
+    "region_size": 12288,
+    "base_is_page_of_address": true,
+    "allocation_base_is_reservation": true
+   },
+   {
+    "s": "image.protect_rdata_back",
+    "ret": 1,
+    "err": 57005,
+    "old": 4
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38172734444: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:af77fd8015671e678be7df19b74160d4cc93ce8691c64127412da3572cf73955; run 38172736319: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:8385bc74e8db79d6ef5c62d4ebd0dc161e7985f85f4d763dc73dd42bed2a137d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "virtual_memory-1791750828-0-1",
+    "virtual_memory-1791750828-0-2",
+    "virtual_memory-1791750828-1-1",
+    "virtual_memory-1791750828-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-virtualquery",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualquery (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "The function determines the attributes of the first page in the region and then scans subsequent pages until it scans the entire range of pages or until it encounters a page with a nonmatching set of attributes."
+  },
+  {
+   "evidence_id": "ms-virtualalloc",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc (page updated 2024-02-05; retrieved 2026-10-10)",
+   "quote": "Attempting to commit a specific address range by specifying MEM_COMMIT without MEM_RESERVE and a non-NULL lpAddress fails unless the entire range has already been reserved."
+  }
+ ],
+ "open_questions": [
+  "Protections are recorded, not enforced: a store to a read-only page succeeds in w2m.",
+  "A released region's size runs to the next allocation and differs between executions; the row keeps that it is at least the reservation.",
+  "A writable image page counts as written when its bytes differ from load; a write of the same bytes is missed."
+ ],
+ "sections": {
+  "probe": "probes/virtual_memory (Sprint 044)",
+  "implementation": "tools/guest_runtime/virtual_memory.c",
+  "rows": "scripts/family_run.py virtual_memory",
+  "excluded": "none"
+ }
+}
