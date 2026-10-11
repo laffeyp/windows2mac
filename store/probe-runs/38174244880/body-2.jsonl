@@ -1,0 +1,36 @@
+{"s":"screen.work_area","rect_left":0,"rect_top":0,"rect_right":1024,"rect_bottom":720}
+{"s":"icon.own_103","non_null":true,"err":0}
+{"s":"icon.own_999","non_null":false,"err":1813}
+{"s":"icon.system_application","handle":65579,"err":57005}
+{"s":"cursor.arrow","handle":65539,"err":57005}
+{"s":"cursor.arrow_again","same":true}
+{"s":"class.register_ex","atom_in_range":true,"err":57005}
+{"s":"class.register_ex_again","atom":0,"err":1410}
+{"s":"class.register","atom_in_range":true,"after_first":true,"err":57005}
+{"s":"create.unknown_class","null":true,"err":1407}
+{"s":"msg.batch.0","msg":36,"same_window":true,"wparam":0,"max_size_in_x":1040,"max_size_in_y":784,"max_position_in_x":-8,"max_position_in_y":-8,"min_track_in_x":136,"min_track_in_y":39,"max_track_in_x":1044,"max_track_in_y":788,"max_size_x":1040,"max_size_y":784,"max_position_x":-8,"max_position_y":-8,"min_track_x":136,"min_track_y":39,"max_track_x":1044,"max_track_y":788,"result":0}
+{"s":"msg.batch.1","msg":129,"same_window":true,"wparam":0,"params_null":true,"instance_is_self":true,"menu_null":true,"parent_null":true,"cx":-2147483648,"cy":-2147483648,"x":104,"y":104,"style":0,"ex_style":0,"name":"Hail to the Rainbow","class_is_atom":true,"result":1}
+{"s":"msg.batch.2","msg":131,"same_window":true,"wparam":0,"in_left":104,"in_top":104,"in_right":872,"in_bottom":623,"out_left":112,"out_top":135,"out_right":864,"out_bottom":615,"result":0}
+{"s":"msg.batch.3","msg":1,"same_window":true,"wparam":0,"params_null":true,"instance_is_self":true,"menu_null":true,"parent_null":true,"cx":-2147483648,"cy":-2147483648,"x":104,"y":104,"style":0,"ex_style":0,"name":"Hail to the Rainbow","class_is_atom":true,"set_long_ptr":0,"set_long_ptr_err":57005,"result":0}
+{"s":"create.batch","null":false,"first_message_window":true,"messages":4,"err":57005}
+{"s":"batch.long_ptr_0","stored":true,"err":57005}
+{"s":"batch.long_ptr_8","ret":0,"err":1413}
+{"s":"batch.user_data","before":0,"err":57005,"after":77}
+{"s":"batch.styles","style":79691776,"ex_style":256,"instance_is_self":true,"procedure_is_ours":true}
+{"s":"batch.client_rect","ret":1,"err":57005,"rect_left":0,"rect_top":0,"rect_right":752,"rect_bottom":480}
+{"s":"batch.window_rect","ret":1,"rect_left":104,"rect_top":104,"rect_right":872,"rect_bottom":623}
+{"s":"batch.visible","value":false}
+{"s":"batch.monitor","primary":true}
+{"s":"msg.play.0","msg":36,"same_window":true,"wparam":0,"max_size_in_x":1040,"max_size_in_y":784,"max_position_in_x":-8,"max_position_in_y":-8,"min_track_in_x":136,"min_track_in_y":39,"max_track_in_x":1044,"max_track_in_y":788,"max_size_x":1040,"max_size_y":784,"max_position_x":-8,"max_position_y":-8,"min_track_x":136,"min_track_y":39,"max_track_x":1044,"max_track_y":788,"result":0}
+{"s":"msg.play.1","msg":129,"same_window":true,"wparam":0,"params_null":true,"instance_is_self":true,"menu_null":true,"parent_null":true,"cx":320,"cy":240,"x":130,"y":130,"style":13238272,"ex_style":256,"name":"Hail to the Rainbow","class_is_atom":false,"class":"W2mProbeMain","result":1}
+{"s":"msg.play.2","msg":131,"same_window":true,"wparam":0,"in_left":130,"in_top":130,"in_right":450,"in_bottom":370,"out_left":138,"out_top":161,"out_right":442,"out_bottom":362,"result":0}
+{"s":"msg.play.3","msg":1,"same_window":true,"wparam":0,"params_null":true,"instance_is_self":true,"menu_null":true,"parent_null":true,"cx":320,"cy":240,"x":130,"y":130,"style":13238272,"ex_style":256,"name":"Hail to the Rainbow","class_is_atom":false,"class":"W2mProbeMain","set_long_ptr":0,"set_long_ptr_err":57005,"result":0}
+{"s":"create.play","null":false,"first_message_window":true,"differs_from_batch":true,"messages":4,"err":57005}
+{"s":"play.long_ptr_0","stored":true,"err":57005}
+{"s":"play.long_ptr_8","ret":0,"err":1413}
+{"s":"play.user_data","before":0,"err":57005,"after":77}
+{"s":"play.styles","style":80347136,"ex_style":256,"instance_is_self":true,"procedure_is_ours":true}
+{"s":"play.client_rect","ret":1,"err":57005,"rect_left":0,"rect_top":0,"rect_right":304,"rect_bottom":201}
+{"s":"play.window_rect","ret":1,"rect_left":130,"rect_top":130,"rect_right":450,"rect_bottom":370}
+{"s":"play.visible","value":false}
+{"s":"play.monitor","primary":true}

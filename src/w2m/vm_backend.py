@@ -44,7 +44,7 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
-from w2m.file_bridge import (FILE_DUP, FILE_FSTAT, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
+from w2m.file_bridge import (FILE_DUP, FILE_FSTAT, FILE_LIST, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
                              FileBridge)
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
 from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
@@ -53,7 +53,7 @@ from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
 from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
-from w2m import exception_stubs
+from w2m import guest_stubs
 from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
                             detach_stub, write_context)
 
@@ -1017,7 +1017,7 @@ class VM:
         self.modules = self._modules(image_name)
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
-        self._exception_page = 0                         # exception_stubs.py's page, once written (Sprint 053)
+        self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
         self._max_steps = 0
         self.current_tid = tid
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
@@ -1113,14 +1113,22 @@ class VM:
         if len(spellings) > SYSTEM_IMAGES:
             raise CompileError(f"{len(spellings)} system DLLs imported; the process area holds {SYSTEM_IMAGES}")
         system: dict[str, tuple[int, str]] = {}
-        for i, (c, spelling) in enumerate(sorted(spellings.items())):
-            off = SYSTEM_IMAGES_OFF + 0x1000 * i
+
+        def system_image(c: str, spelling: str) -> int:
+            """A synthetic system image, one page with DOS and PE headers, in the next free slot."""
+            if len(system) >= SYSTEM_IMAGES:
+                raise Unimplemented(f"{c}: the process area holds {SYSTEM_IMAGES} system DLLs")
+            off = SYSTEM_IMAGES_OFF + 0x1000 * len(system)
             page = self._process(off)
             self.mm[page:page + 2] = b"MZ"
             struct.pack_into("<I", self.mm, page + 0x3C, 0x80)
             self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
             struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)
             system[c] = (PROCESS_VA + off, spelling)
+            return PROCESS_VA + off
+
+        for c, spelling in sorted(spellings.items()):
+            system_image(c, spelling)
         dlls = {d.name.lower(): (d.base, d.pe.size_of_image, {n: d.base + rva for n, rva in d.pe.exports})
                 for d in self.ld.images[1:]}
         modules = Modules(image_base=base, image_size=img.size_of_image if img is not None else 0,
@@ -1129,7 +1137,7 @@ class VM:
                           imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
                           in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
                           dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system,
-                          load_dll=self._load_dll)
+                          load_dll=self._load_dll, load_system=system_image)
         if self.ld.images:                       # a program from loader.load (tests build bare ones)
             self._write_loader_data(modules)
         return modules
@@ -1231,12 +1239,12 @@ class VM:
         self.mem.write(va, code)
         return va
 
-    def _exception_stubs(self) -> int:
-        """The x86 stubs exception dispatch calls handlers and resumes contexts through (exception_stubs.py), on a
-        page of the arena written at the first exception, so a process that raises none keeps its address space."""
-        if not self._exception_page:
-            self._exception_page = self._code_page(exception_stubs.page(self._import_thunk("KERNEL32.dll!W2mExceptionResume")))
-        return self._exception_page
+    def _guest_stubs(self) -> int:
+        """The x86 stubs services call guest code and resume contexts through (guest_stubs.py), on a
+        page of the arena written at the first use, so a process that needs none keeps its address space."""
+        if not self._stub_page:
+            self._stub_page = self._code_page(guest_stubs.page(self._import_thunk("KERNEL32.dll!W2mGuestReturn")))
+        return self._stub_page
 
     def _com_vtables(self) -> None:
         """Each COM class's vtable (com.c, in the runtime image) filled with its methods' thunks: the services
@@ -1484,7 +1492,7 @@ class VM:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
-        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP):
+        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP, FILE_LIST):
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
             result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
@@ -1508,7 +1516,7 @@ class VM:
             result = self._thread_request(a0, a1, a2, a3) & M64
         elif op == HOST_EXCEPTION:
             if a0 == EXCEPTION_STUBS:
-                result = self._exception_stubs()
+                result = self._guest_stubs()
             elif a0 == EXCEPTION_CAPTURE_XMM:
                 xmm, _, _ = self.vectors()
                 self.mem.write(a1, b"".join(q.to_bytes(16, "little") for q in xmm))

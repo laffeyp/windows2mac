@@ -1,0 +1,377 @@
+{
+ "contract_id": "windows.windows.windows",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW).",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/windows/windows.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "screen.work_area",
+    "left": 0,
+    "top": 0,
+    "right": 1024,
+    "bottom_above_768": true
+   },
+   {
+    "s": "icon.own_103",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "icon.own_999",
+    "non_null": false,
+    "err": 1813
+   },
+   {
+    "s": "icon.system_application",
+    "handle": 65579,
+    "err": 57005
+   },
+   {
+    "s": "cursor.arrow",
+    "handle": 65539,
+    "err": 57005
+   },
+   {
+    "s": "cursor.arrow_again",
+    "same": true
+   },
+   {
+    "s": "class.register_ex",
+    "atom_in_range": true,
+    "err": 57005
+   },
+   {
+    "s": "class.register_ex_again",
+    "atom": 0,
+    "err": 1410
+   },
+   {
+    "s": "class.register",
+    "atom_in_range": true,
+    "after_first": true,
+    "err": 57005
+   },
+   {
+    "s": "create.unknown_class",
+    "null": true,
+    "err": 1407
+   },
+   {
+    "s": "msg.batch.0",
+    "msg": 36,
+    "same_window": true,
+    "wparam": 0,
+    "max_size_in_x": 1040,
+    "max_size_in_y": 784,
+    "max_position_in_x": -8,
+    "max_position_in_y": -8,
+    "min_track_in_x": 136,
+    "min_track_in_y": 39,
+    "max_track_in_x": 1044,
+    "max_track_in_y": 788,
+    "max_size_x": 1040,
+    "max_size_y": 784,
+    "max_position_x": -8,
+    "max_position_y": -8,
+    "min_track_x": 136,
+    "min_track_y": 39,
+    "max_track_x": 1044,
+    "max_track_y": 788,
+    "result": 0
+   },
+   {
+    "s": "msg.batch.1",
+    "msg": 129,
+    "same_window": true,
+    "wparam": 0,
+    "params_null": true,
+    "instance_is_self": true,
+    "menu_null": true,
+    "parent_null": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "style": 0,
+    "ex_style": 0,
+    "name": "Hail to the Rainbow",
+    "class_is_atom": true,
+    "result": 1,
+    "x_equals_y": true,
+    "x_in_cascade": true,
+    "past_first": 0
+   },
+   {
+    "s": "msg.batch.2",
+    "msg": 131,
+    "same_window": true,
+    "wparam": 0,
+    "result": 0,
+    "in_left": 0,
+    "in_top": 0,
+    "in_right": 768,
+    "in_bottom": 0,
+    "out_left": 8,
+    "out_top": 31,
+    "out_right": 760,
+    "out_bottom": -8
+   },
+   {
+    "s": "msg.batch.3",
+    "msg": 1,
+    "same_window": true,
+    "wparam": 0,
+    "params_null": true,
+    "instance_is_self": true,
+    "menu_null": true,
+    "parent_null": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "style": 0,
+    "ex_style": 0,
+    "name": "Hail to the Rainbow",
+    "class_is_atom": true,
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "result": 0,
+    "x_equals_y": true,
+    "x_in_cascade": true,
+    "past_first": 0
+   },
+   {
+    "s": "create.batch",
+    "null": false,
+    "first_message_window": true,
+    "messages": 4,
+    "err": 57005
+   },
+   {
+    "s": "batch.long_ptr_0",
+    "stored": true,
+    "err": 57005
+   },
+   {
+    "s": "batch.long_ptr_8",
+    "ret": 0,
+    "err": 1413
+   },
+   {
+    "s": "batch.user_data",
+    "before": 0,
+    "err": 57005,
+    "after": 77
+   },
+   {
+    "s": "batch.styles",
+    "style": 79691776,
+    "ex_style": 256,
+    "instance_is_self": true,
+    "procedure_is_ours": true
+   },
+   {
+    "s": "batch.client_rect",
+    "ret": 1,
+    "err": 57005,
+    "rect_left": 0,
+    "rect_top": 0,
+    "rect_right": 752,
+    "rect_bottom": -39
+   },
+   {
+    "s": "batch.window_rect",
+    "ret": 1,
+    "rect_left": 0,
+    "rect_top": 0,
+    "rect_right": 768,
+    "rect_bottom": 0
+   },
+   {
+    "s": "batch.visible",
+    "value": false
+   },
+   {
+    "s": "batch.monitor",
+    "primary": true
+   },
+   {
+    "s": "msg.play.0",
+    "msg": 36,
+    "same_window": true,
+    "wparam": 0,
+    "max_size_in_x": 1040,
+    "max_size_in_y": 784,
+    "max_position_in_x": -8,
+    "max_position_in_y": -8,
+    "min_track_in_x": 136,
+    "min_track_in_y": 39,
+    "max_track_in_x": 1044,
+    "max_track_in_y": 788,
+    "max_size_x": 1040,
+    "max_size_y": 784,
+    "max_position_x": -8,
+    "max_position_y": -8,
+    "min_track_x": 136,
+    "min_track_y": 39,
+    "max_track_x": 1044,
+    "max_track_y": 788,
+    "result": 0
+   },
+   {
+    "s": "msg.play.1",
+    "msg": 129,
+    "same_window": true,
+    "wparam": 0,
+    "params_null": true,
+    "instance_is_self": true,
+    "menu_null": true,
+    "parent_null": true,
+    "cx": 320,
+    "cy": 240,
+    "style": 13238272,
+    "ex_style": 256,
+    "name": "Hail to the Rainbow",
+    "class_is_atom": false,
+    "class": "W2mProbeMain",
+    "result": 1,
+    "x_equals_y": true,
+    "x_in_cascade": true,
+    "past_first": 26
+   },
+   {
+    "s": "msg.play.2",
+    "msg": 131,
+    "same_window": true,
+    "wparam": 0,
+    "result": 0,
+    "in_left": 0,
+    "in_top": 0,
+    "in_right": 320,
+    "in_bottom": 240,
+    "out_left": 8,
+    "out_top": 31,
+    "out_right": 312,
+    "out_bottom": 232
+   },
+   {
+    "s": "msg.play.3",
+    "msg": 1,
+    "same_window": true,
+    "wparam": 0,
+    "params_null": true,
+    "instance_is_self": true,
+    "menu_null": true,
+    "parent_null": true,
+    "cx": 320,
+    "cy": 240,
+    "style": 13238272,
+    "ex_style": 256,
+    "name": "Hail to the Rainbow",
+    "class_is_atom": false,
+    "class": "W2mProbeMain",
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "result": 0,
+    "x_equals_y": true,
+    "x_in_cascade": true,
+    "past_first": 26
+   },
+   {
+    "s": "create.play",
+    "null": false,
+    "first_message_window": true,
+    "differs_from_batch": true,
+    "messages": 4,
+    "err": 57005
+   },
+   {
+    "s": "play.long_ptr_0",
+    "stored": true,
+    "err": 57005
+   },
+   {
+    "s": "play.long_ptr_8",
+    "ret": 0,
+    "err": 1413
+   },
+   {
+    "s": "play.user_data",
+    "before": 0,
+    "err": 57005,
+    "after": 77
+   },
+   {
+    "s": "play.styles",
+    "style": 80347136,
+    "ex_style": 256,
+    "instance_is_self": true,
+    "procedure_is_ours": true
+   },
+   {
+    "s": "play.client_rect",
+    "ret": 1,
+    "err": 57005,
+    "rect_left": 0,
+    "rect_top": 0,
+    "rect_right": 304,
+    "rect_bottom": 201
+   },
+   {
+    "s": "play.window_rect",
+    "ret": 1,
+    "rect_left": 0,
+    "rect_top": 0,
+    "rect_right": 320,
+    "rect_bottom": 240
+   },
+   {
+    "s": "play.visible",
+    "value": false
+   },
+   {
+    "s": "play.monitor",
+    "primary": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38174244880: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:e8636f8cc0657e52431d57380477f3ee148f3842bdda1064466fc9d621e2995c; run 38174246839: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:220412c9aaa756201ef395b341336f0260bc3f634643ab7e7f005b626b412966",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "windows-1791752145-0-1",
+    "windows-1791752145-0-2",
+    "windows-1791752145-1-1",
+    "windows-1791752145-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "Where CW_USEDEFAULT places a window depends on the windows the desktop made before (52, 78, 130 seen for a probe's first); w2m's cascade starts at 52.",
+  "The default height is fitted: 3/4 of the work area's height less 21 on both runners (519, 525).",
+  "Windows are records; nothing is drawn, and ShowWindow, the message loop and every message after WM_CREATE are later work."
+ ],
+ "sections": {
+  "probe": "probes/windows (Sprint 044)",
+  "implementation": "tools/guest_runtime/windows.c",
+  "rows": "scripts/family_run.py windows",
+  "excluded": "none"
+ }
+}

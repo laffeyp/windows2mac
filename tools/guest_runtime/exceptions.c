@@ -10,13 +10,11 @@
  * same frames again calling each termination handler, then resumes the target frame. No taker: the top-level
  * filter (SetUnhandledExceptionFilter), then the process ends with the exception code.
  *
- * Handlers are x86 code. The runtime calls one by setting the guest's registers and sending the bridge to an x86
- * stub the host writes (W2M_HOST_EXCEPTION): `call rax`, then the handler's answer goes to the service
- * W2mExceptionResume, which continues where the dispatch left off. The dispatch keeps its state in a frame on the
- * guest's stack, below the exception's RSP, as Windows's dispatcher keeps its own; the stub's return point marks
- * it, so a walk that reaches the stub (RtlUnwindEx called from a handler) finds the dispatch it is inside. A
- * context resumes through a second stub that loads XMM0-15, MXCSR, the GPRs and RFLAGS from a CONTEXT and returns
- * to its RIP.
+ * Handlers are x86 code, called through guest_calls.c (Sprint 054 made Sprint 053's call stub shared): the
+ * dispatch keeps its state in a frame on the guest's stack, below the exception's RSP, as Windows's dispatcher keeps
+ * its own, and each handler's answer resumes it. The CALL stub's return point marks the frame, so a walk that
+ * reaches the stub (RtlUnwindEx called from a handler) finds the dispatch it is inside. A context resumes through a
+ * second stub that loads XMM0-15, MXCSR, the GPRs and RFLAGS from a CONTEXT and returns to its RIP.
  *
  * As contracts/windows.exception.exceptions records Windows answering (Server 2025 and 2022) and
  * contracts/windows.exception.vectored_handlers' dispatch rows:
@@ -59,11 +57,10 @@
 #define R9 9
 #define MAX_FRAMES 100000                    /* a walk longer than this is a cycle */
 
-/* The host's x86 stubs (src/w2m/exception_stubs.py), at the page W2M_EXCEPTION_STUBS answers. */
-#define STUB_RETURN 0x00                     /* ret: the point RaiseException's context resumes at */
-#define STUB_CALL 0x10                       /* call rax; mov rcx, rax; mov rax, W2mExceptionResume; jmp rax */
-#define STUB_CALL_RETURN (STUB_CALL + 2)     /* the return address a handler sees */
-#define STUB_RESTORE 0x40                    /* rcx = CONTEXT: XMM0-15, MXCSR, the GPRs, RFLAGS, then RIP */
+/* The host's x86 stubs (src/w2m/guest_stubs.py): RaiseException's context resumes at W2M_STUB_RETURN, a ret. */
+#define STUB_RETURN W2M_STUB_RETURN
+#define STUB_CALL_RETURN W2M_STUB_CALL_RETURN
+#define STUB_RESTORE W2M_STUB_RESTORE
 
 struct runtime_function { u32 begin, end, unwind; };
 
@@ -79,30 +76,28 @@ enum { STEP_VECTORED = 1, STEP_FRAME, STEP_TOP_FILTER };
 
 /* A dispatch or an unwind in progress, on the guest's stack. */
 struct frame {
+    struct w2m_guest_call call;          /* first: the frame is where the CALL stub's return point says */
+    u64 pad[2];                          /* the contexts stay 16-aligned */
     struct w2m_context ctx;              /* dispatch: the exception's context; unwind: the frame being unwound */
     struct w2m_context walk;             /* the context one frame out */
     struct w2m_exception_record rec;     /* dispatch: the record; unwind: its own when the caller gave none */
     struct dispatcher_context dc;
     u64 pointers[2];                     /* EXCEPTION_POINTERS: the record, the context */
-    u64 magic, kind, step, next_vectored;
+    u64 kind, step, next_vectored;
     u64 record;                          /* the record in use */
     u64 establisher;                     /* the frame whose handler runs */
     u64 target_frame, target_ip, return_value, history;
     u64 frames;                          /* frames walked */
 };
-#define FRAME_MAGIC 0x6863746170736964ull     /* "dispatch" */
-#define FRAME_GAP 0x40                       /* bytes left free below the stack pointer the frame sits under */
+#define FRAME_GAP 0x40                       /* guest_calls.c's: bytes left free below the stack pointer */
 _Static_assert(sizeof(struct w2m_context) % 16 == 0, "the walk context stays 16-aligned");
 
 u64 w2m_vectored_handler(u64 k);                         /* vectored_handlers.c: the k-th, front to back; 0 past */
 int w2m_table_function(u64 pc, u64 *base, u64 *entry);   /* function_tables.c: a growable table's range */
 u32 w2m_mxcsr_now(void);                                 /* runtime.c */
 
-static u64 stubs(void) {
-    static u64 page;
-    if (!page) page = w2m_host(W2M_HOST_EXCEPTION, W2M_EXCEPTION_STUBS, 0, 0, 0, 0);
-    return page;
-}
+static u64 stubs(void) { return w2m_guest_stubs(); }
+static void resume(struct w2m_guest_call *c, u64 answer);
 
 /* ---- finding a frame's unwind data ------------------------------------------------------------------------ */
 
@@ -263,16 +258,9 @@ static u64 virtual_unwind(u32 type, u64 base, u64 pc, const struct runtime_funct
 
 /* ---- calling the guest ----------------------------------------------------------------------------------- */
 
-/* Call x86 function fn(a0, a1, a2, a3) with the frame's stack: its answer comes to W2mExceptionResume. */
+/* Call x86 function fn(a0, a1, a2, a3) below the frame: its answer comes to resume(). */
 static void call_guest(struct frame *f, u64 fn, u64 a0, u64 a1, u64 a2, u64 a3) {
-    struct w2m_state *st = w2m_state();
-    st->gpr[RAX] = fn;
-    st->gpr[RCX] = a0;
-    st->gpr[RDX] = a1;
-    st->gpr[R8] = a2;
-    st->gpr[R9] = a3;
-    st->gpr[RSP] = (u64)f - 0x20;                      /* home space; `call` leaves RSP 8 mod 16 at entry */
-    st->redirect_rip = stubs() + STUB_CALL;
+    w2m_call_guest(&f->call, fn, a0, a1, a2, a3);
 }
 
 static void resume_context(struct w2m_context *c) {
@@ -288,11 +276,7 @@ static void end_process(u32 code) {
 
 /* A frame for a new dispatch or unwind below stack pointer rsp, zeroed. */
 static struct frame *place(u64 rsp) {
-    struct frame *f = (struct frame *)((rsp - FRAME_GAP - sizeof(struct frame)) & ~15ull);
-    u8 *b = (u8 *)f;
-    for (u64 i = 0; i < sizeof *f; i++) b[i] = 0;
-    f->magic = FRAME_MAGIC;
-    return f;
+    return (struct frame *)w2m_guest_frame(rsp, sizeof(struct frame), resume);
 }
 
 static int in_stack(u64 a) {
@@ -303,9 +287,9 @@ static int in_stack(u64 a) {
 /* The dispatch a walk reached through a handler call's return point, or 0. */
 static struct frame *outer_frame(const struct w2m_context *c) {
     if (c->rip != stubs() + STUB_CALL_RETURN) return 0;
-    struct frame *o = (struct frame *)(c->gpr[RSP] + 0x20);
-    if (o->magic != FRAME_MAGIC) w2m_unimplemented(W2M_API_RtlUnwindEx, c->gpr[RSP]);
-    return o;
+    struct w2m_guest_call *o = w2m_guest_call_at(c->gpr[RSP]);
+    if (!o || o->resume != resume) w2m_unimplemented(W2M_API_RtlUnwindEx, c->gpr[RSP]);   /* a window procedure's */
+    return (struct frame *)o;
 }
 
 /* The caller's context at a service entry: the bridge saved the GPRs; RSP points at the return address. */
@@ -494,13 +478,10 @@ int w2m_dispatch_fault(const struct w2m_exception_record *rec, const struct w2m_
     return 1;
 }
 
-/* Where a handler called through the stub returns, its answer in RCX: the dispatch or unwind goes on. */
-W2M_VOID u64 k32_W2mExceptionResume(u64 answer, u64 a1, u64 a2, u64 a3, u64 rsp) {
-    (void)a1, (void)a2, (void)a3;
-    struct frame *f = (struct frame *)(rsp + 0x20);
-    if (f->magic != FRAME_MAGIC) w2m_unimplemented(W2M_API_W2mExceptionResume, rsp);
+/* A handler's answer (guest_calls.c's W2mGuestReturn): the dispatch or unwind goes on. */
+static void resume(struct w2m_guest_call *c, u64 answer) {
+    struct frame *f = (struct frame *)c;
     struct w2m_exception_record *rec = (struct w2m_exception_record *)f->record;
-    w2m_logged(W2M_API_W2mExceptionResume, f->step, (u32)answer);
     if (f->kind == KIND_UNWIND) {
         rec->flags &= ~(EXCEPTION_TARGET_UNWIND | EXCEPTION_COLLIDED_UNWIND);
         if ((u32)answer != DISPOSITION_CONTINUE_SEARCH) w2m_unimplemented(W2M_API_RtlUnwindEx, (u32)answer);
@@ -509,7 +490,7 @@ W2M_VOID u64 k32_W2mExceptionResume(u64 answer, u64 a1, u64 a2, u64 a3, u64 rsp)
             f->ctx = f->walk;
             next_unwind(f);
         }
-        return 0;
+        return;
     }
     if (f->step == STEP_VECTORED) {
         if ((s32)answer == FILTER_CONTINUE_EXECUTION) continue_execution(f);
@@ -522,7 +503,6 @@ W2M_VOID u64 k32_W2mExceptionResume(u64 answer, u64 a1, u64 a2, u64 a3, u64 rsp)
         if ((s32)answer == FILTER_CONTINUE_EXECUTION) continue_execution(f);
         else end_unhandled(f);
     }
-    return 0;
 }
 
 /* RtlUnwindEx(TargetFrame, TargetIp, ExceptionRecord, ReturnValue, ContextRecord, HistoryTable): never returns;

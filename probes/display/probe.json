@@ -1,0 +1,6 @@
+{
+ "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:start -Wl,/subsystem:console -Wl,/manifest:no",
+ "rc": "probes/display/display.rc",
+ "libs": "-lkernel32 -luser32",
+ "mode": "stdout"
+}

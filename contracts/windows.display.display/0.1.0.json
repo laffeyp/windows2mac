@@ -1,0 +1,905 @@
+{
+ "contract_id": "windows.display.display",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The display as the game queries it, under its manifest (PerMonitorV2): GetSystemMetrics 0-99, the Hyper-V adapter and its one monitor (EnumDisplayDevicesA), EnumDisplayMonitors' one callback, GetMonitorInfoA and W, MonitorFromPoint, Rect and Window, shcore's GetDpiForMonitor (96 x 96), EnumDisplaySettingsW's current settings and 13 modes; one 1024 x 768 monitor, the work area above the taskbar.",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 9V74 80-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/display/display.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "metric.0",
+    "value": 1024
+   },
+   {
+    "s": "metric.1",
+    "value": 768
+   },
+   {
+    "s": "metric.2",
+    "value": 17
+   },
+   {
+    "s": "metric.3",
+    "value": 17
+   },
+   {
+    "s": "metric.4",
+    "value": 23
+   },
+   {
+    "s": "metric.5",
+    "value": 1
+   },
+   {
+    "s": "metric.6",
+    "value": 1
+   },
+   {
+    "s": "metric.7",
+    "value": 3
+   },
+   {
+    "s": "metric.8",
+    "value": 3
+   },
+   {
+    "s": "metric.9",
+    "value": 17
+   },
+   {
+    "s": "metric.10",
+    "value": 17
+   },
+   {
+    "s": "metric.11",
+    "value": 32
+   },
+   {
+    "s": "metric.12",
+    "value": 32
+   },
+   {
+    "s": "metric.13",
+    "value": 32
+   },
+   {
+    "s": "metric.14",
+    "value": 32
+   },
+   {
+    "s": "metric.15",
+    "value": 20
+   },
+   {
+    "s": "metric.16",
+    "value": 1024
+   },
+   {
+    "s": "metric.17",
+    "value": 0
+   },
+   {
+    "s": "metric.18",
+    "value": 0
+   },
+   {
+    "s": "metric.19",
+    "value": 1
+   },
+   {
+    "s": "metric.20",
+    "value": 17
+   },
+   {
+    "s": "metric.21",
+    "value": 17
+   },
+   {
+    "s": "metric.22",
+    "value": 0
+   },
+   {
+    "s": "metric.23",
+    "value": 0
+   },
+   {
+    "s": "metric.24",
+    "value": 0
+   },
+   {
+    "s": "metric.25",
+    "value": 0
+   },
+   {
+    "s": "metric.26",
+    "value": 0
+   },
+   {
+    "s": "metric.27",
+    "value": 0
+   },
+   {
+    "s": "metric.28",
+    "value": 136
+   },
+   {
+    "s": "metric.29",
+    "value": 39
+   },
+   {
+    "s": "metric.30",
+    "value": 36
+   },
+   {
+    "s": "metric.31",
+    "value": 22
+   },
+   {
+    "s": "metric.32",
+    "value": 4
+   },
+   {
+    "s": "metric.33",
+    "value": 4
+   },
+   {
+    "s": "metric.34",
+    "value": 136
+   },
+   {
+    "s": "metric.35",
+    "value": 39
+   },
+   {
+    "s": "metric.36",
+    "value": 4
+   },
+   {
+    "s": "metric.37",
+    "value": 4
+   },
+   {
+    "s": "metric.38",
+    "value": 75
+   },
+   {
+    "s": "metric.39",
+    "value": 75
+   },
+   {
+    "s": "metric.40",
+    "value": 0
+   },
+   {
+    "s": "metric.41",
+    "value": 0
+   },
+   {
+    "s": "metric.42",
+    "value": 0
+   },
+   {
+    "s": "metric.43",
+    "value": 5
+   },
+   {
+    "s": "metric.44",
+    "value": 0
+   },
+   {
+    "s": "metric.45",
+    "value": 2
+   },
+   {
+    "s": "metric.46",
+    "value": 2
+   },
+   {
+    "s": "metric.47",
+    "value": 160
+   },
+   {
+    "s": "metric.48",
+    "value": 28
+   },
+   {
+    "s": "metric.49",
+    "value": 16
+   },
+   {
+    "s": "metric.50",
+    "value": 16
+   },
+   {
+    "s": "metric.51",
+    "value": 23
+   },
+   {
+    "s": "metric.52",
+    "value": 22
+   },
+   {
+    "s": "metric.53",
+    "value": 22
+   },
+   {
+    "s": "metric.54",
+    "value": 19
+   },
+   {
+    "s": "metric.55",
+    "value": 19
+   },
+   {
+    "s": "metric.56",
+    "value": 8
+   },
+   {
+    "s": "metric.57",
+    "value": 160
+   },
+   {
+    "s": "metric.58",
+    "value": 28
+   },
+   {
+    "s": "metric.59",
+    "value": 1044
+   },
+   {
+    "s": "metric.60",
+    "value": 788
+   },
+   {
+    "s": "metric.61",
+    "value": 1040
+   },
+   {
+    "s": "metric.62",
+    "value": 0
+   },
+   {
+    "s": "metric.63",
+    "value": 3
+   },
+   {
+    "s": "metric.64",
+    "value": 0
+   },
+   {
+    "s": "metric.65",
+    "value": 0
+   },
+   {
+    "s": "metric.66",
+    "value": 0
+   },
+   {
+    "s": "metric.67",
+    "value": 0
+   },
+   {
+    "s": "metric.68",
+    "value": 4
+   },
+   {
+    "s": "metric.69",
+    "value": 4
+   },
+   {
+    "s": "metric.70",
+    "value": 0
+   },
+   {
+    "s": "metric.71",
+    "value": 15
+   },
+   {
+    "s": "metric.72",
+    "value": 15
+   },
+   {
+    "s": "metric.73",
+    "value": 0
+   },
+   {
+    "s": "metric.74",
+    "value": 0
+   },
+   {
+    "s": "metric.75",
+    "value": 1
+   },
+   {
+    "s": "metric.76",
+    "value": 0
+   },
+   {
+    "s": "metric.77",
+    "value": 0
+   },
+   {
+    "s": "metric.78",
+    "value": 1024
+   },
+   {
+    "s": "metric.79",
+    "value": 768
+   },
+   {
+    "s": "metric.80",
+    "value": 1
+   },
+   {
+    "s": "metric.81",
+    "value": 1
+   },
+   {
+    "s": "metric.82",
+    "value": 1
+   },
+   {
+    "s": "metric.83",
+    "value": 1
+   },
+   {
+    "s": "metric.84",
+    "value": 1
+   },
+   {
+    "s": "metric.85",
+    "value": 4
+   },
+   {
+    "s": "metric.86",
+    "value": 0
+   },
+   {
+    "s": "metric.87",
+    "value": 0
+   },
+   {
+    "s": "metric.88",
+    "value": 0
+   },
+   {
+    "s": "metric.89",
+    "value": 0
+   },
+   {
+    "s": "metric.90",
+    "value": 0
+   },
+   {
+    "s": "metric.91",
+    "value": 0
+   },
+   {
+    "s": "metric.92",
+    "value": 4
+   },
+   {
+    "s": "metric.93"
+   },
+   {
+    "s": "metric.94",
+    "value": 0
+   },
+   {
+    "s": "metric.95",
+    "value": 0
+   },
+   {
+    "s": "metric.96",
+    "value": 0
+   },
+   {
+    "s": "metric.97",
+    "value": 0
+   },
+   {
+    "s": "metric.98",
+    "value": 0
+   },
+   {
+    "s": "metric.99",
+    "value": 0
+   },
+   {
+    "s": "metric.4096",
+    "value": 0
+   },
+   {
+    "s": "metric.8193",
+    "value": 0
+   },
+   {
+    "s": "devices.adapter_0",
+    "ret": 1,
+    "err": 57005,
+    "name": "__._DISPLAY1",
+    "string": "Microsoft Hyper-V Video",
+    "state": 5,
+    "id": "VMBUS_{da0a7802-e377-4aac-8e77-0558eb1073f8}",
+    "key": "_Registry_Machine_System_CurrentControlSet_Control_Video_{GUID}_0000"
+   },
+   {
+    "s": "devices.adapter_0_monitor_0",
+    "ret": 1,
+    "err": 57005,
+    "name": "__._DISPLAY1_Monitor0",
+    "string": "Generic PnP Monitor",
+    "state": 3,
+    "id": "MONITOR_MSH062E_{4d36e96e-e325-11ce-bfc1-08002be10318}_0000",
+    "key": "_Registry_Machine_System_CurrentControlSet_Control_Class_{4d36e96e-e325-11ce-bfc1-08002be10318}_0000"
+   },
+   {
+    "s": "devices.adapter_0_monitor_1",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "devices.adapter_1",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "devices.adapter_2",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "devices.unknown_adapter",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "enum_monitors.callback",
+    "index": 0,
+    "monitor": 65537,
+    "dc_null": true,
+    "rect_left": 0,
+    "rect_top": 0,
+    "rect_right": 1024,
+    "rect_bottom": 768,
+    "data": 23130
+   },
+   {
+    "s": "enum_monitors.callback_info",
+    "ret": 1,
+    "err": 57005,
+    "size": 72,
+    "monitor_left": 0,
+    "monitor_top": 0,
+    "monitor_right": 1024,
+    "monitor_bottom": 768,
+    "work_left": 0,
+    "work_top": 0,
+    "work_right": 1024,
+    "work_bottom": true,
+    "flags": 1,
+    "device": "__._DISPLAY1"
+   },
+   {
+    "s": "enum_monitors",
+    "ret": 1,
+    "err": 57005,
+    "callbacks": 1
+   },
+   {
+    "s": "info.wide",
+    "ret": 1,
+    "size": 104,
+    "monitor_left": 0,
+    "monitor_top": 0,
+    "monitor_right": 1024,
+    "monitor_bottom": 768,
+    "work_left": 0,
+    "work_top": 0,
+    "work_right": 1024,
+    "work_bottom": true,
+    "flags": 1,
+    "device": "__._DISPLAY1"
+   },
+   {
+    "s": "info.plain",
+    "ret": 1,
+    "monitor_left": 0,
+    "monitor_top": 0,
+    "monitor_right": 1024,
+    "monitor_bottom": 768,
+    "flags": 1
+   },
+   {
+    "s": "info.bad_size",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "info.not_a_monitor",
+    "ret": 0,
+    "err": 1461
+   },
+   {
+    "s": "from_point.origin_null",
+    "null": false,
+    "first": true
+   },
+   {
+    "s": "from_point.far_null",
+    "null": true,
+    "first": false
+   },
+   {
+    "s": "from_point.far_nearest",
+    "null": false,
+    "first": true
+   },
+   {
+    "s": "from_point.far_primary",
+    "null": false,
+    "first": true
+   },
+   {
+    "s": "from_rect.inside",
+    "null": false,
+    "first": true
+   },
+   {
+    "s": "from_rect.far_null",
+    "null": true
+   },
+   {
+    "s": "from_rect.far_nearest",
+    "first": true
+   },
+   {
+    "s": "from_window.null_null",
+    "null": true
+   },
+   {
+    "s": "from_window.null_primary",
+    "first": true
+   },
+   {
+    "s": "from_window.null_nearest",
+    "null": false,
+    "first": true
+   },
+   {
+    "s": "dpi.found",
+    "library": true,
+    "function": true
+   },
+   {
+    "s": "dpi.effective",
+    "hr": 0,
+    "x": 96,
+    "y": 96
+   },
+   {
+    "s": "dpi.angular",
+    "hr": 0,
+    "x": 96,
+    "y": 96
+   },
+   {
+    "s": "dpi.raw",
+    "hr": 2147942450,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "dpi.bad_type",
+    "hr": 2147942560,
+    "x": 42405,
+    "y": 42405
+   },
+   {
+    "s": "dpi.not_a_monitor",
+    "hr": 2147942406,
+    "x": 42405,
+    "y": 42405
+   },
+   {
+    "s": "settings.current",
+    "ret": 1,
+    "err": 57005,
+    "device": "CDD",
+    "size": 188,
+    "fields": 544997536,
+    "width": 1024,
+    "height": 768,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.registry",
+    "ret": 1,
+    "err": 57005,
+    "device": "CDD",
+    "size": 188,
+    "fields": 544997536,
+    "width": 1024,
+    "height": 768,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_0",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 640,
+    "height": 480,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_1",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 800,
+    "height": 600,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_2",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1024,
+    "height": 768,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_3",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1152,
+    "height": 864,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_4",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1280,
+    "height": 720,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_5",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1280,
+    "height": 800,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_6",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1280,
+    "height": 1024,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_7",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1366,
+    "height": 768,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_8",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1440,
+    "height": 900,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_9",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1600,
+    "height": 900,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_10",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1600,
+    "height": 1200,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_11",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1680,
+    "height": 1050,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_12",
+    "ret": 1,
+    "err": 57005,
+    "device": "cdd",
+    "size": 188,
+    "fields": 8126592,
+    "width": 1920,
+    "height": 1080,
+    "bits": 32,
+    "frequency": 64,
+    "flags": 0,
+    "x": 0,
+    "y": 0,
+    "orientation": 0,
+    "fixed_output": 0
+   },
+   {
+    "s": "settings.mode_count",
+    "value": 13
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38174316653: windows-2025, AMD EPYC 9V74 80-Core Processor, probe sha256:82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c; run 38174318347: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "display-1791752210-0-1",
+    "display-1791752210-0-2",
+    "display-1791752210-1-1",
+    "display-1791752210-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "w2m's display is the runners' (one 1024 x 768 monitor at 96 DPI, Server 2025's taskbar) until the game's window is a Mac window (phase 6).",
+  "GetSystemMetrics(93), which has no SM_ name, answers a different value on each run; w2m answers 0."
+ ],
+ "sections": {
+  "probe": "probes/display (Sprint 044)",
+  "implementation": "tools/guest_runtime/display.c",
+  "rows": "scripts/family_run.py display",
+  "excluded": "none"
+ }
+}

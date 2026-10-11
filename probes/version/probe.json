@@ -1,0 +1,6 @@
+{
+ "cflags": "-O1 -Wall -Werror -Wno-deprecated-declarations -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:start -Wl,/subsystem:console -Wl,/manifest:no",
+ "rc": "probes/version/version.rc",
+ "libs": "-lkernel32",
+ "mode": "stdout"
+}

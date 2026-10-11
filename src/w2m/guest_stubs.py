@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""exception_stubs.py — the x86 code exception dispatch runs through (Sprint 053; tools/guest_runtime/exceptions.c).
+"""guest_stubs.py — the x86 code a service calls the guest's own code through (Sprint 053, exceptions.c; Sprint 054,
+guest_calls.c: window procedures and enumeration callbacks too).
 
-The dispatcher is guest runtime code; the handlers it calls are x86. Three stubs on one page bridge them:
+Services are guest runtime code; the handlers, window procedures and callbacks they call are x86. Three stubs on one
+page bridge them:
 
   +0x00 RETURN   ret. RaiseException's context resumes here, with RSP at the call's return address, so a handler
                  that continues execution returns from RaiseException (Windows's context points inside
                  KERNELBASE!RaiseException, after its call to RtlRaiseException).
-  +0x10 CALL     call rax; mov rcx, rax; mov rax, <W2mExceptionResume's thunk>; jmp rax. The runtime sets RAX to the
-                 handler, RCX, RDX, R8, R9 to its arguments and RSP to the dispatch frame less 0x20; the handler's
-                 answer comes back to the service, which finds its frame at RSP + 0x20. CALL + 2 is the return point
-                 a walk recognizes.
+  +0x10 CALL     call rax; mov rcx, rax; mov rax, <W2mGuestReturn's thunk>; jmp rax. The runtime sets RAX to the
+                 function, RCX, RDX, R8, R9 to its arguments and RSP to the calling service's frame less 0x20; the
+                 answer comes back to W2mGuestReturn, which finds the frame at RSP + 0x20. CALL + 2 is the return point
+                 an exception walk recognizes.
   +0x40 RESTORE  rcx = a CONTEXT: XMM0-15 and MXCSR, then RSP from it less 16, RIP and EFLAGS written below it,
                  the GPRs (RCX last), popfq, ret: the context resumed whole (RtlRestoreContext's work).
 """
@@ -47,7 +49,7 @@ def _restore() -> bytes:
 
 
 def page(resume_thunk: int) -> bytes:
-    """The stub page, with W2mExceptionResume's thunk address in CALL."""
+    """The stub page, with W2mGuestReturn's thunk address in CALL."""
     out = bytearray(b"\xcc" * SIZE)
     out[RETURN] = 0xC3
     call = b"\xff\xd0" + b"\x48\x89\xc1" + b"\x48\xb8" + struct.pack("<Q", resume_thunk) + b"\xff\xe0"

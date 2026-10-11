@@ -1,0 +1,102 @@
+{
+ "contract_id": "windows.time.time",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The work list's time family as relations to the clocks w2m serves: GetSystemTimePreciseAsFileTime (KERNELBASE, through GetProcAddress) within a second of GetSystemTimeAsFileTime, timeGetTime within a second of GetTickCount, GetTickCount64's low half with GetTickCount; none going back over 1,000 reads, each advancing 40 ms to 5 s across Sleep(50); timeBeginPeriod and timeEndPeriod answering 0, and 97 (TIMERR_NOCANDO) for a period of 0.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/time/time.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "precise.found",
+    "value": true
+   },
+   {
+    "s": "precise.against_system_time",
+    "within_one_second": true,
+    "after_2020": true
+   },
+   {
+    "s": "precise.never_back",
+    "value": true
+   },
+   {
+    "s": "precise.across_sleep_50",
+    "at_least_40ms": true,
+    "under_5s": true
+   },
+   {
+    "s": "time_get_time.against_tick_count",
+    "within_one_second": true
+   },
+   {
+    "s": "time_get_time.never_back",
+    "value": true
+   },
+   {
+    "s": "time_get_time.across_sleep_50",
+    "at_least_40ms": true,
+    "under_5s": true
+   },
+   {
+    "s": "period.begin_1",
+    "ret": 0
+   },
+   {
+    "s": "period.begin_0",
+    "ret": 97
+   },
+   {
+    "s": "period.end_1",
+    "ret": 0
+   },
+   {
+    "s": "period.end_0",
+    "ret": 97
+   },
+   {
+    "s": "tick_count_64.against_tick_count",
+    "low_within_one_second": true,
+    "high_zero": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38173127764: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:b96af5861876df13a97b0e822e3c03134b5ebedf40f6b027b8ec792e510239c6; run 38173129974: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:3cf5e2998c1778dc7f8e5d54fb9b55d9c0c59cc127649782e6a4987f95206c81",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "time-1791751169-0-1",
+    "time-1791751169-0-2",
+    "time-1791751169-1-1",
+    "time-1791751169-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "A period ended that was not begun, and periods over 16 ms, are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/time (Sprint 044)",
+  "implementation": "tools/guest_runtime/time.c",
+  "rows": "scripts/family_run.py time",
+  "excluded": "none"
+ }
+}

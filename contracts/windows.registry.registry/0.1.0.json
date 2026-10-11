@@ -1,0 +1,157 @@
+{
+ "contract_id": "windows.registry.registry",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; a key closes once; the last error is left.",
+ "applicability": "windows-2022 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz); windows-2025 (Intel(R) Xeon(R) 6973P-C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/registry/registry.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "open.missing",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_two_levels",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_case",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_case",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_below_software_handle",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.root_null_subkey",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": true
+   },
+   {
+    "s": "open.root_empty_subkey",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": true
+   },
+   {
+    "s": "open.not_a_key",
+    "ret": 6,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "close.software",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.software_case",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.software_again",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "close.root_null_subkey",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.root_empty_subkey",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.not_a_key",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "close.null",
+    "ret": 6,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38173241012: windows-2025, Intel(R) Xeon(R) 6973P-C, probe sha256:77693426a875153bdbf03f4930875bdb62c3e6b382aa02a4160415cad9c14cd5; run 38173242936: windows-2022, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:18132de8c453d0f2b319cef8e53346b35e086dba9602e6cc468607eb7ea923f5",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "registry-1791751265-0-1",
+    "registry-1791751265-0-2",
+    "registry-1791751265-1-1",
+    "registry-1791751265-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run."
+ ],
+ "sections": {
+  "probe": "probes/registry (Sprint 044)",
+  "implementation": "tools/guest_runtime/registry.c",
+  "rows": "scripts/family_run.py registry",
+  "excluded": "none"
+ }
+}

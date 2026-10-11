@@ -20,6 +20,8 @@ It asks the host only what w2m's process holds:
   ntdll                 a synthetic image too (it is in every process's loader list, contracts/
                         windows.loader.static_import); its exports are not listed, so GetProcAddress on it stops
   api-ms-win-core-*     kernelbase, as Windows maps api-ms-win-core-synch-l1-2-0 (the modules rows)
+  later system DLLs     a system DLL loaded by name after the start whose exports the spec lists (Sprint 054): a synthetic
+                        page as above, its path System32's spelling; it stays in the process (PEB.Ldr is not extended)
   anything else         a stop by name (Unimplemented) when Windows would find the module: a DLL of
                         System32 or of the program's directory, or an API set w2m has not observed;
                         ERROR_MOD_NOT_FOUND only for a name found nowhere
@@ -70,10 +72,13 @@ class Modules:
     system: dict[str, tuple[int, str]] = field(default_factory=dict)   # canonical name -> handle, the import's spelling
     load_dll: Callable[[str], int] | None = None    # LoadLibrary of a DLL file after the start: its base, or 0 (Sprint 049)
     dll_paths: dict[str, str] = field(default_factory=dict)   # canonical name -> full path, for DLLs not beside the program
+    load_system: Callable[[str, str], int] | None = None   # LoadLibrary of a system DLL not imported (Sprint 054)
 
     def __post_init__(self) -> None:
         spec = json.loads(EXPORTS.read_text())
         self.exports = {m: frozenset(names) for m, names in spec["modules"].items()}
+        # System32's names as Windows spells them ("SHCore.dll"), by the lowercase form names are compared in
+        self.system32_spelling = {n.lower(): n for n in self.system32}
 
     @property
     def image_path(self) -> str:
@@ -107,7 +112,13 @@ class Modules:
             h = self.load_dll(name)                     # a file the name finds: mapped, bound, its DllMain pending
             if h:
                 return h
-        if c in self.system32 or self.in_app_directory(c):
+        if c in self.system32_spelling and c[:-4] in self.exports and self.load_system is not None:
+            # a system DLL whose exports w2m knows (specs/windows_exports.json): a synthetic image, as one imported
+            # statically has, spelled as System32 spells the file (Sprint 054: shell32, shcore through LoadLibraryW)
+            h = self.load_system(c, self.system32_spelling[c])
+            self.system[c] = (h, self.system32_spelling[c])
+            return h
+        if c in self.system32_spelling or self.in_app_directory(c):
             raise Unimplemented(f"LoadLibrary {name}: a Windows DLL w2m does not model")
         return 0
 

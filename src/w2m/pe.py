@@ -19,7 +19,8 @@ PE32_PLUS = 0x20B
 SCN_MEM_EXECUTE = 0x20000000
 SCN_MEM_READ = 0x40000000
 SCN_MEM_WRITE = 0x80000000
-DIR_EXPORT, DIR_IMPORT, DIR_EXCEPTION, DIR_BASERELOC, DIR_TLS, DIR_DELAY = 0, 1, 3, 5, 9, 13
+DIR_EXPORT, DIR_IMPORT, DIR_RESOURCE, DIR_EXCEPTION, DIR_BASERELOC, DIR_TLS, DIR_DELAY = 0, 1, 2, 3, 5, 9, 13
+RT_MANIFEST = 24
 REL_ABSOLUTE, REL_DIR64 = 0, 10
 
 
@@ -67,6 +68,7 @@ class PeImage:
     function_ends: tuple[int, ...] = ()                         # .pdata EndAddress, in the same order
     stack_reserve: int = 0x100000                               # SizeOfStackReserve (a new thread's default; Sprint 051)
     stack_commit: int = 0x1000                                  # SizeOfStackCommit
+    resources: tuple[tuple[int | str, int | str, int, int, int], ...] = ()   # (type, name, language, data RVA, size)
 
     def read_rva(self, data: bytes, rva: int, size: int) -> bytes:
         """Up to `size` bytes of the image at `rva`, from file `data`. Bytes past a section's raw
@@ -81,6 +83,13 @@ class PeImage:
                 raw = data[s.raw_offset + delta: s.raw_offset + min(s.raw_size, delta + size)]
                 return raw + b"\0" * (size - len(raw))
         raise PeError(f"RVA 0x{rva:x} is in no section")
+
+    def resource(self, data: bytes, rtype: int | str, name: int | str | None = None) -> bytes | None:
+        """The bytes of a resource of type `rtype` (and `name`; any name when None), its first language, or None."""
+        for t, n, _, rva, size in self.resources:
+            if t == rtype and (name is None or n == name):
+                return self.read_rva(data, rva, size)
+        return None
 
     def code_targets(self) -> list[tuple[str, int]]:
         """Statically known entries into guest code: (discovery kind, RVA)."""
@@ -270,6 +279,39 @@ def parse(data: bytes) -> PeImage:
             starts.append(begin)
             ends.append(end)
 
+    resources: list[tuple[int | str, int | str, int, int, int]] = []
+    rva, size = d(DIR_RESOURCE)
+    if rva:
+        root = _rva_to_offset(sections, rva)
+
+        def entries(off: int) -> list[tuple[int | str, int]]:
+            # PE Format, "The .rsrc Section": a directory table, its named entries, then its ID entries
+            named, ids = r.u("<HH", off + 12)
+            out: list[tuple[int | str, int]] = []
+            for i in range(named + ids):
+                key, target = r.u("<II", off + 16 + 8 * i)
+                if key & 0x80000000:
+                    (length,) = r.u("<H", root + (key & 0x7FFFFFFF))
+                    start = root + (key & 0x7FFFFFFF) + 2
+                    if start + 2 * length > len(data):
+                        raise PeError(f"resource name at 0x{start:x} beyond the file")
+                    out.append((data[start:start + 2 * length].decode("utf-16-le", errors="replace"), target))
+                else:
+                    out.append((key, target))
+            return out
+
+        for rtype, t in entries(root):
+            if not t & 0x80000000:
+                raise PeError("a resource type entry is not a directory")
+            for name, n in entries(root + (t & 0x7FFFFFFF)):
+                if not n & 0x80000000:
+                    raise PeError("a resource name entry is not a directory")
+                for lang, leaf in entries(root + (n & 0x7FFFFFFF)):
+                    if leaf & 0x80000000 or not isinstance(lang, int):
+                        raise PeError("a resource language entry is not a data entry")
+                    data_rva, data_size = r.u("<II", root + leaf)
+                    resources.append((rtype, name, lang, data_rva, data_size))
+
     if not 0 <= entry < size_of_image:
         raise PeError(f"entry RVA 0x{entry:x} outside image size 0x{size_of_image:x}")
     return PeImage(machine=machine, timestamp=timestamp, characteristics=chars,
@@ -278,4 +320,5 @@ def parse(data: bytes) -> PeImage:
                    sections=sections, imports=imports, relocations=relocs,
                    relocation_sites=tuple(sites), delay_imports=delay,
                    exports=tuple(exports), tls_callbacks=tuple(callbacks), tls=tls, iat=iat,
-                   function_starts=tuple(starts), function_ends=tuple(ends), stack_reserve=stack_reserve, stack_commit=stack_commit)
+                   function_starts=tuple(starts), function_ends=tuple(ends), stack_reserve=stack_reserve, stack_commit=stack_commit,
+                   resources=tuple(resources))

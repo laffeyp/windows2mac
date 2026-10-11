@@ -79,6 +79,13 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $libs += "$($d.name).lib"
           }
+          # probe.json `rc` (Sprint 054): a resource script compiled by llvm-rc (paths from the repository root) and
+          # linked in; a manifest goes in as resource 1 of type 24, since link.exe's /manifestinput needs mt.exe
+          if ((Test-Path $cfg) -and $c.rc) {
+            llvm-rc /nologo /I . /fo probe.res $c.rc
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $libs += "probe.res"
+          }
           # /Brepro (Sprint 044): the linker writes a content hash where it wrote the time and a random PDB
           # signature, so one source on one runner image builds one binary (16 runs had made 16 binaries)
           clang @flags "-Wl,/Brepro" -o probe.exe $src @libs

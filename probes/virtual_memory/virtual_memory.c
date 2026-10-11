@@ -97,6 +97,16 @@ void start(void) {
     alloc("alloc.bad_protect", NULL, 0x1000, MEM_RESERVE | MEM_COMMIT, 0x12345, NULL);
     unsigned char *little_block = alloc("alloc.little_block", NULL, 100, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, NULL);
     query("query.little_block", little_block, little_block);
+    /* UnityPlayer's form (Sprint 054; batch trace seq 2-3): MEM_COMMIT alone at NULL, then its middle page made
+     * read-write */
+    unsigned char *guarded = alloc("alloc.commit_null", NULL, 0x3000, MEM_COMMIT, PAGE_NOACCESS, NULL);
+    if (guarded) {
+        query("query.commit_null", guarded, guarded);
+        protect("protect.commit_null_middle", guarded + 0x1000, 0x1000, PAGE_READWRITE);
+        query("query.commit_null_middle", guarded + 0x1000, guarded);
+        query("query.commit_null_last", guarded + 0x2000, guarded);
+        release("free.commit_null", guarded, 0, MEM_RELEASE);
+    }
     release("free.decommit", c, 0x10000, MEM_DECOMMIT);
     query("query.decommitted", c, r);
     release("free.release_with_size", r, 0x10000, MEM_RELEASE);

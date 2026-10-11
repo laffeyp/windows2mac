@@ -1,0 +1,3 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// The game's manifest as the probe's RT_MANIFEST 1 (Sprint 054)
+1 24 "games/hail-to-the-rainbow/manifest.xml"

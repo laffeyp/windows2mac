@@ -211,6 +211,87 @@ def virtual_memory_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def version_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """DLLVERSIONINFO2's ullVersion ends in shell32's file revision, which differs by image (33438 on Server 2025, 5499
+    on 2022); the row keeps that it is set."""
+    return [{k: v for k, v in r.items() if k != "version_low"} | {"version_low_set": r["version_low"] != 0}
+            if "version_low" in r else r for r in printed]
+
+
+def display_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The runners' taskbars differ (the work area ends at 720 on Server 2025, 728 on 2022), and with it
+    SM_CYFULLSCREEN (17: the work area's height less the caption, 23) and SM_CYMAXIMIZED (62: the work area's height
+    and 16); the rows keep those as relations to the work area, and the work area's bottom as lying above the
+    screen's. Index 93 has no SM_ name and differs from run to run (5852, 6552, 7696): its row keeps no value. The
+    adapter's registry key ends in a GUID that differs by machine: the row keeps the key's form."""
+    import re
+    info = next((r for r in printed if r["s"] == "info.wide" and "work_bottom" in r), None)
+    work = info["work_bottom"] - info["work_top"] if info else 0
+    out = []
+    for r in printed:
+        r = dict(r)
+        s = r["s"]
+        if s == "metric.17":
+            r["value"] = r["value"] - (work - 23)
+        elif s == "metric.62":
+            r["value"] = r["value"] - (work + 16)
+        elif s == "metric.93":
+            r.pop("value", None)
+        if "work_bottom" in r:
+            r["work_bottom"] = r["work_bottom"] < r.get("monitor_bottom", 768)
+        if s == "devices.adapter_0" and "key" in r:
+            r["key"] = re.sub(r"\{[0-9A-F-]{36}\}", "{GUID}", r["key"])
+        out.append(r)
+    return out
+
+
+def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
+    windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
+    work area's less 21 (519 on Server 2025's 720, 525 on 2022's 728: the taskbars differ). The rows keep each
+    window's geometry from its own origin, positions as relations (x = y, a multiple of 26, the second window 26 past
+    the first), the batch window's heights as their excess over that default, and the work area's bottom as lying
+    above the screen's."""
+    work = next((r for r in printed if r["s"] == "screen.work_area"), None)
+    default_height = (work["rect_bottom"] - work["rect_top"]) * 3 // 4 - 21 if work else 0
+    origin: dict[str, tuple[int, int]] = {}
+    for r in printed:
+        if r["s"] in ("msg.batch.1", "msg.play.1") and "x" in r:
+            origin[r["s"].split(".")[1]] = (r["x"], r["y"])
+    out = []
+    for r in printed:
+        s = r["s"]
+        if s == "screen.work_area":
+            out.append({"s": s, "left": r["rect_left"], "top": r["rect_top"], "right": r["rect_right"],
+                        "bottom_above_768": r["rect_bottom"] < 768})
+            continue
+        which = "batch" if s.startswith(("msg.batch.", "batch.")) else "play" if s.startswith(("msg.play.", "play.")) else None
+        if which is None or which not in origin:
+            out.append(r)
+            continue
+        x, y = origin[which]
+        tall = which == "batch"                     # CW_USEDEFAULT height: from the work area
+        r = dict(r)
+        if "x" in r:
+            first = origin.get("batch", (x, y))[0]
+            r |= {"x": None, "y": None}
+            r = {k: v for k, v in r.items() if v is not None} | {
+                "x_equals_y": x == y, "x_in_cascade": x > 0 and x % 26 == 0, "past_first": x - first}
+        for prefix in ("in", "out", "rect"):
+            if f"{prefix}_left" not in r:
+                continue
+            left, top, right, bottom = (r.pop(f"{prefix}_{k}") for k in ("left", "top", "right", "bottom"))
+            if s.endswith(".client_rect"):
+                left0, top0 = 0, 0
+            else:
+                left0, top0 = x, y
+            height = bottom - top0
+            r |= {f"{prefix}_left": left - left0, f"{prefix}_top": top - top0, f"{prefix}_right": right - left0,
+                  f"{prefix}_bottom": height - default_height if tall else height}
+        out.append(r)
+    return out
+
+
 TIME_RUNS = {
               "38053043702": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-0", "AMD EPYC 7763 64-Core Processor"),
               "38053047590": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-1", "AMD EPYC 9V74 80-Core Processor"),
@@ -753,30 +834,24 @@ FAMILIES: dict[str, Family] = {
     "virtual_memory": Family(
         name="virtual_memory",
         contract_id="windows.memory.virtual",
-        version="0.1.0",
+        version="0.2.0",
         summary=("VirtualAlloc, VirtualFree, VirtualProtect and VirtualQuery on one thread: 64 KB-aligned reservations "
                  "above 4 GB, zeroed commits, queries reporting the run of equal pages, the error codes (87, 50, 487), "
+                 "MEM_COMMIT alone at NULL reserving and committing (UnityPlayer's form, Sprint 054), "
                  "and an image's pages (headers read-only, code execute-read, data copy-on-write until written)."),
         probe="virtual_memory", guest_file="virtual_memory.c",
         runs={
-              "38050561886": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633783-0", "AMD EPYC 7763 64-Core Processor"),
-              "38050563770": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633783-1", "AMD EPYC 7763 64-Core Processor"),
-              "38050565681": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633783-2", "AMD EPYC 7763 64-Core Processor"),
-              "38050567245": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633783-3", "AMD EPYC 9V74 80-Core Processor"),
-              "38050618749": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633842-0", "AMD EPYC 7763 64-Core Processor"),
-              "38050620683": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633842-1", "AMD EPYC 7763 64-Core Processor"),
-              "38050622465": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633842-2", "AMD EPYC 7763 64-Core Processor"),
-              "38050624259": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633842-3", "AMD EPYC 7763 64-Core Processor"),
-              "38050676216": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633900-0", "AMD EPYC 7763 64-Core Processor"),
-              "38050678382": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633900-1", "AMD EPYC 7763 64-Core Processor"),
-              "38050680580": Run("windows-2025", "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a", "virtual_memory-1791633900-2", "AMD EPYC 7763 64-Core Processor"),
-              "38050682385": Run("windows-2022", "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08", "virtual_memory-1791633900-3", "AMD EPYC 7763 64-Core Processor"),
+              "38172734444": Run("windows-2025", "af77fd8015671e678be7df19b74160d4cc93ce8691c64127412da3572cf73955", "virtual_memory-1791750828-0", "AMD EPYC 7763 64-Core Processor"),
+              "38172736319": Run("windows-2022", "8385bc74e8db79d6ef5c62d4ebd0dc161e7985f85f4d763dc73dd42bed2a137d", "virtual_memory-1791750828-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(
             documented("ms-virtualquery", "api/memoryapi/nf-memoryapi-virtualquery", "2024-02-22",
                        "The function determines the attributes of the first page in the region and then scans "
                        "subsequent pages until it scans the entire range of pages or until it encounters a page with "
-                       "a nonmatching set of attributes."),),
+                       "a nonmatching set of attributes."),
+            documented("ms-virtualalloc", "api/memoryapi/nf-memoryapi-virtualalloc", "2024-02-05",
+                       "Attempting to commit a specific address range by specifying MEM_COMMIT without MEM_RESERVE and "
+                       "a non-NULL lpAddress fails unless the entire range has already been reserved."),),
         open_questions=(
             "Protections are recorded, not enforced: a store to a read-only page succeeds in w2m.",
             "A released region's size runs to the next allocation and differs between executions; the row keeps that "
@@ -784,7 +859,12 @@ FAMILIES: dict[str, Family] = {
             "A writable image page counts as written when its bytes differ from load; a write of the same bytes is "
             "missed."),
         derive=virtual_memory_rows, host_files=("src/w2m/virtual_memory.py", "src/w2m/vm_backend.py"),
-        plants={"bad_protect_parameter": Plant("            return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)",
+        plants={"commit_null_refused": Plant("        if kind & MEM_RESERVE or not address:     # MEM_COMMIT alone at NULL reserves too (row alloc.commit_null)",
+                                             "        if kind & MEM_RESERVE:",
+                                             ("alloc.commit_null", "query.commit_null", "protect.commit_null_middle",
+                                              "query.commit_null_middle", "query.commit_null_last", "free.commit_null",
+                                              "image.section._data", "image.rdata_after"), host="w2m.virtual_memory"),
+                "bad_protect_parameter": Plant("            return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)",
                                                 "            return 0, ERROR_INVALID_PARAMETER",
                                                 ("alloc.bad_protect",), host="w2m.virtual_memory"),
                 "old_unwritten_on_failure": Plant("    *(u32 *)old = (u32)second;                     /* written on failure too (row protect.reserved_page) */\n    if (!ok) set_error((u32)(second >> 32));",
@@ -1819,6 +1899,201 @@ FAMILIES: dict[str, Family] = {
             "guid_version_1": Plant("    g[7] = (u8)((g[7] & 0x0F) | 0x40);", "    g[7] = (u8)((g[7] & 0x0F) | 0x10);", ("guid",)),
             "implicit_mta_refused": Plant("    if (!w2m_thread_scratch()->com_inits && !process_mta)",
                                           "    if (!w2m_thread_scratch()->com_inits)", ("create.implicit_mta",))}),
+    "time": Family(
+        name="time",
+        contract_id="windows.time.time",
+        version="0.1.0",
+        summary=("The work list's time family as relations to the clocks w2m serves: GetSystemTimePreciseAsFileTime "
+                 "(KERNELBASE, through GetProcAddress) within a second of GetSystemTimeAsFileTime, timeGetTime within a "
+                 "second of GetTickCount, GetTickCount64's low half with GetTickCount; none going back over 1,000 reads, "
+                 "each advancing 40 ms to 5 s across Sleep(50); timeBeginPeriod and timeEndPeriod answering 0, and 97 "
+                 "(TIMERR_NOCANDO) for a period of 0."),
+        probe="time", guest_file="time.c", host_files=("src/w2m/vm_backend.py",),
+        runs={
+              "38173127764": Run("windows-2025", "b96af5861876df13a97b0e822e3c03134b5ebedf40f6b027b8ec792e510239c6", "time-1791751169-0", "AMD EPYC 7763 64-Core Processor"),
+              "38173129974": Run("windows-2022", "3cf5e2998c1778dc7f8e5d54fb9b55d9c0c59cc127649782e6a4987f95206c81", "time-1791751169-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("A period ended that was not begun, and periods over 16 ms, are not in the rows and stop the run.",),
+        plants={
+            "precise_from_counter_only": Plant("    u64 now = w2m_filetime_now();\n    *(u32 *)out = (u32)now;\n    *(u32 *)(out + 4) = (u32)(now >> 32);\n    return w2m_logged(W2M_API_GetSystemTimePreciseAsFileTime",
+                                               "    u64 now = w2m_counter_now();\n    *(u32 *)out = (u32)now;\n    *(u32 *)(out + 4) = (u32)(now >> 32);\n    return w2m_logged(W2M_API_GetSystemTimePreciseAsFileTime",
+                                               ("precise.against_system_time",)),
+            "time_in_ticks": Plant("(u32)(w2m_counter_now() / 10000));\n}\n\nu64 winmm_timeBeginPeriod",
+                                   "(u32)(w2m_counter_now() / 1000));\n}\n\nu64 winmm_timeBeginPeriod",
+                                   ("time_get_time.against_tick_count",)),
+            "period_zero_accepted": Plant("    if ((u32)period == 0) return w2m_logged(W2M_API_timeBeginPeriod, period, TIMERR_NOCANDO);",
+                                          "    if ((u32)period == 0) return w2m_logged(W2M_API_timeBeginPeriod, period, TIMERR_NOERROR);",
+                                          ("period.begin_0",)),
+            "tick_64_high_set": Plant("    return w2m_logged(W2M_API_GetTickCount64, 0, w2m_counter_now() / 10000);",
+                                      "    return w2m_logged(W2M_API_GetTickCount64, 0, w2m_counter_now() / 10000 + (1ull << 32));",
+                                      ("tick_count_64.against_tick_count",))}),
+    "registry": Family(
+        name="registry",
+        contract_id="windows.registry.registry",
+        version="0.1.0",
+        summary=("RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software "
+                 "that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a "
+                 "NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; "
+                 "a key closes once; the last error is left."),
+        probe="registry", guest_file="registry.c", host_files=("src/w2m/vm_backend.py",),
+        runs={
+              "38173241012": Run("windows-2025", "77693426a875153bdbf03f4930875bdb62c3e6b382aa02a4160415cad9c14cd5", "registry-1791751265-0", "Intel(R) Xeon(R) 6973P-C"),
+              "38173242936": Run("windows-2022", "18132de8c453d0f2b319cef8e53346b35e086dba9602e6cc468607eb7ea923f5", "registry-1791751265-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
+        documented=(),
+        open_questions=("w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not "
+                        "exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run.",),
+        plants={
+            "missing_untouched": Plant("    if (!exists(path)) {\n        *(u64 *)result = 0;", "    if (!exists(path)) {",
+                                       ("open.missing", "open.missing_two_levels", "open.missing_case",
+                                        "open.missing_below_software_handle")),
+            "case_kept": Plant("return c >= 'A' && c <= 'Z' ? (char)(c + 32) : (char)c;", "return (char)c;",
+                               ("open.software", "open.software_case", "open.missing_below_software_handle",
+                                "close.software", "close.software_case", "close.software_again")),
+            "close_twice_succeeds": Plant("    keys[(h - KEY_BASE) / 4].open = 0;", "", ("close.software_again",)),
+            "root_new_handle": Plant("        *(u64 *)result = root;\n", "        *(u64 *)result = KEY_BASE + 0x100;\n",
+                                     ("open.root_null_subkey", "open.root_empty_subkey", "close.root_null_subkey",
+                                      "close.root_empty_subkey"))}),
+    "file_search": Family(
+        name="file_search",
+        contract_id="windows.file.file_search",
+        version="0.1.0",
+        summary=("FindFirstFileExW in UnityPlayer's form (FindExInfoBasic, name match, no filter or flags), FindNextFileW "
+                 "and FindClose: a folder's entries \".\" and \"..\" first, then by name without case; attributes 0x10 with "
+                 "size 0 for a folder, 0x20 and the size for a file; times as GetFileAttributesExW's; no short name; * and ? "
+                 "without case; a plain name found as stored; ERROR_NO_MORE_FILES at the end; ERROR_PATH_NOT_FOUND for a "
+                 "missing folder, ERROR_FILE_NOT_FOUND for no match; FindClose of INVALID_HANDLE_VALUE ERROR_INVALID_HANDLE."),
+        probe="file_search", guest_file="file_search.c",
+        host_files=("src/w2m/vm_backend.py", "src/w2m/file_bridge.py", "tools/guest_runtime/file.c", "tools/guest_runtime/paths.c"),
+        runs={
+              "38173241103": Run("windows-2025", "8ab37a462d1a658a2e983372c45fde028a1dfae3ed7b321a0fb744ba3dce704e", "file_search-1791751265-0", "AMD EPYC 7763 64-Core Processor"),
+              "38173242874": Run("windows-2022", "298c4f783acb7f1bd199f95118728cc8465837fa3130ea0692d645a05339b2f8", "file_search-1791751265-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("FindExInfoStandard (short names), other search operations, flags, filters, the DOS wildcards and "
+                        "\"*.*\" are not in the rows and stop the run.",),
+        plants={
+            "order_with_case": Plant("    return upper(*a) < upper(*b);", "    return *a < *b;", ("all.next1", "all.next2", "all.next3")),
+            "folder_size_4096": Plant("    if (kind != 2) { *(u32 *)(d + 28)", "    if (1) { *(u32 *)(d + 28)",
+                                      ("all", "all.next0", "all.next3", "folder_itself")),
+            "case_matters": Plant("upper(*p) == upper(*s)", "*p == *s",
+                                  ("exact_other_case", "exact_other_case.next0", "exact_other_case.close")),
+            "end_error_left": Plant("        set_error(ERROR_NO_MORE_FILES);\n", "",
+                                    ("all.next4", "pattern_txt.next0", "pattern_question.next0", "exact.next0",
+                                     "exact_other_case.next0", "folder_itself.next0")),
+            "missing_folder_as_file": Plant("        set_error(ERROR_PATH_NOT_FOUND);", "        set_error(ERROR_FILE_NOT_FOUND);",
+                                            ("missing_folder",))}),
+    "version": Family(
+        name="version",
+        contract_id="windows.version.version",
+        version="0.1.0",
+        summary=("The version check under the game's manifest: VerSetConditionMask's three bits per type and bit 63; "
+                 "RtlVerifyVersionInfo and VerifyVersionInfoW comparing major, minor and service pack as one version, "
+                 "build, platform and product type alone, a condition of 0 skipped (STATUS_REVISION_MISMATCH, "
+                 "ERROR_OLD_WIN_VERSION; a type mask of 0 STATUS_INVALID_PARAMETER, ERROR_BAD_ARGUMENTS); GetVersionExW "
+                 "10.0, platform 2, product 3, suite 0x190; SHELL32's DllGetVersion 10.0.10586."),
+        probe="version", guest_file="version.c",
+        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/resources.c", "tools/guest_runtime/system_info.c"),
+        runs={
+              "38173733146": Run("windows-2025", "3a49efbae6b80ad79bc6226b6d41c39241097745e032f0848118c10d034fef4f", "version-1791751693-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38173735116": Run("windows-2022", "a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c11f7", "version-1791751693-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("The build is w2m's profile (Server 2025, 26100); Server 2022 answers 20348, and the rows keep "
+                        "the build as relations to the two.",
+                        "VerifyVersionInfoW for a program whose manifest does not name Windows 10, and the suite "
+                        "conditions, are not in the rows and stop the run."),
+        derive=version_rows,
+        plants={
+            "mask_no_high_bit": Plant("    return w2m_logged(W2M_API_VerSetConditionMask, t, mask | 1ull << 63);",
+                                      "    return w2m_logged(W2M_API_VerSetConditionMask, t, mask);",
+                                      ("mask.game_*", "mask.type_*", "mask.two_types_at_once", "mask.replace")),
+            "fields_apart": Plant("        if (!decided) ok = holds(0, 0, c, api);", "        if (!decided) ok = holds(0, 0, c, api);\n        for (int i = 0; i < 4; i++) if (types & order[i] && !holds(have[i], want[i], c, api)) ok = 0;",
+                                  ("verify.game_6_1", "verify.game_6_2")),
+            "condition_zero_checked": Plant("    if (c) {\n        int decided",
+                                            "    if (!c && types & 0x33) return STATUS_REVISION_MISMATCH;\n    if (c) {\n        int decided",
+                                            ("verify.type_without_condition",)),
+            "unmanifested_version": Plant("    int windows_10 = (w2m_manifest() & W2M_MANIFEST_WINDOWS_10) != 0;",
+                                          "    int windows_10 = 0;", ("get_version.ex", "get_version.plain"),
+                                          file="system_info.c"),
+            "shell32_system_build": Plant("#define SHELL32_BUILD 10586u", "#define SHELL32_BUILD 26100u",
+                                          ("dll_get_version.info", "dll_get_version.info2"))}),
+    "display": Family(
+        name="display",
+        contract_id="windows.display.display",
+        version="0.1.0",
+        summary=("The display as the game queries it, under its manifest (PerMonitorV2): GetSystemMetrics 0-99, the "
+                 "Hyper-V adapter and its one monitor (EnumDisplayDevicesA), EnumDisplayMonitors' one callback, "
+                 "GetMonitorInfoA and W, MonitorFromPoint, Rect and Window, shcore's GetDpiForMonitor (96 x 96), "
+                 "EnumDisplaySettingsW's current settings and 13 modes; one 1024 x 768 monitor, the work area above the "
+                 "taskbar."),
+        probe="display", guest_file="display.c",
+        host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py", "tools/guest_runtime/guest_calls.c",
+                    "tools/guest_runtime/windows.c"),
+        runs={
+              "38174316653": Run("windows-2025", "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c", "display-1791752210-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38174318347": Run("windows-2022", "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b", "display-1791752210-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(),
+        open_questions=("w2m's display is the runners' (one 1024 x 768 monitor at 96 DPI, Server 2025's taskbar) until "
+                        "the game's window is a Mac window (phase 6).",
+                        "GetSystemMetrics(93), which has no SM_ name, answers a different value on each run; w2m "
+                        "answers 0."),
+        derive=display_rows,
+        plants={
+            "metrics_unaware": Plant("    1024, 768, 17, 17, 23, 1, 1, 3, 3,", "    1280, 768, 17, 17, 23, 1, 1, 3, 3,", ("metric.0",)),
+            "monitor_string": Plant("        copy(d + 36, \"Generic PnP Monitor\", 128);", "        copy(d + 36, \"Generic Monitor\", 128);",
+                                    ("devices.adapter_0_monitor_0",)),
+            "callback_rect_work": Plant("    f->rect[3] = SCREEN_H;", "    f->rect[3] = WORK_H;", ("enum_monitors.callback",)),
+            "dpi_scaled": Plant("    *(u32 *)x = 96; *(u32 *)y = 96;", "    *(u32 *)x = 144; *(u32 *)y = 144;",
+                                ("dpi.effective", "dpi.angular")),
+            "null_window_null": Plant("    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return outside(",
+                                      "    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return flags == 2 ? w2m_logged(W2M_API_MonitorFromWindow, 0, 0) : outside(",
+                                      ("from_window.null_nearest",)),
+            "one_mode_short": Plant("    else if (m >= 0 && m < 13) {", "    else if (m >= 0 && m < 12) {",
+                                    ("settings.mode_12", "settings.mode_count"))}),
+    "windows": Family(
+        name="windows",
+        contract_id="windows.windows.windows",
+        version="0.1.0",
+        summary=("Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, "
+                 "CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, "
+                 "WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default "
+                 "size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the "
+                 "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW)."),
+        probe="windows", guest_file="windows.c",
+        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/guest_calls.c", "tools/guest_runtime/display.c",
+                    "tools/guest_runtime/resources.c", "src/w2m/guest_stubs.py"),
+        runs={
+              "38174244880": Run("windows-2025", "e8636f8cc0657e52431d57380477f3ee148f3842bdda1064466fc9d621e2995c", "windows-1791752145-0", "AMD EPYC 7763 64-Core Processor"),
+              "38174246839": Run("windows-2022", "220412c9aaa756201ef395b341336f0260bc3f634643ab7e7f005b626b412966", "windows-1791752145-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("Where CW_USEDEFAULT places a window depends on the windows the desktop made before (52, 78, 130 "
+                        "seen for a probe's first); w2m's cascade starts at 52.",
+                        "The default height is fitted: 3/4 of the work area's height less 21 on both runners (519, 525).",
+                        "Windows are records; nothing is drawn, and ShowWindow, the message loop and every message after "
+                        "WM_CREATE are later work."),
+        derive=windows_rows,
+        plants={
+            "minmax_not_sent": Plant("    w2m_call_guest(&f->call, w->procedure, h, WM_GETMINMAXINFO, 0, (u64)f->minmax);",
+                                     "    f->step = 1;\n    w2m_call_guest(&f->call, w->procedure, h, WM_NCCREATE, 0, (u64)f->create);",
+                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*",
+                                      "create.play", "play.window_rect")),
+            "frame_thin": Plant("#define FRAME_TOP 31 ", "#define FRAME_TOP 26 ",
+                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect")),
+            "height_from_screen": Plant("        cy = (work[3] - work[1]) * 3 / 4 - 21;", "        cy = 768 * 3 / 4 - 21;",
+                                        ("msg.batch.2", "batch.client_rect", "batch.window_rect")),
+            "no_edge_in_create": Plant("    *(u32 *)(cs + 72) = ((u32)style & WS_CAPTION) == WS_CAPTION ? WS_EX_WINDOWEDGE : 0;",
+                                       "    *(u32 *)(cs + 72) = 0;", ("msg.play.1", "msg.play.3")),
+            "extra_unbounded": Plant("        if (index + 8 > classes[w->cls].extra) return 0;", "        if (index + 8 > EXTRA) return 0;",
+                                     ("batch.long_ptr_8", "play.long_ptr_8")),
+            "duplicate_class_allowed": Plant("        if (classes[k].instance != instance) w2m_unimplemented(api, instance);        /* another module's: no row */\n        set_error(ERROR_CLASS_ALREADY_EXISTS);\n        return w2m_logged(api, name, 0);",
+                                             "        if (classes[k].instance != instance) w2m_unimplemented(api, instance);        /* another module's: no row */\n        return w2m_logged(api, name, classes[k].atom);",
+                                             ("class.register_ex_again",)),
+            "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
+                                     ("icon.own_103",))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",
@@ -1853,7 +2128,7 @@ FAMILIES: dict[str, Family] = {
                  "address; RtlCaptureContext, RtlLookupFunctionEntry, RtlVirtualUnwind and RtlPcToFileHeader answer "
                  "for the probe's own code; an exception no frame takes reaches the top-level filter."),
         probe="exceptions", guest_file="exceptions.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/exception_stubs.py"),
+        host_files=("src/w2m/vm_backend.py", "src/w2m/guest_stubs.py", "tools/guest_runtime/guest_calls.c"),
         runs={
               "38165931122": Run("windows-2025", "a71f491c4e8b9c1a563597497a004b74add2cf9caca0c7a9d3b36b041f34553a", "exceptions-1791745002-0", "AMD EPYC 7763 64-Core Processor"),
               "38165933249": Run("windows-2022", "55369a03c431c6c2448a9ddbe99ebcfe452227a2fcb79c184015697bc57cb6b3", "exceptions-1791745002-1", "AMD EPYC 7763 64-Core Processor"),
