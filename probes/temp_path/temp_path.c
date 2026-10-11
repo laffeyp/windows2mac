@@ -15,13 +15,13 @@
 #define SENTINEL 0xDEADu
 #define MARK 0xA5A5u
 
-static char out[4096];
+static char out[65536];
 static unsigned n;
 static WCHAR cwd[MAX_PATH];
 static unsigned cwd_len;
 static WCHAR buf[1024];
 
-static void put(const char *s) { while (*s) out[n++] = *s++; }
+static void put(const char *s) { while (*s && n < sizeof out - 64) out[n++] = *s++; }
 static void putu(unsigned long long v) {
     char t[24];
     int k = 0;
@@ -116,26 +116,32 @@ static void block(const char *name) {
 void start(void) {
     cwd_len = GetCurrentDirectoryW(MAX_PATH, cwd);
 
-    /* Delete every variable but W2M_KEEP (GetEnvironmentStringsW faulted, 0xC0000005, once every variable was
-     * deleted: runs 38098511094, 38098565802); names run to the first '=' after the first character
-     * ("=C:=C:\x" is "=C:"). */
+    /* Delete every variable but W2M_KEEP, in passes of up to 64 names (a runner holds more); names run to the
+     * first '=' after the first character ("=C:=C:\x" is "=C:"). */
     SetEnvironmentVariableW(L"W2M_KEEP", L"1");
-    WCHAR *b = GetEnvironmentStringsW();
     static WCHAR names[64][128];
-    unsigned count = 0;
-    for (WCHAR *e = b; *e && count < 64; ) {
-        unsigned k = 0;
-        while (e[k] && (k == 0 || e[k] != '=') && k < 127) { names[count][k] = e[k]; k++; }
-        names[count][k] = 0;
-        count++;
-        while (*e) e++;
-        e++;
-    }
-    FreeEnvironmentStringsW(b);
-    row("clear"); put(",\"failed\":[");
     unsigned failed = 0;
-    for (unsigned i = 0; i < count; i++)
-        if (!starts(names[i], L"W2M_KEEP", 9) && !SetEnvironmentVariableW(names[i], NULL)) { if (failed++) put(","); put("\""); raw(names[i]); put("\""); }
+    row("clear"); put(",\"failed\":[");
+    for (int pass = 0; pass < 64; pass++) {
+        WCHAR *b = GetEnvironmentStringsW();
+        unsigned count = 0;
+        for (WCHAR *e = b; *e && count < 64; ) {
+            unsigned k = 0;
+            while (e[k] && (k == 0 || e[k] != '=') && k < 127) { names[count][k] = e[k]; k++; }
+            names[count][k] = 0;
+            if (!starts(names[count], L"W2M_KEEP", 9)) count++;
+            while (*e) e++;
+            e++;
+        }
+        FreeEnvironmentStringsW(b);
+        if (count == 0) break;
+        unsigned deleted = 0;
+        for (unsigned i = 0; i < count; i++) {
+            if (SetEnvironmentVariableW(names[i], NULL)) deleted++;
+            else if (failed < 8) { if (failed++) put(","); put("\""); raw(names[i]); put("\""); }
+        }
+        if (!deleted) break;
+    }
     put("]"); end();
     block("cleared");
 
