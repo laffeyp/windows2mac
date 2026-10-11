@@ -53,6 +53,7 @@ from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
 from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
+from w2m import exception_stubs
 from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
                             detach_stub, write_context)
 
@@ -146,6 +147,8 @@ COM_VTABLES = {"w2m_enumerator_vtable": ("QueryInterface", "AddRef", "Release", 
                                          "UnregisterEndpointNotificationCallback"),
                "w2m_collection_vtable": ("QueryInterface", "AddRef", "Release", "GetCount", "Item")}
 HOST_THREAD = 30                    # threads.c's requests: a0 the W2M_THREAD_* sub-operation (scheduler.py; Sprint 051)
+HOST_EXCEPTION = 31                 # exceptions.c's requests (Sprint 053): a0 1, the x86 stubs' page; 2, XMM0-15 to a1
+EXCEPTION_STUBS, EXCEPTION_CAPTURE_XMM = 1, 2
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
     THREAD_SIGNAL = range(1, 9)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
@@ -1014,6 +1017,7 @@ class VM:
         self.modules = self._modules(image_name)
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
+        self._exception_page = 0                         # exception_stubs.py's page, once written (Sprint 053)
         self._max_steps = 0
         self.current_tid = tid
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
@@ -1036,6 +1040,7 @@ class VM:
         self.pc_map = [m for m in self.pc_map if m[0] < MONITOR_VA + self.code_cursor]
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
+        self._write_exception_entry()                    # it returns to the guest through the dispatcher
 
     def _process(self, off: int) -> int:
         """File offset of a process-area offset."""
@@ -1225,6 +1230,13 @@ class VM:
             raise Unimplemented(f"a thread stub: VirtualAlloc error {err}")
         self.mem.write(va, code)
         return va
+
+    def _exception_stubs(self) -> int:
+        """The x86 stubs exception dispatch calls handlers and resumes contexts through (exception_stubs.py), on a
+        page of the arena written at the first exception, so a process that raises none keeps its address space."""
+        if not self._exception_page:
+            self._exception_page = self._code_page(exception_stubs.page(self._import_thunk("KERNEL32.dll!W2mExceptionResume")))
+        return self._exception_page
 
     def _com_vtables(self) -> None:
         """Each COM class's vtable (com.c, in the runtime image) filled with its methods' thunks: the services
@@ -1422,6 +1434,10 @@ class VM:
         fn = ORDINAL_NAMES.get(dll.upper(), {}).get(fn, fn)
         service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
                    else DLL_SERVICES.get(dll.upper(), {}).get(fn))
+        if service is None and dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL"):
+            # kernel32 exports RtlUnwindEx, RtlCaptureContext and the other Rtl* exception functions as its own
+            # (not forwarders: specs/windows_exports.json) and they do ntdll's work: one service serves both names
+            service = DLL_SERVICES.get("NTDLL.DLL", {}).get(fn)
         state = PROCESS_VA + STATE_OFF
         if service is None:
             a.emit(a64.hvc(9))
@@ -1490,6 +1506,15 @@ class VM:
         elif op == HOST_THREAD:
             a2, a3 = struct.unpack_from("<QQ", self.mm, t + 24)
             result = self._thread_request(a0, a1, a2, a3) & M64
+        elif op == HOST_EXCEPTION:
+            if a0 == EXCEPTION_STUBS:
+                result = self._exception_stubs()
+            elif a0 == EXCEPTION_CAPTURE_XMM:
+                xmm, _, _ = self.vectors()
+                self.mem.write(a1, b"".join(q.to_bytes(16, "little") for q in xmm))
+                result = 0
+            else:
+                raise CompileError(f"guest runtime: unknown exception request {a0}")
         elif op == HOST_MAP_VIEW:                       # the view's pages, then the file's bytes copied in
             a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
             if self.files is None or a1 not in self.files.fds:
@@ -1733,7 +1758,6 @@ class VM:
             else:
                 vec.emit(a64.hvc(2), *[a64.b(0)] * 31)  # each 0x80 slot: hvc #2, then spin
         self._write_words(VECTORS, vec.finish())
-        self._write_exception_entry()
         d = Assembler(MONITOR_VA + DISPATCHER)
         top, miss = d.label(), d.label()
         d.bind(top)
@@ -1749,6 +1773,7 @@ class VM:
         self._write_words(DISPATCHER, d.finish())
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
+        self._write_exception_entry()                    # it returns to the guest through the dispatcher
 
     def _slow_sse(self, x: list[int], rip: int) -> int:
         """Execute the SSE instruction at `rip` with x86fp (MXCSR unmasks an exception): the guest's
@@ -1804,8 +1829,11 @@ class VM:
     def _write_exception_entry(self) -> None:
         """Save x0-x30, ESR, FAR and ELR in the monitor data page, leave exception state (ERET to
         the continuation, EL1h, interrupts masked), take the runtime stack and call
-        w2m_exception, which does not return for a guest fault. Translated code keeps nothing in
-        SP, and x16 and x17 are temporaries, so the routine may use them."""
+        w2m_exception. For a guest fault it returns once it has dispatched the exception (Sprint 053):
+        the state block holds the GPRs and redirect_rip the x86 address to go on at (a handler's call
+        stub, or a resumed context), which are loaded as a bridge loads them before it dispatches.
+        Translated code keeps nothing in SP, and x16 and x17 are temporaries, so the routine may use
+        them; x19-x28 (flags and the monitor's registers) survive the call."""
         e = Assembler(MONITOR_VA + EXCEPTION_ENTRY)
         e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + SAVE_AREA))
         for i in range(0, 30, 2):
@@ -1821,7 +1849,12 @@ class VM:
         assert e.here() == cont
         self.exception_call_va = cont
         e.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
-               a64.mov_imm(16, self.runtime.symbols["w2m_exception"]), a64.blr(16), a64.hvc(2))
+               a64.mov_imm(16, self.runtime.symbols["w2m_exception"]), a64.blr(16))
+        e.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF))
+        for i in range(0, 16, 2):
+            e.emit(a64.ldp(i, i + 1, 16, 8 * i))
+        e.emit(a64.ldr(8, 17, 16, STATE_REDIRECT), a64.str_(8, a64.ZR, 16, STATE_REDIRECT))
+        e.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
         words = e.finish()
         assert 4 * len(words) <= DISPATCH_TABLE - EXCEPTION_ENTRY
         self._write_words(EXCEPTION_ENTRY, words)

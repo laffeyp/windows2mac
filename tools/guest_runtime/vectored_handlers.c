@@ -7,7 +7,7 @@
  *     nonzero puts it at the front, zero at the back; dispatch calls them front to back (rows dispatch.*)
  *   - RemoveVectoredExceptionHandler answers 1 for a handle in the list and removes it, 0 for any other value
  *   - neither touches the last error
- * The list is kept in order here for the dispatcher; dispatch itself (RaiseException, faults) is not built yet.
+ * The list is kept in order here; exceptions.c dispatches to it (Sprint 053).
  */
 #include "runtime.h"
 
@@ -46,3 +46,6 @@ u64 k32_RemoveVectoredExceptionHandler(u64 handle) {
         }
     return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 0);
 }
+
+/* For exceptions.c: the k-th handler front to back, 0 past the last. */
+u64 w2m_vectored_handler(u64 k) { return k < (u64)count ? slots[order[k]].handler : 0; }

@@ -1,0 +1,154 @@
+{
+ "contract_id": "windows.exception.exceptions",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "Structured exceptions as the game's modules use them, with the probe's own __C_specific_handler as their static C runtimes carry: RaiseException's record (flags 0x80, the arguments, no chained record, the last error left) reaches vectored handlers first, then each frame's language handler through .pdata; EXECUTE_HANDLER unwinds with RtlUnwindEx, running each __finally, to the __except with the code in RAX; CONTINUE_EXECUTION returns from RaiseException; continuing a noncontinuable exception raises STATUS_NONCONTINUABLE_EXCEPTION (flags 0x81, no chained record); unwinding crosses frame-pointer, large-allocation and saved-XMM frames; access violations carry the access and the address; RtlCaptureContext, RtlLookupFunctionEntry, RtlVirtualUnwind and RtlPcToFileHeader answer for the probe's own code; an exception no frame takes reaches the top-level filter.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/exceptions/exceptions.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "except.thread_naming",
+    "reached": 1,
+    "code": 1080890248,
+    "filter_calls": 1,
+    "seen_code": 1080890248,
+    "flags": 128,
+    "params": 3,
+    "args_equal": 1,
+    "chained": 0,
+    "err": 57005
+   },
+   {
+    "s": "except.continue",
+    "returned": 1,
+    "filter_calls": 1,
+    "params": 1,
+    "info0": 7,
+    "err": 57005
+   },
+   {
+    "s": "except.search_order",
+    "order": [
+     1,
+     1,
+     3,
+     2,
+     4
+    ],
+    "abnormal": 1
+   },
+   {
+    "s": "except.noncontinuable",
+    "reached": 1,
+    "order": [
+     1,
+     2
+    ],
+    "seen_code": 3221225509,
+    "flags": 129,
+    "params": 0,
+    "chained": 0,
+    "chained_code": 0
+   },
+   {
+    "s": "except.vectored_first",
+    "order": [
+     10,
+     11,
+     12
+    ]
+   },
+   {
+    "s": "except.deep",
+    "reached": 1,
+    "code": 3763826771,
+    "fp": 11,
+    "big": 22,
+    "xmm": 33
+   },
+   {
+    "s": "fault.write_null",
+    "code": 3221225477,
+    "flags": 0,
+    "params": 2,
+    "info0": 1,
+    "info1": 0
+   },
+   {
+    "s": "fault.read_low",
+    "code": 3221225477,
+    "flags": 0,
+    "params": 2,
+    "info0": 0,
+    "info1": 16,
+    "v": 0
+   },
+   {
+    "s": "rtl.queries",
+    "rip_in_self": 1,
+    "found": 1,
+    "begin": 1,
+    "base_is_module": 1,
+    "handler_null": 1,
+    "to_caller": 1,
+    "frame_below_caller": 1,
+    "stack_entry_null": 1,
+    "stack_base_left": 1,
+    "header": 1,
+    "stack_header_null": 1
+   },
+   {
+    "s": "unhandled.top_filter",
+    "code": 3763826771,
+    "flags": 128,
+    "params": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38165931122: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:a71f491c4e8b9c1a563597497a004b74add2cf9caca0c7a9d3b36b041f34553a; run 38165933249: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:55369a03c431c6c2448a9ddbe99ebcfe452227a2fcb79c184015697bc57cb6b3",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "exceptions-1791745002-0-1",
+    "exceptions-1791745002-0-2",
+    "exceptions-1791745002-1-1",
+    "exceptions-1791745002-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-rtlunwindex",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtlunwindex (page updated 2024-02-02; retrieved 2026-10-10)",
+   "quote": "A value to be placed in the integer function return register before continuing execution."
+  }
+ ],
+ "open_questions": [
+  "C++ exceptions (STATUS_UNWIND_CONSOLIDATE), collided unwinds and an exception raised inside a handler are not in the rows: the game's Windows run raises one exception, mono's thread name, and none from UnityPlayer."
+ ],
+ "sections": {
+  "probe": "probes/exceptions (Sprint 044)",
+  "implementation": "tools/guest_runtime/exceptions.c",
+  "rows": "scripts/family_run.py exceptions",
+  "excluded": "none"
+ }
+}

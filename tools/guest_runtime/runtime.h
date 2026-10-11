@@ -197,8 +197,9 @@ struct w2m_save_area {
 _Static_assert(__builtin_offsetof(struct w2m_save_area, sw_code) == 0x118, "save.sw_code");
 _Static_assert(__builtin_offsetof(struct w2m_save_area, q) == 0x200, "save.q");
 
-/* Where the runtime leaves an exception it could not hand to a handler: the record and the
- * CONTEXT it built, for the host to read (Sprint 040; VEH dispatch is Sprint 047). */
+/* Where the runtime leaves an exception no handler took, which ends the process: the record and
+ * the CONTEXT it was raised with, for the host to read (Sprint 040). A fault builds them here first;
+ * the magic is written only when the exception ends the process (exceptions.c; Sprint 053). */
 struct w2m_exception_area {
     u64 magic;                       /* W2M_EXCEPTION_MAGIC once written */
     u64 pad;
@@ -230,6 +231,9 @@ u64 w2m_counter_now(void);                                              /* proce
 u64 w2m_filetime_now(void);                                             /* process.c: the system time */
 u64 w2m_filetime_start(void);                                           /* process.c: its first reading */
 u64 w2m_unhandled_exception_filter(void);                               /* exception_filter.c: the current one */
+struct w2m_exception_record;
+struct w2m_context;
+int w2m_dispatch_fault(const struct w2m_exception_record *rec, const struct w2m_context *ctx);   /* exceptions.c */
 
 /* Monitor data word: the process's start (console.c): 0 a console program with redirected standard
  * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */
@@ -243,7 +247,11 @@ u64 w2m_unhandled_exception_filter(void);                               /* excep
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,
        W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR,      /* 24: Sprint 047; 25, 26: 048 */
        W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW,                                           /* 27-29: Sprint 049 */
-       W2M_HOST_THREAD };                                                                         /* 30: Sprint 051 */
+       W2M_HOST_THREAD,                                                                           /* 30: Sprint 051 */
+       W2M_HOST_EXCEPTION };                                                                      /* 31: Sprint 053 */
+
+/* W2M_HOST_EXCEPTION's first argument (exceptions.c): the x86 stubs' page; XMM0-15 copied to a CONTEXT's. */
+enum { W2M_EXCEPTION_STUBS = 1, W2M_EXCEPTION_CAPTURE_XMM };
 
 /* W2M_HOST_THREAD's first argument (src/w2m/scheduler.py). */
 enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_SUSPEND, W2M_THREAD_RESUME,

@@ -378,3 +378,11 @@
 
 **Kit change suggested:** for each documented callback sequence (loader, thread start, exit), one probe that records the sequence of calls, not their results.
 
+
+### 2026-10-11 — Sprint 053: a done criterion set at a trace position without reading the trace up to it
+
+**What happened:** Sprint 052 closed partial and moved its criterion (the frontier past UnityPlayer's CoCreateInstance calls, Windows trace seq 1705) to Sprint 053, on the reading that mono's RaiseException was the one thing in the way. 053 caught the exception and the frontier stopped at seq 1524, on the first of 20 unserved functions (the version check, the display, the game window) that the held trace had listed all along. One query over the trace, run at 052's close, would have shown them.
+
+**Finding (#43):** a criterion stated as a position in a held trace ("past seq N") is a claim about every call before N; it is checked by listing the unserved calls between the current stop and N before the criterion is written, not by running to the next stop.
+
+**Kit change suggested:** a frontier criterion carries the list of unserved functions between the current stop and its target, produced by a script over the reference trace, in the card.

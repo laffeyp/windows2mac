@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 053
-status: open
+status: closed (partial)
 phase: 5
 pass_kind: functional
 ---
@@ -56,3 +56,12 @@ Not in this sprint, each with its reason: `STATUS_UNWIND_CONSOLIDATE` (C++ catch
 The exceptions family accepted, vectored_handlers re-accepted with dispatch; the frontier past the six CoCreateInstance calls.
 
 ## observed
+
+- **Closed partial:** the exceptions half of the done criteria is met; the frontier half is not. mono's thread-naming RaiseException is caught by its own `__except` as on Windows (one RaiseException, one handler call, one RtlUnwindEx, the counts of the game's Windows run), and the frontier runs 41,315,682 instructions, twice 052's 20,785,191, with 20 threads created; it stops at `KERNEL32.dll!VerSetConditionMask` (`store/runs/frontier-643a6283510c-1791745663100836000`, the same stop on the closing code as on the first run), Windows trace seq 1524, before the six CoCreateInstance calls at seq 1705.
+- **Why the criterion moves again:** between seq 1524 and 1705 the held trace lists 20 functions w2m does not serve: the version check (VerSetConditionMask 5, ntdll RtlVerifyVersionInfo), the display (GetSystemMetrics 4, EnumDisplayDevicesA 3, EnumDisplayMonitors, GetMonitorInfoA, MonitorFromWindow, shcore GetDpiForMonitor) and the game window (RegisterClassExW, RegisterClassW, CreateWindowExW, DefWindowProcW 3, SetWindowLongPtrW, GetClientRect, LoadIconA, LoadCursorA), with GetSystemTimePreciseAsFileTime, RegOpenKeyExW, SHELL32 DllGetVersion and FindFirstFileExW; WINMM timeGetTime follows at 1707. Sprint 052 moved its criterion here without listing them; the listing, made now from the trace, is the next sprint's scope (KIT_DIARY #43).
+- **The exceptions family equals Windows** (contract windows.exception.exceptions 0.1.0, 10 rows, runs 38165931122 and 38165933249, Server 2025 and 2022 equal) with seven plants of named reach: the software-origin flag, vectored handlers skipped, termination handlers skipped, the unwind's return value, a noncontinuable exception continued, UWOP_SET_FPREG ignored (it breaks every row after the frame-pointer frame), no top-level filter.
+- **vectored_handlers 0.2.0 equals Windows** with Sprint 049's two dispatch rows included (8 rows) and a plant the dispatch rows now catch (First handlers put at the back), which 0.1.0's open question said no row could.
+- **Faults dispatch:** the exception entry returns to the guest after w2m_exception; the fault oracle of run 38011862284 judges 39,708 cases (5,485 faults) with no class differing, and 436 of 436 classes stay accepted in model and VM.
+- **Windows facts the rows fixed:** STATUS_NONCONTINUABLE_EXCEPTION carries flags 0x81 and no chained record; an access violation's flags are 0; clang's `__try` takes exceptions only from the calls in its body (a fault in its own body needs `-fasync-exceptions`) and gives `.pdata` only to functions with a `__try` unless built with unwind tables, without which Windows's RtlUnwindEx raised STATUS_BAD_STACK walking out of the probe's handler (run 38165571800).
+- **Built:** `tools/guest_runtime/exceptions.c` (dispatch, the unwinder for UNWIND_INFO versions 1 and 2 with chained entries and epilogues, RtlUnwindEx, RaiseException, RtlCaptureContext, RtlVirtualUnwind, RtlPcToFileHeader), RtlLookupFunctionEntry over images' `.pdata`, `src/w2m/exception_stubs.py` (return, call and restore stubs, written at the first exception), host request 31, the bridge serving a KERNEL32 Rtl* import with the ntdll service, the runtime's memcpy; the exception area marks only an exception that ends the process.
+- **Defects found and fixed on the way:** the reference traversal took an address the probe's code computes (`queries + 0x400`, one LEA) for a function entry and decoded from inside an instruction; an address taken inside a `.pdata` function but not at its start is no longer a root (`src/w2m/pe.py` keeps EndAddress). Three binary tests told a CRT-linked probe by having `.pdata` at all; they now use its size (448 and 451 entries against the exceptions probe's 23). The table search in function_tables.c had been copied for the dispatcher; RtlLookupFunctionEntry now calls the one search. Ten families re-recorded on the changed host files, all conforming.

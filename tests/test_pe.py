@@ -76,7 +76,8 @@ def test_structure(path: Path) -> None:
     assert text.virtual_address <= img.entry_rva < text.virtual_address + text.virtual_size
     assert set(img.relocations) <= {0, 10}         # only DIR64 and ABSOLUTE padding
     assert ("static", img.entry_rva) in img.code_targets()
-    if img.function_starts:                        # CRT-linked probes (hello, event_auto_reset): .pdata
+    if len(img.function_starts) > 400:             # CRT-linked probes (hello, event_auto_reset): their .pdata
+                                                   # (a no-CRT probe built with unwind tables has a few entries)
         assert "WaitForSingleObject" in img.imports["KERNEL32.dll"]
     else:                                          # no-CRT probes (Sprint 029): kernel32, and a DLL the
         assert set(img.imports) - {"KERNEL32.dll"} - SYSTEM_DLLS <= PROBE_DLLS   # probe builds (Sprint 046), or

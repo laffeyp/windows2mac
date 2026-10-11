@@ -64,6 +64,7 @@ class PeImage:
     tls: tuple[int, int, int, int] | None = None                 # TLS directory: template start, end, index (VAs), zero fill
     iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name" (incl. delay)
     function_starts: tuple[int, ...] = ()                       # .pdata RUNTIME_FUNCTION.BeginAddress
+    function_ends: tuple[int, ...] = ()                         # .pdata EndAddress, in the same order
     stack_reserve: int = 0x100000                               # SizeOfStackReserve (a new thread's default; Sprint 051)
     stack_commit: int = 0x1000                                  # SizeOfStackCommit
 
@@ -260,12 +261,14 @@ def parse(data: bytes) -> PeImage:
                 off += 8
 
     starts: list[int] = []
+    ends: list[int] = []
     rva, size = d(DIR_EXCEPTION)
     if rva:
         off = _rva_to_offset(sections, rva)
         for i in range(size // 12):
-            begin, _, _ = r.u("<III", off + 12 * i)
+            begin, end, _ = r.u("<III", off + 12 * i)
             starts.append(begin)
+            ends.append(end)
 
     if not 0 <= entry < size_of_image:
         raise PeError(f"entry RVA 0x{entry:x} outside image size 0x{size_of_image:x}")
@@ -275,4 +278,4 @@ def parse(data: bytes) -> PeImage:
                    sections=sections, imports=imports, relocations=relocs,
                    relocation_sites=tuple(sites), delay_imports=delay,
                    exports=tuple(exports), tls_callbacks=tuple(callbacks), tls=tls, iat=iat,
-                   function_starts=tuple(starts), stack_reserve=stack_reserve, stack_commit=stack_commit)
+                   function_starts=tuple(starts), function_ends=tuple(ends), stack_reserve=stack_reserve, stack_commit=stack_commit)

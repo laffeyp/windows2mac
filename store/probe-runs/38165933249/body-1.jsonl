@@ -1,0 +1,10 @@
+{"s":"except.thread_naming","reached":1,"code":1080890248,"filter_calls":1,"seen_code":1080890248,"flags":128,"params":3,"args_equal":1,"chained":0,"err":57005}
+{"s":"except.continue","returned":1,"filter_calls":1,"params":1,"info0":7,"err":57005}
+{"s":"except.search_order","order":[1,1,3,2,4],"abnormal":1}
+{"s":"except.noncontinuable","reached":1,"order":[1,2],"seen_code":3221225509,"flags":129,"params":0,"chained":0,"chained_code":0}
+{"s":"except.vectored_first","order":[10,11,12]}
+{"s":"except.deep","reached":1,"code":3763826771,"fp":11,"big":22,"xmm":33}
+{"s":"fault.write_null","code":3221225477,"flags":0,"params":2,"info0":1,"info1":0}
+{"s":"fault.read_low","code":3221225477,"flags":0,"params":2,"info0":0,"info1":16,"v":0}
+{"s":"rtl.queries","rip_in_self":1,"found":1,"begin":1,"base_is_module":1,"handler_null":1,"to_caller":1,"frame_below_caller":1,"stack_entry_null":1,"stack_base_left":1,"header":1,"stack_header_null":1}
+{"s":"unhandled.top_filter","code":3763826771,"flags":128,"params":0}

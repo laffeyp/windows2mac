@@ -17,6 +17,7 @@ probe has no .pdata to list it).
 
 from __future__ import annotations
 
+import bisect
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -75,6 +76,15 @@ def walk(img: PeImage, data: bytes) -> Reachable:
     def executable(rva: int) -> bool:
         return any(a <= rva < b for a, b in ranges)
 
+    # an address taken inside a .pdata function but not at its start is not an entry: a bound such as
+    # `function + 0x400`, which a compiler folds into one LEA (Sprint 053, the exceptions probe); an address in
+    # no described function stays a root (a leaf function, which has no .pdata entry, passed as a pointer)
+    inside = sorted(zip(img.function_starts, img.function_ends, strict=True))
+
+    def interior(rva: int) -> bool:
+        i = bisect.bisect_right(inside, (rva, 1 << 32)) - 1
+        return i >= 0 and inside[i][0] < rva < inside[i][1]
+
     out = Reachable()
     work: list[int] = []
     for kind, rva in img.code_targets():
@@ -98,7 +108,7 @@ def walk(img: PeImage, data: bytes) -> Reachable:
                     out.imports_referenced[img.iat[nxt + op.mem.disp]] += 1
                 if (got.mnemonic == "lea" and op.type == cx86.X86_OP_MEM and op.mem.base == cx86.X86_REG_RIP
                         and op.mem.index == 0 and executable(nxt + op.mem.disp)
-                        and nxt + op.mem.disp not in out.insns):
+                        and nxt + op.mem.disp not in out.insns and not interior(nxt + op.mem.disp)):
                     out.roots["address_taken"] += 1
                     work.append(nxt + op.mem.disp)
             groups = set(got.groups)

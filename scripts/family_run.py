@@ -1425,19 +1425,18 @@ FAMILIES: dict[str, Family] = {
             "end_inclusive": Plant("            else if (pc >= tb->base + f[mid].end) lo = mid + 1;",
                                    "            else if (pc > tb->base + f[mid].end) lo = mid + 1;", ("find.first_end",)),
             "grow_ignored": Plant("    tb->count = (u32)count;\n", "", ("find.second", "find.third")),
-            "miss_writes_image": Plant("        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
-                                       "        *(u64 *)image = tb->base;\n        return w2m_logged(W2M_API_RtlLookupFunctionEntry, pc, 0);\n    }",
+            "miss_writes_image": Plant("        if (entry) *(u64 *)image = base;", "        *(u64 *)image = base;",
                                        ("find.first_end", "find.second_before_grow", "find.gap",
                                         "find.fourth_beyond_count", "find.empty"))}),
     "vectored_handlers": Family(
         name="vectored_handlers",
         contract_id="windows.exception.vectored_handlers",
-        version="0.1.0",
+        version="0.2.0",
         summary=("AddVectoredExceptionHandler answers a new non-NULL handle each call, the same handler again included; "
                  "RemoveVectoredExceptionHandler answers 1 for a registered handle and 0 for it again or for any other "
-                 "value; neither touches the last error. Dispatch (excluded until w2m dispatches): handlers added first "
-                 "run before those added last, CONTINUE_EXECUTION ends the search and RaiseException returns, the "
-                 "handler sees the code and flags 0x80."),
+                 "value; neither touches the last error. Dispatch (0.2.0, Sprint 053): handlers added first run before "
+                 "those added last, CONTINUE_EXECUTION ends the search and RaiseException returns, the handler sees "
+                 "the code and flags 0x80."),
         probe="vectored_handlers", guest_file="vectored_handlers.c",
         runs={
               "38114204685": Run("windows-2025", "ee140359e6683f4072a35535c52483aa788b381c6f44f9cdf883e45e48a03682", "vectored_handlers-1791695726-0", "AMD EPYC 7763 64-Core Processor"),
@@ -1448,18 +1447,13 @@ FAMILIES: dict[str, Family] = {
                        "2018-12-05", "If the First parameter is nonzero, the handler is the first handler to be "
                        "called until a subsequent call to AddVectoredExceptionHandler is used to specify a different "
                        "handler as the first handler."),),
-        open_questions=(
-            "The list's order is not judged yet: only dispatch shows it, and its rows are excluded; a plant that puts "
-            "First handlers at the back changes no included row (tried 2026-10-11).",
-            "Excluded rows: see sections.excluded."),
-        excluded={"dispatch.continue": "RaiseException and dispatch to guest handlers: not built (the exceptions "
-                                       "family); the probe writes its registration rows first",
-                  "dispatch.after_remove": "as dispatch.continue"},
-        expected_stop="Unimplemented: import KERNEL32.dll!RaiseException",
+        open_questions=(),
         plants={
             "remove_answers_one": Plant("    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 0);",
                                         "    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 1);",
-                                        ("remove.again", "remove.unknown"))}),
+                                        ("remove.again", "remove.unknown")),
+            "first_at_back": Plant("            if ((u32)first) {", "            if ((u32)first && !count) {",
+                                   ("dispatch.continue",))}),
     "thread_stack": Family(
         name="thread_stack",
         contract_id="windows.memory.thread_stack",
@@ -1845,6 +1839,56 @@ FAMILIES: dict[str, Family] = {
                                      ("startup.3_0",)),
             "cleanup_leaves_error": Plant("    owed--;\n    set_error(0);", "    owed--;",
                                           ("cleanup.1", "cleanup.2", "cleanup.3", "cleanup.4"))}),
+    "exceptions": Family(
+        name="exceptions",
+        contract_id="windows.exception.exceptions",
+        version="0.1.0",
+        summary=("Structured exceptions as the game's modules use them, with the probe's own __C_specific_handler as "
+                 "their static C runtimes carry: RaiseException's record (flags 0x80, the arguments, no chained "
+                 "record, the last error left) reaches vectored handlers first, then each frame's language handler "
+                 "through .pdata; EXECUTE_HANDLER unwinds with RtlUnwindEx, running each __finally, to the __except "
+                 "with the code in RAX; CONTINUE_EXECUTION returns from RaiseException; continuing a noncontinuable "
+                 "exception raises STATUS_NONCONTINUABLE_EXCEPTION (flags 0x81, no chained record); unwinding crosses "
+                 "frame-pointer, large-allocation and saved-XMM frames; access violations carry the access and the "
+                 "address; RtlCaptureContext, RtlLookupFunctionEntry, RtlVirtualUnwind and RtlPcToFileHeader answer "
+                 "for the probe's own code; an exception no frame takes reaches the top-level filter."),
+        probe="exceptions", guest_file="exceptions.c",
+        host_files=("src/w2m/vm_backend.py", "src/w2m/exception_stubs.py"),
+        runs={
+              "38165931122": Run("windows-2025", "a71f491c4e8b9c1a563597497a004b74add2cf9caca0c7a9d3b36b041f34553a", "exceptions-1791745002-0", "AMD EPYC 7763 64-Core Processor"),
+              "38165933249": Run("windows-2022", "55369a03c431c6c2448a9ddbe99ebcfe452227a2fcb79c184015697bc57cb6b3", "exceptions-1791745002-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-rtlunwindex", "api/winnt/nf-winnt-rtlunwindex", "2024-02-02",
+                       "A value to be placed in the integer function return register before continuing execution."),),
+        open_questions=(
+            "C++ exceptions (STATUS_UNWIND_CONSOLIDATE), collided unwinds and an exception raised inside a handler are "
+            "not in the rows: the game's Windows run raises one exception, mono's thread name, and none from "
+            "UnityPlayer.",),
+        plants={
+            "no_software_origin": Plant("((u32)flags & EXCEPTION_NONCONTINUABLE) | EXCEPTION_SOFTWARE_ORIGINATE;",
+                                        "((u32)flags & EXCEPTION_NONCONTINUABLE);",
+                                        ("except.thread_naming", "unhandled.top_filter")),
+            "vectored_skipped": Plant("    u64 h = w2m_vectored_handler(f->next_vectored++);",
+                                      "    u64 h = 0 * w2m_vectored_handler(f->next_vectored++);",
+                                      ("except.vectored_first",)),
+            "finally_skipped": Plant("        if (handler) {\n            if (establisher == f->target_frame)",
+                                     "        if (handler && establisher == f->target_frame) {\n            if (establisher == f->target_frame)",
+                                     ("except.search_order", "except.deep")),
+            "no_return_value": Plant("    f->ctx.gpr[RAX] = f->return_value;\n", "",
+                                     ("except.thread_naming",)),
+            "noncontinuable_continues": Plant("    if (f->rec.flags & EXCEPTION_NONCONTINUABLE) raise_noncontinuable(f);",
+                                              "    if (0 & f->rec.flags & EXCEPTION_NONCONTINUABLE) raise_noncontinuable(f);",
+                                              ("except.noncontinuable",)),
+            "frame_register_ignored": Plant("                case 3: c->gpr[RSP] = c->gpr[frame_reg] - 16 * frame_off; *frame = c->gpr[RSP]; break;",
+                                            "                case 3: break;",
+                                            # the frame-pointer frame resumes with the wrong registers: the rows
+                                            # after it fail too
+                                            ("except.deep", "fault.write_null", "fault.read_low", "rtl.queries",
+                                             "unhandled.top_filter")),
+            "no_top_filter": Plant("    if (filter && f->step != STEP_TOP_FILTER) {",
+                                   "    if (!filter && f->step != STEP_TOP_FILTER) {",
+                                   ("unhandled.top_filter",))}),
 }
 
 
