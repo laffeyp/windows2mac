@@ -31,7 +31,7 @@ store/runs/class-runs.json: classes accepted with set 048 (Intel Xeon 8573C run 
 
 ### dual_contract_self_grade
 
-**Signal contract:** pass (vocabulary 0.7, no new tags). **Artifact contract:** gates 0; CI on the closing commit. **Observation contract:** F1 pass (685–769 ns raw, 10.3–10.5 µs through the pipe); families pass (eight new, every plant as named after one corrected prediction); frontier pass (2,668,647, past boot.config and app.info).
+**Signal contract:** pass (vocabulary 0.7, no new tags). **Artifact contract:** gates 0; CI run 38099562363 success on 401deef. **Observation contract:** F1 pass (685–769 ns raw, 10.3–10.5 µs through the pipe); families pass (eight new, every plant as named after one corrected prediction); frontier pass (2,668,647, past boot.config and app.info).
 
 **overall:** pass.
 
