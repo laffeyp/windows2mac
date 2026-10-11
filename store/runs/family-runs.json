@@ -547,6 +547,26 @@
    "38092777429": "conforms"
   }
  },
+ "locale": {
+  "candidate_sha256": "sha256:2ac874d4d74d897ec5d2030bf988144d524a40cbeff62f30f2af291a47fd19dd",
+  "divergence": {
+   "38120346754": null,
+   "38120348019": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "locale",
+  "record": "store/runs/family-locale-1791702621693909000",
+  "verdicts": {
+   "38120346754": "conforms",
+   "38120348019": "conforms"
+  }
+ },
  "module_names_ansi": {
   "candidate_sha256": "sha256:5cb913dc217c99b00f976b8f95a003e0479b6b7ad71931b5803ef1eb7cd32a91",
   "divergence": {
@@ -1018,7 +1038,7 @@
   }
  },
  "time_and_error_mode": {
-  "candidate_sha256": "sha256:84d39715d2664626f501d2513b6520d62ba144a1078c5e6757fdeae7165c4440",
+  "candidate_sha256": "sha256:f85773f52447641070e3ef9e19024cfb6e3a42fddec9f28b68dee958bb2d6191",
   "divergence": {
    "38053043702": "Unimplemented: import KERNEL32.dll!CreateProcessW",
    "38053047590": "Unimplemented: import KERNEL32.dll!CreateProcessW",
@@ -1037,7 +1057,7 @@
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode",
-  "record": "store/runs/family-time_and_error_mode-1791697681919745000",
+  "record": "store/runs/family-time_and_error_mode-1791702649068820000",
   "verdicts": {
    "38053043702": "conforms",
    "38053047590": "conforms",
@@ -1050,7 +1070,7 @@
   }
  },
  "time_and_error_mode_child": {
-  "candidate_sha256": "sha256:84d39715d2664626f501d2513b6520d62ba144a1078c5e6757fdeae7165c4440",
+  "candidate_sha256": "sha256:f85773f52447641070e3ef9e19024cfb6e3a42fddec9f28b68dee958bb2d6191",
   "divergence": {
    "38053043702": null,
    "38053047590": null,
@@ -1069,7 +1089,7 @@
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode_child",
-  "record": "store/runs/family-time_and_error_mode_child-1791697682892792000",
+  "record": "store/runs/family-time_and_error_mode_child-1791702650204070000",
   "verdicts": {
    "38053043702": "conforms",
    "38053047590": "conforms",

@@ -72,16 +72,23 @@ u64 k32_GetTimeZoneInformation(u64 tz) {
     return w2m_logged(W2M_API_GetTimeZoneInformation, tz, 0);  /* TIME_ZONE_ID_UNKNOWN */
 }
 
-u64 k32_SystemTimeToFileTime(u64 st, u64 ft) {
-    const u16 *t = (const u16 *)st;
+/* A SYSTEMTIME as 100 ns ticks since 1601; 0 for a date or time out of range (wDayOfWeek is not read). */
+static int ticks_of(const u16 *t, u64 *v) {
     u32 y = t[0], m = t[1], d = t[3];
     if (y < 1601 || y > 30827 || m < 1 || m > 12 || d < 1 || d > month_days(y, m) || t[4] > 23 || t[5] > 59 ||
-        t[6] > 59 || t[7] > 999) {
+        t[6] > 59 || t[7] > 999)
+        return 0;
+    *v = days_since_1601(y, m, d) * TICKS_PER_DAY + (u64)t[4] * 36000000000ull + (u64)t[5] * 600000000ull +
+         (u64)t[6] * 10000000ull + (u64)t[7] * 10000ull;
+    return 1;
+}
+
+u64 k32_SystemTimeToFileTime(u64 st, u64 ft) {
+    u64 v;
+    if (!ticks_of((const u16 *)st, &v)) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_SystemTimeToFileTime, st, 0);
     }
-    u64 v = days_since_1601(y, m, d) * TICKS_PER_DAY + (u64)t[4] * 36000000000ull + (u64)t[5] * 600000000ull +
-            (u64)t[6] * 10000000ull + (u64)t[7] * 10000ull;
     *(u32 *)ft = (u32)v;
     *(u32 *)(ft + 4) = (u32)(v >> 32);
     return w2m_logged(W2M_API_SystemTimeToFileTime, st, 1);
@@ -114,4 +121,19 @@ u64 k32_SetErrorMode(u64 mode) {
     u32 old = current_error_mode();
     error_mode = (u32)mode;
     return w2m_logged(W2M_API_SetErrorMode, (u32)mode, old);
+}
+
+/* SystemTimeToTzSpecificLocalTime(lpTimeZoneInformation, lpUniversalTime, lpLocalTime) for the active zone (NULL, the
+ * game's only form; contracts/windows.locale.locale, Sprint 049): the zone is UTC, so the local time is the universal
+ * one with wDayOfWeek computed; a time out of range is ERROR_INVALID_PARAMETER with nothing written; success leaves
+ * the last error. An explicit zone is not in the rows. */
+u64 k32_SystemTimeToTzSpecificLocalTime(u64 tz, u64 in, u64 out) {
+    if (tz) w2m_unimplemented(W2M_API_SystemTimeToTzSpecificLocalTime, tz);
+    u64 v;
+    if (!ticks_of((const u16 *)in, &v)) {
+        set_error(ERROR_INVALID_PARAMETER);
+        return w2m_logged(W2M_API_SystemTimeToTzSpecificLocalTime, in, 0);
+    }
+    to_systemtime(v, (u16 *)out);
+    return w2m_logged(W2M_API_SystemTimeToTzSpecificLocalTime, in, 1);
 }

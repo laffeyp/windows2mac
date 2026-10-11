@@ -61,6 +61,7 @@ class Plant:
     new: str
     reach: tuple[str, ...]  # the rows it changes, named before it runs (fnmatch patterns allowed)
     host: str | None = None  # a host module (w2m.vm_backend) to patch instead of the family's guest file
+    file: str | None = None  # another guest runtime file (time_and_error_mode.c) to patch instead (Sprint 049)
 
 
 @dataclass(frozen=True)
@@ -1615,6 +1616,52 @@ FAMILIES: dict[str, Family] = {
             "temp_error_left": Plant("        set_error(0);\n        return w2m_logged(W2M_API_GetTempFileNameW",
                                      "        return w2m_logged(W2M_API_GetTempFileNameW",
                                      ("temp_name.zero", "temp_name.cwd_full", "temp_name.second"))}),
+    "locale": Family(
+        name="locale",
+        contract_id="windows.locale.locale",
+        version="0.1.0",
+        summary=("The locale and local time the game asks for (specs/work_list.json), en-US in UTC as on the runners. "
+                 "SystemTimeToTzSpecificLocalTime(NULL): the universal time with wDayOfWeek computed; a date or time "
+                 "out of range (month 0 or 13, day 0, February 29 of 2025, hour 24, 1000 ms, years 1600 and 30828) is "
+                 "ERROR_INVALID_PARAMETER with nothing written. GetThreadLocale: 0x409. GetLocaleInfoA: \"en\" and "
+                 "\"US\", 3, for 0x409, LOCALE_USER_DEFAULT and LOCALE_SYSTEM_DEFAULT; a short buffer gets what fits "
+                 "without a NUL and ERROR_INSUFFICIENT_BUFFER; size 0 gives 3; a negative size is "
+                 "ERROR_INVALID_PARAMETER. GetUserDefaultLocaleName: \"en-US\", 6; a short buffer gets size - 1 units "
+                 "and a NUL, and it and size 0 answer 0 with error 266. Success leaves the last error."),
+        probe="locale", guest_file="locale.c", host_files=("tools/guest_runtime/time_and_error_mode.c",),
+        runs={
+              "38120346754": Run("windows-2025", "acbe1c6e43d39d53f83d838bf64f81750c95b6b45302c98238e58e4b1c15785d", "locale-1791702485-0", "AMD EPYC 7763 64-Core Processor"),
+              "38120348019": Run("windows-2022", "cc344b3608f76dfe67851701a49772a4f967fb08ff02defe066c43367758c03d", "locale-1791702485-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-getlocaleinfoa", "api/winnls/nf-winnls-getlocaleinfoa", "2018-12-05",
+                       "If the function succeeds and the value of cchData is 0, the return value is the required size, "
+                       "in characters including a null character, for the locale data buffer. ... "
+                       "ERROR_INSUFFICIENT_BUFFER. A supplied buffer size was not large enough"),
+            documented("ms-getuserdefaultlocalename", "api/winnls/nf-winnls-getuserdefaultlocalename", "2018-12-05",
+                       "Returns the size of the buffer containing the locale name, including the terminating null "
+                       "character, if successful. ... ERROR_INSUFFICIENT_BUFFER. A supplied buffer size was not large "
+                       "enough, or it was incorrectly set to NULL.")),
+        open_questions=(
+            "GetUserDefaultLocaleName's page names ERROR_INSUFFICIENT_BUFFER (122) for a short buffer; both builds set "
+            "266 (ERROR_CANNOT_COPY) and write size - 1 units and a NUL. w2m follows the rows.",
+            "GetLocaleInfoA's short buffer receives the chars that fit with no NUL before the failure (row "
+            "info.language_short); the page does not say.",
+            "The runners' locale (en-US) and zone (UTC) are w2m's profile, not a property of Windows; other LCIDs, "
+            "LCTYPEs and an explicit time zone are not in the rows and stop the run. The eight locale imports the "
+            "captures never call (CompareStringEx, EnumSystemLocalesEx, GetDateFormatEx, GetLocaleInfoEx, "
+            "GetTimeFormatEx, IsValidLocaleName, LCIDToLocaleName, LocaleNameToLCID) stop the run by name."),
+        plants={
+            "day_of_week_kept": Plant("    to_systemtime(v, (u16 *)out);\n    return w2m_logged(W2M_API_SystemTimeToTzSpecificLocalTime",
+                                      "    for (int i = 0; i < 8; i++) ((u16 *)out)[i] = ((const u16 *)in)[i];\n"
+                                      "    return w2m_logged(W2M_API_SystemTimeToTzSpecificLocalTime",
+                                      ("local.day_of_week_ignored", "local.last_day"),
+                                      file="time_and_error_mode.c"),
+            "short_ansi_unwritten": Plant("    for (u32 i = 0; i < need && i < (u32)cch; i++) out[i] = value[i];",
+                                          "    for (u32 i = 0; i < need && (u32)cch >= need; i++) out[i] = value[i];",
+                                          ("info.language_short",)),
+            "locale_name_error_122": Plant("        set_error(ERROR_CANNOT_COPY);", "        set_error(ERROR_INSUFFICIENT_BUFFER);",
+                                           ("user_name.short", "user_name.size_zero"))}),
 }
 
 
@@ -1745,9 +1792,10 @@ def host_patched(module_name: str, old: str, new: str) -> Iterator[None]:
 
 def planted_sources(f: Family, name: str) -> dict[str, str]:
     p = f.plants[name]
-    text = (GUEST / f.guest_file).read_text()
-    assert text.count(p.old) == 1, f"plant {name}: its target text is not in {f.guest_file} exactly once"
-    return {f.guest_file: text.replace(p.old, p.new)}
+    target = p.file or f.guest_file
+    text = (GUEST / target).read_text()
+    assert text.count(p.old) == 1, f"plant {name}: its target text is not in {target} exactly once"
+    return {target: text.replace(p.old, p.new)}
 
 
 def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,

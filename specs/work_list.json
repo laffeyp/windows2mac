@@ -148,116 +148,6 @@
    ]
   },
   {
-   "name": "locale",
-   "first_seq": 919,
-   "functions": [
-    {
-     "name": "SystemTimeToTzSpecificLocalTime",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 18,
-     "first_seq": 919,
-     "dynamic": false
-    },
-    {
-     "name": "GetThreadLocale",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 1,
-     "first_seq": 2214,
-     "dynamic": false
-    },
-    {
-     "name": "GetLocaleInfoA",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 2,
-     "first_seq": 2215,
-     "dynamic": false
-    },
-    {
-     "name": "GetUserDefaultLocaleName",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll"
-     ],
-     "calls": 1,
-     "first_seq": 3203,
-     "dynamic": true
-    },
-    {
-     "name": "CompareStringEx",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "EnumSystemLocalesEx",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "GetDateFormatEx",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "GetLocaleInfoEx",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "GetTimeFormatEx",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "IsValidLocaleName",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "LCIDToLocaleName",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    },
-    {
-     "name": "LocaleNameToLCID",
-     "dll": "",
-     "callers": [],
-     "calls": 0,
-     "first_seq": null,
-     "dynamic": true
-    }
-   ]
-  },
-  {
    "name": "file_mapping",
    "first_seq": 929,
    "functions": [
@@ -1618,6 +1508,76 @@
      "dynamic": false
     }
    ]
+  },
+  {
+   "name": "locale",
+   "first_seq": null,
+   "functions": [
+    {
+     "name": "CompareStringEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "EnumSystemLocalesEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetDateFormatEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetLocaleInfoEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "GetTimeFormatEx",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "IsValidLocaleName",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "LCIDToLocaleName",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    },
+    {
+     "name": "LocaleNameToLCID",
+     "dll": "",
+     "callers": [],
+     "calls": 0,
+     "first_seq": null,
+     "dynamic": true
+    }
+   ]
   }
  ],
  "game_exports": [
@@ -1913,5 +1873,5 @@
   "unity_mono_method_is_inflated",
   "unity_mono_reflection_method_get_method"
  ],
- "unserved": 155
+ "unserved": 151
 }
