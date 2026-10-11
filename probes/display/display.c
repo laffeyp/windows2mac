@@ -201,13 +201,15 @@ void start(void) {
 
     settings("settings.current", ENUM_CURRENT_SETTINGS);
     settings("settings.registry", ENUM_REGISTRY_SETTINGS);
-    settings("settings.mode_0", 0);
-    DEVMODEW dm;
+    char mode[32];
     unsigned modes = 0;
-    for (; modes < 2000; modes++) {
+    DEVMODEW dm;
+    for (; modes < 100; modes++) {
         zero(&dm, sizeof dm);
         dm.dmSize = sizeof dm;
         if (!EnumDisplaySettingsW(NULL, modes, &dm)) break;
+        named(mode, "settings.mode_", modes);
+        settings(mode, modes);
     }
     row("settings.mode_count"); field("value", modes); end();
     ExitProcess(0);
