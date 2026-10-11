@@ -39,16 +39,21 @@ u64 k32_GetThreadTimes(u64 thread, u64 creation, u64 exit, u64 kernel, u64 rsp) 
     return w2m_logged(W2M_API_GetThreadTimes, thread, 1);
 }
 
+int w2m_object_thread_of(u64 h, u32 *tid);   /* sync_objects.c */
+s32 w2m_thread_priority(u32 tid);            /* threads.c: what SetThreadPriority set, 0 before */
+
 u64 k32_GetThreadPriority(u64 thread) {
-    if (thread != CURRENT_THREAD) w2m_unimplemented(W2M_API_GetThreadPriority, thread);
-    return w2m_logged(W2M_API_GetThreadPriority, thread, 0);
+    u32 tid = (u32)w2m_teb()->client_thread;
+    if (thread != CURRENT_THREAD && !w2m_object_thread_of(thread, &tid))
+        w2m_unimplemented(W2M_API_GetThreadPriority, thread);
+    return w2m_logged(W2M_API_GetThreadPriority, thread, (u32)w2m_thread_priority(tid));
 }
 
 /* GetCurrentThreadStackLimits(LowLimit, HighLimit): TEB.DeallocationStack and NtTib.StackBase
  * (contracts/windows.memory.thread_stack, Sprint 049: row limits); the last error is left. */
 W2M_VOID u64 k32_GetCurrentThreadStackLimits(u64 low, u64 high) {
     if (!low || !high) w2m_unimplemented(W2M_API_GetCurrentThreadStackLimits, 0);
-    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x1478);
-    *(u64 *)high = *(const u64 *)(W2M_TEB_VA + 0x08);
+    *(u64 *)low = *(const u64 *)((u8 *)w2m_teb() + 0x1478);
+    *(u64 *)high = w2m_teb()->stack_base;
     return w2m_logged(W2M_API_GetCurrentThreadStackLimits, low, 0);
 }

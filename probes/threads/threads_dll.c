@@ -21,7 +21,9 @@ static void NTAPI on_tls(PVOID instance, DWORD reason, PVOID reserved) {
     (void)instance; (void)reserved;
     log_event(1, reason);
 }
+#ifdef _MSC_VER                                   /* the runner's clang targets MSVC; the gate's mingw check does not */
 #pragma section(".CRT$XLB", read)
+#endif
 __declspec(allocate(".CRT$XLB")) PIMAGE_TLS_CALLBACK threads_dll_callback = on_tls;
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {

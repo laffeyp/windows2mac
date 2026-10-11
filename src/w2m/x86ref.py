@@ -10,7 +10,9 @@ Traversal: start from every statically known code target in the PE (entry, expor
 callbacks, .pdata function starts); follow fall-through and direct branch/call targets inside
 executable sections; stop at ret, unconditional jmp, int3, ud2, hlt; count indirect transfers as
 unresolved (v0.2 section 5.1: their targets are discovered at run time). Calls through the IAT
-resolve to "dll!name".
+resolve to "dll!name". A RIP-relative LEA of an address in an executable section is a function whose address
+is taken (a thread's start routine handed to CreateThread, a callback): it is a root too (Sprint 051: a no-CRT
+probe has no .pdata to list it).
 """
 
 from __future__ import annotations
@@ -94,6 +96,11 @@ def walk(img: PeImage, data: bytes) -> Reachable:
                 if (op.type == cx86.X86_OP_MEM and op.mem.base == cx86.X86_REG_RIP
                         and nxt + op.mem.disp in img.iat):
                     out.imports_referenced[img.iat[nxt + op.mem.disp]] += 1
+                if (got.mnemonic == "lea" and op.type == cx86.X86_OP_MEM and op.mem.base == cx86.X86_REG_RIP
+                        and op.mem.index == 0 and executable(nxt + op.mem.disp)
+                        and nxt + op.mem.disp not in out.insns):
+                    out.roots["address_taken"] += 1
+                    work.append(nxt + op.mem.disp)
             groups = set(got.groups)
             is_branch = cx86.X86_GRP_JUMP in groups or cx86.X86_GRP_CALL in groups
             if is_branch:

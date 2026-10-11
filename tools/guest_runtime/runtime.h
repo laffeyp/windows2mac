@@ -33,7 +33,27 @@ struct w2m_teb {
 _Static_assert(__builtin_offsetof(struct w2m_teb, client_thread) == 0x48, "TEB ClientId.UniqueThread");
 _Static_assert(__builtin_offsetof(struct w2m_teb, last_error_value) == 0x68, "TEB LastErrorValue");
 
+/* The running thread's TEB: the state block's gs_base (0xb0), which the host sets when it switches threads (Sprint
+ * 051; before, one fixed TEB at W2M_TEB_VA, which stays the main thread's). */
+#ifdef W2M_STATE_VA
+static inline struct w2m_teb *w2m_teb(void) { return *(struct w2m_teb **)(W2M_STATE_VA + 0xb0); }
+#else                                        /* a candidate built for the host (src/w2m/candidate.py): one TEB */
 static inline struct w2m_teb *w2m_teb(void) { return (struct w2m_teb *)W2M_TEB_VA; }
+#endif
+
+/* w2m's own per-thread words, past the TEB's last Windows field (0x1838) in its 0x2000 bytes (Sprint 051): what a
+ * blocked call keeps between its retries, and what ExitThread leaves for the end of the thread. */
+struct w2m_thread_scratch {
+    u64 wait_deadline;               /* the counter value a blocked wait times out at; 0: none, ~0: never */
+    u64 wait_cv;                     /* SleepConditionVariableSRW: the variable waited on, while waiting */
+    u64 wait_generation;             /* its wake count when the wait began */
+    u32 exit_code;                   /* ExitThread's code, for the detach stub's end */
+    u32 phase;                       /* a retried call's progress (SleepConditionVariableSRW: 1 released, 2 woken) */
+};
+#define W2M_THREAD_SCRATCH_OFF 0x1900
+static inline struct w2m_thread_scratch *w2m_thread_scratch(void) {
+    return (struct w2m_thread_scratch *)((u8 *)w2m_teb() + W2M_THREAD_SCRATCH_OFF);
+}
 
 /* Host transport: the runtime fills a request, executes hvc #8, and reads the result. */
 enum { W2M_HOST_WRITE = 1, W2M_HOST_EXIT = 2, W2M_HOST_CLOCK = 3, W2M_HOST_UNIMPLEMENTED = 4,
@@ -83,7 +103,10 @@ struct w2m_state {
     u32 suspend_count;               /* 0x0c4 */
     u64 af_operands[3];              /* 0x0c8 */
     u8 df;                           /* 0x0e0 */
-    u8 reserved1[0x100 - 0xe1];
+    u8 reserved1[0xe8 - 0xe1];
+    u64 redirect_rip;                /* 0x0e8 a service's next x86 address instead of its return (Sprint 051) */
+    u32 schedule;                    /* 0x0f0 W2M_SCHEDULE_*: the bridge hands the vCPU to the host's scheduler */
+    u8 reserved2[0x100 - 0xf4];
     u8 xmm[16][16];                  /* 0x100 */
     u8 ymm_high[16][16];             /* 0x200 */
     u8 st[8][16];                    /* 0x300 */
@@ -94,6 +117,23 @@ _Static_assert(__builtin_offsetof(struct w2m_state, mxcsr) == 152, "state.mxcsr"
 _Static_assert(__builtin_offsetof(struct w2m_state, af_operands) == 200, "state.af_operands");
 _Static_assert(__builtin_offsetof(struct w2m_state, df) == 224, "state.df");
 _Static_assert(__builtin_offsetof(struct w2m_state, xmm) == 256, "state.xmm0");
+_Static_assert(__builtin_offsetof(struct w2m_state, redirect_rip) == 0xe8, "state.redirect_rip");
+_Static_assert(__builtin_offsetof(struct w2m_state, schedule) == 0xf0, "state.schedule");
+#ifdef W2M_STATE_VA
+static inline struct w2m_state *w2m_state(void) { return (struct w2m_state *)W2M_STATE_VA; }
+#endif
+
+/* The bridge reads state.schedule after a service returns (Sprint 051; src/w2m/vm_backend.py _bridge):
+ * YIELD   return to the caller, then let the scheduler run another thread (Sleep, SwitchToThread)
+ * RETRY   do not return: the thread re-enters the same call when it next runs (a wait that cannot complete yet);
+ *         the scheduler runs it again when an object is signaled or its TEB scratch's wait_deadline passes
+ * END     the thread has ended (ExitThread's last step); it never runs again */
+#define W2M_SCHEDULE_YIELD 1u
+#define W2M_SCHEDULE_RETRY 2u
+#define W2M_SCHEDULE_END 4u
+#define W2M_SCHEDULE_ANSWER 8u               /* with YIELD: RAX = nonzero when another thread ran (SwitchToThread) */
+void w2m_block(u64 deadline);                /* threads.c: RETRY until signaled or the counter passes deadline */
+void w2m_signal(void);                       /* threads.c: a waitable thing changed; blocked threads re-check */
 _Static_assert(__builtin_offsetof(struct w2m_state, st) == 768, "state.st0");
 
 /* Windows x64 EXCEPTION_RECORD and CONTEXT, at the offsets probes/guest_state measured on the
@@ -200,7 +240,12 @@ u64 w2m_unhandled_exception_filter(void);                               /* excep
 /* Host file primitives (src/w2m/file_bridge.py). */
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,
        W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR,      /* 24: Sprint 047; 25, 26: 048 */
-       W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW };                                         /* 27-29: Sprint 049 */
+       W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW,                                           /* 27-29: Sprint 049 */
+       W2M_HOST_THREAD };                                                                         /* 30: Sprint 051 */
+
+/* W2M_HOST_THREAD's first argument (src/w2m/scheduler.py). */
+enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_SUSPEND, W2M_THREAD_RESUME,
+       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL };
 
 /* The contract surface a candidate may implement (contracts/windows.thread.last_error.set_get).
  * The default is tools/guest_runtime/last_error.c. */
