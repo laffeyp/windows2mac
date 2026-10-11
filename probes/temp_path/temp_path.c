@@ -7,8 +7,8 @@
  * GetEnvironmentStringsW. Microsoft documents GetTempPathW's order: TMP, TEMP, USERPROFILE, the Windows directory.
  * A runner's environment is not w2m's, so the probe first deletes every variable its block holds but W2M_KEEP (the
  * names that failed are printed), then sets the variables each row needs. Paths under the working directory print as
- * "<cwd>". Rows: each call's return, last error (after SetLastError(0xDEAD)) and text; a buffer too small is
- * filled with 0xA5A5 first, and the row says whether it was left so.
+ * "<cwd>". Rows: each call's return, last error (after SetLastError(0xDEAD)) and text; every buffer is filled with
+ * 0xA5A5 first, and where a call returns no string terminated at its return value the row holds the first four units.
  */
 #include <windows.h>
 
@@ -61,6 +61,17 @@ static void end(void) {
     n = 0;
 }
 static void fill(void) { for (unsigned i = 0; i < 1024; i++) buf[i] = MARK; }
+/* The buffer's first four units, hex: what a call left when it did not return a terminated string. */
+static void head(void) {
+    put(",\"head\":[");
+    for (int i = 0; i < 4; i++) {
+        if (i) put(",");
+        put("\"");
+        for (int sh = 12; sh >= 0; sh -= 4) out[n++] = "0123456789abcdef"[(buf[i] >> sh) & 15];
+        put("\"");
+    }
+    put("]");
+}
 
 static void set(const WCHAR *name, const WCHAR *value) { SetEnvironmentVariableW(name, value); }
 
@@ -71,8 +82,8 @@ static void temp(const char *name, DWORD size, int null_buffer) {
     DWORD r = GetTempPathW(size, null_buffer ? NULL : buf);
     DWORD err = GetLastError();
     row(name); field("ret", r); field("err", err);
-    if (r && r < size) text("path", buf);
-    else if (!null_buffer) field("untouched", buf[0] == MARK);
+    if (r && r < size && buf[r] == 0) text("path", buf);
+    else if (!null_buffer) head();
     end();
 }
 
@@ -83,8 +94,8 @@ static void get(const char *name, const WCHAR *var, DWORD size, int null_buffer)
     DWORD r = GetEnvironmentVariableW(var, null_buffer ? NULL : buf, size);
     DWORD err = GetLastError();
     row(name); field("ret", r); field("err", err);
-    if (r < size && !null_buffer && buf[0] != MARK) text("value", buf);
-    else if (!null_buffer) field("untouched", buf[0] == MARK);
+    if (r < size && !null_buffer && buf[r] == 0) text("value", buf);
+    else if (!null_buffer) head();
     end();
 }
 
