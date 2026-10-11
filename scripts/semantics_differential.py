@@ -523,6 +523,12 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             # frozen file stays what the runners ran (KIT_DIARY #23), and set 047 holds them
             skipped["MUL narrower than 64 bits (set 047)"] += 1
             continue
+        if classes is CLASSES_050 and d.iclass in ("STC", "CLC", "CMC", "SAHF", "PUSHFQ", "POPFQ") and d.fields is not None and \
+                0x67 in d.fields.prefixes:
+            # lifted since run 38122967607 (a 67 STC in UnityPlayer); set 050 keeps the refusal so its frozen file
+            # stays what the runner ran (KIT_DIARY #23)
+            skipped["67-prefixed flag instruction (lifted after set 050 ran)"] += 1
+            continue
         if any(op[0] == "br" for op in ins.ops) or (classes is CLASSES_050 and d.iclass in FIXED_050):
             skipped["control flow or implicit pointers (fixed encodings instead)"] += 1
             continue

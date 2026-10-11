@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 050
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -56,3 +56,11 @@ Not in this set, each with its reason: the MMX-register forms of MOVD, MOVQ, PAD
 Set 050 accepted class by class in `store/runs/class-runs.json`; the frontier runs past 0x1180023e52.
 
 ## observed
+
+- **The frontier moved** from 5,376,528 instructions (CVTDQ2PS at 0x1180023e52 in mono) to 20,584,207 (`store/runs/frontier-643a6283510c-1791705955122259000`), 36 s on the Mac; it stops at `KERNEL32.dll!CreateThread`, the threads family. `run_frontier.py`'s default step limit rose from 10 M to 1,000 M: the game ran past the old one.
+- **Set 050 judged on the Intel Xeon 8573C** (run 38122967607, release semantics-050): 64 classes, 12,833 cases (3,266 faults), three runs equal; the model and the VM equal the CPU on every case; 436 of 436 classes accepted in `store/runs/class-runs.json`.
+- **The censuses shrink** (`store/census/class-census-2026-10-11-050.json`): mono-2.0-bdwgc.dll lifts 221 of its 227 classes, the four missing being INT3, INT, IN and OUTSB (traps and decoded data); UnityPlayer.dll misses 51, all INT3, traps, port I/O, MMX forms or classes behind CPUID features w2m withholds. No set-050 class is refused but the MMX rows of PMADDUBSW and PMULHW.
+- **Intel against the SDM:** a 16-bit SHLD or SHRD with a count of 17 to 31, undefined in the SDM, shifts the 48 bits dst:src:dst on the Xeon; a count of 0 still writes a 32-bit register destination (its upper half zeroed) for SHLD, SHRD and RCR.
+- **Defects found and fixed:** SCAS and CMPS computed OF with a misplaced shift (operator precedence); a rule fix after the run (a 67-prefixed STC in UnityPlayer) changed set 050's frozen case file, which the judge's hash check caught; the builder keeps the old refusal for set 050 (KIT_DIARY #23).
+- **Not native yet:** every set-050 class runs in the model (hvc #10 and #11) in the VM; native lowerings wait for a measured need (BLACKBOARD Deferred).
+

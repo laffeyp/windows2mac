@@ -616,9 +616,11 @@ def rcr(ctx: Ctx) -> None:
 
 def implicit(ctx: Ctx) -> None:
     """STC, CLC, CMC, SAHF, PUSHFQ, POPFQ, and the single string forms (SDM, each page): every operand implicit. A
-    0x67 prefix (32-bit RSI and RDI) or a 66 prefix on PUSHF and POPF is not lifted."""
+    0x67 prefix on a string form (32-bit RSI and RDI) or a 66 prefix on PUSHF and POPF is not lifted; on the flag
+    instructions both prefixes change nothing (UnityPlayer has a 67 STC)."""
     f = ctx.f
-    if f is not None and (0x67 in f.prefixes or (0x66 in f.prefixes and ctx.ic in ("PUSHFQ", "POPFQ"))):
+    strings = ctx.ic not in ("STC", "CLC", "CMC", "SAHF", "PUSHFQ", "POPFQ")
+    if f is not None and ((0x67 in f.prefixes and strings) or (0x66 in f.prefixes and ctx.ic in ("PUSHFQ", "POPFQ"))):
         raise LiftError(f"{ctx.ic} with a 66 or 67 prefix at 0x{ctx.address:x}")
     _model(ctx, None, (), 64)
 

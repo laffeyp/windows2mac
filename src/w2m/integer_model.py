@@ -40,6 +40,13 @@ def _parity(v: int) -> bool:
     return bin(v & 0xFF).count("1") % 2 == 0
 
 
+def _zero_count_write(rt: Any, dst: Op | None, a: int) -> None:
+    """A count of 0 changes no flag, but a 32-bit register destination is still written, its upper half zeroed
+    (set 050 on the Xeon 8573C, run 38122967607: SHRD, SHLD, RCR); a memory destination keeps its bytes."""
+    if dst is not None and dst[0] == "r" and dst[2] == 32:
+        rt._store(dst, a)
+
+
 def execute(rt: Any, ic: str, dst: Op | None, vals: list[int], bits: int) -> int | None:
     """Run `ic`; returns a branch target when the instruction branches, else None."""
     th, f = rt.th, rt.th.flags
@@ -47,13 +54,22 @@ def execute(rt: Any, ic: str, dst: Op | None, vals: list[int], bits: int) -> int
     if ic in ("SHLD", "SHRD"):
         a, b, count = vals[0] & m, vals[1] & m, vals[2] & (0x3F if bits == 64 else 0x1F)
         if count == 0:
+            _zero_count_write(rt, dst, a)
             return None
-        if ic == "SHLD":                                        # the high half of (dst:src) << count
-            r = ((a << bits | b) << count >> bits) & m if count <= bits else 0
-            cf = bool(a >> (bits - count) & 1) if count <= bits else None
+        if bits == 16 and count > 16:
+            # the SDM leaves it undefined; the Xeon 8573C shifts the 48 bits dst:src:dst (set 050, run
+            # 38122967607: all six register SHLD cases with a count of 17 to 31)
+            v = a << 32 | b << 16 | a
+            if ic == "SHLD":
+                r, cf = (v << count >> 32) & m, bool(v >> (48 - count) & 1)
+            else:
+                r, cf = (v >> count) & m, bool(v >> (count - 1) & 1)
+        elif ic == "SHLD":                                      # the high half of (dst:src) << count
+            r = ((a << bits | b) << count >> bits) & m
+            cf = bool(a >> (bits - count) & 1)
         else:                                                   # the low half of (src:dst) >> count
-            r = ((b << bits | a) >> count) & m if count <= bits else 0
-            cf = bool(a >> (count - 1) & 1) if count <= bits else None
+            r = ((b << bits | a) >> count) & m
+            cf = bool(a >> (count - 1) & 1)
         rt._store(dst, r)
         f.update(C=cf, Z=r == 0, S=bool(r & sign), P=_parity(r), A=None,
                  O=(bool(r & sign) != bool(a & sign)) if count == 1 else None)
@@ -62,6 +78,7 @@ def execute(rt: Any, ic: str, dst: Op | None, vals: list[int], bits: int) -> int
         a, masked = vals[0] & m, vals[1] & (0x3F if bits == 64 else 0x1F)
         count = masked % 9 if bits == 8 else masked % 17 if bits == 16 else masked
         if masked == 0:
+            _zero_count_write(rt, dst, a)
             return None
         carry = int(rt._flag("C"))
         of = (bool(a & sign) != bool(carry)) if masked == 1 else None
@@ -132,7 +149,7 @@ def execute(rt: Any, ic: str, dst: Op | None, vals: list[int], bits: int) -> int
             r = (a - b) & mask
             w = 8 * size
             f.update(C=a < b, Z=r == 0, S=bool(r >> (w - 1) & 1), P=_parity(r), A=bool((a ^ b ^ r) & 0x10),
-                     O=bool((a ^ b) & (a ^ r) >> (w - 1) & 1))
+                     O=bool(((a ^ b) & (a ^ r)) >> (w - 1) & 1))
             if kind == "cmps":
                 regs[RSI] = (regs[RSI] + step) & M64
             regs[RDI] = (regs[RDI] + step) & M64
