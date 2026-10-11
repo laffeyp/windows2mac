@@ -241,7 +241,7 @@
 
 ## Sprint tail
 
-### Sprint 050 (2026-10-11, closed)
+### Sprint 050 (2026-10-11, closed: CI run 38123808878 success on 3b709e65)
 - **Scope:** set 050, the 64 classes the censuses list as missing that the guest profile reaches, in one case set.
 - **Rubber Duck Pass:**
   - *Sequence narration:* per class, the class run's SESSION_INIT, CANDIDATE_GENERATED, the model's and the VM's COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED (64 classes); the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED naming KERNEL32.dll!CreateThread after 20,584,207 instructions.
