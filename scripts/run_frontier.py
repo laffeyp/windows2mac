@@ -13,6 +13,10 @@ One substrate run, three steps, each caused by the one before:
 The stop is the frontier: the item the application needs next. Item runs that resolve it and
 resume the frontier arrive with the pools (roadmap Sprints 041, 045).
 
+The game is given the batch run's arguments (Sprint 054; .github/workflows/windows-game.yml, mode batch): the
+reference trace and unity.log of milestone A come from that run, so the frontier takes its path. The log the game
+writes to C:\\w2m\\unity.log is kept at store/frontier-logs/<execution id>/unity.log.
+
 Usage: uv run python scripts/run_frontier.py <exe> [--runs runs] [--max-steps N]
 """
 
@@ -38,6 +42,8 @@ from w2m.vm_backend import USER_ENVIRONMENT, VM  # noqa: E402
 from w2m.record import producer, run_with_provenance  # noqa: E402
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
+BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
+LOGS = ROOT / "store" / "frontier-logs"
 
 
 def main(argv: list[str]) -> int:
@@ -65,13 +71,18 @@ def main(argv: list[str]) -> int:
         # the program's directory is C:\\w2m\\app and the working directory, read-only (Sprint 048)
         files = FileBridge(here, read_only=True)
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
-                image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT)     # the game: a GUI program started by Steam
+                image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
+                command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}')
         try:
             r = vm.run(max_steps=a.max_steps, timeout_ms=60_000)
             totals = vm.calls_total()
         finally:
             vm.close()
             files.close_all()
+            log = files.drive / "w2m" / "unity.log"
+            if log.is_file():
+                (LOGS / xid).mkdir(parents=True, exist_ok=True)
+                (LOGS / xid / "unity.log").write_bytes(log.read_bytes())
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:

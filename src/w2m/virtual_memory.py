@@ -127,7 +127,7 @@ class VirtualMemory:
             return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)
         if kind & ~(MEM_COMMIT | MEM_RESERVE) or not kind:
             raise Unimplemented(f"VirtualAlloc type 0x{kind:x}")
-        if kind & MEM_RESERVE:
+        if kind & MEM_RESERVE or not address:     # MEM_COMMIT alone at NULL reserves too (row alloc.commit_null)
             if address:
                 base = _down(address, GRANULARITY)
                 end = _up(address + size, PAGE)

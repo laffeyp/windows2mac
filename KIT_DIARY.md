@@ -386,3 +386,11 @@
 **Finding (#43):** a criterion stated as a position in a held trace ("past seq N") is a claim about every call before N; it is checked by listing the unserved calls between the current stop and N before the criterion is written, not by running to the next stop.
 
 **Kit change suggested:** a frontier criterion carries the list of unserved functions between the current stop and its target, produced by a script over the reference trace, in the card.
+
+### 2026-10-11 — Sprint 054: a reference run in another mode than the run it judged
+
+**What happened:** two game runs were captured on the runner in Sprint 049, one in batch mode (`-batchmode -nographics`) and one in play mode. Every frontier criterion since Sprint 052 was read from the batch run's trace, while `scripts/run_frontier.py` started the game with no arguments, which is play mode. The two traces agree call for call up to seq 1538, so nothing showed until the window: the play run creates its main window and loads Direct3D; the batch run creates a hidden window and never does. Reading both unity.log files at the start of 054 found it (KIT_DIARY #43's listing used the batch trace only).
+
+**Finding (#44):** a reference trace judges a run only when both were given the same inputs: command line, working directory, environment. The inputs belong in the record beside the trace, and the run that is judged reads its inputs from there.
+
+**Kit change suggested:** a reference capture stores its process inputs (arguments, directory, environment) as a file the local run loads, never retypes.

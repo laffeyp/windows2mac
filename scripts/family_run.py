@@ -776,7 +776,10 @@ FAMILIES: dict[str, Family] = {
             documented("ms-virtualquery", "api/memoryapi/nf-memoryapi-virtualquery", "2024-02-22",
                        "The function determines the attributes of the first page in the region and then scans "
                        "subsequent pages until it scans the entire range of pages or until it encounters a page with "
-                       "a nonmatching set of attributes."),),
+                       "a nonmatching set of attributes."),
+            documented("ms-virtualalloc", "api/memoryapi/nf-memoryapi-virtualalloc", "2024-02-05",
+                       "Attempting to commit a specific address range by specifying MEM_COMMIT without MEM_RESERVE and "
+                       "a non-NULL lpAddress fails unless the entire range has already been reserved."),),
         open_questions=(
             "Protections are recorded, not enforced: a store to a read-only page succeeds in w2m.",
             "A released region's size runs to the next allocation and differs between executions; the row keeps that "
@@ -784,7 +787,10 @@ FAMILIES: dict[str, Family] = {
             "A writable image page counts as written when its bytes differ from load; a write of the same bytes is "
             "missed."),
         derive=virtual_memory_rows, host_files=("src/w2m/virtual_memory.py", "src/w2m/vm_backend.py"),
-        plants={"bad_protect_parameter": Plant("            return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)",
+        plants={"commit_null_refused": Plant("        if kind & MEM_RESERVE or not address:     # MEM_COMMIT alone at NULL reserves too (row alloc.commit_null)",
+                                             "        if kind & MEM_RESERVE:",
+                                             ("alloc.commit_null",), host="w2m.virtual_memory"),
+                "bad_protect_parameter": Plant("            return 0, ERROR_NOT_SUPPORTED                    # row alloc.bad_protect (0x12345)",
                                                 "            return 0, ERROR_INVALID_PARAMETER",
                                                 ("alloc.bad_protect",), host="w2m.virtual_memory"),
                 "old_unwritten_on_failure": Plant("    *(u32 *)old = (u32)second;                     /* written on failure too (row protect.reserved_page) */\n    if (!ok) set_error((u32)(second >> 32));",
