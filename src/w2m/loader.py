@@ -154,12 +154,30 @@ def _region(mem: Memory, base: int) -> Region:
     return next(r for r in mem.regions if r.base == base)
 
 
-def _stub(dlls: list[Image], program_entry: int, failed: int) -> bytes:
-    """x86-64: for each DLL, DllMain(base, DLL_PROCESS_ATTACH, non-NULL) with the shadow space; a FALSE
-    return calls `failed`; then a jump to the program's entry with RSP as the thread started."""
+def _tls_calls(image: Image) -> bytes:
+    """x86-64: each TLS callback of `image` with (base, DLL_PROCESS_ATTACH, non-NULL), before its DllMain (Sprint 051,
+    contracts/windows.thread.threads row events.start: the TLS callback, then DllMain)."""
+    out = bytearray()
+    for rva in image.pe.tls_callbacks:
+        out += bytes.fromhex("4883ec28")                                   # sub rsp, 0x28
+        out += bytes.fromhex("48b9") + image.base.to_bytes(8, "little")    # mov rcx, instance
+        out += bytes.fromhex("ba") + DLL_PROCESS_ATTACH.to_bytes(4, "little")
+        out += bytes.fromhex("49b8") + LOADER_STUB.to_bytes(8, "little")   # mov r8, non-NULL
+        out += bytes.fromhex("48b8") + (image.base + rva).to_bytes(8, "little")
+        out += bytes.fromhex("ffd0")                                       # call rax
+        out += bytes.fromhex("4883c428")                                   # add rsp, 0x28
+    return bytes(out)
+
+
+def _stub(dlls: list[Image], program: Image, program_entry: int, failed: int) -> bytes:
+    """x86-64: for each DLL in init order, its TLS callbacks and then DllMain(base, DLL_PROCESS_ATTACH, non-NULL) with
+    the shadow space (a FALSE return calls `failed`); the program's TLS callbacks; then a jump to the program's entry
+    with RSP as the thread started."""
     out = bytearray()
     for d in dlls:
-        assert d.entry is not None
+        out += _tls_calls(d)
+        if d.entry is None:
+            continue
         out += bytes.fromhex("4883ec28")                                   # sub rsp, 0x28
         out += bytes.fromhex("48b9") + d.base.to_bytes(8, "little")        # mov rcx, instance
         out += bytes.fromhex("ba") + DLL_PROCESS_ATTACH.to_bytes(4, "little")   # mov edx, reason
@@ -171,6 +189,7 @@ def _stub(dlls: list[Image], program_entry: int, failed: int) -> bytes:
         out += bytes.fromhex("750c")                                       # jnz past the failure call
         out += bytes.fromhex("48b8") + failed.to_bytes(8, "little")        # mov rax, the failure thunk
         out += bytes.fromhex("ffd0")                                       # call rax (stops the run)
+    out += _tls_calls(program)
     out += bytes.fromhex("48b8") + program_entry.to_bytes(8, "little")     # mov rax, the program's entry
     out += bytes.fromhex("ffe0")                                           # jmp rax
     return bytes(out)
@@ -232,8 +251,9 @@ def load(data: bytes, dlls: Callable[[str], bytes | None] | None = None, name: s
     tls_array = _static_tls(mem, images)
     starting = [d for d in order if d.entry is not None]
     entry = program.entry or 0
-    if starting:
-        stub = _stub(starting, entry, thunk(DLL_INIT_FAILED))
+    if starting or any(i.pe.tls_callbacks for i in images):
+        stub = _stub([d for d in order if d.entry is not None or d.pe.tls_callbacks], program, entry,
+                     thunk(DLL_INIT_FAILED))
         mem.map(LOADER_STUB, (len(stub) + 0xFFF) & ~0xFFF, "loader").data[:len(stub)] = stub
         entry = LOADER_STUB
     mem.map(THUNK_BASE, 16 * max(len(thunks), 1), "thunks")

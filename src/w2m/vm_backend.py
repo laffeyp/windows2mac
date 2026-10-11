@@ -53,6 +53,8 @@ from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
 from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
+from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
+                            detach_stub, write_context)
 
 ROOT = Path(__file__).resolve().parents[2]
 MONITOR_SOURCE = ROOT / "tools" / "vm_monitor" / "vm_monitor.c"
@@ -135,6 +137,9 @@ INIT_STUB_SLOT = 0x80                # where module.c keeps LoadLibrary's return
 HOST_RANDOM = 23                    # a0 bytes of the host's CSPRNG (os.urandom) at guest address a1 (bcrypt.c)
 HOST_MAP_VIEW = 29                  # a view of a0 bytes of file descriptor a1 with protection a2 (file.c; Sprint 049;
                                     # 24-28 are file primitives)
+HOST_THREAD = 30                    # threads.c's requests: a0 the W2M_THREAD_* sub-operation (scheduler.py; Sprint 051)
+THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
+    THREAD_SIGNAL = range(1, 9)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -507,6 +512,10 @@ FP_CLASSES = {f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "
 FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, MXCSR bit): IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE
 HVC_SLOW_SSE = 10
 HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
+HVC_SCHEDULE = 12            # a service handed the vCPU to the scheduler (state.schedule; Sprint 051)
+STATE_REDIRECT, STATE_SCHEDULE = 0xE8, 0xF0       # runtime.h w2m_state.redirect_rip, .schedule
+SCHEDULE_YIELD, SCHEDULE_RETRY, SCHEDULE_END, SCHEDULE_ANSWER = 1, 2, 4, 8
+STATE_SIZE = 896
 CVT_INDEFINITE = True        # False exists only so a test can show the CPU catches the missing fix-up
 
 
@@ -993,8 +1002,11 @@ class VM:
         self.translations: list[tuple[int, int, Discovery]] = []   # (guest start, guest end, discovery)
         self.slow_sse = 0                                # SSE instructions run by x86fp (MXCSR unmasked)
         self._write_monitor()
-        self.bridges = {thunk: self._bridge(name) for thunk, name in loaded.thunks.items()}
+        self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
+        self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
+        self._max_steps = 0
+        self.current_tid = tid
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
                                      [(i.base, i.pe) for i in loaded.images] or
                                      ([(loaded.image.image_base, loaded.image)] if loaded.image is not None else []),
@@ -1070,7 +1082,7 @@ class VM:
         def make_thunk(key: str) -> int:
             addr = THUNK_BASE + 16 * len(self.ld.thunks)
             self.ld.thunks[addr] = key
-            self.bridges[addr] = self._bridge(key)
+            self.bridges[addr] = self._bridge(key, addr)
             return addr
 
         def in_app_directory(name: str) -> bool:
@@ -1151,12 +1163,242 @@ class VM:
         link(0x30, 0x20, init)
         struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x18, va0)
 
-    def _bridge(self, import_name: str) -> int:
+    # ---- threads (Sprint 051; scheduler.py) ------------------------------------------------------------
+    def _thread_callbacks(self) -> list[tuple[int, int]]:
+        """(module base, function) a thread's start and end call, in order: each DLL whose entry runs (load order,
+        then the DLLs loaded after the start), its TLS callbacks and then its DllMain; the program's TLS callbacks
+        last. The rows hold one DLL (its TLS callback before its DllMain); the order between modules is the
+        loader's init order, not yet observed (contract open question)."""
+        program = self.ld.images[0] if self.ld.images else None
+        dlls = list(self.ld.init_order) + [i for i in self.ld.images[1:] if i not in self.ld.init_order]
+        out: list[tuple[int, int]] = []
+        for image in dlls:
+            out += [(image.base, image.base + rva) for rva in image.pe.tls_callbacks]
+            if image.pe.entry_rva:
+                out.append((image.base, image.base + image.pe.entry_rva))
+        if program is not None:
+            out += [(program.base, program.base + rva) for rva in program.pe.tls_callbacks]
+        return out
+
+    def _thread_static_tls(self) -> int:
+        """A new thread's ThreadLocalStoragePointer: the pointer array and each module's block, copied from the
+        templates as loader._static_tls lays them out for the first thread; 0 when no module has static TLS."""
+        images = self.ld.images
+        if not images or all(i.pe.tls is None for i in images):
+            return 0
+        blocks: list[bytes | None] = []
+        for k, image in enumerate([images[0], *[i for i in images[1:] if i.pe.tls is not None]]):
+            if image.pe.tls is None:
+                blocks.append(None)                       # the program's slot, when it has no TLS
+                continue
+            start, end, _, zero_fill = (v - image.pe.image_base + image.base if j < 3 else v
+                                        for j, v in enumerate(image.pe.tls))
+            blocks.append(bytes(self.mem.read(start, end - start)) + bytes(zero_fill))
+        array = (8 * len(blocks) + 15) & ~15
+        size = array + sum((len(b) + 15) & ~15 for b in blocks if b is not None)
+        base, err = self.virtual.alloc(0, size, MEM_COMMIT | MEM_RESERVE, 0x04)
+        if err:
+            raise Unimplemented(f"a thread's static TLS: VirtualAlloc error {err}")
+        at = array
+        for index, block in enumerate(blocks):
+            if block is None:
+                continue
+            self.mem.write(base + 8 * index, (base + at).to_bytes(8, "little"))
+            self.mem.write(base + at, block)
+            at += (len(block) + 15) & ~15
+        return base
+
+    def _code_page(self, code: bytes) -> int:
+        """x86 code the host writes for a thread (its attach or detach stub), on fresh pages of the arena: an address
+        never translated before, so no stale translation can run it."""
+        va, err = self.virtual.alloc(0, len(code), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+        if err:
+            raise Unimplemented(f"a thread stub: VirtualAlloc error {err}")
+        self.mem.write(va, code)
+        return va
+
+    def _import_thunk(self, name: str) -> int:
+        key = name.lower()
+        m = self.modules
+        va = m.imports.get(key) or m.make_thunk(name)
+        m.imports[key] = va
+        return va
+
+    def _create_thread(self, start: int, parameter: int, flags: int, stack_size: int) -> int:
+        """CreateThread's host half: a thread id, a TEB, a stack, static TLS, the attach stub and the first state."""
+        tid = max(self.threads) + 4
+        program = self.ld.images[0].pe if self.ld.images else None
+        reserve = max(stack_size if flags & 0x10000 and stack_size else 0,
+                      program.stack_reserve if program is not None else 0x100000, 0x10000)
+        reserve = (reserve + 0xFFFF) & ~0xFFFF
+        dealloc, err = self.virtual.alloc(0, reserve, MEM_RESERVE, 0x04)
+        if err:
+            raise Unimplemented(f"a thread's stack of 0x{reserve:x} bytes: VirtualAlloc error {err}")
+        limit = dealloc + (1 + STACK_GUARD_PAGES) * 0x1000            # as the first thread's (_init_process)
+        self.virtual.alloc(limit, dealloc + reserve - limit, MEM_COMMIT, 0x04)
+        top = dealloc + reserve
+        teb, err = self.virtual.alloc(0, 0x4000, MEM_COMMIT | MEM_RESERVE, 0x04)     # TEB, then TlsExpansionSlots
+        if err:
+            raise Unimplemented(f"a thread's TEB: VirtualAlloc error {err}")
+        peb = PROCESS_VA + PEB_OFF
+        for off, value in ((0x08, top), (0x10, limit), (0x30, teb), (0x40, PROCESS_ID), (0x48, tid),
+                           (0x58, self._thread_static_tls()), (0x60, peb), (0x1478, dealloc), (0x1780, teb + 0x2000)):
+            self.mem.write(teb + off, value.to_bytes(8, "little"))
+        stub = self._code_page(attach_stub(self._thread_callbacks(), start, parameter,
+                                           self._import_thunk("KERNEL32.dll!ExitThread")))
+        x = [0] * 31
+        x[4] = top - 0x48                                              # RSP = 8 mod 16, as at a function's entry
+        x[17] = stub
+        x[REG_UNDEFINED_FLAGS] = 0x3F
+        x[28] = MONITOR_VA + MONITOR_DATA
+        monitor = []
+        for a, b in PER_THREAD_MONITOR:
+            data = bytearray(b - a)
+            if a == MXCSR_OFF:
+                data[0:4] = (0x1F80).to_bytes(4, "little")
+            if a == FCW_OFF:
+                data[0:2] = (0x27F).to_bytes(2, "little")
+            monitor.append(bytes(data))
+        state = bytearray(STATE_SIZE)
+        struct.pack_into("<I", state, 152, 0x1F80)
+        struct.pack_into("<H", state, 156, 0x27F)
+        struct.pack_into("<QQ", state, 176, teb, teb)
+        t = GuestThread(tid, teb, (dealloc, limit, top), x=x, fpcr=fpcr_for(0x1F80), monitor=monitor,
+                        state=bytes(state), suspend=1 if flags & 0x4 else 0)
+        self.threads[tid] = t
+        self.virtual.stacks.append(t.stack)
+        self._set_budget()                                # two threads: time slices from now on
+        return tid
+
+    def _thread_request(self, sub: int, a0: int, a1: int, a2: int) -> int:
+        """threads.c's W2M_THREAD_* requests."""
+        if sub == THREAD_CREATE:
+            return self._create_thread(a0, a1, a2 & 0xFFFFFFFF, a2 >> 32)
+        cur = self.threads[self.current_tid]
+        if sub == THREAD_EXIT_STUB:
+            return self._code_page(detach_stub(self._thread_callbacks(), self._import_thunk("KERNEL32.dll!W2mThreadEnd")))
+        if sub == THREAD_END:
+            cur.exit_code = a0 & 0xFFFFFFFF
+            return 0
+        if sub == THREAD_SIGNAL:
+            for t in self.threads.values():
+                if t.status == "blocked":
+                    t.status = "ready"
+            self._publish_blocked()
+            return 0
+        found = self.threads.get(a0 & 0xFFFFFFFF)
+        if found is None:
+            raise Unimplemented(f"a thread request ({sub}) for thread id {a0 & 0xFFFFFFFF}, which w2m did not create")
+        t = found
+        if sub == THREAD_EXIT_CODE:
+            return t.exit_code
+        if sub == THREAD_SUSPEND:
+            if t.status == "ended":
+                return M64
+            t.suspend += 1
+            return t.suspend - 1
+        if sub == THREAD_RESUME:
+            if t.status == "ended" or t.suspend == 0:
+                return 0
+            t.suspend -= 1
+            return t.suspend + 1
+        if sub == THREAD_CONTEXT:
+            buf = bytearray(self.mem.read(a1, 1232))
+            flags = struct.unpack_from("<I", buf, 48)[0]
+            mon = dict(zip((a for a, _ in PER_THREAD_MONITOR), t.monitor))
+            af_a, af_b, af_r = struct.unpack_from("<QQQ", mon[0x20], 0)
+            undefined = t.x[REG_UNDEFINED_FLAGS]
+            eflags = 0x202 | (mon[0x20][DF_BYTE - 0x20] & 1) << 10
+            for f, bit in (("C", 0), ("P", 2), ("Z", 6), ("S", 7), ("O", 11)):
+                if not undefined >> FLAG_BIT[f] & 1 and t.x[FLAG_REG[f]]:
+                    eflags |= 1 << bit
+            if not undefined >> FLAG_BIT["A"] & 1 and (af_a ^ af_b ^ af_r) & 0x10:
+                eflags |= 1 << 4
+            write_context(buf, flags, t.x[:16], t.x[17], eflags, struct.unpack_from("<I", mon[MXCSR_OFF], 0)[0],
+                          struct.unpack_from("<H", mon[FCW_OFF], 0)[0], t.xmm)
+            self.mem.write(a1, bytes(buf))
+            return 1
+        raise Unimplemented(f"thread request {sub}")
+
+    def _set_budget(self) -> None:
+        """The step budget the block entries check: the run's limit, or with more than one thread a time slice."""
+        executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+        limit = self._max_steps if len(self.threads) < 2 else min(self._max_steps, executed + TIME_SLICE)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, limit)
+
+    def _read_guest(self, va: int, n: int) -> bytes:
+        """Guest memory, the process area (the first thread's TEB, the PEB) included."""
+        off = va - PROCESS_VA
+        if 0 <= off and off + n <= PROCESS_SIZE:
+            return bytes(self.mm[self._process(off):self._process(off) + n])
+        return bytes(self.mem.read(va, n))
+
+    def _publish_blocked(self) -> None:
+        """The number of blocked threads, where threads.c's w2m_signal reads it."""
+        n = sum(1 for t in self.threads.values() if t.status == "blocked")
+        struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_threads_blocked"] - MONITOR_VA, n)
+
+    def _save_thread(self, t: GuestThread, x: list[int]) -> None:
+        t.x = list(x)
+        t.xmm, t.fpcr, t.fpsr = self.vectors()
+        t.monitor = [bytes(self.mm[MONITOR_DATA + a:MONITOR_DATA + b]) for a, b in PER_THREAD_MONITOR]
+        st = self._process(STATE_OFF)
+        t.state = bytes(self.mm[st:st + STATE_SIZE])
+
+    def _load_thread(self, t: GuestThread) -> list[int]:
+        for (a, b), data in zip(PER_THREAD_MONITOR, t.monitor):
+            self.mm[MONITOR_DATA + a:MONITOR_DATA + b] = data
+        st = self._process(STATE_OFF)
+        self.mm[st:st + STATE_SIZE] = t.state
+        self.set_vectors(t.xmm, t.fpcr, t.fpsr)
+        return list(t.x)
+
+    def _schedule(self, x: list[int], schedule: int) -> list[int] | None:
+        """Hand the vCPU from the current thread (its state in x, at an instruction boundary) to the next that can
+        run: round robin over ready, unsuspended threads; when none is ready, a thread blocked with a finite deadline
+        runs to check it (after a millisecond's sleep, so the clock moves); with neither, every thread waits
+        forever and the run stops. `schedule` is state.schedule's bits (0: the time slice ran out)."""
+        cur = self.threads[self.current_tid]
+        if schedule & SCHEDULE_END:
+            cur.status = "ended"
+            for t in self.threads.values():              # its handle signals: waiters check again
+                if t.status == "blocked":
+                    t.status = "ready"
+        elif schedule & SCHEDULE_RETRY:
+            cur.status = "blocked"
+            cur.deadline = struct.unpack_from("<Q", self._read_guest(cur.teb + SCRATCH_OFF, 8))[0]
+        if all(t.status == "ended" for t in self.threads.values()):
+            return None                                       # the last thread ended: the process ends with it
+        order = sorted(self.threads)
+        i = order.index(cur.tid)
+        rotation = order[i + 1:] + order[:i + 1]
+        nxt = next((self.threads[k] for k in rotation
+                    if self.threads[k].status == "ready" and self.threads[k].suspend == 0), None)
+        if nxt is None:
+            timed = [self.threads[k] for k in rotation if self.threads[k].status == "blocked"
+                     and self.threads[k].suspend == 0 and self.threads[k].deadline != M64]
+            if not timed:
+                raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
+            time.sleep(0.001)
+            nxt = timed[0]
+            nxt.status = "ready"
+        if schedule & SCHEDULE_ANSWER:
+            x[0] = int(nxt is not cur)                       # SwitchToThread: nonzero when another thread runs
+        self._publish_blocked()
+        if nxt is cur:
+            return x
+        self._save_thread(cur, x)
+        self.current_tid = nxt.tid
+        return self._load_thread(nxt)
+
+    def _bridge(self, import_name: str, thunk: int) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
         R9 and RSP in x0-x4, call the C service on the runtime stack, put its result in RAX unless
         the service is void, restore the GPRs, and do RET's pop (Microsoft x64 calling convention;
         AAPCS64 keeps x19-x28, so the flag registers survive). An import with no service exits
-        with hvc #9."""
+        with hvc #9. Sprint 051: a service may set state.redirect_rip (the next x86 address instead of the
+        return; RSP keeps the return address) and state.schedule: RETRY leaves the call unreturned with RIP at
+        `thunk`, so the thread re-enters it; any schedule bit exits with hvc #12 to the scheduler."""
         dll, fn = import_name.split("!", 1)
         a = Assembler(MONITOR_VA + self.code_cursor)
         service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
@@ -1177,8 +1419,24 @@ class VM:
                 a.emit(a64.str_(8, 0, 16, 0))
             for i in range(0, 16, 2):
                 a.emit(a64.ldp(i, i + 1, 16, 8 * i))
+            not_retry, pop, after, to_host = a.label(), a.label(), a.label(), a.label()
+            a.emit(a64.ldr(4, 17, 16, STATE_SCHEDULE))
+            a.branch(lambda off: a64.tbz(17, 1, off), not_retry)
+            a.emit(a64.mov_imm(17, thunk))                            # RETRY: RIP back at the call, RSP as it is
+            a.branch(a64.b, to_host)
+            a.bind(not_retry)
+            a.emit(a64.ldr(8, 17, 16, STATE_REDIRECT))
+            a.branch(lambda off: a64.cbz(17, off), pop)
+            a.emit(a64.str_(8, a64.ZR, 16, STATE_REDIRECT))
+            a.branch(a64.b, after)
+            a.bind(pop)
             a.emit(a64.ldr(8, 17, 4, 0), a64.addi(4, 4, 8))
+            a.bind(after)
+            a.emit(a64.ldr(4, 16, 16, STATE_SCHEDULE))
+            a.branch(lambda off: a64.cbnz(16, off), to_host)
             a.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
+            a.bind(to_host)
+            a.emit(a64.hvc(HVC_SCHEDULE))
         words = a.finish()
         va = MONITOR_VA + self.code_cursor
         self._write_words(self.code_cursor, words)
@@ -1210,6 +1468,9 @@ class VM:
             result = a0
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
+        elif op == HOST_THREAD:
+            a2, a3 = struct.unpack_from("<QQ", self.mm, t + 24)
+            result = self._thread_request(a0, a1, a2, a3) & M64
         elif op == HOST_MAP_VIEW:                       # the view's pages, then the file's bytes copied in
             a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
             if self.files is None or a1 not in self.files.fds:
@@ -1677,9 +1938,13 @@ class VM:
                 raise RuntimeError(f"vm_monitor: {c.split()[0]} -> {reply}{gone}")
             return reply
 
-        struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)
+        self._max_steps = max_steps
+        self._set_budget()
         forced_stop = False
         self._cmd = cmd
+        if not self.threads:                              # the first thread (scheduler.py; Sprint 051)
+            self.threads[self.current_tid] = GuestThread(self.current_tid, PROCESS_VA + TEB_OFF, self._stack,
+                                                         status="ready")
         if struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0] == 0:
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
         if struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0] == 0:
@@ -1775,13 +2040,35 @@ class VM:
                     pc = self._slow_sse(x, where)
                 elif imm == 4 and forced_stop:
                     forced_stop = False
-                    struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, max_steps)
+                    self._set_budget()
                     if on_boundary:
                         on_boundary(self, x, where)
                     pc = e.pc                                   # on into the block from its entry
                 elif imm == 4:
-                    stop = "max_steps"
-                    break
+                    executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+                    if executed >= max_steps:
+                        stop = "max_steps"
+                        break
+                    self._set_budget()
+                    if len(self.threads) > 1:                   # the time slice ran out: another thread's turn
+                        x[17] = where
+                        switched = self._schedule(x, 0)
+                        assert switched is not None
+                        x = switched
+                        pc = self.miss_va
+                    else:
+                        pc = e.pc
+                elif imm == HVC_SCHEDULE:                       # a service handed the vCPU over (state.schedule)
+                    st = self._process(STATE_OFF)
+                    schedule = struct.unpack_from("<I", self.mm, st + STATE_SCHEDULE)[0]
+                    struct.pack_into("<I", self.mm, st + STATE_SCHEDULE, 0)
+                    switched = self._schedule(x, schedule)
+                    if switched is None:
+                        self.exit_code = self.threads[self.current_tid].exit_code
+                        stop = "ExitProcess"
+                        break
+                    x = switched
+                    pc = self.miss_va
                 elif imm & 0x40:
                     stop = f"UndefinedFlag: {'CZSOP'[imm & 7]} read while undefined at 0x{where:x}"
                     break

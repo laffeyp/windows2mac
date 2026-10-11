@@ -40,6 +40,7 @@ static struct object { u32 kind; s64 count, max; u32 refs; } objects[OBJECTS];
 static int handle_object[OBJECTS];              /* handle slot -> object index + 1; 0: the slot is free */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
+static u32 current_tid(void);
 
 static u64 handle_for(u64 api, int object) {
     for (int i = 0; i < OBJECTS; i++)
@@ -147,7 +148,11 @@ static struct object *must(u64 api, u64 h, u32 kind1, u32 kind2) {
     return o;
 }
 
-u64 k32_SetEvent(u64 h) { must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 1; return w2m_logged(W2M_API_SetEvent, h, 1); }
+u64 k32_SetEvent(u64 h) {
+    must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 1;
+    w2m_signal();
+    return w2m_logged(W2M_API_SetEvent, h, 1);
+}
 u64 k32_ResetEvent(u64 h) { must(W2M_API_ResetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 0; return w2m_logged(W2M_API_ResetEvent, h, 1); }
 
 u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
@@ -159,32 +164,58 @@ u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     }
     if (previous) *(s32 *)previous = (s32)o->count;
     o->count += (s32)count;
+    w2m_signal();
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
 
 u64 k32_ReleaseMutex(u64 h) {
     struct object *o = must(W2M_API_ReleaseMutex, h, MUTEX, MUTEX);
-    if (o->count == 0) {
+    if (o->count == 0 || (u32)o->max != current_tid()) {
         set_error(ERROR_NOT_OWNER);
         return w2m_logged(W2M_API_ReleaseMutex, h, 0);
     }
-    o->count--;
+    if (--o->count == 0) {
+        o->max = 0;
+        w2m_signal();
+    }
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }
 
+int w2m_thread_ended(u32 tid);        /* threads.c */
+
+/* A thread's handle signals when the thread has ended (rows wait.worker, wait.again; Sprint 051); a mutex when no
+ * thread owns it or this one does (`max` holds its owner's id, `count` the recursion). */
 static int signaled(struct object *o) {
-    if (o->kind == THREAD || o->kind == PROCESS) return 0;   /* running: signaled when it ends (row wait.own_thread) */
-    return o->kind == MUTEX || o->count > 0;              /* one thread owns every mutex */
+    if (o->kind == THREAD) return w2m_thread_ended((u32)o->count);
+    if (o->kind == PROCESS) return 0;                          /* this process: still running */
+    if (o->kind == MUTEX) return o->count == 0 || (u32)o->max == current_tid();
+    return o->count > 0;
 }
 
 static void take(struct object *o) {
-    if (o->kind == MUTEX) o->count++;
-    else if (o->kind != EVENT_MANUAL) o->count--;
+    if (o->kind == MUTEX) {
+        o->count++;
+        o->max = current_tid();
+    } else if (o->kind == SEMAPHORE || o->kind == EVENT_AUTO) {
+        o->count--;
+    }
 }
 
-static u64 timeout(u64 api, u32 ms) {
-    if (ms == INFINITE) w2m_unimplemented(api, ms);            /* no other thread: it would never return */
-    return WAIT_TIMEOUT;
+/* Not signaled: 1 when the wait is over (WAIT_TIMEOUT now); 0 when the thread blocks and retries the call (runtime.h
+ * W2M_SCHEDULE_RETRY), other threads running meanwhile. ms is from the first try, the deadline kept in the TEB. */
+static int timed_out(u32 ms) {
+    struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    if (ms == 0) return 1;
+    if (!sc->wait_deadline) {
+        w2m_block(ms == INFINITE ? ~0ull : w2m_counter_now() + (u64)ms * 10000);
+        return 0;
+    }
+    if (sc->wait_deadline != ~0ull && w2m_counter_now() >= sc->wait_deadline) {
+        sc->wait_deadline = 0;
+        return 1;
+    }
+    w2m_block(sc->wait_deadline);
+    return 0;
 }
 
 static u64 wait_one(u64 api, u64 h, u32 ms) {
@@ -194,7 +225,11 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
         set_error(ERROR_INVALID_HANDLE);
         return w2m_logged(api, h, WAIT_FAILED);
     }
-    if (!signaled(o)) return w2m_logged(api, h, timeout(api, ms));
+    if (!signaled(o)) {
+        if (!timed_out(ms)) return 0;                          /* retried: the bridge does not return */
+        return w2m_logged(api, h, WAIT_TIMEOUT);
+    }
+    w2m_thread_scratch()->wait_deadline = 0;
     take(o);
     return w2m_logged(api, h, WAIT_OBJECT_0);
 }
@@ -217,24 +252,25 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
     }
     if ((u32)all) {
         for (u32 i = 0; i < n; i++)
-            if (!signaled(os[i])) return w2m_logged(W2M_API_WaitForMultipleObjects, n, timeout(W2M_API_WaitForMultipleObjects, (u32)ms));
+            if (!signaled(os[i])) {
+                if (!timed_out((u32)ms)) return 0;
+                return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_TIMEOUT);
+            }
+        w2m_thread_scratch()->wait_deadline = 0;
         for (u32 i = 0; i < n; i++) take(os[i]);
         return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0);
     }
     for (u32 i = 0; i < n; i++)
         if (signaled(os[i])) {
+            w2m_thread_scratch()->wait_deadline = 0;
             take(os[i]);
             return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0 + i);
         }
-    return w2m_logged(W2M_API_WaitForMultipleObjects, n, timeout(W2M_API_WaitForMultipleObjects, (u32)ms));
+    if (!timed_out((u32)ms)) return 0;
+    return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_TIMEOUT);
 }
 
-/* Sleep: the time passes on the guest counter (10 MHz); one thread, so nothing else runs meanwhile. */
-W2M_VOID u64 k32_Sleep(u64 ms) {
-    u64 until = w2m_counter_now() + (u64)(u32)ms * 10000;
-    while (w2m_counter_now() < until) {}
-    return w2m_logged(W2M_API_Sleep, (u32)ms, 0);
-}
+/* Sleep: threads.c (Sprint 051), which lets other threads run while it waits. */
 
 /* DuplicateHandle, OpenThread, GetThreadId, GetProcessId, CreateSemaphoreW (Sprint 049, family "thread handles"), as
  * contracts/windows.handle.thread_handles records Windows answering (Server 2025 and 2022):
@@ -254,8 +290,17 @@ W2M_VOID u64 k32_Sleep(u64 ms) {
 int w2m_is_file_handle(u64 h);       /* file.c */
 int w2m_is_std_handle(u64 h);        /* console.c */
 
-static u32 current_tid(void) { return *(const u32 *)(W2M_TEB_VA + 0x48); }
-static u32 current_pid(void) { return *(const u32 *)(W2M_TEB_VA + 0x40); }
+static u32 current_tid(void) { return (u32)w2m_teb()->client_thread; }
+static u32 current_pid(void) { return (u32)w2m_teb()->client_process; }
+
+/* For threads.c (Sprint 051): a new handle on thread tid's object, and the thread a handle names. */
+u64 w2m_object_thread(u64 api, u32 tid) { return handle_for(api, new_object(api, THREAD, tid, 0)); }
+int w2m_object_thread_of(u64 h, u32 *tid) {
+    struct object *o = object_of(h);
+    if (!o || o->kind != THREAD) return 0;
+    *tid = (u32)o->count;
+    return 1;
+}
 
 /* DuplicateHandle(hSourceProcessHandle, hSourceHandle, hTargetProcessHandle, lpTargetHandle, dwDesiredAccess,
  * bInheritHandle, dwOptions): the last three on the guest's stack at RSP + 0x28, + 0x30, + 0x38. */

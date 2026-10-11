@@ -64,6 +64,8 @@ class PeImage:
     tls: tuple[int, int, int, int] | None = None                 # TLS directory: template start, end, index (VAs), zero fill
     iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name" (incl. delay)
     function_starts: tuple[int, ...] = ()                       # .pdata RUNTIME_FUNCTION.BeginAddress
+    stack_reserve: int = 0x100000                               # SizeOfStackReserve (a new thread's default; Sprint 051)
+    stack_commit: int = 0x1000                                  # SizeOfStackCommit
 
     def read_rva(self, data: bytes, rva: int, size: int) -> bytes:
         """Up to `size` bytes of the image at `rva`, from file `data`. Bytes past a section's raw
@@ -142,6 +144,7 @@ def parse(data: bytes) -> PeImage:
     sect_align, _ = r.u("<II", opt + 32)
     size_of_image, _ = r.u("<II", opt + 56)
     subsystem, dllchars = r.u("<HH", opt + 68)
+    stack_reserve, stack_commit = r.u("<QQ", opt + 72)      # PE Format, Optional Header Windows-Specific Fields
     (ndirs,) = r.u("<I", opt + 108)
     dirs: list[tuple[int, int]] = []
     for i in range(min(ndirs, 16)):
@@ -272,4 +275,4 @@ def parse(data: bytes) -> PeImage:
                    sections=sections, imports=imports, relocations=relocs,
                    relocation_sites=tuple(sites), delay_imports=delay,
                    exports=tuple(exports), tls_callbacks=tuple(callbacks), tls=tls, iat=iat,
-                   function_starts=tuple(starts))
+                   function_starts=tuple(starts), stack_reserve=stack_reserve, stack_commit=stack_commit)

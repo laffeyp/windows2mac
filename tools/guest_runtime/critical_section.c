@@ -83,15 +83,20 @@ static int acquire(struct critical_section *cs) {
     return 0;
 }
 
+/* EnterCriticalSection: another thread's section blocks this thread until it is left (Sprint 051; the
+ * fields stay as the owner set them while threads wait, where Windows also counts the waiters in LockCount). */
 W2M_VOID u64 k32_EnterCriticalSection(u64 cs) {
-    if (!acquire((struct critical_section *)cs)) w2m_unimplemented(W2M_API_EnterCriticalSection, cs);
+    if (!acquire((struct critical_section *)cs)) {
+        w2m_block(~0ull);
+        return 0;                                   /* retried: the bridge does not return */
+    }
+    w2m_thread_scratch()->wait_deadline = 0;
     return w2m_logged(W2M_API_EnterCriticalSection, cs, 0);
 }
 
-/* TryEnterCriticalSection: nonzero when entered; another owner (Sprint 047) stops the run. */
+/* TryEnterCriticalSection: nonzero when entered; FALSE while another thread owns it. */
 u64 k32_TryEnterCriticalSection(u64 cs) {
-    if (!acquire((struct critical_section *)cs)) w2m_unimplemented(W2M_API_TryEnterCriticalSection, cs);
-    return w2m_logged(W2M_API_TryEnterCriticalSection, cs, 1);
+    return w2m_logged(W2M_API_TryEnterCriticalSection, cs, (u64)acquire((struct critical_section *)cs));
 }
 
 W2M_VOID u64 k32_LeaveCriticalSection(u64 cs) {
@@ -101,6 +106,7 @@ W2M_VOID u64 k32_LeaveCriticalSection(u64 cs) {
     if (--c->recursion_count == 0) {
         c->owning_thread = 0;
         c->lock_count = -1;
+        w2m_signal();
     }
     return w2m_logged(W2M_API_LeaveCriticalSection, cs, 0);
 }

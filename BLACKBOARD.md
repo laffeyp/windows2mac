@@ -138,6 +138,10 @@
 
 - **2026-10-11 agent-resolved** — Which sprint follows 050: the plan's 051 (the Mono JIT region) or threads, where the frontier stops (CreateThread after 20,584,207 instructions)? Decision: 051 is threads, from the work list's threads family (CreateThread and the ten functions with it) and the M:N scheduler the plan's "exceptions and threads" row names; the JIT region moves to 052, milestone A to 053. Grounds: project — the frontier stop and the user's rule to plan from the work list (Decision 2026-10-10); SDD — AGENTS.md hard rule 6; practice — none beyond the project's. Revisit if: stale translated code shows before threads land (a rewritten call site run as it was).
 
+- **2026-10-11 agent-resolved** — How many vCPUs the first scheduler uses. Decision: Sprint 051 builds the M:N scheduler of Decision 2026-10-09 with a pool of one vCPU: the host switches guest threads at instruction boundaries (a blocking service call, a yield, or a step budget as the time slice), saving and loading each thread's registers, vector registers, MXCSR, x87 control word, YMM upper halves and TEB. A wider pool waits for a measured need and brings memory-ordering questions (TSO, Sprint 008's TSOEN) one vCPU does not have. Grounds: project — Decision 2026-10-09 (M:N), the VM's single-vCPU monitor (`vm_backend.VM.run`), the frontier at CreateThread; SDD — AGENTS.md hard rule 6 (one concept); practice — a uniprocessor scheduler first, as Go's runtime ran with GOMAXPROCS=1 by default until Go 1.5 (Go 1.5 release notes, 2015). Revisit if: a frontier or play run is bound by guest compute that a second vCPU would share.
+
+- **2026-10-11 agent-resolved** — Which sprint follows 051: the plan's 052 (the Mono JIT region) or the com family, where the frontier stops (CoInitializeEx on mono's thread)? Decision: 052 is the com family (CoInitializeEx, CoCreateInstance and the rest of the work list's ten, with the classes the captures create); the JIT region moves to 053, milestone A to 054. Grounds: project — the frontier stop and the work list (Decision 2026-10-10); SDD — AGENTS.md hard rule 6; practice — none beyond the project's. Revisit if: stale translated code shows before COM lands.
+
 ## Built
 
 - **2026-10-05** — Sprint 000 (Vocabulary Session) closed. `signals/0.1.json` (60 tags, 12 categories, 34 enums, 22 entities, 7 temporal invariants, 14 transition rules, 16 operators, 13 evidence constraints), `signals/0.1-rationale.md` (signed), `signals/proposals.json` (6 open, 1 rejected), plus `scripts/check_vocab.py` (structure gate, outside the card's file list; recorded in Sprint tail). v0.1 locked. 10 agent-resolved decisions recorded. Dual contract: signal vacuous (content sprint); artifact pass (all commands exit 0, four content assertions hold). Ready for Sprint 001.
@@ -193,6 +197,7 @@
 - **2026-10-10** — Sprint 048 (the guest's file namespace) closed. Drive C: with the game's directory at `C:\w2m\app` (read-only for the frontier) and the profile `C:\Users\w2m`; full paths in the guest (`paths.c`); FILE_MKDIR and FILE_RMDIR; system DLLs as modules with Server 2025's exports (`specs/windows_exports.json` 0.2.0); SHELL32, OLE32 and ADVAPI32 services; a mutable environment block; set 048 (prefetches) on the Xeon 8573C; eight families (paths, file security, local free, file access, system modules, known folders, temp path, integrity level), 33 in all; F1 measured and F3 relabelled. Dual contract: signal pass; artifact pass (gates 0; CI run 38099562363 success on 401deef); observation pass — the frontier reads boot.config and app.info, writes Player.log under LocalLow, and stops at `USER32.dll!MessageBoxA` ("Failed to load mono") after 2,668,647 instructions with every service before it judged.
 - **2026-10-11** — Sprint 049 (the work list and loading at run time) closed on CI run 38121563657 (d470850a). `tools/jit_capture` call trace, `scripts/work_list.py`, `specs/work_list.json`, services from the guest C (`guest_runtime.service_table`), run-time DLL loading (`VM._load_dll`, `module.c`), the x86-64-v3 profile with VEX, FMA and BMI lifting (`rules/_vex.py`, `x86fp.fma`), case sets 049 and 049b, `scripts/class_census.py --jit`, `src/w2m/system_messages.py`, 14 families. Dual contract: signal pass (item runs, frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED); artifact pass (gates 0, CI success). Observation: pass — mono loads and starts; the frontier runs 5,376,528 instructions.
 - **2026-10-11** — Sprint 050 (mono's and UnityPlayer's remaining instruction classes) closed. Decode spec 0.8.2 (52 operand templates, Edb), 64 rule modules, `src/w2m/integer_model.py` behind the `x86` op, the model's `_sse_050` and eleven lane rules, case set 050 (`CLASSES_050`, `_fixed_050`), release semantics-050. Dual contract: signal pass (64 class runs; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED CreateThread); artifact pass (gates 0, CI on the closing commit). Observation: pass — model and VM equal the Xeon on 12,833 cases; the frontier runs 20,584,207 instructions.
+- **2026-10-11** — Sprint 051 (threads) closed. `src/w2m/scheduler.py`, `tools/guest_runtime/threads.c`, the VM's thread table, bridge epilogue (state.schedule, hvc #12) and time slices; per-thread TEBs, stacks and static TLS; blocking waits, mutexes, critical sections, SRW locks and condition variables; TLS callbacks at process start (loader); the walker's address-taken roots. Dual contract: signal pass (threads item run, five plants, 15 families re-recorded; frontier EXECUTION_STARTED then SERVICE_UNIMPLEMENTED CoInitializeEx); artifact pass (gates 0, CI on the closing commit). Observation: pass, partial on the game's collector path (not reached).
 
 ## Deferred
 
@@ -217,6 +222,9 @@
 - **2026-10-11** — Native lowerings for set 050's classes: all 64 run in the model inside the VM (hvc #10, #11), as the VEX classes of 049 and 049b partly do. Re-visit when a frontier or play run measures a share of its time in model steps.
 - **2026-10-11** — MMX and x87 (the MMX-register forms of MOVD, MOVQ, PADDW, PUNPCKLBW and the rest, EMMS, MOVDQ2Q; FLDCW, FNCLEX, FNSTSW, FWAIT, FISTP, FIADD, FADD, FIDIVR): one register file, one later set. Re-visit when the frontier reaches one.
 
+- **2026-10-11** — The game's collector path (SuspendThread, GetThreadContext, ResumeThread on mono's threads): judged by the threads rows, not yet run by the game. Re-visit when the frontier reaches mono's first collection.
+- **2026-10-11** — A thread's stack with a guard page and commit on demand, as Windows lays it out; w2m commits it whole. Re-visit when a program probes another thread's stack pages or overflows a stack.
+
 ## Open questions
 
 - **OQ-1.** Is `ACTLR_EL1.TSOEN` settable for a guest vCPU through public Hypervisor.framework on macOS 26, or only through a private path? Settled by a probe sprint, not by reading. — **Answered 2026-10-07 (Sprint 008):** public. `HV_SYS_REG_ACTLR_EL1` (macOS 15.0+, SDK header `hv_vcpu_types.h`: "only allows getting / setting of the ACTLR_EL1.EnTSO bit (index 1)"); on Mac17,7 / macOS 25F80 the bit sets, reads back 0x2, and survives an `hv_vcpu_run` exit. Still open: the ordering *effect* (a two-vCPU litmus test). — **Effect demonstrated 2026-10-07 (Sprint 009):** MP litmus, 2 vCPUs, guest MMU on with Normal WB memory: EnTSO off 2245 / 50,000,000 forbidden outcomes; EnTSO on 0 / 50,000,000 (95% upper bound 6.0e-08).
@@ -240,6 +248,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 051 (2026-10-11, closed: CI run 38126051832 success on d73e4ade)
+- **Scope:** guest threads on one vCPU, from the work list's threads family.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the threads probe on two runners (PROBE_AUTHORED); the threads item run's SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; 15 families re-run to CANDIDATE_ACCEPTED; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for ole32.dll!CoInitializeEx with two threads in the VM.
+  - *Observation 1 (missing pair):* events.start in w2m held DllMain's attach without the TLS callback's before it. Disposition: resolved-here (the loader's start stub); KIT_DIARY #42.
+  - *Observation 2 (order violation, of the test of every import's reach):* the walker did not reach the probe's ExitThread call. Disposition: resolved-here (address-taken roots), not a test exemption.
+  - *Observation 3 (timing surprise):* time slices restarted the vCPU's interrupt timer, and the forward-rule test saw no stop. Disposition: resolved-here (slices only with two or more threads).
 
 ### Sprint 050 (2026-10-11, closed: CI run 38123808878 success on 3b709e65)
 - **Scope:** set 050, the 64 classes the censuses list as missing that the guest profile reaches, in one case set.

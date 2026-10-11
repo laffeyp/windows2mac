@@ -81,6 +81,8 @@ class VirtualMemory:
     reservations: dict[int, Reservation] = field(default_factory=dict)
     image_protect: dict[int, int] = field(default_factory=dict)       # page VA -> a protection VirtualProtect set
     stack: tuple[int, int, int] | None = None    # the main thread's (DeallocationStack, StackLimit, StackBase)
+    stacks: list[tuple[int, int, int]] = field(default_factory=list)   # every other thread's (Sprint 051): their
+                                                 # reservations hold no guard pages, all committed above StackLimit
     mapped: list[tuple[int, int]] = field(default_factory=list)   # every range the VM maps, (base, size): what is
                                                  # outside all of them is free address space (Sprint 049)
     heap: tuple[int, int] | None = None          # the process heap's reservation (base, size); heap.c keeps its high

@@ -370,3 +370,11 @@
 
 **Kit change suggested:** a semantics judge reports undefined-per-manual differences apart from defined ones, so the fit is a decision, not an accident.
 
+### 2026-10-11 — Sprint 051: a call with no visible effect, missing for five sprints
+
+**What happened:** w2m's loader has called each DLL's DllMain at process start since Sprint 046 and never its TLS callbacks. Every family that loaded a DLL passed: the static_tls probe checked TLS blocks and indices, and the C runtime's own TLS callback (`__dyn_tls_init`, in UnityPlayer.dll and mono too) has no effect a row printed. The threads probe's DLL logged each TLS callback and DllMain call, and its first row in w2m lacked the callback.
+
+**Finding (#42):** a loader is judged by the calls it makes, not only by the state they leave; a call whose effect no row reads is invisible to every state check. A probe that logs the calls themselves (kind, reason, thread) catches the missing one at once.
+
+**Kit change suggested:** for each documented callback sequence (loader, thread start, exit), one probe that records the sequence of calls, not their results.
+
