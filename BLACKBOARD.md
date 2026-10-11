@@ -249,7 +249,7 @@
 
 ## Sprint tail
 
-### Sprint 051 (2026-10-11, closed)
+### Sprint 051 (2026-10-11, closed: CI run 38126051832 success on d73e4ade)
 - **Scope:** guest threads on one vCPU, from the work list's threads family.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the threads probe on two runners (PROBE_AUTHORED); the threads item run's SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; 15 families re-run to CANDIDATE_ACCEPTED; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for ole32.dll!CoInitializeEx with two threads in the VM.
