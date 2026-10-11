@@ -86,3 +86,4 @@ All eight fixed and checked; the three families re-accepted with the new rows; t
   file_search and display list heap.c and guest_stubs.py (derived lists are Sprint 057).
 - **Not done here:** a review of Sprint 055 (Sprint 058); the pipe's buffer, which grows without bound where Windows's
   blocks a writer, is left to it.
+- **Closed on CI run 38183215347** (success on 79f13466; run 38182897398 on 62dc17ce failed first, LeakSanitizer on Linux reporting the native harnesses' buffers).

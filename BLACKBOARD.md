@@ -267,13 +267,14 @@
 
 ## Sprint tail
 
-### Sprint 056 (2026-10-11, closed: CI on the closing commit, recorded at merge)
+### Sprint 056 (2026-10-11, closed: CI run 38183215347 success on 79f13466)
 - **Scope:** the eight verified findings of the review of Sprint 054, the audit for their patterns, the claims.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the native checks fail on 243b8ad9; the registry, file_search and windows probes run on two runners twice (the class-name boundary asked again at 254 and 255); fixes; the three families' item runs SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; 28 families re-run to CANDIDATE_ACCEPTED.
   - *Observation 1 (order violation, of the judge):* one native check failed first for a wrong expectation, not the defect. Disposition: resolved-here (each check's failure read before any fix).
   - *Observation 2 (missing pair, of the documentation):* Microsoft Learn's class-name maximum of 256 is off by one against Windows (256 answers 87). Disposition: resolved-here (the rows decide; the comment cites both).
   - *Observation 3 (vocabulary gap, checked):* none.
+  - *Observation 4 (timing surprise, of CI):* the first closing commit (62dc17ce) failed CI run 38182897398: Linux's AddressSanitizer runs LeakSanitizer, which macOS's does not, and it reported the harnesses' own buffers and exited before stdout flushed. Disposition: resolved-here (leaks not judged; the guest heap is w2m's own).
 
 ### Sprint 055 (2026-10-11, closed: CI run 38180806466 success on 3e0dea6d)
 - **Scope:** captures with names and the handler's calls; the processes and winrt families; a second process as a second VM.
