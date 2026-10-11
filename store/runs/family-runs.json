@@ -1157,6 +1157,26 @@
    "38124578332": "conforms"
   }
  },
+ "time": {
+  "candidate_sha256": "sha256:2b39edfc1b931bb179f7be35ae0b98ce3e06e71d1784bf17b6d9c441994fc9f3",
+  "divergence": {
+   "38173127764": null,
+   "38173129974": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "time",
+  "record": "store/runs/family-time-1791751321831983000",
+  "verdicts": {
+   "38173127764": "conforms",
+   "38173129974": "conforms"
+  }
+ },
  "time_and_error_mode": {
   "candidate_sha256": "sha256:f85773f52447641070e3ef9e19024cfb6e3a42fddec9f28b68dee958bb2d6191",
   "divergence": {

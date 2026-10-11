@@ -1818,6 +1818,35 @@ FAMILIES: dict[str, Family] = {
             "guid_version_1": Plant("    g[7] = (u8)((g[7] & 0x0F) | 0x40);", "    g[7] = (u8)((g[7] & 0x0F) | 0x10);", ("guid",)),
             "implicit_mta_refused": Plant("    if (!w2m_thread_scratch()->com_inits && !process_mta)",
                                           "    if (!w2m_thread_scratch()->com_inits)", ("create.implicit_mta",))}),
+    "time": Family(
+        name="time",
+        contract_id="windows.time.time",
+        version="0.1.0",
+        summary=("The work list's time family as relations to the clocks w2m serves: GetSystemTimePreciseAsFileTime "
+                 "(KERNELBASE, through GetProcAddress) within a second of GetSystemTimeAsFileTime, timeGetTime within a "
+                 "second of GetTickCount, GetTickCount64's low half with GetTickCount; none going back over 1,000 reads, "
+                 "each advancing 40 ms to 5 s across Sleep(50); timeBeginPeriod and timeEndPeriod answering 0, and 97 "
+                 "(TIMERR_NOCANDO) for a period of 0."),
+        probe="time", guest_file="time.c", host_files=("src/w2m/vm_backend.py",),
+        runs={
+              "38173127764": Run("windows-2025", "b96af5861876df13a97b0e822e3c03134b5ebedf40f6b027b8ec792e510239c6", "time-1791751169-0", "AMD EPYC 7763 64-Core Processor"),
+              "38173129974": Run("windows-2022", "3cf5e2998c1778dc7f8e5d54fb9b55d9c0c59cc127649782e6a4987f95206c81", "time-1791751169-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=("A period ended that was not begun, and periods over 16 ms, are not in the rows and stop the run.",),
+        plants={
+            "precise_from_counter_only": Plant("    u64 now = w2m_filetime_now();\n    *(u32 *)out = (u32)now;\n    *(u32 *)(out + 4) = (u32)(now >> 32);\n    return w2m_logged(W2M_API_GetSystemTimePreciseAsFileTime",
+                                               "    u64 now = w2m_counter_now();\n    *(u32 *)out = (u32)now;\n    *(u32 *)(out + 4) = (u32)(now >> 32);\n    return w2m_logged(W2M_API_GetSystemTimePreciseAsFileTime",
+                                               ("precise.against_system_time",)),
+            "time_in_ticks": Plant("(u32)(w2m_counter_now() / 10000));\n}\n\nu64 winmm_timeBeginPeriod",
+                                   "(u32)(w2m_counter_now() / 1000));\n}\n\nu64 winmm_timeBeginPeriod",
+                                   ("time_get_time.against_tick_count",)),
+            "period_zero_accepted": Plant("    if ((u32)period == 0) return w2m_logged(W2M_API_timeBeginPeriod, period, TIMERR_NOCANDO);",
+                                          "    if ((u32)period == 0) return w2m_logged(W2M_API_timeBeginPeriod, period, TIMERR_NOERROR);",
+                                          ("period.begin_0",)),
+            "tick_64_high_set": Plant("    return w2m_logged(W2M_API_GetTickCount64, 0, w2m_counter_now() / 10000);",
+                                      "    return w2m_logged(W2M_API_GetTickCount64, 0, w2m_counter_now() / 10000 + (1ull << 32));",
+                                      ("tick_count_64.against_tick_count",))}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",

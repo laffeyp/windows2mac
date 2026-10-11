@@ -1,0 +1,12 @@
+{"s":"precise.found","value":true}
+{"s":"precise.against_system_time","within_one_second":true,"after_2020":true}
+{"s":"precise.never_back","value":true}
+{"s":"precise.across_sleep_50","at_least_40ms":true,"under_5s":true}
+{"s":"time_get_time.against_tick_count","within_one_second":true}
+{"s":"time_get_time.never_back","value":true}
+{"s":"time_get_time.across_sleep_50","at_least_40ms":true,"under_5s":true}
+{"s":"period.begin_1","ret":0}
+{"s":"period.begin_0","ret":97}
+{"s":"period.end_1","ret":0}
+{"s":"period.end_0","ret":97}
+{"s":"tick_count_64.against_tick_count","low_within_one_second":true,"high_zero":true}
