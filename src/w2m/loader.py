@@ -123,7 +123,7 @@ class Loaded:
     tls_array: int = 0                   # TEB.ThreadLocalStoragePointer: 0 when no image has static TLS
 
 
-def _map_image(mem: Memory, data: bytes, img: PeImage, base: int, name: str) -> None:
+def map_image(mem: Memory, data: bytes, img: PeImage, base: int, name: str) -> None:
     region = mem.map(base, img.size_of_image, name)
     headers = min((s.raw_offset for s in img.sections if s.raw_offset), default=0x400)
     region.data[:headers] = data[:headers]
@@ -180,7 +180,7 @@ def load(data: bytes, dlls: Callable[[str], bytes | None] | None = None, name: s
     """The program, and each DLL `dlls` supplies by its imported name (None: not the program's to load)."""
     img = parse(data)
     mem = Memory()
-    _map_image(mem, data, img, img.image_base, "image")
+    map_image(mem, data, img, img.image_base, "image")
     program = Image(name, img, img.image_base)
     images = [program]
     loaded: dict[str, Image] = {}
@@ -202,7 +202,7 @@ def load(data: bytes, dlls: Callable[[str], bytes | None] | None = None, name: s
             else:
                 base = next_base
                 next_base = (base + pe.size_of_image + 0xFFFF) & ~0xFFFF
-            _map_image(mem, raw, pe, base, f"image {dll}")
+            map_image(mem, raw, pe, base, f"image {dll}")
             d = loaded[key] = Image(dll, pe, base)
             images.append(d)
             visit(d)

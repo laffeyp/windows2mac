@@ -108,6 +108,15 @@ class FileBridge:
         name = mem.read(va, 2 * chars).decode("utf-16-le", errors="replace")
         if "\0" in name:
             raise BridgeRequestError(f"path of {chars} characters has a NUL at character {name.index(chr(0))}: {name!r}")
+        return self._parts(name)
+
+    def host_file(self, name: str) -> Path | None:
+        """The host path of the file a guest name means (full, or relative to C:\\w2m\\app), or None when no file
+        is there: LoadLibrary's search of the program's directory (Sprint 049)."""
+        kind, path = self._resolve(self._parts(name))
+        return path if kind == IS_FILE else None
+
+    def _parts(self, name: str) -> list[str]:
         if name.startswith("\\\\?\\"):
             name = name[4:]
         if len(name) > 1 and name[1] == ":":

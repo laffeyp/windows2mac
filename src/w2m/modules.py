@@ -68,6 +68,8 @@ class Modules:
 
     dll_names: dict[str, str] = field(default_factory=dict)   # canonical name -> the name as loaded
     system: dict[str, tuple[int, str]] = field(default_factory=dict)   # canonical name -> handle, the import's spelling
+    load_dll: Callable[[str], int] | None = None    # LoadLibrary of a DLL file after the start: its base, or 0 (Sprint 049)
+    dll_paths: dict[str, str] = field(default_factory=dict)   # canonical name -> full path, for DLLs not beside the program
 
     def __post_init__(self) -> None:
         spec = json.loads(EXPORTS.read_text())
@@ -101,8 +103,12 @@ class Modules:
             return self.system[c][0]
         if not loading:
             return 0                                    # not loaded in a process of only these modules
+        if self.load_dll is not None:
+            h = self.load_dll(name)                     # a file the name finds: mapped, bound, its DllMain pending
+            if h:
+                return h
         if c in self.system32 or self.in_app_directory(c):
-            raise Unimplemented(f"LoadLibrary {name}: w2m loads no other DLL yet (Sprint 046)")
+            raise Unimplemented(f"LoadLibrary {name}: a Windows DLL w2m does not model")
         return 0
 
     def file_name(self, handle: int) -> str | None:
@@ -114,7 +120,7 @@ class Modules:
             return "C:\\Windows\\System32\\KERNELBASE.dll"
         for name, (base, _, _) in self.dlls.items():
             if handle == base:
-                return APP_DIRECTORY + self.dll_names[name]
+                return self.dll_paths.get(name, APP_DIRECTORY + self.dll_names[name])
         for h, spelling in self.system.values():
             if handle == h:
                 return "C:\\Windows\\System32\\" + spelling

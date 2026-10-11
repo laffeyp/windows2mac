@@ -47,21 +47,36 @@ static u64 find(u64 name, u64 loading) {
     return w2m_host(W2M_HOST_MODULE, name, wide_length(name), loading, 0, 0);
 }
 
+/* LoadLibrary's search. A DLL the host maps now (Sprint 049) comes with a stub that runs its DllMain: the caller's
+ * return address goes into the stub at W2M_INIT_STUB_SLOT and the stub becomes the return address, so the service
+ * returns into DllMain, and DllMain's return into the caller with RAX the handle. */
+static u64 load(u64 name, u64 rsp) {
+    u64 init = 0;
+    u64 h = w2m_host(W2M_HOST_MODULE, name, wide_length(name), 1, 0, &init);
+    if (init) {
+        *(u64 *)(init + W2M_INIT_STUB_SLOT) = *(u64 *)rsp;
+        *(u64 *)rsp = init;
+    }
+    return h;
+}
+
 /* LoadLibraryExW(lpLibFileName, hFile, dwFlags): the module's handle, or NULL with the error. */
-u64 k32_LoadLibraryExW(u64 name, u64 file, u64 flags) {
+u64 k32_LoadLibraryExW(u64 name, u64 file, u64 flags, u64 unused, u64 rsp) {
+    (void)unused;
     flags = (u32)flags;
     if (name == 0 || file != 0 || (flags != 0 && flags != LOAD_LIBRARY_SEARCH_SYSTEM32))
         w2m_unimplemented(W2M_API_LoadLibraryExW, flags);
-    u64 h = find(name, 1);
+    u64 h = load(name, rsp);
     if (!h) set_error(ERROR_MOD_NOT_FOUND);
     return w2m_logged(W2M_API_LoadLibraryExW, name, h);
 }
 
 /* LoadLibraryW(lpLibFileName): LoadLibraryExW with no file and no flags (Sprint 048; contracts/windows.module.system:
  * a system DLL the program imports statically is found under any spelling, as GetModuleHandleW finds it). */
-u64 k32_LoadLibraryW(u64 name) {
+u64 k32_LoadLibraryW(u64 name, u64 unused1, u64 unused2, u64 unused3, u64 rsp) {
+    (void)unused1; (void)unused2; (void)unused3;
     if (name == 0) w2m_unimplemented(W2M_API_LoadLibraryW, 0);
-    u64 h = find(name, 1);
+    u64 h = load(name, rsp);
     if (!h) set_error(ERROR_MOD_NOT_FOUND);
     return w2m_logged(W2M_API_LoadLibraryW, name, h);
 }

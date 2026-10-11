@@ -46,10 +46,11 @@ from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
-from w2m.virtual_memory import VirtualMemory
+from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
-from w2m.loader import THUNK_BASE, GuestFault, Loaded, Memory, Region
+from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
+from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -236,6 +237,7 @@ HOST_WRITE, HOST_EXIT, HOST_CLOCK, HOST_UNIMPLEMENTED, HOST_RUNTIME_FAULT = 1, 2
 HOST_FILETIME = 14                  # the wall clock as FILETIME (6-13: the file primitives)
 HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # src/w2m/modules.py
 HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY = 19, 20, 21, 22   # virtual_memory.py
+INIT_STUB_SLOT = 0x80                # where module.c keeps LoadLibrary's return address in a DllMain stub (Sprint 049)
 HOST_RANDOM = 23                    # a0 bytes of the host's CSPRNG (os.urandom) at guest address a1 (bcrypt.c)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
@@ -560,6 +562,12 @@ def _temps_written(op: Op) -> list[int]:
     return [op[1]] if op[0] in ("imm", "addr", "ld", "alu", "sel") else []
 
 
+def _canonical_dll(name: str) -> str:
+    """A DLL's import name as the module table keys it: lower case, '.dll' added when it has no extension."""
+    c = name.lower()
+    return c if "." in c else c + ".dll"
+
+
 def runtime_defines() -> dict[str, int]:
     """The guest-memory addresses the guest runtime is compiled against (tools/guest_runtime)."""
     return {
@@ -570,6 +578,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
         "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
+        "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
         "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
@@ -1025,6 +1034,7 @@ class VM:
         self.out = bytearray()
         self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
         self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
+        self._pending_init = 0                          # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
         placed: list[tuple[Region, int]] = []
@@ -1170,7 +1180,8 @@ class VM:
                           image_exports={n: base + rva for n, rva in (img.exports if img is not None else ())},
                           imports=imports, make_thunk=make_thunk, system32=frozenset(spec.get("system32", ())),
                           in_app_directory=in_app_directory, ntdll=ntdll, dlls=dlls,
-                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system)
+                          dll_names={d.name.lower(): d.name for d in self.ld.images[1:]}, system=system,
+                          load_dll=self._load_dll)
         if self.ld.images:                       # a program from loader.load (tests build bare ones)
             self._write_loader_data(modules)
         return modules
@@ -1285,6 +1296,8 @@ class VM:
         elif op in (HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT):
             a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
             result = self._module_request(op, a0, a1, a2)
+            struct.pack_into("<Q", self.mm, t + 48, self._pending_init)      # a DLL just loaded: its DllMain stub
+            self._pending_init = 0
         elif op == HOST_RUNTIME_FAULT:
             raise CompileError(f"guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} "
                                f"(EC 0x{a1 >> 26 & 0x3F:x}), not in translated code or not a data abort")
@@ -1315,6 +1328,75 @@ class VM:
         if a2:
             view.write(a1, raw)
         return len(path)
+
+    def _load_dll(self, name: str) -> int:
+        """LoadLibrary of a DLL file after the start (Sprint 049): the file the name finds (a full path, or a name
+        in the program's directory) is mapped into the VirtualAlloc arena at its preferred base or relocated
+        there, its imports bound (the program's DLLs by export, every other DLL through a thunk), and it joins
+        the module table under its full path. Its DllMain(base, DLL_PROCESS_ATTACH, NULL) is left to a stub the
+        service returns through (`_init_stub`), so the guest runs it as the caller's next code. 0: no file."""
+        if self.files is None:
+            return 0
+        host = self.files.host_file(name)
+        if host is None:
+            return 0
+        raw = host.read_bytes()
+        pe = parse_pe(raw)
+        if pe.tls is not None or pe.tls_callbacks:
+            raise Unimplemented(f"LoadLibrary {name}: static TLS in a DLL loaded after the start")
+        base = self.virtual.place_image(pe)
+        staging = Memory()
+        map_image(staging, raw, pe, base, host.name)
+        self.mem.write(base, bytes(staging.regions[0].data))
+        m = self.modules
+        for slot, target in sorted(pe.iat.items()):
+            dll, fn = target.split("!", 1)
+            leaf = _canonical_dll(dll)
+            if leaf in m.dlls:
+                va = m.dlls[leaf][2].get(fn)
+                if va is None:
+                    raise LoadError(f"{host.name} imports {target}, which {leaf} does not export")
+            else:
+                key = f"{dll.lower()}!{fn.lower()}"
+                va = m.imports.get(key) or m.make_thunk(target)
+                m.imports[key] = va
+            self.mem.write(base + slot, va.to_bytes(8, "little"))
+        self.virtual.snapshot_image(base, pe)
+        c = host.name.lower()
+        m.dlls[c] = (base, pe.size_of_image, {n: base + rva for n, rva in pe.exports})
+        m.dll_names[c] = host.name
+        root = self.files.root
+        m.dll_paths[c] = APP_PATH + "\\".join(host.relative_to(root).parts) if root in host.parents else str(host)
+        self.ld.images.append(Image(host.name, pe, base))
+        if pe.entry_rva:
+            self._pending_init = self._init_stub(base, base + pe.entry_rva)
+        return base
+
+    def _init_stub(self, base: int, entry: int) -> int:
+        """x86 that LoadLibrary returns through (module.c writes the caller's return address at +0x80): DllMain(base,
+        DLL_PROCESS_ATTACH, NULL) with the shadow space (RSP is 16-aligned after the service's ret), a FALSE return
+        calls a thunk that stops the run by name, else RAX = base and a jump to the caller."""
+        page, error = self.virtual.alloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+        if error:
+            raise Unimplemented(f"LoadLibrary: no page for the DllMain stub (error {error})")
+        failed = self.modules.make_thunk(DLL_INIT_FAILED)
+        code = bytearray()
+        code += bytes.fromhex("4883ec20")                                      # sub rsp, 0x20
+        code += bytes.fromhex("48b9") + base.to_bytes(8, "little")             # mov rcx, instance
+        code += bytes.fromhex("ba01000000")                                    # mov edx, DLL_PROCESS_ATTACH
+        code += bytes.fromhex("4531c0")                                        # xor r8d, r8d: a dynamic load
+        code += bytes.fromhex("48b8") + entry.to_bytes(8, "little")            # mov rax, DllMain
+        code += bytes.fromhex("ffd0")                                          # call rax
+        code += bytes.fromhex("4883c420")                                      # add rsp, 0x20
+        code += bytes.fromhex("85c0")                                          # test eax, eax
+        code += bytes.fromhex("750c")                                          # jnz past the failure call
+        code += bytes.fromhex("48b8") + failed.to_bytes(8, "little") + bytes.fromhex("ffd0")
+        code += bytes.fromhex("48b8") + base.to_bytes(8, "little")             # mov rax, the module's handle
+        disp = INIT_STUB_SLOT - (len(code) + 6)
+        code += bytes.fromhex("ff25") + disp.to_bytes(4, "little", signed=True)   # jmp [the caller's return]
+        assert len(code) <= INIT_STUB_SLOT
+        self.mem.write(page, bytes(code))
+        return page
 
     def _zero(self, va: int, n: int) -> None:
         self.mem.write(va, bytes(n))

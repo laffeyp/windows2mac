@@ -95,12 +95,15 @@ class VirtualMemory:
         return self.arena <= va and va + size <= self.arena + self.arena_size
 
     def _free_range(self, size: int) -> int:
-        """The lowest 64 KB-aligned arena address with `size` bytes free."""
+        """The lowest 64 KB-aligned arena address with `size` bytes free (reservations and images loaded into the
+        arena both take space)."""
         at = self.arena
-        for r in sorted(self.reservations.values(), key=lambda r: r.base):
-            if at + size <= r.base:
+        taken = [(r.base, r.size) for r in self.reservations.values()]
+        taken += [(b, pe.size_of_image) for b, pe in self.images if self._in_arena(b)]
+        for base, n in sorted(taken):
+            if at + size <= base:
                 return at
-            at = max(at, _up(r.base + r.size, GRANULARITY))
+            at = max(at, _up(base + n, GRANULARITY))
         if at + size > self.arena + self.arena_size:
             raise Unimplemented(f"VirtualAlloc of 0x{size:x} bytes: the arena (0x{self.arena_size:x}) is full")
         return at
@@ -224,6 +227,28 @@ class VirtualMemory:
             nxt = min((r.base for r in self.reservations.values() if r.base > page), default=self.arena + self.arena_size)
             return Info(page, 0, 0, nxt - page, MEM_FREE, PAGE_NOACCESS, 0)
         raise Unimplemented(f"VirtualQuery at 0x{address:x}, outside the arena and the images")
+
+    def place_image(self, pe: PeImage) -> int:
+        """Where a DLL loaded at run time goes (Sprint 049): its preferred base when that lies free in the arena,
+        else the lowest free 64 KB-aligned range, relocated there by the caller. The image is then one of
+        `images` (VirtualQuery reports MEM_IMAGE); `snapshot_image` records its writable pages once written."""
+        size = _up(pe.size_of_image, PAGE)
+        base = pe.image_base
+        free = self._in_arena(base, size) and base % GRANULARITY == 0 and all(
+            b + n <= base or base + size <= b for b, n in
+            [(r.base, r.size) for r in self.reservations.values()] + [(b, p.size_of_image) for b, p in self.images])
+        if not free:
+            base = self._free_range(size)
+        self.images.append((base, pe))
+        return base
+
+    def snapshot_image(self, base: int, pe: PeImage) -> None:
+        assert self.read is not None
+        for s in pe.sections:
+            if s.characteristics & SCN_MEM_WRITE:
+                start = base + s.virtual_address
+                for va in range(start, start + _up(max(s.virtual_size, 1), PAGE), PAGE):
+                    self.pristine[va] = self.read(va, PAGE)
 
     def snapshot(self) -> None:
         """Remember every writable image page as loaded (the copy-on-write test of _image_page_protect)."""
