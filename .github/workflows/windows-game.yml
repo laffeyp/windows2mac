@@ -49,6 +49,10 @@ jobs:
             $m = @("manifest.res", "-Wl,/manifest:no")
           }
           clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c "-Wl,/subsystem:windows" @m
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # the crash handler's tracer (Sprint 055): jit_capture queues it into UnityCrashHandler64.exe at its start
+          clang -O1 -Wall -Werror -shared -o handler_trace.dll tools/jit_capture/handler_trace.c
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: disk
         shell: pwsh
         run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
@@ -105,6 +109,7 @@ jobs:
         run: |
           Move-Item "$env:GAME_DIR\${{ inputs.exe }}.exe" "$env:GAME_DIR\${{ inputs.exe }}.original.exe"
           Copy-Item jit_capture.exe "$env:GAME_DIR\${{ inputs.exe }}.exe"
+          Copy-Item handler_trace.dll "$env:GAME_DIR\handler_trace.dll"
       - name: run
         shell: pwsh
         run: |
