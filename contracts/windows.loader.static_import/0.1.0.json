@@ -99,7 +99,8 @@
     "s": "ldr.first_is_exe",
     "value": true
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py loader_rows: apphelp.dll is in the loader lists of a binary's first execution on a runner and not of its second (16 runs, both images): the application-compatibility engine looks at a binary it has not seen. The rows drop it, with its count."
  },
  "evidence": [
   {

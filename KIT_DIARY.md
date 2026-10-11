@@ -410,3 +410,11 @@
 **Finding (#46):** a planted fault is judged only where the system under test runs the planted build; when the system starts more of itself (a child process, a worker, a plugin host), each part must be built from the same planted source, or the plant tests nothing there.
 
 **Kit change suggested:** a plant run asserts that every process or module it observed was built from the planted source (a hash in each part's record), and fails otherwise.
+
+### 2026-10-11 — Sprint 054, reviewed: rows that covered the game's inputs, code that took wider ones
+
+**What happened:** an outside review of Sprint 054 found seven defects, all reproduced: a stack overflow when a short search pattern matches a long name, a directory listing parsed after a transfer that did not complete, unchecked heap results, registry names narrowed from UTF-16 to char so other names opened Software, the app mount missing from its parent's listing, class names cut at 63 units, and MonitorFromWindow ignoring the window's position. Searching for the class-name pattern found an eighth (window titles cut at 127). Every probe row passed, because the probes fed the game's own inputs: short ASCII names, an unchanging directory, windows on the screen. The project's rule is that an input the rows do not cover stops the run by name; these paths accepted such inputs and answered wrongly instead.
+
+**Finding (#47):** a probe that copies the program's inputs proves the implementation on those inputs only; every input the code accepts without a row must either get a row or stop the run, and fixed buffers, narrowing conversions and unchecked host answers are where silent acceptance hides.
+
+**Kit change suggested:** each family's probe carries boundary rows (the longest name, a non-ASCII name, a changing input, an out-of-range geometry) for every input the implementation accepts, and a gate test rejects the patterns that accept silently.

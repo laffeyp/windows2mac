@@ -16,11 +16,12 @@
  *     GetMonitorInfoA and W fill MONITORINFO (40 bytes) or MONITORINFOEX (72, 104) with the screen, the work area,
  *     MONITORINFOF_PRIMARY and \\.\DISPLAY1; another size is ERROR_INVALID_PARAMETER, another monitor
  *     ERROR_INVALID_MONITOR_HANDLE (1461)
- *   - MonitorFrom{Point,Rect,Window}: the monitor for a point or rectangle on it, else NULL for
+ *   - MonitorFrom{Point,Rect,Window}: the monitor for a point, rectangle or window on it, else NULL for
  *     MONITOR_DEFAULTTONULL and the monitor for the others; a NULL window as a point off every monitor
  *   - shcore's GetDpiForMonitor: 96 x 96 for MDT_EFFECTIVE_DPI and MDT_ANGULAR_DPI; MDT_RAW_DPI answers
  *     HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED) with 0 x 0 (the Hyper-V monitor reports no size); another type
- *     E_INVALIDARG's WIN32 form (0x800700A0), another monitor 0x80070006, both leaving x and y
+ *     HRESULT_FROM_WIN32(ERROR_BAD_ARGUMENTS) (0x800700A0), another monitor HRESULT_FROM_WIN32(ERROR_INVALID_HANDLE)
+ *     (0x80070006), both leaving x and y
  *   - EnumDisplaySettingsW(NULL): the current and registry settings 1024 x 768 x 32 at 64 Hz as "CDD", and 13 modes
  *     from 640 x 480 to 1920 x 1080 as "cdd"; dmSize answers 188
  * Other forms (a DC or clip rectangle, EDD_GET_DEVICE_INTERFACE_NAME, a callback that stops the enumeration, a named
@@ -162,9 +163,16 @@ u64 user32_MonitorFromRect(u64 rect, u64 flags) {
 }
 
 int w2m_is_window(u64 window);                          /* windows.c */
+int w2m_window_rect(u64 window, s32 r[4]);              /* windows.c */
 
+/* A window's monitor is the one its rectangle meets (review of Sprint 054: every window was on the monitor) */
 u64 user32_MonitorFromWindow(u64 window, u64 flags) {
-    if (window && w2m_is_window(window)) return w2m_logged(W2M_API_MonitorFromWindow, window, MONITOR);
+    s32 r[4];
+    if (window && w2m_window_rect(window, r)) {
+        if (r[0] < SCREEN_W && r[2] > 0 && r[1] < SCREEN_H && r[3] > 0)
+            return w2m_logged(W2M_API_MonitorFromWindow, window, MONITOR);
+        return outside(W2M_API_MonitorFromWindow, (u32)flags);
+    }
     if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */
     return outside(W2M_API_MonitorFromWindow, (u32)flags);
 }

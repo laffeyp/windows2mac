@@ -64,7 +64,8 @@
     "protect": 0,
     "type": 131072
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py heap_query_rows: Drops `allocation_base_below_block` from query.small and query.after_small_region."
  },
  "evidence": [
   {

@@ -94,7 +94,8 @@
     "is_image": 1,
     "err": 57005
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py module_names_ansi_rows: Drops `w_len` from file.image, file.exact, file.short and file.one, and `ret` from the first three."
  },
  "evidence": [
   {

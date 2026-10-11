@@ -488,7 +488,8 @@
     "s": "dll_get_version.free",
     "ret": true
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py version_rows: DLLVERSIONINFO2's ullVersion ends in shell32's file revision, which differs by image (33438 on Server 2025, 5499 on 2022); the row keeps that it is set."
  },
  "evidence": [
   {

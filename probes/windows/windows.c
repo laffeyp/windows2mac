@@ -255,5 +255,34 @@ void start(void) {
     row("create.play"); flag("null", play == NULL); flag("first_message_window", play == current);
     flag("differs_from_batch", play != batch); field("messages", messages); field("err", GetLastError()); end();
     if (play) after("play", play);
+    /* Sprint 056 (review of 054): class names of 64, 256 and 257 units, and a window off the screen */
+    static WCHAR long_class[300];
+    static const int lengths[5] = {64, 254, 255, 256, 257};
+    static const char *const names[5][2] = {{"class.name_64", "class.name_64_again"}, {"class.name_254", "class.name_254_again"},
+                                            {"class.name_255", "class.name_255_again"}, {"class.name_256", "class.name_256_again"},
+                                            {"class.name_257", "class.name_257_again"}};
+    for (int j = 0; j < 5; j++) {
+        for (int i = 0; i < lengths[j]; i++) long_class[i] = (WCHAR)(L'A' + j);
+        long_class[lengths[j]] = 0;
+        hidden_class.lpszClassName = long_class;
+        for (int again = 0; again < 2; again++) {
+            SetLastError(SENTINEL);
+            ATOM a = RegisterClassW(&hidden_class);
+            row(names[j][again]); flag("atom_in_range", a >= 0xC000); field("err", GetLastError()); end();
+        }
+    }
+    window_name = "offscreen";
+    current = NULL;
+    messages = 0;
+    SetLastError(SENTINEL);
+    HWND away = CreateWindowExW(0, L"W2mProbeMain", L"away", 0xCA0000, 2000, 2000, 320, 240, NULL, NULL, self, NULL);
+    row("create.offscreen"); flag("null", away == NULL); field("messages", messages); field("err", GetLastError()); end();
+    if (away) {
+        POINT zero = {0, 0};
+        HMONITOR primary = MonitorFromPoint(zero, MONITOR_DEFAULTTOPRIMARY);
+        row("offscreen.monitor"); flag("null_null", MonitorFromWindow(away, MONITOR_DEFAULTTONULL) == NULL);
+        flag("primary_primary", MonitorFromWindow(away, MONITOR_DEFAULTTOPRIMARY) == primary);
+        flag("nearest_primary", MonitorFromWindow(away, MONITOR_DEFAULTTONEAREST) == primary); end();
+    }
     ExitProcess(0);
 }

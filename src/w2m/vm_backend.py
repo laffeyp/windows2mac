@@ -1084,6 +1084,8 @@ class VM:
             entries = [e for e in self.inherited if e[1] < KIND_STANDARD]
             std = {w: h for w, k, h in self.inherited if k == KIND_STANDARD}
             mode = [h for _, k, h in self.inherited if k == KIND_ERROR_MODE]
+            if 32 + 24 * len(entries) > 0xFE8:           # the marks at 0xFE8 follow the entries (review of Sprint 054)
+                raise Unimplemented(f"{len(entries)} inherited handles: the page holds {(0xFE8 - 32) // 24}")
             page = self._process(INHERIT_OFF)
             struct.pack_into("<QQQQ", self.mm, page, len(entries), std.get(0, 0), std.get(1, 0), std.get(2, 0))
             for i, e in enumerate(entries):

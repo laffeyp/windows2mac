@@ -89,6 +89,9 @@ class ExactRows(Struct, frozen=True, forbid_unknown_fields=True,
 
     key: str
     rows: tuple[dict[str, Any], ...]
+    # Sprint 056 (review of 054): when the rows are derived from what the reference printed (relations kept in place
+    # of values that differ by machine or run), the function that derives them and what it keeps; "" for raw rows
+    derivation: str = ""
 
 
 Acceptance = AllowedOutcomeSet | ExactReturnOfArgument | ExactRows

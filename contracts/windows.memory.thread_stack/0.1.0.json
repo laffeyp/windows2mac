@@ -105,7 +105,8 @@
     "high": "base",
     "err": 57005
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py thread_stack_rows: Drops `base_address` from query.sp and query.base_minus_one."
  },
  "evidence": [
   {

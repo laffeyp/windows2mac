@@ -59,6 +59,11 @@ void start(void) {
     HKEY by_null = open("open.root_null_subkey", HKEY_CURRENT_USER, NULL);
     HKEY by_empty = open("open.root_empty_subkey", HKEY_CURRENT_USER, L"");
     open("open.not_a_key", UNTOUCHED, L"Software");
+    /* Sprint 056 (review of 054): names with letters above ASCII, which w2m had narrowed to char */
+    open("open.u0173_oftware", HKEY_CURRENT_USER, L"\x0173oftware");
+    open("open.software_u0100_x", HKEY_CURRENT_USER, L"Software\x0100x");
+    open("open.long_s_oftware", HKEY_CURRENT_USER, L"\x017Foftware");
+    open("open.software_dotless_i", HKEY_CURRENT_USER, L"Softwar\x0131e");
     if (software) close("close.software", software);
     if (software_case) close("close.software_case", software_case);
     if (software) close("close.software_again", software);

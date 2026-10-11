@@ -176,7 +176,8 @@
     "s": "debugger.present",
     "value": 0
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py process_query_rows: IsProcessorFeaturePresent's answer depends on the CPU; where a CPUID bit names the feature, the row is whether the answer equals that bit (on Windows, the runner's CPU; in w2m, the guest's CPUID profile). Every other row is as printed."
  },
  "evidence": [
   {

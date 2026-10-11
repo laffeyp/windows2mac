@@ -276,7 +276,8 @@
      "ZED=2"
     ]
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py temp_path_rows: Drops `ret` from temp.relative."
  },
  "evidence": [
   {

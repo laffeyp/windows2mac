@@ -78,7 +78,8 @@
     "s": "free.path",
     "err": 57005
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py known_folders_rows: Drops `err` from every row that holds `hr`."
  },
  "evidence": [
   {

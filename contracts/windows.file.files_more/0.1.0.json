@@ -522,7 +522,8 @@
     "size": 0,
     "attributes": 32
    }
-  ]
+  ],
+  "derivation": "scripts/family_run.py files_more_rows: Names each standard.sweep row by its size, standard.sweep.<size>."
  },
  "evidence": [
   {
