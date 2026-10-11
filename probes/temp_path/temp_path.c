@@ -97,8 +97,12 @@ static void put_set(const char *name, const WCHAR *var, const WCHAR *value) {
 
 /* The block's entries in order. */
 static void block(const char *name) {
+    SetLastError(SENTINEL);
     WCHAR *b = GetEnvironmentStringsW();
-    row(name); put(",\"entries\":[");
+    DWORD err = GetLastError();
+    row(name); field("null", b == NULL); field("err", err);
+    if (!b) { end(); return; }
+    put(",\"entries\":[");
     for (WCHAR *e = b; *e; ) {
         if (e != b) put(",");
         put("\""); raw(e); put("\"");
