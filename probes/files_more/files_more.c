@@ -246,6 +246,28 @@ void start(void) {
     size("size.after_write", h, 1);
     CloseHandle(h);
 
+    /* AllocationSize by size: NTFS keeps small data in the file record (8-byte units), larger data in clusters */
+    static const DWORD sizes[] = {1, 8, 9, 256, 512, 600, 650, 700, 720, 740, 760, 800, 900, 1000, 1024, 2048, 4095,
+                                  4096, 4097, 8192};
+    for (unsigned i = 0; i < sizeof sizes / sizeof *sizes; i++) {
+        h = make(L"fm_sweep.dat", sizes[i]);
+        CloseHandle(h);
+        h = open_read(L"fm_sweep.dat");
+        fill();
+        BOOL r = GetFileInformationByHandleEx(h, FileStandardInfo, buf, 0x18);
+        row("standard.sweep"); field("size", sizes[i]); field("ret", r != 0); field("allocation", q(0)); end();
+        CloseHandle(h);
+    }
+    DeleteFileW(L"fm_sweep.dat");
+    h = make(L"fm_sweep.dat", 4000);                   /* grown past the record, then cut back */
+    SetFilePointer(h, 100, NULL, FILE_BEGIN);
+    SetEndOfFile(h);
+    CloseHandle(h);
+    h = open_read(L"fm_sweep.dat");
+    standard("standard.shrunk", h, 0x18);
+    CloseHandle(h);
+    DeleteFileW(L"fm_sweep.dat");
+
     windows("windows.full", MAX_PATH, 0);
     windows("windows.exact", 11, 0);                   /* "C:\Windows" and its NUL */
     windows("windows.short", 10, 0);
