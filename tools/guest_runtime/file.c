@@ -26,6 +26,12 @@
  * for FileBasicInfo and FileStandardInfo, GetFileSize, SetHandleInformation and GetTempFileNameW. Their rows: a
  * success leaves the last error, but GetTempFileNameW's with uUnique 0 sets 0; a handle opened with no access
  * answers all three handle queries; a closed handle is ERROR_INVALID_HANDLE.
+ *
+ * Sprint 049 (contracts/windows.file.file_mapping): CreateFileMappingW and MapViewOfFile in mono's read-only form. A
+ * mapping holds its own host descriptor, so its views outlive the file's handle and the mapping's; a view is the
+ * file's bytes copied into a MEM_MAPPED region of the VirtualAlloc arena (virtual_memory.py). A copy is what a
+ * read-only view needs; a write to the file through another handle after the view is made is not seen by it, and
+ * writable views are not in the rows.
  */
 #include "runtime.h"
 
@@ -58,6 +64,8 @@
 #define ERROR_INVALID_PARAMETER 87u
 #define ERROR_NEGATIVE_SEEK 131u
 #define ERROR_ALREADY_EXISTS 183u
+#define ERROR_NOT_ENOUGH_MEMORY 8u
+#define ERROR_FILE_INVALID 1006u
 
 enum { LOOKUP_ABSENT, LOOKUP_FILE, LOOKUP_DIRECTORY, LOOKUP_PARENT_MISSING };
 
@@ -466,4 +474,70 @@ u64 k32_GetTempFileNameW(u64 dir, u64 prefix, u64 unique, u64 out) {
         set_error(0);
         return w2m_logged(W2M_API_GetTempFileNameW, unique, number);
     }
+}
+
+#define PAGE_READONLY 0x02u
+#define PAGE_READWRITE 0x04u
+#define PAGE_WRITECOPY 0x08u
+#define FILE_MAP_COPY 0x1u
+#define FILE_MAP_WRITE 0x2u
+#define FILE_MAP_READ 0x4u
+
+u64 w2m_object_mapping(u64 api, u64 fd, u64 size);              /* sync_objects.c */
+int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size);
+
+/* CreateFileMappingW(hFile, lpFileMappingAttributes, flProtect, dwMaximumSizeHigh, dwMaximumSizeLow, lpName) (rows
+ * map.*): PAGE_READONLY on a handle with read access; the size 0 means the file's, and an empty file is
+ * ERROR_FILE_INVALID; a size past the file's end is ERROR_NOT_ENOUGH_MEMORY for a read-only mapping; no read access,
+ * or PAGE_READWRITE on a handle without write access, is ERROR_ACCESS_DENIED. Success sets the last error to 0. */
+u64 k32_CreateFileMappingW(u64 file, u64 attributes, u64 protect, u64 high, u64 rsp) {
+    u64 low = *(u32 *)(rsp + 0x28);
+    u64 name = *(u64 *)(rsp + 0x30);
+    if (attributes || name) w2m_unimplemented(W2M_API_CreateFileMappingW, name);    /* named or secured: not in the rows */
+    if (file == INVALID_HANDLE_VALUE) w2m_unimplemented(W2M_API_CreateFileMappingW, file);   /* paging-file backed */
+    struct open_file *f = file_or_stop(W2M_API_CreateFileMappingW, file);
+    if (!f) return w2m_logged(W2M_API_CreateFileMappingW, file, 0);
+    protect = (u32)protect;
+    u32 error = 0;
+    if (protect == PAGE_READWRITE) {
+        if (!(f->access & W) || !(f->access & R)) error = ERROR_ACCESS_DENIED;
+        else w2m_unimplemented(W2M_API_CreateFileMappingW, protect);              /* a writable mapping: not in the rows */
+    } else if (protect != PAGE_READONLY) {
+        w2m_unimplemented(W2M_API_CreateFileMappingW, protect);
+    } else if (!(f->access & R)) {
+        error = ERROR_ACCESS_DENIED;
+    }
+    u64 file_size = w2m_host(W2M_FILE_SIZE, f->fd, 0, 0, 0, 0);
+    u64 size = (u64)(u32)high << 32 | low;
+    if (!error && size == 0 && file_size == 0) error = ERROR_FILE_INVALID;
+    if (!error && size > file_size) error = ERROR_NOT_ENOUGH_MEMORY;
+    if (error) {
+        set_error(error);
+        return w2m_logged(W2M_API_CreateFileMappingW, file, 0);
+    }
+    u64 fd = w2m_host(W2M_FILE_DUP, f->fd, 0, 0, 0, 0);
+    u64 h = w2m_object_mapping(W2M_API_CreateFileMappingW, fd, size ? size : file_size);
+    set_error(0);
+    return w2m_logged(W2M_API_CreateFileMappingW, file, h);
+}
+
+/* MapViewOfFile(hFileMappingObject, dwDesiredAccess, dwFileOffsetHigh, dwFileOffsetLow, dwNumberOfBytesToMap) (rows
+ * view.*): FILE_MAP_READ, or FILE_MAP_COPY (a private copy), from offset 0; 0 bytes means the whole mapping; more
+ * bytes than the mapping holds, or FILE_MAP_WRITE on a read-only mapping, is ERROR_ACCESS_DENIED. The view starts on
+ * a 64 KB boundary and holds zeros from the file's end to its last page's end. Success leaves the last error. */
+u64 k32_MapViewOfFile(u64 mapping, u64 access, u64 offset_high, u64 offset_low, u64 rsp) {
+    u64 bytes = *(u64 *)(rsp + 0x28);
+    u64 fd, size;
+    if (!w2m_object_mapping_of(mapping, &fd, &size)) w2m_unimplemented(W2M_API_MapViewOfFile, mapping);
+    if ((u32)offset_high || (u32)offset_low) w2m_unimplemented(W2M_API_MapViewOfFile, offset_low);
+    access = (u32)access;
+    if (access != FILE_MAP_READ && access != FILE_MAP_COPY && access != FILE_MAP_WRITE)
+        w2m_unimplemented(W2M_API_MapViewOfFile, access);
+    if (access == FILE_MAP_WRITE || bytes > size) {
+        set_error(ERROR_ACCESS_DENIED);
+        return w2m_logged(W2M_API_MapViewOfFile, mapping, 0);
+    }
+    u64 view = w2m_host(W2M_HOST_MAP_VIEW, bytes ? bytes : size, fd, access == FILE_MAP_COPY ? PAGE_WRITECOPY : PAGE_READONLY,
+                        0, 0);
+    return w2m_logged(W2M_API_MapViewOfFile, mapping, view);
 }

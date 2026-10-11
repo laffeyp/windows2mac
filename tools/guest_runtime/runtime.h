@@ -200,7 +200,7 @@ u64 w2m_unhandled_exception_filter(void);                               /* excep
 /* Host file primitives (src/w2m/file_bridge.py). */
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,
        W2M_FILE_TRUNCATE, W2M_FILE_UNLINK, W2M_FILE_STAT = 24, W2M_FILE_MKDIR, W2M_FILE_RMDIR,      /* 24: Sprint 047; 25, 26: 048 */
-       W2M_FILE_FSTAT };                                                                          /* 27: Sprint 049 */
+       W2M_FILE_FSTAT, W2M_FILE_DUP, W2M_HOST_MAP_VIEW };                                         /* 27-29: Sprint 049 */
 
 /* The contract surface a candidate may implement (contracts/windows.thread.last_error.set_get).
  * The default is tools/guest_runtime/last_error.c. */

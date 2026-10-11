@@ -21,6 +21,8 @@ guest's working directory:
     FILE_FSTAT   (fd, out)              -> 0; 40 bytes at out: FILE_STAT's 32, then the change time (st_ctime) as FILETIME
                                            (Sprint 049: GetFileInformationByHandleEx asks by handle, so a name deleted
                                            or renamed since the open still answers)
+    FILE_DUP     (fd)                   -> a second descriptor on the same open file (Sprint 049: a file mapping holds
+                                           one, so its views outlive the file's handle)
     FILE_MKDIR   (path, chars)          -> 0, or -errno (Sprint 048)
     FILE_RMDIR   (path, chars)          -> 0, or -errno (Sprint 048)
 
@@ -43,7 +45,7 @@ from w2m.kernel32 import Unimplemented
 from typing import Protocol
 
 FILE_LOOKUP, FILE_OPEN, FILE_CLOSE, FILE_READ, FILE_WRITE, FILE_SIZE, FILE_TRUNCATE, FILE_UNLINK = range(6, 14)
-FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT = 24, 25, 26, 27   # after the host requests 14-23 (vm_backend.py)
+FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP = 24, 25, 26, 27, 28   # after the host requests 14-23
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
 # C:\Users\w2m and the AppData folders SHGetKnownFolderPath names, each an existing directory on Windows
@@ -216,6 +218,13 @@ class FileBridge:
             if self.read_only and arg[0] in self.read_only_fds:
                 raise Unimplemented("a write to a file under the read-only C:\\w2m\\app")
             return os.pwrite(host, mem.read(arg[1], arg[2]), arg[3]), 0
+        if op == FILE_DUP:
+            fd = self.next_fd
+            self.next_fd += 1
+            self.fds[fd] = os.dup(host)
+            if arg[0] in self.read_only_fds:
+                self.read_only_fds.add(fd)
+            return fd, 0
         if op == FILE_FSTAT:
             st = os.fstat(host)
             times = [t // 100 + FILETIME_UNIX_EPOCH

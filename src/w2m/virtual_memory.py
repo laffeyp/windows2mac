@@ -24,7 +24,7 @@ from w2m.pe import PeImage, SCN_MEM_EXECUTE, SCN_MEM_READ, SCN_MEM_WRITE
 
 PAGE, GRANULARITY = 0x1000, 0x10000
 MEM_COMMIT, MEM_RESERVE, MEM_DECOMMIT, MEM_RELEASE = 0x1000, 0x2000, 0x4000, 0x8000
-MEM_FREE, MEM_PRIVATE, MEM_IMAGE = 0x10000, 0x20000, 0x1000000
+MEM_FREE, MEM_PRIVATE, MEM_MAPPED, MEM_IMAGE = 0x10000, 0x20000, 0x40000, 0x1000000
 PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY = 0x01, 0x02, 0x04, 0x08
 PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY = 0x10, 0x20, 0x40, 0x80
 PROTECTIONS = {PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY, PAGE_EXECUTE, PAGE_EXECUTE_READ,
@@ -50,6 +50,7 @@ class Reservation:
     allocation_protect: int
     state: bytearray = field(default_factory=bytearray)      # per page: RESERVED or COMMITTED
     protect: bytearray = field(default_factory=bytearray)    # per page: the protection while committed
+    type: int = MEM_PRIVATE                                   # MEM_MAPPED for a file view (Sprint 049)
 
     def __post_init__(self) -> None:
         pages = self.size // PAGE
@@ -167,6 +168,8 @@ class VirtualMemory:
             r = self.reservations.get(address)
             if r is None:
                 return 0, ERROR_INVALID_ADDRESS
+            if r.type == MEM_MAPPED:
+                raise Unimplemented(f"VirtualFree of the file view at 0x{address:x}")      # not in the rows
             for i, s in enumerate(r.state):
                 if s == COMMITTED:
                     self.zero(r.base + i * PAGE, PAGE)
@@ -225,7 +228,7 @@ class VirtualMemory:
                 j += 1
             committed = r.state[i] == COMMITTED
             return Info(page, r.base, r.allocation_protect, (j - i) * PAGE, MEM_COMMIT if committed else MEM_RESERVE,
-                        r.protect[i] if committed else 0, MEM_PRIVATE)
+                        r.protect[i] if committed else 0, r.type)
         image = self._image(address)
         if image is not None:
             base, pe = image
@@ -243,6 +246,18 @@ class VirtualMemory:
             nxt = min((b for b, _ in self.mapped if b > page), default=1 << 47)
             return Info(page, 0, 0, nxt - page, MEM_FREE, PAGE_NOACCESS, 0)
         raise Unimplemented(f"VirtualQuery at 0x{address:x}, outside the arena and the images")
+
+    def map_view(self, size: int, protect: int) -> int:
+        """A view of a file mapping (contracts/windows.file.file_mapping, Sprint 049): a 64 KB-aligned MEM_MAPPED
+        region of the view's pages, committed with `protect`, its allocation protection the same; the rest of the
+        64 KB granule is free address space, as on Windows (rows query.after_view, query.granule_end). The caller
+        writes the file's bytes over the zeroed pages."""
+        pages = _up(size, PAGE)
+        base = self._free_range(pages)
+        r = Reservation(base, pages, protect, type=MEM_MAPPED)
+        self.reservations[base] = r
+        self._commit(r, base, pages, protect)
+        return base
 
     def place_image(self, pe: PeImage) -> int:
         """Where a DLL loaded at run time goes (Sprint 049): its preferred base when that lies free in the arena,

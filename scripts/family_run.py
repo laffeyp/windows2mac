@@ -1662,6 +1662,47 @@ FAMILIES: dict[str, Family] = {
                                           ("info.language_short",)),
             "locale_name_error_122": Plant("        set_error(ERROR_CANNOT_COPY);", "        set_error(ERROR_INSUFFICIENT_BUFFER);",
                                            ("user_name.short", "user_name.size_zero"))}),
+    "file_mapping": Family(
+        name="file_mapping",
+        contract_id="windows.file.file_mapping",
+        version="0.1.0",
+        summary=("CreateFileMappingW and MapViewOfFile in mono's read-only form (specs/work_list.json: five assemblies "
+                 "per run, never unmapped). A PAGE_READONLY mapping of a file opened for reading succeeds and sets the "
+                 "last error to 0; an empty file is ERROR_FILE_INVALID, a size past the file ERROR_NOT_ENOUGH_MEMORY, no "
+                 "read access or PAGE_READWRITE on a read handle ERROR_ACCESS_DENIED, a closed handle "
+                 "ERROR_INVALID_HANDLE. A FILE_MAP_READ or FILE_MAP_COPY view starts on a 64 KB boundary, holds the "
+                 "file's bytes and zeros to its last page's end, outlives the file's and the mapping's handles, and "
+                 "VirtualQuery reports it MEM_MAPPED, committed PAGE_READONLY, its pages rounded; the rest of the 64 KB "
+                 "granule is free. Mapping more bytes than the file, or FILE_MAP_WRITE, is ERROR_ACCESS_DENIED."),
+        probe="file_mapping", guest_file="file.c",
+        host_files=("src/w2m/file_bridge.py", "src/w2m/virtual_memory.py", "src/w2m/vm_backend.py",
+                    "tools/guest_runtime/sync_objects.c"),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("query.after_view", "query.granule_end") and k == "region_size")}
+                                for r in printed],
+        runs={
+              "38120624307": Run("windows-2025", "0407e57fcef44dd02237f541b902804fe843d8e6cef4f76163811c7331893c87", "file_mapping-1791702788-0", "AMD EPYC 7763 64-Core Processor"),
+              "38120626017": Run("windows-2022", "fa3540a10d0b61f3c0ce0e96dfca6caca497edb8208b9ebf9040a0cddd382e51", "file_mapping-1791702788-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "The free region after a view runs to whatever Windows placed next (110,592 bytes in one execution, "
+            "138,958,864,691,200 in another); the derive drops its RegionSize and keeps its state, protection and type.",
+            "A view in w2m is a copy made when MapViewOfFile runs: a write through another handle afterwards is not "
+            "seen in it, as it would be on Windows. mono writes no file it maps in the captures; writable mappings, "
+            "named mappings, offsets and UnmapViewOfFile are not in the rows and stop the run."),
+        plants={
+            "view_private": Plant("        r = Reservation(base, pages, protect, type=MEM_MAPPED)",
+                                  "        r = Reservation(base, pages, protect, type=MEM_PRIVATE)",
+                                  ("query.view", "query.view_middle", "query.whole_file", "query.small"),
+                                  host="w2m.virtual_memory"),
+            "mapping_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_CreateFileMappingW, file, h);",
+                                        "    return w2m_logged(W2M_API_CreateFileMappingW, file, h);",
+                                        ("map.game_form", "map.again", "map.small")),
+            "empty_file_mapped": Plant("    if (!error && size == 0 && file_size == 0) error = ERROR_FILE_INVALID;\n", "",
+                                       ("map.empty_file",)),
+            "copy_refused": Plant("    if (access == FILE_MAP_WRITE || bytes > size) {",
+                                  "    if (access != FILE_MAP_READ || bytes > size) {", ("view.copy_access",))}),
 }
 
 

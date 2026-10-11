@@ -44,7 +44,7 @@ from typing import Literal
 
 from w2m import a64_encoder as a64
 from w2m import guest_runtime
-from w2m.file_bridge import (FILE_FSTAT, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
+from w2m.file_bridge import (FILE_DUP, FILE_FSTAT, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
                              FileBridge)
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
 from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
@@ -133,6 +133,8 @@ HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT = 15, 16, 17, 18   # sr
 HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY = 19, 20, 21, 22   # virtual_memory.py
 INIT_STUB_SLOT = 0x80                # where module.c keeps LoadLibrary's return address in a DllMain stub (Sprint 049)
 HOST_RANDOM = 23                    # a0 bytes of the host's CSPRNG (os.urandom) at guest address a1 (bcrypt.c)
+HOST_MAP_VIEW = 29                  # a view of a0 bytes of file descriptor a1 with protection a2 (file.c; Sprint 049;
+                                    # 24-28 are file primitives)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -1185,7 +1187,7 @@ class VM:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
-        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT):
+        if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP):
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
             result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
@@ -1204,6 +1206,14 @@ class VM:
             result = a0
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
+        elif op == HOST_MAP_VIEW:                       # the view's pages, then the file's bytes copied in
+            a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
+            if self.files is None or a1 not in self.files.fds:
+                raise Unimplemented(f"a file view of descriptor {a1}, which is not open")
+            base = self.virtual.map_view(a0, a2)
+            self.mem.write(base, os.pread(self.files.fds[a1], a0, 0))
+            struct.pack_into("<QQ", self.mm, t + 48, 0, base)
+            return True
         elif op in (HOST_VIRTUAL_ALLOC, HOST_VIRTUAL_FREE, HOST_VIRTUAL_PROTECT, HOST_VIRTUAL_QUERY):
             a2, a3 = struct.unpack_from("<QQ", self.mm, t + 24)
             result, second = self._virtual_request(op, a0, a1, a2, a3)

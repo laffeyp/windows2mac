@@ -148,32 +148,6 @@
    ]
   },
   {
-   "name": "file_mapping",
-   "first_seq": 929,
-   "functions": [
-    {
-     "name": "CreateFileMappingW",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 5,
-     "first_seq": 929,
-     "dynamic": false
-    },
-    {
-     "name": "MapViewOfFile",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 5,
-     "first_seq": 930,
-     "dynamic": false
-    }
-   ]
-  },
-  {
    "name": "messages",
    "first_seq": 949,
    "functions": [
@@ -1873,5 +1847,5 @@
   "unity_mono_method_is_inflated",
   "unity_mono_reflection_method_get_method"
  ],
- "unserved": 151
+ "unserved": 149
 }

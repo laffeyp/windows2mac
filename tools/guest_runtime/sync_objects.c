@@ -30,11 +30,12 @@
 #define CREATE_EVENT_MANUAL_RESET 1u
 #define CREATE_EVENT_INITIAL_SET 2u
 
-enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PROCESS };   /* TOKEN: token.c; THREAD,
-                                                                                         * PROCESS: Sprint 049 */
+enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PROCESS, MAPPING };   /* TOKEN: token.c;
+                                                                          * THREAD, PROCESS, MAPPING: Sprint 049 */
 
 /* Objects, and the handles that name them (Sprint 049: DuplicateHandle gives a second handle to one object, which
- * lives until its last handle closes). count: semaphore count, event 0/1, mutex recursion, a thread's id. */
+ * lives until its last handle closes). count: semaphore count, event 0/1, mutex recursion, a thread's id, a file
+ * mapping's host descriptor (its own; closed with the mapping); max: a mapping's size. */
 static struct object { u32 kind; s64 count, max; u32 refs; } objects[OBJECTS];
 static int handle_object[OBJECTS];              /* handle slot -> object index + 1; 0: the slot is free */
 
@@ -84,13 +85,27 @@ u64 w2m_object_token(u64 api) { return handle_for(api, new_object(api, TOKEN, 0,
 int w2m_object_is_token(u64 h) { struct object *o = object_of(h); return o && o->kind == TOKEN; }
 int w2m_object_is_open(u64 h) { return object_of(h) != 0; }        /* file.c's handle calls (Sprint 049) */
 
+/* For file.c's CreateFileMappingW and MapViewOfFile (Sprint 049): a mapping's handle, holding host descriptor fd
+ * and the mapping's size; and a mapping's descriptor and size by handle (0 when h names no mapping). */
+u64 w2m_object_mapping(u64 api, u64 fd, u64 size) { return handle_for(api, new_object(api, MAPPING, (s64)fd, (s64)size)); }
+int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size) {
+    struct object *o = object_of(h);
+    if (!o || o->kind != MAPPING) return 0;
+    *fd = (u64)o->count;
+    *size = (u64)o->max;
+    return 1;
+}
+
 /* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. */
 int w2m_object_close(u64 h) {
     int i = slot_of(h);
     if (i < 0) return 0;
     struct object *o = &objects[handle_object[i] - 1];
     handle_object[i] = 0;
-    if (--o->refs == 0) o->kind = FREE;
+    if (--o->refs == 0) {
+        if (o->kind == MAPPING) w2m_host(W2M_FILE_CLOSE, (u64)o->count, 0, 0, 0, 0);   /* the views keep their copy */
+        o->kind = FREE;
+    }
     return 1;
 }
 
