@@ -6,7 +6,9 @@
  * their statically linked C runtime's: the dispatcher calls it for each frame whose UNWIND_INFO names it, it calls
  * the __except filters, and it unwinds to the taken __except with RtlUnwindEx (mono's one RtlUnwindEx call in the
  * game's Windows run). Its rules follow winnt.h's SCOPE_TABLE_AMD64: a scope with JumpTarget 0 is a __finally, a
- * HandlerAddress of 1 is the filter EXCEPTION_EXECUTE_HANDLER.
+ * HandlerAddress of 1 is the filter EXCEPTION_EXECUTE_HANDLER. Built with unwind tables for every function, as MSVC
+ * builds the game's modules: without them clang gives .pdata only to functions with a __try, and RtlUnwindEx, walking
+ * out of this handler as a leaf, raised STATUS_BAD_STACK (run 38165571800).
  *
  * Rows, each written as it ends: a thread-naming RaiseException taken by __except; CONTINUE_EXECUTION; the search
  * order through two frames with a __finally between; a noncontinuable exception continued; a vectored handler
