@@ -28,15 +28,38 @@ BASE = {"VMULSD": "MULSD", "VADDSD": "ADDSD", "VSUBSD": "SUBSD", "VDIVSD": "DIVS
         "VPCMPEQB": "PCMPEQB", "VPCMPEQW": "PCMPEQW", "VPSUBQ": "PSUBQ", "VPSUBD": "PSUBD", "VPADDQ": "PADDQ",
         "VCVTDQ2PD": "CVTDQ2PD", "VPSRLQ": "PSRLQ", "VPSLLQ": "PSLLQ", "VPSRLDQ": "PSRLDQ", "VPMOVMSKB": "PMOVMSKB",
         "VCVTTPD2DQ": "CVTTPD2DQ", "VCVTPD2DQ": "CVTPD2DQ", "VCMPSD": "CMPSD_XMM_VEX", "VMOVLHPS": "MOVLHPS",
-        "VHADDPD": "HADDPD"}
+        "VHADDPD": "HADDPD",
+        # set 049b (Sprint 049): UnityPlayer's VEX classes on existing legacy forms
+        "VMOVUPS": "MOVUPS", "VMOVAPS": "MOVAPS", "VPADDD": "PADDD", "VPSRLD": "PSRLD", "VPSLLD": "PSLLD",
+        "VPSRAD": "PSRAD", "VPSLLDQ": "PSLLDQ", "VPANDN": "PANDN", "VPUNPCKLDQ": "PUNPCKLDQ", "VMULPS": "MULPS",
+        "VADDPS": "ADDPS", "VSUBPS": "SUBPS", "VMAXPS": "MAXPS", "VMINPS": "MINPS", "VPSHUFD": "PSHUFD",
+        "VUNPCKHPS": "UNPCKHPS", "VUNPCKLPS": "UNPCKLPS", "VPCMPEQD": "PCMPEQD", "VPCMPGTD": "PCMPGTD",
+        "VMULSS": "MULSS", "VADDSS": "ADDSS", "VSUBSS": "SUBSS", "VDIVSS": "DIVSS", "VCOMISS": "COMISS",
+        "VUCOMISS": "UCOMISS", "VMOVSS": "MOVSS", "VCVTSD2SS": "CVTSD2SS", "VCVTSS2SD": "CVTSS2SD",
+        "VRCPPS": "RCPPS", "VRSQRTPS": "RSQRTPS", "VANDNPS": "ANDNPS", "VORPS": "ORPS", "VMULPD": "MULPD",
+        "VADDPD": "ADDPD", "VSHUFPS": "SHUFPS", "VUNPCKLPD": "UNPCKLPD", "VCVTSS2SI": "CVTSS2SI",
+        "VCVTSI2SS": "CVTSI2SS", "VCVTTSD2SI": "CVTTSD2SI", "VPADDB": "PADDB", "VPMULUDQ": "PMULUDQ",
+        "VPUNPCKHQDQ": "PUNPCKHQDQ", "VPCMPEQQ": "PCMPEQQ",
+        # and on the set-049b forms (the model's _sse_049b)
+        "VPSHUFB": "PSHUFB", "VPALIGNR": "PALIGNR", "VPINSRD": "PINSRD", "VPINSRQ": "PINSRQ", "VPEXTRQ": "PEXTRQ",
+        "VANDNPD": "ANDNPD", "VCVTDQ2PS": "CVTDQ2PS", "VCVTTPS2DQ": "CVTTPS2DQ", "VCMPPS": "CMPPS_VEX",
+        "VROUNDSD": "ROUNDSD", "VPBLENDD": "PBLENDD", "VCVTPS2PD": "CVTPS2PD", "VPMOVSXDQ": "PMOVSXDQ"}
+# whole-register VEX instructions: data moves between the 128-bit halves (the model's _vex_cross)
+CROSS = {"VPERMQ", "VPERMD", "VPBROADCASTD", "VPBROADCASTQ", "VBROADCASTSS", "VBROADCASTF128", "VINSERTF128",
+         "VINSERTI128", "VEXTRACTF128", "VEXTRACTI128", "VZEROALL"}
+CROSS_AT_256 = {"VCVTPS2PD", "VPMOVSXDQ"}                         # widening: cross-lane only at VEX.256
 FMA = {f"V{k}{o}{t}" for k in ("FMADD", "FMSUB", "FNMADD", "FNMSUB") for o in ("132", "213", "231")
        for t in ("SS", "SD", "PS", "PD")}
 L0_ONLY = {"VCVTDQ2PD", "VCVTTPD2DQ", "VCVTPD2DQ"}                 # their 256-bit forms change operand widths
-ALIGNED = {"VMOVAPD", "VMOVDQA"}                                     # the only VEX forms that fault on alignment
+ALIGNED = {"VMOVAPD", "VMOVDQA", "VMOVAPS"}                                     # the only VEX forms that fault on alignment
 NO_WRITE = {"COMISD", "UCOMISD"}                                     # flags only: the destination is a source
-SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM_VEX", "HADDPD"}              # in the model (x86fp) for now
+SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
+        "ANDNPD", "CVTDQ2PS", "CVTTPS2DQ", "CMPPS_VEX", "ROUNDSD", "PBLENDD", "CVTPS2PD", "PMOVSXDQ", "PERMILPS_VAR",
+        "PADDB", "PMULUDQ", "PUNPCKHQDQ", "PCMPEQQ", "CVTSS2SI", "CVTSI2SS", "CVTTSD2SI", "RCPPS", "RSQRTPS"}              # in the model (x86fp) for now
 NATIVE_256 = {"PXOR", "XORPS", "XORPD", "PAND", "POR", "ORPD", "ANDPD", "ANDPS", "PCMPEQB", "PCMPEQW", "PSUBQ",
-              "PSUBD", "PADDQ", "MOVDQU", "MOVDQA", "MOVAPD", "PMOVMSKB"}
+              "PSUBD", "PADDQ", "MOVDQU", "MOVDQA", "MOVAPD", "PMOVMSKB", "MOVUPS", "MOVAPS", "PADDD", "PSRLD", "PSLLD",
+              "PSRAD", "PSLLDQ", "PANDN", "PUNPCKLDQ", "PSHUFD", "UNPCKHPS", "UNPCKLPS", "PCMPEQD", "PCMPGTD",
+              "ANDNPS", "ORPS", "SHUFPS", "UNPCKLPD"}
 FUSED = {"FMADD": "fmadd", "FMSUB": "fnmsub", "FNMADD": "fmsub", "FNMSUB": "fnmadd"}
 
 
@@ -49,10 +72,25 @@ def rule(ctx: Ctx) -> None:
     if ic == "VZEROUPPER":
         b.emit("vzeroupper")
         return
+    if ic == "VZEROALL":
+        b.emit("vexs", ic, ("x", 0), None, ("x", 0), 1, None)
+        return
     locs = [cast(tuple[Any, ...], _operand(b, o, nxt)[1]) for o in ops if not o.startswith("I:")]
     imm = int(ops[-1].split(":")[2], 16) if ops[-1].startswith("I:") else None
     if ic in FMA:
         b.emit("fma", ic, locs[0], locs[1], locs[2], vl)
+        return
+    if ic == "VPERMILPS":                                             # imm8 form: PSHUFD's order; vvvv form: a select
+        base = "PSHUFD" if imm is not None else "PERMILPS_VAR"
+        d, s1, s2 = (locs[0], None, locs[1]) if imm is not None else (locs[0], locs[1], locs[2])
+        b.emit("vex", base, d, s1, s2, vl, 0, imm)
+        return
+    if ic in CROSS or (ic in CROSS_AT_256 and ctx.f is not None and ctx.f.vl):
+        if len(locs) == 3:
+            d, s1, s2 = locs
+        else:
+            d, s1, s2 = locs[0], None, locs[1]
+        b.emit("vexs", ic, d, s1, s2, vl if ic not in CROSS_AT_256 else 1, imm)
         return
     if ic in L0_ONLY and ctx.f is not None and ctx.f.vl:        # the encoded L: their 256-bit forms differ in width
         raise LiftError(f"{ic} at 0x{ctx.address:x}: the 256-bit form is not lifted")
@@ -103,6 +141,9 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         return
     if k == "fma":
         _lower_fma(a, op, reg_of)
+        return
+    if k == "vexs":                                                  # in the model for now
+        _slow(a)
         return
     _, base, d, s1, s2, vl, align, imm = op
     if base in SLOW or (vl and base not in NATIVE_256):

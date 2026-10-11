@@ -498,6 +498,28 @@ def cmp_predicate(f: Fmt, a: int, b: int, imm: int, env: Env) -> bool:
             "false": False, "true": True}[rel]
 
 
+def round_to_integer(f: Fmt, b: int, imm: int, env: Env) -> int:
+    """ROUNDSD/ROUNDSS (SDM): b to an integral value; imm bit 2 takes MXCSR.RC, else imm bits 1:0 (nearest, down,
+    up, toward zero); imm bit 3 suppresses Precision. An SNaN sets IE and is quieted; inf and zero pass."""
+    b = env.src(f, b)
+    if is_nan(f, b):
+        if is_snan(f, b):
+            env.flags |= IE
+        env.flags &= ~DE
+        return _quiet(f, b)
+    if is_inf(f, b) or is_zero(f, b):
+        return b
+    v = value(f, b)
+    negative = v < 0
+    rc = env.rc if imm & 4 else imm & 3
+    n = _round_int(-v if negative else v, negative, rc)
+    if Fraction(-n if negative else n) != v and not imm & 8:
+        env.flags |= PE
+    if n == 0:
+        return f.sign if negative else 0
+    return env.round(f, Fraction(-n if negative else n))
+
+
 def lanes(x: int, width: int, count: int) -> list[int]:
     return [x >> (width * i) & ((1 << width) - 1) for i in range(count)]
 

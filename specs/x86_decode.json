@@ -12467,7 +12467,9 @@
    "src": "Intel SDM Vol 2 instruction page VPCMPEQQ (opcode line \"VEX.128.66.0F38.WIG 29 /r VPCMPEQQ xmm1, xmm2, xmm3/m128\"), as transcribed at https://www.felixcloutier.com/x86/pcmpeqq, retrieved 2026-10-09",
    "vex": true,
    "l": 0,
-   "iclass": "VPCMPEQQ"
+   "iclass": "VPCMPEQQ",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, PCMPEQQ's VEX opcode line); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f38",
@@ -12478,7 +12480,9 @@
    "src": "Intel SDM Vol 2 instruction page VPCMPEQQ (opcode line \"VEX.256.66.0F38.WIG 29 /r VPCMPEQQ ymm1, ymm2, ymm3 /m256\"), as transcribed at https://www.felixcloutier.com/x86/pcmpeqq, retrieved 2026-10-09",
    "vex": true,
    "l": 1,
-   "iclass": "VPCMPEQQ"
+   "iclass": "VPCMPEQQ",
+   "ops": "Vx,Hx,Wx",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2, PCMPEQQ's VEX opcode line); notation Vol 2D Table A-1 (Sprint 049)"
   },
   {
    "map": "0f38",

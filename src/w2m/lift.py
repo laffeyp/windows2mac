@@ -236,6 +236,8 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[1] == "st" else "load"
         if op[0] == "fcw":
             return "store"
+        if op[0] == "vexs":                                   # ("vexs", ic, d, s1, s2, L, imm)
+            return "store" if op[2][0] == "m" else "load" if op[4][0] == "m" else None
         if op[0] == "vex":                                    # ("vex", base, d, s1, s2, L, align, imm)
             return "store" if op[2][0] == "m" else "load" if op[4][0] == "m" else None
         if op[0] == "fma":                                    # ("fma", ic, d, s2, s3, L)
@@ -247,7 +249,7 @@ def commit_order(ins: Lifted) -> str | None:
     def effect(op: Op) -> bool:
         return (op[0] == "st" and op[1][0] == "r") or op[0] in ("flags", "df", "cmov", "cpuid", "div") or (
             op[0] in ("set", "cst", "cstz") and op[2][0] == "r") or (op[0] == "sse" and op[2][0] != "m") or (
-            op[0] == "mxcsr" and op[1] == "ld") or (op[0] == "vex" and op[2][0] != "m") or op[0] in ("fma", "vzeroupper")
+            op[0] == "mxcsr" and op[1] == "ld") or (op[0] in ("vex", "vexs") and op[2][0] != "m") or op[0] in ("fma", "vzeroupper")
 
     last_access = max((i for i, op in enumerate(ins.ops) if memory_access(op)), default=-1)
     if last_access < 0:
@@ -271,7 +273,7 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER",
+    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER", "VZEROALL",
                               *REP_STRING):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")

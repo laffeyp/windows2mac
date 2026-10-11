@@ -297,6 +297,12 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         _mark_defined(a, U_CF | U_OF)
         _mark_undefined(a, U_ZF | U_SF | U_PF | U_AF)
         return
+    if kind == "andn":                                         # SDM ANDN: SF ZF by the result, CF OF 0, AF PF undefined
+        a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
+        _set_zf_sf_pf(a, rr, bits)
+        _mark_defined(a, U_CF | U_ZF | U_SF | U_OF)
+        _mark_undefined(a, U_AF | U_PF)
+        return
     if kind == "logic":
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
         _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF)
@@ -427,6 +433,8 @@ def _temps_read(op: Op) -> list[int]:
     if k == "sse":
         return [loc[1] for loc in (op[2], op[3]) if loc[0] == "m"]
     if k == "vex":                                      # ("vex", base, d, s1, s2, L, align, imm) (Sprint 049)
+        return [loc[1] for loc in (op[2], op[4]) if loc[0] == "m"]
+    if k == "vexs":                                     # ("vexs", ic, d, s1, s2, L, imm): cross-lane VEX
         return [loc[1] for loc in (op[2], op[4]) if loc[0] == "m"]
     if k == "fma":                                      # ("fma", ic, d, s2, s3, L)
         return [op[4][1]] if op[4][0] == "m" else []
@@ -787,7 +795,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             if op[2][0] == "r" and op[2][2] == 32:              # a 32-bit destination is zero-extended anyway
                 a.emit(a64.mov32(op[2][1], op[2][1]))
             a.bind(end)
-        elif k in ("vex", "fma", "vzeroupper"):                  # VEX (src/w2m/rules/_vex.py; Sprint 049)
+        elif k in ("vex", "vexs", "fma", "vzeroupper"):          # VEX (src/w2m/rules/_vex.py; Sprint 049)
             from w2m.rules import _vex
             _vex.lower(a, op, reg_of, store)
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)

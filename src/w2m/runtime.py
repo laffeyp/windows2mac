@@ -25,8 +25,12 @@ STATUS_INTEGER_DIVIDE_BY_ZERO = 0xC000_0094   # ntstatus.h; DIV #DE with a zero 
 STATUS_INTEGER_OVERFLOW = 0xC000_0095         # ntstatus.h; DIV #DE with a quotient too wide
 STATUS_ILLEGAL_INSTRUCTION = 0xC000_001D      # ntstatus.h; #UD
 XCR0 = 7                                      # x87 | SSE | AVX enabled (specs/guest_cpuid.json 0.2.0, leaf 0xD)
+# Sprint 049 (set 049b): the legacy forms UnityPlayer's VEX classes rest on (some, such as PERMILPS_VAR and PBLENDD,
+# exist only in VEX form; the names are the model's)
+SSE_049B = {"PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ", "PMOVSXDQ", "ANDNPD", "CVTDQ2PS", "CVTTPS2DQ",
+            "CVTPS2PD", "CMPPS_VEX", "ROUNDSD", "PERMILPS_VAR", "PBLENDD"}
 SHIFT_BY_COUNT = {"PSRLQ", "PSLLQ", "PSRLD", "PSLLD", "PSRAD", "PSRLW", "PSRAW"}   # VEX.256: one count, both halves
-VEX_FP = {"HADDPD", "CVTTPD2DQ", "CVTPD2DQ", "CMPPS_VEX", "CVTDQ2PS", "CVTTPS2DQ"}  # FP bases beyond ADD..MAX
+VEX_FP = {"HADDPD", "CVTTPD2DQ", "CVTPD2DQ", "CMPPS_VEX", "CVTDQ2PS", "CVTTPS2DQ", "CVTPS2PD", "ROUNDSD"}  # FP bases beyond ADD..MAX
 
 __all__ = ["Result", "Runtime", "UndefinedFlag", "Unimplemented"]
 
@@ -71,7 +75,10 @@ LANE_ARITH: dict[str, tuple[int, Callable[[int, int, int], int]]] = {
     "PMULLW": (16, lambda p, q, w: p * q),
 }
 # interleaves: (lane bits, from the high half)
-INTERLEAVE = {"PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "UNPCKHPD": (64, True), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
+LANE_ARITH["PADDB"] = (8, lambda p, q, w: p + q)                                      # Sprint 049
+LANE_ARITH["PCMPEQQ"] = (64, lambda p, q, w: _mask(w) if p == q else 0)
+LANE_ARITH["PMULUDQ"] = (64, lambda p, q, w: (p & 0xFFFF_FFFF) * (q & 0xFFFF_FFFF))
+INTERLEAVE = {"PUNPCKHQDQ": (64, True), "PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "UNPCKHPD": (64, True), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
               "PUNPCKHWD": (16, True), "PUNPCKLWD": (16, False)}
 
 
@@ -197,6 +204,9 @@ class Runtime:
             sy = (b & m) - (1 << bits) if b & sign else b & m
             sr = res - (1 << bits) if res & sign else res
             f.update(C=sx * sy != sr, O=sx * sy != sr, Z=None, S=None, P=None, A=None)
+            return
+        if kind == "andn":                                        # SDM ANDN: SF ZF by the result, CF OF 0, AF PF undefined
+            f.update(Z=res == 0, S=bool(res & sign), C=False, O=False, A=None, P=None)
             return
         f.update(Z=res == 0, S=bool(res & sign), P=_parity(res))
         if kind == "logic":
@@ -324,7 +334,9 @@ class Runtime:
         if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "MOVDQA", "MOVDQU", "MOVNTPS"):
             v = self._xread(src, 16)
             self._xwrite(dst, v, 16)
-        elif ic in SSE2_INT:
+        elif ic in SSE_049B:
+            self._sse_049b(ic, dst, src, imm)
+        elif ic in SSE2_INT or ic in LANE_ARITH or ic in INTERLEAVE:
             self._sse2_int(ic, dst, src, imm)
         elif ic in ("MOVSS", "MOVSD_XMM"):
             n = 4 if ic == "MOVSS" else 8
@@ -405,6 +417,146 @@ class Runtime:
         else:
             raise LiftError(f"sse {ic}")
 
+    def _sse_049b(self, ic: str, dst: Op, src: Op, imm: int | None) -> None:
+        """The set-049b legacy forms (Intel SDM Vol 2, each page; Sprint 049), on 128 bits."""
+        th, x = self.th, self.th.xmm
+
+        def lanes(v: int, w: int) -> list[int]:
+            return [(v >> (w * i)) & _mask(w) for i in range(128 // w)]
+
+        def pack(ls: list[int], w: int) -> int:
+            return sum((n & _mask(w)) << (w * i) for i, n in enumerate(ls))
+
+        if ic == "PEXTRQ":                                       # a quadword of the source to r/m64
+            assert imm is not None
+            self._xwrite(dst, x[src[1]] >> (64 * (imm & 1)) & _mask(64), 8)
+            return
+        a = x[dst[1]]
+        if ic in ("PINSRD", "PINSRQ"):                           # the source into dword imm & 3, qword imm & 1
+            assert imm is not None
+            w = 32 if ic == "PINSRD" else 64
+            lane = imm & (3 if w == 32 else 1)
+            v = self._xread(src, w // 8) & _mask(w)
+            x[dst[1]] = a & ~(_mask(w) << (w * lane)) & _mask(128) | v << (w * lane)
+            return
+        if ic == "PMOVSXDQ":                                     # two signed dwords to two qwords
+            v = self._xread(src, 8)
+            x[dst[1]] = pack([(d - (1 << 32)) if d >> 31 else d for d in (v & _mask(32), v >> 32 & _mask(32))], 64)
+            return
+        if ic == "CVTPS2PD":                                     # two floats to two doubles
+            v, env, flags, out = self._xread(src, 8), fp.Env(th.mxcsr), 0, []
+            for f32 in (v & _mask(32), v >> 32):
+                env.flags = 0
+                out.append(fp.convert(fp.F32, fp.F64, f32, env))
+                flags |= env.flags
+            env.flags = flags
+            self._fp_check(env)
+            x[dst[1]] = pack(out, 64)
+            return
+        if ic == "ROUNDSD":                                      # the low double to an integer value
+            assert imm is not None
+            v, env = self._xread(src, 8), fp.Env(th.mxcsr)
+            x[dst[1]] = a & ~_mask(64) & _mask(128) | fp.round_to_integer(fp.F64, v, imm, env)
+            self._fp_check(env)
+            return
+        v = self._xread(src, 16)
+        if ic == "PSHUFB":                                       # byte i: 0 if index bit 7, else a[index & 15]
+            ab = lanes(a, 8)
+            x[dst[1]] = pack([0 if i & 0x80 else ab[i & 15] for i in lanes(v, 8)], 8)
+        elif ic == "PALIGNR":                                    # (dst:src) >> 8*imm, the low 16 bytes
+            assert imm is not None
+            x[dst[1]] = ((a << 128 | v) >> (8 * imm)) & _mask(128) if imm < 32 else 0
+        elif ic == "ANDNPD":
+            x[dst[1]] = ~a & v & _mask(128)
+        elif ic == "PERMILPS_VAR":                               # dword i = a[v's dword i & 3]
+            aw = lanes(a, 32)
+            x[dst[1]] = pack([aw[c & 3] for c in lanes(v, 32)], 32)
+        elif ic == "PBLENDD":                                    # dword i from the source where imm bit i
+            assert imm is not None
+            aw, vw = lanes(a, 32), lanes(v, 32)
+            x[dst[1]] = pack([vw[i] if imm >> i & 1 else aw[i] for i in range(4)], 32)
+        elif ic in ("CVTDQ2PS", "CVTTPS2DQ", "CMPPS_VEX"):
+            env, flags, out = fp.Env(th.mxcsr), 0, []
+            for i, (p, q) in enumerate(zip(lanes(a, 32), lanes(v, 32))):
+                env.flags = 0
+                if ic == "CVTDQ2PS":
+                    out.append(fp.from_int(fp.F32, q, 32, env))
+                elif ic == "CVTTPS2DQ":
+                    out.append(fp.to_int(fp.F32, q, 32, True, env))
+                else:
+                    assert imm is not None
+                    out.append(_mask(32) if fp.cmp_predicate(fp.F32, p, q, imm & 31, env) else 0)
+                flags |= env.flags
+            env.flags = flags
+            self._fp_check(env)
+            x[dst[1]] = pack(out, 32)
+        else:
+            raise LiftError(f"sse {ic}")
+
+    def _vex_cross(self, ic: str, d: Op, s1: Op | None, s2: Op, vl: int, imm: int | None) -> None:
+        """VEX instructions that move data between the 128-bit halves (Intel SDM Vol 2; Sprint 049), on whole
+        256-bit values: VPERMQ, VPERMD, the broadcasts, VINSERT/VEXTRACT F/I128, VCVTPS2PD and VPMOVSXDQ at 256
+        bits, VZEROALL."""
+        th, x, hi = self.th, self.th.xmm, self.th.ymm_hi
+        if ic == "VZEROALL":
+            th.xmm, th.ymm_hi = [0] * 16, [0] * 16
+            return
+
+        def read(loc: Op, nbytes: int) -> int:
+            if loc[0] == "x":
+                return (x[loc[1]] | hi[loc[1]] << 128) & _mask(8 * nbytes)
+            return int.from_bytes(self.mem.read(self._t[loc[1]], nbytes), "little")
+
+        def lanes(v: int, w: int, n: int) -> list[int]:
+            return [(v >> (w * i)) & _mask(w) for i in range(n)]
+
+        def pack(ls: list[int], w: int) -> int:
+            return sum((n & _mask(w)) << (w * i) for i, n in enumerate(ls))
+
+        width = 32 if vl else 16
+        if ic == "VPERMQ":
+            assert imm is not None
+            q = lanes(read(s2, 32), 64, 4)
+            out = pack([q[(imm >> (2 * i)) & 3] for i in range(4)], 64)
+        elif ic == "VPERMD":
+            assert s1 is not None
+            idx, src = lanes(read(s1, 32), 32, 8), lanes(read(s2, 32), 32, 8)
+            out = pack([src[i & 7] for i in idx], 32)
+        elif ic in ("VPBROADCASTD", "VBROADCASTSS"):
+            out = pack([read(s2, 4)] * (width // 4), 32)
+        elif ic == "VPBROADCASTQ":
+            out = pack([read(s2, 8)] * (width // 8), 64)
+        elif ic == "VBROADCASTF128":
+            v = read(s2, 16)
+            out = v | v << 128
+        elif ic in ("VINSERTF128", "VINSERTI128"):
+            assert s1 is not None and imm is not None
+            base, part = read(s1, 32), read(s2, 16)
+            shift = 128 * (imm & 1)
+            out = base & ~(_mask(128) << shift) & _mask(256) | part << shift
+        elif ic in ("VEXTRACTF128", "VEXTRACTI128"):
+            assert imm is not None
+            out = read(s2, 32) >> (128 * (imm & 1)) & _mask(128)
+            width = 16
+        elif ic == "VCVTPS2PD":
+            v, env, flags, res = read(s2, 16), fp.Env(th.mxcsr), 0, []
+            for f32 in lanes(v, 32, 4):
+                env.flags = 0
+                res.append(fp.convert(fp.F32, fp.F64, f32, env))
+                flags |= env.flags
+            env.flags = flags
+            self._fp_check(env)
+            out = pack(res, 64)
+        elif ic == "VPMOVSXDQ":
+            out = pack([(w - (1 << 32)) if w >> 31 else w for w in lanes(read(s2, 16), 32, 4)], 64)
+        else:
+            raise LiftError(f"vex {ic}")
+        if d[0] == "x":
+            x[d[1]] = out & _mask(128)
+            hi[d[1]] = out >> 128 & _mask(128) if width == 32 else 0
+        else:
+            self.mem.write(self._t[d[1]], out.to_bytes(width, "little"))
+
     def _vex(self, base: str, d: Op, s1: Op | None, s2: Op, vl: int, align: int, imm: int | None) -> None:
         """One VEX instruction (Sprint 049) as its legacy-SSE base: d = BASE(s1, s2) on the low 128 bits, the
         same on bits 255:128 for VEX.256; a VEX.128 write to a register zeroes its bits 255:128 (SDM Vol 1
@@ -448,7 +600,7 @@ class Runtime:
         elif d[0] == "x":
             if vl:
                 x[16], x[17] = first_hi, src_hi
-                self._sse(base, ("x", 16), ("x", 17), 0, imm)
+                self._sse(base, ("x", 16), ("x", 17), 0, imm >> 4 if base == "PBLENDD" and imm is not None else imm)
                 hi[d[1]] = x[16]
             else:
                 hi[d[1]] = 0
@@ -708,6 +860,8 @@ class Runtime:
                     if v & ~0xFFFF:                                       # MXCSR_MASK 0xFFFF: reserved bits #GP
                         raise GuestFault(f"#GP: LDMXCSR 0x{v:x} sets reserved bits at 0x{ins.address:x}")
                     self.th.mxcsr = v
+            elif k == "vexs":
+                self._vex_cross(op[1], op[2], op[3], op[4], op[5], op[6])
             elif k == "vex":
                 self._vex(op[1], op[2], op[3], op[4], op[5], op[6], op[7] if len(op) > 7 else None)
             elif k == "fma":

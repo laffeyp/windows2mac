@@ -392,7 +392,19 @@ CLASSES_049 = frozenset(("ORPD", "PCMPEQW", "CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM"
                          "VPSRLQ", "VPSLLQ", "VPSRLDQ", "VPMOVMSKB", "VCVTTPD2DQ", "VCVTPD2DQ", "VCMPSD", "VMOVLHPS",
                          "VHADDPD", "VFMADD213SD", "VFMADD231SD", "VFMADD132SD", "VFNMADD231SD", "VFNMADD132SD",
                          "VFNMADD213SD", "VFMSUB213SD", "VFMSUB132SD", "VFMADD132PD"))
-FORMAT_3 = frozenset(("049",))                     # sets whose records carry the YMM upper halves
+# Sprint 049 (049b): with AVX reported, UnityPlayer's VEX and BMI classes (its census, 2026-10-11), where the frontier
+# stopped at VMOVUPS (384,526 instructions); AES, PCLMULQDQ, FMA4 and XOP are not reported and not lifted
+CLASSES_049B = frozenset((
+    "VMOVUPS", "VMOVAPS", "VPADDD", "VPSRLD", "VPSLLD", "VPSRAD", "VPSLLDQ", "VPANDN", "VPUNPCKLDQ", "VMULPS",
+    "VADDPS", "VSUBPS", "VMAXPS", "VMINPS", "VPSHUFD", "VUNPCKHPS", "VUNPCKLPS", "VPCMPEQD", "VPCMPGTD", "VMULSS",
+    "VADDSS", "VSUBSS", "VDIVSS", "VCOMISS", "VUCOMISS", "VMOVSS", "VCVTSD2SS", "VCVTSS2SD", "VRCPPS", "VRSQRTPS",
+    "VANDNPS", "VORPS", "VMULPD", "VADDPD", "VSHUFPS", "VUNPCKLPD", "VCVTSS2SI", "VCVTSI2SS", "VCVTTSD2SI", "VPADDB",
+    "VPMULUDQ", "VPUNPCKHQDQ", "VPCMPEQQ", "VPSHUFB", "VPALIGNR", "VPINSRD", "VPINSRQ", "VPEXTRQ", "VANDNPD",
+    "VCVTDQ2PS", "VCVTTPS2DQ", "VCMPPS", "VROUNDSD", "VPBLENDD", "VCVTPS2PD", "VPMOVSXDQ", "VPERMILPS", "VPERMQ",
+    "VPERMD", "VPBROADCASTD", "VPBROADCASTQ", "VBROADCASTSS", "VBROADCASTF128", "VINSERTF128", "VINSERTI128",
+    "VEXTRACTF128", "VEXTRACTI128", "VZEROALL", "VFMADD213SS", "VFMADD231SS", "VFMSUB213SS", "VFMADD231PS",
+    "VFNMADD231PS", "VLDMXCSR", "VSTMXCSR", "ANDN", "SHLX", "SHRX", "RORX", "MULX"))
+FORMAT_3 = frozenset(("049", "049b"))              # sets whose records carry the YMM upper halves
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -410,7 +422,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "046e": (2026_10_10_464, CLASSES_046E, (), False),
     "047": (2026_10_10_47, CLASSES_047, (), False),
     "048": (2026_10_10_48, CLASSES_048, (), False),
-    "049": (2026_10_11_49, CLASSES_049, (), False)}
+    "049": (2026_10_11_49, CLASSES_049, (), False),
+    "049b": (2026_10_11_491, CLASSES_049B, (), False)}
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -427,7 +440,7 @@ def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
 def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039,
                 locked: tuple[str, ...] = (), control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
-    ymm = classes is CLASSES_049                     # format 3 (FORMAT_3): states carry YMM upper halves
+    ymm = classes in (CLASSES_049, CLASSES_049B)    # format 3 (FORMAT_3): states carry YMM upper halves
     out: list[Case] = []
     skipped: Counter[str] = Counter()
     source = list(encgen_cases()) + list(_locked_variants(locked))
@@ -460,6 +473,8 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             continue
         raw = c.raw[:d.length]
         sse = d.iclass in SSE or (ymm and (d.iclass.startswith("V") or d.iclass == "FNSTCW"))
+        if ymm and d.iclass in ("VZEROALL", "VZEROUPPER"):
+            sse = True
         placeable = True
         wide = (_memory_size(c.raw[:d.length]) or 0) if ymm else 0
         for _ in range(SSE_STATES if sse else STATES):
