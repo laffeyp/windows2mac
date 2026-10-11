@@ -42,7 +42,7 @@ static void one(const char *name, DWORD spin, DWORD flags) {
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     n = 0;
     if (ok && !(flags & 0x04000000)) DeleteCriticalSection(&cs);   /* STATIC_INIT leaves the bytes as they were
-                                                                        * (run 38113744018): nothing to delete */
+                                                                        * (run 38113744326): nothing to delete */
 }
 
 void start(void) {

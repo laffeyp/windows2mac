@@ -1,0 +1,134 @@
+{
+ "contract_id": "windows.critical_section.flags",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "InitializeCriticalSectionEx's flags, as mono's start-up passes CRITICAL_SECTION_NO_DEBUG_INFO with spin 0: spin 0 gives 2000 with the dynamic-spin flag, NO_DEBUG_INFO adds its bit (0x030007D0), DYNAMIC_SPIN with spin 0 changes nothing; a nonzero spin keeps the flags; STATIC_INIT alone answers TRUE and leaves every byte; the last error is left.",
+ "applicability": "windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/critical_section_flags/critical_section_flags.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "spin0.no_debug_info",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -1,
+    "lock_count": -1,
+    "recursion": 0,
+    "owner": 0,
+    "semaphore": 0,
+    "spin": 50333648
+   },
+   {
+    "s": "spin4000.no_debug_info",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -1,
+    "lock_count": -1,
+    "recursion": 0,
+    "owner": 0,
+    "semaphore": 0,
+    "spin": 16781216
+   },
+   {
+    "s": "spin0.none",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -1,
+    "lock_count": -1,
+    "recursion": 0,
+    "owner": 0,
+    "semaphore": 0,
+    "spin": 33556432
+   },
+   {
+    "s": "spin4000.none",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -1,
+    "lock_count": -1,
+    "recursion": 0,
+    "owner": 0,
+    "semaphore": 0,
+    "spin": 4000
+   },
+   {
+    "s": "spin0.dynamic_spin",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -1,
+    "lock_count": -1,
+    "recursion": 0,
+    "owner": 0,
+    "semaphore": 0,
+    "spin": 33556432
+   },
+   {
+    "s": "spin0.static_init",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -6510615555426900571,
+    "lock_count": -1515870811,
+    "recursion": -1515870811,
+    "owner": 11936128518282651045,
+    "semaphore": 11936128518282651045,
+    "spin": 11936128518282651045
+   },
+   {
+    "s": "spin0.no_debug_dynamic",
+    "ret": 1,
+    "err": 57005,
+    "debug_info": -1,
+    "lock_count": -1,
+    "recursion": 0,
+    "owner": 0,
+    "semaphore": 0,
+    "spin": 50333648
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38113796820: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:78f7203b0f64375e7a55f06cbadde9d67f2a91c32ab0674d0775934545c69a3f; run 38113797868: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:eab7ad8bdc971a686c4cd9ba5dddb919be7207ae1e2a18d00ad415498eb23c38",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "critical_section_flags-1791695270-0-1",
+    "critical_section_flags-1791695270-0-2",
+    "critical_section_flags-1791695270-1-1",
+    "critical_section_flags-1791695270-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-initializecriticalsectionex",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-initializecriticalsectionex (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "CRITICAL_SECTION_NO_DEBUG_INFO: The critical section is created without debug information."
+  }
+ ],
+ "open_questions": [
+  "STATIC_INIT and DYNAMIC_SPIN are not documented for this call; the rows record what Windows does with them alone and with NO_DEBUG_INFO; other combinations stop the run."
+ ],
+ "sections": {
+  "probe": "probes/critical_section_flags (Sprint 044)",
+  "implementation": "tools/guest_runtime/critical_section.c",
+  "rows": "scripts/family_run.py critical_section_flags",
+  "excluded": "none"
+ }
+}

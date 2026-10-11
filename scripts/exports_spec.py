@@ -4,7 +4,7 @@
 
 Sprint 044 wrote the spec by hand from run 38039106988 (kernel32, kernelbase). This builds it from a run's rows
 (probes/exports): {"m": module, "n": name, "f": forwarded} per export in directory order, and {"system32": name} per
-DLL in the system directory. Every module the run dumped goes in; a module the run could not load stops the build.
+DLL in the system directory. Every module the run dumped goes in; a module the run could not load is listed under `missing`.
 
 Usage: uv run python scripts/exports_spec.py <store/probe-runs/run> [--check]
 """
@@ -23,9 +23,7 @@ SPEC = ROOT / "specs" / "windows_exports.json"
 
 def build(run: Path, previous: dict[str, Any]) -> dict[str, Any]:
     rows = [json.loads(line) for line in (run / "body-1.jsonl").read_text().splitlines() if line.strip()]
-    missing = [r["m"] for r in rows if r.get("missing")]
-    if missing:
-        raise SystemExit(f"{run.name}: modules not loaded: {missing}")
+    missing = sorted(r["m"] for r in rows if r.get("missing"))     # LoadLibrary failed on the runner: a fact kept
     modules: dict[str, list[str]] = {}
     forwarded: dict[str, list[str]] = {}
     for r in rows:
@@ -34,11 +32,12 @@ def build(run: Path, previous: dict[str, Any]) -> dict[str, Any]:
             if r["f"]:
                 forwarded.setdefault(r["m"], []).append(r["n"])
     profile = (run / "profile.txt").read_text().strip()
-    return {"version": "0.2.0",
+    return {"version": "0.3.0",
             "source": (f"probes/exports on run {run.name} ({profile}); the export directory of each module in memory, "
                        f"in order: kernel32 and kernelbase (Sprint 044, run 38039106988 then) and every other DLL "
-                       f"UnityPlayer.dll imports (Sprint 048), built by scripts/exports_spec.py"),
-            "forwarded": forwarded, "modules": modules,
+                       f"UnityPlayer.dll imports (Sprint 048) or mono imports and the game names at run time (Sprint 049), "
+                       f"built by scripts/exports_spec.py; `missing`: modules LoadLibraryW did not find on the runner"),
+            "forwarded": forwarded, "modules": modules, "missing": missing,
             "system32": sorted(r["system32"] for r in rows if "system32" in r) or previous.get("system32", [])}
 
 

@@ -1,0 +1,130 @@
+{
+ "contract_id": "windows.module.names_ansi",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetModuleFileNameA answers GetModuleFileNameW's text narrowed and its length; a buffer too small gets nSize - 1 bytes and a NUL, the answer nSize and error 122; success sets error 0. GetModuleHandleA finds kernel32 under any case and without its extension, NULL is the image, a missing name is NULL and 126; success leaves the last error.",
+ "applicability": "windows-2022 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/module_names_ansi/module_names_ansi.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "file.image",
+    "err": 0,
+    "ret_is_w_len": 1,
+    "text_is_w": 1,
+    "nul_at_shown": 1,
+    "byte_after": 165
+   },
+   {
+    "s": "file.kernel32",
+    "ret": 32,
+    "err": 0,
+    "w_len": 32,
+    "ret_is_w_len": 1,
+    "text_is_w": 1,
+    "nul_at_shown": 1,
+    "byte_after": 165
+   },
+   {
+    "s": "file.exact",
+    "err": 0,
+    "ret_is_w_len": 1,
+    "text_is_w": 1,
+    "nul_at_shown": 1,
+    "byte_after": 165
+   },
+   {
+    "s": "file.short",
+    "err": 122,
+    "ret_is_w_len": 1,
+    "text_is_w": 1,
+    "nul_at_shown": 1,
+    "byte_after": 165
+   },
+   {
+    "s": "file.one",
+    "ret": 1,
+    "err": 122,
+    "ret_is_w_len": 0,
+    "text_is_w": 1,
+    "nul_at_shown": 1,
+    "byte_after": 165
+   },
+   {
+    "s": "handle.kernel32",
+    "is_kernel32": 1,
+    "null": 0,
+    "err": 57005
+   },
+   {
+    "s": "handle.upper",
+    "is_kernel32": 1,
+    "null": 0,
+    "err": 57005
+   },
+   {
+    "s": "handle.no_extension",
+    "is_kernel32": 1,
+    "null": 0,
+    "err": 57005
+   },
+   {
+    "s": "handle.missing",
+    "is_kernel32": 0,
+    "null": 1,
+    "err": 126
+   },
+   {
+    "s": "handle.null",
+    "is_image": 1,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38113666467: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:101395b58178b3fc6fbda6647f30e73123f1728782a9b92c59d5925ecd777a4a; run 38113667870: windows-2022, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:c131bd9f752c01b7966c229dc45cc0c7986bdb904a118c55ce10168e9493695c",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "module_names_ansi-1791695127-0-1",
+    "module_names_ansi-1791695127-0-2",
+    "module_names_ansi-1791695127-1-1",
+    "module_names_ansi-1791695127-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getmodulefilenamea",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamea (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "If the buffer is too small to hold the module name, the string is truncated to nSize characters including the terminating null character, the function returns nSize, and the function sets the last error to ERROR_INSUFFICIENT_BUFFER."
+  }
+ ],
+ "open_questions": [
+  "The image's path length is the runner's (38); the derive drops it (w_len, and ret where ret is that length) from file.image, file.exact, file.short and file.one, and keeps ret_is_w_len.",
+  "Only ASCII paths and names are probed; w2m stops at another byte."
+ ],
+ "sections": {
+  "probe": "probes/module_names_ansi (Sprint 044)",
+  "implementation": "tools/guest_runtime/module.c",
+  "rows": "scripts/family_run.py module_names_ansi",
+  "excluded": "none"
+ }
+}

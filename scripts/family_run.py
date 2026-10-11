@@ -1340,6 +1340,64 @@ FAMILIES: dict[str, Family] = {
                                                "    return w2m_logged(W2M_API_GetSidSubAuthority", ("sub_authority",)),
             "short_buffer_accepted": Plant("if ((u32)length < LABEL_SIZE || !info)", "if (!info)",
                                            ("short_buffer",))}),
+    "critical_section_flags": Family(
+        name="critical_section_flags",
+        contract_id="windows.critical_section.flags",
+        version="0.1.0",
+        summary=("InitializeCriticalSectionEx's flags, as mono's start-up passes CRITICAL_SECTION_NO_DEBUG_INFO with spin 0: "
+                 "spin 0 gives 2000 with the dynamic-spin flag, NO_DEBUG_INFO adds its bit (0x030007D0), DYNAMIC_SPIN "
+                 "with spin 0 changes nothing; a nonzero spin keeps the flags; STATIC_INIT alone answers TRUE and leaves "
+                 "every byte; the last error is left."),
+        probe="critical_section_flags", guest_file="critical_section.c",
+        runs={
+              "38113796820": Run("windows-2025", "78f7203b0f64375e7a55f06cbadde9d67f2a91c32ab0674d0775934545c69a3f", "critical_section_flags-1791695270-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38113797868": Run("windows-2022", "eab7ad8bdc971a686c4cd9ba5dddb919be7207ae1e2a18d00ad415498eb23c38", "critical_section_flags-1791695270-1", "AMD EPYC 9V74 80-Core Processor"),
+        },
+        documented=(
+            documented("ms-initializecriticalsectionex", "api/synchapi/nf-synchapi-initializecriticalsectionex",
+                       "2018-12-05", "CRITICAL_SECTION_NO_DEBUG_INFO: The critical section is created without debug "
+                       "information."),),
+        open_questions=(
+            "STATIC_INIT and DYNAMIC_SPIN are not documented for this call; the rows record what Windows does with "
+            "them alone and with NO_DEBUG_INFO; other combinations stop the run.",),
+        plants={
+            "no_debug_dropped_at_spin0": Plant("DEFAULT_SPIN | (flags & NO_DEBUG_INFO)", "DEFAULT_SPIN",
+                                               ("spin0.no_debug_info", "spin0.no_debug_dynamic")),
+            "static_init_initializes": Plant(
+                "    if (flags == STATIC_INIT) return w2m_logged(W2M_API_InitializeCriticalSectionEx, cs, 1);\n",
+                "    if (flags == STATIC_INIT) flags = 0;\n", ("spin0.static_init",))}),
+    "module_names_ansi": Family(
+        name="module_names_ansi",
+        contract_id="windows.module.names_ansi",
+        version="0.1.0",
+        summary=("GetModuleFileNameA answers GetModuleFileNameW's text narrowed and its length; a buffer too small gets "
+                 "nSize - 1 bytes and a NUL, the answer nSize and error 122; success sets error 0. GetModuleHandleA finds "
+                 "kernel32 under any case and without its extension, NULL is the image, a missing name is NULL and 126; "
+                 "success leaves the last error."),
+        probe="module_names_ansi", guest_file="module.c", host_files=("src/w2m/modules.py",),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("file.image", "file.exact", "file.short", "file.one")
+                                         and (k == "w_len" or (k == "ret" and r["s"] != "file.one")))}
+                                for r in printed],
+        runs={
+              "38113666467": Run("windows-2025", "101395b58178b3fc6fbda6647f30e73123f1728782a9b92c59d5925ecd777a4a", "module_names_ansi-1791695127-0", "AMD EPYC 7763 64-Core Processor"),
+              "38113667870": Run("windows-2022", "c131bd9f752c01b7966c229dc45cc0c7986bdb904a118c55ce10168e9493695c", "module_names_ansi-1791695127-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+        },
+        documented=(
+            documented("ms-getmodulefilenamea", "api/libloaderapi/nf-libloaderapi-getmodulefilenamea", "2018-12-05",
+                       "If the buffer is too small to hold the module name, the string is truncated to nSize characters "
+                       "including the terminating null character, the function returns nSize, and the function sets the "
+                       "last error to ERROR_INSUFFICIENT_BUFFER."),),
+        open_questions=(
+            "The image's path length is the runner's (38); the derive drops it (w_len, and ret where ret is that "
+            "length) from file.image, file.exact, file.short and file.one, and keeps ret_is_w_len.",
+            "Only ASCII paths and names are probed; w2m stops at another byte.",),
+        plants={
+            "short_returns_size_minus_one": Plant("return w2m_logged(W2M_API_GetModuleFileNameA, module, size);",
+                                                  "return w2m_logged(W2M_API_GetModuleFileNameA, module, size - 1);",
+                                                  ("file.short", "file.one")),
+            "missing_handle_no_error": Plant("    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_GetModuleHandleA",
+                                             "    return w2m_logged(W2M_API_GetModuleHandleA", ("handle.missing",))}),
 }
 
 

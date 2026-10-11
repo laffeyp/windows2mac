@@ -1,0 +1,7 @@
+{"s":"spin0.no_debug_info","ret":1,"err":57005,"debug_info":-1,"lock_count":-1,"recursion":0,"owner":0,"semaphore":0,"spin":50333648}
+{"s":"spin4000.no_debug_info","ret":1,"err":57005,"debug_info":-1,"lock_count":-1,"recursion":0,"owner":0,"semaphore":0,"spin":16781216}
+{"s":"spin0.none","ret":1,"err":57005,"debug_info":-1,"lock_count":-1,"recursion":0,"owner":0,"semaphore":0,"spin":33556432}
+{"s":"spin4000.none","ret":1,"err":57005,"debug_info":-1,"lock_count":-1,"recursion":0,"owner":0,"semaphore":0,"spin":4000}
+{"s":"spin0.dynamic_spin","ret":1,"err":57005,"debug_info":-1,"lock_count":-1,"recursion":0,"owner":0,"semaphore":0,"spin":33556432}
+{"s":"spin0.static_init","ret":1,"err":57005,"debug_info":-6510615555426900571,"lock_count":-1515870811,"recursion":-1515870811,"owner":11936128518282651045,"semaphore":11936128518282651045,"spin":11936128518282651045}
+{"s":"spin0.no_debug_dynamic","ret":1,"err":57005,"debug_info":-1,"lock_count":-1,"recursion":0,"owner":0,"semaphore":0,"spin":50333648}

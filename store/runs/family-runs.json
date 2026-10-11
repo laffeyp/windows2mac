@@ -91,8 +91,28 @@
    "38046100953": "conforms"
   }
  },
+ "critical_section_flags": {
+  "candidate_sha256": "sha256:2826efdf98f1cd3e492a57b3e507fca0fd28773f693fd48a4ce69e25d8b0f703",
+  "divergence": {
+   "38113796820": null,
+   "38113797868": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "critical_section_flags",
+  "record": "store/runs/family-critical_section_flags-1791695364038978000",
+  "verdicts": {
+   "38113796820": "conforms",
+   "38113797868": "conforms"
+  }
+ },
  "critical_sections": {
-  "candidate_sha256": "sha256:0971312def76c87af91f843e7c4507d5f2f8e7468f0e3315f2a3ef0d5eda2440",
+  "candidate_sha256": "sha256:2826efdf98f1cd3e492a57b3e507fca0fd28773f693fd48a4ce69e25d8b0f703",
   "divergence": {
    "38039748482": null,
    "38039751056": null,
@@ -109,7 +129,7 @@
    "SESSION_INIT": 1
   },
   "family": "critical_sections",
-  "record": "store/runs/family-critical_sections-1791679464816953000",
+  "record": "store/runs/family-critical_sections-1791695388347600000",
   "verdicts": {
    "38039748482": "conforms",
    "38039751056": "conforms",
@@ -400,7 +420,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:32eb794b4f72c03c657712de57435ffe7dc1751cc757a0c2c7254e8e9002ab34",
+  "candidate_sha256": "sha256:c86cbc90972dd7b77d04c5b554956e4a2b8c7ac49fcdcc995d451300528bdc46",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -427,7 +447,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791679460382496000",
+  "record": "store/runs/family-loader-1791695389692907000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -467,8 +487,28 @@
    "38092777429": "conforms"
   }
  },
+ "module_names_ansi": {
+  "candidate_sha256": "sha256:6fec9bc32e3a715750b454b8925ef2f1d81aead4886af758027610c16c09fba9",
+  "divergence": {
+   "38113666467": null,
+   "38113667870": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "module_names_ansi",
+  "record": "store/runs/family-module_names_ansi-1791695382197471000",
+  "verdicts": {
+   "38113666467": "conforms",
+   "38113667870": "conforms"
+  }
+ },
  "modules": {
-  "candidate_sha256": "sha256:34bc9bd4be5b7c5b59139c01cd88e79bc187e62861240b392ad73f87005c680d",
+  "candidate_sha256": "sha256:13a1ac8c709d94540f103452ae4604560fe9179fb67ed25b094c7181ce77f6a5",
   "divergence": {
    "38039204088": null,
    "38039205782": null,
@@ -485,7 +525,7 @@
    "SESSION_INIT": 1
   },
   "family": "modules",
-  "record": "store/runs/family-modules-1791679464034235000",
+  "record": "store/runs/family-modules-1791695388721043000",
   "verdicts": {
    "38039204088": "conforms",
    "38039205782": "conforms",
@@ -782,7 +822,7 @@
   }
  },
  "system_modules": {
-  "candidate_sha256": "sha256:ca7f9858451df5ad2091a2e18bcfc245a90e9c3bef0c7df7417faec74bde029f",
+  "candidate_sha256": "sha256:20d9ca68ea3701fff902edbe40b059a4931b12a25c546608304e5b6c3b140489",
   "divergence": {
    "38094160385": null,
    "38094162181": null
@@ -795,7 +835,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_modules",
-  "record": "store/runs/family-system_modules-1791679481065449000",
+  "record": "store/runs/family-system_modules-1791695389472430000",
   "verdicts": {
    "38094160385": "conforms",
    "38094162181": "conforms"

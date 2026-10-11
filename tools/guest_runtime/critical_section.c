@@ -16,6 +16,8 @@
 #include "runtime.h"
 
 #define NO_DEBUG_INFO 0x01000000u
+#define DYNAMIC_SPIN 0x02000000u                    /* RTL_CRITICAL_SECTION_FLAG_DYNAMIC_SPIN */
+#define STATIC_INIT 0x04000000u                     /* RTL_CRITICAL_SECTION_FLAG_STATIC_INIT */
 #define DEFAULT_SPIN 0x020007D0ull                 /* observed: count 2000, flag 0x02000000 */
 
 struct critical_section {
@@ -39,13 +41,18 @@ static void initialize(struct critical_section *cs, u64 spin) {
     cs->spin_count = spin;
 }
 
-/* InitializeCriticalSectionEx(lpCriticalSection, dwSpinCount, Flags): nonzero. */
+/* InitializeCriticalSectionEx(lpCriticalSection, dwSpinCount, Flags): nonzero. Flags, as
+ * contracts/windows.critical_section.flags records (Sprint 049): with spin 0 the count is 2000 with the dynamic-spin
+ * flag, as InitializeCriticalSection gives, and CRITICAL_SECTION_NO_DEBUG_INFO adds its bit (0x030007D0); a
+ * nonzero spin keeps the flags it is given; RTL_CRITICAL_SECTION_FLAG_STATIC_INIT alone answers TRUE and leaves
+ * the structure as it was. Other combinations are not in the rows. */
 u64 k32_InitializeCriticalSectionEx(u64 cs, u64 spin, u64 flags) {
     spin = (u32)spin;
     flags = (u32)flags;
-    if ((flags & ~(u64)NO_DEBUG_INFO) || (spin == 0 && flags != 0))
+    if (flags == STATIC_INIT) return w2m_logged(W2M_API_InitializeCriticalSectionEx, cs, 1);
+    if ((flags & ~(u64)(NO_DEBUG_INFO | DYNAMIC_SPIN)) || (spin != 0 && (flags & DYNAMIC_SPIN)))
         w2m_unimplemented(W2M_API_InitializeCriticalSectionEx, flags | spin << 32);
-    initialize((struct critical_section *)cs, spin ? spin | flags : DEFAULT_SPIN);
+    initialize((struct critical_section *)cs, spin ? spin | flags : DEFAULT_SPIN | (flags & NO_DEBUG_INFO));
     return w2m_logged(W2M_API_InitializeCriticalSectionEx, cs, 1);
 }
 
