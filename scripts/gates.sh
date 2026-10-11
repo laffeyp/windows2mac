@@ -14,11 +14,13 @@ head=$(git -C substrate rev-parse HEAD)
 [ -z "$(git -C substrate status --porcelain -- src pyproject.toml)" ] || { echo "gates: ./substrate has uncommitted kernel changes"; exit 1; }
 # every probe compiles against Windows headers (mingw-w64) before a runner sees it (Sprint 044: two
 # runner rounds lost to compile errors); skipped where the headers are absent (CI's Ubuntu). The Windows
-# SDK's rpcndr.h defines small and hyper, mingw's does not: defined here too (Sprint 046, two rounds lost)
+# SDK's rpcndr.h defines small and hyper, mingw's does not: defined here too (Sprint 046, two rounds lost). The
+# runner's clang targets MSVC, where MS extensions (__try) are on; mingw's excpt.h declares __C_specific_handler
+# dllimport, the SDK's does not (Sprint 053: a probe defines its own)
 win=/opt/homebrew/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/include
 if [ -d "$win" ]; then
   for c in $(grep -l "include <windows.h>" probes/*/*.c); do
-    clang --target=x86_64-w64-mingw32 -fsyntax-only -Wall -Werror -Wno-unknown-attributes -Dsmall=char -Dhyper=__int64 -isystem "$win" "$c" \
+    clang --target=x86_64-w64-mingw32 -fms-extensions -fsyntax-only -Wall -Werror -Wno-unknown-attributes -Wno-inconsistent-dllimport -Dsmall=char -Dhyper=__int64 -isystem "$win" "$c" \
       || { echo "gates: $c does not compile for Windows"; exit 1; }
   done
 fi

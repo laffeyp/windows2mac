@@ -44,11 +44,16 @@ def llvm_insns(path: Path, image_base: int, end_rva: int) -> dict[int, tuple[str
     return {a: (mn, b - a) for (a, mn), (b, _) in zip(rows, rows[1:])}
 
 
+def crt_linked(img: PeImage) -> bool:
+    """A CRT-linked probe is told by the size of its .pdata (448 and 451 function starts), not by its import count
+    (the console probe has 21 imports and no C runtime, Sprint 044) nor by having .pdata at all (the no-CRT
+    exceptions probe has 23 entries, built with unwind tables; Sprint 053)."""
+    return len(img.function_starts) > 400
+
+
 def floor(img: PeImage) -> int:
-    """CRT-linked probes reach > 20,000 instructions; the no-CRT skeleton 217. A CRT-linked binary is told
-    by its .pdata (448 and 451 function starts; every no-CRT probe has none), not by its import count:
-    the console probe has 21 imports and no C runtime (Sprint 044)."""
-    return 20_000 if img.function_starts else 200
+    """CRT-linked probes reach > 20,000 instructions; the no-CRT skeleton 217."""
+    return 20_000 if crt_linked(img) else 200
 
 
 @pytest.mark.parametrize("path", BINARIES, ids=lambda p: p.name[:12])
@@ -59,7 +64,7 @@ def test_reachable_code(path: Path) -> None:
     assert not r.undecodable
     assert len(r.insns) > floor(img)
     assert r.roots["pdata"] == len(img.function_starts)
-    assert len(img.function_starts) > (400 if floor(img) > 200 else -1)   # no-CRT: no .pdata
+    assert crt_linked(img) or len(img.function_starts) < 100              # no-CRT: little or no .pdata
     # every import is referenced; some are loaded into a register, not called through the slot
     assert set(r.imports_referenced) == set(img.iat.values())
     assert set(r.imports_called) <= set(r.imports_referenced)

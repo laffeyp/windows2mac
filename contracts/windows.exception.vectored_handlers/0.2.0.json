@@ -1,0 +1,103 @@
+{
+ "contract_id": "windows.exception.vectored_handlers",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "AddVectoredExceptionHandler answers a new non-NULL handle each call, the same handler again included; RemoveVectoredExceptionHandler answers 1 for a registered handle and 0 for it again or for any other value; neither touches the last error. Dispatch (0.2.0, Sprint 053): handlers added first run before those added last, CONTINUE_EXECUTION ends the search and RaiseException returns, the handler sees the code and flags 0x80.",
+ "applicability": "windows-2022 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/vectored_handlers/vectored_handlers.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "add.last",
+    "non_null": 1,
+    "err": 57005
+   },
+   {
+    "s": "add.first",
+    "non_null": 1,
+    "distinct": 1,
+    "err": 57005
+   },
+   {
+    "s": "add.same_handler",
+    "distinct": 1
+   },
+   {
+    "s": "remove",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "remove.again",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "remove.unknown",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "dispatch.continue",
+    "turns": 2,
+    "order": [
+     2,
+     1
+    ],
+    "code_seen": 1,
+    "flags_seen": 128,
+    "err": 57005
+   },
+   {
+    "s": "dispatch.after_remove",
+    "turns": 1,
+    "order": [
+     2
+    ]
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38114204685: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:ee140359e6683f4072a35535c52483aa788b381c6f44f9cdf883e45e48a03682; run 38114206477: windows-2022, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:62adbf5d647a07f02182ceecc86b535ee508163913152ea86b9ffe9e82d7bc18",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "vectored_handlers-1791695726-0-1",
+    "vectored_handlers-1791695726-0-2",
+    "vectored_handlers-1791695726-1-1",
+    "vectored_handlers-1791695726-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-addvectoredexceptionhandler",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-addvectoredexceptionhandler (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "If the First parameter is nonzero, the handler is the first handler to be called until a subsequent call to AddVectoredExceptionHandler is used to specify a different handler as the first handler."
+  }
+ ],
+ "open_questions": [],
+ "sections": {
+  "probe": "probes/vectored_handlers (Sprint 044)",
+  "implementation": "tools/guest_runtime/vectored_handlers.c",
+  "rows": "scripts/family_run.py vectored_handlers",
+  "excluded": "none"
+ }
+}

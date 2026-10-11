@@ -35,6 +35,14 @@ u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second) {
     return t->result;
 }
 
+/* The compiler's call for a large structure copy (exceptions.c copies CONTEXTs): the runtime links no C library. */
+void *memcpy(void *dst, const void *src, unsigned long n) {
+    u8 *d = (u8 *)dst;
+    const u8 *s = (const u8 *)src;
+    for (unsigned long i = 0; i < n; i++) d[i] = s[i];
+    return dst;
+}
+
 void w2m_unimplemented(u64 api, u64 detail) {
     host_call(W2M_HOST_UNIMPLEMENTED, api, detail);     /* the host stops the run; no return */
     for (;;) {}
@@ -191,12 +199,14 @@ static void context_from_state(struct w2m_context *c, const struct w2m_state *st
 /* Entered from the EL1 synchronous-exception vector after it saved the registers, with the
  * runtime stack. A data abort in translated code becomes a Windows access violation: the
  * thread's state block is filled from the saved registers (the commit rule makes them the state
- * before the faulting instruction), and the exception record and CONTEXT are built from it. With
- * no vectored handler yet (Sprint 047), the exception is unhandled and the process ends with the
- * exception code. Anything else, or a fault outside translated code, is a runtime fault the host
+ * before the faulting instruction), and the exception record and CONTEXT are built from it, left
+ * in the exception area for the host. Then it is dispatched (exceptions.c; Sprint 053): this
+ * returns with the state block holding the registers and redirect_rip the x86 address to go on
+ * at, which the exception entry loads; a stack that cannot hold the dispatch ends the process
+ * with the code. Anything else, or a fault outside translated code, is a runtime fault the host
  * reports. */
 /* MXCSR's exception flags from FPSR's cumulative bits: IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE. */
-static u32 mxcsr_now(void) {
+u32 w2m_mxcsr_now(void) {
     u64 fpsr;
     __asm__ volatile("mrs %0, S3_3_C4_C4_1" : "=r"(fpsr));     /* FPSR, by encoding: -mgeneral-regs-only rejects the name */
     u32 m = *(const volatile u32 *)(W2M_MONITOR_DATA_VA + 0x50);
@@ -230,7 +240,7 @@ void w2m_exception(void) {
     st->af_operands[1] = af[1];
     st->af_operands[2] = af[2];
     st->df = (u8)df;
-    st->mxcsr = mxcsr_now();
+    st->mxcsr = w2m_mxcsr_now();
     for (int i = 0; i < 16; i++)
         for (int j = 0; j < 16; j++) st->xmm[i][j] = s->q[i][j];
 
@@ -248,9 +258,10 @@ void w2m_exception(void) {
         r->information[1] = s->far;
     }
     context_from_state(&e->context, st);
-    e->magic = W2M_EXCEPTION_MAGIC;
     w2m_logged(W2M_API_Exception, r->code, rip);
-    host_call(W2M_HOST_EXIT, r->code, 0);              /* unhandled: the process ends */
+    if (w2m_dispatch_fault(r, &e->context)) return;
+    e->magic = W2M_EXCEPTION_MAGIC;                    /* no room on the stack: the process ends */
+    host_call(W2M_HOST_EXIT, r->code, 0);
     for (;;) {}
 }
 
