@@ -82,6 +82,7 @@ static struct object *object_of(u64 h) {
  * last error is left (row open). */
 u64 w2m_object_token(u64 api) { return handle_for(api, new_object(api, TOKEN, 0, 0)); }
 int w2m_object_is_token(u64 h) { struct object *o = object_of(h); return o && o->kind == TOKEN; }
+int w2m_object_is_open(u64 h) { return object_of(h) != 0; }        /* file.c's handle calls (Sprint 049) */
 
 /* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. */
 int w2m_object_close(u64 h) {

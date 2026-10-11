@@ -268,7 +268,7 @@
   }
  },
  "file_access": {
-  "candidate_sha256": "sha256:78bf0f1015e5cf09d84ff3c6d9a1fba93b6b15390b6822f192855291a19bb060",
+  "candidate_sha256": "sha256:6aa59136d31035f73f1698d8fabc09508af491fdbd426ef2809e3ac56e489bda",
   "divergence": {
    "38093116676": null,
    "38093118511": null
@@ -281,14 +281,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_access",
-  "record": "store/runs/family-file_access-1791697686095861000",
+  "record": "store/runs/family-file_access-1791701987470852000",
   "verdicts": {
    "38093116676": "conforms",
    "38093118511": "conforms"
   }
  },
  "file_attributes": {
-  "candidate_sha256": "sha256:891346042763e4ba1b68cb9853368c00bfa8ff8424bfd58a93a1ed30e17f46d4",
+  "candidate_sha256": "sha256:6144287fb631661a0c2f9cbab9edb05b0f14eecac4f01daa2245ed09ade780f8",
   "divergence": {
    "38087355443": null,
    "38087357359": null
@@ -301,14 +301,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_attributes",
-  "record": "store/runs/family-file_attributes-1791697685045971000",
+  "record": "store/runs/family-file_attributes-1791701986105647000",
   "verdicts": {
    "38087355443": "conforms",
    "38087357359": "conforms"
   }
  },
  "file_security": {
-  "candidate_sha256": "sha256:78bf0f1015e5cf09d84ff3c6d9a1fba93b6b15390b6822f192855291a19bb060",
+  "candidate_sha256": "sha256:6aa59136d31035f73f1698d8fabc09508af491fdbd426ef2809e3ac56e489bda",
   "divergence": {
    "38090863707": null,
    "38090865352": null
@@ -321,10 +321,30 @@
    "SESSION_INIT": 1
   },
   "family": "file_security",
-  "record": "store/runs/family-file_security-1791697685644737000",
+  "record": "store/runs/family-file_security-1791701987055393000",
   "verdicts": {
    "38090863707": "conforms",
    "38090865352": "conforms"
+  }
+ },
+ "files_more": {
+  "candidate_sha256": "sha256:377d401a5b509f936e1c1cf054cf562864fbd584b5a281cbd0b1eb8382546fee",
+  "divergence": {
+   "38119625685": null,
+   "38119627458": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "files_more",
+  "record": "store/runs/family-files_more-1791701880967613000",
+  "verdicts": {
+   "38119625685": "conforms",
+   "38119627458": "conforms"
   }
  },
  "function_tables": {
@@ -348,7 +368,7 @@
   }
  },
  "generate_random": {
-  "candidate_sha256": "sha256:cdf52b1d8ff25f5e60bb15d4c48a1c2474f38522b2b52773f32d66796ccef4f8",
+  "candidate_sha256": "sha256:060b5927adf7d876186ad2d37d1f485b05d4565702f88b412e5671dfedd0df4c",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -361,7 +381,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791701109403150000",
+  "record": "store/runs/family-generate_random-1791701985686001000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -420,7 +440,7 @@
   }
  },
  "integrity_level": {
-  "candidate_sha256": "sha256:8bab81df409e76deb7da1393081f6922a0d4b788b033af93c6bc0e29231ec4c8",
+  "candidate_sha256": "sha256:b43ed19a63cd558ab754fbb5c1a7360156e9720946f531abe2a4c3d87becc61f",
   "divergence": {
    "38099150504": null,
    "38099152338": null
@@ -433,14 +453,14 @@
    "SESSION_INIT": 1
   },
   "family": "integrity_level",
-  "record": "store/runs/family-integrity_level-1791697687165985000",
+  "record": "store/runs/family-integrity_level-1791701988793493000",
   "verdicts": {
    "38099150504": "conforms",
    "38099152338": "conforms"
   }
  },
  "known_folders": {
-  "candidate_sha256": "sha256:b4cea352162ed8274d1ea4e35caaf64bbe85bad4f5b9a387b1720793a0f6ed90",
+  "candidate_sha256": "sha256:d5e496d50f0369a21c31128359d031273b1ef8151a754926b54f40d0901f8bb1",
   "divergence": {
    "38098265812": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1",
    "38098267402": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1"
@@ -453,14 +473,14 @@
    "SESSION_INIT": 1
   },
   "family": "known_folders",
-  "record": "store/runs/family-known_folders-1791697686631962000",
+  "record": "store/runs/family-known_folders-1791701988361761000",
   "verdicts": {
    "38098265812": "conforms",
    "38098267402": "conforms"
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:b1f390bbfdf74cc9423f92f1e9f7ca08540ae3adf4b3e69b23f90e6db52225e9",
+  "candidate_sha256": "sha256:194efa4e52c97ec613cdfd30269028a9cd4820aa7496af8fd49f2c01c3a6d9ba",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -487,7 +507,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791701098580836000",
+  "record": "store/runs/family-loader-1791701978690336000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -576,7 +596,7 @@
   }
  },
  "paths": {
-  "candidate_sha256": "sha256:9f08ef1e1189c18a1961ee7f0430aacf177e4dbe7bacd5cd52bfab6402ba2d12",
+  "candidate_sha256": "sha256:6c09df31a8c1b7f9dd7273b49718b061876d3b876676abd3b7210b147f6bb33d",
   "divergence": {
    "38090281974": null,
    "38090284442": null
@@ -589,7 +609,7 @@
    "SESSION_INIT": 1
   },
   "family": "paths",
-  "record": "store/runs/family-paths-1791697685320957000",
+  "record": "store/runs/family-paths-1791701986552766000",
   "verdicts": {
    "38090281974": "conforms",
    "38090284442": "conforms"
@@ -718,7 +738,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:88f0249204c03441830e8a1f18292e50995f0d59174541c7e767ee2d3637fb96",
+  "candidate_sha256": "sha256:a234307e032669d2857f3359ddebb7899ea709db7d7b29524618e9ebd91e4c6b",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -745,7 +765,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791701107019302000",
+  "record": "store/runs/family-static_tls-1791701983380264000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -798,7 +818,7 @@
   }
  },
  "sync_objects": {
-  "candidate_sha256": "sha256:49f5939bbcb947871c6160830f8f77059821830593f6840852524408c0cf2237",
+  "candidate_sha256": "sha256:c0a7805038102c1df6dea51505da9e4dd7fa72b7dcdbf76486da5daf6736a70d",
   "divergence": {
    "38051398628": null,
    "38051400336": null,
@@ -813,7 +833,7 @@
    "SESSION_INIT": 1
   },
   "family": "sync_objects",
-  "record": "store/runs/family-sync_objects-1791697678955806000",
+  "record": "store/runs/family-sync_objects-1791701982834388000",
   "verdicts": {
    "38051398628": "conforms",
    "38051400336": "conforms",
@@ -822,7 +842,7 @@
   }
  },
  "system_info": {
-  "candidate_sha256": "sha256:a06436120eef5b64a2511f37a11edfba3e15ca18598bd12a013842b6f7f5179e",
+  "candidate_sha256": "sha256:23b92aa4a4108309982300334dc03960402e577de610f8b0006e6952d04002c8",
   "divergence": {
    "38049865817": null,
    "38049867401": null,
@@ -845,7 +865,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_info",
-  "record": "store/runs/family-system_info-1791697676245835000",
+  "record": "store/runs/family-system_info-1791701979987835000",
   "verdicts": {
    "38049865817": "conforms",
    "38049867401": "conforms",
@@ -862,7 +882,7 @@
   }
  },
  "system_modules": {
-  "candidate_sha256": "sha256:855731faf4059566534b4465df108549c55fb49ce9352321f94cd07e671dd695",
+  "candidate_sha256": "sha256:b9b8da670d78b182bb32896a151ba37681c45575498e14286c7f1f1717dd56f3",
   "divergence": {
    "38094160385": null,
    "38094162181": null
@@ -875,7 +895,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_modules",
-  "record": "store/runs/family-system_modules-1791701109863071000",
+  "record": "store/runs/family-system_modules-1791701987940687000",
   "verdicts": {
    "38094160385": "conforms",
    "38094162181": "conforms"
@@ -902,7 +922,7 @@
   }
  },
  "thread_handles": {
-  "candidate_sha256": "sha256:334632194fe80a2362235aff0858bca4d76d7a8047c2e9f096796fb2009e4747",
+  "candidate_sha256": "sha256:d317456685523d7bacadfd11c5dd51c62d5e144bdfed1664af59b4c3cb99a940",
   "divergence": {
    "38114820680": null,
    "38114822014": null
@@ -915,7 +935,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_handles",
-  "record": "store/runs/family-thread_handles-1791697688718064000",
+  "record": "store/runs/family-thread_handles-1791701989279797000",
   "verdicts": {
    "38114820680": "conforms",
    "38114822014": "conforms"
@@ -1082,7 +1102,7 @@
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:d8fb5d11f55bc8bac4d38da6c5863531a5fe67a603a65ace61a9cfe5ae5fa355",
+  "candidate_sha256": "sha256:9b2be167413ed736c415c1e9878030915dcea5ae5dfe12a005ef5cb4f283d4cb",
   "divergence": {
    "38050561886": null,
    "38050563770": null,
@@ -1105,7 +1125,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791701105644089000",
+  "record": "store/runs/family-virtual_memory-1791701981521401000",
   "verdicts": {
    "38050561886": "conforms",
    "38050563770": "conforms",

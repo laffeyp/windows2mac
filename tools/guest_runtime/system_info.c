@@ -94,6 +94,17 @@ u64 k32_GetTickCount(void) {
     return w2m_logged(W2M_API_GetTickCount, 0, (u32)(w2m_counter_now() / 10000));   /* ms of the 10 MHz counter */
 }
 
+/* GetWindowsDirectoryW (contracts/windows.file.files_more, Sprint 049): C:\Windows, 10; a buffer under 11 units gets
+ * nothing and the answer 11; the last error is left. */
+u64 k32_GetWindowsDirectoryW(u64 buffer, u64 size) {
+    static const u16 dir[] = {'C', ':', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', 0};
+    u32 n = 10;
+    if ((u32)size < n + 1) return w2m_logged(W2M_API_GetWindowsDirectoryW, (u32)size, n + 1);
+    u16 *out = (u16 *)buffer;
+    for (u32 i = 0; i <= n; i++) out[i] = dir[i];
+    return w2m_logged(W2M_API_GetWindowsDirectoryW, (u32)size, n);
+}
+
 u64 k32_GetSystemDirectoryW(u64 buffer, u64 size) {
     static const u16 dir[] = {'C', ':', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', '\\', 's', 'y', 's', 't', 'e', 'm', '3', '2', 0};
     u32 n = 19;

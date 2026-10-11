@@ -52,62 +52,6 @@
    ]
   },
   {
-   "name": "files_more",
-   "first_seq": 10,
-   "functions": [
-    {
-     "name": "SetHandleInformation",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll"
-     ],
-     "calls": 1,
-     "first_seq": 10,
-     "dynamic": false
-    },
-    {
-     "name": "GetFileInformationByHandleEx",
-     "dll": "KERNELBASE.dll",
-     "callers": [
-      "GetProcAddress"
-     ],
-     "calls": 12,
-     "first_seq": 917,
-     "dynamic": true
-    },
-    {
-     "name": "GetWindowsDirectoryW",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll"
-     ],
-     "calls": 1,
-     "first_seq": 2777,
-     "dynamic": false
-    },
-    {
-     "name": "GetFileSize",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 2,
-     "first_seq": 2905,
-     "dynamic": false
-    },
-    {
-     "name": "GetTempFileNameW",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll"
-     ],
-     "calls": 2,
-     "first_seq": 3420,
-     "dynamic": false
-    }
-   ]
-  },
-  {
    "name": "winrt",
    "first_seq": 75,
    "functions": [
@@ -200,180 +144,6 @@
      "calls": 0,
      "first_seq": null,
      "dynamic": true
-    }
-   ]
-  },
-  {
-   "name": "exceptions",
-   "first_seq": 789,
-   "functions": [
-    {
-     "name": "AddVectoredExceptionHandler",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 1,
-     "first_seq": 789,
-     "dynamic": false
-    },
-    {
-     "name": "RaiseException",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 1,
-     "first_seq": null,
-     "dynamic": false
-    },
-    {
-     "name": "RtlUnwindEx",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 1,
-     "first_seq": null,
-     "dynamic": false
-    }
-   ]
-  },
-  {
-   "name": "threads",
-   "first_seq": 809,
-   "functions": [
-    {
-     "name": "DuplicateHandle",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 6,
-     "first_seq": 809,
-     "dynamic": false
-    },
-    {
-     "name": "CreateSemaphoreW",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 7,
-     "first_seq": 852,
-     "dynamic": false
-    },
-    {
-     "name": "OpenThread",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 3,
-     "first_seq": 1141,
-     "dynamic": false
-    },
-    {
-     "name": "CreateThread",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll",
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 28,
-     "first_seq": 1250,
-     "dynamic": false
-    },
-    {
-     "name": "SetThreadPriority",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll",
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 37,
-     "first_seq": 1278,
-     "dynamic": false
-    },
-    {
-     "name": "SetThreadDescription",
-     "dll": "KERNEL32.DLL",
-     "callers": [
-      "GetProcAddress"
-     ],
-     "calls": 24,
-     "first_seq": 1391,
-     "dynamic": true
-    },
-    {
-     "name": "AppPolicyGetThreadInitializationType",
-     "dll": "kernel.appcore.dll",
-     "callers": [
-      "GetProcAddress"
-     ],
-     "calls": 1,
-     "first_seq": 1766,
-     "dynamic": true
-    },
-    {
-     "name": "GetExitCodeThread",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 111,
-     "first_seq": 2166,
-     "dynamic": false
-    },
-    {
-     "name": "SuspendThread",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 111,
-     "first_seq": 2167,
-     "dynamic": false
-    },
-    {
-     "name": "GetThreadContext",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 111,
-     "first_seq": 2168,
-     "dynamic": false
-    },
-    {
-     "name": "ResumeThread",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "mono-2.0-bdwgc.dll"
-     ],
-     "calls": 111,
-     "first_seq": 2187,
-     "dynamic": false
-    },
-    {
-     "name": "SleepEx",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll"
-     ],
-     "calls": 41341,
-     "first_seq": 2583,
-     "dynamic": false
-    },
-    {
-     "name": "SwitchToThread",
-     "dll": "KERNEL32.dll",
-     "callers": [
-      "UnityPlayer.dll"
-     ],
-     "calls": 475374,
-     "first_seq": 2984,
-     "dynamic": false
     }
    ]
   },
@@ -525,6 +295,114 @@
      ],
      "calls": 238,
      "first_seq": 949,
+     "dynamic": false
+    }
+   ]
+  },
+  {
+   "name": "threads",
+   "first_seq": 1250,
+   "functions": [
+    {
+     "name": "CreateThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll",
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 28,
+     "first_seq": 1250,
+     "dynamic": false
+    },
+    {
+     "name": "SetThreadPriority",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll",
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 37,
+     "first_seq": 1278,
+     "dynamic": false
+    },
+    {
+     "name": "SetThreadDescription",
+     "dll": "KERNEL32.DLL",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 24,
+     "first_seq": 1391,
+     "dynamic": true
+    },
+    {
+     "name": "AppPolicyGetThreadInitializationType",
+     "dll": "kernel.appcore.dll",
+     "callers": [
+      "GetProcAddress"
+     ],
+     "calls": 1,
+     "first_seq": 1766,
+     "dynamic": true
+    },
+    {
+     "name": "GetExitCodeThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2166,
+     "dynamic": false
+    },
+    {
+     "name": "SuspendThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2167,
+     "dynamic": false
+    },
+    {
+     "name": "GetThreadContext",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2168,
+     "dynamic": false
+    },
+    {
+     "name": "ResumeThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 111,
+     "first_seq": 2187,
+     "dynamic": false
+    },
+    {
+     "name": "SleepEx",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 41341,
+     "first_seq": 2583,
+     "dynamic": false
+    },
+    {
+     "name": "SwitchToThread",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "UnityPlayer.dll"
+     ],
+     "calls": 475374,
+     "first_seq": 2984,
      "dynamic": false
     }
    ]
@@ -1714,6 +1592,32 @@
      "dynamic": false
     }
    ]
+  },
+  {
+   "name": "exceptions",
+   "first_seq": null,
+   "functions": [
+    {
+     "name": "RaiseException",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": null,
+     "dynamic": false
+    },
+    {
+     "name": "RtlUnwindEx",
+     "dll": "KERNEL32.dll",
+     "callers": [
+      "mono-2.0-bdwgc.dll"
+     ],
+     "calls": 1,
+     "first_seq": null,
+     "dynamic": false
+    }
+   ]
   }
  ],
  "game_exports": [
@@ -2009,5 +1913,5 @@
   "unity_mono_method_is_inflated",
   "unity_mono_reflection_method_get_method"
  ],
- "unserved": 164
+ "unserved": 155
 }

@@ -1561,6 +1561,60 @@ FAMILIES: dict[str, Family] = {
             "base_is_page": Plant("            return Info(page, base, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)",
                                   "            return Info(page, page, PAGE_READWRITE, committed - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)",
                                   ("query.small",), host="w2m.virtual_memory")}),
+    "files_more": Family(
+        name="files_more",
+        contract_id="windows.file.files_more",
+        version="0.1.0",
+        summary=("The game's remaining file calls (specs/work_list.json). GetFileInformationByHandleEx: FileBasicInfo "
+                 "(0x28 bytes, the pad zeroed) holds GetFileAttributesExW's times, a change time not before the write "
+                 "time, and FILE_ATTRIBUTE_ARCHIVE; FileStandardInfo (0x18) one link, not deleting, not a directory, "
+                 "the size, and an allocation of 8-byte units up to 720 bytes and 4096-byte clusters from 740 on, kept "
+                 "in clusters after the file shrinks; a smaller buffer is ERROR_BAD_LENGTH with nothing written. "
+                 "GetFileSize: the low 32 bits, the high ones through the pointer. SetHandleInformation: the mask's "
+                 "INHERIT and PROTECT_FROM_CLOSE bits, other bits ignored. GetWindowsDirectoryW: C:\\Windows, 10; 11 "
+                 "for a short buffer, left unwritten. GetTempFileNameW: <dir as given>\\<prefix's first 3><hex, upper "
+                 "case, no leading zeros>.tmp, ERROR_DIRECTORY for a missing directory; uUnique 0 creates the empty "
+                 "file and sets the last error to 0. A handle opened with no access answers every query; a closed one "
+                 "is ERROR_INVALID_HANDLE; every other success leaves the last error."),
+        probe="files_more", guest_file="file.c",
+        derive=lambda printed: [{**r, "s": f"standard.sweep.{r['size']}"} if r.get("s") == "standard.sweep" else r
+                                for r in printed],                       # one row per swept size
+        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/system_info.c", "tools/guest_runtime/paths.c"),
+        runs={
+              "38119625685": Run("windows-2025", "4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8", "files_more-1791701711-0", "AMD EPYC 7763 64-Core Processor"),
+              "38119627458": Run("windows-2022", "17d996052924c712ba56fb559c8b0f851988187a4ee4da56c368ac66ee9b02f0", "files_more-1791701711-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-gettempfilenamew", "api/fileapi/nf-fileapi-gettempfilenamew", "2025-09-24",
+                       "If uUnique is zero, the function attempts to form a unique file name using the current system "
+                       "time. If the file already exists, the number is increased by one ... Only the lower 16 bits of "
+                       "the uUnique parameter are used."),
+            documented("ms-getfileinformationbyhandleex", "api/winbase/nf-winbase-getfileinformationbyhandleex",
+                       "2018-12-05", "FileBasicInfo (0) FILE_BASIC_INFO; FileStandardInfo (1) FILE_STANDARD_INFO ... "
+                       "If the function fails, the return value is zero.")),
+        open_questions=(
+            "The GetTempFileNameW page gives the form <path>\\<pre><uuuu>.TMP; both builds write \".tmp\" in lower case "
+            "and the number without leading zeros (rows temp_name.long_prefix: abc1.tmp). w2m follows the rows.",
+            "Where NTFS stops keeping data in the file record lies between 721 and 739 bytes and depends on what else "
+            "the record holds (the name's length among it); w2m keeps 720 and below there, the largest size a row "
+            "holds resident.",
+            "uUnique 0 takes its number from GetTickCount's milliseconds in w2m; the page says \"the current system "
+            "time\" and the rows print the number only as matching the name. A uUnique whose low 16 bits are 0, a "
+            "directory past MAX_PATH-14 (the page's ERROR_BUFFER_OVERFLOW), other information classes, and handles "
+            "of other kinds (pipes, events, the console) are not in the rows and stop the run.",
+            "CloseHandle on a handle with PROTECT_FROM_CLOSE is not probed (Windows raises under a debugger); w2m "
+            "stops."),
+        plants={
+            "unknown_bits_kept": Plant("    u32 m = (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE);",
+                                       "    u32 m = (u32)mask;", ("set.unknown_bit",)),
+            "short_buffers_taken": Plant("    if (size < (info_class == FILE_BASIC_INFO_CLASS ? 0x28u : 0x18u)) {",
+                                         "    if (size < (info_class == FILE_BASIC_INFO_CLASS ? 0x24u : 0x16u)) {",
+                                         ("basic.short", "basic.exact_less_pad", "standard.short",
+                                          "standard.exact_less_pad")),
+            "record_holds_740": Plant("#define RESIDENT_MAX 720u", "#define RESIDENT_MAX 740u", ("standard.sweep.740",)),
+            "temp_error_left": Plant("        set_error(0);\n        return w2m_logged(W2M_API_GetTempFileNameW",
+                                     "        return w2m_logged(W2M_API_GetTempFileNameW",
+                                     ("temp_name.zero", "temp_name.cwd_full", "temp_name.second"))}),
 }
 
 
@@ -1721,11 +1775,15 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
     def judge(run: str) -> Callable[[Any], AsyncIterator[msgspec.Struct]]:
         async def go(_inp: dict[str, Any]) -> AsyncIterator[msgspec.Struct]:
             r = f.runs[run]
-            out, stop, _ = run_in_vm(r.binary, sources, f)
+            from w2m.guest_runtime import BuildError
+            try:
+                out, stop, _ = run_in_vm(r.binary, sources, f)
+            except BuildError as e:                       # a candidate that does not build is rejected, on the record
+                out, stop = b"", f"the guest runtime did not build: {str(e)[:400]}"
             cmp = compare_exact_rows(c, derived_output(f, out), f"cmp-{cand}-{run}", f"{r.execution}-1",
                                      f"managed_vm-{cand}-{run}")
             expected = f.expected_stop is not None and stop.startswith(f.expected_stop)
-            if stop != "ExitProcess" and not expected and cmp.verdict == "conforms":
+            if stop != "ExitProcess" and not expected and (cmp.verdict == "conforms" or not out):
                 cmp = msgspec.structs.replace(cmp, verdict="discrepancy", first_divergence=f"run stopped: {stop}")
             state["verdicts"][run] = cmp.verdict
             state["divergence"][run] = cmp.first_divergence or (stop if stop != "ExitProcess" else None)

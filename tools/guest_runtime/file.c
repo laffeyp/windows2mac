@@ -21,6 +21,11 @@
  *   - a disposition outside 1-5, or TRUNCATE_EXISTING without GENERIC_WRITE: ERROR_INVALID_PARAMETER
  *   - a failed SetFilePointerEx leaves the position and *lpNewFilePointer unchanged
  * Argument forms no row covers stop the run (w2m_unimplemented) instead of being guessed.
+ *
+ * Sprint 049 (contracts/windows.file.files_more, the game's forms in specs/work_list.json): GetFileInformationByHandleEx
+ * for FileBasicInfo and FileStandardInfo, GetFileSize, SetHandleInformation and GetTempFileNameW. Their rows: a
+ * success leaves the last error, but GetTempFileNameW's with uUnique 0 sets 0; a handle opened with no access
+ * answers all three handle queries; a closed handle is ERROR_INVALID_HANDLE.
  */
 #include "runtime.h"
 
@@ -39,11 +44,15 @@
 #define FILE_BEGIN 0u
 #define FILE_CURRENT 1u
 #define FILE_END 2u
+#define HANDLE_FLAG_INHERIT 1u
+#define HANDLE_FLAG_PROTECT_FROM_CLOSE 2u
 
 #define ERROR_FILE_NOT_FOUND 2u
 #define ERROR_PATH_NOT_FOUND 3u
 #define ERROR_ACCESS_DENIED 5u
 #define ERROR_INVALID_HANDLE 6u
+#define ERROR_BAD_LENGTH 24u
+#define ERROR_DIRECTORY 267u
 #define ERROR_SHARING_VIOLATION 32u
 #define ERROR_FILE_EXISTS 80u
 #define ERROR_INVALID_PARAMETER 87u
@@ -65,7 +74,8 @@ struct open_file {
     u32 used;
     u32 access;
     u32 share;
-    u32 inherit;                   /* SECURITY_ATTRIBUTES.bInheritHandle != 0 (Sprint 048; HANDLE_FLAG_INHERIT) */
+    u32 flags;                     /* HANDLE_FLAG_INHERIT from SECURITY_ATTRIBUTES.bInheritHandle (Sprint 048);
+                                      SetHandleInformation's INHERIT and PROTECT_FROM_CLOSE (Sprint 049) */
     u32 append_only;               /* FILE_APPEND_DATA without FILE_WRITE_DATA: every write goes to the end (Sprint 048) */
     u32 pad;
     u64 fd;                        /* the host bridge's descriptor */
@@ -202,7 +212,7 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
     f->used = 1;
     f->access = access;
     f->share = (u32)share;
-    f->inherit = inherit;
+    f->flags = inherit;
     f->append_only = (desired & FILE_APPEND_DATA) && !(desired & (GENERIC_WRITE | FILE_WRITE_DATA | GENERIC_ALL | MAXIMUM_ALLOWED));
     f->fd = fd;
     f->id = id;
@@ -217,6 +227,7 @@ int w2m_file_is_open(u64 handle) { return file_of(handle) != 0; }
 /* "Closes an open object handle." Nonzero on success. */
 u64 k32_CloseHandle(u64 handle) {
     struct open_file *f = file_of(handle);
+    if (f && (f->flags & HANDLE_FLAG_PROTECT_FROM_CLOSE)) w2m_unimplemented(W2M_API_CloseHandle, handle);  /* not in the rows */
     if (!f) {
         if (w2m_object_close(handle)) return w2m_logged(W2M_API_CloseHandle, handle, 1);   /* sync_objects.c */
         set_error(ERROR_INVALID_HANDLE);
@@ -249,6 +260,8 @@ u64 k32_DeleteFileW(u64 name) {
     return w2m_logged(W2M_API_DeleteFileW, name, 1);
 }
 
+static void note_size(u64 id, u64 size);           /* FileStandardInfo's allocation rule, below */
+
 /* WriteFile on a file handle, after runtime.c zeroed *written. */
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written) {
     struct open_file *f = file_of(handle);
@@ -265,6 +278,7 @@ u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written) {
     if (f->append_only) f->pos = (long long)w2m_host(W2M_FILE_SIZE, f->fd, 0, 0, 0, 0);
     u64 done = w2m_host(W2M_FILE_WRITE, f->fd, buffer, count, (u64)f->pos, 0);
     f->pos += (long long)done;
+    note_size(f->id, (u64)f->pos);                     /* past the file record: clusters from now on */
     *(u32 *)written = (u32)done;
     return 1;
 }
@@ -290,13 +304,100 @@ u64 k32_ReadFile(u64 handle, u64 buffer, u64 count, u64 read, u64 rsp) {
     return w2m_logged(W2M_API_ReadFile, handle, 1);
 }
 
-/* GetHandleInformation on a file handle (Sprint 048, contracts/windows.file.security): HANDLE_FLAG_INHERIT (1) as
- * CreateFileW's SECURITY_ATTRIBUTES set it; other handles are not in the rows. */
-u64 k32_GetHandleInformation(u64 handle, u64 flags) {
+int w2m_object_is_open(u64 h);         /* sync_objects.c */
+int w2m_is_std_handle(u64 h);          /* console.c */
+
+/* A handle that is neither an open file nor any other live handle: what a closed file handle is. Live handles of
+ * other kinds are not in the rows and stop the run. */
+static struct open_file *file_or_stop(u64 api, u64 handle) {
     struct open_file *f = file_of(handle);
-    if (!f) w2m_unimplemented(W2M_API_GetHandleInformation, handle);
-    *(u32 *)flags = f->inherit;
+    if (!f && (w2m_object_is_open(handle) || w2m_is_std_handle(handle))) w2m_unimplemented(api, handle);
+    if (!f) set_error(ERROR_INVALID_HANDLE);
+    return f;
+}
+
+/* GetHandleInformation on a file handle (Sprint 048, contracts/windows.file.security): HANDLE_FLAG_INHERIT (1) as
+ * CreateFileW's SECURITY_ATTRIBUTES set it, and both flags as SetHandleInformation set them (Sprint 049). */
+u64 k32_GetHandleInformation(u64 handle, u64 flags) {
+    struct open_file *f = file_or_stop(W2M_API_GetHandleInformation, handle);
+    if (!f) return w2m_logged(W2M_API_GetHandleInformation, handle, 0);
+    *(u32 *)flags = f->flags;
     return w2m_logged(W2M_API_GetHandleInformation, handle, 1);
+}
+
+/* SetHandleInformation(hObject, dwMask, dwFlags): the mask's bits of INHERIT and PROTECT_FROM_CLOSE take dwFlags'
+ * values; other bits are ignored, and the answer is still TRUE (row set.unknown_bit). */
+u64 k32_SetHandleInformation(u64 handle, u64 mask, u64 flags) {
+    struct open_file *f = file_or_stop(W2M_API_SetHandleInformation, handle);
+    if (!f) return w2m_logged(W2M_API_SetHandleInformation, handle, 0);
+    u32 m = (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE);
+    f->flags = (f->flags & ~m) | ((u32)flags & m);
+    return w2m_logged(W2M_API_SetHandleInformation, handle, 1);
+}
+
+/* GetFileSize(hFile, lpFileSizeHigh): the low 32 bits; the high ones at lpFileSizeHigh when it is not NULL. A closed
+ * handle answers INVALID_FILE_SIZE and leaves *lpFileSizeHigh. */
+u64 k32_GetFileSize(u64 handle, u64 high) {
+    struct open_file *f = file_or_stop(W2M_API_GetFileSize, handle);
+    if (!f) return w2m_logged(W2M_API_GetFileSize, handle, 0xFFFFFFFFu);
+    u64 size = w2m_host(W2M_FILE_SIZE, f->fd, 0, 0, 0, 0);
+    if (high) *(u32 *)high = (u32)(size >> 32);
+    return w2m_logged(W2M_API_GetFileSize, handle, (u32)size);
+}
+
+/* NTFS's AllocationSize (rows standard.sweep, Server 2025 and 2022): data up to 720 bytes lives in the file record,
+ * in 8-byte units; from 740 bytes on it lives in 4096-byte clusters, and a file that has been there stays there when
+ * it shrinks. CLUSTERED holds the ids of files w2m has seen past RESIDENT_MAX. */
+#define RESIDENT_MAX 720u
+#define CLUSTERED 256
+static u64 clustered[CLUSTERED];
+
+static int is_clustered(u64 id) {
+    for (int i = 0; i < CLUSTERED; i++)
+        if (clustered[i] == id) return 1;
+    return 0;
+}
+static void note_size(u64 id, u64 size) {
+    if (size <= RESIDENT_MAX || is_clustered(id)) return;
+    for (int i = 0; i < CLUSTERED; i++)
+        if (!clustered[i]) { clustered[i] = id; return; }
+    w2m_unimplemented(W2M_API_GetFileInformationByHandleEx, CLUSTERED);
+}
+static u64 allocation_of(u64 id, u64 size) {
+    note_size(id, size);
+    return is_clustered(id) ? (size + 4095) & ~4095ull : (size + 7) & ~7ull;
+}
+
+#define FILE_BASIC_INFO_CLASS 0u
+#define FILE_STANDARD_INFO_CLASS 1u
+#define FILE_ATTRIBUTE_ARCHIVE 0x20u
+
+/* GetFileInformationByHandleEx(hFile, FileInformationClass, lpFileInformation, dwBufferSize) for the two classes the
+ * game asks (mono: FileBasicInfo then FileStandardInfo). A buffer under the structure's size, padding included, is
+ * ERROR_BAD_LENGTH and nothing is written; a larger one gets the structure and nothing past it. */
+u64 k32_GetFileInformationByHandleEx(u64 handle, u64 info_class, u64 out, u64 size) {
+    struct open_file *f = file_or_stop(W2M_API_GetFileInformationByHandleEx, handle);
+    if (!f) return w2m_logged(W2M_API_GetFileInformationByHandleEx, handle, 0);
+    info_class = (u32)info_class;
+    size = (u32)size;
+    if (info_class != FILE_BASIC_INFO_CLASS && info_class != FILE_STANDARD_INFO_CLASS)
+        w2m_unimplemented(W2M_API_GetFileInformationByHandleEx, info_class);
+    if (size < (info_class == FILE_BASIC_INFO_CLASS ? 0x28u : 0x18u)) {
+        set_error(ERROR_BAD_LENGTH);
+        return w2m_logged(W2M_API_GetFileInformationByHandleEx, info_class, 0);
+    }
+    u64 st[5];                                        /* size, then birth, access, write and change as FILETIME */
+    w2m_host(W2M_FILE_FSTAT, f->fd, (u64)st, 0, 0, 0);
+    u64 *q = (u64 *)out;
+    if (info_class == FILE_BASIC_INFO_CLASS) {        /* FILE_BASIC_INFO: four times, FileAttributes, 4 bytes of pad */
+        q[0] = st[1]; q[1] = st[2]; q[2] = st[3]; q[3] = st[4];
+        q[4] = FILE_ATTRIBUTE_ARCHIVE;
+    } else {                                          /* FILE_STANDARD_INFO: one link, not deleting, not a directory */
+        q[0] = allocation_of(f->id, st[0]);
+        q[1] = st[0];
+        q[2] = 1;
+    }
+    return w2m_logged(W2M_API_GetFileInformationByHandleEx, info_class, 1);
 }
 
 /* SetFilePointerEx(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod): nonzero on success; a
@@ -320,4 +421,49 @@ u64 k32_SetFilePointerEx(u64 handle, u64 distance, u64 new_pointer, u64 method) 
     f->pos = to;
     if (new_pointer) *(long long *)new_pointer = to;
     return w2m_logged(W2M_API_SetFilePointerEx, handle, 1);
+}
+
+/* GetTempFileNameW(lpPathName, lpPrefixString, uUnique, lpTempFileName) (rows temp_name.*): the name is the directory
+ * as given (not made full), one backslash, the prefix's first three characters, the number in upper-case hex without
+ * leading zeros, and ".tmp". The directory must exist (ERROR_DIRECTORY otherwise, whatever uUnique is). A nonzero
+ * uUnique gives its low 16 bits and creates nothing; 0 takes a number from the clock, steps past names that exist,
+ * creates the empty file, and sets the last error to 0. */
+#define TEMP_TRIES 65535u
+u64 k32_GetTempFileNameW(u64 dir, u64 prefix, u64 unique, u64 out) {
+    const unsigned short *d = (const unsigned short *)dir, *pre = (const unsigned short *)prefix;
+    u64 chars = *d ? normalize(dir) : 0;
+    if (!*d) w2m_unimplemented(W2M_API_GetTempFileNameW, 0);          /* the empty directory: not in the rows */
+    u64 id = 0;
+    if (lookup(chars, &id) != LOOKUP_DIRECTORY) {
+        set_error(ERROR_DIRECTORY);
+        return w2m_logged(W2M_API_GetTempFileNameW, unique, 0);
+    }
+    unsigned short *name = (unsigned short *)out;
+    u32 n = 0;
+    while (d[n]) { name[n] = d[n]; n++; }
+    if (name[n - 1] != '\\') name[n++] = '\\';
+    for (u32 k = 0; k < 3 && pre[k]; k++) name[n++] = pre[k];
+    if (n + 8 > MAX_PATH_CHARS) w2m_unimplemented(W2M_API_GetTempFileNameW, n);   /* a name past MAX_PATH: not in the rows */
+    u32 number = (u32)unique & 0xFFFF;
+    if ((u32)unique && !number) w2m_unimplemented(W2M_API_GetTempFileNameW, unique);   /* 0x10000 and the like */
+    for (u32 tries = 0;; tries++) {
+        if (!(u32)unique) {
+            if (tries == TEMP_TRIES) w2m_unimplemented(W2M_API_GetTempFileNameW, tries);
+            if (!tries) number = (u32)(w2m_counter_now() / 10000) & 0xFFFF;     /* GetTickCount's milliseconds */
+            else number = (number + 1) & 0xFFFF;
+            if (!number) number = 1;
+        }
+        u32 m = n, digits = 1;
+        while (digits < 4 && number >> (4 * digits)) digits++;
+        for (u32 k = 0; k < digits; k++) name[m++] = "0123456789ABCDEF"[(number >> (4 * (digits - 1 - k))) & 15];
+        name[m++] = '.'; name[m++] = 't'; name[m++] = 'm'; name[m++] = 'p'; name[m] = 0;
+        if ((u32)unique) return w2m_logged(W2M_API_GetTempFileNameW, unique, number);
+        u64 full = normalize(out);
+        if (lookup(full, &id) != LOOKUP_ABSENT) continue;
+        u64 fd = w2m_host(W2M_FILE_OPEN, (u64)path, full, 1, 0, &id);
+        if ((long long)fd < 0) w2m_unimplemented(W2M_API_GetTempFileNameW, fd);
+        w2m_host(W2M_FILE_CLOSE, fd, 0, 0, 0, 0);
+        set_error(0);
+        return w2m_logged(W2M_API_GetTempFileNameW, unique, number);
+    }
 }

@@ -1,0 +1,567 @@
+{
+ "contract_id": "windows.file.files_more",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The game's remaining file calls (specs/work_list.json). GetFileInformationByHandleEx: FileBasicInfo (0x28 bytes, the pad zeroed) holds GetFileAttributesExW's times, a change time not before the write time, and FILE_ATTRIBUTE_ARCHIVE; FileStandardInfo (0x18) one link, not deleting, not a directory, the size, and an allocation of 8-byte units up to 720 bytes and 4096-byte clusters from 740 on, kept in clusters after the file shrinks; a smaller buffer is ERROR_BAD_LENGTH with nothing written. GetFileSize: the low 32 bits, the high ones through the pointer. SetHandleInformation: the mask's INHERIT and PROTECT_FROM_CLOSE bits, other bits ignored. GetWindowsDirectoryW: C:\\Windows, 10; 11 for a short buffer, left unwritten. GetTempFileNameW: <dir as given>\\<prefix's first 3><hex, upper case, no leading zeros>.tmp, ERROR_DIRECTORY for a missing directory; uUnique 0 creates the empty file and sets the last error to 0. A handle opened with no access answers every query; a closed one is ERROR_INVALID_HANDLE; every other success leaves the last error.",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/files_more/files_more.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "basic.read",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "creation_as_attributes_ex": 1,
+    "access_as_attributes_ex": 1,
+    "write_as_attributes_ex": 1,
+    "change_ge_write": 1,
+    "write_ge_creation": 1,
+    "times_nonzero": 1,
+    "tail": "2000000000000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "basic.short",
+    "ret": 0,
+    "err": 24,
+    "tail": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "basic.exact_less_pad",
+    "ret": 0,
+    "err": 24,
+    "tail": "a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "basic.long",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "creation_as_attributes_ex": 1,
+    "access_as_attributes_ex": 1,
+    "write_as_attributes_ex": 1,
+    "change_ge_write": 1,
+    "write_ge_creation": 1,
+    "times_nonzero": 1,
+    "tail": "2000000000000000a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.read",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 8,
+    "end_of_file": 5,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.short",
+    "ret": 0,
+    "err": 24,
+    "tail": "a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.exact_less_pad",
+    "ret": 0,
+    "err": 24,
+    "tail": "a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.long",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 8,
+    "end_of_file": 5,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "size.five",
+    "ret": 5,
+    "err": 57005,
+    "high": 0
+   },
+   {
+    "s": "size.null_high",
+    "ret": 5,
+    "err": 57005
+   },
+   {
+    "s": "set.inherit",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 1
+   },
+   {
+    "s": "set.clear",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 0
+   },
+   {
+    "s": "set.flags_outside_mask",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 0
+   },
+   {
+    "s": "set.protect",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 2
+   },
+   {
+    "s": "set.unprotect",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 0
+   },
+   {
+    "s": "set.both",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 3
+   },
+   {
+    "s": "set.none",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 0
+   },
+   {
+    "s": "set.unknown_bit",
+    "ret": 1,
+    "err": 57005,
+    "get_ret": 1,
+    "flags": 0
+   },
+   {
+    "s": "basic.closed",
+    "ret": 0,
+    "err": 6,
+    "tail": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.closed",
+    "ret": 0,
+    "err": 6,
+    "tail": "a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "size.closed",
+    "ret": 4294967295,
+    "err": 6,
+    "high": 2779096485
+   },
+   {
+    "s": "set.closed",
+    "ret": 0,
+    "err": 6,
+    "get_ret": 0,
+    "flags": 2779096485
+   },
+   {
+    "s": "basic.empty",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "creation_as_attributes_ex": 1,
+    "access_as_attributes_ex": 1,
+    "write_as_attributes_ex": 1,
+    "change_ge_write": 1,
+    "write_ge_creation": 1,
+    "times_nonzero": 1,
+    "tail": "2000000000000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.empty",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 0,
+    "end_of_file": 0,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "size.empty",
+    "ret": 0,
+    "err": 57005,
+    "high": 0
+   },
+   {
+    "s": "basic.no_access",
+    "ret": 1,
+    "err": 57005,
+    "attributes": 32,
+    "creation_as_attributes_ex": 1,
+    "access_as_attributes_ex": 1,
+    "write_as_attributes_ex": 1,
+    "change_ge_write": 1,
+    "write_ge_creation": 1,
+    "times_nonzero": 1,
+    "tail": "2000000000000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.no_access",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 8,
+    "end_of_file": 5,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "size.no_access",
+    "ret": 5,
+    "err": 57005,
+    "high": 0
+   },
+   {
+    "s": "standard.after_write",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 8192,
+    "end_of_file": 5000,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "size.after_write",
+    "ret": 5000,
+    "err": 57005,
+    "high": 0
+   },
+   {
+    "s": "standard.sweep.1",
+    "size": 1,
+    "ret": 1,
+    "allocation": 8
+   },
+   {
+    "s": "standard.sweep.8",
+    "size": 8,
+    "ret": 1,
+    "allocation": 8
+   },
+   {
+    "s": "standard.sweep.9",
+    "size": 9,
+    "ret": 1,
+    "allocation": 16
+   },
+   {
+    "s": "standard.sweep.256",
+    "size": 256,
+    "ret": 1,
+    "allocation": 256
+   },
+   {
+    "s": "standard.sweep.512",
+    "size": 512,
+    "ret": 1,
+    "allocation": 512
+   },
+   {
+    "s": "standard.sweep.600",
+    "size": 600,
+    "ret": 1,
+    "allocation": 600
+   },
+   {
+    "s": "standard.sweep.650",
+    "size": 650,
+    "ret": 1,
+    "allocation": 656
+   },
+   {
+    "s": "standard.sweep.700",
+    "size": 700,
+    "ret": 1,
+    "allocation": 704
+   },
+   {
+    "s": "standard.sweep.720",
+    "size": 720,
+    "ret": 1,
+    "allocation": 720
+   },
+   {
+    "s": "standard.sweep.740",
+    "size": 740,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.760",
+    "size": 760,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.800",
+    "size": 800,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.900",
+    "size": 900,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.1000",
+    "size": 1000,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.1024",
+    "size": 1024,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.2048",
+    "size": 2048,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.4095",
+    "size": 4095,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.4096",
+    "size": 4096,
+    "ret": 1,
+    "allocation": 4096
+   },
+   {
+    "s": "standard.sweep.4097",
+    "size": 4097,
+    "ret": 1,
+    "allocation": 8192
+   },
+   {
+    "s": "standard.sweep.8192",
+    "size": 8192,
+    "ret": 1,
+    "allocation": 8192
+   },
+   {
+    "s": "standard.recreated",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 4096,
+    "end_of_file": 5,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.truncated",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 4096,
+    "end_of_file": 5,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "standard.appended",
+    "ret": 1,
+    "err": 57005,
+    "allocation": 4096,
+    "end_of_file": 10,
+    "links": 1,
+    "delete_pending": 0,
+    "directory": 0,
+    "tail": "00000000a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "windows.full",
+    "ret": 10,
+    "err": 57005,
+    "path": "C:\\Windows"
+   },
+   {
+    "s": "windows.exact",
+    "ret": 10,
+    "err": 57005,
+    "path": "C:\\Windows"
+   },
+   {
+    "s": "windows.short",
+    "ret": 11,
+    "err": 57005,
+    "first_unit": 42405
+   },
+   {
+    "s": "windows.zero_null",
+    "ret": 11,
+    "err": 57005
+   },
+   {
+    "s": "temp_name.zero",
+    "ret_nonzero": 1,
+    "err": 0,
+    "name": ".\\w2m<u>.tmp",
+    "exists": 1,
+    "size": 0,
+    "attributes": 32
+   },
+   {
+    "s": "temp_name.cwd_full",
+    "ret_nonzero": 1,
+    "err": 0,
+    "name": "<cwd>\\w2m<u>.tmp",
+    "exists": 1,
+    "size": 0,
+    "attributes": 32
+   },
+   {
+    "s": "temp_name.unique",
+    "ret_nonzero": 1,
+    "err": 57005,
+    "ret": 4779,
+    "name": ".\\w2m12AB.tmp",
+    "exists": 0
+   },
+   {
+    "s": "temp_name.unique_high",
+    "ret_nonzero": 1,
+    "err": 57005,
+    "ret": 9029,
+    "name": ".\\w2m2345.tmp",
+    "exists": 0
+   },
+   {
+    "s": "temp_name.long_prefix",
+    "ret_nonzero": 1,
+    "err": 57005,
+    "ret": 1,
+    "name": ".\\abc1.tmp",
+    "exists": 0
+   },
+   {
+    "s": "temp_name.empty_prefix",
+    "ret_nonzero": 1,
+    "err": 57005,
+    "ret": 2,
+    "name": ".\\2.tmp",
+    "exists": 0
+   },
+   {
+    "s": "temp_name.trailing_backslash",
+    "ret_nonzero": 1,
+    "err": 57005,
+    "ret": 3,
+    "name": ".\\w2m3.tmp",
+    "exists": 0
+   },
+   {
+    "s": "temp_name.missing_dir",
+    "ret_nonzero": 0,
+    "err": 267
+   },
+   {
+    "s": "temp_name.missing_dir_unique",
+    "ret_nonzero": 0,
+    "err": 267,
+    "ret": 0
+   },
+   {
+    "s": "temp_name.file_as_dir",
+    "ret_nonzero": 0,
+    "err": 267
+   },
+   {
+    "s": "temp_name.second",
+    "ret_nonzero": 1,
+    "err": 0,
+    "name": ".\\w2m<u>.tmp",
+    "exists": 1,
+    "size": 0,
+    "attributes": 32
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38119625685: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8; run 38119627458: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:17d996052924c712ba56fb559c8b0f851988187a4ee4da56c368ac66ee9b02f0",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "files_more-1791701711-0-1",
+    "files_more-1791701711-0-2",
+    "files_more-1791701711-1-1",
+    "files_more-1791701711-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-gettempfilenamew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettempfilenamew (page updated 2025-09-24; retrieved 2026-10-10)",
+   "quote": "If uUnique is zero, the function attempts to form a unique file name using the current system time. If the file already exists, the number is increased by one ... Only the lower 16 bits of the uUnique parameter are used."
+  },
+  {
+   "evidence_id": "ms-getfileinformationbyhandleex",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex (page updated 2018-12-05; retrieved 2026-10-10)",
+   "quote": "FileBasicInfo (0) FILE_BASIC_INFO; FileStandardInfo (1) FILE_STANDARD_INFO ... If the function fails, the return value is zero."
+  }
+ ],
+ "open_questions": [
+  "The GetTempFileNameW page gives the form <path>\\<pre><uuuu>.TMP; both builds write \".tmp\" in lower case and the number without leading zeros (rows temp_name.long_prefix: abc1.tmp). w2m follows the rows.",
+  "Where NTFS stops keeping data in the file record lies between 721 and 739 bytes and depends on what else the record holds (the name's length among it); w2m keeps 720 and below there, the largest size a row holds resident.",
+  "uUnique 0 takes its number from GetTickCount's milliseconds in w2m; the page says \"the current system time\" and the rows print the number only as matching the name. A uUnique whose low 16 bits are 0, a directory past MAX_PATH-14 (the page's ERROR_BUFFER_OVERFLOW), other information classes, and handles of other kinds (pipes, events, the console) are not in the rows and stop the run.",
+  "CloseHandle on a handle with PROTECT_FROM_CLOSE is not probed (Windows raises under a debugger); w2m stops."
+ ],
+ "sections": {
+  "probe": "probes/files_more (Sprint 044)",
+  "implementation": "tools/guest_runtime/file.c",
+  "rows": "scripts/family_run.py files_more",
+  "excluded": "none"
+ }
+}

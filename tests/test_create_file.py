@@ -125,8 +125,9 @@ def test_runtime_missing_a_service_is_refused_at_build() -> None:
     from w2m.vm_backend import build_runtime
     text = file_run.FILE_C.read_text()
     start = text.index("/* SetFilePointerEx(")
-    with pytest.raises(guest_runtime.BuildError, match="does not define k32_SetFilePointerEx"):
-        build_runtime(None, text[:start])
+    end = text.index("\n}\n", start) + 3                   # that function alone; the services after it stay
+    with pytest.raises(guest_runtime.BuildError, match="does not define k32_SetFilePointerEx$"):
+        build_runtime(None, text[:start] + text[end:])
 
 
 @pytest.mark.hvf
