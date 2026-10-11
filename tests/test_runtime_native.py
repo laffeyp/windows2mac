@@ -9,6 +9,7 @@ reproduced. A stop by name (w2m_unimplemented) exits 88; AddressSanitizer exits 
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -53,7 +54,10 @@ def run_native(sources: list[str], body: str) -> subprocess.CompletedProcess[str
         built = subprocess.run([CLANG, "-g", "-O1", "-fsanitize=address", "-I", str(work), *units, "-o", str(exe)],
                                capture_output=True, text=True)
         assert built.returncode == 0, built.stderr
-        return subprocess.run([str(exe)], capture_output=True, text=True, timeout=60)
+        # leaks are not judged: the guest heap is w2m's own, and LeakSanitizer (Linux's AddressSanitizer runs it, macOS's
+        # does not) reports the harnesses' test buffers and exits before stdout is flushed (CI run 38182897398)
+        env = os.environ | {"ASAN_OPTIONS": "detect_leaks=0"}
+        return subprocess.run([str(exe)], capture_output=True, text=True, timeout=60, env=env)
 
 
 FIND_STUBS = """
