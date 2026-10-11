@@ -124,6 +124,48 @@ u64 k32_GetModuleFileNameW(u64 module, u64 buffer, u64 size) {
     return w2m_logged(W2M_API_GetModuleFileNameW, module, size);
 }
 
+/* GetModuleFileNameA(hModule, lpFilename, nSize): GetModuleFileNameW's answer narrowed (contracts/windows.module.
+ * names_ansi, Sprint 049: the same length, the same short-buffer form and errors). w2m's module paths are ASCII;
+ * another character stops the run rather than guess the code page's mapping. */
+u64 k32_GetModuleFileNameA(u64 module, u64 buffer, u64 size) {
+    size = (u32)size;
+    if (size == 0 || buffer == 0) w2m_unimplemented(W2M_API_GetModuleFileNameA, size);
+    u64 h = module ? module : image_base();
+    u64 n = w2m_host(W2M_HOST_MODULE_PATH, h, (u64)path, PATH_CHARS, 0, 0);
+    if (n == ~0ull) w2m_unimplemented(W2M_API_GetModuleFileNameA, module);
+    for (u64 i = 0; i < n; i++) if (path[i] > 0x7F) w2m_unimplemented(W2M_API_GetModuleFileNameA, path[i]);
+    char *out = (char *)buffer;
+    if (n < size) {
+        for (u64 i = 0; i < n; i++) out[i] = (char)path[i];
+        out[n] = 0;
+        set_error(0);
+        return w2m_logged(W2M_API_GetModuleFileNameA, module, n);
+    }
+    for (u64 i = 0; i + 1 < size; i++) out[i] = (char)path[i];
+    out[size - 1] = 0;
+    set_error(ERROR_INSUFFICIENT_BUFFER);
+    return w2m_logged(W2M_API_GetModuleFileNameA, module, size);
+}
+
+/* GetModuleHandleA(lpModuleName): GetModuleHandleW on the name widened (ASCII names; another byte stops the run). */
+u64 k32_GetModuleHandleA(u64 name) {
+    u64 h;
+    if (!name) h = image_base();
+    else {
+        u64 n = byte_length(name);
+        if (n >= PATH_CHARS) w2m_unimplemented(W2M_API_GetModuleHandleA, n);
+        for (u64 i = 0; i < n; i++) {
+            u8 c = ((const u8 *)name)[i];
+            if (c > 0x7F) w2m_unimplemented(W2M_API_GetModuleHandleA, c);
+            path[i] = c;
+        }
+        path[n] = 0;
+        h = find((u64)path, 0);
+    }
+    if (!h) set_error(ERROR_MOD_NOT_FOUND);
+    return w2m_logged(W2M_API_GetModuleHandleA, name, h);
+}
+
 /* GetProcAddress(hModule, lpProcName): the function's address, or NULL with the error. */
 u64 k32_GetProcAddress(u64 module, u64 name) {
     if (module == 0 || name < 0x10000) w2m_unimplemented(W2M_API_GetProcAddress, name);   /* ordinals */

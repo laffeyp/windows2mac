@@ -38,6 +38,9 @@ static void one(const char *name, DWORD spin, DWORD flags) {
     field("owner", (ULONG_PTR)cs.OwningThread); field("semaphore", (ULONG_PTR)cs.LockSemaphore);
     field("spin", cs.SpinCount);
     put("}\n");
+    DWORD written;                                       /* each row written as it ends (KIT_DIARY #37) */
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
+    n = 0;
     if (ok) DeleteCriticalSection(&cs);
 }
 
@@ -49,7 +52,5 @@ void start(void) {
     one("spin0.dynamic_spin", 0, 0x02000000);            /* RTL_CRITICAL_SECTION_FLAG_DYNAMIC_SPIN */
     one("spin0.static_init", 0, 0x04000000);             /* RTL_CRITICAL_SECTION_FLAG_STATIC_INIT */
     one("spin0.no_debug_dynamic", 0, CRITICAL_SECTION_NO_DEBUG_INFO | 0x02000000);
-    DWORD written;
-    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);
 }
