@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from w2m import VOCAB_VERSION, events  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.loader import load  # noqa: E402
-from w2m.vm_backend import VM  # noqa: E402
+from w2m.vm_backend import USER_ENVIRONMENT, VM  # noqa: E402
 from w2m.record import producer, run_with_provenance  # noqa: E402
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
@@ -65,7 +65,7 @@ def main(argv: list[str]) -> int:
         # the program's directory is C:\\w2m\\app and the working directory, read-only (Sprint 048)
         files = FileBridge(here, read_only=True)
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
-                image_name=Path(a.exe).name, gui=True, files=files)     # the game: a GUI program started by Steam
+                image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT)     # the game: a GUI program started by Steam
         try:
             r = vm.run(max_steps=a.max_steps, timeout_ms=60_000)
             totals = vm.calls_total()

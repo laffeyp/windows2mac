@@ -1,0 +1,11 @@
+{"s":"profile","hr":"0x00000000","err":1008,"untouched":0,"null":0,"path":"C:\\Users\\<user>","directory":1}
+{"s":"local_low","hr":"0x00000000","err":0,"untouched":0,"null":0,"path":"<profile>\\AppData\\LocalLow","directory":1}
+{"s":"local","hr":"0x00000000","err":1008,"untouched":0,"null":0,"path":"<profile>\\AppData\\Local","directory":1}
+{"s":"roaming","hr":"0x00000000","err":1008,"untouched":0,"null":0,"path":"<profile>\\AppData\\Roaming","directory":1}
+{"s":"local_low.dont_verify","hr":"0x00000000","err":1008,"untouched":0,"null":0,"path":"<profile>\\AppData\\LocalLow","directory":1}
+{"s":"local_low.create","hr":"0x00000000","err":183,"untouched":0,"null":0,"path":"<profile>\\AppData\\LocalLow","directory":1}
+{"s":"proc","is_import":0}
+{"s":"free.null","err":57005}
+{"s":"free.path","err":57005}
+{"s":"unregistered","hr":"0x80070002","err":0,"untouched":0,"null":1}
+{"s":"unregistered.create","hr":"0x80070002","err":0,"untouched":0,"null":1}

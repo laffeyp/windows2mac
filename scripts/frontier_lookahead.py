@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.lift import RAX  # noqa: E402
-from w2m.vm_backend import VM  # noqa: E402
+from w2m.vm_backend import USER_ENVIRONMENT, VM  # noqa: E402
 
 
 def main(argv: list[str]) -> int:
@@ -37,7 +37,7 @@ def main(argv: list[str]) -> int:
     here = a.exe.resolve().parent
     files = FileBridge(here, read_only=True)          # C:\\w2m\\app, read-only (Sprint 048)
     vm = VM(load(a.exe.read_bytes(), lambda n: (here / n).read_bytes() if (here / n).is_file() else None,
-                 a.exe.name), image_name=a.exe.name, gui=True, files=files)
+                 a.exe.name), image_name=a.exe.name, gui=True, files=files, environment=USER_ENVIRONMENT)
     counts: Counter[str] = Counter()
     first: dict[str, int] = {}
 

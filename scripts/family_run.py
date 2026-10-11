@@ -1253,6 +1253,61 @@ FAMILIES: dict[str, Family] = {
             "free_sets_error": Plant("    if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);",
                                      "    if (p) w2m_heap_release(W2M_API_CoTaskMemFree, p);\n    w2m_set_last_error(0);",
                                      ("free.null", "free.path"))}),
+    "temp_path": Family(
+        name="temp_path",
+        contract_id="windows.environment.temp_path",
+        version="0.1.0",
+        summary=("GetTempPathW over an environment the probe sets: the first of TMP, TEMP and USERPROFILE made full "
+                 "(relative, '/', '..') with one trailing backslash, a missing directory included, else C:\\Windows\\; "
+                 "a 303-character TMP is skipped; an empty TMP answers 1 and writes nothing; a short buffer gets "
+                 "size - 1 units and a NUL, the answer the size needed. GetEnvironmentVariableW: case-insensitive "
+                 "names, 203 for a missing one, a NUL at [0] of a short buffer, 0 for an empty value. "
+                 "SetEnvironmentVariableW: 87 for an empty name or '=' inside one, TRUE for deleting a missing name, "
+                 "a replaced name keeps its spelling, new entries in upper-cased name order. The last error is left "
+                 "on every success."),
+        probe="temp_path", guest_file="environment.c",
+        derive=lambda printed: [{k: v for k, v in r.items() if not (r.get("s") == "temp.relative" and k == "ret")}
+                                for r in printed],
+        runs={
+              "38098847298": Run("windows-2025", "ff7714fa701c3870ceac7080865aaac604719f71d7318a1ca00b371236dfdba1", "temp_path-1791678823-0", "AMD EPYC 9V45 96-Core Processor"),
+              "38098848806": Run("windows-2022", "4c25a456e35e5b7cf5461baa1e2a1dba6c79451c8e5b6fbc3e932ef36d3f3e20", "temp_path-1791678823-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-gettemppathw", "api/fileapi/nf-fileapi-gettemppathw", "2018-12-05",
+                       "The GetTempPath function checks for the existence of environment variables in the following "
+                       "order and uses the first path found: The path specified by the TMP environment variable. The "
+                       "path specified by the TEMP environment variable. The path specified by the USERPROFILE "
+                       "environment variable. The Windows directory. Note that the function does not verify that the "
+                       "path exists ... The maximum possible return value is MAX_PATH+1 (261)."),
+            documented("ms-getenvironmentvariablew", "api/processenv/nf-processenv-getenvironmentvariablew",
+                       "2022-08-05", "If lpBuffer is not large enough to hold the data, the return value is the buffer "
+                       "size, in characters, required to hold the string and its terminating null character and the "
+                       "contents of lpBuffer are undefined. ... If the specified environment variable was not found in "
+                       "the environment block, GetLastError returns ERROR_ENVVAR_NOT_FOUND."),
+            documented("ms-setenvironmentvariablew", "api/processenv/nf-processenv-setenvironmentvariablew",
+                       "2022-08-05", "If this parameter is NULL, the variable is deleted from the current process's "
+                       "environment.")),
+        open_questions=(
+            "temp.relative's return is the length of a path under the runner's working directory; the derive drops "
+            "it and keeps the path (<cwd>\\rel\\).",
+            "Where a long variable stops being skipped is not probed: w2m skips a value or path past MAX_PATH (260), "
+            "from the page's maximum return of 261; the rows hold 303 (skipped) and 24 (used).",
+            "An empty TMP answers 1 and writes nothing (temp.tmp_empty); the page says nothing of it, and w2m does "
+            "the same for an empty TEMP or USERPROFILE without a row.",
+            "Names compare by ASCII upper case in w2m; non-ASCII names are not probed.",
+            "The first probe run faulted (0xC0000005) inside its own row writer: a runner's block held more than "
+            "the 64 names one pass deleted, and the rest overflowed the output buffer (runs 38098431870, "
+            "38098511094, 38098565802, 38098627044); the probe now deletes in passes."),
+        plants={
+            "temp_before_tmp": Plant("ORDER[] = {TMP, TEMP, PROFILE};", "ORDER[] = {TEMP, TMP, PROFILE};",
+                                     # not temp.size_zero: it prints a length, and C:\t\ is as long as C:\m\
+                                     ("temp.tmp", "temp.size_exact", "temp.size_short", "temp.tmp_backslash",
+                                      "temp.relative", "temp.forward", "temp.dots", "temp.missing_dir",
+                                      "temp.tmp_empty")),
+            "replace_respells": Plant("        keep = e;\n", "",
+                                      ("order.before", "order.after")),
+            "new_entries_last": Plant("        if (c > 0) break;\n", "",
+                                      ("order.before", "order.after"))}),
 }
 
 
