@@ -484,6 +484,11 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                 placeable = False
                 break
             s.code, s.label = raw, d.iclass
+            if ymm and not STACK_VA + 0x1000 <= s.regs[4] < STACK_VA + STACK_SIZE:
+                # RSP off the stack (a memory operand based on RSP): no #XM may be raised, since Windows dispatches
+                # it on this stack; the model's word that none is raised is not enough (run 38118279292 died on
+                # VMULPS ymm, [rsp+rbp] with UE unmasked). The flags are still compared.
+                s.mxcsr |= 0x3F << 7
             if not _dispatchable(s):
                 skipped["fault with RSP outside the stack (not dispatchable)"] += 1
                 continue
