@@ -43,3 +43,12 @@ u64 k32_GetThreadPriority(u64 thread) {
     if (thread != CURRENT_THREAD) w2m_unimplemented(W2M_API_GetThreadPriority, thread);
     return w2m_logged(W2M_API_GetThreadPriority, thread, 0);
 }
+
+/* GetCurrentThreadStackLimits(LowLimit, HighLimit): TEB.DeallocationStack and NtTib.StackBase
+ * (contracts/windows.memory.thread_stack, Sprint 049: row limits); the last error is left. */
+W2M_VOID u64 k32_GetCurrentThreadStackLimits(u64 low, u64 high) {
+    if (!low || !high) w2m_unimplemented(W2M_API_GetCurrentThreadStackLimits, 0);
+    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x1478);
+    *(u64 *)high = *(const u64 *)(W2M_TEB_VA + 0x08);
+    return w2m_logged(W2M_API_GetCurrentThreadStackLimits, low, 0);
+}

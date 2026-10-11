@@ -1459,6 +1459,42 @@ FAMILIES: dict[str, Family] = {
             "remove_answers_one": Plant("    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 0);",
                                         "    return w2m_logged(W2M_API_RemoveVectoredExceptionHandler, handle, 1);",
                                         ("remove.again", "remove.unknown"))}),
+    "thread_stack": Family(
+        name="thread_stack",
+        contract_id="windows.memory.thread_stack",
+        version="0.1.0",
+        summary=("The main thread's stack, as mono's collector queries it: one MEM_PRIVATE reservation of "
+                 "SizeOfStackReserve from TEB.DeallocationStack, allocation protection read-write; reserved below "
+                 "StackLimit - 3 pages, those 3 pages committed with PAGE_GUARD, committed read-write from StackLimit "
+                 "to StackBase; VirtualQuery's BaseAddress is the queried page; GetCurrentThreadStackLimits answers "
+                 "DeallocationStack and StackBase; the last error is left."),
+        probe="thread_stack", guest_file="thread_queries.c", host_files=("src/w2m/virtual_memory.py",),
+        derive=lambda printed: [{k: v for k, v in r.items()
+                                 if not (r.get("s") in ("query.sp", "query.base_minus_one") and k == "base_address")}
+                                for r in printed],
+        runs={
+              "38114444717": Run("windows-2025", "09f0d8199eb9748f2ebd1855df859eeed84a7028982ffc6fe7091e7ccfb44091", "thread_stack-1791696004-0", "AMD EPYC 7763 64-Core Processor"),
+              "38114446614": Run("windows-2022", "d39ae9f9aa57c21fdc3a440f5e0acc4df8b073df4def00ef03b21a5ad047e7dd", "thread_stack-1791696004-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+        },
+        documented=(
+            documented("ms-thread-stack-size", "procthread/thread-stack-size", "2025-07-14",
+                       "The system commits additional pages from the reserved stack memory as they are needed, until "
+                       "either the stack reaches the reserved size minus one page (which is used as a guard page to "
+                       "prevent stack overflow) or the system is so low on memory that the operation fails."),),
+        open_questions=(
+            "Where the stack pointer's page lies above StackLimit depends on how far the runner's stack had grown "
+            "(2 or 3 pages in runs 38114383995, 38114385651, 38114444717, 38114446614); the derive drops base_address "
+            "from query.sp and query.base_minus_one, and query.limit and query.below_limit keep the layout.",
+            "w2m commits all but 4 pages of the 1 MB at the start and never moves StackLimit; Windows commits on "
+            "demand through the guard pages. A program that reads StackLimit to size its stack sees more room in "
+            "w2m.",
+            "The page speaks of one guard page; every run shows a 3-page PAGE_GUARD region below StackLimit "
+            "(query.below_limit, query.below_guard). The rows are followed.",
+            "The layout lives in src/w2m/virtual_memory.py, which family_run's plants cannot patch (they patch the "
+            "guest C file): a planted guard size is not tried; limits_swapped covers the C side."),
+        plants={
+            "limits_swapped": Plant("    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x1478);",
+                                    "    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x10);", ("limits",))}),
 }
 
 

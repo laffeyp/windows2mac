@@ -320,6 +320,7 @@ struct w2m_exception_area {
 #define W2M_API_RtlLookupFunctionEntry 151
 #define W2M_API_AddVectoredExceptionHandler 152
 #define W2M_API_RemoveVectoredExceptionHandler 153
+#define W2M_API_GetCurrentThreadStackLimits 154
 
 /* Marks a service Windows declares void: the bridge leaves the guest's RAX as it was (vm_backend sets_rax). */
 #define W2M_VOID

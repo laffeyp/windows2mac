@@ -1,0 +1,143 @@
+{
+ "contract_id": "windows.memory.thread_stack",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The main thread's stack, as mono's collector queries it: one MEM_PRIVATE reservation of SizeOfStackReserve from TEB.DeallocationStack, allocation protection read-write; reserved below StackLimit - 3 pages, those 3 pages committed with PAGE_GUARD, committed read-write from StackLimit to StackBase; VirtualQuery's BaseAddress is the queried page; GetCurrentThreadStackLimits answers DeallocationStack and StackBase; the last error is left.",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/thread_stack/thread_stack.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "teb",
+    "reserve_is_header": 1,
+    "sp_inside": 1,
+    "aligned": 1,
+    "limit_above_dealloc": 1
+   },
+   {
+    "s": "query.sp",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "query.below_limit",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-1p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "query.limit",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit",
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "query.below_guard",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-2p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "query.dealloc",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "dealloc",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "query.base_minus_one",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "limits",
+    "low": "dealloc",
+    "high": "base",
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38114444717: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:09f0d8199eb9748f2ebd1855df859eeed84a7028982ffc6fe7091e7ccfb44091; run 38114446614: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:d39ae9f9aa57c21fdc3a440f5e0acc4df8b073df4def00ef03b21a5ad047e7dd",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "thread_stack-1791696004-0-1",
+    "thread_stack-1791696004-0-2",
+    "thread_stack-1791696004-1-1",
+    "thread_stack-1791696004-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-thread-stack-size",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/procthread/thread-stack-size (page updated 2025-07-14; retrieved 2026-10-10)",
+   "quote": "The system commits additional pages from the reserved stack memory as they are needed, until either the stack reaches the reserved size minus one page (which is used as a guard page to prevent stack overflow) or the system is so low on memory that the operation fails."
+  }
+ ],
+ "open_questions": [
+  "Where the stack pointer's page lies above StackLimit depends on how far the runner's stack had grown (2 or 3 pages in runs 38114383995, 38114385651, 38114444717, 38114446614); the derive drops base_address from query.sp and query.base_minus_one, and query.limit and query.below_limit keep the layout.",
+  "w2m commits all but 4 pages of the 1 MB at the start and never moves StackLimit; Windows commits on demand through the guard pages. A program that reads StackLimit to size its stack sees more room in w2m.",
+  "The page speaks of one guard page; every run shows a 3-page PAGE_GUARD region below StackLimit (query.below_limit, query.below_guard). The rows are followed.",
+  "The layout lives in src/w2m/virtual_memory.py, which family_run's plants cannot patch (they patch the guest C file): a planted guard size is not tried; limits_swapped covers the C side."
+ ],
+ "sections": {
+  "probe": "probes/thread_stack (Sprint 044)",
+  "implementation": "tools/guest_runtime/thread_queries.c",
+  "rows": "scripts/family_run.py thread_stack",
+  "excluded": "none"
+ }
+}

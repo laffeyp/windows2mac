@@ -905,6 +905,26 @@
    "38048930112": "conforms"
   }
  },
+ "thread_stack": {
+  "candidate_sha256": "sha256:2824dfe6946555f7a70b982d4e9f9313de596b64fafc831a69f3764314054060",
+  "divergence": {
+   "38114444717": null,
+   "38114446614": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "thread_stack",
+  "record": "store/runs/family-thread_stack-1791696126176225000",
+  "verdicts": {
+   "38114444717": "conforms",
+   "38114446614": "conforms"
+  }
+ },
  "thread_storage": {
   "candidate_sha256": "sha256:9428143780320775759340d1d90e39073a59d0b8f6731fd3027329dc48c24d02",
   "divergence": {

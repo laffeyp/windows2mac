@@ -31,6 +31,8 @@ PROTECTIONS = {PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY, PAG
                PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY}
 ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED, ERROR_INVALID_ADDRESS = 87, 50, 487
 RESERVED, COMMITTED = 1, 2
+PAGE_GUARD = 0x100
+STACK_GUARD_PAGES = 3          # the guard below StackLimit (contracts/windows.memory.thread_stack, Sprint 049)
 
 
 def _down(v: int, to: int) -> int:
@@ -77,6 +79,7 @@ class VirtualMemory:
     pristine: dict[int, bytes] = field(default_factory=dict)   # writable image page VA -> its bytes at load
     reservations: dict[int, Reservation] = field(default_factory=dict)
     image_protect: dict[int, int] = field(default_factory=dict)       # page VA -> a protection VirtualProtect set
+    stack: tuple[int, int, int] | None = None    # the main thread's (DeallocationStack, StackLimit, StackBase)
 
     # ---- lookups -------------------------------------------------------------------------------------
     def _reservation(self, va: int) -> Reservation | None:
@@ -206,6 +209,8 @@ class VirtualMemory:
 
     def query(self, address: int) -> Info | None:
         page = _down(address, PAGE)
+        if self.stack is not None and self.stack[0] <= address < self.stack[2]:
+            return self._stack_query(page)
         r = self._reservation(address)
         if r is not None:
             i = (page - r.base) // PAGE
@@ -249,6 +254,18 @@ class VirtualMemory:
                 start = base + s.virtual_address
                 for va in range(start, start + _up(max(s.virtual_size, 1), PAGE), PAGE):
                     self.pristine[va] = self.read(va, PAGE)
+
+    def _stack_query(self, page: int) -> Info:
+        """The thread's stack as contracts/windows.memory.thread_stack records it (Sprint 049): one MEM_PRIVATE
+        reservation from DeallocationStack, read-write: reserved below StackLimit - 3 pages, those 3 pages committed
+        with PAGE_GUARD, and committed read-write from StackLimit to StackBase; BaseAddress is the queried page."""
+        dealloc, limit, base = self.stack                       # type: ignore[misc]
+        guard = limit - STACK_GUARD_PAGES * PAGE
+        if page < guard:
+            return Info(page, dealloc, PAGE_READWRITE, guard - page, MEM_RESERVE, 0, MEM_PRIVATE)
+        if page < limit:
+            return Info(page, dealloc, PAGE_READWRITE, limit - page, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD, MEM_PRIVATE)
+        return Info(page, dealloc, PAGE_READWRITE, base - page, MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE)
 
     def snapshot(self) -> None:
         """Remember every writable image page as loaded (the copy-on-write test of _image_page_protect)."""

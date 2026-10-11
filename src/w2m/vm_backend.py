@@ -46,7 +46,7 @@ from w2m import a64_encoder as a64
 from w2m import guest_runtime
 from w2m.file_bridge import FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError, FileBridge
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
-from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualMemory
+from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
@@ -227,7 +227,8 @@ SERVICES = {"GetCurrentThreadId": ("k32_GetCurrentThreadId", True), "SetLastErro
             "LocalAlloc": ("k32_LocalAlloc", True), "GetModuleFileNameA": ("k32_GetModuleFileNameA", True),
             "GetModuleHandleA": ("k32_GetModuleHandleA", True),
             "AddVectoredExceptionHandler": ("k32_AddVectoredExceptionHandler", True),
-            "RemoveVectoredExceptionHandler": ("k32_RemoveVectoredExceptionHandler", True)}
+            "RemoveVectoredExceptionHandler": ("k32_RemoveVectoredExceptionHandler", True),
+            "GetCurrentThreadStackLimits": ("k32_GetCurrentThreadStackLimits", False)}
 # services of the other system DLLs in the guest runtime: DLL (upper case) -> import name -> (C symbol, sets RAX)
 DLL_SERVICES = {"SHELL32.DLL": {"CommandLineToArgvW": ("shell32_CommandLineToArgvW", True),
                                  "SHGetKnownFolderPath": ("shell32_SHGetKnownFolderPath", True)},   # Sprint 048
@@ -1091,6 +1092,7 @@ class VM:
                                      [(i.base, i.pe) for i in loaded.images] or
                                      ([(loaded.image.image_base, loaded.image)] if loaded.image is not None else []),
                                      read=lambda va, n: bytes(self.mem.read(va, n)))
+        self.virtual.stack = self._stack
         self.virtual.snapshot()
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
 
@@ -1126,9 +1128,13 @@ class VM:
         teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)
-        for field_off, value in ((0x08, self.ld.stack_top), (0x10, stack.base), (0x30, teb),
-                                 (0x40, PROCESS_ID), (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb)):
+        # the stack as Windows lays it out (contracts/windows.memory.thread_stack): DeallocationStack at the
+        # reservation's bottom, one reserved page, the 3-page guard, then StackLimit; w2m commits the rest
+        limit = stack.base + (1 + STACK_GUARD_PAGES) * 0x1000
+        for field_off, value in ((0x08, self.ld.stack_top), (0x10, limit), (0x30, teb), (0x40, PROCESS_ID),
+                                 (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb), (0x1478, stack.base)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
+        self._stack = (stack.base, limit, self.ld.stack_top)
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
         struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x30, HEAP_VA)     # PEB.ProcessHeap (heap.c)
