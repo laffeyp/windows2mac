@@ -131,3 +131,20 @@ def test_a_traced_images_dllmain_runs_with_the_trace_closed() -> None:
     close, reopen = b"\x48\xb9" + header + bytes.fromhex("48c70100000000"), b"\x48\xb9" + header + bytes.fromhex("48c70101000000")
     assert traced_stub.index(close) < traced_stub.index(b"\xff\xd0") < traced_stub.index(reopen)
     assert close not in plain_stub and reopen not in plain_stub
+
+
+@pytest.mark.hvf
+def test_a_call_through_getprocaddress_is_labeled_as_the_capture_labels_it() -> None:
+    """tools/jit_capture points a hooked image's import slots at thunks of their own and GetProcAddress's answers at
+    another, labeled "GetProcAddress" in the Windows trace (game run 38176899195: FlsGetValue, SetThreadDescription,
+    RtlAddGrowableFunctionTable). The function_tables probe reaches RtlAddGrowableFunctionTable by GetProcAddress
+    and GetProcAddress itself through its import."""
+    f = family_run.FAMILIES["function_tables"]
+    exe = (ROOT / "store" / "binaries" / f"{next(iter(f.runs.values())).binary}.exe").read_bytes()
+    calls, _, out, stop = traced(exe, ("probe.exe",))
+    assert stop == "ExitProcess"
+    assert family_run.unequal_rows(f, out) == []
+    labels = {(c[2], c[4]) for c in calls}
+    assert ("GetProcAddress", "RtlAddGrowableFunctionTable") in labels
+    assert ("probe.exe", "RtlAddGrowableFunctionTable") not in labels
+    assert ("probe.exe", "GetModuleHandleW") in labels or ("probe.exe", "LoadLibraryW") in labels

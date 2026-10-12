@@ -27,7 +27,10 @@
    "float": "not compared",
    "void": "not compared",
    "error": "equal where sets_last_error and the Windows return failed",
-   "called": "a pair w2m calls is called on Windows"
+   "called": "a pair w2m calls is called on Windows",
+   "assigned": "a value the system assigns (thread and process ids, TLS and FLS slots, window-class atoms) maps one to one across the stream, a thread id through the thread map; a clock reading is not compared (call_compare.ASSIGNED)",
+   "threads": "each Windows thread is paired with the w2m thread that first makes a traced call in the same place in order, and each (label, function)'s calls are compared per pair of threads",
+   "labels": "a call through a traced image's import slot carries the image's name; one through the pointer GetProcAddress answers carries 'GetProcAddress', as tools/jit_capture labels its hooks"
   },
   "comparator": "scripts/call_compare.py",
   "signatures": "specs/signatures.json"
@@ -56,5 +59,10 @@
   "implementation": "tools/guest_runtime (every service the game reaches)",
   "rows": "scripts/call_compare.py",
   "excluded": "functions call_trace.h leaves untraced (UNTRACED)"
+ },
+ "excluded_threads": {
+  "38176899195": {
+   "6636": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (seq 1-39) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  }
  }
 }

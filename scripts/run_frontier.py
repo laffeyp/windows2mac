@@ -144,7 +144,8 @@ def main(argv: list[str]) -> int:
     async def comparator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         windows = call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
         found, compared = call_compare.compare(windows, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"),
-                                               SIGNATURES)
+                                               SIGNATURES, call_compare.excluded(
+                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name))
         state.update(divergences=found, compared=compared)
         yield events.validate(events.COMPARISON_COMPLETED(
             comparison_id=f"cmp-{xid}", contract_id=CONTRACT[0], contract_version=CONTRACT[1],

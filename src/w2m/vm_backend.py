@@ -129,7 +129,7 @@ FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the fi
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
 TRACE_SIZE = 0x200000
-TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS = 0x8100, 120, 4096
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xD100, 120, 4096, 0xC080
 TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
 TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
 # call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
@@ -1078,6 +1078,7 @@ class VM:
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
+        self._trace_bound: set[str] = set()
         self._trace_ranges()
         # the trace opens when the guest first enters `call_trace_from` ("DLL!export"), as tools/jit_capture hooks the
         # images just before it calls UnityPlayer.dll!UnityMain (jit_capture.c wWinMain); 0: from the start
@@ -1900,7 +1901,9 @@ class VM:
         return count, [struct.unpack_from("<4Q", self.mm, off + 8 + 32 * i) for i in range(min(count, 64))]
 
     def _trace_ranges(self) -> None:
-        """The traced images' address ranges in the trace header, as each is mapped (call_trace.c)."""
+        """The traced images' address ranges in the trace header, as each is mapped, and their import slots on thunks
+        of their own (call_trace.c): tools/jit_capture points each hooked image's slots at its own thunks, and
+        GetProcAddress at another, so the capture labels a call by the slot it went through."""
         for i, name in enumerate(self.call_trace):
             c = name.lower()
             if c in self.modules.dlls:
@@ -1910,6 +1913,19 @@ class VM:
             else:
                 continue
             struct.pack_into("<QQ", self.mm, self._process(TRACE_OFF) + 40 + 16 * i, base, base + size)
+            if c in self._trace_bound:
+                continue
+            self._trace_bound.add(c)
+            image = next(im for im in self.ld.images if im.base == base)
+            for slot in sorted(image.pe.iat):
+                held = int.from_bytes(self.mem.read(base + slot, 8), "little")
+                if held not in self.ld.thunks:
+                    continue                             # bound to a game DLL's export: no Windows hook there
+                own = self.modules.make_thunk(self.ld.thunks[held])
+                self.mem.write(base + slot, own.to_bytes(8, "little"))
+                index = (own - THUNK_BASE) // 16
+                if index < TRACE_THUNKS:
+                    self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = i + 1
 
     def traced_calls(self) -> tuple[list[tuple[int, int, str, str, str, tuple[int, ...], int, int]], int]:
         """The calls call_trace.c recorded, in the Windows trace's shape (tools/jit_capture/call_trace.h): (seq, tid,
@@ -1923,7 +1939,8 @@ class VM:
             if not ready:
                 continue
             dll, fn = self.ld.thunks[THUNK_BASE + 16 * thunk].split("!", 1)
-            out.append((seq, tid, self.call_trace[image], dll, fn, tuple(rest[:8]), rest[8], rest[9]))
+            label = self.call_trace[image] if image < len(self.call_trace) else "GetProcAddress"
+            out.append((seq, tid, label, dll, fn, tuple(rest[:8]), rest[8], rest[9]))
         return out, dropped
 
     def calls_total(self) -> dict[str, int]:

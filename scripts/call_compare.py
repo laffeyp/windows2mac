@@ -35,6 +35,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 SIGNATURES = ROOT / "specs" / "signatures.json"
+CONTRACT = ROOT / "contracts" / "windows.game.calls" / "0.1.0.json"
 INVALID_HANDLE_VALUE = (1 << 64) - 1
 
 Call = tuple[int, int, str, str, str, tuple[int, ...], int, int]   # seq, tid, image, dll, function, a0..a7, ret, error
@@ -156,40 +157,97 @@ def judge(kind: str, size: int | None, windows: int, w2m: int, argument: bool) -
     raise ValueError(kind)
 
 
-def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any]) -> tuple[list[Divergence], int]:
-    """Every divergence, in the order of the Windows calls they concern, and the count of calls compared."""
-    def by_pair(calls: list[Call]) -> dict[tuple[str, str], list[Call]]:
-        out: dict[tuple[str, str], list[Call]] = {}
+# Values the system assigns, which differ between any two runs, each with the relation that holds instead of equality
+# (Sprint 060, from the first comparisons): an id must map one to one across the whole stream, a thread id through
+# the thread map, and a clock reading is not compared.
+ASSIGNED: dict[tuple[str, str], str] = {
+    ("GetCurrentThreadId", "ret"): "thread", ("OpenThread", "a2"): "thread", ("GetThreadId", "ret"): "thread",
+    ("GetCurrentProcessId", "ret"): "process", ("OpenProcess", "a2"): "process",
+    ("TlsAlloc", "ret"): "tls", ("TlsGetValue", "a0"): "tls", ("TlsSetValue", "a0"): "tls", ("TlsFree", "a0"): "tls",
+    ("FlsAlloc", "ret"): "fls", ("FlsGetValue", "a0"): "fls", ("FlsSetValue", "a0"): "fls", ("FlsFree", "a0"): "fls",
+    ("RegisterClassExW", "ret"): "atom", ("RegisterClassW", "ret"): "atom", ("RegisterClassExA", "ret"): "atom",
+    ("CreateWindowExW", "a1"): "atom", ("CreateWindowExA", "a1"): "atom", ("UnregisterClassW", "a0"): "atom",
+    ("timeGetTime", "ret"): "clock", ("GetTickCount", "ret"): "clock", ("GetTickCount64", "ret"): "clock"}
+
+
+def thread_map(windows: list[Call], w2m: list[Call]) -> dict[int, int]:
+    """Windows thread id -> w2m thread id, by the order each first makes a traced call: the game starts its threads
+    in one order on both, and the first comparison showed each pair's calls the same in shape."""
+    def order(calls: list[Call]) -> list[int]:
+        seen: list[int] = []
         for c in sorted(calls):
-            out.setdefault((c[2].lower(), c[4]), []).append(c)
+            if c[1] not in seen:
+                seen.append(c[1])
+        return seen
+    return dict(zip(order(windows), order(w2m)))
+
+
+def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
+            excluded_threads: frozenset[int] = frozenset()) -> tuple[list[Divergence], int]:
+    """Every divergence, in the order of the Windows calls they concern, and the count of calls compared. Each
+    (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
+    with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
+    threads the game does not start (the capture's own)."""
+    windows = [c for c in windows if c[1] not in excluded_threads]
+    threads = thread_map(windows, w2m)
+
+    def by_pair(calls: list[Call]) -> dict[tuple[str, str], dict[int, list[Call]]]:
+        out: dict[tuple[str, str], dict[int, list[Call]]] = {}
+        for c in sorted(calls):
+            out.setdefault((c[2].lower(), c[4]), {}).setdefault(c[1], []).append(c)
         return out
 
     w, m = by_pair(windows), by_pair(w2m)
     found: list[Divergence] = []
-    compared = 0
+    pairs: list[tuple[int, Call, Call]] = []
     for pair, ours in m.items():
-        image, fn = ours[0][2], pair[1]
         theirs = w.get(pair)
         if theirs is None:
-            found.append(Divergence(image, fn, 0, "called", None, ours[0][6], None))
+            first = min(c for calls in ours.values() for c in calls)
+            found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None))
             continue
+        for tid, calls in theirs.items():
+            mine = ours.get(threads.get(tid, -1), [])
+            pairs += [(k, a, b) for k, (a, b) in enumerate(zip(calls, mine))]
+    maps: dict[str, tuple[dict[int, int], dict[int, int]]] = {}
+
+    def same(space: str, x: int, y: int) -> bool:
+        if space == "clock":
+            return True
+        if space == "thread":
+            return threads.get(x & 0xFFFFFFFF) == y & 0xFFFFFFFF
+        forward, backward = maps.setdefault(space, ({}, {}))
+        if space == "atom" and (x >= 0x10000 or y >= 0x10000):
+            return (x == 0) == (y == 0)            # a class name, not an atom: a pointer
+        x, y = x & 0xFFFFFFFF, y & 0xFFFFFFFF
+        if forward.setdefault(x, y) != y or backward.setdefault(y, x) != x:
+            return False
+        return True
+
+    for k, a, b in sorted(pairs, key=lambda p: p[1][0]):
+        fn = a[4]
         sig = signatures.get(fn)
-        for k, (a, b) in enumerate(zip(theirs, ours)):
-            compared += 1
-            if sig is None:
-                fields = [("ret", "value", 8, a[6], b[6], False)]
-            else:
-                ret = sig["return"]
-                fields = [(f"a{i}", p["kind"], p.get("bytes"), a[5][i], b[5][i], True)
-                          for i, p in enumerate(sig["params"][:8])]
-                fields.append(("ret", ret["kind"], ret.get("bytes"), a[6], b[6], False))
-                if sig["sets_last_error"] and failed(ret["kind"], a[6], ret.get("bytes")):
-                    fields.append(("error", "value", 4, a[7], b[7], False))
-            for name, kind, size, x, y, argument in fields:
-                if not judge(kind, size, x, y, argument):
-                    found.append(Divergence(image, fn, k, name, x, y, a[0]))
+        if sig is None:
+            fields = [("ret", "value", 8, a[6], b[6], False)]
+        else:
+            ret = sig["return"]
+            fields = [(f"a{i}", p["kind"], p.get("bytes"), a[5][i], b[5][i], True)
+                      for i, p in enumerate(sig["params"][:8])]
+            fields.append(("ret", ret["kind"], ret.get("bytes"), a[6], b[6], False))
+            if sig["sets_last_error"] and failed(ret["kind"], a[6], ret.get("bytes")):
+                fields.append(("error", "value", 4, a[7], b[7], False))
+        for name, kind, size, x, y, argument in fields:
+            space = ASSIGNED.get((fn, name))
+            ok = same(space, x, y) if space is not None else judge(kind, size, x, y, argument)
+            if not ok:
+                found.append(Divergence(a[2], fn, k, name, x, y, a[0]))
     found.sort(key=lambda d: (d.windows_seq is None, d.windows_seq or 0, d.function))
-    return found, compared
+    return found, len(pairs)
+
+
+def excluded(contract: dict[str, Any], run: str) -> frozenset[int]:
+    """The reference threads a contract leaves out for a run (its `excluded_threads`)."""
+    return frozenset(int(t) for t in contract.get("excluded_threads", {}).get(run, {}))
 
 
 def main(argv: list[str]) -> int:
@@ -199,7 +257,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--signatures", type=Path, default=SIGNATURES)
     a = ap.parse_args(argv)
     signatures = json.loads(a.signatures.read_text())["functions"]
-    found, compared = compare(read_tsv(a.run / "jit_capture.bin.trace.tsv"), read_tsv(a.calls), signatures)
+    found, compared = compare(read_tsv(a.run / "jit_capture.bin.trace.tsv"), read_tsv(a.calls), signatures,
+                              excluded(json.loads(CONTRACT.read_text()), a.run.name))
     print(f"{compared} calls compared; {len(found)} divergences")
     for d in found:
         print(f"  seq {d.windows_seq}: {d.text()}")
