@@ -593,7 +593,7 @@
    "SESSION_INIT": 1
   },
   "family": "interlocked_lists",
-  "record": "store/runs/family-interlocked_lists-1791784926601964000",
+  "record": "store/runs/family-interlocked_lists-1791785126338002000",
   "verdicts": {
    "38210349431": "conforms",
    "38210351696": "conforms"
@@ -943,7 +943,7 @@
    "SESSION_INIT": 1
   },
   "family": "registry",
-  "record": "store/runs/family-registry-1791785005960807000",
+  "record": "store/runs/family-registry-1791785108187584000",
   "verdicts": {
    "38210383833": "conforms",
    "38210386046": "conforms"
