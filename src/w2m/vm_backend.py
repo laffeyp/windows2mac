@@ -149,6 +149,7 @@ CURRENT_DIRECTORY_MAX = 0x208       # CurrentDirectory.DosPath.MaximumLength: MA
 CURRENT_DIRECTORY_HANDLE = 0x10     # CurrentDirectory.Handle: non-null (rows *.current_directory); below every
                                     # handle range w2m gives out (stdout 0x74, files 0x1000, objects 0x2000)
 DESKTOP = "winsta0\\default"
+PROCESSORS = 4                      # the runners' processors (runtime.h W2M_PROCESSORS; Sprint 061)
 START_GROUP = 1000                  # ProcessGroupId of a process w2m starts: neither 0 nor its own id (rows *.header);
                                     # a child keeps its parent's
 STDOUT_HANDLE = 0x74
@@ -1164,6 +1165,7 @@ class VM:
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
         struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x30, HEAP_VA)     # PEB.ProcessHeap (heap.c)
+        struct.pack_into("<I", self.mm, self._process(PEB_OFF) + 0xB8, PROCESSORS)  # PEB.NumberOfProcessors (Chappell)
         st = self._process(STATE_OFF)                   # thread-start defaults (spec, observed on Windows)
         struct.pack_into("<I", self.mm, st + 152, 0x1F80)
         struct.pack_into("<H", self.mm, st + 156, 0x27F)

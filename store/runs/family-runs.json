@@ -890,27 +890,23 @@
   }
  },
  "processor_topology": {
-  "candidate_sha256": "sha256:177e3e0c09e51733f58b153accc79a8ed7a8038d36d4d12750ee8373b9446427",
+  "candidate_sha256": "sha256:7d1468cea2ae88e38a4c0af8843a956a1db20f022c0787caf49383a9217f44c9",
   "divergence": {
-   "38086761220": null,
-   "38086763271": null,
-   "38086765021": null,
-   "38086767249": null
+   "38206551545": null,
+   "38206553365": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
    "CANDIDATE_GENERATED": 1,
-   "COMPARISON_COMPLETED": 4,
+   "COMPARISON_COMPLETED": 2,
    "SESSION_COMPLETED": 1,
    "SESSION_INIT": 1
   },
   "family": "processor_topology",
-  "record": "store/runs/family-processor_topology-1791779070174608000",
+  "record": "store/runs/family-processor_topology-1791781772390982000",
   "verdicts": {
-   "38086761220": "conforms",
-   "38086763271": "conforms",
-   "38086765021": "conforms",
-   "38086767249": "conforms"
+   "38206551545": "conforms",
+   "38206553365": "conforms"
   }
  },
  "registry": {
@@ -1062,7 +1058,7 @@
   }
  },
  "system_info": {
-  "candidate_sha256": "sha256:f01acd3f0c69c99510830ebfed8160ba207d35bcac30c3859e7acafed970575f",
+  "candidate_sha256": "sha256:3c7c070700230bde84869f11278f50396e4dc1d23e8b58a016dc7bbf3c6bb8e1",
   "divergence": {
    "38049865817": null,
    "38049867401": null,
@@ -1085,7 +1081,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_info",
-  "record": "store/runs/family-system_info-1791779033993418000",
+  "record": "store/runs/family-system_info-1791781780329823000",
   "verdicts": {
    "38049865817": "conforms",
    "38049867401": "conforms",
