@@ -8,7 +8,7 @@ from w2m.lift import lift_mmx
 from w2m.rules import Ctx
 
 ICLASSES = ("EMMS", "MOVDQ2Q", "PSHUFW")
-SHARED = ()
+SHARED = ("_mmx",)
 
 
 def rule(ctx: Ctx) -> None:

@@ -5,6 +5,6 @@
 from w2m.rules import _sse
 
 ICLASSES = ("PUNPCKHBW",)
-SHARED = ("_sse",)
+SHARED = ("_sse", "_mmx")
 rule = _sse.int_rule
 lower = _sse.lower

@@ -34,13 +34,15 @@ def _slot(n: int) -> int:
 
 def native(op: Op) -> bool:
     """Whether the form runs in A64: MMX-register and memory operands only."""
-    _, ic, dst, src, _ = op
+    ic: str = op[1]
+    d: str = op[2][0]
+    s: str = op[3][0]
     if ic in ("MOVQ", "MOVD"):
-        return (dst[0] == "mm" and src[0] in ("mm", "m")) or (dst[0] == "m" and src[0] == "mm")
+        return (d == "mm" and s in ("mm", "m")) or (d == "m" and s == "mm")
     if ic in SHIFTS:
-        return dst[0] == "mm" and src[0] == "i"
+        return d == "mm" and s == "i"
     if ic in SOURCE_FORMS:
-        return dst[0] == "mm" and src[0] in ("mm", "m")
+        return d == "mm" and s in ("mm", "m")
     return False
 
 
