@@ -2235,6 +2235,7 @@ class VM:
         except (fp.SimdFault, GuestFault) as e:
             code = fp.xm_status(th.mxcsr) if isinstance(e, fp.SimdFault) else e.code
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
+            self._store_x87(st, th)                    # a faulting MMX store has set TOP 0 (set 065b)
             self.set_vectors(xmm, fpcr, 0)
             return self._raise_in_guest(x, xmm, code, rip)
         x[:16] = th.regs
@@ -2245,15 +2246,19 @@ class VM:
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
         struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
-        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, th.x87_sw, th.x87_tags)
-        top = th.x87_sw >> 11 & 7
-        for i in range(8):
-            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = th.x87_regs[(top + i) & 7].to_bytes(10, "little")
+        self._store_x87(st, th)
         for i, v in enumerate(th.ymm_hi):
             self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
         return self.miss_va                                    # dispatch the next instruction
+
+    def _store_x87(self, st: int, th: Any) -> None:
+        """The thread's x87 status, tags and registers back into the state block, ST(i) in FXSAVE's order."""
+        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, th.x87_sw, th.x87_tags)
+        top = th.x87_sw >> 11 & 7
+        for i in range(8):
+            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = th.x87_regs[(top + i) & 7].to_bytes(10, "little")
 
     def _raise_in_guest(self, x: list[int], xmm: list[int], code: int, rip: int) -> int:
         """Have the guest runtime raise exception `code` at `rip` with the state in `x` and `xmm`:

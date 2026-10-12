@@ -31,8 +31,8 @@ def traced(exe: bytes, images: tuple[str, ...], dll: tuple[str, bytes] | None = 
     with tempfile.TemporaryDirectory() as d:
         files = FileBridge(Path(d))
         loaded = load(exe, lambda n: dll[1] if dll is not None and n.lower() == dll[0].lower() else None, "probe.exe")
-        vm = VM(loaded, files=files, image_name="probe.exe", call_trace=images,
-                **({"environment": environment} if environment else {}))
+        vm = (VM(loaded, files=files, image_name="probe.exe", call_trace=images, environment=environment) if environment
+              else VM(loaded, files=files, image_name="probe.exe", call_trace=images))
         try:
             r = Machine(lambda *a: None, max_steps=1 << 40, timeout_ms=60_000).run(vm)
             calls, dropped = vm.traced_calls()
