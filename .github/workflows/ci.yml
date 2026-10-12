@@ -77,6 +77,7 @@ jobs:
       - name: pytest
         env:
           W2M_REQUIRE_REFERENCES: "1"
+          GH_TOKEN: ${{ github.token }}     # vm_oracle.result_file fetches a run's results from its case set's release
         run: uv run pytest -q -rs
       - name: record replay
         run: uv run python scripts/check_replay.py
