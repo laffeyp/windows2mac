@@ -1201,6 +1201,25 @@ FAMILIES: dict[str, Family] = {
         expected_stop="Unimplemented: OutputDebugStringW argument form",
         plants={"length_without_nul": Plant("    f->rec.information[0] = n + 1;", "    f->rec.information[0] = n;",
                                             ("a.short.exception0", "a.empty.exception0"))}),
+    "current_directory_ansi": Family(
+        name="current_directory_ansi",
+        contract_id="windows.paths.current_directory_ansi",
+        version="0.1.0",
+        summary=("GetCurrentDirectoryA, as steam_api64.dll calls it, beside GetCurrentDirectoryW on an ASCII working "
+                 "directory: by buffer size (NULL, 1, the length, the length + 1, MAX_PATH) the return, the last error, "
+                 "the bytes written and the fill left."),
+        probe="current_directory_ansi", guest_file="paths.c",
+        runs={
+              "38231721988": Run("windows-2025", "6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65", "current_directory_ansi-1-0", "AMD EPYC 7763 64-Core Processor", ),
+              "38231725219": Run("windows-2022", "666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d", "current_directory_ansi-1-1", "AMD EPYC 7763 64-Core Processor", ),
+              "38231728407": Run("windows-2025", "6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65", "current_directory_ansi-1-2", "AMD EPYC 7763 64-Core Processor", ),
+              "38231731700": Run("windows-2022", "666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d", "current_directory_ansi-1-3", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz", ),
+        },
+        documented=(),
+        open_questions=("A working directory with characters outside ASCII: no row has one.",),
+        plants={"size_without_nul": Plant("    if (!buffer || (u32)size <= n) return w2m_logged(W2M_API_GetCurrentDirectoryA, n, n + 1);",
+                                          "    if (!buffer || (u32)size <= n) return w2m_logged(W2M_API_GetCurrentDirectoryA, n, n);",
+                                          ("a.null", "a.one", "a.exact"))}),
     "time_and_error_mode": time_family("parent", (
         "Local time on a UTC machine, the time zone (TIME_ZONE_ID_UNKNOWN, zero biases, error 0), exact SYSTEMTIME "
         "and FILETIME conversions and their invalid inputs (87), and the error mode a process inherits from the "

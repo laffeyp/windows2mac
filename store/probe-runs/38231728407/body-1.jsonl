@@ -1,0 +1,5 @@
+{"s":"a.null","ret_less_n":1,"error":57005}
+{"s":"a.one","ret_less_n":1,"error":57005,"text_equal":false,"fill_kept":true}
+{"s":"a.exact","ret_less_n":1,"error":57005,"text_equal":false,"fill_kept":true}
+{"s":"a.room","ret_less_n":0,"error":57005,"text_equal":true,"fill_kept":true}
+{"s":"a.max_path","ret_less_n":0,"error":57005,"text_equal":true,"fill_kept":true}
