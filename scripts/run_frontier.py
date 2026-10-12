@@ -72,6 +72,15 @@ PLANTS = {
                              ("GetEnvironmentVariableW", "error"))}
 
 
+def where(vm: Any, address: int) -> str:
+    """An x86 address as module+RVA, or a thunk's import name (Sprint 063: where each thread stands at the stop)."""
+    if address in vm.ld.thunks:
+        return vm.ld.thunks[address]
+    base = vm.modules.containing(address)
+    name = next((n for n, (b, _, _) in vm.modules.dlls.items() if b == base), vm.modules.image_name if base else "")
+    return f"{name}+0x{address - base:x}" if base else hex(address)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -130,6 +139,7 @@ def main(argv: list[str]) -> int:
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()
+            state["main_threads"] = {t.tid: (t.status, where(vm, t.x[17]) if t.x else "running") for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
                                           dict(sorted(p.vm.calls_total().items())),
                                           {t.tid: (t.status, p.vm.ld.thunks.get(t.x[17], hex(t.x[17])) if t.x else "running")
@@ -212,6 +222,8 @@ def main(argv: list[str]) -> int:
     print(f"host requests by op {state.get('host_requests')}; calls by service {state.get('calls_total')}")
     count, first = state.get("faults", (0, []))
     print(f"faults dispatched {count}: " + "; ".join(f"0x{c:x} at 0x{rip:x} ({i0}, 0x{i1:x})" for c, rip, i0, i1 in first))
+    for tid, (status, at) in state.get("main_threads", {}).items():
+        print(f"main process thread {tid}: {status} at {at}")
     for pid, (name, code, calls, threads) in state.get("processes", {}).items():
         print(f"process {pid} {name}: exit code {code}; threads {threads}; calls by service {calls}")
     print(f"unity.log lines {state.get('log_lines')}")
