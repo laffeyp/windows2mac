@@ -566,9 +566,6 @@ def mxcsr_flags_from_fpsr(fpsr: int) -> int:
     return sum(1 << m for f, m in FPSR_TO_MXCSR if fpsr >> f & 1)
 
 
-_RUNTIME_SYMBOLS: dict[str, int] = {}
-
-
 def build_runtime(last_error_source: str | None = None, file_source: str | None = None,
                   sources: dict[str, str] | None = None) -> guest_runtime.Image:
     """The guest runtime image, refused if it lacks a service SERVICES names (a candidate file.c or
@@ -580,14 +577,10 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
     return image
 
 
-def runtime_symbol(name: str) -> int:
-    """A guest runtime symbol's address; the VM sets the table when it builds its runtime image.
-    Compiled outside a VM (an assembler check), the address is 0."""
-    return _RUNTIME_SYMBOLS.get(name, 0)
-
-
-def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
-    """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`.
+def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None) -> bool:
+    """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`. `symbols` are the
+    compiling VM's runtime image's (CPUID calls its w2m_cpuid; Sprint 058: one table for every VM in the host gave a
+    parent the child's addresses); without them, as in an assembler check, the address is 0.
     Returns True when control never falls through (an unconditional branch)."""
     last: dict[int, int] = {}
     for i, op in enumerate(ins.ops):
@@ -861,7 +854,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             for i in range(0, 16, 2):
                 a.emit(a64.stp(i, i + 1, 16, 8 * i))
             a.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
-                   a64.mov_imm(16, runtime_symbol("w2m_cpuid")), a64.blr(16), a64.mov_imm(16, state))
+                   a64.mov_imm(16, (symbols or {}).get("w2m_cpuid", 0)), a64.blr(16), a64.mov_imm(16, state))
             for i in range(0, 16, 2):
                 a.emit(a64.ldp(i, i + 1, 16, 8 * i))
         elif k == "df":                                         # CLD, STD
@@ -1033,8 +1026,6 @@ class VM:
         self.mem.regions.append(Region(HEAP_VA, view[heap_off:heap_off + HEAP_SIZE], "heap"))   # sparse: no copy
         self.mem.regions.append(Region(VIRTUAL_VA, view[virtual_off:virtual_off + VIRTUAL_SIZE], "virtual"))
         self.runtime = build_runtime(last_error_source, file_source, runtime_sources)
-        _RUNTIME_SYMBOLS.clear()
-        _RUNTIME_SYMBOLS.update(self.runtime.symbols)
         if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
             raise CompileError(f"guest runtime image ends at 0x{self.runtime.end:x}, past its area")
         for va, data in self.runtime.segments:
@@ -1999,7 +1990,7 @@ class VM:
         ended = False
         for ins in insns:
             pc_marks.append((a.here(), ins.address))
-            ended = compile_insn(a, ins, exit_va)
+            ended = compile_insn(a, ins, exit_va, self.runtime.symbols)
         if not ended:
             a.emit(a64.mov_imm(17, addr))
             a.branch(a64.b, exit_va)

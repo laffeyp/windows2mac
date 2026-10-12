@@ -186,10 +186,14 @@ static void capacity(void) {
     DWORD part = drain(r, 1000);
     Sleep(500);
     LONG done_after_part = big_done;
+    part += drain(r, 5000);                                  /* 4000 left: less than the 4096 a pipe holds */
+    Sleep(500);
+    LONG done_after_6000 = big_done;
     DWORD rest = drain(r, sizeof big - part);
     done = WaitForSingleObject(t, 10000);
     row("pipe.large_write"); field("done_before_read", (unsigned long long)done_before);
-    field("done_after_1000", (unsigned long long)done_after_part); field("read", part + rest);
+    field("done_after_1000", (unsigned long long)done_after_part);
+    field("done_after_6000", (unsigned long long)done_after_6000); field("read", part + rest);
     field("written", big_written); field("writer_done", done); end();
     CloseHandle(t); CloseHandle(r); CloseHandle(w);
 }
