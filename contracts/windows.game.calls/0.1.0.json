@@ -1,0 +1,60 @@
+{
+ "contract_id": "windows.game.calls",
+ "version": "0.1.0",
+ "status": "proposed",
+ "summary": "The calls UnityPlayer.dll and mono-2.0-bdwgc.dll make through their imports and the names they resolve with GetProcAddress, as the game makes them on Windows in batch mode: for each (image, function) its first 32 calls in order, each argument, the return value and, where the function sets one and the return says it failed, the last error, judged by the relation the value's type in win32metadata allows.",
+ "applicability": "windows-2025 (game run 38176899195, batch mode: -batchmode -nographics -logFile); the calls w2m makes before its frontier stops",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "Hail to the Rainbow.exe started as Steam starts it, with the batch run's arguments"
+  },
+  "execution": {
+   "main": "the game, from its entry to the frontier's stop"
+  },
+  "observation": {
+   "phase": "each traced call's entry (sequence, thread, arguments) and return (value, last error)"
+  }
+ },
+ "acceptance": {
+  "relation": "state_relation",
+  "rules": {
+   "value": "equal in the type's bytes",
+   "pointer": "null on both or neither; equal below 0x10000 as an argument",
+   "handle": "null on both or neither; equal with the top bit set",
+   "float": "not compared",
+   "void": "not compared",
+   "error": "equal where sets_last_error and the Windows return failed",
+   "called": "a pair w2m calls is called on Windows"
+  },
+  "comparator": "scripts/call_compare.py",
+  "signatures": "specs/signatures.json"
+ },
+ "evidence": [
+  {
+   "evidence_id": "game-trace",
+   "category": "observed",
+   "source_ref": "run 38176899195: store/game-runs/38176899195/jit_capture.bin.trace.tsv sha256:e65490f5c012fcaccfc6d126fc93bedc9a76d782eb354e00e09cfb4a858ee62f (tools/jit_capture/call_trace.h)",
+   "applicability": "windows-2025, the build in store/game-runs/38176899195/profile.txt"
+  },
+  {
+   "evidence_id": "signatures",
+   "category": "documented",
+   "source_ref": "Microsoft.Windows.SDK.Win32Metadata 71.0.30-preview, Windows.Win32.winmd sha256:8cce5eb353c9395784fba3204675ee73d5ba808573d0f7730e86148e51e9e616",
+   "applicability": "the 220 Windows functions the capture names that the metadata describes"
+  }
+ ],
+ "open_questions": [
+  "Calls are compared per (image, function) in order; where threads interleave calls to one function differently on the two systems, a divergence may be an order and not a value.",
+  "String arguments are compared as pointers; the Windows capture's strings (jit_capture.bin.strings.tsv) are not yet compared with w2m's.",
+  "The crash handler's calls (jit_capture.bin.handler.trace.tsv) are not compared."
+ ],
+ "sections": {
+  "probe": "tools/jit_capture (the game's run on a Windows runner)",
+  "implementation": "tools/guest_runtime (every service the game reaches)",
+  "rows": "scripts/call_compare.py",
+  "excluded": "functions call_trace.h leaves untraced (UNTRACED)"
+ }
+}

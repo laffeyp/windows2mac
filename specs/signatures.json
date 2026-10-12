@@ -1,0 +1,5529 @@
+{
+ "version": "0.1.0",
+ "source": {
+  "package": "Microsoft.Windows.SDK.Win32Metadata 71.0.30-preview",
+  "package_sha256": "b1f4ae72797e76c7512f08ba24ee3fd2deff01c26a7d812083d56229f7d62a3b",
+  "winmd_sha256": "8cce5eb353c9395784fba3204675ee73d5ba808573d0f7730e86148e51e9e616",
+  "reader": "dnfile 0.18.0"
+ },
+ "capture": "store/game-runs/38176899195",
+ "missing": [
+  "DllGetVersion",
+  "RtlVerifyVersionInfo",
+  "SteamAPI_Init",
+  "SteamAPI_RestartAppIfNecessary",
+  "UnityGetAudioEffectDefinitions",
+  "UnityPluginLoad",
+  "UnityPluginUnload",
+  "UnityRenderEvent",
+  "UnityRenderingExtEvent",
+  "UnityRenderingExtQuery",
+  "UnitySetEventQueue",
+  "UnitySetGraphicsDevice",
+  "UnityShaderCompilerExtEvent",
+  "mono_add_internal_call",
+  "mono_array_addr_with_size",
+  "mono_array_class_get",
+  "mono_array_element_size",
+  "mono_array_new",
+  "mono_assembly_close",
+  "mono_assembly_fill_assembly_name",
+  "mono_assembly_foreach",
+  "mono_assembly_get_image",
+  "mono_assembly_get_object",
+  "mono_assembly_load_from",
+  "mono_assembly_load_from_full",
+  "mono_assembly_loaded",
+  "mono_assembly_name_free",
+  "mono_assembly_name_parse",
+  "mono_assembly_open",
+  "mono_class_array_element_size",
+  "mono_class_enum_basetype",
+  "mono_class_from_mono_type",
+  "mono_class_from_name",
+  "mono_class_from_name_case",
+  "mono_class_get_byref_type",
+  "mono_class_get_element_class",
+  "mono_class_get_field_from_name",
+  "mono_class_get_fields",
+  "mono_class_get_flags",
+  "mono_class_get_image",
+  "mono_class_get_interfaces",
+  "mono_class_get_method_from_name",
+  "mono_class_get_methods",
+  "mono_class_get_name",
+  "mono_class_get_namespace",
+  "mono_class_get_nested_types",
+  "mono_class_get_nesting_type",
+  "mono_class_get_parent",
+  "mono_class_get_properties",
+  "mono_class_get_property_from_name",
+  "mono_class_get_rank",
+  "mono_class_get_type",
+  "mono_class_get_type_token",
+  "mono_class_get_userdata",
+  "mono_class_get_userdata_offset",
+  "mono_class_instance_size",
+  "mono_class_is_blittable",
+  "mono_class_is_enum",
+  "mono_class_is_generic",
+  "mono_class_is_inflated",
+  "mono_class_is_subclass_of",
+  "mono_class_is_valuetype",
+  "mono_class_set_userdata",
+  "mono_class_vtable",
+  "mono_config_parse",
+  "mono_custom_attrs_construct",
+  "mono_custom_attrs_construct_by_type",
+  "mono_custom_attrs_free",
+  "mono_custom_attrs_from_assembly",
+  "mono_custom_attrs_from_class",
+  "mono_custom_attrs_from_field",
+  "mono_custom_attrs_from_method",
+  "mono_custom_attrs_from_property",
+  "mono_custom_attrs_get_attr",
+  "mono_custom_attrs_get_attrs",
+  "mono_custom_attrs_has_attr",
+  "mono_debug_find_method",
+  "mono_debug_free_method_jit_info",
+  "mono_debug_free_source_location",
+  "mono_debug_init",
+  "mono_debug_lookup_source_location",
+  "mono_debug_lookup_source_location_by_il",
+  "mono_debug_open_image_from_memory",
+  "mono_dl_fallback_register",
+  "mono_dl_fallback_unregister",
+  "mono_domain_assembly_open",
+  "mono_domain_create_appdomain",
+  "mono_domain_finalize",
+  "mono_domain_get",
+  "mono_domain_get_id",
+  "mono_domain_set",
+  "mono_domain_unload",
+  "mono_error_cleanup",
+  "mono_error_get_error_code",
+  "mono_error_get_message",
+  "mono_error_init",
+  "mono_error_ok",
+  "mono_exception_from_name_msg",
+  "mono_exception_from_name_two_strings",
+  "mono_field_get_flags",
+  "mono_field_get_name",
+  "mono_field_get_offset",
+  "mono_field_get_parent",
+  "mono_field_get_type",
+  "mono_field_get_value",
+  "mono_field_set_value",
+  "mono_field_static_get_value",
+  "mono_gc_collect",
+  "mono_gc_collect_a_little",
+  "mono_gc_get_heap_size",
+  "mono_gc_get_max_time_slice_ns",
+  "mono_gc_get_used_size",
+  "mono_gc_is_incremental",
+  "mono_gc_max_generation",
+  "mono_gc_set_incremental",
+  "mono_gc_set_max_time_slice_ns",
+  "mono_gc_wbarrier_generic_store",
+  "mono_gc_wbarrier_set_field",
+  "mono_gchandle_free",
+  "mono_gchandle_get_target",
+  "mono_gchandle_is_in_domain",
+  "mono_gchandle_new",
+  "mono_gchandle_new_weakref",
+  "mono_get_array_class",
+  "mono_get_boolean_class",
+  "mono_get_byte_class",
+  "mono_get_char_class",
+  "mono_get_corlib",
+  "mono_get_double_class",
+  "mono_get_enum_class",
+  "mono_get_exception_argument_null",
+  "mono_get_exception_class",
+  "mono_get_int16_class",
+  "mono_get_int32_class",
+  "mono_get_int64_class",
+  "mono_get_object_class",
+  "mono_get_root_domain",
+  "mono_get_single_class",
+  "mono_get_string_class",
+  "mono_image_close",
+  "mono_image_get_assembly",
+  "mono_image_get_filename",
+  "mono_image_get_name",
+  "mono_image_get_table_rows",
+  "mono_image_loaded",
+  "mono_image_open_from_data_full",
+  "mono_image_open_from_data_with_name",
+  "mono_is_debugger_attached",
+  "mono_jit_info_get_code_size",
+  "mono_jit_info_get_code_start",
+  "mono_jit_info_table_find",
+  "mono_jit_init_version",
+  "mono_jit_parse_options",
+  "mono_metadata_signature_equal",
+  "mono_metadata_type_equal",
+  "mono_method_full_name",
+  "mono_method_get_class",
+  "mono_method_get_last_managed",
+  "mono_method_get_name",
+  "mono_method_get_object",
+  "mono_method_signature",
+  "mono_method_signature_checked",
+  "mono_object_get_class",
+  "mono_object_get_size",
+  "mono_object_get_virtual_method",
+  "mono_object_isinst",
+  "mono_object_new",
+  "mono_object_new_alloc_specific",
+  "mono_object_new_specific",
+  "mono_object_unbox",
+  "mono_parse_default_optimizations",
+  "mono_pmip",
+  "mono_profiler_create",
+  "mono_profiler_enable_coverage",
+  "mono_profiler_get_all_coverage_data",
+  "mono_profiler_get_coverage_data",
+  "mono_profiler_install",
+  "mono_profiler_install_gc",
+  "mono_profiler_load",
+  "mono_profiler_reset_all_coverage",
+  "mono_profiler_reset_coverage",
+  "mono_profiler_set_coverage_filter_callback",
+  "mono_profiler_set_events",
+  "mono_property_get_get_method",
+  "mono_raise_exception",
+  "mono_reflection_get_custom_attrs_by_type",
+  "mono_runtime_cleanup",
+  "mono_runtime_delegate_invoke",
+  "mono_runtime_exec_main",
+  "mono_runtime_invoke",
+  "mono_runtime_invoke_array",
+  "mono_runtime_is_shutting_down",
+  "mono_runtime_object_init",
+  "mono_runtime_set_shutting_down",
+  "mono_runtime_unhandled_exception_policy_set",
+  "mono_set_assemblies_path_null_separated",
+  "mono_set_crash_chaining",
+  "mono_set_defaults",
+  "mono_set_dirs",
+  "mono_set_find_plugin_callback",
+  "mono_set_ignore_version_and_key_when_finding_assemblies_already_loaded",
+  "mono_set_signal_chaining",
+  "mono_signature_get_param_count",
+  "mono_signature_get_params",
+  "mono_signature_get_return_type",
+  "mono_signature_is_instance",
+  "mono_stack_walk",
+  "mono_stack_walk_no_il",
+  "mono_string_from_utf16",
+  "mono_string_new_len",
+  "mono_string_new_utf16",
+  "mono_string_new_wrapper",
+  "mono_string_to_utf16",
+  "mono_string_to_utf8",
+  "mono_stringify_assembly_name",
+  "mono_thread_attach",
+  "mono_thread_current",
+  "mono_thread_detach",
+  "mono_thread_exit",
+  "mono_thread_pool_cleanup",
+  "mono_thread_pop_appdomain_ref",
+  "mono_thread_push_appdomain_ref",
+  "mono_thread_set_main",
+  "mono_thread_suspend_all_other_threads",
+  "mono_threads_set_shutting_down",
+  "mono_trace_set_level_string",
+  "mono_trace_set_mask_string",
+  "mono_type_get_attrs",
+  "mono_type_get_class",
+  "mono_type_get_name",
+  "mono_type_get_name_full",
+  "mono_type_get_object",
+  "mono_type_get_type",
+  "mono_type_is_byref",
+  "mono_unity_allocation_granularity",
+  "mono_unity_array_new_2d",
+  "mono_unity_array_new_3d",
+  "mono_unity_array_object_header_size",
+  "mono_unity_assembly_mempool_chunk_foreach",
+  "mono_unity_capture_memory_snapshot",
+  "mono_unity_class_field_is_literal",
+  "mono_unity_class_for_each",
+  "mono_unity_class_get",
+  "mono_unity_class_get_data_size",
+  "mono_unity_class_get_generic_type_definition",
+  "mono_unity_class_is_abstract",
+  "mono_unity_class_is_interface",
+  "mono_unity_class_is_open_constructed_type",
+  "mono_unity_class_try_get_vtable",
+  "mono_unity_domain_mempool_chunk_foreach",
+  "mono_unity_domain_set_config",
+  "mono_unity_error_convert_to_exception",
+  "mono_unity_free_captured_memory_snapshot",
+  "mono_unity_g_free",
+  "mono_unity_gc_disable",
+  "mono_unity_gc_enable",
+  "mono_unity_gc_handles_foreach_get_target",
+  "mono_unity_gc_heap_foreach",
+  "mono_unity_gc_is_disabled",
+  "mono_unity_image_set_mempool_chunk_foreach",
+  "mono_unity_install_unitytls_interface",
+  "mono_unity_jit_cleanup",
+  "mono_unity_liveness_calculation_begin",
+  "mono_unity_liveness_calculation_end",
+  "mono_unity_liveness_calculation_from_root",
+  "mono_unity_liveness_calculation_from_statics",
+  "mono_unity_liveness_finalize",
+  "mono_unity_liveness_free_struct",
+  "mono_unity_liveness_start_gc_world",
+  "mono_unity_liveness_stop_gc_world",
+  "mono_unity_loader_get_last_error_and_error_prepare_exception",
+  "mono_unity_lock_dynamic_function_access_tables64",
+  "mono_unity_managed_callstack",
+  "mono_unity_object_header_size",
+  "mono_unity_offset_of_array_bounds_in_array_object_header",
+  "mono_unity_offset_of_array_length_in_array_object_header",
+  "mono_unity_root_domain_mempool_chunk_foreach",
+  "mono_unity_runtime_set_main_args",
+  "mono_unity_set_data_dir",
+  "mono_unity_set_embeddinghostname",
+  "mono_unity_set_vprintf_func",
+  "mono_unity_start_gc_world",
+  "mono_unity_stop_gc_world",
+  "mono_unity_string_empty_wrapper",
+  "mono_unity_type_get_name_full_chunked",
+  "mono_unity_type_is_pointer_type",
+  "mono_unity_type_is_static",
+  "mono_unity_unlock_dynamic_function_access_tables64",
+  "mono_unity_vtable_get_static_field_data",
+  "mono_value_box",
+  "unity_mono_method_is_generic",
+  "unity_mono_method_is_inflated",
+  "unity_mono_reflection_method_get_method"
+ ],
+ "functions": {
+  "AcquireSRWLockExclusive": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "SRWLock",
+     "type": "SRWLOCK*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "AcquireSRWLockShared": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "SRWLock",
+     "type": "SRWLOCK*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "AddDllDirectory": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "NewDirectory",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "AddVectoredExceptionHandler": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "First",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "Handler",
+     "type": "PVECTORED_EXCEPTION_HANDLER",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "AppPolicyGetProcessTerminationMethod": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "processToken",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "policy",
+     "type": "AppPolicyProcessTerminationMethod*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "AppPolicyGetThreadInitializationType": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "processToken",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "policy",
+     "type": "AppPolicyThreadInitializationType*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "AreFileApisANSI": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "BCryptGenRandom": {
+   "dll": "bcrypt.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "NTSTATUS",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hAlgorithm",
+     "type": "BCRYPT_ALG_HANDLE",
+     "kind": "pointer"
+    },
+    {
+     "name": "pbBuffer",
+     "type": "u1*",
+     "kind": "pointer"
+    },
+    {
+     "name": "cbBuffer",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFlags",
+     "type": "BCRYPTGENRANDOM_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "CancelSynchronousIo": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "CloseHandle": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hObject",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "CoCreateGuid": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "pguid",
+     "type": "Guid*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CoCreateInstance": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "rclsid",
+     "type": "Guid*",
+     "kind": "pointer"
+    },
+    {
+     "name": "pUnkOuter",
+     "type": "IUnknown",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwClsContext",
+     "type": "CLSCTX",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "riid",
+     "type": "Guid*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ppv",
+     "type": "void**",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CoInitialize": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "pvReserved",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CoInitializeEx": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "pvReserved",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwCoInit",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "CoTaskMemFree": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "pv",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CoUninitialize": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": []
+  },
+  "CommandLineToArgvW": {
+   "dll": "SHELL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "PWSTR*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "lpCmdLine",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "pNumArgs",
+     "type": "i4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CompareStringEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "COMPARESTRING_RESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwCmpFlags",
+     "type": "COMPARE_STRING_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpString1",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchCount1",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpString2",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchCount2",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpVersionInformation",
+     "type": "NLSVERSIONINFO*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpReserved",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lParam",
+     "type": "LPARAM",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "CreateDXGIFactory": {
+   "dll": "dxgi.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "riid",
+     "type": "Guid*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ppFactory",
+     "type": "void**",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateDirectoryW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpPathName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpSecurityAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateEventA": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpEventAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "bManualReset",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bInitialState",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateEventW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpEventAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "bManualReset",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bInitialState",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateFileMappingW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpFileMappingAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "flProtect",
+     "type": "PAGE_PROTECTION_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwMaximumSizeHigh",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwMaximumSizeLow",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateFileW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwDesiredAccess",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwShareMode",
+     "type": "FILE_SHARE_MODE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpSecurityAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwCreationDisposition",
+     "type": "FILE_CREATION_DISPOSITION",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFlagsAndAttributes",
+     "type": "FILE_FLAGS_AND_ATTRIBUTES",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "hTemplateFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "CreatePipe": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hReadPipe",
+     "type": "HANDLE*",
+     "kind": "pointer"
+    },
+    {
+     "name": "hWritePipe",
+     "type": "HANDLE*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpPipeAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "nSize",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "CreateProcessW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpApplicationName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpCommandLine",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpProcessAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpThreadAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "bInheritHandles",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwCreationFlags",
+     "type": "PROCESS_CREATION_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpEnvironment",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpCurrentDirectory",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpStartupInfo",
+     "type": "STARTUPINFOW*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpProcessInformation",
+     "type": "PROCESS_INFORMATION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateSemaphoreExW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpSemaphoreAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lInitialCount",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lMaximumCount",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwDesiredAccess",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "CreateSemaphoreW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpSemaphoreAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lInitialCount",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lMaximumCount",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpThreadAttributes",
+     "type": "SECURITY_ATTRIBUTES*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwStackSize",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "lpStartAddress",
+     "type": "LPTHREAD_START_ROUTINE",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpParameter",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwCreationFlags",
+     "type": "THREAD_CREATION_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpThreadId",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "CreateWindowExW": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HWND",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "dwExStyle",
+     "type": "WINDOW_EX_STYLE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpClassName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpWindowName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwStyle",
+     "type": "WINDOW_STYLE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "X",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "Y",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "nWidth",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "nHeight",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "hWndParent",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "hMenu",
+     "type": "HMENU",
+     "kind": "handle"
+    },
+    {
+     "name": "hInstance",
+     "type": "HINSTANCE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpParam",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "DecodePointer": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "Ptr",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "DefWindowProcW": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "LRESULT",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "Msg",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "wParam",
+     "type": "WPARAM",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "lParam",
+     "type": "LPARAM",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "DeleteCriticalSection": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "DeleteFileW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "DispatchMessageA": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "LRESULT",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "lpMsg",
+     "type": "MSG*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "DuplicateHandle": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hSourceProcessHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "hSourceHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "hTargetProcessHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpTargetHandle",
+     "type": "HANDLE*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwDesiredAccess",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bInheritHandle",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwOptions",
+     "type": "DUPLICATE_HANDLE_OPTIONS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "EncodePointer": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "Ptr",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "EnterCriticalSection": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "EnumDisplayDevicesA": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpDevice",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "iDevNum",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpDisplayDevice",
+     "type": "DISPLAY_DEVICEA*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "EnumDisplayMonitors": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hdc",
+     "type": "HDC",
+     "kind": "handle"
+    },
+    {
+     "name": "lprcClip",
+     "type": "RECT*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpfnEnum",
+     "type": "MONITORENUMPROC",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwData",
+     "type": "LPARAM",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "EnumDisplaySettingsW": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpszDeviceName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "iModeNum",
+     "type": "ENUM_DISPLAY_SETTINGS_MODE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpDevMode",
+     "type": "DEVMODEW*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "EnumProcessModules": {
+   "dll": "PSAPI.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hProcess",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lphModule",
+     "type": "HMODULE*",
+     "kind": "pointer"
+    },
+    {
+     "name": "cb",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpcbNeeded",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "EnumSystemLocalesEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleEnumProcEx",
+     "type": "LOCALE_ENUMPROCEX",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lParam",
+     "type": "LPARAM",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "lpReserved",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FileTimeToSystemTime": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpFileTime",
+     "type": "FILETIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpSystemTime",
+     "type": "SYSTEMTIME*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FindClose": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFindFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "FindFirstFileExW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "fInfoLevelId",
+     "type": "FINDEX_INFO_LEVELS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpFindFileData",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "fSearchOp",
+     "type": "FINDEX_SEARCH_OPS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpSearchFilter",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwAdditionalFlags",
+     "type": "FIND_FIRST_EX_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "FindNextFileW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFindFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpFindFileData",
+     "type": "WIN32_FIND_DATAW*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FlsAlloc": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpCallback",
+     "type": "PFLS_CALLBACK_FUNCTION",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FlsGetValue": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "dwFlsIndex",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "FlsSetValue": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwFlsIndex",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpFlsData",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FlushFileBuffers": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "FormatMessageW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwFlags",
+     "type": "FORMAT_MESSAGE_OPTIONS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpSource",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwMessageId",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwLanguageId",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpBuffer",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "nSize",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "Arguments",
+     "type": "i1**",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FreeEnvironmentStringsW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "penv",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "FreeLibrary": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hLibModule",
+     "type": "HMODULE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "GetACP": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetCPInfo": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "CodePage",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpCPInfo",
+     "type": "CPINFO*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetClientRect": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "lpRect",
+     "type": "RECT*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetCommandLineA": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "PSTR",
+    "kind": "pointer"
+   },
+   "params": []
+  },
+  "GetCommandLineW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "PWSTR",
+    "kind": "pointer"
+   },
+   "params": []
+  },
+  "GetConsoleCP": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetConsoleOutputCP": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetCurrentDirectoryW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "nBufferLength",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpBuffer",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetCurrentProcess": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": []
+  },
+  "GetCurrentProcessId": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetCurrentThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": []
+  },
+  "GetCurrentThreadId": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetDateFormatEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "ENUM_DATE_FORMATS_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpDate",
+     "type": "SYSTEMTIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpFormat",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpDateStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchDate",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpCalendar",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetDpiForMonitor": {
+   "dll": "api-ms-win-shcore-scaling-l1-1-1.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hmonitor",
+     "type": "HMONITOR",
+     "kind": "handle"
+    },
+    {
+     "name": "dpiType",
+     "type": "MONITOR_DPI_TYPE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dpiX",
+     "type": "u4*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dpiY",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetEnvironmentStringsW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "PWSTR",
+    "kind": "pointer"
+   },
+   "params": []
+  },
+  "GetEnvironmentVariableW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpBuffer",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "nSize",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetExitCodeThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpExitCode",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetFileAttributesExW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "fInfoLevelId",
+     "type": "GET_FILEEX_INFO_LEVELS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpFileInformation",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetFileAttributesW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetFileInformationByHandleEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "FileInformationClass",
+     "type": "FILE_INFO_BY_HANDLE_CLASS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpFileInformation",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwBufferSize",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetFileSize": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpFileSizeHigh",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetFileType": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "FILE_TYPE",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "GetFocus": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HWND",
+    "kind": "handle"
+   },
+   "params": []
+  },
+  "GetFullPathNameW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "nBufferLength",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpBuffer",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpFilePart",
+     "type": "PWSTR*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetLastError": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetLocaleInfoA": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "Locale",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "LCType",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpLCData",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchData",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetLocaleInfoEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "LCType",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpLCData",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchData",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetLogicalProcessorInformationEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "RelationshipType",
+     "type": "LOGICAL_PROCESSOR_RELATIONSHIP",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "Buffer",
+     "type": "SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ReturnedLength",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetMessageExtraInfo": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "LPARAM",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": []
+  },
+  "GetModuleFileNameW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hModule",
+     "type": "HMODULE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpFilename",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "nSize",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetModuleHandleA": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HMODULE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpModuleName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetModuleHandleExW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpModuleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "phModule",
+     "type": "HMODULE*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetModuleHandleW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HMODULE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpModuleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetMonitorInfoA": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hMonitor",
+     "type": "HMONITOR",
+     "kind": "handle"
+    },
+    {
+     "name": "lpmi",
+     "type": "MONITORINFO*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetMonitorInfoW": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hMonitor",
+     "type": "HMONITOR",
+     "kind": "handle"
+    },
+    {
+     "name": "lpmi",
+     "type": "MONITORINFO*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetNativeSystemInfo": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpSystemInfo",
+     "type": "SYSTEM_INFO*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetProcAddress": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "FARPROC",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "hModule",
+     "type": "HMODULE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpProcName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetProcessHeap": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": []
+  },
+  "GetSidSubAuthority": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "pSid",
+     "type": "PSID",
+     "kind": "pointer"
+    },
+    {
+     "name": "nSubAuthority",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetStartupInfoW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpStartupInfo",
+     "type": "STARTUPINFOW*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetStdHandle": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "nStdHandle",
+     "type": "STD_HANDLE",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetStringTypeW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwInfoType",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpSrcStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchSrc",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpCharType",
+     "type": "u2*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetSystemInfo": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpSystemInfo",
+     "type": "SYSTEM_INFO*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetSystemMetrics": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "nIndex",
+     "type": "SYSTEM_METRICS_INDEX",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetSystemTimePreciseAsFileTime": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpSystemTimeAsFileTime",
+     "type": "FILETIME*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetTempFileNameW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpPathName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpPrefixString",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "uUnique",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpTempFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetTempPathW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "nBufferLength",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpBuffer",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetThreadContext": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpContext",
+     "type": "CONTEXT*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetThreadLocale": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "GetThreadPriority": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "GetThreadTimes": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpCreationTime",
+     "type": "FILETIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpExitTime",
+     "type": "FILETIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpKernelTime",
+     "type": "FILETIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpUserTime",
+     "type": "FILETIME*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetTickCount64": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u8",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": []
+  },
+  "GetTimeFormatEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "TIME_FORMAT_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpTime",
+     "type": "SYSTEMTIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpFormat",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpTimeStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchTime",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetTimeZoneInformation": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpTimeZoneInformation",
+     "type": "TIME_ZONE_INFORMATION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetTokenInformation": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "TokenHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "TokenInformationClass",
+     "type": "TOKEN_INFORMATION_CLASS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "TokenInformation",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "TokenInformationLength",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "ReturnLength",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "GetUserDefaultLocaleName": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchLocaleName",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GetWindowsDirectoryW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpBuffer",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "uSize",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "GlobalMemoryStatusEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpBuffer",
+     "type": "MEMORYSTATUSEX*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "HeapAlloc": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "hHeap",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwFlags",
+     "type": "HEAP_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwBytes",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "HeapFree": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hHeap",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwFlags",
+     "type": "HEAP_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpMem",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "HeapReAlloc": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "hHeap",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwFlags",
+     "type": "HEAP_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpMem",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwBytes",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "HeapSize": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "usize",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "hHeap",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwFlags",
+     "type": "HEAP_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpMem",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InitializeConditionVariable": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "ConditionVariable",
+     "type": "CONDITION_VARIABLE*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InitializeCriticalSection": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InitializeCriticalSectionAndSpinCount": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwSpinCount",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "InitializeCriticalSectionEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwSpinCount",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "Flags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "InitializeSListHead": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "ListHead",
+     "type": "SLIST_HEADER*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InitializeSRWLock": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "SRWLock",
+     "type": "SRWLOCK*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InterlockedFlushSList": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "SLIST_ENTRY*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "ListHead",
+     "type": "SLIST_HEADER*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InterlockedPopEntrySList": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "SLIST_ENTRY*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "ListHead",
+     "type": "SLIST_HEADER*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "InterlockedPushEntrySList": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "SLIST_ENTRY*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "ListHead",
+     "type": "SLIST_HEADER*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ListEntry",
+     "type": "SLIST_ENTRY*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "IsValidCodePage": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "CodePage",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "IsValidLocaleName": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "IsWindowVisible": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    }
+   ]
+  },
+  "LCIDToLocaleName": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "Locale",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchName",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "LCMapStringEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpLocaleName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwMapFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpSrcStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchSrc",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpDestStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchDest",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpVersionInformation",
+     "type": "NLSVERSIONINFO*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpReserved",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "sortHandle",
+     "type": "LPARAM",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "LeaveCriticalSection": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "LoadCursorA": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HCURSOR",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hInstance",
+     "type": "HINSTANCE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpCursorName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "LoadIconA": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HICON",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hInstance",
+     "type": "HINSTANCE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpIconName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "LoadImageW": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hInst",
+     "type": "HINSTANCE",
+     "kind": "handle"
+    },
+    {
+     "name": "name",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "type",
+     "type": "GDI_IMAGE_TYPE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "cx",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "cy",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "fuLoad",
+     "type": "IMAGE_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "LoadLibraryA": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HMODULE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpLibFileName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "LoadLibraryExW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HMODULE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpLibFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwFlags",
+     "type": "LOAD_LIBRARY_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "LoadLibraryW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HMODULE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "lpLibFileName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "LocalAlloc": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HLOCAL",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "uFlags",
+     "type": "LOCAL_ALLOC_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "uBytes",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "LocalFree": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HLOCAL",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hMem",
+     "type": "HLOCAL",
+     "kind": "handle"
+    }
+   ]
+  },
+  "LocaleNameToLCID": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "MapViewOfFile": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "MEMORY_MAPPED_VIEW_ADDRESS",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "hFileMappingObject",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwDesiredAccess",
+     "type": "FILE_MAP",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFileOffsetHigh",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFileOffsetLow",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwNumberOfBytesToMap",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "MonitorFromWindow": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HMONITOR",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hwnd",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "dwFlags",
+     "type": "MONITOR_FROM_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "MultiByteToWideChar": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "CodePage",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFlags",
+     "type": "MULTI_BYTE_TO_WIDE_CHAR_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpMultiByteStr",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cbMultiByte",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpWideCharStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchWideChar",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "OpenProcess": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "dwDesiredAccess",
+     "type": "PROCESS_ACCESS_RIGHTS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bInheritHandle",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwProcessId",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "OpenProcessToken": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "ProcessHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "DesiredAccess",
+     "type": "TOKEN_ACCESS_MASK",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "TokenHandle",
+     "type": "HANDLE*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "OpenThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HANDLE",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "dwDesiredAccess",
+     "type": "THREAD_ACCESS_RIGHTS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bInheritHandle",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwThreadId",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "PeekMessageA": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpMsg",
+     "type": "MSG*",
+     "kind": "pointer"
+    },
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "wMsgFilterMin",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "wMsgFilterMax",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "wRemoveMsg",
+     "type": "PEEK_MESSAGE_REMOVE_TYPE",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "PropVariantClear": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "pvar",
+     "type": "PROPVARIANT*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "QueryPerformanceCounter": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpPerformanceCount",
+     "type": "i8*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "QueryPerformanceFrequency": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpFrequency",
+     "type": "i8*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RaiseException": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "dwExceptionCode",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwExceptionFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "nNumberOfArguments",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpArguments",
+     "type": "usize*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "ReadFile": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpBuffer",
+     "type": "u1*",
+     "kind": "pointer"
+    },
+    {
+     "name": "nNumberOfBytesToRead",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpNumberOfBytesRead",
+     "type": "u4*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpOverlapped",
+     "type": "OVERLAPPED*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegCloseKey": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hKey",
+     "type": "HKEY",
+     "kind": "handle"
+    }
+   ]
+  },
+  "RegCreateKeyW": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hKey",
+     "type": "HKEY",
+     "kind": "handle"
+    },
+    {
+     "name": "lpSubKey",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "phkResult",
+     "type": "HKEY*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegDeleteValueA": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hKey",
+     "type": "HKEY",
+     "kind": "handle"
+    },
+    {
+     "name": "lpValueName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegOpenKeyExW": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hKey",
+     "type": "HKEY",
+     "kind": "handle"
+    },
+    {
+     "name": "lpSubKey",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "ulOptions",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "samDesired",
+     "type": "REG_SAM_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "phkResult",
+     "type": "HKEY*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegQueryValueExA": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hKey",
+     "type": "HKEY",
+     "kind": "handle"
+    },
+    {
+     "name": "lpValueName",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpReserved",
+     "type": "u4*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpType",
+     "type": "REG_VALUE_TYPE*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpData",
+     "type": "u1*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpcbData",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegSetValueExA": {
+   "dll": "ADVAPI32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "WIN32_ERROR",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hKey",
+     "type": "HKEY",
+     "kind": "handle"
+    },
+    {
+     "name": "lpValueName",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "Reserved",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwType",
+     "type": "REG_VALUE_TYPE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpData",
+     "type": "u1*",
+     "kind": "pointer"
+    },
+    {
+     "name": "cbData",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "RegisterClassExW": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u2",
+    "kind": "value",
+    "bytes": 2
+   },
+   "params": [
+    {
+     "name": "param0",
+     "type": "WNDCLASSEXW*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegisterClassW": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u2",
+    "kind": "value",
+    "bytes": 2
+   },
+   "params": [
+    {
+     "name": "lpWndClass",
+     "type": "WNDCLASSW*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RegisterDeviceNotificationW": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HDEVNOTIFY",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hRecipient",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "NotificationFilter",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "Flags",
+     "type": "REGISTER_NOTIFICATION_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "ReleaseSRWLockExclusive": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "SRWLock",
+     "type": "SRWLOCK*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "ReleaseSRWLockShared": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "SRWLock",
+     "type": "SRWLOCK*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "ReleaseSemaphore": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hSemaphore",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lReleaseCount",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpPreviousCount",
+     "type": "i4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "ResetEvent": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hEvent",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "ResumeThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "RoActivateInstance": {
+   "dll": "api-ms-win-core-winrt-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "activatableClassId",
+     "type": "HSTRING",
+     "kind": "handle"
+    },
+    {
+     "name": "instance",
+     "type": "IInspectable*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RoGetActivationFactory": {
+   "dll": "api-ms-win-core-winrt-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "activatableClassId",
+     "type": "HSTRING",
+     "kind": "handle"
+    },
+    {
+     "name": "iid",
+     "type": "Guid*",
+     "kind": "pointer"
+    },
+    {
+     "name": "factory",
+     "type": "void**",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RoGetAgileReference": {
+   "dll": "OLE32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "options",
+     "type": "AgileReferenceOptions",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "riid",
+     "type": "Guid*",
+     "kind": "pointer"
+    },
+    {
+     "name": "pUnk",
+     "type": "IUnknown",
+     "kind": "pointer"
+    },
+    {
+     "name": "ppAgileReference",
+     "type": "IAgileReference*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RoInitialize": {
+   "dll": "api-ms-win-core-winrt-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "initType",
+     "type": "RO_INIT_TYPE",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "RoUninitialize": {
+   "dll": "api-ms-win-core-winrt-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": []
+  },
+  "RtlAddGrowableFunctionTable": {
+   "dll": "ntdll.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "DynamicTable",
+     "type": "void**",
+     "kind": "pointer"
+    },
+    {
+     "name": "FunctionTable",
+     "type": "IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY*",
+     "kind": "pointer"
+    },
+    {
+     "name": "EntryCount",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "MaximumEntryCount",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "RangeBase",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "RangeEnd",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ],
+   "also": [
+    {
+     "dll": "ntdll.dll",
+     "sets_last_error": false,
+     "return": {
+      "type": "u4",
+      "kind": "value",
+      "bytes": 4
+     },
+     "params": [
+      {
+       "name": "DynamicTable",
+       "type": "void**",
+       "kind": "pointer"
+      },
+      {
+       "name": "FunctionTable",
+       "type": "IMAGE_RUNTIME_FUNCTION_ENTRY*",
+       "kind": "pointer"
+      },
+      {
+       "name": "EntryCount",
+       "type": "u4",
+       "kind": "value",
+       "bytes": 4
+      },
+      {
+       "name": "MaximumEntryCount",
+       "type": "u4",
+       "kind": "value",
+       "bytes": 4
+      },
+      {
+       "name": "RangeBase",
+       "type": "usize",
+       "kind": "value",
+       "bytes": 8
+      },
+      {
+       "name": "RangeEnd",
+       "type": "usize",
+       "kind": "value",
+       "bytes": 8
+      }
+     ]
+    }
+   ]
+  },
+  "RtlDeleteGrowableFunctionTable": {
+   "dll": "ntdll.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "DynamicTable",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "RtlGrowFunctionTable": {
+   "dll": "ntdll.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "DynamicTable",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "NewEntryCount",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "RtlUnwindEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "TargetFrame",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "TargetIp",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ExceptionRecord",
+     "type": "EXCEPTION_RECORD*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ReturnValue",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "ContextRecord",
+     "type": "CONTEXT*",
+     "kind": "pointer"
+    },
+    {
+     "name": "HistoryTable",
+     "type": "UNWIND_HISTORY_TABLE*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "SHGetKnownFolderPath": {
+   "dll": "SHELL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "rfid",
+     "type": "Guid*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "hToken",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "ppszPath",
+     "type": "PWSTR*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "SetConsoleCtrlHandler": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "HandlerRoutine",
+     "type": "PHANDLER_ROUTINE",
+     "kind": "pointer"
+    },
+    {
+     "name": "Add",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SetDllDirectoryW": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpPathName",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "SetErrorMode": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "THREAD_ERROR_MODE",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "uMode",
+     "type": "THREAD_ERROR_MODE",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SetEvent": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hEvent",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "SetFilePointerEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "liDistanceToMove",
+     "type": "i8",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "lpNewFilePointer",
+     "type": "i8*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwMoveMethod",
+     "type": "SET_FILE_POINTER_MOVE_METHOD",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SetFocus": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "HWND",
+    "kind": "handle"
+   },
+   "params": [
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    }
+   ]
+  },
+  "SetHandleInformation": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hObject",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwMask",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFlags",
+     "type": "HANDLE_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SetLastError": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "dwErrCode",
+     "type": "WIN32_ERROR",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SetThreadDescription": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpThreadDescription",
+     "type": "PWSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "SetThreadPriority": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "nPriority",
+     "type": "THREAD_PRIORITY",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SetUnhandledExceptionFilter": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "LPTOP_LEVEL_EXCEPTION_FILTER",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "lpTopLevelExceptionFilter",
+     "type": "LPTOP_LEVEL_EXCEPTION_FILTER",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "SetWindowLongPtrA": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "isize",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "nIndex",
+     "type": "WINDOW_LONG_PTR_INDEX",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwNewLong",
+     "type": "isize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "SetWindowLongPtrW": {
+   "dll": "USER32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "isize",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "hWnd",
+     "type": "HWND",
+     "kind": "handle"
+    },
+    {
+     "name": "nIndex",
+     "type": "WINDOW_LONG_PTR_INDEX",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwNewLong",
+     "type": "isize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "Sleep": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "dwMilliseconds",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SleepEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwMilliseconds",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bAlertable",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "SuspendThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hThread",
+     "type": "HANDLE",
+     "kind": "handle"
+    }
+   ]
+  },
+  "SwitchToThread": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "SystemTimeToTzSpecificLocalTime": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpTimeZoneInformation",
+     "type": "TIME_ZONE_INFORMATION*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpUniversalTime",
+     "type": "SYSTEMTIME*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpLocalTime",
+     "type": "SYSTEMTIME*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "TlsAlloc": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  },
+  "TlsFree": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwTlsIndex",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "TlsGetValue": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "dwTlsIndex",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "TlsSetValue": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "dwTlsIndex",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpTlsValue",
+     "type": "void*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "TranslateMessage": {
+   "dll": "USER32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpMsg",
+     "type": "MSG*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "TryEnterCriticalSection": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpCriticalSection",
+     "type": "CRITICAL_SECTION*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "VerSetConditionMask": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u8",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "ConditionMask",
+     "type": "u8",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "TypeMask",
+     "type": "VER_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "Condition",
+     "type": "u1",
+     "kind": "value",
+     "bytes": 1
+    }
+   ]
+  },
+  "VirtualAlloc": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "void*",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "lpAddress",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwSize",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "flAllocationType",
+     "type": "VIRTUAL_ALLOCATION_TYPE",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "flProtect",
+     "type": "PAGE_PROTECTION_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "VirtualFree": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpAddress",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwSize",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "dwFreeType",
+     "type": "VIRTUAL_FREE_TYPE",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "VirtualProtect": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "lpAddress",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwSize",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    },
+    {
+     "name": "flNewProtect",
+     "type": "PAGE_PROTECTION_FLAGS",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpflOldProtect",
+     "type": "PAGE_PROTECTION_FLAGS*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "VirtualQuery": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "usize",
+    "kind": "value",
+    "bytes": 8
+   },
+   "params": [
+    {
+     "name": "lpAddress",
+     "type": "void*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpBuffer",
+     "type": "MEMORY_BASIC_INFORMATION*",
+     "kind": "pointer"
+    },
+    {
+     "name": "dwLength",
+     "type": "usize",
+     "kind": "value",
+     "bytes": 8
+    }
+   ]
+  },
+  "WaitForMultipleObjectsEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "WAIT_EVENT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "nCount",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpHandles",
+     "type": "HANDLE*",
+     "kind": "pointer"
+    },
+    {
+     "name": "bWaitAll",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwMilliseconds",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bAlertable",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "WaitForSingleObject": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "WAIT_EVENT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwMilliseconds",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "WaitForSingleObjectEx": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "WAIT_EVENT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hHandle",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "dwMilliseconds",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "bAlertable",
+     "type": "BOOL",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "WakeAllConditionVariable": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "void",
+    "kind": "void"
+   },
+   "params": [
+    {
+     "name": "ConditionVariable",
+     "type": "CONDITION_VARIABLE*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WideCharToMultiByte": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "i4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "CodePage",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "dwFlags",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpWideCharStr",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cchWideChar",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpMultiByteStr",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "cbMultiByte",
+     "type": "i4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpDefaultChar",
+     "type": "PSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpUsedDefaultChar",
+     "type": "BOOL*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WindowsCompareStringOrdinal": {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "string1",
+     "type": "HSTRING",
+     "kind": "handle"
+    },
+    {
+     "name": "string2",
+     "type": "HSTRING",
+     "kind": "handle"
+    },
+    {
+     "name": "result",
+     "type": "i4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WindowsCreateString": {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "sourceString",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "length",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "string",
+     "type": "HSTRING*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WindowsCreateStringReference": {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "sourceString",
+     "type": "PWSTR",
+     "kind": "pointer"
+    },
+    {
+     "name": "length",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "hstringHeader",
+     "type": "HSTRING_HEADER*",
+     "kind": "pointer"
+    },
+    {
+     "name": "string",
+     "type": "HSTRING*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WindowsDeleteString": {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "string",
+     "type": "HSTRING",
+     "kind": "handle"
+    }
+   ]
+  },
+  "WindowsDuplicateString": {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "HRESULT",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "string",
+     "type": "HSTRING",
+     "kind": "handle"
+    },
+    {
+     "name": "newString",
+     "type": "HSTRING*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WindowsGetStringRawBuffer": {
+   "dll": "api-ms-win-core-winrt-string-l1-1-0.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "PWSTR",
+    "kind": "pointer"
+   },
+   "params": [
+    {
+     "name": "string",
+     "type": "HSTRING",
+     "kind": "handle"
+    },
+    {
+     "name": "length",
+     "type": "u4*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "WriteFile": {
+   "dll": "KERNEL32.dll",
+   "sets_last_error": true,
+   "return": {
+    "type": "BOOL",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "hFile",
+     "type": "HANDLE",
+     "kind": "handle"
+    },
+    {
+     "name": "lpBuffer",
+     "type": "u1*",
+     "kind": "pointer"
+    },
+    {
+     "name": "nNumberOfBytesToWrite",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    },
+    {
+     "name": "lpNumberOfBytesWritten",
+     "type": "u4*",
+     "kind": "pointer"
+    },
+    {
+     "name": "lpOverlapped",
+     "type": "OVERLAPPED*",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "if_nametoindex": {
+   "dll": "IPHLPAPI.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "InterfaceName",
+     "type": "PSTR",
+     "kind": "pointer"
+    }
+   ]
+  },
+  "timeBeginPeriod": {
+   "dll": "WINMM.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": [
+    {
+     "name": "uPeriod",
+     "type": "u4",
+     "kind": "value",
+     "bytes": 4
+    }
+   ]
+  },
+  "timeGetTime": {
+   "dll": "WINMM.dll",
+   "sets_last_error": false,
+   "return": {
+    "type": "u4",
+    "kind": "value",
+    "bytes": 4
+   },
+   "params": []
+  }
+ }
+}
