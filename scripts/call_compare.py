@@ -184,6 +184,10 @@ ADDRESS_FIELDS = {("RtlAddGrowableFunctionTable", "a4"), ("RtlAddGrowableFunctio
                   ("EnumDisplayMonitors", "a3")}
 WINDOW_LONG_ADDRESSES = {(-4) & 0xFFFFFFFF, (-6) & 0xFFFFFFFF, (-21) & 0xFFFFFFFF}
 POINTER_LPARAM = {0x01, 0x0C, 0x0D, 0x1A, 0x24, 0x46, 0x47, 0x4A, 0x4E, 0x7C, 0x7D, 0x81, 0x83, 0x2E0}
+# A window message's wParam that is a window handle (Microsoft Learn: WM_SETFOCUS "A handle to the window that has lost
+# the keyboard focus", WM_KILLFOCUS "A handle to the window that receives the keyboard focus"; either can be NULL):
+# judged, with each message function's window (a0), in one map from Windows' windows to w2m's (Sprint 065).
+WINDOW_WPARAM = {0x07, 0x08}
 MESSAGE_FUNCTIONS = {"DefWindowProcW", "DefWindowProcA", "SendMessageW", "SendMessageA", "CallWindowProcW",
                      "CallWindowProcA", "PostMessageW", "PostMessageA"}
 
@@ -421,6 +425,8 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             if (fn, name) in undecided:
                 continue
             space = ASSIGNED.get((fn, name))
+            if fn in MESSAGE_FUNCTIONS and (name == "a0" or name == "a2" and a[5][1] & 0xFFFFFFFF in WINDOW_WPARAM):
+                space = "window"
             if space is not None:
                 ok = same(space, x, y)
             elif carries_address(fn, name, a[5]):

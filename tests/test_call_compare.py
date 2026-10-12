@@ -238,3 +238,13 @@ def test_a_pools_workers_pair_per_function_by_agreement() -> None:
     assert [(d.function, d.field, d.w2m) for d in found] == [("HeapSize", "ret", 0x423)]
     assert call_compare.pools({1: "Job.Worker 0", 2: "Job.Worker 1", 3: "Loading.AsyncRead", 4: "Worker 7"}) == \
         {1: "Job.Worker", 2: "Job.Worker"}
+
+
+def test_a_focus_messages_window_maps_to_the_same_window() -> None:
+    """Sprint 065: WM_KILLFOCUS's and WM_SETFOCUS's wParam is a window (0x50150 on Windows, 0x20010 on w2m: the game's
+    own); it maps one to one with the message functions' windows, so another window there is a divergence."""
+    def msgs(window: int, focus: int) -> list[call_compare.Call]:
+        return [call(1, "DefWindowProcW", (window, 0x08, window, 0), 0), call(2, "DefWindowProcW", (window, 0x07, focus, 0), 0)]
+    assert call_compare.compare(msgs(0x50150, 0x50150), msgs(0x20010, 0x20010), SIGNATURES)[0] == []
+    found = call_compare.compare(msgs(0x50150, 0x50150), msgs(0x20010, 0x30020), SIGNATURES)[0]
+    assert [(d.function, d.index, d.field) for d in found] == [("DefWindowProcW", 1, "a2")]
