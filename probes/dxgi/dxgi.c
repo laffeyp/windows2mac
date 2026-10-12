@@ -74,7 +74,7 @@ static void end(void) {
     n = 0;
 }
 
-void start(void) {
+static void walk(void) {
     POINT zero = {0, 0};
     HMONITOR primary = MonitorFromPoint(zero, MONITOR_DEFAULTTOPRIMARY);
     HMODULE dxgi = LoadLibraryW(L"dxgi.dll");
@@ -150,4 +150,9 @@ void start(void) {
     row("release.last"); field("count", last); end();
     BOOL freed = FreeLibrary(dxgi);
     row("free_library"); field("ret", freed != 0); end();
+}
+
+void start(void) {
+    walk();
+    ExitProcess(0);      /* the entry's return value would be the exit code (Sprint 063: the first round exited 1) */
 }
