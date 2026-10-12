@@ -127,7 +127,17 @@ LDR_ENTRY_SIZE = 0x120
 INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited handles (sync_objects.c; Sprint 055)
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
-PROCESS_SIZE = CURRENT_DIRECTORY_OFF + 0x1000
+TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
+TRACE_SIZE = 0x200000
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xD100, 120, 4096, 0xC080
+TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
+TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
+# call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
+UNTRACED = frozenset({"RaiseException", "RtlUnwindEx", "RtlUnwind", "RtlCaptureContext", "RtlVirtualUnwind",
+                      "RtlLookupFunctionEntry", "RtlRestoreContext", "RtlCaptureStackBackTrace",
+                      "CaptureStackBackTrace", "ExitProcess", "ExitThread", "FreeLibraryAndExitThread",
+                      "TerminateProcess", "GetProcAddress", "SetUnhandledExceptionFilter", "UnhandledExceptionFilter"})
+PROCESS_SIZE = TRACE_OFF + TRACE_SIZE
 # PEB.ProcessParameters (RTL_USER_PROCESS_PARAMETERS, Sprint 059), as contracts/windows.process.parameters records
 # Windows filling it: in the process heap's arena, its strings inside it, the current directory and the environment
 # outside. Offsets: phnt's ntrtl.h (ImagePathName 0x60 and CommandLine 0x70 as winternl.h has them).
@@ -541,7 +551,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
         "W2M_INHERIT_VA": PROCESS_VA + INHERIT_OFF,
         "W2M_CURRENT_DIRECTORY_VA": PROCESS_VA + CURRENT_DIRECTORY_OFF,
-        "W2M_FAULT_LOG_VA": PROCESS_VA + FAULT_LOG_OFF,
+        "W2M_FAULT_LOG_VA": PROCESS_VA + FAULT_LOG_OFF, "W2M_TRACE_VA": PROCESS_VA + TRACE_OFF,
         "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
         "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
@@ -1001,8 +1011,12 @@ class VM:
                  gui: bool = False, command_line: str | None = None,
                  environment: tuple[str, ...] = (), process_id: int = 0,
                  inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None,
-                 process_group: int = START_GROUP) -> None:
+                 process_group: int = START_GROUP, call_trace: tuple[str, ...] = (),
+                 call_trace_from: str | None = None) -> None:
         self.ld = loaded
+        self.call_trace = call_trace       # the images whose calls call_trace.c records, at most 2 (Sprint 060)
+        if len(call_trace) > 2:
+            raise ValueError(f"call_trace.c traces at most two images, not {call_trace}")
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
         self.clock = clock if clock is not None else monotonic_count   # a given clock is served by the host
@@ -1064,6 +1078,16 @@ class VM:
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
+        self._trace_bound: set[str] = set()
+        self._trace_quiet: dict[str, int] = {}           # untraced thunks GetProcAddress gave while the trace was closed
+        self._trace_ranges()
+        # the trace opens when the guest first enters `call_trace_from` ("DLL!export"), as tools/jit_capture hooks the
+        # images just before it calls UnityPlayer.dll!UnityMain (jit_capture.c wWinMain); 0: from the start
+        self._trace_from = 0
+        if call_trace_from is not None:
+            dll, export = call_trace_from.split("!", 1)
+            self._trace_from = self.modules.dlls[dll.lower()][2][export]
+            struct.pack_into("<Q", self.mm, self._process(TRACE_OFF), 0)
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
         self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
@@ -1145,6 +1169,7 @@ class VM:
         struct.pack_into("<H", self.mm, st + 156, 0x27F)
         struct.pack_into("<QQQ", self.mm, st + 176, teb, teb, 0)
         struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - RING_HEADER) // 24)
+        struct.pack_into("<QQQQ", self.mm, self._process(TRACE_OFF), int(bool(self.call_trace)), 0, 0, TRACE_CAPACITY)
 
     def _init_parameters(self) -> None:
         """PEB.ProcessParameters as the rows of contracts/windows.process.parameters show Windows filling it."""
@@ -1413,7 +1438,8 @@ class VM:
         struct.pack_into("<H", state, 156, 0x27F)
         struct.pack_into("<QQ", state, 176, teb, teb)
         t = GuestThread(tid, teb, (dealloc, limit, top), x=x, fpcr=fpcr_for(0x1F80), monitor=monitor,
-                        state=bytes(state), suspend=1 if flags & 0x4 else 0)
+                        state=bytes(state), suspend=1 if flags & 0x4 else 0, parent=self.current_tid, start=start,
+                        created_suspended=bool(flags & 0x4))
         self.threads[tid] = t
         self.virtual.stacks.append(t.stack)
         self._set_budget()                                # two threads: time slices from now on
@@ -1620,6 +1646,11 @@ class VM:
                 a.emit(a64.stp(i, i + 1, 16, 8 * i))
             a.emit(a64.mov(0, 1), a64.mov(1, 2), a64.mov(2, 8), a64.mov(3, 9))   # x4 = RSP already
             a.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0))
+            # call_trace.c records the call around the service; w2m's own COM methods (MMDEVAPI!W2m*, reached through
+            # a vtable, not an import) have no hook in the capture
+            if self.call_trace and fn not in UNTRACED and not fn.startswith("W2m"):
+                a.emit(a64.mov_imm(5, self.runtime.symbols[symbol]), a64.mov_imm(6, (thunk - THUNK_BASE) // 16))
+                symbol = "w2m_traced"
             a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
             a.emit(a64.mov_imm(16, state))
             if sets_rax:
@@ -1652,7 +1683,18 @@ class VM:
         return va
 
     def _host_request(self, x: list[int]) -> bool:
-        """Service the transport page (hvc #8). False when the guest exited."""
+        """Service the transport page (hvc #8). False when the guest exited. A request the host cannot serve (an
+        API set with no observed host module, a file call with no root) stops the run as an unserved service does,
+        with the guest's return address (Sprint 060: the frontier reports it as SERVICE_UNIMPLEMENTED)."""
+        try:
+            return self._serve_host_request(x)
+        except Unimplemented as e:
+            if self.unimplemented is None:
+                rsp = struct.unpack_from("<Q", self.mm, self._process(STATE_OFF) + 8 * 4)[0]
+                self.unimplemented = (str(e), int.from_bytes(self.mem.read(rsp, 8), "little"))
+            raise
+
+    def _serve_host_request(self, x: list[int]) -> bool:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
@@ -1732,7 +1774,7 @@ class VM:
         if op == HOST_MODULE:
             return m.module(view.read(a0, 2 * a1).decode("utf-16-le"), loading=bool(a2))
         if op == HOST_PROC:
-            return m.proc(a0, view.read(a1, a2).decode("latin-1"))
+            return self._traced_proc(m.proc(a0, view.read(a1, a2).decode("latin-1")))
         if op == HOST_MODULE_AT:
             return m.containing(a0)
         path = m.file_name(a0)                                  # HOST_MODULE_PATH: buffer a1, a2 characters
@@ -1782,6 +1824,7 @@ class VM:
         root = self.files.root
         m.dll_paths[c] = APP_PATH + "\\".join(host.relative_to(root).parts) if root in host.parents else str(host)
         self.ld.images.append(Image(host.name, pe, base))
+        self._trace_ranges()
         if pe.entry_rva:
             self._pending_init = self._init_stub(base, base + pe.entry_rva)
         return base
@@ -1789,12 +1832,20 @@ class VM:
     def _init_stub(self, base: int, entry: int) -> int:
         """x86 that LoadLibrary returns through (module.c writes the caller's return address at +0x80): DllMain(base,
         DLL_PROCESS_ATTACH, NULL) with the shadow space (RSP is 16-aligned after the service's ret), a FALSE return
-        calls a thunk that stops the run by name, else RAX = base and a jump to the caller."""
+        calls a thunk that stops the run by name, else RAX = base and a jump to the caller. A traced image's DllMain
+        runs with the call trace closed (Sprint 060): on Windows tools/jit_capture loads mono-2.0-bdwgc.dll, and its
+        DllMain runs, before it hooks the images, and UnityPlayer.dll's later load of it runs no DllMain."""
+        trace = PROCESS_VA + TRACE_OFF
+        pause = (any(base == self.modules.dlls.get(n.lower(), (None,))[0] for n in self.call_trace)
+                 and struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0] == 1)
         page, error = self.virtual.alloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
         if error:
             raise Unimplemented(f"LoadLibrary: no page for the DllMain stub (error {error})")
         failed = self.modules.make_thunk(DLL_INIT_FAILED)
         code = bytearray()
+        if pause:
+            code += bytes.fromhex("48b9") + trace.to_bytes(8, "little")        # mov rcx, the trace header
+            code += bytes.fromhex("48c70100000000")                            # mov qword [rcx], 0: closed
         code += bytes.fromhex("4883ec20")                                      # sub rsp, 0x20
         code += bytes.fromhex("48b9") + base.to_bytes(8, "little")             # mov rcx, instance
         code += bytes.fromhex("ba01000000")                                    # mov edx, DLL_PROCESS_ATTACH
@@ -1802,6 +1853,9 @@ class VM:
         code += bytes.fromhex("48b8") + entry.to_bytes(8, "little")            # mov rax, DllMain
         code += bytes.fromhex("ffd0")                                          # call rax
         code += bytes.fromhex("4883c420")                                      # add rsp, 0x20
+        if pause:
+            code += bytes.fromhex("48b9") + trace.to_bytes(8, "little")        # mov rcx, the trace header
+            code += bytes.fromhex("48c70101000000")                            # mov qword [rcx], 1: open again
         code += bytes.fromhex("85c0")                                          # test eax, eax
         code += bytes.fromhex("750c")                                          # jnz past the failure call
         code += bytes.fromhex("48b8") + failed.to_bytes(8, "little") + bytes.fromhex("ffd0")
@@ -1848,6 +1902,67 @@ class VM:
         off = self._process(FAULT_LOG_OFF)
         count = struct.unpack_from("<Q", self.mm, off)[0]
         return count, [struct.unpack_from("<4Q", self.mm, off + 8 + 32 * i) for i in range(min(count, 64))]
+
+    def _traced_proc(self, va: int) -> int:
+        """GetProcAddress's answer as the capture's process sees it (Sprint 060): a name resolved while the trace is
+        closed (a DLL's start before UnityMain, a traced image's DllMain) is the real function on Windows, resolved
+        before tools/jit_capture hooked GetProcAddress, and its calls are never traced; here it is a thunk of its
+        own marked untraced (owner 0xFF), the same service as the shared one."""
+        if not self.call_trace or va not in self.ld.thunks:
+            return va
+        if struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0]:
+            return va
+        key = self.ld.thunks[va]
+        quiet = self._trace_quiet.get(key)
+        if quiet is None:
+            quiet = self._trace_quiet[key] = self.modules.make_thunk(key)
+            index = (quiet - THUNK_BASE) // 16
+            if index < TRACE_THUNKS:
+                self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = 0xFF
+        return quiet
+
+    def _trace_ranges(self) -> None:
+        """The traced images' address ranges in the trace header, as each is mapped, and their import slots on thunks
+        of their own (call_trace.c): tools/jit_capture points each hooked image's slots at its own thunks, and
+        GetProcAddress at another, so the capture labels a call by the slot it went through."""
+        for i, name in enumerate(self.call_trace):
+            c = name.lower()
+            if c in self.modules.dlls:
+                base, size, _ = self.modules.dlls[c]
+            elif c == self.modules.image_name.lower() and self.ld.image is not None:
+                base, size = self.ld.image.image_base, self.ld.image.size_of_image
+            else:
+                continue
+            struct.pack_into("<QQ", self.mm, self._process(TRACE_OFF) + 40 + 16 * i, base, base + size)
+            if c in self._trace_bound:
+                continue
+            self._trace_bound.add(c)
+            image = next(im for im in self.ld.images if im.base == base)
+            for slot in sorted(image.pe.iat):
+                held = int.from_bytes(self.mem.read(base + slot, 8), "little")
+                if held not in self.ld.thunks:
+                    continue                             # bound to a game DLL's export: no Windows hook there
+                own = self.modules.make_thunk(self.ld.thunks[held])
+                self.mem.write(base + slot, own.to_bytes(8, "little"))
+                index = (own - THUNK_BASE) // 16
+                if index < TRACE_THUNKS:
+                    self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = i + 1
+
+    def traced_calls(self) -> tuple[list[tuple[int, int, str, str, str, tuple[int, ...], int, int]], int]:
+        """The calls call_trace.c recorded, in the Windows trace's shape (tools/jit_capture/call_trace.h): (seq, tid,
+        image, dll, function, a0..a7, ret, last error), and the count of calls the full area left out."""
+        t = self._process(TRACE_OFF)
+        _, _, count, _, dropped = struct.unpack_from("<5Q", self.mm, t)     # on, seq, count, capacity, dropped
+        out = []
+        for k in range(count):
+            ready, seq, tid, image, thunk, *rest = struct.unpack_from("<15Q", self.mm,
+                                                                       t + TRACE_RECORDS_OFF + TRACE_RECORD * k)
+            if not ready:
+                continue
+            dll, fn = self.ld.thunks[THUNK_BASE + 16 * thunk].split("!", 1)
+            label = self.call_trace[image] if image < len(self.call_trace) else "GetProcAddress"
+            out.append((seq, tid, label, dll, fn, tuple(rest[:8]), rest[8], rest[9]))
+        return out, dropped
 
     def calls_total(self) -> dict[str, int]:
         """Every service call by name, counted in the guest (exact past the ring's capacity)."""
@@ -2049,6 +2164,8 @@ class VM:
 
     # blocks ----------------------------------------------------------------------------------
     def _compile(self, start: int) -> int:
+        if start == self._trace_from and self._trace_from:
+            struct.pack_into("<Q", self.mm, self._process(TRACE_OFF), 1)     # the trace opens (call_trace_from)
         a = Assembler(MONITOR_VA + self.code_cursor)
         insns: list[Lifted] = []
         addr = start
@@ -2198,7 +2315,7 @@ class VM:
         self._cmd = cmd
         if not self.threads:                              # the first thread (scheduler.py; Sprint 051)
             self.threads[self.current_tid] = GuestThread(self.current_tid, PROCESS_VA + TEB_OFF, self._stack,
-                                                         status="ready")
+                                                         status="ready", start=self.ld.entry)
         if struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0] == 0:
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
         if struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0] == 0:

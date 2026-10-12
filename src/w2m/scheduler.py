@@ -46,6 +46,9 @@ class GuestThread:
     suspend: int = 0
     exit_code: int = STILL_ACTIVE
     deadline: int = 0                    # a blocked thread's wait deadline on the guest counter; ~0: none
+    parent: int = 0                      # the creating thread's id; 0 for the first (GUEST_THREAD_STARTED; Sprint 060)
+    start: int = 0                       # the start routine, or the first thread's entry
+    created_suspended: bool = False      # CREATE_SUSPENDED
 
 
 def _call(fn: int, rcx: int, edx: int) -> bytes:

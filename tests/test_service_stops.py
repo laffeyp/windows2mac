@@ -36,3 +36,31 @@ def test_refused_argument_form_names_the_service_and_its_return_address() -> Non
     base, size = loaded.image.image_base, loaded.image.size_of_image
     assert name == "GetACP argument form 0x7"
     assert base <= ret < base + size, hex(ret)                       # the probe's own code called GetACP
+
+
+@pytest.mark.hvf
+def test_an_api_set_with_no_observed_host_names_the_set_and_its_return_address() -> None:
+    """Sprint 060: Sprint 059's frontier stopped in LoadLibraryExW on api-ms-win-appmodel-runtime-l1-1-2, a request
+    the host refuses, and reported EXECUTION_COMPLETED (faulted) with the stop in `unobserved`; an unserved service is
+    SERVICE_UNIMPLEMENTED, which needs the name and the guest's return address."""
+    from w2m.vm_backend import VM
+    source = (ROOT / "tools" / "guest_runtime" / "code_pages.c").read_text()
+    old = "u64 k32_GetACP(void) { return w2m_logged(W2M_API_GetACP, 0, ANSI_CP); }"
+    assert source.count(old) == 1
+    name = "api-ms-win-appmodel-runtime-l1-1-2"
+    units = ", ".join(str(ord(c)) for c in name)
+    planted = source.replace(old, "u64 k32_GetACP(void) { static const u16 set[] = {" + units + ", 0}; "
+                             f"return w2m_host(W2M_HOST_MODULE, (u64)set, {len(name)}, 1, 0, 0); }}")
+    loaded = load(BINARY.read_bytes())
+    vm = VM(loaded, image_name="probe.exe", runtime_sources={"code_pages.c": planted})
+    try:
+        r = vm.run(max_steps=1 << 30, timeout_ms=60_000)
+    finally:
+        vm.close()
+    stop = f"API set {name}: its host module on Windows is not observed"
+    assert r.stop == f"Unimplemented: {stop}", r.stop
+    assert vm.unimplemented is not None
+    service, ret = vm.unimplemented
+    base, size = loaded.image.image_base, loaded.image.size_of_image
+    assert service == stop
+    assert base <= ret < base + size, hex(ret)

@@ -39,6 +39,17 @@ def _commit(repo: Path) -> str:
     return head.stdout.strip() + ("-dirty" if dirty else "")
 
 
+def uncommitted() -> list[str]:
+    """Tracked files that differ from HEAD, in w2m and the substrate clone (Sprint 060: a record in store/ names
+    the code that ran, so a run that writes there starts from a committed tree)."""
+    out = []
+    for prefix, repo in (("", ROOT), ("substrate/", ROOT / "substrate")):
+        status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
+                                capture_output=True, text=True).stdout
+        out += [prefix + line[3:] for line in status.splitlines() if line.strip()]
+    return out
+
+
 @cache
 def provenance() -> dict[str, str]:
     """The code that writes a record (review 2026-10-10 D2): w2m's commit and the substrate clone's.

@@ -271,6 +271,18 @@
     "into": "0.7",
     "grounds": "project \u2014 v0.2 \u00a78.1 (destination capabilities are probed, not assumed); SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version)"
    }
+  },
+  {
+   "id": "P18",
+   "kind": "NEW_TAG_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "TRANSLATION_REFUSED (execution_id, guest_address, instruction_bytes, reason, instructions_executed)"
+   ],
+   "category": "probe",
+   "source": "docs/review-2026-10-11-ground-up.md K2 and its verification; BLACKBOARD Drift watchlist 2026-10-11 (lift refusal); Sprint 049's stop at CVTDQ2PS",
+   "rationale": "The frontier stops when the translator refuses a guest instruction it does not lift, and reports EXECUTION_COMPLETED (faulted) with the refusal in `unobserved`, which vocabulary 0.4 (P13) defines as the place to name what a run did not observe. A refusal is neither a guest fault nor a service w2m lacks (SERVICE_UNIMPLEMENTED); like SERVICE_UNIMPLEMENTED it closes the execution and is the frontier's measurement of what comes next. Sprint 050 was planned from such a stop. The unresolved API set of Sprint 059, which the review also named, is a service w2m does not serve and is reported as SERVICE_UNIMPLEMENTED from Sprint 060; it needs no tag.",
+   "status": "open"
   }
  ]
 }
