@@ -36,6 +36,20 @@ and keep a plan row of their own.
    tag words beside it). Each x87 instruction runs as a model step (hvc #11): the game executes few, and every one
    is a model step until a measurement asks for more. Threads switch with their x87 state.
 4. **The frontier** passes the FLD and seq 3426 (from 064), its comparison with game run 38216081440 conforming.
+5. **What the frontier meets past the FLD** (amended 2026-10-12, before the work; Decision 2026-10-11 user: every
+   divergence closed by matching the reference). A scratch run of 50.75 billion instructions writes 49 lines of
+   unity.log, equal to Windows' but for two timings. It stops at CreateFileW's form 0x08000080
+   (FILE_FLAG_SEQUENTIAL_SCAN | FILE_ATTRIBUTE_NORMAL), and its comparison shows four kinds of divergence:
+   - **The system font folder.** Unity lists `C:\Windows\Fonts\*` (seq 2778) and finds files on the runner; w2m's
+     drive C: has no such folder. A probe records the runners' listing, and the file bridge holds it.
+   - **Hinted VirtualAlloc.** mono asks for the address past its last block and retries without the hint when that
+     address is taken (487). Which address is taken depends on the address space: on Windows, ASLR. Those calls are
+     left out of the pairing on both sides, with the rule in the contract.
+   - **TryEnterCriticalSection's answer** depends on whether another thread holds the lock at that instant, which the
+     scheduler decides; it is not compared.
+   - **RtlAddGrowableFunctionTable's two calls** pair in opposite orders; its count argument is checked as a pairing
+     question.
+   The CreateFileW form gets its Windows rows in the file family.
 
 ## prerequisites
 

@@ -72,7 +72,17 @@ def operands(f: Fields) -> tuple[str, ...]:
         raise OperandError("row has no operand template")
     out: list[str] = []
     vec = YMM if f.vl else XMM                 # VEX.L (Sprint 049): Vx, Hx, Wx name YMM registers at 256 bits
+    if f.ops == "-":                           # no explicit operand (FSIN, FNCLEX, FWAIT, FNSTSW AX; Sprint 065)
+        return ()
     for t in f.ops.split(","):
+        if t.startswith("Mf"):                 # x87 memory of the template's bytes (Mf2 .. Mf10; Sprint 065)
+            assert f.modrm is not None and f.modrm >> 6 != 3
+            out.append(_mem(f, int(t[2:])))
+            continue
+        if t == "STi":                         # ST(i) from ModRM.r/m (Sprint 065)
+            assert f.modrm is not None
+            out.append(f"ST:{f.modrm & 7}")
+            continue
         if t == "Vx":                          # XMM or YMM from ModRM.reg, by VEX.L (SDM Table A-1 "x")
             assert f.modrm is not None
             out.append("R:" + vec[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])

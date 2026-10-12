@@ -82,6 +82,8 @@ START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redi
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
 YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
 FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
+X87_SW_OFF, X87_ST_OFF = 158, 768    # the state block's x87_status_word (x87_tag_abridged after it) and st0-st7
+                                     # (specs/guest_state.json; Sprint 065: the model's x87 steps keep them)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
@@ -786,7 +788,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
-        elif k in ("mxcsr", "ud", "fcw", "xgetbv"):              # run by the model (hvc #11): MXCSR's fault rule
+        elif k in ("mxcsr", "ud", "fcw", "xgetbv", "x87"):       # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())
@@ -2167,6 +2169,12 @@ class VM:
         th.ymm_hi = [int.from_bytes(self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16],
                                     "little") for i in range(16)]
         th.flags = x86_flags(x, self)
+        st = self._process(STATE_OFF)
+        th.x87_sw, th.x87_tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
+        top = th.x87_sw >> 11 & 7                              # the state block keeps ST(i) as FXSAVE does
+        for i in range(8):
+            raw = self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10]
+            th.x87_regs[(top + i) & 7] = int.from_bytes(raw, "little")
         try:
             rt.step()
         except (fp.SimdFault, GuestFault) as e:
@@ -2182,6 +2190,10 @@ class VM:
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
         struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
+        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, th.x87_sw, th.x87_tags)
+        top = th.x87_sw >> 11 & 7
+        for i in range(8):
+            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = th.x87_regs[(top + i) & 7].to_bytes(10, "little")
         for i, v in enumerate(th.ymm_hi):
             self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls

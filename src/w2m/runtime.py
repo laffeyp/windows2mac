@@ -136,6 +136,31 @@ class Runtime:
         else:
             self.th.regs[idx] = (old & ~_mask(bits) & M64) | (v & _mask(bits))
 
+    def _x87(self, op: Op, ins: Lifted) -> None:
+        """One x87 instruction on the thread's register stack (src/w2m/x87.py; Sprint 065). An exception the control
+        word does not mask has no rows and stops the run by name."""
+        from w2m import x87
+        _, ic, opcode, reg, st, mem = op
+        th = self.th
+        fpu = x87.Fpu(cw=th.fcw, sw=th.x87_sw, regs=list(th.x87_regs))
+        fpu.set_abridged_tags(th.x87_tags)
+        address = self._t[mem[1]] if mem is not None else 0
+
+        def read(n: int) -> int:
+            return int.from_bytes(self.mem.read(address, n), "little")
+
+        def write(n: int, v: int) -> None:
+            self.mem.write(address, (v & _mask(8 * n)).to_bytes(n, "little"))
+
+        ax = [th.regs[0] & 0xFFFF]
+        try:
+            x87.execute(fpu, ic, opcode, reg, st, read, write, ax)
+        except x87.X87Unmasked as e:
+            raise Unimplemented(f"{ic} at 0x{ins.address:x}: {e}") from None
+        th.fcw, th.x87_sw, th.x87_regs, th.x87_tags = fpu.cw, fpu.sw, fpu.regs, fpu.abridged_tags
+        if ic == "FNSTSW" and mem is None:
+            th.regs[0] = th.regs[0] & ~0xFFFF | ax[0]
+
     def _load(self, loc: Op, t: dict[int, int]) -> int:
         if loc[0] == "r":
             return self._rd(loc[1], loc[2], loc[3])
@@ -993,6 +1018,8 @@ class Runtime:
                 self.th.regs[0], self.th.regs[2] = XCR0, 0
             elif k == "fcw":
                 self._store(op[2], self.th.fcw)
+            elif k == "x87":
+                self._x87(op, ins)
             elif k == "fence":
                 pass
             elif k == "ud":

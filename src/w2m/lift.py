@@ -38,6 +38,7 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("fence", kind)                 SFENCE "st": earlier stores before later ones; LFENCE "ld": earlier loads
                                   before later accesses; MFENCE "full": every access (Sprint 047)
   ("fcw", "st", loc)               FNSTCW (Sprint 049): the x87 control word to 2 bytes of memory
+  ("x87", ic, opcode, reg, st, mem) one x87 instruction, run whole by the model (src/w2m/x87.py; Sprint 065)
   ("ud",)                         an instruction the guest profile makes undefined (#UD)
   ("xgetbv",)                     XGETBV (Sprint 049): EDX:EAX = XCR0 (7) for ECX 0, #GP otherwise
   ("vex", base, d, s1, s2, L, align, imm)  a VEX instruction as its legacy-SSE base (Sprint 049; rules/_vex.py): d =
@@ -252,6 +253,10 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[1] == "st" else "load"
         if op[0] == "fcw":
             return "store"
+        if op[0] == "x87":                                    # ("x87", ic, opcode, reg, st, mem): Sprint 065
+            if op[5] is None:
+                return None
+            return "store" if op[1] in ("FSTP", "FISTP", "FISTTP", "FNSTSW") else "load"
         if op[0] == "vexs":                                   # ("vexs", ic, d, s1, s2, L, imm)
             return "store" if op[2][0] == "m" else "load" if op[4][0] == "m" else None
         if op[0] == "vex":                                    # ("vex", base, d, s1, s2, L, align, imm)
@@ -291,7 +296,8 @@ def lift(code: bytes, address: int) -> Lifted:
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER", "VZEROALL",
+    declared_none = f is not None and f.ops == "-"       # the spec says the row has no explicit operand (Sprint 065)
+    if not ops and not declared_none and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER", "VZEROALL",
                               *REP_STRING, *IMPLICIT_050):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")

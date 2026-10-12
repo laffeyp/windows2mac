@@ -1,6 +1,6 @@
 {
  "spec_id": "x86_64.decode",
- "version": "0.8.2",
+ "version": "0.9.0",
  "scope": "length and mnemonic of 64-bit-mode instructions; mnemonics follow Intel names in Capstone's spelling (je not jz, cmove not cmovz, movabs for B8+r with REX.W, 'lock '/'rep ' fused into the mnemonic)",
  "prefixes": {
   "legacy": [
@@ -8044,7 +8044,9 @@
    "src": "Intel SDM Vol 2D Appendix A, Table A-7..A-22 (x87 escape opcode maps)",
    "reg": 5,
    "form": "mem",
-   "iclass": "FLDCW"
+   "iclass": "FLDCW",
+   "ops": "Mf2",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FLDCW: \"D9 /5 FLDCW m2byte\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -8089,7 +8091,9 @@
    "modrm": true,
    "src": "Intel SDM Vol 2D Appendix A, Table A-7..A-22 (x87 escape opcode maps)",
    "mod": "E2",
-   "iclass": "FNCLEX"
+   "iclass": "FNCLEX",
+   "ops": "-",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FNCLEX: \"DB E2 FNCLEX\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "0f",
@@ -9296,7 +9300,9 @@
    "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"D8 /0 FADD m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
    "reg": 0,
    "form": "mem",
-   "iclass": "FADD"
+   "iclass": "FADD",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FADD: \"D8 /0 FADD m32fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9307,7 +9313,9 @@
    "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"DC /0 FADD m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
    "reg": 0,
    "form": "mem",
-   "iclass": "FADD"
+   "iclass": "FADD",
+   "ops": "Mf8",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FADD: \"DC /0 FADD m64fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9318,7 +9326,9 @@
    "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"D8 C0+i FADD ST(0), ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
    "reg": 0,
    "form": "reg",
-   "iclass": "FADD"
+   "iclass": "FADD",
+   "ops": "STi",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FADD: \"D8 C0+i FADD ST(0), ST(i)\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9329,7 +9339,9 @@
    "src": "Intel SDM Vol 2 instruction page FADD (opcode line \"DC C0+i FADD ST(i), ST(0)\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
    "reg": 0,
    "form": "reg",
-   "iclass": "FADD"
+   "iclass": "FADD",
+   "ops": "STi",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FADD: \"DC C0+i FADD ST(i), ST(0)\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9340,7 +9352,9 @@
    "src": "Intel SDM Vol 2 instruction page FCOS (opcode line \"D9 FF FCOS\"), as transcribed at https://www.felixcloutier.com/x86/fcos, retrieved 2026-10-09",
    "mod": "ff",
    "form": "reg",
-   "iclass": "FCOS"
+   "iclass": "FCOS",
+   "ops": "-",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FCOS: \"D9 FF FCOS\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9351,7 +9365,9 @@
    "src": "Intel SDM Vol 2 instruction page FIADD (opcode line \"DA /0 FIADD m32int\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
    "reg": 0,
    "form": "mem",
-   "iclass": "FIADD"
+   "iclass": "FIADD",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FIADD: \"DA /0 FIADD m32int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9362,7 +9378,9 @@
    "src": "Intel SDM Vol 2 instruction page FIADD (opcode line \"DE /0 FIADD m16int\"), as transcribed at https://www.felixcloutier.com/x86/fadd:faddp:fiadd, retrieved 2026-10-09",
    "reg": 0,
    "form": "mem",
-   "iclass": "FIADD"
+   "iclass": "FIADD",
+   "ops": "Mf2",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FIADD: \"DE /0 FIADD m16int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9373,7 +9391,9 @@
    "src": "Intel SDM Vol 2 instruction page FIDIVR (opcode line \"DA /7 FIDIVR m32int\"), as transcribed at https://www.felixcloutier.com/x86/fdivr:fdivrp:fidivr, retrieved 2026-10-09",
    "reg": 7,
    "form": "mem",
-   "iclass": "FIDIVR"
+   "iclass": "FIDIVR",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FIDIVR: \"DA /7 FIDIVR m32int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9384,7 +9404,9 @@
    "src": "Intel SDM Vol 2 instruction page FIDIVR (opcode line \"DE /7 FIDIVR m16int\"), as transcribed at https://www.felixcloutier.com/x86/fdivr:fdivrp:fidivr, retrieved 2026-10-09",
    "reg": 7,
    "form": "mem",
-   "iclass": "FIDIVR"
+   "iclass": "FIDIVR",
+   "ops": "Mf2",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FIDIVR: \"DE /7 FIDIVR m16int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9395,7 +9417,9 @@
    "src": "Intel SDM Vol 2 instruction page FISTP (opcode line \"DF /3 FISTP m16int\"), as transcribed at https://www.felixcloutier.com/x86/fist:fistp, retrieved 2026-10-09",
    "reg": 3,
    "form": "mem",
-   "iclass": "FISTP"
+   "iclass": "FISTP",
+   "ops": "Mf2",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FISTP: \"DF /3 FISTP m16int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9406,7 +9430,9 @@
    "src": "Intel SDM Vol 2 instruction page FISTP (opcode line \"DB /3 FISTP m32int\"), as transcribed at https://www.felixcloutier.com/x86/fist:fistp, retrieved 2026-10-09",
    "reg": 3,
    "form": "mem",
-   "iclass": "FISTP"
+   "iclass": "FISTP",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FISTP: \"DB /3 FISTP m32int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9417,7 +9443,9 @@
    "src": "Intel SDM Vol 2 instruction page FISTP (opcode line \"DF /7 FISTP m64int\"), as transcribed at https://www.felixcloutier.com/x86/fist:fistp, retrieved 2026-10-09",
    "reg": 7,
    "form": "mem",
-   "iclass": "FISTP"
+   "iclass": "FISTP",
+   "ops": "Mf8",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FISTP: \"DF /7 FISTP m64int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9428,7 +9456,9 @@
    "src": "Intel SDM Vol 2 instruction page FISTTP (opcode line \"DF /1 FISTTP m16int\"), as transcribed at https://www.felixcloutier.com/x86/fisttp, retrieved 2026-10-09",
    "reg": 1,
    "form": "mem",
-   "iclass": "FISTTP"
+   "iclass": "FISTTP",
+   "ops": "Mf2",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FISTTP: \"DF /1 FISTTP m16int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9439,7 +9469,9 @@
    "src": "Intel SDM Vol 2 instruction page FISTTP (opcode line \"DB /1 FISTTP m32int\"), as transcribed at https://www.felixcloutier.com/x86/fisttp, retrieved 2026-10-09",
    "reg": 1,
    "form": "mem",
-   "iclass": "FISTTP"
+   "iclass": "FISTTP",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FISTTP: \"DB /1 FISTTP m32int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9450,7 +9482,9 @@
    "src": "Intel SDM Vol 2 instruction page FISTTP (opcode line \"DD /1 FISTTP m64int\"), as transcribed at https://www.felixcloutier.com/x86/fisttp, retrieved 2026-10-09",
    "reg": 1,
    "form": "mem",
-   "iclass": "FISTTP"
+   "iclass": "FISTTP",
+   "ops": "Mf8",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FISTTP: \"DD /1 FISTTP m64int\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9461,7 +9495,9 @@
    "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"D9 /0 FLD m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
    "reg": 0,
    "form": "mem",
-   "iclass": "FLD"
+   "iclass": "FLD",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FLD: \"D9 /0 FLD m32fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9472,7 +9508,9 @@
    "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"DD /0 FLD m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
    "reg": 0,
    "form": "mem",
-   "iclass": "FLD"
+   "iclass": "FLD",
+   "ops": "Mf8",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FLD: \"DD /0 FLD m64fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9483,7 +9521,9 @@
    "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"DB /5 FLD m80fp\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
    "reg": 5,
    "form": "mem",
-   "iclass": "FLD"
+   "iclass": "FLD",
+   "ops": "Mf10",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FLD: \"DB /5 FLD m80fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9494,7 +9534,9 @@
    "src": "Intel SDM Vol 2 instruction page FLD (opcode line \"D9 C0+i FLD ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fld, retrieved 2026-10-09",
    "reg": 0,
    "form": "reg",
-   "iclass": "FLD"
+   "iclass": "FLD",
+   "ops": "STi",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FLD: \"D9 C0+i FLD ST(i)\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9505,7 +9547,9 @@
    "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"D8 /1 FMUL m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
    "reg": 1,
    "form": "mem",
-   "iclass": "FMUL"
+   "iclass": "FMUL",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FMUL: \"D8 /1 FMUL m32fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9516,7 +9560,9 @@
    "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"DC /1 FMUL m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
    "reg": 1,
    "form": "mem",
-   "iclass": "FMUL"
+   "iclass": "FMUL",
+   "ops": "Mf8",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FMUL: \"DC /1 FMUL m64fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9527,7 +9573,9 @@
    "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"D8 C8+i FMUL ST(0), ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
    "reg": 1,
    "form": "reg",
-   "iclass": "FMUL"
+   "iclass": "FMUL",
+   "ops": "STi",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FMUL: \"D8 C8+i FMUL ST(0), ST(i)\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9538,7 +9586,9 @@
    "src": "Intel SDM Vol 2 instruction page FMUL (opcode line \"DC C8+i FMUL ST(i), ST(0)\"), as transcribed at https://www.felixcloutier.com/x86/fmul:fmulp:fimul, retrieved 2026-10-09",
    "reg": 1,
    "form": "reg",
-   "iclass": "FMUL"
+   "iclass": "FMUL",
+   "ops": "STi",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FMUL: \"DC C8+i FMUL ST(i), ST(0)\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9549,7 +9599,9 @@
    "src": "Intel SDM Vol 2 instruction page FNSTSW (opcode line \"DD /7 FNSTSW m2byte\"), as transcribed at https://www.felixcloutier.com/x86/fstsw:fnstsw, retrieved 2026-10-09",
    "reg": 7,
    "form": "mem",
-   "iclass": "FNSTSW"
+   "iclass": "FNSTSW",
+   "ops": "Mf2",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FNSTSW: \"DD /7 FNSTSW m2byte\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9560,7 +9612,9 @@
    "src": "Intel SDM Vol 2 instruction page FNSTSW (opcode line \"DF E0 FNSTSW AX\"), as transcribed at https://www.felixcloutier.com/x86/fstsw:fnstsw, retrieved 2026-10-09",
    "mod": "e0",
    "form": "reg",
-   "iclass": "FNSTSW"
+   "iclass": "FNSTSW",
+   "ops": "-",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FNSTSW: \"DF E0 FNSTSW AX\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9571,7 +9625,9 @@
    "src": "Intel SDM Vol 2 instruction page FSIN (opcode line \"D9 FE FSIN\"), as transcribed at https://www.felixcloutier.com/x86/fsin, retrieved 2026-10-09",
    "mod": "fe",
    "form": "reg",
-   "iclass": "FSIN"
+   "iclass": "FSIN",
+   "ops": "-",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FSIN: \"D9 FE FSIN\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9582,7 +9638,9 @@
    "src": "Intel SDM Vol 2 instruction page FSQRT (opcode line \"D9 FA FSQRT\"), as transcribed at https://www.felixcloutier.com/x86/fsqrt, retrieved 2026-10-09",
    "mod": "fa",
    "form": "reg",
-   "iclass": "FSQRT"
+   "iclass": "FSQRT",
+   "ops": "-",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FSQRT: \"D9 FA FSQRT\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9593,7 +9651,9 @@
    "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"D9 /3 FSTP m32fp\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
    "reg": 3,
    "form": "mem",
-   "iclass": "FSTP"
+   "iclass": "FSTP",
+   "ops": "Mf4",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FSTP: \"D9 /3 FSTP m32fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9604,7 +9664,9 @@
    "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"DD /3 FSTP m64fp\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
    "reg": 3,
    "form": "mem",
-   "iclass": "FSTP"
+   "iclass": "FSTP",
+   "ops": "Mf8",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FSTP: \"DD /3 FSTP m64fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9615,7 +9677,9 @@
    "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"DB /7 FSTP m80fp\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
    "reg": 7,
    "form": "mem",
-   "iclass": "FSTP"
+   "iclass": "FSTP",
+   "ops": "Mf10",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FSTP: \"DB /7 FSTP m80fp\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9626,7 +9690,9 @@
    "src": "Intel SDM Vol 2 instruction page FSTP (opcode line \"DD D8+i FSTP ST(i)\"), as transcribed at https://www.felixcloutier.com/x86/fst:fstp, retrieved 2026-10-09",
    "reg": 3,
    "form": "reg",
-   "iclass": "FSTP"
+   "iclass": "FSTP",
+   "ops": "STi",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FSTP: \"DD D8+i FSTP ST(i)\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -9679,7 +9745,9 @@
    "pfx": "none",
    "modrm": false,
    "src": "Intel SDM Vol 2 instruction page WAIT (opcode line \"9B WAIT\"), as transcribed at https://www.felixcloutier.com/x86/wait:fwait, retrieved 2026-10-09",
-   "iclass": "FWAIT"
+   "iclass": "FWAIT",
+   "ops": "-",
+   "src_ops": "written by hand from the row's SDM line (Intel SDM Vol 2A, FWAIT: \"9B FWAIT\"); x87 templates Mf<bytes>, STi, - (Sprint 065)"
   },
   {
    "map": "1",
@@ -13075,7 +13143,7 @@
    "iclass": "MOVNTSD"
   }
  ],
- "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv; 0.7.1 (2026-10-09): operand templates for the legacy-SSE rows the model lifts (V, W, G, E with d, q, dq, y; scripts/sse_operand_templates.py; Sprint 039); 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044); 0.7.3 (2026-10-10): operand templates for the second SSE block, the classes UnityPlayer.dll reaches most without a rule and without floating-point exceptions (Sprint 046); 0.7.4 (2026-10-10): CMPXCHG8B/16B's template Mqdq (Sprint 046); 0.7.5 (2026-10-10): operand templates for the third SSE block (Sprint 046); 0.7.6 (2026-10-10): RCPPS, RSQRTPS, RCPSS, RSQRTSS (Sprint 046); 0.7.7 (2026-10-10): PCMPISTRI, UNPCKHPD (Sprint 047); 0.7.8 (2026-10-10): PREFETCHW, PREFETCHT0, PREFETCHT1, PREFETCHT2 (Sprint 048); 0.7.9 (2026-10-11): FNSTCW's operand template (Sprint 049); 0.8.0 (2026-10-11): operand templates for the VEX rows mono-2.0-bdwgc.dll reaches (Vx, Hx, Wx: XMM or YMM by VEX.L; H: VEX.vvvv), the guest profile now x86-64-v3; ORPD, PCMPEQW, CMPSD (scalar), CVTPD2DQ, CVTTPD2DQ (Sprint 049); 0.8.1 (2026-10-11): operand templates for the VEX and BMI rows UnityPlayer.dll reaches (B: a general register in VEX.vvvv) (Sprint 049); 0.8.2 (2026-10-11): operand templates for set 050, the legacy-SSE and integer classes the mono and UnityPlayer censuses of 2026-10-11 list as missing (Edb: r32 or m8) (Sprint 050)",
+ "revision": "0.2.0 (2026-10-08): rows for the Sprint 016 corpus gaps except EVEX/XOP; VEX.L constraint; form (mem/reg) constraint; moffs immediates; REPE spelling for cmps/scas; 0.3.0 (2026-10-08): XED iclass identity per row; CPU-feature-dependent rows (requires/fallback); 0.4.0 (2026-10-08): EVEX (62) and XOP (8F) rows; encoding class field `enc`; 0.5.0 (2026-10-08): validity layer (LOCK, VEX vvvv/L); iclass edge rules from the generated differential; 0.5.1: register-only shift-immediate groups; XOP L0; strict mandatory prefix on SSE-family opcodes; 0.6.0 (2026-10-08): operand templates (SDM Appendix A notation) for general-purpose integer rows; d64 flag; 0.6.1: opsize64 d64/f64 (SDM Table A-1 superscripts; FF /2, FF /4 are f64: 66 ignored in 64-bit mode on Intel); MOVSXD source Ez; 0.6.2: removed 3 duplicate VEX rows (vpunpckldq, vpunpckhdq, vpunpckhqdq appeared twice; found by per-row hashing, Sprint 023); gen_decoder now refuses duplicate rows; 0.6.3 (2026-10-09): cmpxchg8b and cmpxchg16b join prefixes.lockable (SDM Vol 2A, LOCK: \"ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, ...\"), so LOCK 0F C7 /1 decodes as CMPXCHG16B_LOCK as XED does (25 sites in Hail to the Rainbow, Sprint 033); 0.7.0 (2026-10-09, Sprint 036): LEA memory-form only (SDM LEA: \"#UD If source operand is not a memory location\"); the mandatory prefix of an SSE-family opcode is the present prefix of highest precedence with no fallback, except prefixes.legacy_prefix_opcodes; SDM NP rows refuse 66/F2/F3 and NFx rows F2/F3 (row field np); ModRM.reg validity for MOV CR/DR/Sreg (row field reg_valid); rows generated from the SDM instruction pages (scripts/rows_from_sdm.py, scripts/merge_sdm_rows.py, scripts/rebuild_decode_spec.py) for the gap kinds Hail to the Rainbow reaches, replacing hand-written vector rows that lacked L, W, vvvv, form or NP constraints; AMD rows FEMMS, VFMADDPS, MOVNTSS, MOVNTSD and Key Locker rows from their opcodes, confirmed by XED; UD0 without ModR/M as XED decodes it; ENTER immediate wb; PUSHFQ/POPFQ/IRETD 16-bit iclasses; XGETBV, LFENCE, SFENCE, MFENCE NP; RDRAND/RDSEED NFx; MOV_CR/MOV_DR iclasses; XOP rotate-immediate W0/vvvv; 0.7.1 (2026-10-09): operand templates for the legacy-SSE rows the model lifts (V, W, G, E with d, q, dq, y; scripts/sse_operand_templates.py; Sprint 039); 0.7.2 (2026-10-10): operand templates for the SSE2 integer rows the launcher's C runtime reaches, MXCSR access and PREFETCHNTA (Sprint 044); 0.7.3 (2026-10-10): operand templates for the second SSE block, the classes UnityPlayer.dll reaches most without a rule and without floating-point exceptions (Sprint 046); 0.7.4 (2026-10-10): CMPXCHG8B/16B's template Mqdq (Sprint 046); 0.7.5 (2026-10-10): operand templates for the third SSE block (Sprint 046); 0.7.6 (2026-10-10): RCPPS, RSQRTPS, RCPSS, RSQRTSS (Sprint 046); 0.7.7 (2026-10-10): PCMPISTRI, UNPCKHPD (Sprint 047); 0.7.8 (2026-10-10): PREFETCHW, PREFETCHT0, PREFETCHT1, PREFETCHT2 (Sprint 048); 0.7.9 (2026-10-11): FNSTCW's operand template (Sprint 049); 0.8.0 (2026-10-11): operand templates for the VEX rows mono-2.0-bdwgc.dll reaches (Vx, Hx, Wx: XMM or YMM by VEX.L; H: VEX.vvvv), the guest profile now x86-64-v3; ORPD, PCMPEQW, CMPSD (scalar), CVTPD2DQ, CVTTPD2DQ (Sprint 049); 0.8.1 (2026-10-11): operand templates for the VEX and BMI rows UnityPlayer.dll reaches (B: a general register in VEX.vvvv) (Sprint 049); 0.8.2 (2026-10-11): operand templates for set 050, the legacy-SSE and integer classes the mono and UnityPlayer censuses of 2026-10-11 list as missing (Edb: r32 or m8) (Sprint 050); 0.9.0 (2026-10-12): operand templates for the x87 rows the game reaches (Mf2, Mf4, Mf8, Mf10: x87 memory of that many bytes; STi: ST(i) from ModRM.r/m; -: no explicit operand) (Sprint 065)",
  "identity": "iclass: XED instruction-class naming (github.com/intelxed/xed), assigned per row by rule; corrections recorded as spec revisions with XED as evidence. Fusion: LOCK prefix -> <ICLASS>_LOCK; REP -> REP_<ICLASS>; REPE -> REPE_<ICLASS>; REPNE -> REPNE_<ICLASS>.",
  "features": "A row with `requires` decodes as itself only when the CPU profile has that feature; otherwise as its `fallback` (SDM: TZCNT executes as BSF and LZCNT as BSR on processors without the feature; ENDBR and RDSSP are NOPs without CET). Observed with XED chips PENTIUM4/SKYLAKE/ALL on 2026-10-08.",
  "validity": "Rows may carry `lock` (LOCK allowed on the memory form), `vvvv` ('1111' when the operand is unused), `l` (required VEX.L), `form`. An encoding outside these raises InvalidEncoding: the guest observes #UD (v0.2 section 5.1). Strict mandatory prefix: in the 0F/0F38/0F3A maps, an opcode whose rows include any mandatory-prefix row is an SSE-family opcode; a 66/F2/F3 prefix with no matching row means the bytes are a different instruction or invalid, never the unprefixed row. On opcodes with only unprefixed rows, 66 stays operand size."
