@@ -24,8 +24,11 @@ frontier records in `store/runs/` name a dirty tree, and each record carries `tr
    through names they resolve with GetProcAddress, as `tools/jit_capture/call_trace.h` records them on Windows: for the
    first 32 calls of each function, the sequence number taken on entry, the thread, eight integer arguments (four
    registers, four stack slots), the return value and the last error after the call. The functions call_trace.h leaves
-   untraced (its `UNTRACED` list) are left untraced here too. The frontier writes the stream into its record; the
-   record's `trace_sha256` and `guest_line_count` name it.
+   untraced (its `UNTRACED` list) are left untraced here too. The frontier writes the stream as a guest trace in the
+   content store (`store/traces/<sha256>.jsonl`: GUEST_TRACE_OPENED, a GUEST_THREAD_STARTED per thread, a
+   GUEST_CALL_RETURNED per call, GUEST_TRACE_CLOSED), ingested by `trace.py` into TRACE_INGESTED; the raw values the
+   comparator reads go beside it (`store/frontier-calls/<execution id>.tsv`, in the Windows trace's columns).
+   (Amended 2026-10-11 before the build: vocabulary 0.7 has the tags, and SERVICE_UNIMPLEMENTED carries no digest.)
 3. **Signatures.** Each traced function's parameter and return types come from win32metadata 71.0.30-preview
    (`Windows.Win32.winmd` in NuGet package Microsoft.Windows.SDK.Win32Metadata; package sha256 b1f4ae72…2a3b, winmd
    8cce5eb3…e616), read with dnfile 0.18.0, and are written once to `specs/signatures.json` with the package's
@@ -58,8 +61,10 @@ frontier records in `store/runs/` name a dirty tree, and each record carries `tr
 
 ### Emits
 
-- The frontier: SESSION_INIT, EXECUTION_STARTED, its stop (SERVICE_UNIMPLEMENTED or EXECUTION_COMPLETED with the
-  call stream's digest and line count), COMPARISON_COMPLETED against run 38176899195, SESSION_COMPLETED.
+- The frontier: SESSION_INIT, EXECUTION_STARTED, its stop (SERVICE_UNIMPLEMENTED, or EXECUTION_COMPLETED with the
+  guest trace's digest and line count), TRACE_INGESTED, COMPARISON_COMPLETED against run 38176899195,
+  SESSION_COMPLETED. The guest trace: GUEST_TRACE_OPENED, GUEST_THREAD_STARTED, GUEST_CALL_RETURNED,
+  GUEST_TRACE_CLOSED.
 
 ### Invariants
 
@@ -67,7 +72,9 @@ frontier records in `store/runs/` name a dirty tree, and each record carries `tr
 
 ## artifact contract
 
-- created: `specs/signatures.json` and the script that writes it; the comparator and its tests
+- created: `specs/signatures.json` and `scripts/signatures.py`; `tools/guest_runtime/call_trace.c`;
+  `scripts/call_compare.py` and its tests; `contracts/windows.game.calls/0.1.0.json` (the comparison's relations and
+  reference)
 - modified: `scripts/run_frontier.py`, `src/w2m/vm_backend.py`, `WORKING_AGREEMENT.md`, `docs/plan.md`,
   `signals/proposals.json`, BLACKBOARD
 - gates 0 and CI `success` on the closing commit
