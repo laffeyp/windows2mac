@@ -90,6 +90,7 @@ FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word 
 X87_SW_OFF, X87_ST_OFF = 158, 768    # the state block's x87_status_word (x87_tag_abridged after it) and st0-st7
                                      # (specs/guest_state.json; Sprint 065: the model's x87 steps keep them)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
+CODE_WRITE_SPILL = 0x88             # MONITOR_DATA + this: x17 while the exception entry asks about a write to code
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
@@ -617,6 +618,11 @@ FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, 
 HVC_SLOW_SSE = 10
 HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
 HVC_SCHEDULE = 12            # a service handed the vCPU to the scheduler (state.schedule; Sprint 051)
+HVC_CODE_WRITE = 13          # a write faulted on a page behind translated code: x17 the address (Sprint 065)
+AP_READ_ONLY = 1 << 7        # a descriptor's AP[2]: no writes at EL1 (Arm ARM D8.4.1)
+# A level-3 permission fault on a write from the current EL: ESR's EC 0x25, WnR, DFSC 0x0F (Arm ARM D17.2.40)
+CODE_WRITE_ESR_MASK = (0x3F << 26) | (1 << 6) | 0x3F
+CODE_WRITE_ESR = (0x25 << 26) | (1 << 6) | 0x0F
 STATE_REDIRECT, STATE_SCHEDULE = 0xE8, 0xF0       # runtime.h w2m_state.redirect_rip, .schedule
 SCHEDULE_YIELD, SCHEDULE_RETRY, SCHEDULE_END, SCHEDULE_ANSWER = 1, 2, 4, 8
 STATE_SIZE = 896
@@ -1007,9 +1013,10 @@ class VcpuExit:
     x: list[int]
 
 
-def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -> int:
+def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -> tuple[int, int]:
     """Write 4-level stage-1 tables for (va, ipa, size) maps into the TRANSLATION_TABLES area; return the
-    root table's IPA. Descriptor layout: Arm ARM D8.3 (VMSAv8-64 translation table format)."""
+    root table's IPA and the offset of the next free table. Descriptor layout: Arm ARM D8.3 (VMSAv8-64 translation
+    table format)."""
     nxt = [TRANSLATION_TABLES + PAGE]
 
     def table_at(off: int, idx: int) -> int:
@@ -1044,7 +1051,7 @@ def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -
             for level in (0, 1, 2):
                 off = table_at(off, (v >> (39 - 9 * level)) & 0x1FF)
             struct.pack_into("<Q", mm, off + 8 * ((v >> 12) & 0x1FF), (ipa + p) | PAGE_ATTRIBUTES | 0x3)
-    return IPA_BASE + TRANSLATION_TABLES
+    return IPA_BASE + TRANSLATION_TABLES, nxt[0]
 
 
 def _round_up(n: int, to: int = PAGE) -> int:
@@ -1164,7 +1171,13 @@ class VM:
         maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE), (PROCESS_VA, IPA_BASE + MONITOR_SIZE, PROCESS_SIZE)]
         maps += [(r.base, IPA_BASE + off, _round_up(len(r.data))) for r, off in placed]
         maps += [(HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE), (VIRTUAL_VA, IPA_BASE + virtual_off, VIRTUAL_SIZE)]
-        self.ttbr = _write_translation_tables(self.mm, maps)
+        self.ttbr, self._next_table = _write_translation_tables(self.mm, maps)
+        # Translated code is invalidated when its guest bytes change (Sprint 065 item 9e): the pages behind blocks are
+        # read-only, a write to one faults (HVC_CODE_WRITE), and the blocks over it are dropped
+        self.code_pages: dict[int, set[int]] = {}       # page VA -> the starts of the blocks over it
+        self.code_writes = 0                            # writes that dropped blocks
+        self.blocks_dropped = 0
+        self.mem.on_write = self._host_wrote            # the host's own writes into guest memory fault on nothing
         self.code_cursor = CODE_CACHE
         self.blocks: dict[int, int] = {}                 # x86 address -> code VA
         self.addrs: set[int] = set()                     # x86 instructions compiled into blocks
@@ -2245,7 +2258,8 @@ class VM:
         d.emit(a64.br(16))
         d.bind(miss)
         self.miss_va = d.here()
-        d.emit(a64.hvc(1), a64.IC_IALLU, a64.DSB_ISH, a64.ISB)
+        # the host may have compiled a block and made its pages read-only (_protect_code): drop stale TLB entries too
+        d.emit(a64.hvc(1), a64.IC_IALLU, a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
         d.branch(a64.b, top)
         self.dispatch_va = MONITOR_VA + DISPATCHER
         self._write_words(DISPATCHER, d.finish())
@@ -2328,6 +2342,21 @@ class VM:
         Translated code keeps nothing in SP, and x16 and x17 are temporaries, so the routine may use
         them; x19-x28 (flags and the monitor's registers) survive the call."""
         e = Assembler(MONITOR_VA + EXCEPTION_ENTRY)
+        # First, a write to a page behind translated code (Sprint 065 item 9e): ask the host, which drops the blocks
+        # and makes the page writable, then return to the store. The faulting code may hold live values in x16 and
+        # x17, so x16 waits in SP (translated code keeps nothing there) and x17 in the monitor data.
+        other, back = e.label(), e.label()
+        e.emit(a64.addi(31, 16, 0), a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL),
+               a64.str_(8, 17, 16, 0), a64.mrs(17, a64.ESR_EL1), a64.mov_imm(16, CODE_WRITE_ESR_MASK),
+               a64.and_(17, 17, 16), a64.mov_imm(16, CODE_WRITE_ESR), a64.cmp(17, 16))
+        e.branch(lambda off: a64.bcond("ne", off), other)
+        e.emit(a64.mrs(17, a64.FAR_EL1), a64.hvc(HVC_CODE_WRITE))           # x17: 1 when the host dropped blocks
+        e.branch(lambda off: a64.cbz(17, off), other)
+        e.emit(a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
+        e.branch(a64.b, back)
+        e.bind(other)
+        e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL), a64.ldr(8, 17, 16, 0),
+               a64.addi(16, 31, 0))
         e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + SAVE_AREA))
         for i in range(0, 30, 2):
             e.emit(a64.stp(i, i + 1, 16, 8 * i))
@@ -2348,12 +2377,85 @@ class VM:
             e.emit(a64.ldp(i, i + 1, 16, 8 * i))
         e.emit(a64.ldr(8, 17, 16, STATE_REDIRECT), a64.str_(8, a64.ZR, 16, STATE_REDIRECT))
         e.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
+        e.bind(back)
+        e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL), a64.ldr(8, 17, 16, 0),
+               a64.addi(16, 31, 0), a64.ERET)
         words = e.finish()
         assert 4 * len(words) <= EXCEPTION_ENTRY_END - EXCEPTION_ENTRY
         self._write_words(EXCEPTION_ENTRY, words)
 
     def _write_words(self, off: int, words: list[int]) -> None:
         self.mm[off:off + 4 * len(words)] = struct.pack(f"<{len(words)}I", *words)
+
+    # code pages ------------------------------------------------------------------------------
+    def _page_descriptor(self, va: int) -> int:
+        """The offset in the memory file of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB block over it
+        split into the next level's 512 descriptors with the block's attributes (Arm ARM D8.3); 0 when nothing maps
+        it."""
+        off = TRANSLATION_TABLES
+        for level, shift in ((0, 39), (1, 30), (2, 21)):
+            at = off + 8 * ((va >> shift) & 0x1FF)
+            desc = struct.unpack_from("<Q", self.mm, at)[0]
+            if not desc & 1:
+                return 0
+            if not desc & 2:                                   # a block: split it
+                size = 1 << shift
+                base = desc & 0x0000_FFFF_FFFF_F000 & ~(size - 1)
+                attributes = desc & ~0x0000_FFFF_FFFF_F000 & ~0x3
+                new = self._next_table
+                if new + PAGE > TRANSLATION_TABLES + TRANSLATION_TABLES_SIZE:
+                    raise CompileError("stage-1 table area full")
+                self._next_table += PAGE
+                low = 0x3 if level == 2 else 0x1                # pages at level 3, blocks at level 2
+                for i in range(512):
+                    struct.pack_into("<Q", self.mm, new + 8 * i, (base + i * (size >> 9)) | attributes | low)
+                struct.pack_into("<Q", self.mm, at, (IPA_BASE + new) | 0x3)
+                desc = (IPA_BASE + new) | 0x3
+            off = int((desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE)
+        return off + 8 * ((va >> 12) & 0x1FF)
+
+    def _protect_code(self, start: int, end: int) -> None:
+        """Make the pages under guest bytes [start, end) read-only and note the block over them. The thunks and the
+        process area are the host's and never written by the guest; they stay as they are."""
+        if start >= PROCESS_VA:
+            return
+        for page in range(start & ~(PAGE - 1), end, PAGE):
+            blocks = self.code_pages.get(page)
+            if blocks is None:
+                at = self._page_descriptor(page)
+                if not at:
+                    continue
+                desc = struct.unpack_from("<Q", self.mm, at)[0]
+                struct.pack_into("<Q", self.mm, at, desc | AP_READ_ONLY)
+                blocks = self.code_pages[page] = set()
+            blocks.add(start)
+
+    def _code_written(self, address: int) -> bool:
+        """A write faulted at `address`: when its page is behind translated code, drop the blocks over the page and
+        their dispatch slots and make the page writable again; the next execution translates afresh."""
+        page = address & ~(PAGE - 1)
+        blocks = self.code_pages.pop(page, None)
+        if blocks is None:
+            return False
+        for start in blocks:
+            if self.blocks.pop(start, None) is None:
+                continue
+            slot = DISPATCH_TABLE + 16 * dispatch_slot(start)
+            if struct.unpack_from("<Q", self.mm, slot)[0] == start:
+                struct.pack_into("<QQ", self.mm, slot, M64, self.miss_va)
+            self.blocks_dropped += 1
+        at = self._page_descriptor(page)
+        struct.pack_into("<Q", self.mm, at, struct.unpack_from("<Q", self.mm, at)[0] & ~AP_READ_ONLY)
+        self.code_writes += 1
+        return True
+
+    def _host_wrote(self, address: int, size: int) -> None:
+        """The host wrote guest bytes [address, address + size) (a file read, a context, a parameter block): drop the
+        translations over them as a guest write would."""
+        if self.code_pages:
+            for page in range(address & ~(PAGE - 1), address + size, PAGE):
+                if page in self.code_pages:
+                    self._code_written(page)
 
     # blocks ----------------------------------------------------------------------------------
     def _compile(self, start: int) -> int:
@@ -2398,6 +2500,8 @@ class VM:
         self._recon_append(pc_marks)
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
+        if not self.lockstep:
+            self._protect_code(start, addr)
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
         return va
 
@@ -2647,6 +2751,9 @@ class VM:
                         pc = self.miss_va
                     else:
                         pc = e.pc
+                elif imm == HVC_CODE_WRITE:                     # a write faulted: behind translated code?
+                    x[17] = 1 if self._code_written(x[17]) else 0
+                    pc = e.pc
                 elif imm == HVC_SCHEDULE:                       # a service handed the vCPU over (state.schedule)
                     st = self._process(STATE_OFF)
                     schedule = struct.unpack_from("<I", self.mm, st + STATE_SCHEDULE)[0]

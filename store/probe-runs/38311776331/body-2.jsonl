@@ -1,0 +1,4 @@
+{"s":"immediate","first":1,"second":2}
+{"s":"rewrite","third":3,"after_data_write":3}
+{"s":"second_page","before":7,"after":8}
+{"s":"protect","to_rx":1,"old":64,"value":3,"back":1,"old_back":32,"after_rewrite":10}

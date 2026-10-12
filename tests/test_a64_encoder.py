@@ -181,6 +181,7 @@ CASES: list[tuple[str, int]] = [
     ("hvc #0x1", a64.hvc(1)),
     ("hvc #0x33", a64.hvc(0x33)),
     ("ic iallu", a64.IC_IALLU),
+    ("tlbi vmalle1", a64.TLBI_VMALLE1),
     ("dsb ish", a64.DSB_ISH),
     ("isb", a64.ISB),
     ("add v3.4s, v5.4s, v30.4s", a64.add_v(3, 5, 30, 2)),

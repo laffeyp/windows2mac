@@ -860,6 +860,28 @@ FAMILIES: dict[str, Family] = {
                     "    if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */\n"
                     "    b->size_and_magic_check = size;\n    b->reach = size;",
                     ("limit.fresh.1",))}),
+    "code_rewrite": Family(
+        name="code_rewrite",
+        contract_id="windows.memory.code_rewrite",
+        version="0.1.0",
+        summary=("Code written into PAGE_EXECUTE_READWRITE memory, run, rewritten and run again (Sprint 065 item 9e). "
+                 "mono writes and patches its methods with plain stores and no FlushInstructionCache; a scratch "
+                 "frontier found 11,365 translated blocks whose guest bytes had changed by the stop. Each rewrite "
+                 "takes effect at the next call; a write to data on the code's page leaves the code as it is."),
+        probe="code_rewrite", guest_file="virtual_memory.c",
+        runs={
+              "38311776331": Run("windows-2025", "f8ec2085c159f9663eb52f25b2df9eef541af13bc3c8a1008d1865d5fd13b3c6", "code-rewrite-windows-2025", "AMD EPYC 9V74 80-Core Processor"),
+              "38311779649": Run("windows-2022", "0e380e63488ae0166d4ba694b9ce3e7a9e3821c693bc8dad5fbdbdf81f362dba", "code-rewrite-windows-2022", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "A store that rewrites the block it is in takes effect at the next execution of that block in w2m (the "
+            "running translation completes); no row shows code that rewrites itself ahead of its own execution.",
+            "The host's own writes into guest memory (a file read, a context) drop translations through "
+            "Memory.on_write; no row reads a file into code."),
+        plants={"pages_not_protected": Plant("        if not self.lockstep:\n            self._protect_code(start, addr)",
+                                             "        if not self.lockstep:\n            pass",
+                                             ("immediate", "rewrite", "second_page", "protect"), host="w2m.vm_backend")}),
     "wait_handoff": Family(
         name="wait_handoff",
         contract_id="windows.sync.wait_handoff",

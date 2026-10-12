@@ -62,6 +62,8 @@ class Region:
 @dataclass
 class Memory:
     regions: list[Region] = field(default_factory=list)
+    # told of each write (address, length): the VM drops translations over the bytes (Sprint 065 item 9e)
+    on_write: Callable[[int, int], None] | None = None
 
     def map(self, base: int, size: int, name: str) -> Region:
         r = Region(base, bytearray(size), name)
@@ -81,6 +83,8 @@ class Memory:
     def write(self, addr: int, data: bytes) -> None:
         r, off = self._find(addr, len(data))
         r.data[off:off + len(data)] = data
+        if self.on_write is not None:
+            self.on_write(addr, len(data))
 
     def code_at(self, addr: int, limit: int = 15) -> bytes:
         """Up to `limit` bytes from `addr`, stopping at the end of its region."""

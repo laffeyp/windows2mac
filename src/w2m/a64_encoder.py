@@ -761,5 +761,6 @@ def msr(reg: tuple[int, int, int, int, int], rt: int) -> int:
 
 ERET = 0xD69F03E0
 IC_IALLU = 0xD508751F
+TLBI_VMALLE1 = 0xD508871F           # stage-1 EL1&0 entries of this VM, this core (Arm ARM C5.5)
 DSB_ISH = 0xD5033B9F
 ISB = 0xD5033FDF
