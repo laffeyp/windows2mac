@@ -12,6 +12,9 @@
  *   - detached: CreateProcessW with DETACHED_PROCESS: no console, as a GUI program
  *   - stub: a detached copy that starts the trial detached and waits, as jit_capture starts the game
  *   - shell: ShellExecuteExW (SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE, SW_SHOWNORMAL), as Start-Process does
+ *   - late2, late8, late20: as console, with that many seconds between CreateWindowExW and SetFocus; stub_late20 as
+ *     stub (the game creates its window at seq 1659 and calls SetFocus at 3380; the first four ways all have the
+ *     lParam not NULL and the wParam 1, runs 38273292412 and 38273295692)
  * A trial writes its rows to the file its command line names; the first copy prints them in order. Rows:
  * <way>.before, <way>.msg.<i> (WM_ACTIVATEAPP, WM_NCACTIVATE, WM_ACTIVATE, WM_KILLFOCUS, WM_SETFOCUS), <way>.after.
  */
@@ -67,6 +70,8 @@ static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(w, msg, wp, lp);
 }
 
+static DWORD delay_ms;
+
 static void trial(void) {
     HWND fg = GetForegroundWindow();
     DWORD pid = 0;
@@ -83,6 +88,9 @@ static void trial(void) {
     ATOM atom = RegisterClassW(&c);
     window = CreateWindowExW(0, (LPCWSTR)(ULONG_PTR)atom, L"Hail to the Rainbow", 0, CW_USEDEFAULT, CW_USEDEFAULT,
                              CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, c.hInstance, NULL);
+    if (delay_ms) Sleep(delay_ms);
+    row("before_focus"); flag("foreground_null", GetForegroundWindow() == NULL);
+    flag("foreground_is_window", GetForegroundWindow() == window); end();
     SetLastError(0xDEAD);
     HWND previous = SetFocus(window);
     DWORD err = GetLastError();
@@ -137,7 +145,7 @@ static void run_way(const char *name8, const WCHAR *name) {
     GetTempPathW(MAX_PATH, path);
     wcat(path, L"w2m_activation_"); wcat(path, name); wcat(path, L".jsonl");
     DeleteFileW(path);
-    if (name[0] == L'c') start_copy(L"trial", name, path, 0);
+    if (name[0] == L'c' || name[0] == L'l') start_copy(L"trial", name, path, 0);
     else if (name[0] == L'd') start_copy(L"trial", name, path, DETACHED_PROCESS);
     else if (name[0] == L's' && name[1] == L't') start_copy(L"stub", name, path, DETACHED_PROCESS);
     else {
@@ -177,6 +185,9 @@ void start(void) {
         static char name8[16];
         for (int i = 0; i < 15 && words[2][i]; i++) name8[i] = (char)words[2][i];
         way = name8;
+        for (int i = 0; words[2][i]; i++)
+            if (words[2][i] >= L'0' && words[2][i] <= L'9') delay_ms = delay_ms * 10 + (DWORD)(words[2][i] - L'0');
+        delay_ms *= 1000;
         sink = CreateFileW(words[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         trial();
         CloseHandle(sink);
@@ -190,5 +201,9 @@ void start(void) {
     run_way("detached", L"detached");
     run_way("stub", L"stub");
     run_way("shell", L"shell");
+    run_way("late2", L"late2");
+    run_way("late8", L"late8");
+    run_way("late20", L"late20");
+    run_way("stub_late20", L"stub_late20");
     ExitProcess(0);
 }
