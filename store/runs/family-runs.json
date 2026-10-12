@@ -48,7 +48,7 @@
   }
  },
  "com": {
-  "candidate_sha256": "sha256:cd8e652a7c36c86d949e96aaa82afef9620c2ea184ff345d663dd35d2bdf3379",
+  "candidate_sha256": "sha256:2ff2828b44286d8c496318b1683d8e9ab5d9952bb5b32fd5ea6d0b487fe2c2ce",
   "divergence": {
    "38126872187": null,
    "38126873913": null
@@ -61,7 +61,7 @@
    "SESSION_INIT": 1
   },
   "family": "com",
-  "record": "store/runs/family-com-1791783953926568000",
+  "record": "store/runs/family-com-1791785225376001000",
   "verdicts": {
    "38126872187": "conforms",
    "38126873913": "conforms"
@@ -177,6 +177,26 @@
   "verdicts": {
    "38174316653": "conforms",
    "38174318347": "conforms"
+  }
+ },
+ "dxgi": {
+  "candidate_sha256": "sha256:d4c70ca6fd5df9712a900a5ef07206aeca686c2a4581f6048bb28fbabfcce50d",
+  "divergence": {
+   "38210591842": null,
+   "38210594155": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "dxgi",
+  "record": "store/runs/family-dxgi-1791785224427977000",
+  "verdicts": {
+   "38210591842": "conforms",
+   "38210594155": "conforms"
   }
  },
  "environment_empty": {

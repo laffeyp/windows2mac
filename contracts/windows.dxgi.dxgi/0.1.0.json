@@ -1,0 +1,179 @@
+{
+ "contract_id": "windows.dxgi.dxgi",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "CreateDXGIFactory and the walk UnityPlayer makes with the factory (RVA 0x520700; game run 38206263976 seq 3298-3301): EnumAdapters to its end, each adapter's EnumOutputs to its end, the outputs' and adapters' descriptions, Release. On the runners, which have no GPU: two Microsoft Basic Render Driver adapters (0x1414, 0x8C), no dedicated memory, 8,587,180,032 bytes shared; the first with one output, \\\\.\\DISPLAY1 at 0,0-1024,768 on the primary monitor; DXGI_ERROR_NOT_FOUND past each end; E_NOINTERFACE for another interface, E_POINTER for a NULL out pointer; every object new with one reference.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/dxgi/dxgi.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "load",
+    "module": 1
+   },
+   {
+    "s": "proc",
+    "found": 1
+   },
+   {
+    "s": "create.unknown_interface",
+    "hr": 2147500034,
+    "out_null": 1,
+    "out_untouched": 0
+   },
+   {
+    "s": "create.null_out",
+    "hr": 2147500035
+   },
+   {
+    "s": "create.factory",
+    "hr": 0,
+    "out_nonnull": 1
+   },
+   {
+    "s": "refcount",
+    "add_ref": 2,
+    "release": 1
+   },
+   {
+    "s": "query.unknown",
+    "hr": 0,
+    "same": 1
+   },
+   {
+    "s": "query.nothing",
+    "hr": 2147500034,
+    "out_null": 1
+   },
+   {
+    "s": "adapter.0",
+    "hr": 0,
+    "desc_hr": 0,
+    "description": "Microsoft Basic Render Driver",
+    "vendor": 5140,
+    "device": 140,
+    "subsys": 0,
+    "revision": 0,
+    "dedicated_video": 0,
+    "dedicated_system": 0,
+    "shared_system": 8587180032,
+    "luid_nonzero": 1
+   },
+   {
+    "s": "adapter.0.output.0",
+    "desc_hr": 0,
+    "device_name": "\\\\.\\DISPLAY1",
+    "left": 0,
+    "top": 0,
+    "right": 1024,
+    "bottom": 768,
+    "attached": 1,
+    "rotation": 1,
+    "monitor_is_primary": 1
+   },
+   {
+    "s": "adapter.0.outputs.end.1",
+    "hr": 2289696770,
+    "out_null": 1
+   },
+   {
+    "s": "adapter.0.release",
+    "count": 0
+   },
+   {
+    "s": "adapter.1",
+    "hr": 0,
+    "desc_hr": 0,
+    "description": "Microsoft Basic Render Driver",
+    "vendor": 5140,
+    "device": 140,
+    "subsys": 0,
+    "revision": 0,
+    "dedicated_video": 0,
+    "dedicated_system": 0,
+    "shared_system": 8587180032,
+    "luid_nonzero": 1
+   },
+   {
+    "s": "adapter.1.outputs.end.0",
+    "hr": 2289696770,
+    "out_null": 1
+   },
+   {
+    "s": "adapter.1.release",
+    "count": 0
+   },
+   {
+    "s": "adapters.end.2",
+    "hr": 2289696770,
+    "out_null": 1
+   },
+   {
+    "s": "game_walk",
+    "matched": 1
+   },
+   {
+    "s": "release.last",
+    "count": 0
+   },
+   {
+    "s": "free_library",
+    "ret": 1
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38210591842: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:15e0aa0873454d1bbacd5b9c343b730970d6df7b776afeeccdf273caf9168dc9; run 38210594155: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:8fa545b798033b50b3254efc6919816129e168d774fe7041270fc653cf4d3445",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "dxgi-1791784916-0-1",
+    "dxgi-1791784916-0-2",
+    "dxgi-1791784916-1-1",
+    "dxgi-1791784916-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-createdxgifactory",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-createdxgifactory (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Creates a DXGI 1.0 factory that you can use to generate other DXGI objects."
+  },
+  {
+   "evidence_id": "ms-enumadapters",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgifactory-enumadapters (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Returns S_OK if successful; otherwise, returns DXGI_ERROR_NOT_FOUND if the index is greater than or equal to the number of adapters in the local system, or DXGI_ERROR_INVALID_CALL if ppAdapter parameter is NULL."
+  }
+ ],
+ "open_questions": [
+  "The runners have no GPU, and w2m answers as they do: the Basic Render Driver twice, one output. A Mac adapter backed by Metal is milestone B's (plan, phase 6), with rows from a machine that has a GPU.",
+  "The adapters' LUIDs are the machine's; the rows hold only that each is nonzero.",
+  "IDXGIFactory1 and IDXGIFactory2, the adapters' and outputs' QueryInterface and every method the game does not call stop the run by name: no row shows them."
+ ],
+ "sections": {
+  "probe": "probes/dxgi (Sprint 044)",
+  "implementation": "tools/guest_runtime/dxgi.c",
+  "rows": "scripts/family_run.py dxgi",
+  "excluded": "none"
+ }
+}

@@ -1962,6 +1962,46 @@ FAMILIES: dict[str, Family] = {
             "exited_suspend_error": Plant("        set_error(ERROR_ACCESS_DENIED);\n        return w2m_logged(W2M_API_SuspendThread",
                                           "        set_error(6);\n        return w2m_logged(W2M_API_SuspendThread",
                                           ("suspend.exited",))}),
+    "dxgi": Family(
+        name="dxgi",
+        contract_id="windows.dxgi.dxgi",
+        version="0.1.0",
+        summary=("CreateDXGIFactory and the walk UnityPlayer makes with the factory (RVA 0x520700; game run 38206263976 "
+                 "seq 3298-3301): EnumAdapters to its end, each adapter's EnumOutputs to its end, the outputs' and "
+                 "adapters' descriptions, Release. On the runners, which have no GPU: two Microsoft Basic Render Driver "
+                 "adapters (0x1414, 0x8C), no dedicated memory, 8,587,180,032 bytes shared; the first with one output, "
+                 "\\\\.\\DISPLAY1 at 0,0-1024,768 on the primary monitor; DXGI_ERROR_NOT_FOUND past each end; "
+                 "E_NOINTERFACE for another interface, E_POINTER for a NULL out pointer; every object new with one "
+                 "reference."),
+        probe="dxgi", guest_file="dxgi.c",
+        runs={
+              "38210591842": Run("windows-2025", "15e0aa0873454d1bbacd5b9c343b730970d6df7b776afeeccdf273caf9168dc9", "dxgi-1791784916-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38210594155": Run("windows-2022", "8fa545b798033b50b3254efc6919816129e168d774fe7041270fc653cf4d3445", "dxgi-1791784916-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-createdxgifactory", "api/dxgi/nf-dxgi-createdxgifactory", "2024-02-22",
+                       "Creates a DXGI 1.0 factory that you can use to generate other DXGI objects."),
+            documented("ms-enumadapters", "api/dxgi/nf-dxgi-idxgifactory-enumadapters", "2024-02-22",
+                       "Returns S_OK if successful; otherwise, returns DXGI_ERROR_NOT_FOUND if the index is greater than "
+                       "or equal to the number of adapters in the local system, or DXGI_ERROR_INVALID_CALL if ppAdapter "
+                       "parameter is NULL.")),
+        open_questions=(
+            "The runners have no GPU, and w2m answers as they do: the Basic Render Driver twice, one output. A Mac "
+            "adapter backed by Metal is milestone B's (plan, phase 6), with rows from a machine that has a GPU.",
+            "The adapters' LUIDs are the machine's; the rows hold only that each is nonzero.",
+            "IDXGIFactory1 and IDXGIFactory2, the adapters' and outputs' QueryInterface and every method the game does "
+            "not call stop the run by name: no row shows them."),
+        plants={
+            "second_adapter_has_output": Plant("    if (((struct object *)self)->index != 0 || (u32)index >= 1) {",
+                                               "    if ((u32)index >= 1) {",
+                                               ("adapter.1.outputs.end.0",)),   # its Release still answers 0
+            "null_out_invalid_arg": Plant("    if (!out) return w2m_logged(W2M_API_CreateDXGIFactory, iid, E_POINTER);",
+                                          "    if (!out) return w2m_logged(W2M_API_CreateDXGIFactory, iid, 0x80070057u);",
+                                          ("create.null_out",)),
+            "output_on_another_monitor": Plant("    *(u64 *)(p + 0x58) = MONITOR;", "    *(u64 *)(p + 0x58) = MONITOR + 0x10000;",
+                                               ("adapter.0.output.0", "game_walk")),
+            "release_keeps_count": Plant("    s64 left = --o->refs;", "    s64 left = o->refs;",
+                                         ("refcount", "adapter.0.release", "adapter.1.release", "release.last"))}),
     "com": Family(
         name="com",
         contract_id="windows.com.com",
