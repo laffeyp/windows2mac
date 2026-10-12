@@ -109,6 +109,13 @@ RECON_ENTRIES = 0x40_0000             # 4 Mi entries, 64 MB
 DISPATCH_BITS = 20
 DISPATCH_ENTRIES = 1 << DISPATCH_BITS
 DISPATCH_TABLE = RECON_TABLE + 16 * RECON_ENTRIES
+
+
+def dispatch_slot(target: int) -> int:
+    """The dispatcher's index for an x86 address: its low DISPATCH_BITS bits folded with the next two DISPATCH_BITS.
+    Sprint 064: the game's modules sit at 1 MB-aligned bases (0x140000000, 0x180000000, 0x1180000000, the thunks at
+    0x7FFE00000000), so code at one offset in two modules shared a slot when only the low bits indexed it."""
+    return (target ^ target >> DISPATCH_BITS ^ target >> 2 * DISPATCH_BITS) & (DISPATCH_ENTRIES - 1)
 MONITOR_SIZE = (DISPATCH_TABLE + 16 * DISPATCH_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
@@ -2114,7 +2121,9 @@ class VM:
         d = Assembler(MONITOR_VA + DISPATCHER)
         top, miss = d.label(), d.label()
         d.bind(top)
-        d.emit(a64.ldr(8, 16, 28, 16), a64.ubfx(18, 17, 0, DISPATCH_BITS), a64.add(16, 16, 18, a64.LSL, 4),
+        d.emit(a64.ldr(8, 16, 28, 16), a64.eor(18, 17, 17, a64.LSR, DISPATCH_BITS),
+               a64.eor(18, 18, 17, a64.LSR, 2 * DISPATCH_BITS), a64.ubfx(18, 18, 0, DISPATCH_BITS),
+               a64.add(16, 16, 18, a64.LSL, 4),
                a64.ldp(18, 16, 16), a64.cmp(18, 17))
         d.branch(lambda off: a64.bcond("ne", off), miss)
         d.emit(a64.br(16))
@@ -2430,8 +2439,7 @@ class VM:
                         va = self.bridges[target]
                     else:
                         va = self.blocks.get(target) or self._compile(target)
-                    struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * (target & (DISPATCH_ENTRIES - 1)),
-                                     target, va)
+                    struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * dispatch_slot(target), target, va)
                     pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
                 elif imm == 8:
                     if not self._host_request(x):
