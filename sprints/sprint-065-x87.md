@@ -68,6 +68,22 @@ and keep a plan row of their own.
    census of 2026-10-12 lists 21 classes with MMX forms unlifted (MOVQ 444, PADDW 202, MOVD 85 ...) and EMMS and
    MOVDQ2Q missing. Decode spec 0.10.0 gives the 30 rows their N, P and Q operands; src/w2m/mmx.py runs them on the
    x87 register file; set 065b (22,083 cases, format 4) judges them on the Xeon 8573C (run 38234338405).
+8. **Past the MMX forms** (amended 2026-10-12, after the work: late again). Frontier
+   643a6283510c-1791802134771149000 (tree 7ee6c559; commit 4aa8889c's message names 56b88ceb, wrongly) runs
+   73,274,486,656 instructions, writes 93 lines of unity.log equal to Windows' but for one timing, and stops at
+   `dxgi.dll!W2mOutputGetDisplayModeList`. It runs 9.14M instructions a second over 8,013 s, against 131M before:
+   48.7M slow-SSE exits and 19.3M model steps, each followed by a dispatch miss (70.3M hvc #1).
+   - **Speed.** PUNPCKHQDQ (ZIP2), STMXCSR and LDMXCSR are lowered in A64 (a9dd06a5); run_frontier counts model exits
+     by class, since the site census named 4M of the 48.7M.
+   - **GetDisplayModeList.** The dxgi probe records the runners' 13 modes (runs 38254500336, 38254503636); the game's
+     unity.log prints the same 13. Contract windows.dxgi.dxgi 0.2.0.
+   - **HeapReAlloc in place (seq 3265-3267).** Windows refuses UnityPlayer's growth of a 0x417 block to 0x817; w2m
+     granted it from a reused block's capacity. Probe heap_in_place (runs 38254640218, 38254643501): a block grows in
+     place to at most the larger of its size and 16. Contract windows.heap.in_place 0.1.0.
+   - **InterlockedPopEntrySList (seq 3132)** and the GC's heap growth (seq 2744, 2861): the order in which threads
+     reach shared lists. In the three Windows runs no pop finds an entry and list +0x80 is never popped; on w2m a
+     worker pops +0x80 after the main thread's push. Threads share one vCPU in 200,000-instruction slices; the runners
+     run them on several cores. Open, for the threads sprint (plan row 066).
 
 ## prerequisites
 
