@@ -22,7 +22,7 @@ typedef unsigned short u16;
 #define KF_FLAG_CREATE 0x8000u
 #define DIRECTORY 2                                  /* FILE_STAT's kind */
 
-u64 w2m_file_stat_full(const u16 *full, u64 out);       /* file.c */
+u64 w2m_file_stat_full(const u16 *full, u64 out, u64 *attributes);   /* file.c */
 
 struct folder { u32 a; u16 b, c; u8 d[8]; const u16 *under; };
 
@@ -69,7 +69,7 @@ u64 shell32_SHGetKnownFolderPath(u64 id, u64 flags, u64 token, u64 out) {
     for (u64 i = 0; i < n; i++) s[i] = PROFILE[i];
     for (u64 i = 0; i <= m; i++) s[n + i] = k->under[i];
     u64 st[4];
-    if (w2m_file_stat_full(s, (u64)st) != DIRECTORY)       /* the bridge makes them all; a missing one is not in the rows */
+    if (w2m_file_stat_full(s, (u64)st, 0) != DIRECTORY)       /* the bridge makes them all; a missing one is not in the rows */
         w2m_unimplemented(W2M_API_SHGetKnownFolderPath, m);
     *(u64 *)out = block;
     return w2m_logged(W2M_API_SHGetKnownFolderPath, id, 0);                              /* S_OK */

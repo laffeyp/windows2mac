@@ -176,12 +176,13 @@ def main(argv: list[str]) -> int:
 
     async def comparator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         windows = call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
+        contract = json.loads(call_compare.CONTRACT.read_text())
         found, compared = call_compare.compare(windows, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"),
-                                               SIGNATURES, call_compare.excluded(
-                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name),
+                                               SIGNATURES, call_compare.excluded(contract, REFERENCE.name),
                                                (call_compare.read_strings(REFERENCE / "jit_capture.bin.strings.tsv"),
                                                 call_compare.read_strings(
-                                                    base / "frontier-calls" / f"{xid}.strings.tsv")))
+                                                    base / "frontier-calls" / f"{xid}.strings.tsv")),
+                                               call_compare.undetermined(contract))
         state.update(divergences=found, compared=compared)
         # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
         verdict: Literal["conforms", "discrepancy", "inconclusive"] = (

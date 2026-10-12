@@ -197,3 +197,22 @@ def test_named_threads_pair_by_name_before_agreement() -> None:
     found = call_compare.compare(windows, wrong, SIGNATURES, frozenset(), (w_strings, r_strings))[0]
     assert [(d.function, d.field) for d in found] == [("SetThreadPriority", "a1"), ("SetThreadPriority", "a1")]
     assert call_compare.compare(windows, wrong, SIGNATURES)[0] == []      # by agreement alone, the swap hides it
+
+
+def test_a_hinted_reservation_and_its_retry_drop_out_on_both_sides() -> None:
+    # mono asks for the address past its last code block; whether it is free is the address space's (Sprint 065)
+    windows = [call(1, "VirtualAlloc", (0x2448B3C0000, 0x10000, 0x3000, 0x40), 0x2448B3C0000, image="mono-2.0-bdwgc.dll"),
+               call(2, "VirtualAlloc", (0, 0x56000, 0x3000, 4), 0x2448B3D0000, image="mono-2.0-bdwgc.dll")]
+    w2m = [call(1, "VirtualAlloc", (0x1222E70000, 0x10000, 0x3000, 0x40), 0, 487, image="mono-2.0-bdwgc.dll"),
+           call(2, "VirtualAlloc", (0, 0x10000, 0x3000, 0x40), 0x1222ED0000, image="mono-2.0-bdwgc.dll"),
+           call(3, "VirtualAlloc", (0, 0x56000, 0x3000, 4), 0x1222F00000, image="mono-2.0-bdwgc.dll")]
+    assert call_compare.compare(windows, w2m, SIGNATURES) == ([], 1)
+
+
+def test_a_value_two_windows_runs_disagree_on_is_not_compared() -> None:
+    windows = [call(1, "TryEnterCriticalSection", (0x242F01BFB80,), 1)]
+    w2m = [call(1, "TryEnterCriticalSection", (0x11804AA120,), 0)]
+    assert len(call_compare.compare(windows, w2m, SIGNATURES)[0]) == 1
+    undecided = call_compare.undetermined(json.loads(call_compare.CONTRACT.read_text()))
+    assert ("TryEnterCriticalSection", "ret") in undecided
+    assert call_compare.compare(windows, w2m, SIGNATURES, undecided=undecided)[0] == []

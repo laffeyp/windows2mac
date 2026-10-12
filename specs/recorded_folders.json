@@ -1,0 +1,2450 @@
+{
+ "version": "0.1.0",
+ "summary": "Folders of the runners' drive C: that w2m's drive holds as Windows lists them: each folder's own entry and each file's name, attributes, size and times, as FindFirstFileExW(FindExInfoBasic) answers them on windows-2025. The files' contents are not recorded; opening one stops the run (file_bridge.py).",
+ "source_ref": "probe run 38222954208 (probes/system_fonts, gha-windows-2025-x64-10.0.26100.33438-Server; store/probe-runs/38222954208/body-1.jsonl): FindFirstFileExW(\"C:\\\\Windows\\\\Fonts\\\\*\") as UnityPlayer.dll calls it in game run 38216081440 seq 2778",
+ "folders": {
+  "Windows": {
+   "entry": {
+    "attributes": 16,
+    "size": 0,
+    "creation": 134273533411876318,
+    "access": 134348646994822871,
+    "write": 134348646994802684
+   },
+   "files": null
+  },
+  "Windows\\Fonts": {
+   "entry": {
+    "attributes": 21,
+    "size": 0,
+    "creation": 133564285468346711,
+    "access": 134348487013256853,
+    "write": 134348487013256853
+   },
+   "files": {
+    "8514fix.fon": {
+     "attributes": 32,
+     "size": 10976,
+     "creation": 133564289614135096,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "8514fixe.fon": {
+     "attributes": 32,
+     "size": 10976,
+     "creation": 133564289614291393,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "8514fixg.fon": {
+     "attributes": 32,
+     "size": 11520,
+     "creation": 133564289614291393,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "8514fixr.fon": {
+     "attributes": 32,
+     "size": 10976,
+     "creation": 133564289614291393,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "8514fixt.fon": {
+     "attributes": 32,
+     "size": 11488,
+     "creation": 133564289614447681,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "8514oem.fon": {
+     "attributes": 32,
+     "size": 12288,
+     "creation": 133564289621166704,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "8514oeme.fon": {
+     "attributes": 32,
+     "size": 13248,
+     "creation": 133564289621166704,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "8514oemg.fon": {
+     "attributes": 32,
+     "size": 12800,
+     "creation": 133564289621322902,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "8514oemr.fon": {
+     "attributes": 32,
+     "size": 13200,
+     "creation": 133564289621322902,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "8514oemt.fon": {
+     "attributes": 32,
+     "size": 12720,
+     "creation": 133564289621479198,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "8514sys.fon": {
+     "attributes": 32,
+     "size": 9280,
+     "creation": 133564289625074995,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "8514syse.fon": {
+     "attributes": 32,
+     "size": 9504,
+     "creation": 133564289625229102,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "8514sysg.fon": {
+     "attributes": 32,
+     "size": 9856,
+     "creation": 133564289625229102,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "8514sysr.fon": {
+     "attributes": 32,
+     "size": 10064,
+     "creation": 133564289625229102,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "8514syst.fon": {
+     "attributes": 32,
+     "size": 9792,
+     "creation": 133564289625229102,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "85775.fon": {
+     "attributes": 32,
+     "size": 12304,
+     "creation": 133564289621010355,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "85855.fon": {
+     "attributes": 32,
+     "size": 12256,
+     "creation": 133564289621010355,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "85f1255.fon": {
+     "attributes": 32,
+     "size": 12336,
+     "creation": 133564289614447681,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "85f1256.fon": {
+     "attributes": 32,
+     "size": 12384,
+     "creation": 133564289614603764,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "85f1257.fon": {
+     "attributes": 32,
+     "size": 10976,
+     "creation": 133564289614603764,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "85f874.fon": {
+     "attributes": 32,
+     "size": 12288,
+     "creation": 133564289614135096,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "85s1255.fon": {
+     "attributes": 32,
+     "size": 10224,
+     "creation": 133564289625385354,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "85s1256.fon": {
+     "attributes": 32,
+     "size": 10608,
+     "creation": 133564289625385354,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "85s1257.fon": {
+     "attributes": 32,
+     "size": 9472,
+     "creation": 133564289625385354,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "85s874.fon": {
+     "attributes": 32,
+     "size": 10240,
+     "creation": 133564289625074995,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "app775.fon": {
+     "attributes": 32,
+     "size": 35808,
+     "creation": 133564289626010785,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "app850.fon": {
+     "attributes": 32,
+     "size": 36672,
+     "creation": 133564289626166689,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "app852.fon": {
+     "attributes": 32,
+     "size": 36656,
+     "creation": 133564289626322889,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "app855.fon": {
+     "attributes": 32,
+     "size": 37296,
+     "creation": 133564289626479173,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "app857.fon": {
+     "attributes": 32,
+     "size": 36672,
+     "creation": 133564289626635458,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "app866.fon": {
+     "attributes": 32,
+     "size": 37472,
+     "creation": 133564289626791704,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "app932.fon": {
+     "attributes": 32,
+     "size": 80896,
+     "creation": 133564289626948087,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "app936.fon": {
+     "attributes": 32,
+     "size": 70000,
+     "creation": 133564289627416720,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "app949.fon": {
+     "attributes": 32,
+     "size": 80896,
+     "creation": 133564289627729272,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "app950.fon": {
+     "attributes": 32,
+     "size": 70000,
+     "creation": 133564289627885474,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "arial.ttf": {
+     "attributes": 32,
+     "size": 1016724,
+     "creation": 134331024549226561,
+     "access": 134331024549382875,
+     "write": 134331024549382875
+    },
+    "arialbd.ttf": {
+     "attributes": 32,
+     "size": 960832,
+     "creation": 134331024549226561,
+     "access": 134331024549382875,
+     "write": 134331024549382875
+    },
+    "arialbi.ttf": {
+     "attributes": 32,
+     "size": 696792,
+     "creation": 134331024549226561,
+     "access": 134331024549382875,
+     "write": 134331024549382875
+    },
+    "ariali.ttf": {
+     "attributes": 32,
+     "size": 693452,
+     "creation": 134331024549226561,
+     "access": 134331024549382875,
+     "write": 134331024549382875
+    },
+    "ariblk.ttf": {
+     "attributes": 32,
+     "size": 167592,
+     "creation": 133564284243138249,
+     "access": 133564284243138249,
+     "write": 133564284243138249
+    },
+    "bahnschrift.ttf": {
+     "attributes": 32,
+     "size": 361564,
+     "creation": 133564284243138249,
+     "access": 133564284243138249,
+     "write": 133564284243138249
+    },
+    "c8514fix.fon": {
+     "attributes": 32,
+     "size": 10992,
+     "creation": 133564289613353886,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "c8514oem.fon": {
+     "attributes": 32,
+     "size": 13552,
+     "creation": 133564289619916518,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "c8514sys.fon": {
+     "attributes": 32,
+     "size": 17760,
+     "creation": 133564289624291966,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "calibri.ttf": {
+     "attributes": 32,
+     "size": 1650632,
+     "creation": 134331024549226561,
+     "access": 134331024549539194,
+     "write": 134331024549539194
+    },
+    "calibrib.ttf": {
+     "attributes": 32,
+     "size": 1615616,
+     "creation": 134331024549226561,
+     "access": 134331024549539194,
+     "write": 134331024549539194
+    },
+    "calibrii.ttf": {
+     "attributes": 32,
+     "size": 1202512,
+     "creation": 134331024549382875,
+     "access": 134331024549539194,
+     "write": 134331024549539194
+    },
+    "calibril.ttf": {
+     "attributes": 32,
+     "size": 1441448,
+     "creation": 134331024549382875,
+     "access": 134331024549695347,
+     "write": 134331024549695347
+    },
+    "calibrili.ttf": {
+     "attributes": 32,
+     "size": 1065868,
+     "creation": 134331024549382875,
+     "access": 134331024549695347,
+     "write": 134331024549695347
+    },
+    "calibriz.ttf": {
+     "attributes": 32,
+     "size": 1163904,
+     "creation": 134331024549382875,
+     "access": 134331024549695347,
+     "write": 134331024549695347
+    },
+    "cambria.ttc": {
+     "attributes": 32,
+     "size": 1792664,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "cambriab.ttf": {
+     "attributes": 32,
+     "size": 841440,
+     "creation": 133564289718982852,
+     "access": 133564327076085536,
+     "write": 133564327076085536
+    },
+    "cambriai.ttf": {
+     "attributes": 32,
+     "size": 892620,
+     "creation": 133564289715545233,
+     "access": 133564327075928679,
+     "write": 133564327075928679
+    },
+    "cambriaz.ttf": {
+     "attributes": 32,
+     "size": 856672,
+     "creation": 133564289722264164,
+     "access": 133564327076241293,
+     "write": 133564327076241293
+    },
+    "Candara.ttf": {
+     "attributes": 32,
+     "size": 242012,
+     "creation": 133564289725545703,
+     "access": 133564326654817610,
+     "write": 133564326654817610
+    },
+    "Candarab.ttf": {
+     "attributes": 32,
+     "size": 250772,
+     "creation": 133564289727264474,
+     "access": 133564326654817610,
+     "write": 133564326654817610
+    },
+    "Candarai.ttf": {
+     "attributes": 32,
+     "size": 251156,
+     "creation": 133564289726483098,
+     "access": 133564326654817610,
+     "write": 133564326654817610
+    },
+    "Candaral.ttf": {
+     "attributes": 32,
+     "size": 252124,
+     "creation": 133564289728984910,
+     "access": 133564326654974413,
+     "write": 133564326654974413
+    },
+    "Candarali.ttf": {
+     "attributes": 32,
+     "size": 189388,
+     "creation": 133564289729920427,
+     "access": 133564326654974413,
+     "write": 133564326654974413
+    },
+    "Candaraz.ttf": {
+     "attributes": 32,
+     "size": 254676,
+     "creation": 133564289728201903,
+     "access": 133564326654974413,
+     "write": 133564326654974413
+    },
+    "CascadiaCode.ttf": {
+     "attributes": 32,
+     "size": 387948,
+     "creation": 134010061960000000,
+     "access": 134348487013232266,
+     "write": 134010061960000000
+    },
+    "CascadiaMono.ttf": {
+     "attributes": 32,
+     "size": 371352,
+     "creation": 134010061960000000,
+     "access": 134348487013264655,
+     "write": 134010061960000000
+    },
+    "cga40737.fon": {
+     "attributes": 32,
+     "size": 7216,
+     "creation": 133564289628354391,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga40850.fon": {
+     "attributes": 32,
+     "size": 6352,
+     "creation": 133564289628354391,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga40852.fon": {
+     "attributes": 32,
+     "size": 6672,
+     "creation": 133564289628354391,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga40857.fon": {
+     "attributes": 32,
+     "size": 6672,
+     "creation": 133564289628510462,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga40866.fon": {
+     "attributes": 32,
+     "size": 7232,
+     "creation": 133564289628510462,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga40869.fon": {
+     "attributes": 32,
+     "size": 7216,
+     "creation": 133564289628510462,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga40woa.fon": {
+     "attributes": 32,
+     "size": 6336,
+     "creation": 133564289628197981,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga80737.fon": {
+     "attributes": 32,
+     "size": 5168,
+     "creation": 133564289628666942,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga80850.fon": {
+     "attributes": 32,
+     "size": 4320,
+     "creation": 133564289628666942,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "cga80852.fon": {
+     "attributes": 32,
+     "size": 5200,
+     "creation": 133564289628666942,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "cga80857.fon": {
+     "attributes": 32,
+     "size": 4640,
+     "creation": 133564289628666942,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "cga80866.fon": {
+     "attributes": 32,
+     "size": 5168,
+     "creation": 133564289628823069,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "cga80869.fon": {
+     "attributes": 32,
+     "size": 5168,
+     "creation": 133564289628823069,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "cga80woa.fon": {
+     "attributes": 32,
+     "size": 4304,
+     "creation": 133564289628666942,
+     "access": 133564325618128238,
+     "write": 133564325618128238
+    },
+    "comic.ttf": {
+     "attributes": 32,
+     "size": 272612,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "comicbd.ttf": {
+     "attributes": 32,
+     "size": 255972,
+     "creation": 133564284330174327,
+     "access": 133564284330174327,
+     "write": 133564284330174327
+    },
+    "comici.ttf": {
+     "attributes": 32,
+     "size": 255796,
+     "creation": 133564284354238052,
+     "access": 133564284354238052,
+     "write": 133564284354238052
+    },
+    "comicz.ttf": {
+     "attributes": 32,
+     "size": 253232,
+     "creation": 133564284366269863,
+     "access": 133564284366269863,
+     "write": 133564284366269863
+    },
+    "consola.ttf": {
+     "attributes": 32,
+     "size": 453088,
+     "creation": 134331024549382875,
+     "access": 134331024549539194,
+     "write": 134331024549539194
+    },
+    "consolab.ttf": {
+     "attributes": 32,
+     "size": 391756,
+     "creation": 134331024549539194,
+     "access": 134331024549695347,
+     "write": 134331024549695347
+    },
+    "consolai.ttf": {
+     "attributes": 32,
+     "size": 461496,
+     "creation": 134331024549539194,
+     "access": 134331024549695347,
+     "write": 134331024549695347
+    },
+    "consolaz.ttf": {
+     "attributes": 32,
+     "size": 401732,
+     "creation": 134331024549695347,
+     "access": 134331024549695347,
+     "write": 134331024549695347
+    },
+    "constan.ttf": {
+     "attributes": 32,
+     "size": 448376,
+     "creation": 133564289465537381,
+     "access": 133564327085147472,
+     "write": 133564327085147472
+    },
+    "constanb.ttf": {
+     "attributes": 32,
+     "size": 451824,
+     "creation": 133564289468504402,
+     "access": 133564327085303850,
+     "write": 133564327085303850
+    },
+    "constani.ttf": {
+     "attributes": 32,
+     "size": 448748,
+     "creation": 133564289466941575,
+     "access": 133564327085147472,
+     "write": 133564327085147472
+    },
+    "constanz.ttf": {
+     "attributes": 32,
+     "size": 455564,
+     "creation": 133564289470066493,
+     "access": 133564327085303850,
+     "write": 133564327085303850
+    },
+    "corbel.ttf": {
+     "attributes": 32,
+     "size": 277168,
+     "creation": 133564289737108467,
+     "access": 133564326645911442,
+     "write": 133564326645911442
+    },
+    "corbelb.ttf": {
+     "attributes": 32,
+     "size": 290908,
+     "creation": 133564289739139843,
+     "access": 133564326645911442,
+     "write": 133564326645911442
+    },
+    "corbeli.ttf": {
+     "attributes": 32,
+     "size": 284690,
+     "creation": 133564289738045977,
+     "access": 133564326645911442,
+     "write": 133564326645911442
+    },
+    "corbell.ttf": {
+     "attributes": 32,
+     "size": 172256,
+     "creation": 133564289741015106,
+     "access": 133564326646067527,
+     "write": 133564326646067527
+    },
+    "corbelli.ttf": {
+     "attributes": 32,
+     "size": 169228,
+     "creation": 133564289741639894,
+     "access": 133564326646067527,
+     "write": 133564326646067527
+    },
+    "corbelz.ttf": {
+     "attributes": 32,
+     "size": 294692,
+     "creation": 133564289740077261,
+     "access": 133564326646067527,
+     "write": 133564326646067527
+    },
+    "coue1255.fon": {
+     "attributes": 32,
+     "size": 26432,
+     "creation": 133564289611634853,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "coue1256.fon": {
+     "attributes": 32,
+     "size": 26544,
+     "creation": 133564289611791091,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "coue1257.fon": {
+     "attributes": 32,
+     "size": 23440,
+     "creation": 133564289611947411,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "couf1255.fon": {
+     "attributes": 32,
+     "size": 35888,
+     "creation": 133564289612885043,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "couf1256.fon": {
+     "attributes": 32,
+     "size": 36032,
+     "creation": 133564289613041338,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "couf1257.fon": {
+     "attributes": 32,
+     "size": 31760,
+     "creation": 133564289613197723,
+     "access": 133564325625003074,
+     "write": 133564325625003074
+    },
+    "cour.ttf": {
+     "attributes": 32,
+     "size": 828760,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "courbd.ttf": {
+     "attributes": 32,
+     "size": 827444,
+     "creation": 133564284354238052,
+     "access": 133564284354238052,
+     "write": 133564284354238052
+    },
+    "courbi.ttf": {
+     "attributes": 32,
+     "size": 602956,
+     "creation": 133564284366269863,
+     "access": 133564284366269863,
+     "write": 133564284366269863
+    },
+    "coure.fon": {
+     "attributes": 32,
+     "size": 23408,
+     "creation": 133564289611010035,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "couree.fon": {
+     "attributes": 32,
+     "size": 23440,
+     "creation": 133564289611166253,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "coureg.fon": {
+     "attributes": 32,
+     "size": 25024,
+     "creation": 133564289611166253,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "courer.fon": {
+     "attributes": 32,
+     "size": 23440,
+     "creation": 133564289611322681,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "couret.fon": {
+     "attributes": 32,
+     "size": 25024,
+     "creation": 133564289611478558,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "courf.fon": {
+     "attributes": 32,
+     "size": 31712,
+     "creation": 133564289612103693,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "courfe.fon": {
+     "attributes": 32,
+     "size": 31776,
+     "creation": 133564289612261127,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "courfg.fon": {
+     "attributes": 32,
+     "size": 33344,
+     "creation": 133564289612416357,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "courfr.fon": {
+     "attributes": 32,
+     "size": 31808,
+     "creation": 133564289612572525,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "courft.fon": {
+     "attributes": 32,
+     "size": 33360,
+     "creation": 133564289612728790,
+     "access": 133564325624847087,
+     "write": 133564325624847087
+    },
+    "couri.ttf": {
+     "attributes": 32,
+     "size": 692884,
+     "creation": 133564284330330648,
+     "access": 133564284330330648,
+     "write": 133564284330330648
+    },
+    "cvgafix.fon": {
+     "attributes": 32,
+     "size": 5600,
+     "creation": 133564289613353886,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "cvgasys.fon": {
+     "attributes": 32,
+     "size": 12896,
+     "creation": 133564289624291966,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "desktop.ini": {
+     "attributes": 32,
+     "size": 65,
+     "creation": 133564327676283387,
+     "access": 133564327213938145,
+     "write": 133564327213938145
+    },
+    "dos737.fon": {
+     "attributes": 32,
+     "size": 36336,
+     "creation": 133564289625697864,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "dos869.fon": {
+     "attributes": 32,
+     "size": 36816,
+     "creation": 133564289625854639,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "dosapp.fon": {
+     "attributes": 32,
+     "size": 36656,
+     "creation": 133564289625697864,
+     "access": 133564325617971978,
+     "write": 133564325617971978
+    },
+    "ebrima.ttf": {
+     "attributes": 32,
+     "size": 949408,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "ebrimabd.ttf": {
+     "attributes": 32,
+     "size": 1026388,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "ega40737.fon": {
+     "attributes": 32,
+     "size": 9248,
+     "creation": 133564289628979281,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega40850.fon": {
+     "attributes": 32,
+     "size": 8384,
+     "creation": 133564289628979281,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega40852.fon": {
+     "attributes": 32,
+     "size": 8368,
+     "creation": 133564289628979281,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega40857.fon": {
+     "attributes": 32,
+     "size": 8704,
+     "creation": 133564289629135566,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega40866.fon": {
+     "attributes": 32,
+     "size": 9232,
+     "creation": 133564289629135566,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega40869.fon": {
+     "attributes": 32,
+     "size": 9248,
+     "creation": 133564289629135566,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega40woa.fon": {
+     "attributes": 32,
+     "size": 8368,
+     "creation": 133564289628823069,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80737.fon": {
+     "attributes": 32,
+     "size": 6192,
+     "creation": 133564289629291781,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80850.fon": {
+     "attributes": 32,
+     "size": 5328,
+     "creation": 133564289629291781,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80852.fon": {
+     "attributes": 32,
+     "size": 5344,
+     "creation": 133564289629448081,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80857.fon": {
+     "attributes": 32,
+     "size": 5648,
+     "creation": 133564289629448081,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80866.fon": {
+     "attributes": 32,
+     "size": 5280,
+     "creation": 133564289629448081,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80869.fon": {
+     "attributes": 32,
+     "size": 6192,
+     "creation": 133564289629448081,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "ega80woa.fon": {
+     "attributes": 32,
+     "size": 5312,
+     "creation": 133564289629291781,
+     "access": 133564325618284560,
+     "write": 133564325618284560
+    },
+    "fms_metadata.xml": {
+     "attributes": 39,
+     "size": 84241,
+     "creation": 133564325640472186,
+     "access": 133564325634065826,
+     "write": 133564325634065826
+    },
+    "framd.ttf": {
+     "attributes": 32,
+     "size": 133632,
+     "creation": 133564289473816732,
+     "access": 133564326831692427,
+     "write": 133564326831692427
+    },
+    "framdit.ttf": {
+     "attributes": 32,
+     "size": 148728,
+     "creation": 133564289474285768,
+     "access": 133564326831848734,
+     "write": 133564326831848734
+    },
+    "Gabriola.ttf": {
+     "attributes": 32,
+     "size": 1806004,
+     "creation": 133564289742421146,
+     "access": 133564327149522906,
+     "write": 133564327149522906
+    },
+    "gadugi.ttf": {
+     "attributes": 32,
+     "size": 242684,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "gadugib.ttf": {
+     "attributes": 32,
+     "size": 249236,
+     "creation": 133564289471785738,
+     "access": 133564326860911381,
+     "write": 133564326860911381
+    },
+    "georgia.ttf": {
+     "attributes": 32,
+     "size": 219712,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "georgiab.ttf": {
+     "attributes": 32,
+     "size": 207476,
+     "creation": 133564284354238052,
+     "access": 133564284354238052,
+     "write": 133564284354238052
+    },
+    "georgiai.ttf": {
+     "attributes": 32,
+     "size": 208444,
+     "creation": 133564284330174327,
+     "access": 133564284330330648,
+     "write": 133564284330330648
+    },
+    "georgiaz.ttf": {
+     "attributes": 32,
+     "size": 211780,
+     "creation": 133564284366269863,
+     "access": 133564284366269863,
+     "write": 133564284366269863
+    },
+    "GlobalMonospace.CompositeFont": {
+     "attributes": 32,
+     "size": 26040,
+     "creation": 134348479821777616,
+     "access": 134348470564456801,
+     "write": 134348470564456801
+    },
+    "GlobalSansSerif.CompositeFont": {
+     "attributes": 32,
+     "size": 26489,
+     "creation": 134348479821799550,
+     "access": 134348470564498251,
+     "write": 134348470564498251
+    },
+    "GlobalSerif.CompositeFont": {
+     "attributes": 32,
+     "size": 29779,
+     "creation": 134348479821799550,
+     "access": 134348470564498251,
+     "write": 134348470564498251
+    },
+    "GlobalUserInterface.CompositeFont": {
+     "attributes": 32,
+     "size": 43318,
+     "creation": 134348479822166618,
+     "access": 134348470564518338,
+     "write": 134348470564518338
+    },
+    "gulim.ttc": {
+     "attributes": 32,
+     "size": 13533424,
+     "creation": 133564289748827707,
+     "access": 133564326576064726,
+     "write": 133564326576064726
+    },
+    "h8514fix.fon": {
+     "attributes": 32,
+     "size": 11056,
+     "creation": 133564289613510147,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "h8514oem.fon": {
+     "attributes": 32,
+     "size": 12400,
+     "creation": 133564289620072770,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "h8514sys.fon": {
+     "attributes": 32,
+     "size": 10032,
+     "creation": 133564289624448354,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "himalaya.ttf": {
+     "attributes": 32,
+     "size": 572776,
+     "creation": 133564284243451063,
+     "access": 133564284243451063,
+     "write": 133564284243451063
+    },
+    "hvgafix.fon": {
+     "attributes": 32,
+     "size": 5680,
+     "creation": 133564289613510147,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "hvgasys.fon": {
+     "attributes": 32,
+     "size": 6512,
+     "creation": 133564289624448354,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "impact.ttf": {
+     "attributes": 32,
+     "size": 206784,
+     "creation": 133564289796173370,
+     "access": 133564326613877325,
+     "write": 133564326613877325
+    },
+    "Inkfree.ttf": {
+     "attributes": 32,
+     "size": 198972,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "j8514fix.fon": {
+     "attributes": 32,
+     "size": 12896,
+     "creation": 133564289613666359,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "j8514oem.fon": {
+     "attributes": 32,
+     "size": 14432,
+     "creation": 133564289620072770,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "j8514sys.fon": {
+     "attributes": 32,
+     "size": 10656,
+     "creation": 133564289624448354,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "javatext.ttf": {
+     "attributes": 32,
+     "size": 305448,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "jsmalle.fon": {
+     "attributes": 32,
+     "size": 41584,
+     "creation": 133564289621791580,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "jsmallf.fon": {
+     "attributes": 32,
+     "size": 38480,
+     "creation": 133564289622104092,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "jvgafix.fon": {
+     "attributes": 32,
+     "size": 6528,
+     "creation": 133564289613510147,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "jvgasys.fon": {
+     "attributes": 32,
+     "size": 7728,
+     "creation": 133564289624448354,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "LeelaUIb.ttf": {
+     "attributes": 32,
+     "size": 327420,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "LeelawUI.ttf": {
+     "attributes": 32,
+     "size": 393764,
+     "creation": 133564284243294726,
+     "access": 133564284243294726,
+     "write": 133564284243294726
+    },
+    "LeelUIsl.ttf": {
+     "attributes": 32,
+     "size": 386264,
+     "creation": 133564284330330648,
+     "access": 133564284330330648,
+     "write": 133564284330330648
+    },
+    "lucon.ttf": {
+     "attributes": 32,
+     "size": 111108,
+     "creation": 133564284234544124,
+     "access": 133564284234544124,
+     "write": 133564284234544124
+    },
+    "l_10646.ttf": {
+     "attributes": 32,
+     "size": 309516,
+     "creation": 133564289472566988,
+     "access": 133564326739192497,
+     "write": 133564326739192497
+    },
+    "malgun.ttf": {
+     "attributes": 32,
+     "size": 13459196,
+     "creation": 133564284243294726,
+     "access": 133564284243451063,
+     "write": 133564284243451063
+    },
+    "malgunbd.ttf": {
+     "attributes": 32,
+     "size": 12600392,
+     "creation": 133564289281308345,
+     "access": 133564327063741172,
+     "write": 133564327063741172
+    },
+    "malgunsl.ttf": {
+     "attributes": 32,
+     "size": 5085196,
+     "creation": 133564289135834862,
+     "access": 133564326476368152,
+     "write": 133564326476368152
+    },
+    "marlett.ttf": {
+     "attributes": 32,
+     "size": 27724,
+     "creation": 133564289796954572,
+     "access": 133564326672942824,
+     "write": 133564326672942824
+    },
+    "micross.ttf": {
+     "attributes": 32,
+     "size": 857472,
+     "creation": 134331024549695347,
+     "access": 134331024549851653,
+     "write": 134331024549851653
+    },
+    "mingliu.ttc": {
+     "attributes": 32,
+     "size": 27702516,
+     "creation": 133564289960866986,
+     "access": 133564326723880015,
+     "write": 133564326723880015
+    },
+    "mingliub.ttc": {
+     "attributes": 32,
+     "size": 37112128,
+     "creation": 133564289797110949,
+     "access": 133564326948880892,
+     "write": 133564326948880892
+    },
+    "mmrtext.ttf": {
+     "attributes": 32,
+     "size": 354796,
+     "creation": 133564284243919608,
+     "access": 133564284244075866,
+     "write": 133564284244075866
+    },
+    "mmrtextb.ttf": {
+     "attributes": 32,
+     "size": 336660,
+     "creation": 133564289562413672,
+     "access": 133564326748568237,
+     "write": 133564326748568237
+    },
+    "modern.fon": {
+     "attributes": 32,
+     "size": 8704,
+     "creation": 133564290281816019,
+     "access": 133564325616409548,
+     "write": 133564325616409548
+    },
+    "monbaiti.ttf": {
+     "attributes": 32,
+     "size": 289052,
+     "creation": 133564284243294726,
+     "access": 133564284243451063,
+     "write": 133564284243451063
+    },
+    "msgothic.ttc": {
+     "attributes": 32,
+     "size": 8990160,
+     "creation": 133564290074152436,
+     "access": 133564326512158257,
+     "write": 133564326512158257
+    },
+    "msjh.ttc": {
+     "attributes": 32,
+     "size": 21404172,
+     "creation": 133564284243294726,
+     "access": 133564284243763696,
+     "write": 133564284243763696
+    },
+    "msjhbd.ttc": {
+     "attributes": 32,
+     "size": 14441188,
+     "creation": 133564288953641506,
+     "access": 133564326952474584,
+     "write": 133564326952474584
+    },
+    "msjhl.ttc": {
+     "attributes": 32,
+     "size": 12877764,
+     "creation": 133564289391940601,
+     "access": 133564326585127076,
+     "write": 133564326585127076
+    },
+    "msyh.ttc": {
+     "attributes": 32,
+     "size": 19704352,
+     "creation": 134331024550164191,
+     "access": 134331024551882992,
+     "write": 134331024551882992
+    },
+    "msyhbd.ttc": {
+     "attributes": 32,
+     "size": 16883552,
+     "creation": 134331024550164191,
+     "access": 134331024551882992,
+     "write": 134331024551882992
+    },
+    "msyhl.ttc": {
+     "attributes": 32,
+     "size": 12189612,
+     "creation": 134331024550007937,
+     "access": 134331024551101759,
+     "write": 134331024551101759
+    },
+    "msyi.ttf": {
+     "attributes": 32,
+     "size": 301180,
+     "creation": 133564284244544671,
+     "access": 133564284244544671,
+     "write": 133564284244544671
+    },
+    "mvboli.ttf": {
+     "attributes": 32,
+     "size": 79320,
+     "creation": 133564284243763696,
+     "access": 133564284243763696,
+     "write": 133564284243763696
+    },
+    "Nirmala.ttc": {
+     "attributes": 32,
+     "size": 5304988,
+     "creation": 133564284244232102,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "ntailu.ttf": {
+     "attributes": 32,
+     "size": 74464,
+     "creation": 133564284244232102,
+     "access": 133564284244232102,
+     "write": 133564284244232102
+    },
+    "ntailub.ttf": {
+     "attributes": 32,
+     "size": 67168,
+     "creation": 133564289065989393,
+     "access": 133564326768098903,
+     "write": 133564326768098903
+    },
+    "pala.ttf": {
+     "attributes": 32,
+     "size": 472284,
+     "creation": 133564289342878496,
+     "access": 133564326658410845,
+     "write": 133564326658410845
+    },
+    "palab.ttf": {
+     "attributes": 32,
+     "size": 419932,
+     "creation": 133564289346623522,
+     "access": 133564326658567646,
+     "write": 133564326658567646
+    },
+    "palabi.ttf": {
+     "attributes": 32,
+     "size": 335292,
+     "creation": 133564289348186285,
+     "access": 133564326658567646,
+     "write": 133564326658567646
+    },
+    "palai.ttf": {
+     "attributes": 32,
+     "size": 413708,
+     "creation": 133564289344748766,
+     "access": 133564326658410845,
+     "write": 133564326658410845
+    },
+    "phagspa.ttf": {
+     "attributes": 32,
+     "size": 93720,
+     "creation": 133564284244232102,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "phagspab.ttf": {
+     "attributes": 32,
+     "size": 97476,
+     "creation": 133564289445065955,
+     "access": 133564326521376996,
+     "write": 133564326521376996
+    },
+    "roman.fon": {
+     "attributes": 32,
+     "size": 13312,
+     "creation": 133564290281659799,
+     "access": 133564325616253148,
+     "write": 133564325616253148
+    },
+    "s8514fix.fon": {
+     "attributes": 32,
+     "size": 11056,
+     "creation": 133564289613666359,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "s8514oem.fon": {
+     "attributes": 32,
+     "size": 12384,
+     "creation": 133564289620229013,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "s8514sys.fon": {
+     "attributes": 32,
+     "size": 17760,
+     "creation": 133564289624604511,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "SansSerifCollection.ttf": {
+     "attributes": 32,
+     "size": 3775516,
+     "creation": 133564284244232102,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "script.fon": {
+     "attributes": 32,
+     "size": 12288,
+     "creation": 133564290281659799,
+     "access": 133564325616253148,
+     "write": 133564325616253148
+    },
+    "segmdl2.ttf": {
+     "attributes": 32,
+     "size": 283820,
+     "creation": 133564284395021151,
+     "access": 133564284395021151,
+     "write": 133564284395021151
+    },
+    "SegoeIcons.ttf": {
+     "attributes": 32,
+     "size": 462408,
+     "creation": 134331024549851653,
+     "access": 134331024549851653,
+     "write": 134331024549851653
+    },
+    "segoepr.ttf": {
+     "attributes": 32,
+     "size": 168404,
+     "creation": 133564284244388409,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "segoeprb.ttf": {
+     "attributes": 32,
+     "size": 167800,
+     "creation": 133564289474910988,
+     "access": 133564326995771999,
+     "write": 133564326995771999
+    },
+    "segoesc.ttf": {
+     "attributes": 32,
+     "size": 597476,
+     "creation": 133564289445379996,
+     "access": 133564326772161608,
+     "write": 133564326772161608
+    },
+    "segoescb.ttf": {
+     "attributes": 32,
+     "size": 593028,
+     "creation": 133564289447565879,
+     "access": 133564326772320182,
+     "write": 133564326772320182
+    },
+    "segoeui.ttf": {
+     "attributes": 32,
+     "size": 959752,
+     "creation": 134331024550320394,
+     "access": 134331024550632885,
+     "write": 134331024550632885
+    },
+    "segoeuib.ttf": {
+     "attributes": 32,
+     "size": 947092,
+     "creation": 134331024549695347,
+     "access": 134331024549851653,
+     "write": 134331024549851653
+    },
+    "segoeuii.ttf": {
+     "attributes": 32,
+     "size": 530616,
+     "creation": 134331024549851653,
+     "access": 134331024550007937,
+     "write": 134331024550007937
+    },
+    "segoeuil.ttf": {
+     "attributes": 32,
+     "size": 910144,
+     "creation": 134331024549851653,
+     "access": 134331024550007937,
+     "write": 134331024550007937
+    },
+    "segoeuisl.ttf": {
+     "attributes": 32,
+     "size": 848220,
+     "creation": 134331024550007937,
+     "access": 134331024550164191,
+     "write": 134331024550164191
+    },
+    "segoeuiz.ttf": {
+     "attributes": 32,
+     "size": 542140,
+     "creation": 134331024550007937,
+     "access": 134331024550007937,
+     "write": 134331024550007937
+    },
+    "seguibl.ttf": {
+     "attributes": 32,
+     "size": 318708,
+     "creation": 134331024550007937,
+     "access": 134331024550007937,
+     "write": 134331024550007937
+    },
+    "seguibli.ttf": {
+     "attributes": 32,
+     "size": 350484,
+     "creation": 134331024550164191,
+     "access": 134331024550164191,
+     "write": 134331024550164191
+    },
+    "seguiemj.ttf": {
+     "attributes": 32,
+     "size": 12450664,
+     "creation": 134331024554383121,
+     "access": 134331024557039241,
+     "write": 134331024557039241
+    },
+    "seguihis.ttf": {
+     "attributes": 32,
+     "size": 1622060,
+     "creation": 133564284393771065,
+     "access": 133564284393927308,
+     "write": 133564284393927308
+    },
+    "seguili.ttf": {
+     "attributes": 32,
+     "size": 458412,
+     "creation": 134331024550164191,
+     "access": 134331024550320394,
+     "write": 134331024550320394
+    },
+    "seguisb.ttf": {
+     "attributes": 32,
+     "size": 974500,
+     "creation": 134331024550164191,
+     "access": 134331024550320394,
+     "write": 134331024550320394
+    },
+    "seguisbi.ttf": {
+     "attributes": 32,
+     "size": 456140,
+     "creation": 134331024550320394,
+     "access": 134331024550320394,
+     "write": 134331024550320394
+    },
+    "seguisli.ttf": {
+     "attributes": 32,
+     "size": 465660,
+     "creation": 134331024550320394,
+     "access": 134331024550476610,
+     "write": 134331024550476610
+    },
+    "seguisym.ttf": {
+     "attributes": 32,
+     "size": 2514056,
+     "creation": 133564284387989543,
+     "access": 133564284387989543,
+     "write": 133564284387989543
+    },
+    "SegUIVar.ttf": {
+     "attributes": 32,
+     "size": 1851000,
+     "creation": 133564284244388409,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "sere1255.fon": {
+     "attributes": 32,
+     "size": 62944,
+     "creation": 133564289616011819,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "sere1256.fon": {
+     "attributes": 32,
+     "size": 65392,
+     "creation": 133564289616322705,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "sere1257.fon": {
+     "attributes": 32,
+     "size": 59024,
+     "creation": 133564289616635018,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "serf1255.fon": {
+     "attributes": 32,
+     "size": 89456,
+     "creation": 133564289618666692,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "serf1256.fon": {
+     "attributes": 32,
+     "size": 95488,
+     "creation": 133564289618979073,
+     "access": 133564325617190834,
+     "write": 133564325617190834
+    },
+    "serf1257.fon": {
+     "attributes": 32,
+     "size": 84080,
+     "creation": 133564289619447751,
+     "access": 133564325617190834,
+     "write": 133564325617190834
+    },
+    "serife.fon": {
+     "attributes": 32,
+     "size": 57936,
+     "creation": 133564289614760061,
+     "access": 133564325616878170,
+     "write": 133564325616878170
+    },
+    "serifee.fon": {
+     "attributes": 32,
+     "size": 59952,
+     "creation": 133564289615072428,
+     "access": 133564325616878170,
+     "write": 133564325616878170
+    },
+    "serifeg.fon": {
+     "attributes": 32,
+     "size": 60752,
+     "creation": 133564289615387125,
+     "access": 133564325616878170,
+     "write": 133564325616878170
+    },
+    "serifer.fon": {
+     "attributes": 32,
+     "size": 63296,
+     "creation": 133564289615543402,
+     "access": 133564325616878170,
+     "write": 133564325616878170
+    },
+    "serifet.fon": {
+     "attributes": 32,
+     "size": 61024,
+     "creation": 133564289615856475,
+     "access": 133564325616878170,
+     "write": 133564325616878170
+    },
+    "seriff.fon": {
+     "attributes": 32,
+     "size": 81728,
+     "creation": 133564289616791294,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "seriffe.fon": {
+     "attributes": 32,
+     "size": 85360,
+     "creation": 133564289617103998,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "seriffg.fon": {
+     "attributes": 32,
+     "size": 86256,
+     "creation": 133564289617572661,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "seriffr.fon": {
+     "attributes": 32,
+     "size": 90736,
+     "creation": 133564289617885152,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "serifft.fon": {
+     "attributes": 32,
+     "size": 84848,
+     "creation": 133564289618353832,
+     "access": 133564325617034269,
+     "write": 133564325617034269
+    },
+    "simsun.ttc": {
+     "attributes": 32,
+     "size": 18316748,
+     "creation": 134331024550632885,
+     "access": 134331024555164404,
+     "write": 134331024555164404
+    },
+    "simsunb.ttf": {
+     "attributes": 32,
+     "size": 21894056,
+     "creation": 134331024551101759,
+     "access": 134331024554383121,
+     "write": 134331024554383121
+    },
+    "SimsunExtG.ttf": {
+     "attributes": 32,
+     "size": 3549508,
+     "creation": 134331024550632885,
+     "access": 134331024551414111,
+     "write": 134331024551414111
+    },
+    "SitkaVF-Italic.ttf": {
+     "attributes": 32,
+     "size": 558188,
+     "creation": 133564290212282192,
+     "access": 133564326845130242,
+     "write": 133564326845130242
+    },
+    "SitkaVF.ttf": {
+     "attributes": 32,
+     "size": 516124,
+     "creation": 133564290210250841,
+     "access": 133564326844973929,
+     "write": 133564326844973929
+    },
+    "smae1255.fon": {
+     "attributes": 32,
+     "size": 25216,
+     "creation": 133564289623041865,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "smae1256.fon": {
+     "attributes": 32,
+     "size": 32512,
+     "creation": 133564289623197966,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smae1257.fon": {
+     "attributes": 32,
+     "size": 24672,
+     "creation": 133564289623354036,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smaf1255.fon": {
+     "attributes": 32,
+     "size": 20448,
+     "creation": 133564289623822809,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smaf1256.fon": {
+     "attributes": 32,
+     "size": 37952,
+     "creation": 133564289623979621,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smaf1257.fon": {
+     "attributes": 32,
+     "size": 19904,
+     "creation": 133564289624135744,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smalle.fon": {
+     "attributes": 32,
+     "size": 26112,
+     "creation": 133564289622260462,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "smallee.fon": {
+     "attributes": 32,
+     "size": 24784,
+     "creation": 133564289622419436,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "smalleg.fon": {
+     "attributes": 32,
+     "size": 28912,
+     "creation": 133564289622573071,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "smaller.fon": {
+     "attributes": 32,
+     "size": 24832,
+     "creation": 133564289622729204,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "smallet.fon": {
+     "attributes": 32,
+     "size": 29200,
+     "creation": 133564289622885459,
+     "access": 133564325611409426,
+     "write": 133564325611409426
+    },
+    "smallf.fon": {
+     "attributes": 32,
+     "size": 21504,
+     "creation": 133564289623354036,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smallfe.fon": {
+     "attributes": 32,
+     "size": 19600,
+     "creation": 133564289623510285,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smallfg.fon": {
+     "attributes": 32,
+     "size": 23120,
+     "creation": 133564289623510285,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smallfr.fon": {
+     "attributes": 32,
+     "size": 19760,
+     "creation": 133564289623666699,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "smallft.fon": {
+     "attributes": 32,
+     "size": 23008,
+     "creation": 133564289623822809,
+     "access": 133564325611568437,
+     "write": 133564325611568437
+    },
+    "ssee1255.fon": {
+     "attributes": 32,
+     "size": 69232,
+     "creation": 133564289125365877,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "ssee1256.fon": {
+     "attributes": 32,
+     "size": 73216,
+     "creation": 133564289125678299,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "ssee1257.fon": {
+     "attributes": 32,
+     "size": 65456,
+     "creation": 133564289125992644,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "ssee874.fon": {
+     "attributes": 32,
+     "size": 72192,
+     "creation": 133564289128803342,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "ssef1255.fon": {
+     "attributes": 32,
+     "size": 95840,
+     "creation": 133564289127865845,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "ssef1256.fon": {
+     "attributes": 32,
+     "size": 67328,
+     "creation": 133564289128178370,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "ssef1257.fon": {
+     "attributes": 32,
+     "size": 90336,
+     "creation": 133564289128491174,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "ssef874.fon": {
+     "attributes": 32,
+     "size": 102400,
+     "creation": 133564289129116053,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "sserife.fon": {
+     "attributes": 32,
+     "size": 64656,
+     "creation": 133564289124115571,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "sserifee.fon": {
+     "attributes": 32,
+     "size": 66464,
+     "creation": 133564289124427985,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "sserifeg.fon": {
+     "attributes": 32,
+     "size": 65328,
+     "creation": 133564289124584243,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "sserifer.fon": {
+     "attributes": 32,
+     "size": 68848,
+     "creation": 133564289124897197,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "sserifet.fon": {
+     "attributes": 32,
+     "size": 64400,
+     "creation": 133564289125211640,
+     "access": 133564325625159388,
+     "write": 133564325625159388
+    },
+    "sseriff.fon": {
+     "attributes": 32,
+     "size": 89856,
+     "creation": 133564289126147003,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "sseriffe.fon": {
+     "attributes": 32,
+     "size": 92032,
+     "creation": 133564289126459920,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "sseriffg.fon": {
+     "attributes": 32,
+     "size": 90288,
+     "creation": 133564289126772165,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "sseriffr.fon": {
+     "attributes": 32,
+     "size": 98256,
+     "creation": 133564289127240899,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "sserifft.fon": {
+     "attributes": 32,
+     "size": 89456,
+     "creation": 133564289127553417,
+     "access": 133564325625315781,
+     "write": 133564325625315781
+    },
+    "StaticCache.dat": {
+     "attributes": 39,
+     "size": 19988480,
+     "creation": 134331024552039206,
+     "access": 134331024554226756,
+     "write": 134331024554226756
+    },
+    "svgafix.fon": {
+     "attributes": 32,
+     "size": 5680,
+     "creation": 133564289613666359,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "svgasys.fon": {
+     "attributes": 32,
+     "size": 12896,
+     "creation": 133564289624604511,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "sylfaen.ttf": {
+     "attributes": 32,
+     "size": 260108,
+     "creation": 133564290214469812,
+     "access": 133564326773411403,
+     "write": 133564326773411403
+    },
+    "symbol.ttf": {
+     "attributes": 32,
+     "size": 69036,
+     "creation": 133564290215563526,
+     "access": 133564326464493116,
+     "write": 133564326464493116
+    },
+    "tahoma.ttf": {
+     "attributes": 32,
+     "size": 948860,
+     "creation": 133564290215719879,
+     "access": 133564326664504814,
+     "write": 133564326664504814
+    },
+    "tahomabd.ttf": {
+     "attributes": 32,
+     "size": 877632,
+     "creation": 133564290219938641,
+     "access": 133564326664663546,
+     "write": 133564326664663546
+    },
+    "taile.ttf": {
+     "attributes": 32,
+     "size": 67568,
+     "creation": 133564284244388409,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "taileb.ttf": {
+     "attributes": 32,
+     "size": 58532,
+     "creation": 133564288924264760,
+     "access": 133564326935443059,
+     "write": 133564326935443059
+    },
+    "times.ttf": {
+     "attributes": 32,
+     "size": 1177252,
+     "creation": 134331024551414111,
+     "access": 134331024551570490,
+     "write": 134331024551570490
+    },
+    "timesbd.ttf": {
+     "attributes": 32,
+     "size": 1156684,
+     "creation": 134331024551570490,
+     "access": 134331024551882992,
+     "write": 134331024551882992
+    },
+    "timesbi.ttf": {
+     "attributes": 32,
+     "size": 885328,
+     "creation": 134331024551570490,
+     "access": 134331024551726640,
+     "write": 134331024551726640
+    },
+    "timesi.ttf": {
+     "attributes": 32,
+     "size": 944020,
+     "creation": 134331024551882992,
+     "access": 134331024552039206,
+     "write": 134331024552039206
+    },
+    "trebuc.ttf": {
+     "attributes": 32,
+     "size": 254396,
+     "creation": 133564284244388409,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "trebucbd.ttf": {
+     "attributes": 32,
+     "size": 244124,
+     "creation": 133564284354394351,
+     "access": 133564284354394351,
+     "write": 133564284354394351
+    },
+    "trebucbi.ttf": {
+     "attributes": 32,
+     "size": 225868,
+     "creation": 133564284366426158,
+     "access": 133564284366426158,
+     "write": 133564284366426158
+    },
+    "trebucit.ttf": {
+     "attributes": 32,
+     "size": 252224,
+     "creation": 133564284330799357,
+     "access": 133564284330799357,
+     "write": 133564284330799357
+    },
+    "verdana.ttf": {
+     "attributes": 32,
+     "size": 243304,
+     "creation": 133564284244544671,
+     "access": 133564284244544671,
+     "write": 133564284244544671
+    },
+    "verdanab.ttf": {
+     "attributes": 32,
+     "size": 211260,
+     "creation": 133564284354394351,
+     "access": 133564284354394351,
+     "write": 133564284354394351
+    },
+    "verdanai.ttf": {
+     "attributes": 32,
+     "size": 223268,
+     "creation": 133564284330799357,
+     "access": 133564284330955686,
+     "write": 133564284330955686
+    },
+    "verdanaz.ttf": {
+     "attributes": 32,
+     "size": 229800,
+     "creation": 133564284366426158,
+     "access": 133564284366426158,
+     "write": 133564284366426158
+    },
+    "vga737.fon": {
+     "attributes": 32,
+     "size": 5168,
+     "creation": 133564289620229013,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga775.fon": {
+     "attributes": 32,
+     "size": 5168,
+     "creation": 133564289620229013,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga850.fon": {
+     "attributes": 32,
+     "size": 5232,
+     "creation": 133564289620385291,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga852.fon": {
+     "attributes": 32,
+     "size": 6160,
+     "creation": 133564289620385291,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga855.fon": {
+     "attributes": 32,
+     "size": 5120,
+     "creation": 133564289620385291,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga857.fon": {
+     "attributes": 32,
+     "size": 5552,
+     "creation": 133564289620541645,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga860.fon": {
+     "attributes": 32,
+     "size": 5184,
+     "creation": 133564289620541645,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga861.fon": {
+     "attributes": 32,
+     "size": 5184,
+     "creation": 133564289620541645,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga863.fon": {
+     "attributes": 32,
+     "size": 5200,
+     "creation": 133564289620541645,
+     "access": 133564325610940676,
+     "write": 133564325610940676
+    },
+    "vga865.fon": {
+     "attributes": 32,
+     "size": 5184,
+     "creation": 133564289620697930,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vga866.fon": {
+     "attributes": 32,
+     "size": 6128,
+     "creation": 133564289620697930,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vga869.fon": {
+     "attributes": 32,
+     "size": 5184,
+     "creation": 133564289620697930,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vga932.fon": {
+     "attributes": 32,
+     "size": 7232,
+     "creation": 133564289620854069,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vga936.fon": {
+     "attributes": 32,
+     "size": 6272,
+     "creation": 133564289620854069,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vga949.fon": {
+     "attributes": 32,
+     "size": 6304,
+     "creation": 133564289620854069,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vga950.fon": {
+     "attributes": 32,
+     "size": 6272,
+     "creation": 133564289620854069,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vgaf1255.fon": {
+     "attributes": 32,
+     "size": 5952,
+     "creation": 133564289613978897,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgaf1256.fon": {
+     "attributes": 32,
+     "size": 6528,
+     "creation": 133564289613978897,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgaf1257.fon": {
+     "attributes": 32,
+     "size": 5376,
+     "creation": 133564289614135096,
+     "access": 133564325617503196,
+     "write": 133564325617503196
+    },
+    "vgaf874.fon": {
+     "attributes": 32,
+     "size": 7168,
+     "creation": 133564289613822745,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgafix.fon": {
+     "attributes": 32,
+     "size": 5360,
+     "creation": 133564289613822745,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgafixe.fon": {
+     "attributes": 32,
+     "size": 5376,
+     "creation": 133564289613822745,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgafixg.fon": {
+     "attributes": 32,
+     "size": 6112,
+     "creation": 133564289613822745,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgafixr.fon": {
+     "attributes": 32,
+     "size": 5600,
+     "creation": 133564289613978897,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgafixt.fon": {
+     "attributes": 32,
+     "size": 6112,
+     "creation": 133564289613978897,
+     "access": 133564325617346706,
+     "write": 133564325617346706
+    },
+    "vgaoem.fon": {
+     "attributes": 32,
+     "size": 5168,
+     "creation": 133564289621010355,
+     "access": 133564325611097150,
+     "write": 133564325611097150
+    },
+    "vgas1255.fon": {
+     "attributes": 32,
+     "size": 7104,
+     "creation": 133564289624918581,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgas1256.fon": {
+     "attributes": 32,
+     "size": 7648,
+     "creation": 133564289624918581,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgas1257.fon": {
+     "attributes": 32,
+     "size": 6656,
+     "creation": 133564289625074995,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgas874.fon": {
+     "attributes": 32,
+     "size": 8704,
+     "creation": 133564289624604511,
+     "access": 133564325610159412,
+     "write": 133564325610159412
+    },
+    "vgasys.fon": {
+     "attributes": 32,
+     "size": 7280,
+     "creation": 133564289624760882,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgasyse.fon": {
+     "attributes": 32,
+     "size": 6608,
+     "creation": 133564289624760882,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgasysg.fon": {
+     "attributes": 32,
+     "size": 7008,
+     "creation": 133564289624760882,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgasysr.fon": {
+     "attributes": 32,
+     "size": 6912,
+     "creation": 133564289624918581,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "vgasyst.fon": {
+     "attributes": 32,
+     "size": 6912,
+     "creation": 133564289624918581,
+     "access": 133564325610315569,
+     "write": 133564325610315569
+    },
+    "webdings.ttf": {
+     "attributes": 32,
+     "size": 120560,
+     "creation": 133564284244388409,
+     "access": 133564284244544671,
+     "write": 133564284244544671
+    },
+    "wingding.ttf": {
+     "attributes": 32,
+     "size": 82180,
+     "creation": 133564284244388409,
+     "access": 133564284244388409,
+     "write": 133564284244388409
+    },
+    "YuGothB.ttc": {
+     "attributes": 32,
+     "size": 14729372,
+     "creation": 134331024552195537,
+     "access": 134331024554226756,
+     "write": 134331024554226756
+    },
+    "YuGothL.ttc": {
+     "attributes": 32,
+     "size": 13969876,
+     "creation": 134331024552195537,
+     "access": 134331024553914264,
+     "write": 134331024553914264
+    },
+    "YuGothM.ttc": {
+     "attributes": 32,
+     "size": 13908392,
+     "creation": 134331024552664149,
+     "access": 134331024554226756,
+     "write": 134331024554226756
+    },
+    "YuGothR.ttc": {
+     "attributes": 32,
+     "size": 13835976,
+     "creation": 134331024552039206,
+     "access": 134331024554226756,
+     "write": 134331024554226756
+    }
+   }
+  }
+ }
+}

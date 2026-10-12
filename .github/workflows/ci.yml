@@ -53,11 +53,13 @@ jobs:
           uv run python scripts/semantics_differential.py --cases --set 049 --out probes/semantics_049/cases.bin
           uv run python scripts/semantics_differential.py --cases --set 049b --out probes/semantics_049b/cases.bin
           uv run python scripts/semantics_differential.py --cases --set 050 --out probes/semantics_050/cases.bin
+          uv run python scripts/semantics_differential.py --cases --set 065 --out probes/semantics_065/cases.bin
           echo "$(cat store/probe-runs/38011862284/cases.sha256)  probes/semantics/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38029980267/cases.sha256)  probes/semantics_041/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38117654018/cases.sha256)  probes/semantics_049/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38118493713/cases.sha256)  probes/semantics_049b/cases.bin" | sha256sum -c -
           echo "$(cat store/probe-runs/38122967607/cases.sha256)  probes/semantics_050/cases.bin" | sha256sum -c -
+          echo "$(cat store/probe-runs/38222873837/cases.sha256)  probes/semantics_065/cases.bin" | sha256sum -c -
       - name: vocabulary
         run: |
           python3 scripts/check_vocab.py

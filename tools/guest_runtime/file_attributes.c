@@ -27,7 +27,7 @@ typedef unsigned short u16;
 #define ATTRIBUTE_DIRECTORY 0x10u
 #define ATTRIBUTE_ARCHIVE 0x20u
 
-u64 w2m_file_stat(u64 name, u64 out);                /* file.c */
+u64 w2m_file_stat(u64 name, u64 out, u64 *attributes);   /* file.c */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -40,11 +40,12 @@ static u32 look(u64 api, u64 name, u32 *attributes, u64 st[4]) {
     for (; s[n]; n++)
         if (s[n] == '*' || s[n] == '?') return ERROR_INVALID_NAME;
     int trailing = s[n - 1] == '\\' || s[n - 1] == '/';
-    u64 kind = w2m_file_stat(name, (u64)st);
+    u64 recorded = 0;
+    u64 kind = w2m_file_stat(name, (u64)st, &recorded);
     if (kind == 0) return ERROR_FILE_NOT_FOUND;
     if (kind == 3) return ERROR_PATH_NOT_FOUND;
     if (kind == 1 && trailing) return ERROR_DIRECTORY;
-    *attributes = kind == 2 ? ATTRIBUTE_DIRECTORY : ATTRIBUTE_ARCHIVE;
+    *attributes = recorded ? (u32)recorded : kind == 2 ? ATTRIBUTE_DIRECTORY : ATTRIBUTE_ARCHIVE;   /* Sprint 065 */
     if (kind == 2) st[0] = 4096;                                             /* rows ex.dot, ex.dot.backslash */
     return 0;
 }

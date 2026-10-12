@@ -198,6 +198,30 @@ def carries_address(fn: str, field: str, args: tuple[int, ...]) -> bool:
     return False
 
 
+MEM_RESERVE = 0x2000
+
+
+def placed(calls: list[Call]) -> list[Call]:
+    """`calls` without the reservations made at an address the caller chose, and the retry each failed one leads to
+    (Sprint 065). mono reserves its next code block at the address past its last one (VirtualAlloc(hint, 0x10000,
+    MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)) and, when the system answers ERROR_INVALID_ADDRESS, asks again
+    without the hint. Whether that address is free depends on the address space's layout, which on Windows ASLR
+    draws per run (game run 38216081440: the same call failed at seq 2745 and succeeded at 2749), so neither the
+    hinted call nor its retry is a value the game decides."""
+    out: list[Call] = []
+    retry: dict[int, int] = {}                     # thread -> the size a failed hinted reservation asked for
+    for c in sorted(calls):
+        if c[4] == "VirtualAlloc":
+            if c[5][0] and c[5][2] & MEM_RESERVE:
+                if c[6] == 0:
+                    retry[c[1]] = c[5][1]
+                continue
+            if c[5][0] == 0 and retry.pop(c[1], None) == c[5][1]:
+                continue
+        out.append(c)
+    return out
+
+
 String = tuple[int, int, str]                       # seq, argument, text (<capture>.strings.tsv)
 
 
@@ -288,12 +312,15 @@ def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] 
 
 def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             excluded_threads: frozenset[int] = frozenset(),
-            strings: tuple[list[String], list[String]] = ([], [])) -> tuple[list[Divergence], int]:
+            strings: tuple[list[String], list[String]] = ([], []),
+            undecided: frozenset[tuple[str, str]] = frozenset()) -> tuple[list[Divergence], int]:
     """Every divergence, in the order of the Windows calls they concern, and the count of calls compared. Each
     (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
     with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
-    threads the game does not start (the capture's own)."""
-    windows = [c for c in windows if c[1] not in excluded_threads]
+    threads the game does not start (the capture's own); `undecided` are (function, field) values two Windows runs of
+    the game disagree on, which are not compared (the contract's `undetermined`)."""
+    windows = placed([c for c in windows if c[1] not in excluded_threads])
+    w2m = placed(w2m)
     threads = thread_map(windows, w2m, signatures,
                          (thread_names(windows, strings[0]), thread_names(w2m, strings[1])))
 
@@ -343,6 +370,8 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             if sig["sets_last_error"] and failed(ret["kind"], ret["type"], a[6]):
                 fields.append(("error", "value", 4, a[7], b[7], False))
         for name, kind, size, x, y, argument in fields:
+            if (fn, name) in undecided:
+                continue
             space = ASSIGNED.get((fn, name))
             if space is not None:
                 ok = same(space, x, y)
@@ -361,6 +390,12 @@ def excluded(contract: dict[str, Any], run: str) -> frozenset[int]:
     return frozenset(int(t) for t in contract.get("excluded_threads", {}).get(run, {}))
 
 
+def undetermined(contract: dict[str, Any]) -> frozenset[tuple[str, str]]:
+    """The (function, field) values a contract does not compare: those two Windows runs of the game disagree on (its
+    `undetermined`, keyed "Function field", each with its evidence)."""
+    return frozenset(tuple(k.split(" ")) for k in contract.get("undetermined", {}))   # type: ignore[misc]
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("calls", type=Path)
@@ -368,10 +403,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--signatures", type=Path, default=SIGNATURES)
     a = ap.parse_args(argv)
     signatures = json.loads(a.signatures.read_text())["functions"]
+    contract = json.loads(CONTRACT.read_text())
     found, compared = compare(read_tsv(a.run / "jit_capture.bin.trace.tsv"), read_tsv(a.calls), signatures,
-                              excluded(json.loads(CONTRACT.read_text()), a.run.name),
+                              excluded(contract, a.run.name),
                               (read_strings(a.run / "jit_capture.bin.strings.tsv"),
-                               read_strings(a.calls.with_suffix(".strings.tsv"))))
+                               read_strings(a.calls.with_suffix(".strings.tsv"))), undetermined(contract))
     print(f"{compared} calls compared; {len(found)} divergences")
     for d in found:
         print(f"  seq {d.windows_seq}: {d.text()}")

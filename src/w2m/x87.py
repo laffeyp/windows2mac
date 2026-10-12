@@ -157,7 +157,7 @@ def round80(v: Fraction, precision: int, rc: int, sign_of_zero: int = 0) -> tupl
         if to_inf:
             return infinity(sign), flags | C1
         return make(sign, EXP_MASK - 1, ((1 << precision) - 1) << (64 - precision)), flags & ~C1
-    tiny_after = r != 0 and re < EMIN
+    tiny_after = r == 0 or re < EMIN                   # a nonzero value rounded to zero is tiny (set 065: UE)
     if (tiny if TINY_BEFORE_ROUNDING else tiny_after) and flags & PE:
         flags |= UE
     if r == 0:
@@ -200,7 +200,7 @@ def to_ieee(f: Fmt, x: int, rc: int) -> tuple[int, int]:
         flags = 0 if m >> 62 & 1 else IE
         payload = (m >> (63 - f.mbits)) & ((1 << f.mbits) - 1) | 1 << (f.mbits - 1)
         return s << (f.bits - 1) | emax_bits << f.mbits | payload, flags
-    flags = DE if k in ("denormal", "pseudo_denormal") else 0
+    flags = 0                                      # a denormal source raises no DE in a store (set 065, Xeon 8573C)
     if k == "zero":
         return s << (f.bits - 1), 0
     v = value(x)
@@ -252,7 +252,7 @@ def to_int(x: int, bits: int, rc: int, truncate: bool) -> tuple[int, int]:
     k = kind(x)
     if k in ("nan", "inf", "invalid", "unnormal"):
         return indefinite, IE
-    flags = DE if k in ("denormal", "pseudo_denormal") else 0
+    flags = 0                                      # a denormal source raises no DE in FIST(T)P (set 065, Xeon 8573C)
     if k == "zero":
         return 0, flags
     v = value(x)
@@ -305,6 +305,8 @@ def _operand_flags(*xs: int) -> tuple[bool, int]:
 def add(a: int, b: int, precision: int, rc: int, negate_b: bool = False) -> tuple[int, int]:
     if negate_b:
         b ^= 1 << 79
+    if _unsupported(a, b):
+        return INDEFINITE, IE
     if is_nan(a) or is_nan(b):
         return _nan_result(a, b)
     bad, flags = _operand_flags(a, b)
@@ -324,7 +326,15 @@ def add(a: int, b: int, precision: int, rc: int, negate_b: bool = False) -> tupl
     return r, flags | f
 
 
+def _unsupported(*xs: int) -> bool:
+    """An unnormal, pseudo-NaN, pseudo-infinity or other pattern the x87 does not support: the indefinite with IE,
+    before any NaN operand is looked at (set 065, Xeon 8573C: FMUL of an unnormal and a QNaN gives the indefinite)."""
+    return any(kind(x) in ("invalid", "unnormal") for x in xs)
+
+
 def mul(a: int, b: int, precision: int, rc: int) -> tuple[int, int]:
+    if _unsupported(a, b):
+        return INDEFINITE, IE
     if is_nan(a) or is_nan(b):
         return _nan_result(a, b)
     bad, flags = _operand_flags(a, b)
@@ -344,6 +354,8 @@ def mul(a: int, b: int, precision: int, rc: int) -> tuple[int, int]:
 
 def div(a: int, b: int, precision: int, rc: int) -> tuple[int, int]:
     """a / b."""
+    if _unsupported(a, b):
+        return INDEFINITE, IE
     if is_nan(a) or is_nan(b):
         return _nan_result(a, b)
     bad, flags = _operand_flags(a, b)
@@ -366,6 +378,8 @@ def div(a: int, b: int, precision: int, rc: int) -> tuple[int, int]:
 
 
 def sqrt(a: int, precision: int, rc: int) -> tuple[int, int]:
+    if _unsupported(a):
+        return INDEFINITE, IE
     if is_nan(a):
         return _nan_result(a, None)
     bad, flags = _operand_flags(a)
@@ -419,11 +433,13 @@ def _pi66() -> Fraction:
 
 
 def _sin_cos(r: Fraction, bits: int = 160) -> tuple[Fraction, Fraction]:
-    """sin and cos of |r| <= pi/4 by their series, to well past `bits` bits."""
+    """sin and cos of |r| <= pi/4 by their series, each to well past `bits` bits of its own size: sin's terms run
+    until they fall below r * 2^-bits (set 065: an argument of 2^-64 needs its r^3/6 term to round as the Xeon does,
+    and one of 2^-10681 lies below any fixed limit)."""
     limit = Fraction(1, 1 << bits)
     s, c = Fraction(0), Fraction(0)
     term, k = r, 1
-    while abs(term) > limit:
+    while term and abs(term) > abs(r) * limit:
         s += term
         term = -term * r * r / ((k + 1) * (k + 2))
         k += 2
@@ -437,6 +453,8 @@ def _sin_cos(r: Fraction, bits: int = 160) -> tuple[Fraction, Fraction]:
 
 def trig(a: int, which: str, rc: int) -> tuple[int | None, int]:
     """FSIN or FCOS of ST(0): (the result, or None for |x| >= 2^63 with C2 set and ST(0) unchanged; flags)."""
+    if _unsupported(a):
+        return INDEFINITE, IE
     if is_nan(a):
         return _nan_result(a, None)
     bad, flags = _operand_flags(a)
@@ -447,6 +465,16 @@ def trig(a: int, which: str, rc: int) -> tuple[int | None, int]:
         return INDEFINITE, IE
     if k == "zero":
         return (a if which == "sin" else make(0, BIAS, J)), flags
+    e = a >> 64 & EXP_MASK
+    if e < BIAS - 68:
+        # |x| < 2^-68: the Xeon 8573C answers x for FSIN and 1 for FCOS in every rounding mode, inexact, C1 clear, and
+        # UE when the x it answers is denormal (set 065: every argument from 2^-69 down; from 2^-68 up it rounds
+        # sin and cos correctly)
+        if which == "sin":                         # a pseudo-denormal comes back normalized, and not tiny
+            if kind(a) == "pseudo_denormal":
+                return make(a >> 79, 1, a & ((1 << 64) - 1)), flags | PE
+            return a, flags | PE | (UE if e == 0 else 0)
+        return make(0, BIAS, J), flags | PE
     v = value(a)
     if abs(v) >= Fraction(2) ** 63:
         return None, C2
@@ -460,7 +488,7 @@ def trig(a: int, which: str, rc: int) -> tuple[int | None, int]:
     else:
         out = (c, -s, -c, s)[q]
     res, f = round80(out, 64, rc)
-    return res, flags | f
+    return res, flags | f | PE                     # sin and cos of a nonzero number are irrational: always inexact
 
 
 # ---- the FPU ------------------------------------------------------------------------------------------------------
@@ -536,21 +564,26 @@ def _read(fpu: Fpu, i: int) -> int | None:
 
 
 def execute(fpu: Fpu, ic: str, opcode: int, reg: int, rm: int | None, mem_read: Callable[[int], int],
-            mem_write: Callable[[int, int], None], ax: list[int]) -> None:
+            mem_write: Callable[..., None], ax: list[int]) -> None:
     """One x87 instruction. `rm` is the ST(i) index of a register form, None for a memory form; mem_read(n) and
-    mem_write(n, value) access the memory operand; ax is [AX] for FNSTSW AX."""
+    mem_write(n, value, offset=0) access the memory operand; ax is [AX] for FNSTSW AX."""
     read, write = mem_read, mem_write
     p, rc = fpu.precision, fpu.rc
+    if fpu.sw & ES and ic not in ("FNSTSW", "FNCLEX"):     # a pending unmasked exception: #MF, which has no rows
+        raise X87Unmasked(f"{ic} with an unmasked exception pending (status word 0x{fpu.sw:x})")
     if ic == "FWAIT":
         return
     if ic == "FNCLEX":
         fpu.sw &= ~(IE | DE | ZE | OE | UE | PE | SF | ES | B)
         return
     if ic == "FLDCW":
-        fpu.cw = read(2) | 0x40                           # bit 6 reads as 1 (FNSTCW shows 0x027F, 0x037F)
+        # bits 7 and 13-15 are reserved and read as 0, bit 6 as 1 (FNSTCW shows 0x027F, 0x037F); a flag the new word
+        # unmasks is pending: ES and B set (set 065, Xeon 8573C)
+        fpu.cw = read(2) & 0x1F7F | 0x40
+        fpu.sw = fpu.sw & ~(ES | B) | (ES | B if fpu.sw & ~fpu.cw & 0x3F else 0)
         return
-    if ic == "FNSTSW":
-        if rm is None:
+    if ic == "FNSTSW":                                     # DF E0 stores AX, DD /7 memory
+        if opcode == 0xDD:
             write(2, fpu.sw)
         else:
             ax[0] = fpu.sw
@@ -581,8 +614,9 @@ def execute(fpu: Fpu, ic: str, opcode: int, reg: int, rm: int | None, mem_read: 
         if rm is not None:
             fpu.set_st(rm, x)
             fpu.raise_flags(0)
-        elif opcode == 0xDB:
-            write(10, x)
+        elif opcode == 0xDB:                               # two stores: the significand, then sign and exponent;
+            write(8, x & ((1 << 64) - 1))                  # at a page edge the first lands before the second faults
+            write(2, x >> 64, 8)                           # (set 065: FSTP m80 across 0x30001000)
             fpu.raise_flags(0)
         else:
             f = M32 if opcode == 0xD9 else M64
@@ -628,13 +662,17 @@ def execute(fpu: Fpu, ic: str, opcode: int, reg: int, rm: int | None, mem_read: 
         else:                                              # FIDIVR: the integer divided by ST(0)
             r, flags = div(b, a, p, rc)
         if rm is None and ic in ("FADD", "FMUL"):
-            flags |= load_flags & (IE | DE)
+            flags |= load_flags & IE                       # an SNaN operand
+            if not (is_nan(a) or _unsupported(a)):         # a NaN or unsupported ST(0) decides alone: no DE (set 065)
+                flags |= load_flags & DE
         fpu.raise_flags(flags)
         fpu.set_st(dest, r)
         return
     if ic in ("FSQRT", "FSIN", "FCOS"):
         a = _read(fpu, 0)
         if a is None:
+            if ic != "FSQRT":
+                fpu.sw &= ~C2                              # the argument was in range (set 065)
             fpu.set_st(0, INDEFINITE)
             return
         if ic == "FSQRT":

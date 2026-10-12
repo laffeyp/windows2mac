@@ -149,8 +149,8 @@ class Runtime:
         def read(n: int) -> int:
             return int.from_bytes(self.mem.read(address, n), "little")
 
-        def write(n: int, v: int) -> None:
-            self.mem.write(address, (v & _mask(8 * n)).to_bytes(n, "little"))
+        def write(n: int, v: int, offset: int = 0) -> None:
+            self.mem.write(address + offset, (v & _mask(8 * n)).to_bytes(n, "little"))
 
         ax = [th.regs[0] & 0xFFFF]
         try:

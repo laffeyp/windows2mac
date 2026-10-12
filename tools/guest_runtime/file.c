@@ -121,11 +121,12 @@ static u64 normalize(u64 name) {
     return n;
 }
 
-/* For paths.c (Sprint 048): FILE_STAT on a full path. */
-u64 w2m_file_stat_full(const unsigned short *full, u64 out) {
+/* For paths.c (Sprint 048): FILE_STAT on a full path. *attributes (when given) receives the Windows attributes the
+ * host recorded for the entry, or 0 where the guest derives them from the kind (Sprint 065: C:\\Windows\\Fonts). */
+u64 w2m_file_stat_full(const unsigned short *full, u64 out, u64 *attributes) {
     u64 n = 0;
     while (full[n]) n++;
-    return w2m_host(W2M_FILE_STAT, (u64)full, n, out, 0, 0);
+    return w2m_host(W2M_FILE_STAT, (u64)full, n, out, 0, attributes);
 }
 
 static u64 lookup(u64 chars, u64 *id) {
@@ -152,10 +153,10 @@ u32 w2m_file_read_all(const unsigned short *name, u8 *buf, u64 max, u64 *size) {
 }
 
 /* For file_attributes.c (Sprint 047): the name normalized as CreateFileW's, then FILE_STAT (32 bytes at `out`:
- * size, birth, access and write times). Returns the kind. */
-u64 w2m_file_stat(u64 name, u64 out) {
+ * size, birth, access and write times; recorded attributes or 0 at *attributes). Returns the kind. */
+u64 w2m_file_stat(u64 name, u64 out, u64 *attributes) {
     u64 chars = normalize(name);
-    return w2m_host(W2M_FILE_STAT, (u64)path, chars, out, 0, 0);
+    return w2m_host(W2M_FILE_STAT, (u64)path, chars, out, 0, attributes);
 }
 
 /* Data and delete access from a mask (contracts/windows.file.access, Sprint 048): reading with GENERIC_READ or
