@@ -2523,12 +2523,20 @@ class VM:
         cpsr = CPSR_EL1H
         stop = "timeout"
         report_at = time.monotonic() + PROGRESS_SECONDS
-        reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()))
+        reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()), time.monotonic())
         try:
             while True:
+                machine = self.machine if self.machine is not None and self.machine.main is self else None
+                if machine is not None and machine.stop_requested:
+                    stop = machine.stop_requested
+                    break
                 if time.monotonic() >= report_at:             # a run that goes quiet says where it is
                     reported = self._progress(reported, x)
                     report_at = time.monotonic() + PROGRESS_SECONDS
+                    why = machine.stop_when() if machine is not None and machine.stop_when is not None else None
+                    if why:
+                        stop = why
+                        break
                 cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
                 r = cmd(f"run {interrupt_every_ms if interrupt_every_ms is not None else timeout_ms}")
                 e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
@@ -2669,23 +2677,24 @@ class VM:
         return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop,
                       self.calls_total(), self.calls_dropped())
 
-    def _progress(self, before: tuple[int, Counter[int], Counter[tuple[int, int]], int],
-                  x: list[int]) -> tuple[int, Counter[int], Counter[tuple[int, int]], int]:
-        """One progress line on stderr: instructions and their rate over the last PROGRESS_SECONDS, exits by
-        hvc and the busiest exit sites since the last line, calls made, each thread's status, and the x86
+    def _progress(self, before: tuple[int, Counter[int], Counter[tuple[int, int]], int, float],
+                  x: list[int]) -> tuple[int, Counter[int], Counter[tuple[int, int]], int, float]:
+        """One progress line on stderr: instructions and their rate since the last line, exits by
+        hvc and the busiest exit sites since then, calls made, each thread's status, and the x86
         address the current thread is at."""
         executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
         calls = sum(self.calls_total().values())
+        now = time.monotonic()
         exits = Counter(self.exits)
         exits.subtract(before[1])
         sites = Counter(self.exit_sites)
         sites.subtract(before[2])
         threads = Counter(t.status for t in self.threads.values())
-        print(f"progress: {executed} instructions ({(executed - before[0]) / PROGRESS_SECONDS / 1e6:.2f}M/s); "
+        print(f"progress: {self.modules.image_name}: {executed} instructions ({(executed - before[0]) / max(now - before[4], 1e-6) / 1e6:.2f}M/s); "
               f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
               + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
               + f"; threads {dict(threads)}; thread {self.current_tid} at 0x{x[17]:x}", file=sys.stderr, flush=True)
-        return executed, Counter(self.exits), Counter(self.exit_sites), calls
+        return executed, Counter(self.exits), Counter(self.exit_sites), calls, now
 
     def close(self) -> None:
         for r in self.mem.regions:

@@ -101,6 +101,11 @@ class Machine:
         self.next_id = OBJECT_IDS
         self.next_pid = 4096
         self.next_tid = 4
+        self.main: Any = None
+        # a reason to stop the main process at its next exit (a signal), and a test of the run asked at each progress
+        # line (vm_backend.PROGRESS_SECONDS) that names a reason to stop or None; either ends the run with its record
+        self.stop_requested: str | None = None
+        self.stop_when: Callable[[], str | None] | None = None
 
     def _new(self, obj: Event | Pipe) -> int:
         oid = self.next_id
@@ -268,6 +273,7 @@ class Machine:
 
     def run(self, main: Any) -> Any:
         """Run every VM until the main one's process ends or stops; its Result. The others stop with it."""
+        self.main = main
         if main.process_id not in self.processes:
             self.add(main)
         current = self.processes[main.process_id]

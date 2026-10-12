@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import signal
 import sys
 import time
 from collections.abc import AsyncIterator
@@ -145,6 +146,15 @@ def main(argv: list[str]) -> int:
                 call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources)       # where jit_capture.c opens the Windows trace
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
         machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
+        # the run ends where its reference does: the Windows run logged REFERENCE's lines in 180 s and was stopped
+        # (exec.json), so past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond
+        reference_lines = len((REFERENCE / "unity.log").read_bytes().splitlines())
+        log = files.drive / "w2m" / "unity.log"
+        machine.stop_when = lambda: (f"the log holds the reference's {reference_lines} lines"
+                                     if log.is_file() and len(log.read_bytes().splitlines()) >= reference_lines
+                                     else None)
+        for number in (signal.SIGINT, signal.SIGTERM):       # a stopped run still writes its record
+            signal.signal(number, lambda n, _f: setattr(machine, "stop_requested", f"stopped by signal {n}"))
         try:
             r = machine.run(vm)
             calls, dropped = vm.traced_calls()
