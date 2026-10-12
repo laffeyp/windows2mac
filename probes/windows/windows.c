@@ -86,14 +86,14 @@ static const char *window_name;            /* "batch" or "play", the rows' prefi
 static HWND current;
 static unsigned messages;
 
-static void message_row(void) {
+static void message_row(unsigned index) {
     char name[48];
     int m = 0;
     for (const char *p = "msg."; *p; p++) name[m++] = *p;
     for (const char *p = window_name; *p; p++) name[m++] = *p;
     name[m++] = '.';
-    if (messages >= 10) name[m++] = (char)('0' + messages / 10);
-    name[m++] = (char)('0' + messages % 10);
+    if (index >= 10) name[m++] = (char)('0' + index / 10);
+    name[m++] = (char)('0' + index % 10);
     name[m] = 0;
     row(name);
 }
@@ -110,10 +110,21 @@ static void create_struct(const CREATESTRUCTW *c) {
 
 static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     if (!current) current = w;
-    message_row();
-    messages++;
-    field("msg", msg); flag("same_window", w == current);
+    unsigned index = messages++;
     LRESULT r;
+    /* a message DefWindowProcW answers by sending others (WM_ACTIVATE sends WM_SETFOCUS) gets its row after the
+     * answer, so the rows of the messages it caused come first, each whole (Sprint 063) */
+    switch (msg) {
+    case WM_GETMINMAXINFO:
+    case WM_NCCREATE:
+    case WM_NCCALCSIZE:
+    case WM_CREATE:
+        message_row(index);
+        field("msg", msg); flag("same_window", w == current);
+        break;
+    default:
+        break;
+    }
     switch (msg) {
     case WM_GETMINMAXINFO: {
         MINMAXINFO *mm = (MINMAXINFO *)lp;
@@ -149,21 +160,34 @@ static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_SETFOCUS:
     case WM_KILLFOCUS:                         /* wParam: the window losing or gaining the focus */
+        r = DefWindowProcW(w, msg, wp, lp);
+        message_row(index);
+        field("msg", msg); flag("same_window", w == current);
         flag("wparam_null", wp == 0); flag("wparam_is_self", (HWND)wp == w);
         flag("lparam_null", lp == 0);
-        r = DefWindowProcW(w, msg, wp, lp);
         break;
     case WM_WINDOWPOSCHANGING:
     case WM_WINDOWPOSCHANGED: {                /* lParam: a WINDOWPOS */
         const WINDOWPOS *p = (const WINDOWPOS *)lp;
-        field("wparam", wp); flag("pos_hwnd_is_self", p->hwnd == w); field("pos_flags", p->flags);
-        flag("after_null", p->hwndInsertAfter == NULL);
+        int self_pos = p->hwnd == w, after_null = p->hwndInsertAfter == NULL;
+        UINT flags = p->flags;
         r = DefWindowProcW(w, msg, wp, lp);
+        message_row(index);
+        field("msg", msg); flag("same_window", w == current);
+        field("wparam", wp); flag("pos_hwnd_is_self", self_pos); field("pos_flags", flags); flag("after_null", after_null);
         break;
     }
-    default:
-        field("wparam", wp); hexfield("lparam", (ULONG_PTR)lp);
+    case WM_ACTIVATEAPP:                       /* lParam: the other application's thread id */
         r = DefWindowProcW(w, msg, wp, lp);
+        message_row(index);
+        field("msg", msg); flag("same_window", w == current);
+        field("wparam", wp); flag("lparam_null", lp == 0);
+        break;
+    default:
+        r = DefWindowProcW(w, msg, wp, lp);
+        message_row(index);
+        field("msg", msg); flag("same_window", w == current);
+        field("wparam", wp); hexfield("lparam", (ULONG_PTR)lp);
     }
     sfield("result", r);
     end();
