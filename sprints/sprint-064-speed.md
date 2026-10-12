@@ -104,3 +104,4 @@ The frontier past seq 3426, conforming; its speed measured before and after each
   criterion moves there by the partial-pass rule.
 - **The snapshot's question.** At 442 million instructions a second a rerun costs less still, so Decision
   2026-10-11's decline stands.
+- **Closed partial on CI run 38219168662** (success on cc88048a).

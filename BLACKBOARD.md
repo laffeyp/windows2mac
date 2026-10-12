@@ -285,7 +285,7 @@
 
 ## Sprint tail
 
-### Sprint 064 (2026-10-12, closed partial: CI pending on the closing commit)
+### Sprint 064 (2026-10-12, closed partial: CI run 38219168662 success on cc88048a)
 - **Scope:** speed: the exits counted, their causes removed, the hot model-step classes native.
 - **Rubber Duck Pass:**
   - *Sequence narration:* frontier runs of 1, 20 and 200 billion steps, each with EXECUTION_STARTED, its stop, TRACE_INGESTED, COMPARISON_COMPLETED `conforms` (2,393 to 2,508 calls) and SESSION_COMPLETED; class runs of the lowered classes to CANDIDATE_ACCEPTED, with plants rejected; two full class runs (436) and two family sweeps (60); a reference game run with thread names.
@@ -293,7 +293,7 @@
   - *Observation 2 (missing pair, of the judge):* faster runs reordered threads, and pairing by agreement mispaired workers. Disposition: resolved-here (thread names from both sides).
   - *Observation 3 (order violation, of the work):* a plant restored with `git checkout` discarded uncommitted edits to the same file. Disposition: resolved-here (reapplied; plants are reverted by the reverse edit).
   - *Observation 4 (vocabulary gap, checked):* the frontier's stop at a lift refusal is P18's case (TRANSLATION_REFUSED, proposed); still reported as EXECUTION_COMPLETED `faulted`. Disposition: recorded; P18 stands for the next vocabulary version.
-- **Closed:** on green CI of the closing commit.
+- **Closed:** CI run 38219168662 (success on cc88048a), partial.
 
 ### Sprint 063 (2026-10-11, closed partial: CI run 38215049553 success on 71c0d80a)
 - **Scope:** kernel.appcore and the 20 unserved functions to seq 3426, five groups in parallel worktrees.
