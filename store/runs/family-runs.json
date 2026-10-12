@@ -200,7 +200,7 @@
   }
  },
  "dxgi": {
-  "candidate_sha256": "sha256:518561280bba307fd23b4628d22f3114769128fd382f0cfa8cf983cb36375106",
+  "candidate_sha256": "sha256:2e4b007f6d0a84658e370588bd094b9b801ded1bc505f4970f1570606856aac9",
   "divergence": {
    "38254500336": null,
    "38254503636": null
@@ -213,7 +213,7 @@
    "SESSION_INIT": 1
   },
   "family": "dxgi",
-  "record": "store/runs/family-dxgi-1791818967448095000",
+  "record": "store/runs/family-dxgi-1791820777625500000",
   "verdicts": {
    "38254500336": "conforms",
    "38254503636": "conforms"
@@ -1522,7 +1522,7 @@
   }
  },
  "windows": {
-  "candidate_sha256": "sha256:36859e9fd52be095b572af380d6e2522c3be4e15ed19ac3e92b2b3142e937ef3",
+  "candidate_sha256": "sha256:e0ee42219607e4498e7e8d975c8994e860c892bcf7faeb4514f5a10dd4d19a61",
   "divergence": {
    "38210803867": null,
    "38210806334": null
@@ -1535,7 +1535,7 @@
    "SESSION_INIT": 1
   },
   "family": "windows",
-  "record": "store/runs/family-windows-1791818978383201000",
+  "record": "store/runs/family-windows-1791820777626711000",
   "verdicts": {
    "38210803867": "conforms",
    "38210806334": "conforms"
