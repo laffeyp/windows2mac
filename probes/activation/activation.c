@@ -23,6 +23,9 @@
  *     (the game is jit_capture, a GUI program, started by Start-Process: ShellExecuteEx), started by ShellExecuteExW
  *     (SEE_MASK_NOCLOSEPROCESS, SW_SHOWNORMAL) or CreateProcessW; the child and pump ways change nothing either (runs
  *     38274040670, 38274044288), and every game run (six) has the lParam 0 and the wParam 0
+ *   - guichild, gui_shell_guichild: the idle child is the GUI copy, started as the game starts UnityCrashHandler64
+ *     (a GUI program; CreateProcessW with handles inherited and NORMAL_PRIORITY_CLASS, seq 18); the gui ways change
+ *     nothing (runs 38274597868, 38274601269)
  * A trial writes its rows to the file its command line names; the first copy prints them in order. Rows:
  * <way>.before, <way>.msg.<i> (WM_ACTIVATEAPP, WM_NCACTIVATE, WM_ACTIVATE, WM_KILLFOCUS, WM_SETFOCUS), <way>.after.
  */
@@ -82,6 +85,7 @@ static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
 
 static DWORD delay_ms;
 static int with_child, with_pump;
+static const WCHAR *way_w;
 static HANDLE idle_child;
 
 static int contains(const WCHAR *s, const WCHAR *w) {
@@ -114,11 +118,19 @@ static void trial(void) {
     if (with_child) {
         static WCHAR cmd[1024];
         cmd[0] = 0;
-        wcat(cmd, L"\""); wcat(cmd, exe); wcat(cmd, L"\" idle x x");
+        static WCHAR child[MAX_PATH];
+        if (contains(way_w, L"guichild")) {
+            GetTempPathW(MAX_PATH, child);
+            wcat(child, L"w2m_activation_gui.exe");
+        } else {
+            child[0] = 0;
+            wcat(child, exe);
+        }
+        wcat(cmd, L"\""); wcat(cmd, child); wcat(cmd, L"\" idle x x");
         STARTUPINFOW si = {0};
         si.cb = sizeof si;
         PROCESS_INFORMATION pi;
-        if (CreateProcessW(exe, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        if (CreateProcessW(child, cmd, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, NULL, NULL, &si, &pi)) {
             CloseHandle(pi.hThread);
             idle_child = pi.hProcess;
         }
@@ -258,6 +270,7 @@ void start(void) {
         for (int i = 0; words[2][i]; i++)
             if (words[2][i] >= L'0' && words[2][i] <= L'9') delay_ms = delay_ms * 10 + (DWORD)(words[2][i] - L'0');
         delay_ms *= 1000;
+        way_w = words[2];
         with_child = contains(words[2], L"child");
         with_pump = contains(words[2], L"pump");
         sink = CreateFileW(words[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -266,6 +279,7 @@ void start(void) {
         ExitProcess(0);
     }
     if (count >= 2 && words[1][0] == L'i') {                     /* idle: as UnityCrashHandler64 waits */
+        GetDesktopWindow();                                      /* a GUI thread, as the crash handler's */
         Sleep(60000);
         ExitProcess(0);
     }
@@ -291,5 +305,7 @@ void start(void) {
     run_way("gui_shell", L"gui_shell");
     run_way("gui_create", L"gui_create");
     run_way("gui_shell_child_pump", L"gui_shell_child_pump");
+    run_way("guichild", L"guichild");
+    run_way("gui_shell_guichild", L"gui_shell_guichild");
     ExitProcess(0);
 }
