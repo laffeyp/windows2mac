@@ -167,6 +167,49 @@ u64 k32_CreateMutexA(u64 attributes, u64 owned, u64 name) {
     return make(W2M_API_CreateMutexA, MUTEX, 0, 0);
 }
 
+/* Threads blocked on one semaphore, auto-reset event or mutex, in the order they began to wait. A release grants the
+ * object to them at once, as Windows does (probes/wait_handoff, runs 38304235237 and 38304238413): the releaser's
+ * own zero-timeout wait right after finds it taken (rows *.one_waiter: releaser_wait 258), two units go to the first
+ * two of three waiters (semaphore.three_waiters_two_released) and of two waiters the first wakes (semaphore.order).
+ * A granted waiter's retried wait returns WAIT_OBJECT_0 without taking the object again. Before this, the running
+ * thread took each unit ahead of the waiters it woke: the game's Background Job.Worker 1-15 never returned from
+ * their wait (frontier 643a6283510c-1791830368398119000; game run 38216081440 seq 1402-1508). WaitForMultipleObjects
+ * re-checks as before (no row). */
+#define WAITERS 256
+static struct waiter { u32 tid; int object; int granted; } waiters[WAITERS];
+static int nwaiters;
+
+static int waiter_of(u32 tid) {
+    for (int i = 0; i < nwaiters; i++)
+        if (waiters[i].tid == tid) return i;
+    return -1;
+}
+
+static void waiter_drop(int i) {
+    for (; i + 1 < nwaiters; i++) waiters[i] = waiters[i + 1];
+    nwaiters--;
+}
+
+static int handed_over(struct object *o) {
+    return o->kind == SEMAPHORE || o->kind == EVENT_AUTO || o->kind == MUTEX;
+}
+
+static void grant(struct object *o) {
+    int index = (int)(o - objects);
+    for (int i = 0; i < nwaiters; i++) {
+        if (waiters[i].object != index || waiters[i].granted) continue;
+        if (o->kind == MUTEX) {
+            if (o->count) return;
+            o->count = 1;
+            o->max = waiters[i].tid;
+        } else {
+            if (o->count <= 0) return;
+            o->count--;
+        }
+        waiters[i].granted = 1;
+    }
+}
+
 static struct object *must(u64 api, u64 h, u32 kind1, u32 kind2) {
     struct object *o = object_of(h);
     if (!o || (o->kind != kind1 && o->kind != kind2)) w2m_unimplemented(api, h);   /* not in the rows */
@@ -176,7 +219,11 @@ static struct object *must(u64 api, u64 h, u32 kind1, u32 kind2) {
 u64 k32_SetEvent(u64 h) {
     struct object *o = object_of(h);
     if (o && o->kind == SHARED_EVENT) w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
-    else must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 1;
+    else {
+        o = must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO);
+        o->count = 1;
+        grant(o);
+    }
     w2m_signal();
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
@@ -196,6 +243,7 @@ u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     }
     if (previous) *(s32 *)previous = (s32)o->count;
     o->count += (s32)count;
+    grant(o);
     w2m_signal();
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
@@ -208,6 +256,7 @@ u64 k32_ReleaseMutex(u64 h) {
     }
     if (--o->count == 0) {
         o->max = 0;
+        grant(o);
         w2m_signal();
     }
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
@@ -263,10 +312,24 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
         set_error(ERROR_INVALID_HANDLE);
         return w2m_logged(api, h, WAIT_FAILED);
     }
+    int w = waiter_of(current_tid());
+    if (w >= 0 && waiters[w].granted) {                        /* a release handed it over while this thread waited */
+        waiter_drop(w);
+        w2m_thread_scratch()->wait_deadline = 0;
+        return w2m_logged(api, h, WAIT_OBJECT_0);
+    }
     if (!signaled(o)) {
-        if (!timed_out(ms)) return 0;                          /* retried: the bridge does not return */
+        if (!timed_out(ms)) {                                  /* retried: the bridge does not return */
+            if (w < 0 && handed_over(o)) {
+                if (nwaiters == WAITERS) w2m_unimplemented(api, WAITERS);
+                waiters[nwaiters++] = (struct waiter){current_tid(), (int)(o - objects), 0};
+            }
+            return 0;
+        }
+        if (w >= 0) waiter_drop(w);
         return w2m_logged(api, h, WAIT_TIMEOUT);
     }
+    if (w >= 0) waiter_drop(w);
     w2m_thread_scratch()->wait_deadline = 0;
     take(o);
     return w2m_logged(api, h, WAIT_OBJECT_0);

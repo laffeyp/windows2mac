@@ -860,6 +860,36 @@ FAMILIES: dict[str, Family] = {
                     "    if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */\n"
                     "    b->size_and_magic_check = size;\n    b->reach = size;",
                     ("limit.fresh.1",))}),
+    "wait_handoff": Family(
+        name="wait_handoff",
+        contract_id="windows.sync.wait_handoff",
+        version="0.1.0",
+        summary=("Who gets a semaphore, auto-reset event or mutex released while threads wait for it (Sprint 065; game "
+                 "run 38216081440 seq 1317 and 1402-1508, where all 16 Background Job.Worker waits on one semaphore "
+                 "return and in w2m 15 never did). The release hands the object to the waiters at once, in the order "
+                 "they began to wait: the releaser's own zero-timeout wait right after finds it taken, two units go to "
+                 "the first two of three waiters, and of two waiters the first wakes."),
+        probe="wait_handoff", guest_file="sync_objects.c",
+        runs={
+              "38304235237": Run("windows-2025", "73c18f39bd61a10312d657b439fd27519beceddbb5b382dd07f9609b390d9dc2", "wait-handoff-windows-2025", "AMD EPYC 7763 64-Core Processor"),
+              "38304238413": Run("windows-2022", "f566a7d163bcbecf6b005e9e7abe9e6e02f6a1d8e242342c4bd6bbced32a934f", "wait-handoff-windows-2022", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "The order (first waiter first) is the rows' on two runners, three runs each; no Microsoft page read for "
+            "this family promises it.",
+            "WaitForMultipleObjects re-checks its objects on each retry; no row shows a release while a thread waits "
+            "on several."),
+        plants={"semaphore_not_handed_over": Plant("    o->count += (s32)count;\n    grant(o);", "    o->count += (s32)count;",
+                                                   # named first as 2 rows; it changed 5: the releaser keeps the
+                                                   # unit, the waiter never ends, and the probe deadlocks (recorded)
+                                                   ("semaphore.one_waiter", "semaphore.three_waiters_two_released",
+                                                    "semaphore.order", "event_auto.one_waiter", "mutex.one_waiter")),
+                "last_waiter_first": Plant("    for (int i = 0; i < nwaiters; i++) {\n        if (waiters[i].object != index",
+                                           "    for (int i = nwaiters - 1; i >= 0; i--) {\n        if (waiters[i].object != index",
+                                           ("semaphore.three_waiters_two_released", "semaphore.order")),
+                "mutex_not_handed_over": Plant("        o->max = 0;\n        grant(o);", "        o->max = 0;",
+                                               ("mutex.one_waiter",))}),
     "code_pages": Family(
         name="code_pages",
         contract_id="windows.code_pages.ansi_1252",
