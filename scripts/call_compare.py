@@ -195,16 +195,51 @@ def carries_address(fn: str, field: str, args: tuple[int, ...]) -> bool:
     return False
 
 
-def thread_map(windows: list[Call], w2m: list[Call]) -> dict[int, int]:
-    """Windows thread id -> w2m thread id, by the order each first makes a traced call: the game starts its threads
-    in one order on both, and the first comparison showed each pair's calls the same in shape."""
+def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] | None = None) -> dict[int, int]:
+    """Windows thread id -> w2m thread id. Neither trace links a thread to the CreateThread that made it, and a game's
+    workers run one start routine in an order the scheduler picks; the capture keeps a function's first 32 calls over
+    all threads, w2m 32 on each, so even the threads' first recorded calls differ. Each Windows thread, in the order it
+    first appears, takes the unpaired w2m thread whose calls agree with its own most (per function, in order, each
+    value by its relation; Sprint 061), the first to appear on a tie. A divergence every candidate thread shows
+    survives any pairing; only interchangeable threads trade places."""
     def order(calls: list[Call]) -> list[int]:
         seen: list[int] = []
         for c in sorted(calls):
             if c[1] not in seen:
                 seen.append(c[1])
         return seen
-    return dict(zip(order(windows), order(w2m)))
+
+    def by_function(calls: list[Call]) -> dict[int, dict[tuple[str, str], list[Call]]]:
+        out: dict[int, dict[tuple[str, str], list[Call]]] = {}
+        for c in sorted(calls):
+            out.setdefault(c[1], {}).setdefault((c[2].lower(), c[4]), []).append(c)
+        return out
+
+    sig = signatures or {}
+    w, m = by_function(windows), by_function(w2m)
+
+    def agreement(tw: int, tm: int) -> int:
+        score = 0
+        for key, theirs in w[tw].items():
+            for a, b in zip(theirs, m[tm].get(key, [])):
+                f = sig.get(key[1])
+                params = f["params"][:8] if f else []
+                values = [(p["kind"], p.get("bytes"), a[5][i], b[5][i]) for i, p in enumerate(params)
+                          if (key[1], f"a{i}") not in ASSIGNED and not carries_address(key[1], f"a{i}", a[5])]
+                if f and (key[1], "ret") not in ASSIGNED:
+                    values.append((f["return"]["kind"], f["return"].get("bytes"), a[6], b[6]))
+                score += 1 + sum(judge(k, n, x, y, False) for k, n, x, y in values)
+        return score
+
+    free = order(w2m)
+    pairs: dict[int, int] = {}
+    for tw in order(windows):
+        if not free:
+            break
+        best = max(free, key=lambda tm: (agreement(tw, tm), -free.index(tm)))
+        pairs[tw] = best
+        free.remove(best)
+    return pairs
 
 
 def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
@@ -214,7 +249,7 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
     with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
     threads the game does not start (the capture's own)."""
     windows = [c for c in windows if c[1] not in excluded_threads]
-    threads = thread_map(windows, w2m)
+    threads = thread_map(windows, w2m, signatures)
 
     def by_pair(calls: list[Call]) -> dict[tuple[str, str], dict[int, list[Call]]]:
         out: dict[tuple[str, str], dict[int, list[Call]]] = {}

@@ -3,7 +3,7 @@
  "version": "0.1.0",
  "status": "proposed",
  "summary": "The calls UnityPlayer.dll and mono-2.0-bdwgc.dll make through their imports and the names they resolve with GetProcAddress, as the game makes them on Windows in batch mode: for each (image, function) its first 32 calls in order, each argument, the return value and, where the function sets one and the return says it failed, the last error, judged by the relation the value's type in win32metadata allows.",
- "applicability": "windows-2025 (game run 38203364352, batch mode: -batchmode -nographics -logFile); the calls w2m makes before its frontier stops",
+ "applicability": "windows-2025 (game run 38206263976, batch mode: -batchmode -nographics -logFile); the calls w2m makes before its frontier stops",
  "roles": [
   "main"
  ],
@@ -29,7 +29,7 @@
    "error": "equal where sets_last_error and the Windows return failed",
    "called": "a pair w2m calls is called on Windows",
    "assigned": "a value the system assigns (thread and process ids, TLS and FLS slots, window-class atoms) maps one to one across the stream, a thread id through the thread map; a clock reading is not compared (call_compare.ASSIGNED)",
-   "threads": "each Windows thread is paired with the w2m thread that first makes a traced call in the same place in order, and each (label, function)'s calls are compared per pair of threads",
+   "threads": "each Windows thread, in the order it first appears, is paired with the unpaired w2m thread whose calls agree with its own most (the first to appear on a tie): neither trace links a thread to the CreateThread that made it, a game's workers run one routine in an order the scheduler picks, and the capture keeps a function's first 32 calls over all threads where w2m keeps 32 on each; each (label, function)'s calls are then compared per pair of threads, as far as both go. Only interchangeable threads can trade places: a divergence every candidate shows survives any pairing",
    "labels": "a call through a traced image's import slot carries the image's name; one through the pointer GetProcAddress answers carries 'GetProcAddress', as tools/jit_capture labels its hooks"
   },
   "comparator": "scripts/call_compare.py",
@@ -39,8 +39,8 @@
   {
    "evidence_id": "game-trace",
    "category": "observed",
-   "source_ref": "run 38203364352 (execution game-run-38203364352): store/game-runs/38203364352/jit_capture.bin.trace.tsv sha256:4e149cd97a383fd22bec915dbb00617a4f5aeffd63ca56e7b767e455b0689235 (tools/jit_capture/call_trace.h); the game started from C:\\w2m\\app with TMP and TEMP at C:\\Users\\w2m\\AppData\\Local\\Temp, as w2m starts it. Run 38176899195 (D:\\w2m\\game) was the reference before it: every value derived from the install path was one longer there.",
-   "applicability": "windows-2025, the build in store/game-runs/38203364352/profile.txt"
+   "source_ref": "run 38206263976 (execution game-run-38206263976): store/game-runs/38206263976/jit_capture.bin.trace.tsv sha256:34578d217c175f0d37151ef89b00afe6e3395d1dfd614107a938298c9ed6c878 (tools/jit_capture/call_trace.h); the game started from C:\\w2m\\app with TMP and TEMP at C:\\Users\\w2m\\AppData\\Local\\Temp, as w2m starts it, through a launcher carrying the game exe's resources (copy_resources.c). Before it: run 38203364352 (the launcher had no icon, so LoadIconA on the process's module failed) and run 38176899195 (D:\\w2m\\game).",
+   "applicability": "windows-2025, the build in store/game-runs/38206263976/profile.txt"
   },
   {
    "evidence_id": "signatures",
@@ -66,6 +66,9 @@
   },
   "38203364352": {
    "5368": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  },
+  "38206263976": {
+   "4752": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
   }
  }
 }
