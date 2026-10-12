@@ -1154,10 +1154,10 @@ FAMILIES: dict[str, Family] = {
                  "slot holds."),
         probe="late_tls", guest_file="module.c",
         runs={
-              "38229311268": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-2-0", "AMD EPYC 7763 64-Core Processor", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
-              "38229314900": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-2-1", "AMD EPYC 9V74 80-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
-              "38229318961": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-2-2", "AMD EPYC 9V45 96-Core Processor", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
-              "38229322883": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-2-3", "AMD EPYC 9V45 96-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
+              "38229484497": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-3-0", "INTEL(R) XEON(R) PLATINUM 8573C", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
+              "38229488362": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-3-1", "AMD EPYC 9V74 80-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
+              "38229493876": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-3-2", "AMD EPYC 7763 64-Core Processor", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
+              "38229497641": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-3-3", "AMD EPYC 7763 64-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
         },
         documented=(
             documented("ms-pe-tls", "../../windows/win32/debug/pe-format", "2024-02-22",
@@ -1166,7 +1166,7 @@ FAMILIES: dict[str, Family] = {
         open_questions=(
             "A late DLL's TLS callbacks: no row has one (steam_api64.dll has none); w2m stops on one.",
             "How many modules a thread's array holds before Windows moves it: w2m gives room for loader.TLS_SLOTS."),
-        dll_name="late_tls_dll.dll", host_files=("src/w2m/vm_backend.py", "src/w2m/loader.py"),
+        dll_name="late_tls_dll.dll", dll_on_disk=True, host_files=("src/w2m/vm_backend.py", "src/w2m/loader.py"),
         plants={"block_not_copied": Plant("            self.mem.write(va, block)",
                                           "            self.mem.write(va, bytes(len(block)))",
                                           ("late.main", "late.before_load"), host="w2m.vm_backend")}),
