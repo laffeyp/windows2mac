@@ -14,14 +14,14 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from w2m.file_bridge import (FILE_LIST, FILE_LOOKUP, FILE_OPEN, FILE_STAT, IS_DIRECTORY, IS_FILE,  # noqa: E402
+from w2m.file_bridge import (FILE_LIST, FILE_LOOKUP, FILE_OPEN, FILE_READ, FILE_STAT, FILE_WRITE, IS_DIRECTORY, IS_FILE,  # noqa: E402
                              RECORDED_FOLDERS, FileBridge)
 from w2m.kernel32 import Unimplemented  # noqa: E402
 
 
 class Memory:
     def __init__(self) -> None:
-        self.b = bytearray(1 << 20)
+        self.b = bytearray(1 << 21)
 
     def read(self, va: int, n: int) -> bytes:
         return bytes(self.b[va:va + n])
@@ -57,11 +57,30 @@ def test_the_font_folder_answers_as_the_runner_listed_it(bridge: FileBridge) -> 
     assert kind == IS_DIRECTORY and set(names) - {""} == set(fonts["files"])
 
 
-def test_contents_and_unrecorded_names_stop_the_run(bridge: FileBridge) -> None:
+def test_unrecorded_names_and_creation_stop_the_run(bridge: FileBridge) -> None:
     mem = Memory()
-    with pytest.raises(Unimplemented, match="by name only"):
-        ask(bridge, mem, FILE_OPEN, "C:\\Windows\\Fonts\\arial.ttf", 0)
+    with pytest.raises(Unimplemented, match="recorded from the runners"):
+        ask(bridge, mem, FILE_OPEN, "C:\\Windows\\Fonts\\new.ttf", 1)
     with pytest.raises(Unimplemented, match="listing is not recorded"):
         ask(bridge, mem, FILE_LOOKUP, "C:\\Windows\\System32\\kernel32.dll")
     with pytest.raises(Unimplemented, match="listing"):
         ask(bridge, mem, FILE_LIST, "C:\\Windows", 0x10000, 0x80000)
+
+
+FONTS = json.loads(RECORDED_FOLDERS.read_text())["folders"]["Windows\\Fonts"]
+COPY = Path(FONTS["contents"]["root"]).expanduser()
+
+
+@pytest.mark.skipif(not COPY.is_dir(), reason="the runner's fonts are copied to ~/w2m-depots, not into CI")
+def test_a_font_reads_as_the_runners_copy_and_refuses_writes(bridge: FileBridge) -> None:
+    import hashlib
+    mem = Memory()
+    fd, _ = ask(bridge, mem, FILE_OPEN, "C:\\Windows\\Fonts\\CANDARA.TTF", 0)
+    row = FONTS["files"]["Candara.ttf"]
+    data = b""
+    while len(data) < row["size"]:
+        n, _ = bridge.request(mem, FILE_READ, [fd, 0x20000, 0x80000, len(data), 0, 0])
+        data += mem.read(0x20000, n)
+    assert hashlib.sha256(data).hexdigest() == row["sha256"]
+    with pytest.raises(Unimplemented, match="write"):
+        bridge.request(mem, FILE_WRITE, [fd, 0x20000, 4, 0, 0, 0])

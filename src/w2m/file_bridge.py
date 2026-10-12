@@ -35,8 +35,9 @@ Users\\runneradmin (the profile, with AppData\\Local\\Temp, LocalLow and Roaming
 directory: the probe's, or the game's depot) is mounted; a read-only mount refuses every write by name. The folders
 specs/recorded_folders.json names (C:\\Windows and C:\\Windows\\Fonts, Sprint 065) answer as the runners' do: each
 entry's attributes (in FILE_STAT's arg[5]; 0 elsewhere, where the guest derives them), size and times, and the
-folder's listing where one is recorded; a file's contents, a name not recorded in a folder whose listing is not, and
-any change inside them stop the run. Components compare ASCII case-folded, as NTFS compares
+folder's listing where one is recorded, and a file's bytes from the folder's copy (its `contents`, read-only and
+checked against the row's sha256); a name not recorded in a folder whose listing is not, and any change inside them,
+stop the run. Components compare ASCII case-folded, as NTFS compares
 ASCII names (its upcase table; non-ASCII folding is not needed by any recorded row and is not done). Another drive, a UNC name, or a ".." the guest
 did not resolve is Unimplemented: the run stops rather than guess.
 """
@@ -122,6 +123,8 @@ class FileBridge:
             self.drive = drive
         self.fds: dict[int, int] = {}            # guest-visible descriptor -> host fd
         self.read_only_fds: set[int] = set()     # descriptors of files under the mount (refused writes when read-only)
+        self.recorded_fds: dict[int, dict[str, Any]] = {}   # descriptors of recorded files -> their rows (no writes)
+        self.checked: set[Path] = set()          # recorded copies whose sha256 has been checked this run
         self.next_fd = 3
 
     def _under_mount(self, path: Path) -> bool:
@@ -143,6 +146,28 @@ class FileBridge:
         """The recorded folder `path` lies in, or None."""
         parts = self._components(path)
         return self.recorded.get(parts[:-1]) if parts else None
+
+    def _open_recorded(self, path: Path, row: dict[str, Any], create: bool) -> tuple[int, int]:
+        """A recorded file's bytes: the folder's copy (its `contents`), read-only, its sha256 the row's."""
+        parts = self._components(path)
+        assert parts is not None
+        folder = self.recorded[parts[:-1]]
+        if create or "contents" not in folder or "sha256" not in row:
+            raise Unimplemented(f"the contents of a file recorded from the runners by name only: {path}")
+        root = Path(os.path.expanduser(folder["contents"]["root"]))
+        name = next(n for n, r in folder["files"].items() if r is row)
+        copy = root / name
+        if copy not in self.checked:
+            import hashlib
+            if not copy.is_file() or hashlib.sha256(copy.read_bytes()).hexdigest() != row["sha256"]:
+                raise Unimplemented(f"the copy of {name} at {copy} is missing or not the runner's (sha256 {row['sha256']})")
+            self.checked.add(copy)
+        host = os.open(copy, os.O_RDONLY)
+        fd = self.next_fd
+        self.next_fd += 1
+        self.fds[fd] = host
+        self.recorded_fds[fd] = row
+        return fd, int.from_bytes(name.lower().encode()[:7], "little") | 1 << 60
 
     def _recorded_row(self, kind: int, path: Path) -> tuple[int, dict[str, int] | None]:
         """(kind, the recording's row) for a path in or of a recorded folder; (kind, None) elsewhere."""
@@ -223,8 +248,9 @@ class FileBridge:
             return kind, (os.stat(path).st_ino if kind in (IS_FILE, IS_DIRECTORY) else 0)
         if op == FILE_OPEN:
             kind, path = self._resolve(self._path(mem, arg[0], arg[1]))
-            if self._recorded_row(kind, path)[1] is not None:
-                raise Unimplemented(f"the contents of a file recorded from the runners by name only: {path}")
+            kind, row = self._recorded_row(kind, path)
+            if row is not None:
+                return self._open_recorded(path, row, bool(arg[2]))
             if arg[2]:
                 self._writable(path)
             flags = (os.O_RDONLY if self._under_mount(path) and self.read_only else os.O_RDWR) | (
@@ -288,6 +314,7 @@ class FileBridge:
             raise BridgeRequestError(f"file primitive {op} on descriptor {arg[0]}, which is not open")
         host = self.fds[arg[0]]
         if op == FILE_CLOSE:
+            self.recorded_fds.pop(arg[0], None)
             os.close(self.fds.pop(arg[0]))
             return 0, 0
         if op == FILE_READ:
@@ -295,6 +322,8 @@ class FileBridge:
             mem.write(arg[1], data)
             return len(data), 0
         if op == FILE_WRITE:
+            if arg[0] in self.recorded_fds:
+                raise Unimplemented("a write to a file recorded from the runners")
             if self.read_only and arg[0] in self.read_only_fds:
                 raise Unimplemented("a write to a file under the read-only C:\\w2m\\app")
             return os.pwrite(host, mem.read(arg[1], arg[2]), arg[3]), 0
@@ -302,9 +331,15 @@ class FileBridge:
             fd = self.next_fd
             self.next_fd += 1
             self.fds[fd] = os.dup(host)
+            if arg[0] in self.recorded_fds:
+                self.recorded_fds[fd] = self.recorded_fds[arg[0]]
             if arg[0] in self.read_only_fds:
                 self.read_only_fds.add(fd)
             return fd, 0
+        if op == FILE_FSTAT and arg[0] in self.recorded_fds:     # the runner's times, not the copy's
+            row = self.recorded_fds[arg[0]]
+            mem.write(arg[1], b"".join(row[k].to_bytes(8, "little") for k in ("size", "creation", "access", "write", "write")))
+            return 0, 0
         if op == FILE_FSTAT:
             st = os.fstat(host)
             times = [t // 100 + FILETIME_UNIX_EPOCH
@@ -316,6 +351,8 @@ class FileBridge:
             assert stat.S_ISREG(st.st_mode)
             return st.st_size, 0
         if op == FILE_TRUNCATE:
+            if arg[0] in self.recorded_fds:
+                raise Unimplemented("a truncation of a file recorded from the runners")
             if self.read_only and arg[0] in self.read_only_fds:
                 raise Unimplemented("a truncation of a file under the read-only C:\\w2m\\app")
             os.ftruncate(host, arg[1])
