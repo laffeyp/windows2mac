@@ -64,3 +64,17 @@ def test_an_api_set_with_no_observed_host_names_the_set_and_its_return_address()
     base, size = loaded.image.image_base, loaded.image.size_of_image
     assert service == stop
     assert base <= ret < base + size, hex(ret)
+
+
+@pytest.mark.hvf
+def test_the_pc_map_stays_sorted_as_blocks_are_compiled() -> None:
+    """Sprint 062: _compile appends each block's (host address, x86 address) marks instead of sorting the whole map,
+    because the code cache only grows; x86_address_at's bisect needs the map sorted."""
+    from w2m.vm_backend import VM
+    vm = VM(load(BINARY.read_bytes()), image_name="probe.exe")
+    try:
+        vm.run(max_steps=1 << 30, timeout_ms=60_000)
+        marks = list(vm.pc_map)
+    finally:
+        vm.close()
+    assert len(marks) > 1000 and marks == sorted(marks)
