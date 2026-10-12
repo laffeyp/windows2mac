@@ -103,7 +103,8 @@ LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "UNPCKHPD": 
                 "PSUBSB": ("sqsub", 0), "PADDSB": ("sqadd", 0), "PADDSW": ("sqadd", 1), "PMAXUB": ("umax", 0),
                 "PMULLW": ("mul", 1), "PUNPCKHBW": ("zip2", 0), "PUNPCKHDQ": ("zip2", 2), "PUNPCKHWD": ("zip2", 1),
                 "PUNPCKLWD": ("zip1", 1), "PCMPEQW": ("cmeq", 1),
-                "PUNPCKHQDQ": ("zip2", 3)}      # Sprint 065: 1.4M model steps at UnityPlayer.dll+0x3cf4 and its neighbours
+                "PUNPCKHQDQ": ("zip2", 3),      # Sprint 065: 1.4M model steps at UnityPlayer.dll+0x3cf4 and its neighbours
+                "PADDUSB": ("uqadd", 0), "PCMPGTB": ("cmgt", 0), "PADDB": ("add", 0)}     # Sprint 065
 SSE2_INT_LOWERED_APPROXIMATE = {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
 SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
           "PSRAW": (1, "arith"), "PSLLQ": (3, "left")}
@@ -112,6 +113,8 @@ SSE2_INT_LOWERED |= SSE2_INT_LOWERED_APPROXIMATE
 SSE2_INT_LOWERED |= {"PCMPISTRI", "PCMPISTRI64", "UNPCKHPD"}                    # Sprint 047
 SSE2_INT_LOWERED |= {"PCMPEQW"}                                                  # Sprint 049
 SSE2_INT_LOWERED |= {"PUNPCKHQDQ"}                                               # Sprint 065
+# Sprint 065: the frontier's hottest slow-SSE classes (frontier 643a6283510c-1791810726153034000: 39.5M exits)
+SSE2_INT_LOWERED |= {"PADDUSB", "PCMPGTB", "PADDB", "PACKSSWB", "PMULHW", "PSHUFB", "MOVLPS"}
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
@@ -237,6 +240,12 @@ def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of:
         for lane in range(4):
             a.emit(a64.ins_s_element(d, lane, 30 if lane < 2 else 31, imm >> (2 * lane) & 3))
         return
+    if ic == "MOVLPS":                                           # the low quadword from or to memory
+        if dst[0] == "x":
+            a.emit(a64.ldr(8, 16, reg_of(src[1]), 0), a64.ins_d(d, 0, 16))
+        else:
+            a.emit(a64.umov_d(16, int(src[1]), 0), a64.str_(8, 16, reg_of(dst[1]), 0))
+        return
     if ic in ("MOVHLPS", "MOVLHPS"):                             # one quadword between halves; the other kept
         v = int(src[1])
         a.emit(a64.umov_d(16, v, 1 if ic == "MOVHLPS" else 0), a64.ins_d(d, 0 if ic == "MOVHLPS" else 1, 16))
@@ -274,6 +283,12 @@ def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of:
         a.emit(a64.bic_v(d, v, d))
     elif ic == "PACKUSWB":                                       # low half from the destination, high from the source
         a.emit(a64.sqxtun(30, d, False), a64.sqxtun(30, v, True), a64.mov_v(d, 30))
+    elif ic == "PACKSSWB":                                       # as PACKUSWB, to signed bytes
+        a.emit(a64.sqxtn(30, d, False), a64.sqxtn(30, v, True), a64.mov_v(d, 30))
+    elif ic == "PMULHW":                                         # each word's signed product, its high half
+        a.emit(a64.smull(30, d, v, False), a64.smull(31, d, v, True), a64.three_same("uzp2", d, 30, 31, 1))
+    elif ic == "PSHUFB":                                         # a byte's index with bit 7 set gives 0; TBL gives 0
+        a.emit(a64.movi_bytes(30, 0x8F), a64.and_v(30, v, 30), a64.tbl(d, d, 30))     # for any index past 15
     else:
         raise CompileError(f"sse {ic}")
 

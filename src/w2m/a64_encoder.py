@@ -549,13 +549,20 @@ def umov_s(rd: int, vn: int, lane: int) -> int:
 # (0 bytes, 1 halfwords, 2 words, 3 doublewords).
 THREE_SAME = {"add": 0x4E208400, "sub": 0x6E208400, "cmeq": 0x6E208C00, "cmgt": 0x4E203400, "uqsub": 0x6E202C00,
               "sqsub": 0x4E202C00, "sqadd": 0x4E200C00, "umax": 0x6E206400, "mul": 0x4E209C00,
-              "zip1": 0x4E003800, "zip2": 0x4E007800, "ushl": 0x6E204400, "sshl": 0x4E204400}
+              "zip1": 0x4E003800, "zip2": 0x4E007800, "ushl": 0x6E204400, "sshl": 0x4E204400,
+              "uqadd": 0x6E200C00, "uzp2": 0x4E005800}                      # Sprint 065
 
 
 def three_same(name: str, vd: int, vn: int, vm: int, size: int) -> int:
     """<name> Vd.<T>, Vn.<T>, Vm.<T> for T = 16B, 8H, 4S, 2D by size 0-3."""
     _v(vd, vn, vm)
     return THREE_SAME[name] | size << 22 | vm << 16 | vn << 5 | vd
+
+
+def three_same_d(name: str, vd: int, vn: int, vm: int, size: int) -> int:
+    """<name> on the low 64 bits (Q=0): T = 8B, 4H, 2S by size 0-2 (Sprint 065, the MMX registers)."""
+    assert size < 3
+    return three_same(name, vd, vn, vm, size) & ~(1 << 30)
 
 
 def shift_right(vd: int, vn: int, shift: int, size: int, signed: bool) -> int:
@@ -584,6 +591,30 @@ def sqxtun(vd: int, vn: int, upper: bool) -> int:
     """SQXTUN Vd.8B, Vn.8H (upper: SQXTUN2 Vd.16B): halfwords to unsigned bytes, saturated."""
     _v(vd, vn)
     return (0x6E212800 if upper else 0x2E212800) | vn << 5 | vd
+
+
+def sqxtn(vd: int, vn: int, upper: bool) -> int:
+    """SQXTN Vd.8B, Vn.8H (upper: SQXTN2 Vd.16B): halfwords to signed bytes, saturated (Sprint 065)."""
+    _v(vd, vn)
+    return (0x4E214800 if upper else 0x0E214800) | vn << 5 | vd
+
+
+def smull(vd: int, vn: int, vm: int, upper: bool) -> int:
+    """SMULL Vd.4S, Vn.4H, Vm.4H (upper: SMULL2 on the high halfwords): signed products, widened (Sprint 065)."""
+    _v(vd, vn, vm)
+    return (0x4E60C000 if upper else 0x0E60C000) | vm << 16 | vn << 5 | vd
+
+
+def tbl(vd: int, vn: int, vm: int) -> int:
+    """TBL Vd.16B, {Vn.16B}, Vm.16B: an index of 16 or more gives 0 (Sprint 065)."""
+    _v(vd, vn, vm)
+    return 0x4E000000 | vm << 16 | vn << 5 | vd
+
+
+def movi_bytes(vd: int, imm8: int) -> int:
+    """MOVI Vd.16B, #imm8 (Sprint 065)."""
+    _v(vd)
+    return 0x4F00E400 | (imm8 >> 5) << 16 | (imm8 & 31) << 5 | vd
 
 
 def ins_h_element(vd: int, lane: int, vn: int, src_lane: int) -> int:

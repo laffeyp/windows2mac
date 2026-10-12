@@ -557,6 +557,8 @@ def _temps_read(op: Op) -> list[int]:
         return [op[2][1]] if op[2][0] == "m" else []
     if k == "mxcsr":                                    # ("mxcsr", "st"|"ld", m32): lowered in A64 (Sprint 065)
         return [op[2][1]]
+    if k == "mmx":                                      # ("mmx", ic, dst, src, imm): lowered in A64 (Sprint 065)
+        return [o[1] for o in (op[2], op[3]) if o[0] == "m"]
     if k == "sel":
         return [op[2], op[3], op[4]]
     if k in ("cst", "cstz"):
@@ -822,7 +824,10 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
         elif k == "mxcsr":
             _lower_mxcsr(a, op[1], op[2], reg_of)
-        elif k in ("ud", "fcw", "xgetbv", "x87", "mmx"):       # run by the model (hvc #11): MXCSR's fault rule
+        elif k == "mmx":                                         # Sprint 065: src/w2m/rules/_mmx.py
+            from w2m.rules import _mmx
+            _mmx.lower(a, op, reg_of)
+        elif k in ("ud", "fcw", "xgetbv", "x87"):              # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())

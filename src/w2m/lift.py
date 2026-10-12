@@ -298,7 +298,7 @@ def commit_order(ins: Lifted) -> str | None:
     return None
 
 
-MMX_ONLY = ("EMMS", "MOVDQ2Q")                   # classes with no SSE form (Sprint 065)
+MMX_ONLY = ("EMMS", "MOVDQ2Q", "PSHUFW")         # classes with no SSE form (Sprint 065)
 
 
 def lift_mmx(b: _OpBuilder, ic: str, ops: tuple[str, ...], nxt: int) -> None:
