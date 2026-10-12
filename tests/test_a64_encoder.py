@@ -76,6 +76,8 @@ CASES: list[tuple[str, int]] = [
     ("cmeq v1.16b, v2.16b, v3.16b", a64.cmeq_v(1, 2, 3)),
     ("sxtl v30.2d, v6.2s", a64.sxtl_2d(30, 6)),
     ("scvtf v6.2d, v30.2d", a64.scvtf_2d(6, 30)),
+    ("scvtf v6.4s, v30.4s", a64.scvtf_4s(6, 30)),
+    ("fcvtl v6.2d, v30.2s", a64.fcvtl_2d(6, 30)),
     ("mov x16, v5.d[1]", a64.umov_d(16, 5, 1)),
     ("mov v5.d[0], x17", a64.ins_d(5, 0, 17)),
     ("mov v4.s[3], v30.s[1]", a64.ins_s_element(4, 3, 30, 1)),

@@ -17,6 +17,18 @@ from w2m.vm_backend import (AF_OPERANDS, FP_CLASSES, HVC_SLOW_SSE, MXCSR_OFF, RE
 from w2m import a64_encoder as a64
 
 
+native_conversions = True        # Sprint 064's lowered conversions; False sends them to the model as before
+
+
+def _unmasked_to_model(a: Assembler) -> None:
+    """The model runs the instruction when MXCSR unmasks any exception: only the model raises the SIMD fault."""
+    fast = a.label()
+    a.emit(a64.ldr(4, 16, 28, MXCSR_OFF), a64.ubfx(16, 16, 7, 6), a64.cmpi(16, 0x3F))
+    a.branch(lambda off: a64.bcond("eq", off), fast)
+    a.emit(a64.hvc(HVC_SLOW_SSE))
+    a.bind(fast)
+
+
 def rule(ctx: Ctx) -> None:
     """One legacy-SSE instruction as one `sse` operation; the runtime (x86fp) and the lowering below
     compute it (lift.py's SSE rule, Sprint 039)."""
@@ -311,6 +323,13 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
     elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD", "ORPD"):
         v = _sse_src(a, src, 16, reg_of)
         a.emit((a64.eor_v if ic.startswith("XOR") else a64.orr_v if ic == "ORPD" else a64.and_v)(dst[1], dst[1], v))
+    elif ic == "CVTDQ2PS" and native_conversions:
+        # SCVTF rounds in FPCR's mode, which is MXCSR's RC (fpcr_for), and reports an inexact result as FPSR.IXC, MXCSR's
+        # PE; x86 reports only PE here (SDM CVTDQ2PS: Precision). Native from Sprint 064: the frontier ran 24,291 of its
+        # model steps here. An unmasked exception still goes to the model, which raises it.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 16, reg_of)
+        a.emit(a64.scvtf_4s(dst[1], v))
     elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD") or ic in SSE_050:  # in the model (x86fp; Sprints
         a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
