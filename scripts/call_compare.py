@@ -47,7 +47,8 @@ class Divergence:
     image: str
     function: str
     index: int                  # the call's place among this pair's calls (0: the first)
-    field: str                  # "a0".."a7", "ret", "error", or "called" (w2m calls it, Windows never does)
+    field: str                  # "a0".."a7", "ret", "error", "called" (w2m calls it, Windows never does) or
+                                # "missing" (Windows makes the call, the w2m thread paired with it does not)
     windows: int | None
     w2m: int | None
     windows_seq: int | None     # the Windows call's sequence number: the order the divergences are reported in
@@ -349,7 +350,8 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             undecided: frozenset[tuple[str, str]] = frozenset()) -> tuple[list[Divergence], int]:
     """Every divergence, in the order of the Windows calls they concern, and the count of calls compared. Each
     (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
-    with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
+    with, in order; a Windows call past the end of its partner's, or to a function w2m never calls, is missing. Across
+    threads the order is the scheduler's. `excluded_threads` are reference
     threads the game does not start (the capture's own); `undecided` are (function, field) values two Windows runs of
     the game disagree on, which are not compared (the contract's `undetermined`).
 
@@ -373,6 +375,10 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
     w, m = by_pair(windows), by_pair(w2m)
     found: list[Divergence] = []
     pairs: list[tuple[int, Call, Call]] = []
+    for pair, theirs in w.items():                 # a function Windows calls and w2m never does: each call missing
+        if pair not in m:
+            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
+                      for calls in theirs.values() for k, c in enumerate(calls)]
     for pair, ours in m.items():
         theirs = w.get(pair)
         if theirs is None:
@@ -391,6 +397,10 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
         for tid, calls in theirs.items():
             mine = ours.get(chosen.get(tid, -1), [])
             pairs += [(k, a, b) for k, (a, b) in enumerate(zip(calls, mine))]
+            # past the paired thread's last call: Windows makes the call, w2m does not (review of 2026-10-12, B1:
+            # 21 calls of frontier 643a6283510c-1791830368398119000 went unjudged here)
+            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
+                      for k, c in enumerate(calls[len(mine):], len(mine))]
     maps: dict[str, tuple[dict[int, int], dict[int, int]]] = {}
 
     def same(space: str, x: int, y: int) -> bool:

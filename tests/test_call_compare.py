@@ -248,3 +248,13 @@ def test_a_focus_messages_window_maps_to_the_same_window() -> None:
     assert call_compare.compare(msgs(0x50150, 0x50150), msgs(0x20010, 0x20010), SIGNATURES)[0] == []
     found = call_compare.compare(msgs(0x50150, 0x50150), msgs(0x20010, 0x30020), SIGNATURES)[0]
     assert [(d.function, d.index, d.field) for d in found] == [("DefWindowProcW", 1, "a2")]
+
+
+def test_a_call_windows_makes_and_w2m_does_not_is_missing() -> None:
+    # review of 2026-10-12, B1: the comparison walked w2m's calls only, and a Windows call with no partner went unseen
+    windows = [call(1, "GetACP", (), 1252), call(2, "GetACP", (), 1252), call(3, "GetOEMCP", (), 437)]
+    w2m = [call(1, "GetACP", (), 1252)]
+    found, compared = call_compare.compare(windows, w2m, SIGNATURES)
+    assert compared == 1
+    assert [d.text() for d in found] == ["UnityPlayer.dll!GetACP call 1 missing: Windows 0x4e4, w2m none",
+                                         "UnityPlayer.dll!GetOEMCP call 0 missing: Windows 0x1b5, w2m none"]
