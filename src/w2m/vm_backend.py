@@ -2202,8 +2202,9 @@ class VM:
         self._write_words(self.code_cursor, words)
         va = MONITOR_VA + self.code_cursor
         self.code_cursor += 4 * len(words)
+        # the code cache only grows and a block's marks rise, so appending keeps pc_map sorted (Sprint 062: sorting
+        # it after every block took 98 of a frontier run's 154 s)
         self.pc_map.extend(pc_marks)
-        self.pc_map.sort()
         self._recon_append(pc_marks)
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
