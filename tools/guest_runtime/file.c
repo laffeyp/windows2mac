@@ -47,6 +47,7 @@
 #define OPEN_ALWAYS 4u
 #define TRUNCATE_EXISTING 5u
 #define FILE_ATTRIBUTE_NORMAL 0x80u
+#define FILE_FLAG_SEQUENTIAL_SCAN 0x08000000u
 #define FILE_BEGIN 0u
 #define FILE_CURRENT 1u
 #define FILE_END 2u
@@ -201,6 +202,9 @@ u64 k32_CreateFileW(u64 name, u64 desired, u64 share, u64 security, u64 rsp) {
      * open); a descriptor is not in the rows; bInheritHandle sets the handle's inherit flag when nonzero */
     if (security && *(u64 *)(security + 8)) w2m_unimplemented(W2M_API_CreateFileW, security);
     u32 inherit = security ? *(u32 *)(security + 16) != 0 : 0;
+    /* FILE_FLAG_SEQUENTIAL_SCAN with FILE_ATTRIBUTE_NORMAL answers as FILE_ATTRIBUTE_NORMAL alone in every
+     * disposition, read, write, attribute and second open (probe run 38228020392, probes/create_file_flags; Sprint 065) */
+    if (flags == (FILE_FLAG_SEQUENTIAL_SCAN | FILE_ATTRIBUTE_NORMAL)) flags = FILE_ATTRIBUTE_NORMAL;
     if (template_file || (flags != 0 && flags != FILE_ATTRIBUTE_NORMAL))
         w2m_unimplemented(W2M_API_CreateFileW, flags);
 
