@@ -276,7 +276,7 @@
 
 ## Sprint tail
 
-### Sprint 060 (2026-10-11, closed: CI pending on the closing commit)
+### Sprint 060 (2026-10-11, closed: CI run 38205517561 success on 104f1db8)
 - **Scope:** the frontier's records on the record, and the game's own calls on Windows as a judge of w2m's (the ground-up review's G2, S4 and the missed finding).
 - **Rubber Duck Pass:**
   - *Sequence narration:* the frontier's SESSION_INIT, EXECUTION_STARTED, SERVICE_UNIMPLEMENTED (the appmodel API set, 57,409,405 instructions), TRACE_INGESTED (1,769 lines, 22 threads), COMPARISON_COMPLETED against `game-run-38203364352` (55 divergences), SESSION_COMPLETED; the reference's SESSION_INIT, EXECUTION_STARTED (windows_reference), EXECUTION_COMPLETED (timed_out at 181 s); two plant runs, each caught at its call; 57 family item runs and their plants; the file run.
@@ -284,7 +284,7 @@
   - *Observation 2 (payload anomaly, of the reference):* the runner's paths and profile made path-derived values differ. Disposition: resolved-here for the install directory and temp (a new reference run); recorded for the profile (the laptop).
   - *Observation 3 (missing pair, of the product):* FLS values shared by every thread since Sprint 051, with every family accepted. Disposition: deferred to plan row 062 with the four other defects (Decision above).
   - *Observation 4 (vocabulary gap, checked):* the call stream needed no tag (GUEST_CALL_RETURNED, TRACE_INGESTED); the lift refusal's tag is proposed (P18), not used.
-- **Closed:** on green CI of the closing commit.
+- **Closed:** CI run 38205517561 (success on 104f1db8).
 
 ### Sprint 059 (2026-10-11, closed: CI run 38195353233 success on 4a27afe9)
 - **Scope:** PEB.ProcessParameters, which UnityPlayer's C runtime reads with no call; the 058 gap.

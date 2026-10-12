@@ -158,3 +158,4 @@ dispositions; the documents current.
 - **The documents.** Decisions on parallel worktrees (from 062) and on the architecture as built; proposal P18;
   WORKING_AGREEMENT at vocabulary 0.7 with its registry rows; the plan's stale rows corrected, the host share in its
   model-step row, and a row for `w2m steam run`.
+- **Closed on CI run 38205517561** (success on 104f1db8).
