@@ -71,12 +71,24 @@ FONTS = json.loads(RECORDED_FOLDERS.read_text())["folders"]["Windows\\Fonts"]
 COPY = Path(FONTS["contents"]["root"]).expanduser()
 
 
-@pytest.mark.skipif(not COPY.is_dir(), reason="the runner's fonts are copied to ~/w2m-depots, not into CI")
-def test_a_font_reads_as_the_runners_copy_and_refuses_writes(bridge: FileBridge) -> None:
+def test_a_font_reads_as_the_runners_copy_and_refuses_writes(bridge: FileBridge, tmp_path: Path) -> None:
+    """The runner's copy when ~/w2m-depots holds it (the macOS gates); in CI, which has no fonts, a stand-in file
+    whose row carries its own sha256, and a second whose bytes differ from its row, which the bridge refuses."""
     import hashlib
     mem = Memory()
+    folder = bridge.recorded[("windows", "fonts")]
+    if not COPY.is_dir():
+        stand_in = tmp_path / "copy"
+        stand_in.mkdir()
+        (stand_in / "Candara.ttf").write_bytes(bytes(range(256)) * 300)
+        (stand_in / "arial.ttf").write_bytes(b"not the runner's")
+        folder["contents"] = {**folder["contents"], "root": str(stand_in)}
+        data = (stand_in / "Candara.ttf").read_bytes()
+        folder["files"]["Candara.ttf"].update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+        with pytest.raises(Unimplemented, match="not the runner's"):
+            ask(bridge, mem, FILE_OPEN, "C:\\Windows\\Fonts\\ARIAL.TTF", 0)
     fd, _ = ask(bridge, mem, FILE_OPEN, "C:\\Windows\\Fonts\\CANDARA.TTF", 0)
-    row = FONTS["files"]["Candara.ttf"]
+    row = folder["files"]["Candara.ttf"]
     data = b""
     while len(data) < row["size"]:
         n, _ = bridge.request(mem, FILE_READ, [fd, 0x20000, 0x80000, len(data), 0, 0])
