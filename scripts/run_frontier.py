@@ -216,7 +216,8 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
-        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks))
+        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
+                     code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)))
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -302,6 +303,8 @@ def main(argv: list[str]) -> int:
         print(f"  hvc {imm} at 0x{at:x}: {n}")
     for (imm, ic), (n, sites) in state.get("exit_classes", [])[:40]:
         print(f"  hvc {imm} {ic}: {n} at {sites} sites")
+    writes, dropped_blocks, pages = state.get("code_writes", (0, 0, 0))
+    print(f"writes to translated code {writes}, blocks dropped {dropped_blocks}, pages behind blocks at the stop {pages}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
