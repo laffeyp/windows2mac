@@ -80,6 +80,7 @@ RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the recons
 MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits and the flags not yet in FPSR
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
+FOREGROUND_MODE = 0x80              # MONITOR_DATA + this: 0 the process takes the foreground, 1 another holds it (windows.c)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
 YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
 FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
@@ -1101,7 +1102,7 @@ class VM:
                  environment: tuple[str, ...] = (), process_id: int = 0,
                  inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None,
                  process_group: int = START_GROUP, call_trace: tuple[str, ...] = (),
-                 call_trace_from: str | None = None) -> None:
+                 call_trace_from: str | None = None, foreground_held: bool = False) -> None:
         self.ld = loaded
         self.call_trace = call_trace       # the images whose calls call_trace.c records, at most 2 (Sprint 060)
         if len(call_trace) > 2:
@@ -1111,6 +1112,7 @@ class VM:
         self.clock = clock if clock is not None else monotonic_count   # a given clock is served by the host
         self.clock_from_host = clock is not None
         self.gui = gui                     # the Steam-like start: no standard handles (console.c)
+        self.foreground_held = foreground_held   # another process keeps the foreground (windows.c SetFocus; Sprint 065)
         self.command_line = command_line if command_line is not None else f'"C:\\w2m\\app\\{image_name}"'
         self.environment = environment     # the block's entries, in order ("NAME=value"; "=C:=..." too)
         self.process_id = process_id or PROCESS_ID   # TEB.ClientId.UniqueProcess; a child's from kernel.Machine
@@ -1216,6 +1218,7 @@ class VM:
         """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode."""
         struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE, 1 if self.clock_from_host else 0)
         struct.pack_into("<Q", self.mm, MONITOR_DATA + START_MODE, 1 if self.gui else 0)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + FOREGROUND_MODE, 1 if self.foreground_held else 0)
         line = self.command_line.encode("utf-16-le") + b"\0\0"
         if len(line) > 0x1000:
             raise CompileError(f"command line of {len(line)} bytes: the page holds 4096")

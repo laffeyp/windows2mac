@@ -270,6 +270,11 @@ struct w2m_guest_call *w2m_guest_call_at(u64 rsp);   /* the frame a stub call at
  * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */
 #define W2M_START_MODE_OFF 0x68
 
+/* Monitor data word: 0, the process takes the foreground when it activates a window (the probes); 1, another
+ * process keeps it, so a window activates in the background (the game runs: game run 38275716702's hook saw a
+ * Windows Terminal window hold it throughout). src/w2m/vm_backend.py FOREGROUND_MODE; windows.c SetFocus. */
+#define W2M_FOREGROUND_MODE_OFF 0x80
+
 /* Monitor data word: 0, the counter is the guest's CNTVCT_EL0; 1, the host's clock (lockstep, where
  * model and VM must read the same count). src/w2m/vm_backend.py CLOCK_MODE. */
 #define W2M_CLOCK_MODE_OFF 0x60

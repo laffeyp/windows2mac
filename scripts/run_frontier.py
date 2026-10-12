@@ -140,7 +140,7 @@ def main(argv: list[str]) -> int:
         # the program's directory is C:\\w2m\\app and the working directory, read-only (Sprint 048)
         files = FileBridge(here, read_only=True)
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
-                image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
+                image_name=Path(a.exe).name, gui=True, foreground_held=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
                 command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}', call_trace=TRACED_IMAGES,
                 call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources)       # where jit_capture.c opens the Windows trace
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)

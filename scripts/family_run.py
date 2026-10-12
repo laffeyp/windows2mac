@@ -102,6 +102,7 @@ class Family:
     excluded: dict[str, str] = field(default_factory=dict)    # row -> why the runners may differ on it
     expected_stop: str | None = None      # the stop an excluded row causes in w2m (a prefix of the stop text)
     gui: bool = False                     # the Steam-like start: no standard handles (console.c)
+    foreground_held: bool = False         # another process keeps the foreground (windows.c SetFocus; Sprint 065)
     arguments: str = ""                   # after the quoted module path on the command line
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
@@ -2768,7 +2769,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         environment = () if f is None else f.environment
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes(), dlls, "probe.exe"), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
-                gui=f is not None and f.gui, command_line=line, environment=environment)
+                gui=f is not None and f.gui, command_line=line, environment=environment,
+                foreground_held=f is not None and f.foreground_held)
         # every probe runs on a kernel.Machine: a probe that starts a process gets it (Sprint 055)
         machine = Machine(spawner(files, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
         try:

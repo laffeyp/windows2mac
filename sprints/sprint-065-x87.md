@@ -91,6 +91,13 @@ and keep a plan row of their own.
      instructions and stops at GetDisplayModeList; its comparison shows nine HeapSize divergences (seq 2548-2575).
      Windows' Job.Worker 1 made the walk, w2m's Job.Worker 0 made it with the same 32 answers, and pairing by name set
      it against Job.Worker 1's later walk. scripts/call_compare.py pairs a pool's workers per function by agreement.
+   - **Past GetDisplayModeList.** Frontier 643a6283510c-1791818907808872000 (tree a3373038) runs 73,535,703,658
+     instructions at 61.97M a second, writes 158 lines of unity.log and stops at EnumDisplaySettingsW of
+     \\\\.\\DISPLAY1: display probe runs 38273510163 and 38273513428, contract windows.display.display 0.2.0. Its
+     comparison shows WM_ACTIVATEAPP's lParam and WM_NCACTIVATE's wParam 1 where Windows has 0. Seventeen ways of
+     starting probe activation give a thread and 1; game run 38275716702, with a WH_CALLWNDPROC hook in jit_capture,
+     shows Windows sent 0 and 0 while a Windows Terminal window kept the foreground. The VM's foreground_held
+     (FOREGROUND_MODE) says so for the frontier; the probes take the foreground.
 
 ## prerequisites
 
