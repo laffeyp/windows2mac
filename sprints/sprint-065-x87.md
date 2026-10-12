@@ -98,6 +98,26 @@ and keep a plan row of their own.
      starting probe activation give a thread and 1; game run 38275716702, with a WH_CALLWNDPROC hook in jit_capture,
      shows Windows sent 0 and 0 while a Windows Terminal window kept the foreground. The VM's foreground_held
      (FOREGROUND_MODE) says so for the frontier; the probes take the foreground.
+9. **The red team of 2026-10-12** (amended 2026-10-12: items a to d after the work, late; item e before it). The
+   reviewer's large review and the frontier records show:
+   a. The game-call comparison never reported a Windows call w2m does not make (21 in frontier
+      643a6283510c-1791830368398119000). It now reports each as `missing` (d84aada0).
+   b. 14 of the 16 Background Job.Worker waits on one semaphore never returned in w2m: a release raised the count and
+      the running worker took each unit first. Probe wait_handoff (runs 38304235237, 38304238413) shows Windows hands
+      the object to its waiters at the release, first waiter first; sync_objects.c does so (68a5b9a0), family
+      wait_handoff 0.1.0.
+   c. The frontier's stop: past the reference's 168 lines the run goes on until its main thread has made the Windows
+      main thread's calls, at most 20 billion instructions; a harness stop is `killed`; run_frontier exits non-zero on
+      a divergence or a broken record; DecodeError is a stop (81755030).
+   d. Frontier 643a6283510c-1791838458921720000 (tree 81755030) writes unity.log equal to Windows' 168 lines but for
+      timings, line 160 included (16733); run alone, frontier 643a6283510c-1791836968921539000 (tree f9c0bbf3) gave
+      16736. A scratch run hashing each translated block's guest bytes at compile and at the stop found 11,365 blocks
+      whose bytes had changed, all in mono's JIT region from 0x1180cc0000.
+   e. Translated code is invalidated when its guest bytes change (review of 2026-10-12 R3; plan row 067's work,
+      brought forward by item d): the pages behind translated blocks are write-protected in the guest's stage-1 tables;
+      a write to one drops the blocks over that page and their dispatch slots, unprotects it and resumes; the next
+      execution translates afresh. Judged by a probe that writes code, runs it, rewrites it and runs it again, and by
+      the frontier: no stale block at the stop, line 160 equal to Windows' in runs alone and alongside.
 
 ## prerequisites
 
