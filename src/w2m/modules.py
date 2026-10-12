@@ -47,7 +47,10 @@ APP_DIRECTORY = "C:\\w2m\\app\\"
 # API sets whose host is not kernelbase, as LoadLibraryExW answered on Server 2025 and 2022 (Sprint 055, rows
 # load.api_sets): each is the module GetModuleHandleW("combase.dll") then names
 API_SET_HOSTS = {"api-ms-win-core-winrt-l1-1-0.dll": "combase.dll", "api-ms-win-core-com-l1-1-1.dll": "combase.dll",
-                 "api-ms-win-core-winrt-string-l1-1-0.dll": "combase.dll"}
+                 "api-ms-win-core-winrt-string-l1-1-0.dll": "combase.dll",
+                 # the C runtime's thread start (game run 38206263976 seq 1764-1765: the capture's GetProcAddress hook
+                 # names the module kernel.appcore.dll; Sprint 063)
+                 "api-ms-win-appmodel-runtime-l1-1-2.dll": "kernel.appcore.dll"}
 
 
 def _canonical(name: str) -> str:

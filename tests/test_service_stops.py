@@ -78,3 +78,13 @@ def test_the_pc_map_stays_sorted_as_blocks_are_compiled() -> None:
     finally:
         vm.close()
     assert len(marks) > 1000 and marks == sorted(marks)
+
+
+def test_the_appmodel_api_set_is_kernel_appcore_and_its_policy_is_served() -> None:
+    """Sprint 063: the frontier stopped at LoadLibraryExW("api-ms-win-appmodel-runtime-l1-1-2"); on Windows the set is
+    kernel.appcore.dll (game run 38206263976 seq 1764-1765) and AppPolicyGetThreadInitializationType answers 0."""
+    from w2m.modules import API_SET_HOSTS
+    from w2m.vm_backend import service_for
+    assert API_SET_HOSTS["api-ms-win-appmodel-runtime-l1-1-2.dll"] == "kernel.appcore.dll"
+    assert service_for("kernel.appcore.dll", "AppPolicyGetThreadInitializationType") == \
+        ("k32_AppPolicyGetThreadInitializationType", True)

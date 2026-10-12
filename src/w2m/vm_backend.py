@@ -992,6 +992,10 @@ def service_for(dll: str, fn: str) -> tuple[str, bool] | None:
     fn = ORDINAL_NAMES.get(dll.upper(), {}).get(fn, fn)
     service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
                else DLL_SERVICES.get(dll.upper(), {}).get(fn))
+    if service is None and dll.upper() == "KERNEL.APPCORE.DLL":
+        # kernel.appcore's AppPolicy* functions are threads.c's k32_ services; a C symbol cannot carry the dot in the
+        # DLL's name (guest_runtime.service_table), so its names are answered from kernel32's table (Sprint 063)
+        service = SERVICES.get(fn)
     if service is None and dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL"):
         # kernel32 exports RtlUnwindEx, RtlCaptureContext and the other Rtl* exception functions as its own
         # (not forwarders: specs/windows_exports.json) and they do ntdll's work: one service serves both names
