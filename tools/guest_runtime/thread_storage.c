@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-/* thread_storage.c — TLS and FLS on one thread (Sprint 044, family "thread storage").
+/* thread_storage.c — TLS and FLS (Sprint 044, family "thread storage"; FLS per thread, Sprint 061).
  *
  * TlsAlloc, TlsGetValue, TlsSetValue, TlsFree, FlsAlloc, FlsGetValue, FlsSetValue, FlsFree, as
  * contracts/windows.thread_storage.single_thread/0.1.0.json records Windows answering on twelve
@@ -15,6 +15,10 @@
  *     first set), afterwards it clears the last error
  *   - FlsFree runs the index's callback with the value; w2m cannot yet call back into guest code,
  *     so a free that would run one stops the run
+ * A thread's FLS values are its own (Sprint 061): a block the thread's first FlsSetValue makes, behind TEB.FlsData
+ * (+0x17C8, Geoff Chappell's TEB layout), so a new thread's FlsGetValue answers NULL and 87 as the rows say; the
+ * blocks are listed so FlsFree clears the index on every thread. Before, one set of values served every thread, and
+ * the game's new threads read the C runtime's per-thread data of the first (game run 38203364352, Sprint 060).
  * TlsGetValue is the game's second-hottest import (23,291,261 calls in 180 s): it never leaves the guest.
  */
 #include "runtime.h"
@@ -29,10 +33,26 @@
 #define FLS_INDICES 128u
 
 static u8 tls_used[TLS_INDICES];
-static u64 fls_value[FLS_INDICES];
+#define TEB_FLS_DATA 0x17C8u
+struct fls_block { struct fls_block *next; u64 value[FLS_INDICES]; };
+static struct fls_block *fls_blocks;              /* every thread's block, for FlsFree */
 static u64 fls_callback[FLS_INDICES];
 static u8 fls_used[FLS_INDICES];
-static int fls_thread_data;                       /* the thread's FLS data exists (first FlsSetValue) */
+
+/* The calling thread's FLS block; `make`: create it (the thread's first FlsSetValue). */
+static struct fls_block *fls_mine(int make) {
+    struct fls_block **slot = (struct fls_block **)((u8 *)w2m_teb() + TEB_FLS_DATA);
+    if (!*slot && make) {
+        struct fls_block *b = (struct fls_block *)w2m_heap_take(sizeof *b);
+        if (!b) w2m_unimplemented(W2M_API_FlsSetValue, sizeof *b);   /* the heap's arena is full */
+        u8 *bytes = (u8 *)b;
+        for (u64 i = 0; i < sizeof *b; i++) bytes[i] = 0;
+        b->next = fls_blocks;
+        fls_blocks = b;
+        *slot = b;
+    }
+    return *slot;
+}
 static int tls_ready;
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
@@ -103,7 +123,7 @@ u64 k32_FlsAlloc(u64 callback) {
     for (u64 i = 1; i < FLS_INDICES; i++) {
         if (fls_used[i]) continue;
         fls_used[i] = 1;
-        fls_value[i] = 0;
+        for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[i] = 0;
         fls_callback[i] = callback;
         return w2m_logged(W2M_API_FlsAlloc, callback, i);
     }
@@ -113,19 +133,21 @@ u64 k32_FlsAlloc(u64 callback) {
 
 u64 k32_FlsGetValue(u64 index) {
     index = (u32)index;
-    if (!fls_thread_data || index >= FLS_INDICES) {
+    struct fls_block *b = fls_mine(0);
+    if (!b || index >= FLS_INDICES) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_FlsGetValue, index, 0);
     }
     set_error(0);                                  /* a freed index too: NULL, error 0 (row fls2.freed, Server 2025) */
-    return w2m_logged(W2M_API_FlsGetValue, index, fls_value[index]);
+    return w2m_logged(W2M_API_FlsGetValue, index, b->value[index]);
 }
 
 /* FlsGetValue2 and TlsGetValue2 (Server 2025 exports them, 2022 does not): the same values as FlsGetValue
  * and TlsGetValue, the last error left in every case (contracts/windows.thread_storage.get2). */
 u64 k32_FlsGetValue2(u64 index) {
     index = (u32)index;
-    u64 v = fls_thread_data && index < FLS_INDICES ? fls_value[index] : 0;
+    struct fls_block *b = fls_mine(0);
+    u64 v = b && index < FLS_INDICES ? b->value[index] : 0;
     return w2m_logged(W2M_API_FlsGetValue2, index, v);
 }
 
@@ -141,17 +163,17 @@ u64 k32_FlsSetValue(u64 index, u64 value) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_FlsSetValue, index, 0);
     }
-    fls_thread_data = 1;
-    fls_value[index] = value;
+    fls_mine(1)->value[index] = value;
     return w2m_logged(W2M_API_FlsSetValue, index, 1);
 }
 
 u64 k32_FlsFree(u64 index) {
     index = (u32)index;
     if (index >= FLS_INDICES || !fls_used[index]) w2m_unimplemented(W2M_API_FlsFree, index);
-    if (fls_callback[index] && fls_value[index])
-        w2m_unimplemented(W2M_API_FlsFree, index);        /* the callback would run in guest code */
+    for (struct fls_block *b = fls_blocks; b; b = b->next)
+        if (fls_callback[index] && b->value[index])
+            w2m_unimplemented(W2M_API_FlsFree, index);    /* the callback would run in guest code */
     fls_used[index] = 0;
-    fls_value[index] = 0;
+    for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[index] = 0;
     return w2m_logged(W2M_API_FlsFree, index, 1);
 }

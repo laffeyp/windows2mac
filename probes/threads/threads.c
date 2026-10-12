@@ -67,15 +67,22 @@ static LONG events(const char *name, LONG from) {
 }
 
 static HANDLE event_started, event_go;
-static DWORD tls_slot;
+static DWORD tls_slot, fls_slot;
 
 /* worker: what a new thread starts with, then a wait, then a return value */
 static volatile DWORD w_tid, w_last_error, w_counter;
-static volatile ULONG_PTR w_tls;
+static volatile ULONG_PTR w_tls, w_fls;
+static volatile DWORD w_fls_err;
 static DWORD WINAPI worker(LPVOID param) {
     w_tid = GetCurrentThreadId();
     w_last_error = GetLastError();
     w_tls = (ULONG_PTR)TlsGetValue(tls_slot);
+    /* FLS is the thread's own (Sprint 061): the main thread's value is not this thread's, and FlsGetValue on a
+     * thread that has set none answers NULL with ERROR_INVALID_PARAMETER, as the game's new threads saw */
+    SetLastError(SENTINEL);
+    w_fls = (ULONG_PTR)FlsGetValue(fls_slot);
+    w_fls_err = GetLastError();
+    FlsSetValue(fls_slot, (LPVOID)0x88);
     w_counter = (DWORD)*threads_dll_counter();
     *threads_dll_counter() = 7;
     SetLastError(0x77);
@@ -109,6 +116,8 @@ void start(void) {
     event_go = CreateEventW(NULL, TRUE, FALSE, NULL);
     tls_slot = TlsAlloc();
     TlsSetValue(tls_slot, (LPVOID)0x55);
+    fls_slot = FlsAlloc(NULL);
+    FlsSetValue(fls_slot, (LPVOID)0x66);
     *threads_dll_counter() = 1000;
 
     /* create, run to a wait, exit code while running, then its return */
@@ -121,13 +130,14 @@ void start(void) {
     field("tid_nonzero", tid != 0); field("tid_not_main", tid != tids[0]); end();
     WaitForSingleObject(event_started, INFINITE);
     row("worker.start"); field("tid_matches", w_tid == tid); field("last_error", w_last_error); field("tls", w_tls);
-    field("static_tls", w_counter); end();
+    field("static_tls", w_counter); field("fls", w_fls); field("fls_err", w_fls_err); end();
     DWORD code = 0xA5A5;
     SetLastError(SENTINEL);
     BOOL r = GetExitCodeThread(h, &code);
     err = GetLastError();
     row("exit_code.running"); field("ret", r != 0); field("code", code); field("err", err); end();
     row("main.after_worker"); field("last_error", GetLastError()); field("tls", (ULONG_PTR)TlsGetValue(tls_slot));
+    field("fls", (ULONG_PTR)FlsGetValue(fls_slot));
     field("static_tls", (DWORD)*threads_dll_counter()); end();
     seen = events("events.worker_started", seen);
     SetEvent(event_go);
