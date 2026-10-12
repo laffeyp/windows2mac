@@ -3,8 +3,10 @@
 """mmx.py — the MMX-register forms UnityPlayer.dll reaches (Sprint 065), on the x87 register file.
 
 Intel SDM Vol 1 §9.5.1 and Table 9-2: MMn is bits 63:0 of the physical x87 register Rn (not the stack-relative ST(n)).
-An MMX instruction sets TOP to 0 and every tag to valid; one that writes MMn sets Rn's bits 79:64 to all ones. EMMS
-marks every register empty. An x87 exception pending (FSW.ES) makes any of them #MF, which has no rows: it stops the
+An MMX instruction sets TOP to 0 after it reads its operands and before it writes its result, and every tag to valid
+after the write
+(a faulting load leaves both; a faulting store has set TOP and kept the tags); one that writes MMn sets Rn's bits 79:64
+to all ones. EMMS sets TOP to 0 and marks every register empty (set 065b). An x87 exception pending (FSW.ES) makes any of them #MF, which has no rows: it stops the
 run. Each class's lanes follow its Vol 2 page: MOVD, MOVQ, MOVDQ2Q, PADDW, PADDD, PADDSW, PSUBW, PMULLW, PMULHW,
 PMADDUBSW, PACKUSWB, PUNPCKL/H BW/WD/DQ (the low forms read 4 bytes of memory), PXOR, PSRAW, PSRAD, PSRLQ, PEXTRW.
 """
@@ -90,17 +92,26 @@ def execute(fpu: Fpu, ic: str, opcode: int, dst: tuple[Any, ...], src: tuple[Any
         else:
             write(o, v)
 
+    def transition() -> None:                        # TOP 0 after the reads, before the write (set 065b, Xeon 8573C:
+        fpu.sw &= ~(7 << 11)                         # a faulting load leaves TOP, a faulting store has set it)
+        if ic == "EMMS":
+            fpu.empty = [True] * 8
+
     if ic == "EMMS":
-        fpu.empty = [True] * 8
+        transition()
         return
     if ic in ("MOVD", "MOVQ", "MOVDQ2Q"):
         v = get(src)
+        transition()
         put(dst, v & 0xFFFF_FFFF if ic == "MOVD" else v & M64)
     elif ic == "PEXTRW":
-        put(dst, get(src) >> (16 * (imm & 3)) & 0xFFFF)
+        v = get(src) >> (16 * (imm & 3)) & 0xFFFF
+        transition()
+        put(dst, v)
     else:
         shift = ic in ("PSRAW", "PSRAD", "PSRLQ")
         count = (imm if src[0] == "i" else get(src)) if shift else 0
-        put(dst, compute(ic, get(dst), 0 if shift else get(src), count))
-    fpu.sw &= ~(7 << 11)                             # TOP 0, every register valid (Vol 1 Table 9-2)
-    fpu.empty = [False] * 8
+        v = compute(ic, get(dst), 0 if shift else get(src), count)
+        transition()
+        put(dst, v)
+    fpu.empty = [False] * 8                          # the tags valid once the write is done (a faulting store keeps them)

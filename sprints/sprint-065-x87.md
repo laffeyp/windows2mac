@@ -62,6 +62,13 @@ and keep a plan row of their own.
    not the polynomial. The GC's 0x56000 heap growth happens on the main thread in all four Windows runs and on the
    second thread in w2m (seq 2744): open.
 
+7. **The MMX-register forms** (amended 2026-10-12, after the work had begun: the amendment is late, the work
+   followed plan row 065, "MMX and x87"). With items 5 and 6 the frontier runs 53,207,065,370 instructions, writes 79
+   lines of unity.log equal to Windows' but for two timings, and stops at `MOVQ mm1, m64` in UnityPlayer.dll. The
+   census of 2026-10-12 lists 21 classes with MMX forms unlifted (MOVQ 444, PADDW 202, MOVD 85 ...) and EMMS and
+   MOVDQ2Q missing. Decode spec 0.10.0 gives the 30 rows their N, P and Q operands; src/w2m/mmx.py runs them on the
+   x87 register file; set 065b (22,083 cases, format 4) judges them on the Xeon 8573C (run 38234338405).
+
 ## prerequisites
 
 - 064 (closed partial: CI run 38219168662; main 876c44cf)

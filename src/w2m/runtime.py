@@ -187,7 +187,8 @@ class Runtime:
             mmx.execute(fpu, ic, 0, dst, src, imm, read, write)
         except x87.X87Unmasked as e:
             raise Unimplemented(f"{ic} at 0x{ins.address:x}: {e}") from None
-        th.x87_sw, th.x87_regs, th.x87_tags = fpu.sw, fpu.regs, fpu.abridged_tags
+        finally:                                                  # a fault keeps TOP 0 and the tags (set 065b)
+            th.x87_sw, th.x87_regs, th.x87_tags = fpu.sw, fpu.regs, fpu.abridged_tags
 
     def _load(self, loc: Op, t: dict[int, int]) -> int:
         if loc[0] == "r":
