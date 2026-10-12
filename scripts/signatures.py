@@ -18,7 +18,7 @@ script reads it with dnfile and writes, for each function the capture names, its
 The kinds are names for scripts/call_compare.py's relations; the metadata's own type name is kept beside each.
 Functions the capture names that the metadata lacks are listed in `missing`.
 
-Usage: uv run --with dnfile==0.18.0 python scripts/signatures.py <game-run-dir> [--out specs/signatures.json]
+Usage: uv run --with dnfile==0.18.0 python scripts/signatures.py <game-run-dir> [<game-run-dir> ...] [--out specs/signatures.json]
 """
 
 from __future__ import annotations
@@ -288,16 +288,16 @@ def skip_type(blob: bytes, i: int) -> int:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run", type=Path)
+    ap.add_argument("run", type=Path, nargs="+")
     ap.add_argument("--out", type=Path, default=ROOT / "specs" / "signatures.json")
     a = ap.parse_args(argv)
-    wanted = called(a.run)
+    wanted = set().union(*(called(r) for r in a.run))
     found = Metadata(acquire()).functions(wanted)
     missing = sorted(wanted - set(found))
     doc: dict[str, Any] = {"version": "0.1.0", "source": {"package": f"Microsoft.Windows.SDK.Win32Metadata {VERSION}",
                                          "package_sha256": PACKAGE_SHA256, "winmd_sha256": WINMD_SHA256,
                                          "reader": "dnfile 0.18.0"},
-           "capture": str(a.run.relative_to(ROOT)) if a.run.is_absolute() else str(a.run),
+           "captures": [str(r) for r in a.run],
            "missing": missing, "functions": dict(sorted(found.items()))}
     a.out.write_text(json.dumps(doc, indent=1) + "\n")
     print(f"{len(found)} of {len(wanted)} functions; missing {len(missing)}: {missing[:40]}")

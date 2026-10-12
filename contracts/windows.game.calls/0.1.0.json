@@ -3,7 +3,7 @@
  "version": "0.1.0",
  "status": "proposed",
  "summary": "The calls UnityPlayer.dll and mono-2.0-bdwgc.dll make through their imports and the names they resolve with GetProcAddress, as the game makes them on Windows in batch mode: for each (image, function) its first 32 calls in order, each argument, the return value and, where the function sets one and the return says it failed, the last error, judged by the relation the value's type in win32metadata allows.",
- "applicability": "windows-2025 (game run 38176899195, batch mode: -batchmode -nographics -logFile); the calls w2m makes before its frontier stops",
+ "applicability": "windows-2025 (game run 38203364352, batch mode: -batchmode -nographics -logFile); the calls w2m makes before its frontier stops",
  "roles": [
   "main"
  ],
@@ -39,8 +39,8 @@
   {
    "evidence_id": "game-trace",
    "category": "observed",
-   "source_ref": "run 38176899195: store/game-runs/38176899195/jit_capture.bin.trace.tsv sha256:e65490f5c012fcaccfc6d126fc93bedc9a76d782eb354e00e09cfb4a858ee62f (tools/jit_capture/call_trace.h)",
-   "applicability": "windows-2025, the build in store/game-runs/38176899195/profile.txt"
+   "source_ref": "run 38203364352 (execution game-run-38203364352): store/game-runs/38203364352/jit_capture.bin.trace.tsv sha256:4e149cd97a383fd22bec915dbb00617a4f5aeffd63ca56e7b767e455b0689235 (tools/jit_capture/call_trace.h); the game started from C:\\w2m\\app with TMP and TEMP at C:\\Users\\w2m\\AppData\\Local\\Temp, as w2m starts it. Run 38176899195 (D:\\w2m\\game) was the reference before it: every value derived from the install path was one longer there.",
+   "applicability": "windows-2025, the build in store/game-runs/38203364352/profile.txt"
   },
   {
    "evidence_id": "signatures",
@@ -63,6 +63,9 @@
  "excluded_threads": {
   "38176899195": {
    "6636": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (seq 1-39) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  },
+  "38203364352": {
+   "5368": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
   }
  }
 }

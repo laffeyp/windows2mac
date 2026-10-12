@@ -6,7 +6,10 @@
   "winmd_sha256": "8cce5eb353c9395784fba3204675ee73d5ba808573d0f7730e86148e51e9e616",
   "reader": "dnfile 0.18.0"
  },
- "capture": "store/game-runs/38176899195",
+ "captures": [
+  "store/game-runs/38176899195",
+  "store/game-runs/38203364352"
+ ],
  "missing": [
   "DllGetVersion",
   "RtlVerifyVersionInfo",
