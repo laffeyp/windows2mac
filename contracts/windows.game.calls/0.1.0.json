@@ -81,6 +81,7 @@
   "RtlAddGrowableFunctionTable a2": "the entry count mono's JIT registers a code block's table with: 0 in run 38216081440 and 0x34 in 38206263976 at seq 3377 (Sprint 065)",
   "RtlAddGrowableFunctionTable a3": "the maximum entry count follows the block's size, 0x201 for 64 KB and 0x401 for 128 KB; which of the main thread's blocks is the 128 KB one depends on the order the threads JIT their methods: the fourth in run 38216081440 (seq 2754), the third in 38176899195 (seq 2757) (Sprint 065)",
   "InterlockedPushEntrySList ret": "the list's previous head, null or not as other threads have popped it: 7 calls differ between runs 38216081440 and 38206263976 (seq 3212-3232), 5 against 38203364352 (Sprint 065)",
-  "GetTempFileNameW ret": "the unique number GetTempFileNameW makes from the system time when uUnique is 0 (Microsoft Learn, GetTempFileNameW): 0x6738 and 0x698a in run 38216081440, 0x86b6 and 0x8909 in 38206263976, 0x5850 and 0x5aa2 in 38203364352 (Sprint 065)"
+  "GetTempFileNameW ret": "the unique number GetTempFileNameW makes from the system time when uUnique is 0 (Microsoft Learn, GetTempFileNameW): 0x6738 and 0x698a in run 38216081440, 0x86b6 and 0x8909 in 38206263976, 0x5850 and 0x5aa2 in 38203364352 (Sprint 065)",
+  "RegSetValueExA a5": "the size of the second value UnityPlayer writes after RegCreateKeyW (seq 2739 in run 38216081440): 0x14 in runs 38216081440, 38206263976 and 38176899195, 0x13 in 38203364352 (Sprint 065)"
  }
 }
