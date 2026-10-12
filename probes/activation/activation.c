@@ -19,6 +19,10 @@
  *     starts UnityCrashHandler64 at seq 18), or pumps its messages as the game does before SetFocus (PeekMessageA
  *     NULL 0 0 PM_NOREMOVE, then PM_REMOVE with TranslateMessage and DispatchMessageA until empty), or both; the late
  *     ways change nothing (runs 38273502864, 38273506587)
+ *   - gui_shell, gui_create, gui_shell_child_pump: a copy of the probe whose PE header says IMAGE_SUBSYSTEM_WINDOWS_GUI
+ *     (the game is jit_capture, a GUI program, started by Start-Process: ShellExecuteEx), started by ShellExecuteExW
+ *     (SEE_MASK_NOCLOSEPROCESS, SW_SHOWNORMAL) or CreateProcessW; the child and pump ways change nothing either (runs
+ *     38274040670, 38274044288), and every game run (six) has the lParam 0 and the wParam 0
  * A trial writes its rows to the file its command line names; the first copy prints them in order. Rows:
  * <way>.before, <way>.msg.<i> (WM_ACTIVATEAPP, WM_NCACTIVATE, WM_ACTIVATE, WM_KILLFOCUS, WM_SETFOCUS), <way>.after.
  */
@@ -167,15 +171,38 @@ static void split(void) {
 static void wcopy(WCHAR *d, const WCHAR *s) { while ((*d++ = *s++)) {} }
 static void wcat(WCHAR *d, const WCHAR *s) { while (*d) d++; wcopy(d, s); }
 
+static WCHAR gui[MAX_PATH];
+static const WCHAR *target = exe;
+
+/* gui: this file with the optional header's Subsystem (offset 68, PE32 and PE32+ alike) set to 2 */
+static int write_gui_copy(void) {
+    static unsigned char image[1 << 20];
+    HANDLE f = CreateFileW(exe, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return 0;
+    DWORD got = 0;
+    ReadFile(f, image, sizeof image, &got, NULL);
+    CloseHandle(f);
+    DWORD pe = *(DWORD *)(image + 0x3C);
+    *(WORD *)(image + pe + 4 + 20 + 68) = IMAGE_SUBSYSTEM_WINDOWS_GUI;
+    GetTempPathW(MAX_PATH, gui);
+    wcat(gui, L"w2m_activation_gui.exe");
+    HANDLE g = CreateFileW(gui, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (g == INVALID_HANDLE_VALUE) return 0;
+    DWORD written = 0;
+    WriteFile(g, image, got, &written, NULL);
+    CloseHandle(g);
+    return written == got;
+}
+
 static void start_copy(const WCHAR *mode, const WCHAR *name, const WCHAR *path, DWORD flags) {
     static WCHAR cmd[1024];
     cmd[0] = 0;
-    wcat(cmd, L"\""); wcat(cmd, exe); wcat(cmd, L"\" "); wcat(cmd, mode); wcat(cmd, L" "); wcat(cmd, name);
+    wcat(cmd, L"\""); wcat(cmd, target); wcat(cmd, L"\" "); wcat(cmd, mode); wcat(cmd, L" "); wcat(cmd, name);
     wcat(cmd, L" \""); wcat(cmd, path); wcat(cmd, L"\"");
     STARTUPINFOW si = {0};
     si.cb = sizeof si;
     PROCESS_INFORMATION pi;
-    if (CreateProcessW(exe, cmd, NULL, NULL, FALSE, flags, NULL, NULL, &si, &pi)) {
+    if (CreateProcessW(target, cmd, NULL, NULL, FALSE, flags, NULL, NULL, &si, &pi)) {
         WaitForSingleObject(pi.hProcess, 60000);
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
@@ -187,17 +214,18 @@ static void run_way(const char *name8, const WCHAR *name) {
     GetTempPathW(MAX_PATH, path);
     wcat(path, L"w2m_activation_"); wcat(path, name); wcat(path, L".jsonl");
     DeleteFileW(path);
+    target = contains(name, L"gui") ? gui : exe;
     if (contains(name, L"stub")) start_copy(L"stub", name, path, DETACHED_PROCESS);
     else if (contains(name, L"detached")) start_copy(L"trial", name, path, DETACHED_PROCESS);
-    else if (!contains(name, L"shell")) start_copy(L"trial", name, path, 0);
+    else if (!contains(name, L"shell")) start_copy(L"trial", name, path, 0);     /* console, late, child, pump, gui_create */
     else {
         static WCHAR params[1024];
         params[0] = 0;
         wcat(params, L"trial "); wcat(params, name); wcat(params, L" \""); wcat(params, path); wcat(params, L"\"");
         SHELLEXECUTEINFOW e = {0};
         e.cbSize = sizeof e;
-        e.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE;
-        e.lpFile = exe;
+        e.fMask = contains(name, L"gui") ? SEE_MASK_NOCLOSEPROCESS : SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE;
+        e.lpFile = target;
         e.lpParameters = params;
         e.nShow = SW_SHOWNORMAL;
         if (ShellExecuteExW(&e) && e.hProcess) {
@@ -257,5 +285,11 @@ void start(void) {
     run_way("pump", L"pump");
     run_way("child_pump", L"child_pump");
     run_way("stub_child_pump", L"stub_child_pump");
+    sink = GetStdHandle(STD_OUTPUT_HANDLE);
+    way = "gui";
+    row("copy"); flag("written", write_gui_copy()); end();
+    run_way("gui_shell", L"gui_shell");
+    run_way("gui_create", L"gui_create");
+    run_way("gui_shell_child_pump", L"gui_shell_child_pump");
     ExitProcess(0);
 }
