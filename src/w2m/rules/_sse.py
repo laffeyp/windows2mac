@@ -330,6 +330,13 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         _unmasked_to_model(a)
         v = _sse_src(a, src, 16, reg_of)
         a.emit(a64.scvtf_4s(dst[1], v))
+    elif ic == "CVTPS2PD" and native_conversions:
+        # FCVTL widens the low two singles exactly; an SNaN becomes a QNaN with FPSR.IOC (MXCSR's IE), and FPCR.AH=1
+        # gives x86's NaN and denormal-input behavior (Sprint 039 probe). The memory form reads 8 bytes (SDM CVTPS2PD:
+        # m64). Native from Sprint 064: the frontier ran 50,333 of its model steps at one VCVTPS2PD.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 8 if src[0] == "m" else 16, reg_of)
+        a.emit(a64.fcvtl_2d(dst[1], v))
     elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD") or ic in SSE_050:  # in the model (x86fp; Sprints
         a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):

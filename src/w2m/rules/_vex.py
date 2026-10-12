@@ -55,7 +55,7 @@ L0_ONLY = {"VCVTDQ2PD", "VCVTTPD2DQ", "VCVTPD2DQ"}                 # their 256-b
 ALIGNED = {"VMOVAPD", "VMOVDQA", "VMOVAPS"}                                     # the only VEX forms that fault on alignment
 NO_WRITE = {"COMISD", "UCOMISD", "COMISS", "UCOMISS"}                                     # flags only: the destination is a source
 SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
-        "ANDNPD", "CVTTPS2DQ", "CMPPS_VEX", "ROUNDSD", "PBLENDD", "CVTPS2PD", "PMOVSXDQ", "PERMILPS_VAR",
+        "ANDNPD", "CVTTPS2DQ", "CMPPS_VEX", "ROUNDSD", "PBLENDD", "PMOVSXDQ", "PERMILPS_VAR",
         "PADDB", "PMULUDQ", "PUNPCKHQDQ", "PCMPEQQ", "CVTSS2SI", "CVTSI2SS", "CVTTSD2SI", "RCPPS", "RSQRTPS"}              # in the model (x86fp) for now
 NATIVE_256 = {"PXOR", "XORPS", "XORPD", "PAND", "POR", "ORPD", "ANDPD", "ANDPS", "PCMPEQB", "PCMPEQW", "PSUBQ",
               "PSUBD", "PADDQ", "MOVDQU", "MOVDQA", "MOVAPD", "PMOVMSKB", "MOVUPS", "MOVAPS", "PADDD", "PSRLD", "PSLLD",
