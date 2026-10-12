@@ -24,8 +24,11 @@
  *     (0x80070006), both leaving x and y
  *   - EnumDisplaySettingsW(NULL): the current and registry settings 1024 x 768 x 32 at 64 Hz as "CDD", and 13 modes
  *     from 640 x 480 to 1920 x 1080 as "cdd"; dmSize answers 188
- * Other forms (a DC or clip rectangle, EDD_GET_DEVICE_INTERFACE_NAME, a callback that stops the enumeration, a named
- * device for the settings) are not in the rows and stop the run.
+ *   - EnumDisplaySettingsW(L"\\.\DISPLAY1"), in any case, answers as NULL does; another device name, the monitor's
+ *     \\.\DISPLAY1\Monitor0 included, answers FALSE and leaves the last error (Sprint 065, runs 38273510163 and
+ *     38273513428)
+ * Other forms (a DC or clip rectangle, EDD_GET_DEVICE_INTERFACE_NAME, a callback that stops the enumeration) are not
+ * in the rows and stop the run.
  */
 #include "runtime.h"
 
@@ -193,9 +196,22 @@ static const u16 MODES[13][2] = {{640, 480}, {800, 600}, {1024, 768}, {1152, 864
                                  {1280, 1024}, {1366, 768}, {1440, 900}, {1600, 900}, {1600, 1200}, {1680, 1050},
                                  {1920, 1080}};
 
+/* The adapter's name, \\.\DISPLAY1, compared without regard to ASCII case (row settings.named_lower.current) */
+static int display_one(const u16 *name) {
+    static const char want[] = "\\\\.\\DISPLAY1";
+    for (int i = 0;; i++) {
+        u16 c = name[i];
+        if (c >= 'a' && c <= 'z') c = (u16)(c - 'a' + 'A');
+        if (c != (u16)want[i]) return 0;
+        if (!c) return 1;
+    }
+}
+
 /* EnumDisplaySettingsW(lpszDeviceName, iModeNum, lpDevMode): DEVMODEW, the fields the rows hold */
 u64 user32_EnumDisplaySettingsW(u64 device, u64 mode, u64 out) {
-    if (device) w2m_unimplemented(W2M_API_EnumDisplaySettingsW, device);         /* a named device: no row */
+    if (device && !display_one((const u16 *)device)) {
+        return w2m_logged(W2M_API_EnumDisplaySettingsW, mode, 0);              /* rows settings.other_device.current */
+    }
     s32 m = (s32)mode;
     u8 *d = (u8 *)out;
     u32 width, height, fields;

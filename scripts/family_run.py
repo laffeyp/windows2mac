@@ -2392,16 +2392,17 @@ FAMILIES: dict[str, Family] = {
     "display": Family(
         name="display",
         contract_id="windows.display.display",
-        version="0.1.0",
+        version="0.2.0",
         summary=("The display as the game queries it, under its manifest (PerMonitorV2): GetSystemMetrics 0-99, the "
                  "Hyper-V adapter and its one monitor (EnumDisplayDevicesA), EnumDisplayMonitors' one callback, "
                  "GetMonitorInfoA and W, MonitorFromPoint, Rect and Window, shcore's GetDpiForMonitor (96 x 96), "
                  "EnumDisplaySettingsW's current settings and 13 modes; one 1024 x 768 monitor, the work area above the "
-                 "taskbar."),
+                 "taskbar. Sprint 065: EnumDisplaySettingsW of the device \\\\.\\DISPLAY1, in any case, answers as "
+                 "NULL does; another device or the monitor's name answers FALSE and leaves the last error."),
         probe="display", guest_file="display.c",
         runs={
-              "38174316653": Run("windows-2025", "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c", "display-1791752210-0", "AMD EPYC 9V74 80-Core Processor"),
-              "38174318347": Run("windows-2022", "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b", "display-1791752210-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38273510163": Run("windows-2025", "d4b4751fefdeb2b8ebecaba82e8d4670e561f7a422f428b713860141b3197564", "display-windows-2025", "AMD EPYC 7763 64-Core Processor"),
+              "38273513428": Run("windows-2022", "459c45e187bc43eeddcb361c58b4fd2c50e0461af5b4afaffd463880df33c662", "display-windows-2022", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(),
         open_questions=("w2m's display is the runners' (one 1024 x 768 monitor at 96 DPI, Server 2025's taskbar) until "
@@ -2419,6 +2420,8 @@ FAMILIES: dict[str, Family] = {
             "null_window_null": Plant("    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return outside(",
                                       "    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return flags == 2 ? w2m_logged(W2M_API_MonitorFromWindow, 0, 0) : outside(",
                                       ("from_window.null_nearest",)),
+            "named_device_refused": Plant("    if (device && !display_one((const u16 *)device)) {",
+                                          "    if (device) {", ("settings.named.current", "settings.named_lower.current")),
             "one_mode_short": Plant("    else if (m >= 0 && m < 13) {", "    else if (m >= 0 && m < 12) {",
                                     ("settings.mode_12", "settings.mode_count"))}),
     "windows": Family(
