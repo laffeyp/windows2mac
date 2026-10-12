@@ -15,6 +15,10 @@
  *   - late2, late8, late20: as console, with that many seconds between CreateWindowExW and SetFocus; stub_late20 as
  *     stub (the game creates its window at seq 1659 and calls SetFocus at 3380; the first four ways all have the
  *     lParam not NULL and the wParam 1, runs 38273292412 and 38273295692)
+ *   - child, pump, child_pump, stub_child_pump: before its window the trial starts an idle copy of itself (the game
+ *     starts UnityCrashHandler64 at seq 18), or pumps its messages as the game does before SetFocus (PeekMessageA
+ *     NULL 0 0 PM_NOREMOVE, then PM_REMOVE with TranslateMessage and DispatchMessageA until empty), or both; the late
+ *     ways change nothing (runs 38273502864, 38273506587)
  * A trial writes its rows to the file its command line names; the first copy prints them in order. Rows:
  * <way>.before, <way>.msg.<i> (WM_ACTIVATEAPP, WM_NCACTIVATE, WM_ACTIVATE, WM_KILLFOCUS, WM_SETFOCUS), <way>.after.
  */
@@ -43,6 +47,8 @@ static void field(const char *k, unsigned long long v) { put(",\""); put(k); put
 static void flag(const char *k, int v) { put(",\""); put(k); put(v ? "\":true" : "\":false"); }
 static void end(void) { put("}\n"); flush(); }
 
+static void wcat(WCHAR *d, const WCHAR *s);
+static WCHAR exe[MAX_PATH];
 static HWND window;
 static DWORD foreground_thread;
 static unsigned messages;
@@ -71,6 +77,26 @@ static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static DWORD delay_ms;
+static int with_child, with_pump;
+static HANDLE idle_child;
+
+static int contains(const WCHAR *s, const WCHAR *w) {
+    for (; *s; s++) {
+        int i = 0;
+        while (w[i] && s[i] == w[i]) i++;
+        if (!w[i]) return 1;
+    }
+    return 0;
+}
+
+static void pump(void) {
+    MSG m;
+    PeekMessageA(&m, NULL, 0, 0, PM_NOREMOVE);
+    while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&m);
+        DispatchMessageA(&m);
+    }
+}
 
 static void trial(void) {
     HWND fg = GetForegroundWindow();
@@ -81,6 +107,19 @@ static void trial(void) {
     flag("foreground_own_process", fg && pid == GetCurrentProcessId());
     flag("active_null", GetActiveWindow() == NULL); flag("focus_null", GetFocus() == NULL); end();
 
+    if (with_child) {
+        static WCHAR cmd[1024];
+        cmd[0] = 0;
+        wcat(cmd, L"\""); wcat(cmd, exe); wcat(cmd, L"\" idle x x");
+        STARTUPINFOW si = {0};
+        si.cb = sizeof si;
+        PROCESS_INFORMATION pi;
+        if (CreateProcessW(exe, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            idle_child = pi.hProcess;
+        }
+        row("child"); flag("started", idle_child != NULL); end();
+    }
     WNDCLASSW c = {0};
     c.lpfnWndProc = procedure;
     c.hInstance = GetModuleHandleW(NULL);
@@ -89,6 +128,7 @@ static void trial(void) {
     window = CreateWindowExW(0, (LPCWSTR)(ULONG_PTR)atom, L"Hail to the Rainbow", 0, CW_USEDEFAULT, CW_USEDEFAULT,
                              CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, c.hInstance, NULL);
     if (delay_ms) Sleep(delay_ms);
+    if (with_pump) pump();
     row("before_focus"); flag("foreground_null", GetForegroundWindow() == NULL);
     flag("foreground_is_window", GetForegroundWindow() == window); end();
     SetLastError(0xDEAD);
@@ -97,6 +137,10 @@ static void trial(void) {
     row("after"); flag("window_null", window == NULL); flag("previous_null", previous == NULL);
     field("err", err); field("messages", messages); flag("foreground_is_window", GetForegroundWindow() == window);
     flag("active_is_window", GetActiveWindow() == window); flag("focus_is_window", GetFocus() == window); end();
+    if (idle_child) {
+        TerminateProcess(idle_child, 0);
+        CloseHandle(idle_child);
+    }
 }
 
 /* The command line's words after the program: start, then 0, 1 or 2 more (no quotes inside a word but the path's). */
@@ -123,8 +167,6 @@ static void split(void) {
 static void wcopy(WCHAR *d, const WCHAR *s) { while ((*d++ = *s++)) {} }
 static void wcat(WCHAR *d, const WCHAR *s) { while (*d) d++; wcopy(d, s); }
 
-static WCHAR exe[MAX_PATH];
-
 static void start_copy(const WCHAR *mode, const WCHAR *name, const WCHAR *path, DWORD flags) {
     static WCHAR cmd[1024];
     cmd[0] = 0;
@@ -145,9 +187,9 @@ static void run_way(const char *name8, const WCHAR *name) {
     GetTempPathW(MAX_PATH, path);
     wcat(path, L"w2m_activation_"); wcat(path, name); wcat(path, L".jsonl");
     DeleteFileW(path);
-    if (name[0] == L'c' || name[0] == L'l') start_copy(L"trial", name, path, 0);
-    else if (name[0] == L'd') start_copy(L"trial", name, path, DETACHED_PROCESS);
-    else if (name[0] == L's' && name[1] == L't') start_copy(L"stub", name, path, DETACHED_PROCESS);
+    if (contains(name, L"stub")) start_copy(L"stub", name, path, DETACHED_PROCESS);
+    else if (contains(name, L"detached")) start_copy(L"trial", name, path, DETACHED_PROCESS);
+    else if (!contains(name, L"shell")) start_copy(L"trial", name, path, 0);
     else {
         static WCHAR params[1024];
         params[0] = 0;
@@ -188,9 +230,15 @@ void start(void) {
         for (int i = 0; words[2][i]; i++)
             if (words[2][i] >= L'0' && words[2][i] <= L'9') delay_ms = delay_ms * 10 + (DWORD)(words[2][i] - L'0');
         delay_ms *= 1000;
+        with_child = contains(words[2], L"child");
+        with_pump = contains(words[2], L"pump");
         sink = CreateFileW(words[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         trial();
         CloseHandle(sink);
+        ExitProcess(0);
+    }
+    if (count >= 2 && words[1][0] == L'i') {                     /* idle: as UnityCrashHandler64 waits */
+        Sleep(60000);
         ExitProcess(0);
     }
     if (count >= 4 && words[1][0] == L's') {                     /* stub <way> <path>: the trial, detached */
@@ -205,5 +253,9 @@ void start(void) {
     run_way("late8", L"late8");
     run_way("late20", L"late20");
     run_way("stub_late20", L"stub_late20");
+    run_way("child", L"child");
+    run_way("pump", L"pump");
+    run_way("child_pump", L"child_pump");
+    run_way("stub_child_pump", L"stub_child_pump");
     ExitProcess(0);
 }
