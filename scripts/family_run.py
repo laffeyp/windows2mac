@@ -1869,7 +1869,7 @@ FAMILIES: dict[str, Family] = {
     "threads": Family(
         name="threads",
         contract_id="windows.thread.threads",
-        version="0.1.0",
+        version="0.2.0",
         summary=("Guest threads in the game's forms (specs/work_list.json), sequenced by events so every run prints "
                  "the same rows. CreateThread: a handle (a multiple of 4), a new id, the last error left; the new "
                  "thread runs each module's TLS callback then DllMain with DLL_THREAD_ATTACH, then its routine with "
@@ -1882,9 +1882,9 @@ FAMILIES: dict[str, Family] = {
                  "description calls answer 0x10000000; SleepEx answers 0; AppPolicyGetThreadInitializationType gives "
                  "policy 0."),
         probe="threads", guest_file="threads.c", dll_name="threads_dll.dll",
-        runs={
-              "38124576301": Run("windows-2025", "d71f0b8e07328ab48fb4e9023a07174c087dddd55d9654111c741513e202af8e", "threads-1791706952-0", "AMD EPYC 7763 64-Core Processor", dll="b8e8ccaaa31a472a4f845004cca183336414bd99cf8515f4efb4e4eb479cebce"),
-              "38124578332": Run("windows-2022", "ba552c63ffe0fceef05c663c390ce1dd3a3c6670bab915e9165b13c6951e7a21", "threads-1791706952-1", "AMD EPYC 7763 64-Core Processor", dll="f119bb2d52de7ed7f7763790c0b4304796d2fb26fa42789c552dbf4f546f3dac"),
+        runs={   # Sprint 061: FLS read from a worker and inside its DLL's thread attach (rows worker.start, worker.attach_fls)
+              "38207005406": Run("windows-2025", "b08ba1fef04feddc4e5dad53663c5873a0322e162316b54247fa0565c9f05c4b", "threads-1791782002-0", "AMD EPYC 7763 64-Core Processor", dll="37a2ee1b08bfcdc6962a9b6138bac5d758eb3fe2eb3ddbdda866f80e981fef47"),
+              "38207007264": Run("windows-2022", "17761236925f2c5da4380aa83b7e598b5e670e1248b75c2f04c763f20ee3260c", "threads-1791782002-1", "AMD EPYC 7763 64-Core Processor", dll="b679fd7f4c488095f5f03ae3516795b499b100556c15af1f4d8e0efdc4340063"),
         },
         documented=(),
         open_questions=(
@@ -1896,6 +1896,10 @@ FAMILIES: dict[str, Family] = {
             "demand behind a guard page; threads.c and VirtualQuery show the difference only to code that probes "
             "another thread's stack pages."),
         plants={
+            "fls_shared": Plant(
+                "    struct fls_block **slot = (struct fls_block **)((u8 *)w2m_teb() + TEB_FLS_DATA);",
+                "    static struct fls_block *one;\n    struct fls_block **slot = &one;",
+                ("worker.start", "worker.attach_fls", "main.after_worker"), file="thread_storage.c"),
             "start_last_error_kept": Plant('    code += b"\\x65\\xc7\\x04\\x25\\x68\\x00\\x00\\x00" + struct.pack("<I", START_LAST_ERROR)',
                                            '    code += b"\\x65\\xc7\\x04\\x25\\x68\\x00\\x00\\x00" + struct.pack("<I", 0)',
                                            ("worker.start",), host="w2m.scheduler"),
