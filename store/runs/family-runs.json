@@ -930,10 +930,10 @@
   }
  },
  "registry": {
-  "candidate_sha256": "sha256:2d0b1d42d80fe08dfdf8ba29b7d5b790f3a071187149eac0b419c3cbd09b23c5",
+  "candidate_sha256": "sha256:196ce201ea9edbf5932952bd37e35b2d8ebcc5541d9e33db8b44c9035ae10c9c",
   "divergence": {
-   "38182330078": null,
-   "38182331638": null
+   "38210383833": null,
+   "38210386046": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
@@ -943,10 +943,10 @@
    "SESSION_INIT": 1
   },
   "family": "registry",
-  "record": "store/runs/family-registry-1791783956286997000",
+  "record": "store/runs/family-registry-1791785005960807000",
   "verdicts": {
-   "38182330078": "conforms",
-   "38182331638": "conforms"
+   "38210383833": "conforms",
+   "38210386046": "conforms"
   }
  },
  "slim_locks": {
