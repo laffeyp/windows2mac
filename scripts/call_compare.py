@@ -15,8 +15,8 @@ specs/signatures.json allows, because pointers, handles and thread ids differ be
   void     the return of a function with none: not compared
 
 A last error is compared where the metadata marks the function as setting one (SupportsLastError) and the return
-says it failed (a BOOL of 0, a null handle or pointer, INVALID_HANDLE_VALUE): a function that succeeds leaves the last
-error as it was, which belongs to the call before. A function the metadata does not describe is compared on its
+says it failed (a BOOL of FALSE, a null handle or pointer, INVALID_HANDLE_VALUE): a function that succeeds leaves the
+last error as it was, which belongs to the call before. A function the metadata does not describe is compared on its
 return only. A pair w2m calls and Windows never does is a divergence of its own.
 
 Usage: uv run python scripts/call_compare.py <w2m calls.tsv> <game-run-dir> [--signatures specs/signatures.json]
@@ -131,13 +131,16 @@ def guest_trace(execution_id: str, calls: list[Call], threads: dict[int, tuple[i
     return b"".join(line + b"\n" for line in lines)
 
 
-def failed(kind: str, value: int, size: int | None) -> bool:
+def failed(kind: str, type_name: str, value: int) -> bool:
+    """Whether a return says the call failed, so its last error is the function's to set: a NULL or invalid handle, a
+    NULL pointer, a BOOL of FALSE. Other integers carry no failure value the metadata names (WaitForSingleObjectEx's 0
+    is WAIT_OBJECT_0; Sprint 064 found the earlier rule, any 4-byte 0, comparing a wait's stale last error)."""
     if kind == "handle":
         return value in (0, INVALID_HANDLE_VALUE)
     if kind == "pointer":
         return value == 0
-    if kind == "value" and size == 4:
-        return value & 0xFFFFFFFF == 0          # BOOL FALSE; a count of 0 for the functions that return one
+    if type_name in ("BOOL", "BOOLEAN"):
+        return value & 0xFFFFFFFF == 0
     return False
 
 
@@ -294,7 +297,7 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             fields = [(f"a{i}", p["kind"], p.get("bytes"), a[5][i], b[5][i], True)
                       for i, p in enumerate(sig["params"][:8])]
             fields.append(("ret", ret["kind"], ret.get("bytes"), a[6], b[6], False))
-            if sig["sets_last_error"] and failed(ret["kind"], a[6], ret.get("bytes")):
+            if sig["sets_last_error"] and failed(ret["kind"], ret["type"], a[6]):
                 fields.append(("error", "value", 4, a[7], b[7], False))
         for name, kind, size, x, y, argument in fields:
             space = ASSIGNED.get((fn, name))

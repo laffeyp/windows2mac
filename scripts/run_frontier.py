@@ -36,7 +36,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import msgspec
 from substrate.api import PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
@@ -180,7 +180,8 @@ def main(argv: list[str]) -> int:
                                                    json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name))
         state.update(divergences=found, compared=compared)
         # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
-        verdict = "discrepancy" if found else ("inconclusive" if state.get("dropped") else "conforms")
+        verdict: Literal["conforms", "discrepancy", "inconclusive"] = (
+            "discrepancy" if found else "inconclusive" if state.get("dropped") else "conforms")
         yield events.validate(events.COMPARISON_COMPLETED(
             comparison_id=f"cmp-{xid}", contract_id=CONTRACT[0], contract_version=CONTRACT[1],
             relation="state_relation", reference_ref=record_game_run.execution_id(REFERENCE),

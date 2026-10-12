@@ -164,3 +164,32 @@ def test_a_call_that_runs_guest_code_is_recorded_with_what_its_caller_gets() -> 
     assert created[0][7] == 1407                                  # ERROR_CANNOT_FIND_WND_CLASS, after the failure
     windows_used = {c[5][0] for c in calls if c[4] in ("GetClientRect", "DestroyWindow", "GetWindowRect")}
     assert {c[6] for c in created} & windows_used
+
+
+@pytest.mark.hvf
+def test_a_retried_wait_gives_its_slot_back() -> None:
+    """Sprint 064: each retry of a wait left an unready record behind, and a long wait filled the trace area (744,597
+    calls left out of a billion-instruction frontier run). The slots in use equal the records that completed."""
+    import struct
+
+    from w2m.file_bridge import FileBridge
+    from w2m.kernel import Machine
+    from w2m.loader import load
+    from w2m.vm_backend import TRACE_OFF, VM
+    f = family_run.FAMILIES["threads"]
+    run = next(iter(f.runs.values()))
+    assert f.dll_name is not None and run.dll is not None
+    exe = (ROOT / "store" / "binaries" / f"{run.binary}.exe").read_bytes()
+    dll = (ROOT / "store" / "binaries" / f"{run.dll}.dll").read_bytes()
+    with tempfile.TemporaryDirectory() as d:
+        files = FileBridge(Path(d))
+        vm = VM(load(exe, lambda n: dll if n.lower() == "threads_dll.dll" else None, "probe.exe"), files=files,
+                image_name="probe.exe", call_trace=("probe.exe", f.dll_name))
+        try:
+            Machine(lambda *a: None, max_steps=1 << 40, timeout_ms=60_000).run(vm)
+            calls, _ = vm.traced_calls()
+            used = struct.unpack_from("<Q", vm.mm, vm._process(TRACE_OFF) + 16)[0]
+        finally:
+            vm.close()
+            files.close_all()
+    assert used == len(calls)

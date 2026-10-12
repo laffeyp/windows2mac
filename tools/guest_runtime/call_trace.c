@@ -113,7 +113,9 @@ u64 w2m_traced(u64 a0, u64 a1, u64 a2, u64 a3, u64 rsp, u64 service, u64 thunk) 
         r->a[4 + i] = stack[5 + i];  /* above the return address and the 32-byte home area */
     u64 ret = call(a0, a1, a2, a3, rsp);
     if (w2m_state()->schedule & W2M_SCHEDULE_RETRY) {
-        (*taken)--;                  /* the slot stays, not ready: the re-entry is recorded */
+        (*taken)--;                  /* the re-entry is recorded */
+        if (r == (struct w2m_trace_record *)(W2M_TRACE_VA + W2M_TRACE_RECORDS_OFF) + t->count - 1)
+            t->count--;              /* the slot back (Sprint 064: a long wait's retries filled the area) */
         return ret;
     }
     struct w2m_state *st = w2m_state();
