@@ -31,6 +31,8 @@ PREFIX = """#include <stdio.h>
 #include <string.h>
 static unsigned char test_teb[8192];
 #define W2M_TEB_VA ((unsigned long long)test_teb)
+static unsigned long long test_peb[8];
+#define W2M_PEB_VA ((unsigned long long)test_peb)
 """
 COMMON = """
 u64 w2m_logged(u64 a, u64 b, u64 c) { (void)a; (void)b; return c; }
@@ -320,23 +322,64 @@ int main(void) {
     assert r.stdout.split() == ["-1", "1", "1", "10000"]
 
 
-def test_a_child_starts_in_its_parents_directory() -> None:
-    """Defect 3: a child's GetCurrentDirectoryW answered the program's directory. The parent's, which the host writes
-    to the inherit page beside the child's mark, is the child's (row writer.directory)."""
+PARAMETERS = """static unsigned long long current_directory[0x410 / 8];
+static unsigned char test_parameters[0x448];
+#define W2M_CURRENT_DIRECTORY_VA ((unsigned long long)current_directory)
+"""
+
+
+def test_the_working_directory_is_the_process_parameters() -> None:
+    """Defect 3 of the review of Sprint 055, moved by Sprint 059: a child's GetCurrentDirectoryW answered the
+    program's directory. The working directory is ProcessParameters.CurrentDirectory.DosPath, which the host writes
+    (a child's: its parent's) with a final backslash; SetCurrentDirectoryW writes the other of its two buffers (rows
+    *.current_directory, after.current_directory)."""
     r = run_native(["paths.c"], """
 u64 w2m_file_stat_full(const u16 *full, u64 out) { (void)full; (void)out; return 2; }
 u64 w2m_host(u64 op, u64 a, u64 b, u64 c, u64 d, u64 *e) { (void)op; (void)a; (void)b; (void)c; (void)d; (void)e; return 0; }
-int main(void) {
-    inherit_page[511] = 1;
-    const char *d = "C:\\\\w2m\\\\app\\\\w2m_probe_dir";
-    u16 *to = (u16 *)(inherit_page + 0x100);
-    for (int i = 0; d[i]; i++) to[i] = (u16)d[i];
+static void show(void) {
     u16 out[64];
     u64 n = k32_GetCurrentDirectoryW(64, (u64)out);
     for (u64 i = 0; i < n; i++) putchar((char)out[i]);
-    putchar('\\n');
+    putchar(' ');
+}
+int main(void) {
+    test_peb[4] = (u64)test_parameters;
+    const char *d = "C:\\\\w2m\\\\app\\\\w2m_probe_dir\\\\";
+    u16 *to = (u16 *)current_directory;
+    u64 n = 0;
+    for (; d[n]; n++) to[n] = (u16)d[n];
+    *(u16 *)(test_parameters + 0x38) = (u16)(2 * n);
+    *(u16 *)(test_parameters + 0x3A) = 0x208;
+    *(u16 **)(test_parameters + 0x40) = to;
+    show();
+    u16 sub[] = {'s', 'u', 'b', 0};
+    k32_SetCurrentDirectoryW((u64)sub);
+    show();
+    const u16 *now = *(const u16 **)(test_parameters + 0x40);
+    u64 len = *(const u16 *)(test_parameters + 0x38) / 2;
+    printf("%d %c\\n", now == to + 0x104, (char)now[len - 1]);
+    return 0;
+}
+""", PARAMETERS)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert r.stdout.split() == ["C:\\w2m\\app\\w2m_probe_dir", "C:\\w2m\\app\\w2m_probe_dir\\sub", "1", "\\"]
+
+
+def test_standard_handles_without_inheritance_stop_the_run() -> None:
+    """The gap Sprint 058 left: STARTF_USESTDHANDLES with bInheritHandles FALSE started the child with handles it
+    cannot hold (Microsoft Learn, STARTUPINFOW: they "must be inheritable and the function's bInheritHandles parameter
+    must be set to TRUE"). No row has that form: it stops the run (Sprint 059)."""
+    r = run_native(["processes.c", "sync_objects.c"], PROCESS_STUBS + """
+int main(void) {
+    u16 line[] = {'c', 0};
+    u8 si[104] = {0}, info[24] = {0};
+    *(u32 *)si = 104;
+    *(u32 *)(si + 60) = 0x100;                                    /* STARTF_USESTDHANDLES */
+    u64 stack[16] = {0};
+    stack[9] = (u64)si; stack[10] = (u64)info;                    /* bInheritHandles (stack[5]) FALSE */
+    k32_CreateProcessW(0, (u64)line, 0, 0, (u64)stack);
+    printf("%llu\\n", started);
     return 0;
 }
 """, INHERIT)
-    assert r.returncode == 0, r.stderr[-2000:]
-    assert r.stdout.strip() == "C:\\w2m\\app\\w2m_probe_dir"
+    assert r.returncode == STOPPED, (r.returncode, r.stdout, r.stderr[-2000:])

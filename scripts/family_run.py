@@ -270,6 +270,33 @@ def processes_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if r.get("s") == "child.command_line" else r for r in printed]
 
 
+def parameters_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """ProcessParameters' rows as relations where a run decides the value: the header keeps MaximumLength == Length
+    (both grow with the strings inside the block, and Server 2025's are 8 bytes longer than 2022's); the block keeps
+    no region size (the heap's: 0x9000, 0xf000, 0x10000 seen). The parent is the runner's start, which w2m does not
+    copy: its window values and title are the runner's STARTUPINFO's and its environment's version the runner's
+    (3 or 4), so it keeps only that they equal GetStartupInfoW's, and its standard handles only that they are
+    GetStdHandle's (w2m's console start gives no input or error handle, Sprint 046)."""
+    out = []
+    for r in printed:
+        s = r.get("s", "")
+        r = dict(r)
+        if s.endswith(".header"):
+            r["length_is_maximum"] = r.pop("maximum_length") == r.pop("length")
+        if s.endswith(".block"):
+            r.pop("region_size", None)
+        if s == "parent.window":
+            r = {k: v for k, v in r.items() if k in ("s", "flags_are_startup", "show_is_startup")}
+        if s == "parent.strings":
+            r.pop("title_is_module", None)
+        if s == "parent.environment":
+            r.pop("version", None)
+        if s == "parent.standard_handles":
+            r = {k: v for k, v in r.items() if not k.endswith("_null")}
+        out.append(r)
+    return out
+
+
 def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
     windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
@@ -2179,8 +2206,8 @@ FAMILIES: dict[str, Family] = {
             # Sprint 058: one plant per defect the review of Sprint 055 found and the new rows judge
             "environment_at_start": Plant("vm.environment_now(), directories[0]", "vm.environment, directories[0]",
                                           ("writer.environment",), host="w2m.kernel"),
-            "directory_not_inherited": Plant("        if (((const u64 *)W2M_INHERIT_VA)[511] && parent[0]) {",
-                                             "        if (0 && parent[0]) {", ("writer.directory",), file="paths.c"),
+            "directory_not_inherited": Plant('directory = self.directory if self.directory is not None else ',
+                                             'directory = None or ', ("writer.directory",), host="w2m.vm_backend"),
             "pipe_unbounded": Plant("                n = min(a[3], PIPE_CAPACITY - len(pipe.data))",
                                     "                n = a[3]", ("pipe.capacity", "pipe.large_write"), host="w2m.kernel"),
             # a short write reported whole: the filler counts 65536 bytes into a pipe holding 4096, the drain waits for
@@ -2188,6 +2215,49 @@ FAMILIES: dict[str, Family] = {
             "write_reports_part": Plant("    if (done < (count & 0xFFFFFFFFull)) {", "    if (0) {", ("*",)),
             "ended_process_keeps_handles": Plant("                    self._release(current)\n", "",
                                                  ("*",), host="w2m.kernel")}),
+    "process_parameters": Family(
+        name="process_parameters",
+        contract_id="windows.process.parameters",
+        version="0.1.0",
+        summary=("PEB.ProcessParameters (RTL_USER_PROCESS_PARAMETERS) for a GUI program started by the runner and "
+                 "started as Steam starts the game: Flags 0x4001; MaximumLength equal to Length; no console handle; "
+                 "the standard handles GetStdHandle answers, kept current by SetStdHandle; the current directory "
+                 "with a final backslash in a 0x208-byte buffer outside the block, moved by SetCurrentDirectoryW; no "
+                 "DLL path; the image path, command line (GetCommandLineW's own buffer), title and desktop inside "
+                 "the block, the last two GetStartupInfoW's own buffers; the environment outside it, its size the "
+                 "bytes in use, moved by SetEnvironmentVariableW; the window fields GetStartupInfoW's; the block in "
+                 "the process heap."),
+        probe="process_parameters", guest_file="console.c",
+        runs={
+              "38194049597": Run("windows-2025", "37cd0420619adb06f4e2500a8003be37f0c97f197e3e04ed86eb8802001949ed", "process_parameters-1791770394-0", "AMD EPYC 7763 64-Core Processor"),
+              "38194051809": Run("windows-2022", "7a54f8eddbaa4ce5b16a615833b0d70075656cf4396ae4bd15126758d16637a4", "process_parameters-1791770394-1", "AMD EPYC 9V45 96-Core Processor"),
+        },
+        documented=(
+            documented("ms-rtl-user-process-parameters", "api/winternl/ns-winternl-rtl_user_process_parameters",
+                       "2021-07-27", "ImagePathName: The path of the image file for the process. CommandLine: The "
+                       "command-line string passed to the process."),),
+        open_questions=(
+            "Offsets past CommandLine are phnt's (Process Hacker's reverse-engineered ntrtl.h); Microsoft documents "
+            "the structure as reserved fields around ImagePathName and CommandLine.",
+            "The rows hold a GUI program's block; a console program's ConsoleHandle (a handle to its console) is not in "
+            "them, and w2m leaves it NULL: no service w2m serves reads it.",
+            "A child given standard handles (STARTF_USESTDHANDLES) has them in its block; its WindowFlags are not in "
+            "the rows and stay 0."),
+        derive=parameters_rows,
+        plants={
+            "flags_normalized_only": Plant("PARAMETERS_FLAGS = 0x4001", "PARAMETERS_FLAGS = 0x0001",
+                                           ("parent.header", "child.header"), host="w2m.vm_backend"),
+            "set_std_handle_elsewhere": Plant("    std_handles()[i] = handle;", "    (void)handle;",
+                                              ("parent.after.set_std_handle",)),
+            "title_copied": Plant("    *(u64 *)(si + 24) = *(const u64 *)(p + 0xB8);          /* lpTitle: WindowTitle.Buffer */",
+                                  "    *(u64 *)(si + 24) = *(const u64 *)(p + 0xB8) + 2;",
+                                  ("parent.strings", "child.strings"), file="process.c"),
+            "environment_in_place": Plant("    if (from == to) to += W2M_ENVIRONMENT_SIZE / 4;", "    to = from;",
+                                          ("parent.after.set_environment",), file="environment.c"),
+            "environment_size_stale": Plant("    *(u64 *)(p + 0x3F0) = 2 * (n == 1 ? 2 : n);", "",
+                                            ("parent.after.set_environment",), file="environment.c"),
+            "directory_same_buffer": Plant("    if (now == next) next += 0x208 / 2;", "    next = now;",
+                                           ("parent.after.current_directory",), file="paths.c")}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",

@@ -55,6 +55,11 @@ struct w2m_thread_scratch {
 };
 #define W2M_BLOCKED (~0ull)          /* a service's helper blocked the thread: the call is retried, not returned */
 #define W2M_THREAD_SCRATCH_OFF 0x1900
+/* PEB.ProcessParameters (RTL_USER_PROCESS_PARAMETERS; the host writes it, vm_backend.py _init_parameters; Sprint
+ * 059): Flags +8, the standard handles +0x20, CurrentDirectory.DosPath +0x38, CommandLine +0x70, Environment +0x80,
+ * the window fields +0x88, WindowTitle +0xB0, DesktopInfo +0xC0, EnvironmentSize +0x3F0, EnvironmentVersion +0x3F8. */
+static inline u8 *w2m_parameters(void) { return *(u8 *const volatile *)(W2M_PEB_VA + 0x20); }
+
 static inline struct w2m_thread_scratch *w2m_thread_scratch(void) {
     return (struct w2m_thread_scratch *)((u8 *)w2m_teb() + W2M_THREAD_SCRATCH_OFF);
 }

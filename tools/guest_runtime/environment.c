@@ -11,11 +11,11 @@
  *     with its NUL, then a NUL (69 units, 138 bytes, for five entries); an empty block is two NULs
  *     (HeapSize 4); a write into one copy does not show in the next
  *   - FreeEnvironmentStringsW frees the copy and answers TRUE; both calls leave the last error
- * The block is the host's: UTF-16 entries at W2M_ENVIRONMENT_VA (src/w2m/vm_backend.py, `environment`).
+ * The block is the host's: UTF-16 entries at ProcessParameters.Environment (src/w2m/vm_backend.py, `environment`).
  *
  * GetEnvironmentVariableW, SetEnvironmentVariableW and GetTempPathW (Sprint 048), as contracts/windows.environment.
  * temp_path records Windows answering (Server 2025 and 2022): SetEnvironmentVariableW changes the block in place
- * (W2M_ENVIRONMENT_SIZE bytes; a block that would outgrow it stops the run):
+ * (half of W2M_ENVIRONMENT_SIZE bytes, Sprint 059; a block that would outgrow it stops the run):
  *   - names compare case-insensitively; a replaced variable keeps its spelling; a new one goes where the entries'
  *     upper-cased names keep their order ("=C:" before "alpha" before "EMPTY" before "ZED")
  *   - a NULL value deletes (TRUE also for a missing name); an empty name or one with '=' after its first character
@@ -37,7 +37,10 @@ typedef unsigned short u16;
 
 u64 w2m_full_path(const u16 *in, u16 *out, long *part);    /* paths.c */
 
-static u16 *block(void) { return (u16 *)W2M_ENVIRONMENT_VA; }
+/* ProcessParameters.Environment (Sprint 059): the host's block at the start, in the first half of its area; each
+ * change moves it to the other half and sets EnvironmentSize to the bytes in use (row after.set_environment: Windows
+ * gives the block a new address and its new size). */
+static u16 *block(void) { return *(u16 **)(w2m_parameters() + 0x80); }
 static u16 upper(u16 c) { return c >= 'a' && c <= 'z' ? (u16)(c - 32) : c; }
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -96,8 +99,21 @@ static void shift(u16 *from, long delta) {
     else for (u64 k = i; k < end; k++) b[k + (u64)delta] = b[k];
 }
 
+/* After a change: the block to the other half of the area, with its size and a new version. */
+static void moved(void) {
+    u8 *p = w2m_parameters();
+    u16 *from = block(), *to = (u16 *)W2M_ENVIRONMENT_VA;
+    if (from == to) to += W2M_ENVIRONMENT_SIZE / 4;
+    u64 n = used();
+    for (u64 k = 0; k < n; k++) to[k] = from[k];
+    if (n == 1) to[1] = 0;
+    *(u16 **)(p + 0x80) = to;
+    *(u64 *)(p + 0x3F0) = 2 * (n == 1 ? 2 : n);                 /* an empty block: two NULs */
+    *(u64 *)(p + 0x3F8) += 1;
+}
+
 u64 k32_GetEnvironmentStringsW(void) {
-    const u16 *host = (const u16 *)W2M_ENVIRONMENT_VA;
+    const u16 *host = block();
     u64 units = 0;
     if (!host[0]) units = 2;                         /* empty: two NULs (row empty.heap) */
     else {
@@ -171,13 +187,14 @@ u64 k32_SetEnvironmentVariableW(u64 name, u64 value) {
         if (e) {
             shift(e + old, -(long)old);
             if (!block()[0]) block()[1] = 0;
+            moved();
         }
         return w2m_logged(W2M_API_SetEnvironmentVariableW, name, 1);
     }
     const u16 *v = (const u16 *)value;
     u64 vlen = length(v), units = len + 1 + vlen + 1;
-    if (used() - old + units > W2M_ENVIRONMENT_SIZE / 2)
-        w2m_unimplemented(W2M_API_SetEnvironmentVariableW, units);   /* the block's area is full */
+    if (used() - old + units + 1 > W2M_ENVIRONMENT_SIZE / 4)
+        w2m_unimplemented(W2M_API_SetEnvironmentVariableW, units);   /* the block's half of the area is full */
     u16 spelled[256];
     if (len >= 256) w2m_unimplemented(W2M_API_SetEnvironmentVariableW, len);
     for (u64 k = 0; k < len; k++) spelled[k] = keep[k];
@@ -188,6 +205,7 @@ u64 k32_SetEnvironmentVariableW(u64 name, u64 value) {
     for (u64 k = 0; k < len; k++) at[k] = spelled[k];
     at[len] = '=';
     for (u64 k = 0; k <= vlen; k++) at[len + 1 + k] = v[k];
+    moved();
     return w2m_logged(W2M_API_SetEnvironmentVariableW, name, 1);
 }
 

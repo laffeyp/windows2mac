@@ -35,6 +35,7 @@ class StandIn:
         self.exit_code = 0
         self.unimplemented = None
         self.seen: dict[str, Any] = {}
+        self.process_group = 1000
 
     def read_text(self, va: int, chars: int) -> str:
         return bytes(self.mem[va:va + 2 * chars]).decode("utf-16-le")
@@ -130,7 +131,7 @@ def test_a_child_gets_the_parents_environment_and_directory_as_they_are_now() ->
     p = StandIn(4096, environment=("PATH=C:\\Windows", "W2M_PROBE_VAR=from_parent"))
     m.add(p)
     p.start_child([], directory="C:\\w2m\\app\\w2m_probe_dir")
-    assert children["rest"] == (("PATH=C:\\Windows", "W2M_PROBE_VAR=from_parent"), "C:\\w2m\\app\\w2m_probe_dir")
+    assert children["rest"][:2] == (("PATH=C:\\Windows", "W2M_PROBE_VAR=from_parent"), "C:\\w2m\\app\\w2m_probe_dir")
     assert all(k != KIND_DIRECTORY for _, k, _ in children["inherited"])
 
 

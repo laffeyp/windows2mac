@@ -33,29 +33,20 @@ typedef unsigned short u16;
 #define ENOENT 2
 #define ENOTEMPTY 66                                 /* macOS */
 
-static u16 cwd[MAX_CHARS];                           /* zero until set: the program's directory */
-static const u16 START[] = {'C', ':', '\\', 'w', '2', 'm', '\\', 'a', 'p', 'p', 0};
+static u16 cwd[MAX_CHARS];                           /* the working directory without its final '\\' */
 static u16 scratch[MAX_CHARS];
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
-/* The working directory: one SetCurrentDirectoryW set, or a child's parent's (CreateProcessW with no directory:
- * "the same current drive and directory as the calling process"; vm_backend.py writes it to the inherit page beside
- * the child's mark; Sprint 058), or the program's. */
+/* The working directory: ProcessParameters.CurrentDirectory.DosPath (Sprint 059), which holds it with a final '\\'
+ * (rows *.current_directory); the host wrote the start's (a child's: its parent's, Sprint 058). */
 static const u16 *working(void) {
-    static int inherited;
-    if (!cwd[0] && !inherited) {
-        inherited = 1;
-        const u16 *parent = (const u16 *)W2M_INHERIT_DIRECTORY_VA;
-        if (((const u64 *)W2M_INHERIT_VA)[511] && parent[0]) {
-            u64 k = 0;
-            for (; parent[k]; k++) {
-                if (k + 1 >= MAX_CHARS) w2m_unimplemented(W2M_API_GetCurrentDirectoryW, k);
-                cwd[k] = parent[k];
-            }
-            cwd[k] = 0;
-        }
-    }
-    return cwd[0] ? cwd : START;
+    const u8 *p = w2m_parameters();
+    const u16 *dos = *(const u16 *const *)(p + 0x40);
+    u64 n = *(const u16 *)(p + 0x38) / 2;
+    if (n > 3 && dos[n - 1] == '\\') n--;
+    for (u64 k = 0; k < n; k++) cwd[k] = dos[k];
+    cwd[n] = 0;
+    return cwd;
 }
 static int sep(u16 c) { return c == '\\' || c == '/'; }
 static u16 upper(u16 c) { return c >= 'a' && c <= 'z' ? (u16)(c - 32) : c; }
@@ -189,7 +180,18 @@ u64 k32_SetCurrentDirectoryW(u64 name) {
         return w2m_logged(W2M_API_SetCurrentDirectoryW, kind, 0);
     }
     if (n > 3 && scratch[n - 1] == '\\') scratch[--n] = 0;
-    for (u64 k = 0; k <= n; k++) cwd[k] = scratch[k];
+    /* DosPath gets the path and a final '\\' in the other of its two buffers (row after.current_directory: Windows
+     * moves it to a new buffer); MaximumLength is 0x208 bytes */
+    u8 *p = w2m_parameters();
+    u64 units = n + (scratch[n - 1] != '\\');
+    if (2 * units + 2 > 0x208) w2m_unimplemented(W2M_API_SetCurrentDirectoryW, n);   /* longer than MAX_PATH */
+    u16 *now = *(u16 **)(p + 0x40), *next = (u16 *)W2M_CURRENT_DIRECTORY_VA;
+    if (now == next) next += 0x208 / 2;
+    for (u64 k = 0; k < n; k++) next[k] = scratch[k];
+    next[units - 1] = '\\';
+    next[units] = 0;
+    *(u16 *)(p + 0x38) = (u16)(2 * units);
+    *(u16 **)(p + 0x40) = next;
     return w2m_logged(W2M_API_SetCurrentDirectoryW, n, 1);
 }
 

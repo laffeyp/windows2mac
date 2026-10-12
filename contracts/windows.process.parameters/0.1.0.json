@@ -1,0 +1,269 @@
+{
+ "contract_id": "windows.process.parameters",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "PEB.ProcessParameters (RTL_USER_PROCESS_PARAMETERS) for a GUI program started by the runner and started as Steam starts the game: Flags 0x4001; MaximumLength equal to Length; no console handle; the standard handles GetStdHandle answers, kept current by SetStdHandle; the current directory with a final backslash in a 0x208-byte buffer outside the block, moved by SetCurrentDirectoryW; no DLL path; the image path, command line (GetCommandLineW's own buffer), title and desktop inside the block, the last two GetStartupInfoW's own buffers; the environment outside it, its size the bytes in use, moved by SetEnvironmentVariableW; the window fields GetStartupInfoW's; the block in the process heap.",
+ "applicability": "windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/process_parameters/process_parameters.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "parent.present",
+    "non_null": true
+   },
+   {
+    "s": "parent.header",
+    "flags": "0x4001",
+    "debug_flags": "0x0",
+    "console_flags": "0x0",
+    "loader_threads": 0,
+    "group_is_self": false,
+    "group_zero": false,
+    "length_is_maximum": true
+   },
+   {
+    "s": "parent.console_handle",
+    "null": true
+   },
+   {
+    "s": "parent.standard_handles",
+    "input_is_std": true,
+    "output_is_std": true,
+    "error_is_std": true
+   },
+   {
+    "s": "parent.current_directory",
+    "max_length": "0x208",
+    "length_is_dir_and_slash": true,
+    "text_is_dir": true,
+    "ends_in_slash": true,
+    "nul_after": true,
+    "handle_non_null": true,
+    "buffer_inside": false
+   },
+   {
+    "s": "parent.dll_path",
+    "length": 0,
+    "max_length": 0,
+    "buffer_null": true
+   },
+   {
+    "s": "parent.image_path",
+    "length_is_module": true,
+    "max_minus_length": 2,
+    "text_is_module": true,
+    "nul_after": true,
+    "buffer_inside": true
+   },
+   {
+    "s": "parent.command_line",
+    "buffer_is_get_command_line": true,
+    "length_is_line": true,
+    "max_minus_length": 2,
+    "buffer_inside": true
+   },
+   {
+    "s": "parent.environment",
+    "contents_equal_copy": true,
+    "copy_is_block": false,
+    "inside": false,
+    "size_is_used": true,
+    "size_at_least_used": true
+   },
+   {
+    "s": "parent.window",
+    "flags_are_startup": true,
+    "show_is_startup": true
+   },
+   {
+    "s": "parent.strings",
+    "title_is_startup": true,
+    "desktop": "winsta0\\default",
+    "desktop_is_startup": true,
+    "shell_length": 0,
+    "runtime_data_length": 0
+   },
+   {
+    "s": "parent.drive_directories",
+    "set": 0
+   },
+   {
+    "s": "parent.block",
+    "own_allocation": false,
+    "protect": "0x4",
+    "type": "0x20000",
+    "in_process_heap": true
+   },
+   {
+    "s": "parent.child_started",
+    "ret": true
+   },
+   {
+    "s": "child.present",
+    "non_null": true
+   },
+   {
+    "s": "child.header",
+    "flags": "0x4001",
+    "debug_flags": "0x0",
+    "console_flags": "0x0",
+    "loader_threads": 0,
+    "group_is_self": false,
+    "group_zero": false,
+    "length_is_maximum": true
+   },
+   {
+    "s": "child.console_handle",
+    "null": true
+   },
+   {
+    "s": "child.standard_handles",
+    "input_is_std": true,
+    "input_null": true,
+    "output_is_std": true,
+    "output_null": true,
+    "error_is_std": true,
+    "error_null": true
+   },
+   {
+    "s": "child.current_directory",
+    "max_length": "0x208",
+    "length_is_dir_and_slash": true,
+    "text_is_dir": true,
+    "ends_in_slash": true,
+    "nul_after": true,
+    "handle_non_null": true,
+    "buffer_inside": false
+   },
+   {
+    "s": "child.dll_path",
+    "length": 0,
+    "max_length": 0,
+    "buffer_null": true
+   },
+   {
+    "s": "child.image_path",
+    "length_is_module": true,
+    "max_minus_length": 2,
+    "text_is_module": true,
+    "nul_after": true,
+    "buffer_inside": true
+   },
+   {
+    "s": "child.command_line",
+    "buffer_is_get_command_line": true,
+    "length_is_line": true,
+    "max_minus_length": 2,
+    "buffer_inside": true
+   },
+   {
+    "s": "child.environment",
+    "contents_equal_copy": true,
+    "copy_is_block": false,
+    "inside": false,
+    "size_is_used": true,
+    "size_at_least_used": true,
+    "version": 3
+   },
+   {
+    "s": "child.window",
+    "x": 0,
+    "y": 0,
+    "count_x": 0,
+    "count_y": 0,
+    "chars_x": 0,
+    "chars_y": 0,
+    "fill": 0,
+    "window_flags": "0x0",
+    "show_window": 0,
+    "flags_are_startup": true,
+    "show_is_startup": true
+   },
+   {
+    "s": "child.strings",
+    "title_is_module": true,
+    "title_is_startup": true,
+    "desktop": "winsta0\\default",
+    "desktop_is_startup": true,
+    "shell_length": 0,
+    "runtime_data_length": 0
+   },
+   {
+    "s": "child.drive_directories",
+    "set": 0
+   },
+   {
+    "s": "child.block",
+    "own_allocation": false,
+    "protect": "0x4",
+    "type": "0x20000",
+    "in_process_heap": true
+   },
+   {
+    "s": "parent.after.current_directory",
+    "text_is_dir": true,
+    "same_buffer": false,
+    "length_is_dir_and_slash": true
+   },
+   {
+    "s": "parent.after.set_std_handle",
+    "block_holds_new": true
+   },
+   {
+    "s": "parent.after.set_environment",
+    "same_pointer": false,
+    "holds_new": true,
+    "size_same": false,
+    "size_is_used": true
+   }
+  ],
+  "derivation": "scripts/family_run.py parameters_rows: ProcessParameters' rows as relations where a run decides the value: the header keeps MaximumLength == Length (both grow with the strings inside the block, and Server 2025's are 8 bytes longer than 2022's); the block keeps no region size (the heap's: 0x9000, 0xf000, 0x10000 seen). The parent is the runner's start, which w2m does not copy: its window values and title are the runner's STARTUPINFO's and its environment's version the runner's (3 or 4), so it keeps only that they equal GetStartupInfoW's, and its standard handles only that they are GetStdHandle's (w2m's console start gives no input or error handle, Sprint 046)."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38194049597: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:37cd0420619adb06f4e2500a8003be37f0c97f197e3e04ed86eb8802001949ed; run 38194051809: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:7a54f8eddbaa4ce5b16a615833b0d70075656cf4396ae4bd15126758d16637a4",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "process_parameters-1791770394-0-1",
+    "process_parameters-1791770394-0-2",
+    "process_parameters-1791770394-1-1",
+    "process_parameters-1791770394-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-rtl-user-process-parameters",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winternl/ns-winternl-rtl_user_process_parameters (page updated 2021-07-27; retrieved 2026-10-10)",
+   "quote": "ImagePathName: The path of the image file for the process. CommandLine: The command-line string passed to the process."
+  }
+ ],
+ "open_questions": [
+  "Offsets past CommandLine are phnt's (Process Hacker's reverse-engineered ntrtl.h); Microsoft documents the structure as reserved fields around ImagePathName and CommandLine.",
+  "The rows hold a GUI program's block; a console program's ConsoleHandle (a handle to its console) is not in them, and w2m leaves it NULL: no service w2m serves reads it.",
+  "A child given standard handles (STARTF_USESTDHANDLES) has them in its block; its WindowFlags are not in the rows and stay 0."
+ ],
+ "sections": {
+  "probe": "probes/process_parameters (Sprint 044)",
+  "implementation": "tools/guest_runtime/console.c",
+  "rows": "scripts/family_run.py process_parameters",
+  "excluded": "none"
+ }
+}

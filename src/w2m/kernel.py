@@ -29,7 +29,7 @@ Requests (a0 the sub-operation; the rest by sub-operation):
                id. inherited: count entries of (handle, kind, object id), then the three standard handles as
                (which, KIND_STANDARD, handle), the error mode (0, KIND_ERROR_MODE, mode) and the current directory
                (characters, KIND_DIRECTORY, address); each object gains a handle, which the child holds. The child's
-               environment is the parent's block as it is now (Sprint 058)
+               environment is the parent's block as it is now (Sprint 058), its process group the parent's (059)
   PROCESS_STATE (id) -> STILL_ACTIVE (259) while it runs, its exit code after; ~0 for no such process
   REF          (id) -> 0: one handle more (OpenProcess, inheritance)
 """
@@ -89,7 +89,7 @@ class Machine:
     """The VMs of one run and the objects they share. `spawn(command_line, inherited)` builds a child process's VM
     (the driver supplies it: which files, which environment); `run_args` are VM.steps' arguments for every VM."""
 
-    def __init__(self, spawn: Callable[[str, int, int, list[tuple[int, int, int]], tuple[str, ...], str], Any],
+    def __init__(self, spawn: Callable[[str, int, int, list[tuple[int, int, int]], tuple[str, ...], str, int], Any],
                  **run_args: Any) -> None:
         self.spawn = spawn
         self.run_args = run_args
@@ -203,7 +203,7 @@ class Machine:
                 raise Unimplemented(f"a process start that names {len(directories)} current directories")
             inherited = [(h, k, o) for h, k, o in listed if k != KIND_DIRECTORY]
             pid, tid = self.allocate_ids()
-            child = self.spawn(line, pid, tid, inherited, vm.environment_now(), directories[0])
+            child = self.spawn(line, pid, tid, inherited, vm.environment_now(), directories[0], vm.process_group)
             p = self.add(child)
             for _, kind, oid in inherited:
                 if kind < KIND_STANDARD:
@@ -334,7 +334,7 @@ class Machine:
 
 
 def spawner(files: Any, dlls: Callable[[str], bytes | None] | None = None, runtime_sources: dict[str, str] | None = None
-            ) -> Callable[[str, int, int, list[tuple[int, int, int]], tuple[str, ...], str], Any]:
+            ) -> Callable[[str, int, int, list[tuple[int, int, int]], tuple[str, ...], str, int], Any]:
     """The Machine's spawn for a run: a child's VM from its command line, its exe found by the first token (quoted or
     not) on the same drive and mount as the parent's files, its own file descriptors, the parent's environment and
     current directory as they are at the start (Sprint 058), the parent's guest runtime (a family's planted one too),
@@ -347,7 +347,7 @@ def spawner(files: Any, dlls: Callable[[str], bytes | None] | None = None, runti
     from w2m.vm_backend import VM
 
     def spawn(line: str, pid: int, tid: int, inherited: list[tuple[int, int, int]], environment: tuple[str, ...],
-              directory: str) -> Any:
+              directory: str, group: int) -> Any:
         first = line[1:line.index('"', 1)] if line.startswith('"') else line.split(" ", 1)[0]
         host = files.host_file(first)
         if host is None:
@@ -359,7 +359,7 @@ def spawner(files: Any, dlls: Callable[[str], bytes | None] | None = None, runti
         name = Path(host).name
         vm = VM(load(data, resolve, name), tid=tid, files=child_files, image_name=name,
                 gui=parse_pe(data).subsystem == 2, command_line=line, environment=environment, process_id=pid,
-                inherited=inherited, runtime_sources=runtime_sources, directory=directory)
+                inherited=inherited, runtime_sources=runtime_sources, directory=directory, process_group=group)
         return vm
 
     return spawn
