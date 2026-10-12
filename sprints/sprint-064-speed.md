@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 064
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -70,3 +70,37 @@ Of the exits, 1,088 are host requests and 61,498 are block compiles; the rest ar
 ## done criteria
 
 The frontier past seq 3426, conforming; its speed measured before and after each change.
+
+## observed
+
+- **The census** (`vm.exits`, `vm.exit_sites`, printed by the frontier) found that of 8,747,587 exits in a
+  billion-instruction run, 8,474,510 were dispatch misses. The run then executed 4.0 million instructions a second.
+- **The dispatch table.** At 4,096 entries indexed by an address's low 12 bits, the game's ~62,000 blocks evicted
+  each other. It now has 2^20 entries (16 MB, sparse, after the reconstruction table), and the index folds the
+  address's higher bits in, since the modules sit at 1 MB-aligned bases. Misses fell to 163,508, the first visits and
+  the resumes after thread switches, and the billion instructions to 20.8 s.
+- **Native lowerings, each judged on the Xeon's cases with a plant caught:**
+  - CVTDQ2PS and VCVTDQ2PS (SCVTF; 149 and 605 cases; UCVTF plant);
+  - CVTPS2PD and VCVTPS2PD.128 (FCVTL; 163 and 687; FCVTL2 plant);
+  - CVTPD2DQ and VCVTPD2DQ (FRINTX and FCVTZS per lane, both range bounds; 345 and 251). The Xeon's case 227
+    showed the lower bound matters for PE; the CVT_INDEFINITE switch plant was caught;
+  - CVTPD2PS (FCVTN; 313; FCVTN2 plant);
+  - 32-bit IDIV's fast path (288; a range-check plant).
+  All 436 classes are accepted after each change.
+- **The speed:** from 4.0 to 442.28 million instructions a second over a 20-billion-instruction run, which takes
+  45.2 s. The game's assembly reload, which unity.log times, falls from 113.912 s to 7.750 s (Windows: 0.154).
+- **Found on the way, all fixed with tests that failed first:**
+  - **The trace lost calls.** A retried wait never gave back its trace slot, so 744,597 calls went unrecorded;
+    the slot now comes back. A comparison over a trace that left calls out is now `inconclusive`.
+  - **The trace's thunk table** was widened to 16,384 entries.
+  - **The comparator's failure rule** took any 4-byte 0 for failure and judged a wait's stale last error; it now
+    takes only a BOOL's FALSE, a NULL or a bad handle.
+  - **Thread pairing.** Pairing threads by agreement mispaired near-identical workers once the schedule changed.
+    The capture now records SetThreadDescription's name (reference run 38216081440: Job.Worker 0–2, Background
+    Job.Worker 0–15, Loading.AsyncRead and others), w2m's trace keeps it, and threads pair by name.
+- **Not met: the frontier does not pass seq 3426.** A 200-billion-step run stops after 23,371,280,986 instructions at
+  `LiftError: no operand template for FLD at 0x1180ccfd2f` (mono, `dd 44 24 f8`: FLD m64), its comparison
+  conforming over 2,508 calls. The game has left the compute phase that held 063 and needs x87, plan row 065. The
+  criterion moves there by the partial-pass rule.
+- **The snapshot's question.** At 442 million instructions a second a rerun costs less still, so Decision
+  2026-10-11's decline stands.
