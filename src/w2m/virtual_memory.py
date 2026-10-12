@@ -133,8 +133,10 @@ class VirtualMemory:
                 end = _up(address + size, PAGE)
                 if not self._in_arena(base, end - base):
                     raise Unimplemented(f"VirtualAlloc reserve at 0x{address:x}, outside w2m's arena")
-                if any(r.base < end and base < r.base + r.size for r in self.reservations.values()):
-                    return 0, ERROR_INVALID_ADDRESS
+                taken = [(r.base, r.size) for r in self.reservations.values()]
+                taken += [(b, pe.size_of_image) for b, pe in self.images]      # a DLL loaded at run time (Sprint 065:
+                if any(b < end and base < b + n for b, n in taken):            # mono reserved its code block over
+                    return 0, ERROR_INVALID_ADDRESS                            # steam_api64.dll and wrote JIT code there)
             else:
                 end = 0
                 base = self._free_range(_up(size, PAGE))
