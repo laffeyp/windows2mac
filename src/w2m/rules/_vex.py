@@ -54,7 +54,7 @@ FMA = {f"V{k}{o}{t}" for k in ("FMADD", "FMSUB", "FNMADD", "FNMSUB") for o in ("
 L0_ONLY = {"VCVTDQ2PD", "VCVTTPD2DQ", "VCVTPD2DQ"}                 # their 256-bit forms change operand widths
 ALIGNED = {"VMOVAPD", "VMOVDQA", "VMOVAPS"}                                     # the only VEX forms that fault on alignment
 NO_WRITE = {"COMISD", "UCOMISD", "COMISS", "UCOMISS"}                                     # flags only: the destination is a source
-SLOW = {"CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
+SLOW = {"CVTTPD2DQ", "CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
         "ANDNPD", "CVTTPS2DQ", "CMPPS_VEX", "ROUNDSD", "PBLENDD", "PMOVSXDQ", "PERMILPS_VAR",
         "PADDB", "PMULUDQ", "PUNPCKHQDQ", "PCMPEQQ", "CVTSS2SI", "CVTSI2SS", "CVTTSD2SI", "RCPPS", "RSQRTPS"}              # in the model (x86fp) for now
 NATIVE_256 = {"PXOR", "XORPS", "XORPD", "PAND", "POR", "ORPD", "ANDPD", "ANDPS", "PCMPEQB", "PCMPEQW", "PSUBQ",
