@@ -280,13 +280,13 @@
 
 ## Sprint tail
 
-### Sprint 062 (2026-10-11, closed: CI pending on the closing commit)
+### Sprint 062 (2026-10-11, closed: CI run 38209558822 success on 61690d7d)
 - **Scope:** the frontier's reruns: a profile, the quadratic sort, the snapshot and translation cache decided on the measurement.
 - **Rubber Duck Pass:**
   - *Sequence narration:* a profiled scratch run (154 s, 98 in `list.sort`); the fix; the frontier's SERVICE_UNIMPLEMENTED at 57,445,097 instructions, TRACE_INGESTED (2,711 lines), COMPARISON_COMPLETED `conforms`, SESSION_COMPLETED at 33.1 s; a second profile.
   - *Observation 1 (payload anomaly, of the record):* two runs' trace digests differ although their calls agree; each guest trace names its own execution id, and registers past a function's parameters hold leftovers. Disposition: recorded (the comparator, run between the two streams, finds 0 divergences over 2,685 calls).
   - *Observation 2 (vocabulary gap, checked):* none.
-- **Closed:** on green CI of the closing commit.
+- **Closed:** CI run 38209558822 (success on 61690d7d).
 
 ### Sprint 061 (2026-10-11, closed: CI run 38208477502 success on aee379d6)
 - **Scope:** the 55 divergences of Sprint 060 closed by matching the reference (Decision 2026-10-11, user).

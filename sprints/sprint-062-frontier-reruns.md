@@ -88,3 +88,4 @@ declined on the measurement.
 - **Every family is accepted after the change, every plant caught as named,** and the file run conforms; the first closing commit (CI run 38209285777) preceded the sweep and its index test failed, so this commit closes.
 - **A guard test** checks that the map stays sorted after a probe's run. It would pass with the old sort too: it
   guards the invariant the change relies on.
+- **Closed on CI run 38209558822** (success on 61690d7d).
