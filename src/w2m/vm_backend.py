@@ -89,8 +89,7 @@ SAVE_VECTORS = 0x200
 VECTORS = 0x01000               # vector table, 16 slots of 0x80
 DISPATCHER = 0x01800
 EXCEPTION_ENTRY = 0x01C00           # EL1 synchronous-exception path into the guest runtime
-DISPATCH_TABLE = 0x02000             # 4096 entries of (x86 address, code VA)
-DISPATCH_ENTRIES = 4096
+EXCEPTION_ENTRY_END = 0x02000
 TRANSLATION_TABLES = 0x12000            # stage-1 translation tables
 TRANSLATION_TABLES_SIZE = 0x40000
 # Sprint 047: UnityPlayer filled the 4 MB code cache's 65,536-entry reconstruction table at 1,457,522 instructions.
@@ -104,7 +103,13 @@ RUNTIME_STACK = RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE   # the runtime's AArch64 sta
 RUNTIME_STACK_SIZE = 0x10000
 RECON_TABLE = RUNTIME_STACK + RUNTIME_STACK_SIZE     # reconstruction table: (host code VA, x86 address) pairs, sorted
 RECON_ENTRIES = 0x40_0000             # 4 Mi entries, 64 MB
-MONITOR_SIZE = (RECON_TABLE + 16 * RECON_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
+# The dispatch table: (x86 address, code VA) pairs indexed by the address's low DISPATCH_BITS bits. Sprint 064: with
+# 4,096 entries the game's 62,000 blocks evicted each other, and 8,474,510 of a billion-instruction frontier run's
+# 8,747,587 exits were misses back to the host; 2^20 entries (16 MB, sparse) hold them.
+DISPATCH_BITS = 20
+DISPATCH_ENTRIES = 1 << DISPATCH_BITS
+DISPATCH_TABLE = RECON_TABLE + 16 * RECON_ENTRIES
+MONITOR_SIZE = (DISPATCH_TABLE + 16 * DISPATCH_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -129,8 +134,8 @@ INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
-TRACE_SIZE = 0x400000              # 4 MB: per-thread counters (768 KB), then about 28,000 records
-TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xC1300, 120, 4096, 0x80
+TRACE_SIZE = 0x800000              # 8 MB: per-thread counters (3 MB), then about 43,000 records
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0x304300, 120, 16384, 0x80
 TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
 TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
 # call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
@@ -2090,7 +2095,7 @@ class VM:
         d = Assembler(MONITOR_VA + DISPATCHER)
         top, miss = d.label(), d.label()
         d.bind(top)
-        d.emit(a64.ldr(8, 16, 28, 16), a64.ubfx(18, 17, 0, 12), a64.add(16, 16, 18, a64.LSL, 4),
+        d.emit(a64.ldr(8, 16, 28, 16), a64.ubfx(18, 17, 0, DISPATCH_BITS), a64.add(16, 16, 18, a64.LSL, 4),
                a64.ldp(18, 16, 16), a64.cmp(18, 17))
         d.branch(lambda off: a64.bcond("ne", off), miss)
         d.emit(a64.br(16))
@@ -2185,7 +2190,7 @@ class VM:
         e.emit(a64.ldr(8, 17, 16, STATE_REDIRECT), a64.str_(8, a64.ZR, 16, STATE_REDIRECT))
         e.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
         words = e.finish()
-        assert 4 * len(words) <= DISPATCH_TABLE - EXCEPTION_ENTRY
+        assert 4 * len(words) <= EXCEPTION_ENTRY_END - EXCEPTION_ENTRY
         self._write_words(EXCEPTION_ENTRY, words)
 
     def _write_words(self, off: int, words: list[int]) -> None:

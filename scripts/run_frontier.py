@@ -159,7 +159,7 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
-        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12))
+        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks))
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -179,11 +179,14 @@ def main(argv: list[str]) -> int:
                                                SIGNATURES, call_compare.excluded(
                                                    json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name))
         state.update(divergences=found, compared=compared)
+        # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
+        verdict = "discrepancy" if found else ("inconclusive" if state.get("dropped") else "conforms")
         yield events.validate(events.COMPARISON_COMPLETED(
             comparison_id=f"cmp-{xid}", contract_id=CONTRACT[0], contract_version=CONTRACT[1],
             relation="state_relation", reference_ref=record_game_run.execution_id(REFERENCE),
-            target_execution_id=xid, verdict="discrepancy" if found else "conforms",
-            **({"first_divergence": found[0].text()[:500]} if found else {})))
+            target_execution_id=xid, verdict=verdict,
+            **({"first_divergence": found[0].text()[:500]} if found else
+               {"first_divergence": f"the trace left out {state['dropped']} calls"} if state.get("dropped") else {})))
 
     async def closer(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         found = state.get("divergences", [])
@@ -230,7 +233,8 @@ def main(argv: list[str]) -> int:
     print(f"unity.log lines {state.get('log_lines')}")
     elapsed = time.monotonic() - t0
     print(f"exits by hvc {dict(sorted(state.get('exits', {}).items(), key=lambda kv: -kv[1]))}; "
-          f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s")
+          f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s; "
+          f"{state.get('thunks')} thunks")
     for (imm, at), n in state.get("exit_sites", []):
         print(f"  hvc {imm} at 0x{at:x}: {n}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")

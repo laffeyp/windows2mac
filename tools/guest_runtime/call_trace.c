@@ -20,12 +20,12 @@
 #include "runtime.h"
 
 #define W2M_TRACE_CALLS 32          /* call_trace.h TRACE_CALLS */
-#define W2M_TRACE_THUNKS 4096
+#define W2M_TRACE_THUNKS 16384      /* Sprint 064: 4096 left a frontier run's later thunks untraced */
 #define W2M_TRACE_LABELS 3          /* the two images, then GetProcAddress */
 #define W2M_TRACE_DYNAMIC 2
 #define W2M_TRACE_PENDING 8
 #define W2M_TRACE_THREADS 64
-#define W2M_TRACE_RECORDS_OFF 0xC1300
+#define W2M_TRACE_RECORDS_OFF 0x304300
 
 struct w2m_trace_record {
     u64 ready, seq, tid, image, thunk;
