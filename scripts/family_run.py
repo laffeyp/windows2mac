@@ -883,8 +883,8 @@ FAMILIES: dict[str, Family] = {
             "answers as the rows do until a desktop reference exists.",
             "Processor count, memory amounts and the tick count are machine values; the rows hold relations and w2m "
             "answers one processor, 16 GiB, and the guest counter's milliseconds."),
-        plants={"two_processors_one_bit": Plant("    *(u32 *)(p + 32) = 1;", "    *(u32 *)(p + 32) = 2;",
-                                                ("native_system_info", "system_info")),
+        plants={"count_off_mask": Plant("    *(u32 *)(p + 32) = W2M_PROCESSORS;", "    *(u32 *)(p + 32) = W2M_PROCESSORS + 1;",
+                                        ("native_system_info", "system_info")),   # Sprint 061: was two_processors_one_bit
                 "version_build_off": Plant("windows_10 ? 26100 : 9200;", "windows_10 ? 26100 : 9600;", ("version_ex",))}),
     "virtual_memory": Family(
         name="virtual_memory",
