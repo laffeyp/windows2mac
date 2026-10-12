@@ -26,10 +26,28 @@ static void NTAPI on_tls(PVOID instance, DWORD reason, PVOID reserved) {
 #endif
 __declspec(allocate(".CRT$XLB")) PIMAGE_TLS_CALLBACK threads_dll_callback = on_tls;
 
+/* FLS inside a thread's attach (Sprint 061): the game's C runtime reads FLS in DLL_THREAD_ATTACH, and Windows
+ * answered NULL with error 87 there (game run 38203364352 seq 1254) where a thread's own code later reads error 0 */
+static DWORD fls_watch;
+static volatile ULONG_PTR fls_at_attach = 0xA5A5;
+static volatile DWORD fls_err_at_attach = 0xA5A5;
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
     (void)instance; (void)reserved;
     log_event(2, reason);
+    if (reason == DLL_THREAD_ATTACH && fls_watch) {
+        SetLastError(0xDEAD);
+        fls_at_attach = (ULONG_PTR)FlsGetValue(fls_watch);
+        fls_err_at_attach = GetLastError();
+        fls_watch = 0;                                 /* the first thread's attach only */
+    }
     return TRUE;
+}
+
+__declspec(dllexport) void threads_dll_watch_fls(DWORD index) { fls_watch = index; }
+__declspec(dllexport) void threads_dll_fls_seen(ULONG_PTR *value, DWORD *err) {
+    *value = fls_at_attach;
+    *err = fls_err_at_attach;
 }
 
 /* kind (1 TLS callback, 2 DllMain), reason and thread id of event i; the number of events */

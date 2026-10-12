@@ -17,6 +17,8 @@
 __declspec(dllimport) LONG threads_dll_count(void);
 __declspec(dllimport) int threads_dll_event(LONG i, DWORD *reason, DWORD *tid);
 __declspec(dllimport) int *threads_dll_counter(void);
+__declspec(dllimport) void threads_dll_watch_fls(DWORD index);
+__declspec(dllimport) void threads_dll_fls_seen(ULONG_PTR *value, DWORD *err);
 
 static char out[16384];
 static unsigned n;
@@ -118,6 +120,7 @@ void start(void) {
     TlsSetValue(tls_slot, (LPVOID)0x55);
     fls_slot = FlsAlloc(NULL);
     FlsSetValue(fls_slot, (LPVOID)0x66);
+    threads_dll_watch_fls(fls_slot);
     *threads_dll_counter() = 1000;
 
     /* create, run to a wait, exit code while running, then its return */
@@ -131,6 +134,10 @@ void start(void) {
     WaitForSingleObject(event_started, INFINITE);
     row("worker.start"); field("tid_matches", w_tid == tid); field("last_error", w_last_error); field("tls", w_tls);
     field("static_tls", w_counter); field("fls", w_fls); field("fls_err", w_fls_err); end();
+    ULONG_PTR attach_fls;
+    DWORD attach_err;
+    threads_dll_fls_seen(&attach_fls, &attach_err);
+    row("worker.attach_fls"); field("fls", attach_fls); field("err", attach_err); end();
     DWORD code = 0xA5A5;
     SetLastError(SENTINEL);
     BOOL r = GetExitCodeThread(h, &code);
