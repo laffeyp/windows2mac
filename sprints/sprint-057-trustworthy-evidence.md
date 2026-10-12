@@ -100,3 +100,4 @@ The two observations above hold as tests; all 56 families accepted on derived ca
 - **Left to Sprint 058:** `vm_backend._RUNTIME_SYMBOLS` is one table for the whole host, rewritten by each VM built;
   a parent's code compiled after its child was built takes `w2m_cpuid`'s address from the child's image. The images
   are equal in every run the check above passes, so no run is wrong today.
+- **Closed on CI run 38188148154** (success on f7b474c7).

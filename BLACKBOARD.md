@@ -268,7 +268,7 @@
 
 ## Sprint tail
 
-### Sprint 057 (2026-10-11, closed: CI pending)
+### Sprint 057 (2026-10-11, closed: CI run 38188148154 success on f7b474c7)
 - **Scope:** each family's candidate derived from the runtime's objects, its probe's imports and the requests its files make; every process a run starts checked against the candidate's build.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the objects read; 56 item runs SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED per runner binary, CANDIDATE_ACCEPTED, SESSION_COMPLETED on the derived candidates; every family's plants run; five families' plant runs stopped on a lost anchor, re-anchored and run again.
