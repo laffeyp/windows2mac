@@ -155,3 +155,17 @@ def test_getprocaddress_while_the_trace_is_closed_answers_an_untraced_thunk() ->
         finally:
             vm.close()
             files.close_all()
+
+
+def test_workers_pair_by_agreement_and_a_fault_on_every_worker_survives() -> None:
+    """Job workers run one routine and start in the scheduler's order; the capture keeps different threads' early
+    calls than w2m does. Windows' -1 worker pairs with w2m's -1 worker; a priority wrong on every worker still shows."""
+    windows = [call(1, "GetACP", (), 1252, tid=100), call(2, "SetThreadPriority", ((1 << 64) - 2, (-1) & 0xFFFFFFFF), 1, tid=200),
+               call(3, "SetThreadPriority", ((1 << 64) - 2, (-2) & 0xFFFFFFFF), 1, tid=300)]
+    swapped = [call(1, "GetACP", (), 1252, tid=4), call(2, "SetThreadPriority", ((1 << 64) - 2, (-2) & 0xFFFFFFFF), 1, tid=8),
+               call(3, "SetThreadPriority", ((1 << 64) - 2, (-1) & 0xFFFFFFFF), 1, tid=12)]
+    assert call_compare.compare(windows, swapped, SIGNATURES)[0] == []
+    wrong = [call(1, "GetACP", (), 1252, tid=4), call(2, "SetThreadPriority", ((1 << 64) - 2, 0), 1, tid=8),
+             call(3, "SetThreadPriority", ((1 << 64) - 2, 0), 1, tid=12)]
+    assert [(d.function, d.field) for d in call_compare.compare(windows, wrong, SIGNATURES)[0]] == \
+        [("SetThreadPriority", "a1"), ("SetThreadPriority", "a1")]

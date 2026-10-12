@@ -344,16 +344,9 @@ def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-TIME_RUNS = {
-              "38053043702": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-0", "AMD EPYC 7763 64-Core Processor"),
-              "38053047590": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-1", "AMD EPYC 9V74 80-Core Processor"),
-              "38053049693": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-2", "AMD EPYC 9V74 80-Core Processor"),
-              "38053053337": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-3", "AMD EPYC 9V74 80-Core Processor"),
-              "38053109812": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636304-0", "AMD EPYC 7763 64-Core Processor"),
-              "38053112133": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636304-1", "AMD EPYC 9V45 96-Core Processor"),
-              "38053114329": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636304-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38053116643": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636304-3", "AMD EPYC 7763 64-Core Processor"),
-
+TIME_RUNS = {   # Sprint 061: the probe records the zone's names (row time_zone.names)
+              "38206225386": Run("windows-2025", "214581358977175f87eac5e82de8663bdcc29d83433e1b23493583324645703b", "time_and_error_mode-1791781331-0", "AMD EPYC 7763 64-Core Processor"),
+              "38206227300": Run("windows-2022", "111a16ac4849950896efb41851003c6ee840734fb8e82fce280a6df0348bba1e", "time_and_error_mode-1791781331-1", "AMD EPYC 7763 64-Core Processor"),
 }
 
 
@@ -376,6 +369,7 @@ def time_family(start: str, summary: str) -> Family:
         # February of a common year moves instead (recorded in Sprint 046's card)
         "february_29_always": Plant("    return days[m - 1] + (m == 2 && leap(y));",
                                     "    return days[m - 1] + (m == 2);", ("system_to_file.fixed", "file_to_system.fixed")),
+        "time_zone_unnamed": Plant("        ((u16 *)(p + 4))[i] = (u16)UTC_NAME[i];\n", "", ("time_zone.names",)),
         "time_zone_leaves_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_GetTimeZoneInformation",
                                         "    return w2m_logged(W2M_API_GetTimeZoneInformation", ("time_zone",)),
         "error_mode_not_inherited": Plant("    list[n][2] = w2m_error_mode();", "    list[n][2] = 0x8003;",
@@ -383,15 +377,15 @@ def time_family(start: str, summary: str) -> Family:
     return Family(
         name="time_and_error_mode" + ("_child" if child else ""),
         contract_id="windows.time.error_mode_child" if child else "windows.time.local_and_error_mode",
-        version="0.1.0" if child else "0.2.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
+        version="0.2.0" if child else "0.3.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
         runs=TIME_RUNS,
         documented=(
             documented("ms-seterrormode", "api/errhandlingapi/nf-errhandlingapi-seterrormode", "2024-02-22",
                        "Each process has an associated error mode ... A child process inherits the error mode of its "
                        "parent process."),),
         open_questions=(
-            "The runners keep UTC and w2m does too; a player's machine has its own zone. The zone's names are not in "
-            "the rows.",
+            "The runners keep UTC and w2m does too; a player's machine has its own zone (its names are UTC's: "
+            "\"Coordinated Universal Time\" twice, row time_zone.names, Sprint 061).",
             "Steam's error mode, which the game inherits, is not observed; w2m's GUI start uses 0, as the child of a "
             "parent that set 0."),
         derive=time_rows(start),
@@ -401,13 +395,16 @@ def time_family(start: str, summary: str) -> Family:
 
 
 def topology_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Processor topology (Sprint 047): `smt` is the runner's hardware (every runner's cores run two threads;
-    w2m's one processor has one core and no SMT) and `modules` and `size_other` in the RelationAll row are the OS's (Server 2025
-    lists a processor module, 2022 does not; relationship 7 is excluded below), so both fields are dropped."""
+    """Processor topology (Sprint 047): `modules` and `size_other` in the RelationAll row are the OS's (Server 2025
+    lists a processor module, 2022 does not; relationship 7 is excluded below), so both fields are dropped. Sprint
+    061: w2m reports the runners' machine (four processors on two SMT cores, row machine), so `smt` is kept; the
+    caches' sizes are the CPU's (Xeon 8573C 48 KB, 2 MB, 260 MB; EPYC 7763 32 KB, 512 KB, 32 MB) and are dropped."""
     out = []
     for r in printed:
         r = dict(r)
-        r.pop("smt", None)
+        if r.get("s") == "machine":
+            for k in ("l1d_size", "l2_size", "l3_size"):
+                r.pop(k, None)
         if r.get("s") == "ex.query.65535":
             r.pop("modules", None)
             r.pop("size_other", None)                 # the module entry's size, 48, on 2025 only
@@ -886,8 +883,8 @@ FAMILIES: dict[str, Family] = {
             "answers as the rows do until a desktop reference exists.",
             "Processor count, memory amounts and the tick count are machine values; the rows hold relations and w2m "
             "answers one processor, 16 GiB, and the guest counter's milliseconds."),
-        plants={"two_processors_one_bit": Plant("    *(u32 *)(p + 32) = 1;", "    *(u32 *)(p + 32) = 2;",
-                                                ("native_system_info", "system_info")),
+        plants={"count_off_mask": Plant("    *(u32 *)(p + 32) = W2M_PROCESSORS;", "    *(u32 *)(p + 32) = W2M_PROCESSORS + 1;",
+                                        ("native_system_info", "system_info")),   # Sprint 061: was two_processors_one_bit
                 "version_build_off": Plant("windows_10 ? 26100 : 9200;", "windows_10 ? 26100 : 9600;", ("version_ex",))}),
     "virtual_memory": Family(
         name="virtual_memory",
@@ -1132,17 +1129,15 @@ FAMILIES: dict[str, Family] = {
     "processor_topology": Family(
         name="processor_topology",
         contract_id="windows.system.processor_topology",
-        version="0.1.0",
+        version="0.2.0",
         summary=("GetLogicalProcessorInformationEx over every relationship (sizes, errors, entry sizes 48, 56 and 80, masks "
                  "as the active processors), the classic call's 32-byte entries, GetActiveProcessorCount, "
                  "GetProcessAffinityMask, SetThreadAffinityMask, GetNumaHighestNodeNumber and GetCurrentProcess; the rows "
                  "agree on Intel Xeon 8573C and 6973P and AMD EPYC 7763 and differ only by OS, in relationship 7."),
         probe="processor_topology", guest_file="topology.c",
-        runs={
-              "38086761220": Run("windows-2025", "08fd4d30db6ca50556d9543ce274921c6a447adf1c3b4f0682477953b119dc75", "processor_topology-1791666778-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38086763271": Run("windows-2022", "08e3d2c9420d640bff4a643fe57eefbbde28da5e2933e5348c5a1b3a792c5f72", "processor_topology-1791666778-1", "AMD EPYC 7763 64-Core Processor"),
-              "38086765021": Run("windows-2025", "08fd4d30db6ca50556d9543ce274921c6a447adf1c3b4f0682477953b119dc75", "processor_topology-1791666778-2", "AMD EPYC 7763 64-Core Processor"),
-              "38086767249": Run("windows-2022", "08e3d2c9420d640bff4a643fe57eefbbde28da5e2933e5348c5a1b3a792c5f72", "processor_topology-1791666778-3", "Intel(R) Xeon(R) 6973P-C"),
+        runs={   # Sprint 061: the probe records the machine's numbers (row machine)
+              "38206551545": Run("windows-2025", "2f63103bfa140d4a20dd320a8992fb92ec5860a31a39c0edf2c17f489a96b5bc", "processor_topology-1791781612-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38206553365": Run("windows-2022", "858b8ebb308ec8906279d302a3ececb2d4634a15185decfa7a31d00bf10c892a", "processor_topology-1791781612-1", "AMD EPYC 7763 64-Core Processor"),
         },
         documented=(
             documented("ms-getlogicalprocessorinformationex", "api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformationex",
@@ -1151,8 +1146,8 @@ FAMILIES: dict[str, Family] = {
                        "returns ERROR_INSUFFICIENT_BUFFER, and ReturnedLength is set to the buffer length required to "
                        "contain all of the data."),),
         open_questions=(
-            "The machine is w2m's choice where the rows give relations: one processor, one core without SMT, the "
-            "i3-6100's caches of the guest CPUID profile. A game that sizes its thread pool from these sees one core.",
+            "The machine is the runners' (row machine: four processors on two SMT cores, two L1d and L2, one L3; "
+            "Decision 2026-10-11, user); the caches' sizes, which differ by CPU, are the guest CPUID profile's i3-6100.",
             "Relationship 7 (processor module) exists on Server 2025 and fails with error 31 on 2022; w2m answers as "
             "2025 does."),
         derive=topology_rows,
@@ -1165,7 +1160,9 @@ FAMILIES: dict[str, Family] = {
                 "    if (!buffer || *(u32 *)length < need) {\n        set_error(ERROR_INSUFFICIENT_BUFFER);\n        return w2m_logged(W2M_API_GetLogicalProcessorInformationEx",
                 ("ex.size_query.*", "ex.short_buffer.*", "ex.query.*")),
             "cache_entry_48": Plant("    return 56;\n}", "    return 48;\n}", ("ex.query.2", "ex.query.65535")),
-            "zero_mask_accepted": Plant("    if (!mask || (mask & ~1ull)) {", "    if (mask & ~1ull) {", ("thread_affinity.zero",))}),
+            "zero_mask_accepted": Plant("    if (!mask || (mask & ~ALL)) {", "    if (mask & ~ALL) {", ("thread_affinity.zero",)),
+            "one_core": Plant("static const u64 CORE_MASKS[] = {0x3, 0xC};", "static const u64 CORE_MASKS[] = {0xF};",
+                              ("machine",))}),       # the Ex rows hold the core count as relations (cores_le_n)
     "file_attributes": Family(
         name="file_attributes",
         contract_id="windows.file.attributes",
@@ -1872,7 +1869,7 @@ FAMILIES: dict[str, Family] = {
     "threads": Family(
         name="threads",
         contract_id="windows.thread.threads",
-        version="0.1.0",
+        version="0.2.0",
         summary=("Guest threads in the game's forms (specs/work_list.json), sequenced by events so every run prints "
                  "the same rows. CreateThread: a handle (a multiple of 4), a new id, the last error left; the new "
                  "thread runs each module's TLS callback then DllMain with DLL_THREAD_ATTACH, then its routine with "
@@ -1885,9 +1882,9 @@ FAMILIES: dict[str, Family] = {
                  "description calls answer 0x10000000; SleepEx answers 0; AppPolicyGetThreadInitializationType gives "
                  "policy 0."),
         probe="threads", guest_file="threads.c", dll_name="threads_dll.dll",
-        runs={
-              "38124576301": Run("windows-2025", "d71f0b8e07328ab48fb4e9023a07174c087dddd55d9654111c741513e202af8e", "threads-1791706952-0", "AMD EPYC 7763 64-Core Processor", dll="b8e8ccaaa31a472a4f845004cca183336414bd99cf8515f4efb4e4eb479cebce"),
-              "38124578332": Run("windows-2022", "ba552c63ffe0fceef05c663c390ce1dd3a3c6670bab915e9165b13c6951e7a21", "threads-1791706952-1", "AMD EPYC 7763 64-Core Processor", dll="f119bb2d52de7ed7f7763790c0b4304796d2fb26fa42789c552dbf4f546f3dac"),
+        runs={   # Sprint 061: FLS read from a worker and inside its DLL's thread attach (rows worker.start, worker.attach_fls)
+              "38207005406": Run("windows-2025", "b08ba1fef04feddc4e5dad53663c5873a0322e162316b54247fa0565c9f05c4b", "threads-1791782002-0", "AMD EPYC 7763 64-Core Processor", dll="37a2ee1b08bfcdc6962a9b6138bac5d758eb3fe2eb3ddbdda866f80e981fef47"),
+              "38207007264": Run("windows-2022", "17761236925f2c5da4380aa83b7e598b5e670e1248b75c2f04c763f20ee3260c", "threads-1791782002-1", "AMD EPYC 7763 64-Core Processor", dll="b679fd7f4c488095f5f03ae3516795b499b100556c15af1f4d8e0efdc4340063"),
         },
         documented=(),
         open_questions=(
@@ -1899,6 +1896,10 @@ FAMILIES: dict[str, Family] = {
             "demand behind a guard page; threads.c and VirtualQuery show the difference only to code that probes "
             "another thread's stack pages."),
         plants={
+            "fls_shared": Plant(
+                "    struct fls_block **slot = (struct fls_block **)((u8 *)w2m_teb() + TEB_FLS_DATA);",
+                "    static struct fls_block *one;\n    struct fls_block **slot = &one;",
+                ("worker.start", "worker.attach_fls", "main.after_worker"), file="thread_storage.c"),
             "start_last_error_kept": Plant('    code += b"\\x65\\xc7\\x04\\x25\\x68\\x00\\x00\\x00" + struct.pack("<I", START_LAST_ERROR)',
                                            '    code += b"\\x65\\xc7\\x04\\x25\\x68\\x00\\x00\\x00" + struct.pack("<I", 0)',
                                            ("worker.start",), host="w2m.scheduler"),

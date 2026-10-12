@@ -11,8 +11,8 @@
  *     2^63 or more: FALSE, ERROR_INVALID_PARAMETER; success leaves the last error
  *   - the error mode a process starts with is its parent's: 0x8003 under the runner's cmd, 0 for a child
  *     whose parent set 0 (the Steam-like start); SetErrorMode returns the old mode and sets the new
- * w2m keeps UTC; the time zone's names are not in the rows (w2m writes them empty). The start mode decides
- * the first error mode: 0x8003 for the console start, 0 for the GUI start.
+ * w2m keeps UTC, named as the runners name it ("Coordinated Universal Time" for both names; Sprint 061).
+ * The start mode decides the first error mode: 0x8003 for the console start, 0 for the GUI start.
  */
 #include "runtime.h"
 
@@ -65,9 +65,16 @@ static void now_systemtime(u64 out) { to_systemtime(w2m_filetime_now(), (u16 *)o
 W2M_VOID u64 k32_GetSystemTime(u64 out) { now_systemtime(out); return w2m_logged(W2M_API_GetSystemTime, out, 0); }
 W2M_VOID u64 k32_GetLocalTime(u64 out) { now_systemtime(out); return w2m_logged(W2M_API_GetLocalTime, out, 0); }   /* UTC */
 
+/* UTC's name, StandardName and DaylightName alike (row time_zone.names, both runners; Sprint 061) */
+static const char UTC_NAME[] = "Coordinated Universal Time";
+
 u64 k32_GetTimeZoneInformation(u64 tz) {
     u8 *p = (u8 *)tz;
     for (int i = 0; i < 172; i++) p[i] = 0;                    /* TIME_ZONE_INFORMATION: 172 bytes */
+    for (int i = 0; UTC_NAME[i]; i++) {                         /* StandardName at 4, DaylightName at 88: WCHAR[32] */
+        ((u16 *)(p + 4))[i] = (u16)UTC_NAME[i];
+        ((u16 *)(p + 88))[i] = (u16)UTC_NAME[i];
+    }
     set_error(0);
     return w2m_logged(W2M_API_GetTimeZoneInformation, tz, 0);  /* TIME_ZONE_ID_UNKNOWN */
 }

@@ -310,5 +310,10 @@ enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_S
  * The default is tools/guest_runtime/last_error.c. */
 void w2m_set_last_error(u32 code);
 u32 w2m_get_last_error(void);
+/* The machine's processors (Sprint 061: the runners', row machine of windows.system.processor_topology): four on two
+ * cores with SMT. system_info.c, topology.c and the PEB (vm_backend.py PROCESSORS) report them. */
+#define W2M_PROCESSORS 4u
+#define W2M_PROCESSOR_MASK 0xFull
+void w2m_trace_return(u64 rsp, u64 value);   /* call_trace.c: a traced call that ran guest code returns (Sprint 061) */
 
 #endif

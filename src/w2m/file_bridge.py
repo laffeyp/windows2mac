@@ -31,7 +31,7 @@ guest's working directory:
 
 Paths arrive as UTF-16LE as the guest normalized them: full paths ("C:\\w2m\\app\\a.txt", tools/guest_runtime/paths.c)
 or, as before Sprint 048, names relative to the working directory. Drive C: is a host directory per run holding
-Users\\w2m (the profile, with AppData\\Local\\Temp, LocalLow and Roaming) and w2m\\app, where `root` (the working
+Users\\runneradmin (the profile, with AppData\\Local\\Temp, LocalLow and Roaming), Users\\w2m\\AppData\\Local\\Temp and w2m\\app, where `root` (the working
 directory: the probe's, or the game's depot) is mounted; a read-only mount refuses every write by name. Components compare ASCII case-folded, as NTFS compares
 ASCII names (its upcase table; non-ASCII folding is not needed by any recorded row and is not done). Another drive, a UNC name, or a ".." the guest
 did not resolve is Unimplemented: the run stops rather than guess.
@@ -52,10 +52,12 @@ FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP = 24, 25, 26, 27, 28   #
 FILE_LIST = 32                                                              # after the host requests 29-31
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 ABSENT, IS_FILE, IS_DIRECTORY, PARENT_MISSING = 0, 1, 2, 3
-# C:\Users\w2m and the AppData folders SHGetKnownFolderPath names, each an existing directory on Windows
-# (contracts/windows.shell.known_folder_path); fresh each run, like the rest of drive C:
-# and AppData\Local\Temp, where USER_ENVIRONMENT's TMP and TEMP point (vm_backend.py)
-PROFILE_FOLDERS = ("Users/w2m/AppData/LocalLow", "Users/w2m/AppData/Local/Temp", "Users/w2m/AppData/Roaming")
+# C:\Users\runneradmin, the runners' user (Sprint 061), and the AppData folders SHGetKnownFolderPath names, each an
+# existing directory on Windows (contracts/windows.shell.known_folder_path); fresh each run, like the rest of drive C:;
+# and C:\Users\w2m\AppData\Local\Temp, where USER_ENVIRONMENT's TMP and TEMP point (vm_backend.py) as the reference
+# game run's did (windows-game.yml)
+PROFILE_FOLDERS = ("Users/runneradmin/AppData/LocalLow", "Users/runneradmin/AppData/Local/Temp",
+                   "Users/runneradmin/AppData/Roaming", "Users/w2m/AppData/Local/Temp")
 M64 = (1 << 64) - 1
 
 

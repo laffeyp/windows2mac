@@ -128,8 +128,8 @@ INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
-TRACE_SIZE = 0x200000
-TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xD100, 120, 4096, 0xC080
+TRACE_SIZE = 0x400000              # 4 MB: per-thread counters (768 KB), then about 28,000 records
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xC1300, 120, 4096, 0x80
 TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
 TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
 # call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
@@ -149,6 +149,7 @@ CURRENT_DIRECTORY_MAX = 0x208       # CurrentDirectory.DosPath.MaximumLength: MA
 CURRENT_DIRECTORY_HANDLE = 0x10     # CurrentDirectory.Handle: non-null (rows *.current_directory); below every
                                     # handle range w2m gives out (stdout 0x74, files 0x1000, objects 0x2000)
 DESKTOP = "winsta0\\default"
+PROCESSORS = 4                      # the runners' processors (runtime.h W2M_PROCESSORS; Sprint 061)
 START_GROUP = 1000                  # ProcessGroupId of a process w2m starts: neither 0 nor its own id (rows *.header);
                                     # a child keeps its parent's
 STDOUT_HANDLE = 0x74
@@ -199,10 +200,11 @@ VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: Unity
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 # The block w2m starts a game with (run_frontier.py; Sprint 048): the profile and its temporary directory, which
-# GetTempPathW reads (environment.c), in the block's sorted order. w2m's choice of variables; each directory exists
-# on drive C: (file_bridge.py PROFILE_FOLDERS).
+# GetTempPathW reads (environment.c), in the block's sorted order. The reference game run's (Sprint 061): the
+# runners' user, and TMP and TEMP where windows-game.yml sets them; each directory exists on drive C:
+# (file_bridge.py PROFILE_FOLDERS).
 USER_ENVIRONMENT = ("TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp", "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
-                    "USERPROFILE=C:\\Users\\w2m")
+                    "USERPROFILE=C:\\Users\\runneradmin")
 TLS_TAKEN = 16                      # the TLS index besides 0 a fresh Windows process holds: set from the rows
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
@@ -1164,6 +1166,7 @@ class VM:
         if self.ld.image is not None:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
         struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x30, HEAP_VA)     # PEB.ProcessHeap (heap.c)
+        struct.pack_into("<I", self.mm, self._process(PEB_OFF) + 0xB8, PROCESSORS)  # PEB.NumberOfProcessors (Chappell)
         st = self._process(STATE_OFF)                   # thread-start defaults (spec, observed on Windows)
         struct.pack_into("<I", self.mm, st + 152, 0x1F80)
         struct.pack_into("<H", self.mm, st + 156, 0x27F)

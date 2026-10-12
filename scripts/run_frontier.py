@@ -59,7 +59,7 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
 LOGS = ROOT / "store" / "frontier-logs"
-REFERENCE = ROOT / "store" / "game-runs" / "38203364352"     # the batch run, the game at C:\\w2m\\app (Sprint 060)
+REFERENCE = ROOT / "store" / "game-runs" / "38206263976"     # the batch run: C:\\w2m\\app, the game's resources (Sprint 061)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
 # exact text, its replacement, and the (function, field) the divergence names.

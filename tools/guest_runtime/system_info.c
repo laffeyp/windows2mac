@@ -15,7 +15,7 @@
  *     0x7FFFFFFE0000, extended 0; the rest as relations
  *   - GetTickCount advances in steps under 100 ms; GetSystemDirectoryW "C:\Windows\system32", and a short
  *     buffer gets the size it needs, NUL included, with the last error left
- * w2m's choices where the rows give relations: one processor (w2m runs one thread), 16 GiB of memory, the
+ * w2m's choices where the rows give relations: the runners' four processors (Sprint 061), 16 GiB of memory, the
  * tick count from the guest counter. Level and revision come from the guest CPUID profile.
  */
 #include "runtime.h"
@@ -40,8 +40,8 @@ static void system_info(u64 si) {
     *(u32 *)(p + 4) = 4096;
     *(u64 *)(p + 8) = 0x10000;
     *(u64 *)(p + 16) = 0x7FFFFFFEFFFFull;
-    *(u64 *)(p + 24) = 1;                             /* active processor mask: one processor */
-    *(u32 *)(p + 32) = 1;
+    *(u64 *)(p + 24) = W2M_PROCESSOR_MASK;            /* active processor mask: the runners' four (runtime.h) */
+    *(u32 *)(p + 32) = W2M_PROCESSORS;
     *(u32 *)(p + 36) = 8664;                          /* PROCESSOR_AMD_X8664 */
     *(u32 *)(p + 40) = 65536;
     *(u16 *)(p + 44) = (u16)family;

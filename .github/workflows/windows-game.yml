@@ -53,6 +53,9 @@ jobs:
           # the crash handler's tracer (Sprint 055): jit_capture queues it into UnityCrashHandler64.exe at its start
           clang -O1 -Wall -Werror -shared -o handler_trace.dll tools/jit_capture/handler_trace.c
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # the game exe's resources into the launcher at install (Sprint 061)
+          clang -O1 -Wall -Werror -o copy_resources.exe tools/jit_capture/copy_resources.c
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: disk
         shell: pwsh
         run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
@@ -109,6 +112,9 @@ jobs:
         run: |
           Move-Item "$env:GAME_DIR\${{ inputs.exe }}.exe" "$env:GAME_DIR\${{ inputs.exe }}.original.exe"
           Copy-Item jit_capture.exe "$env:GAME_DIR\${{ inputs.exe }}.exe"
+          # the process's own module answers with the game's resources (its icon: LoadIconA(module, 103))
+          .\copy_resources.exe "$env:GAME_DIR\${{ inputs.exe }}.original.exe" "$env:GAME_DIR\${{ inputs.exe }}.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item handler_trace.dll "$env:GAME_DIR\handler_trace.dll"
           # The game runs from C:\w2m\app, a junction to the unpacked tree, with TMP and TEMP at
           # C:\Users\w2m\AppData\Local\Temp and its log at C:\w2m\unity.log: the paths w2m gives it

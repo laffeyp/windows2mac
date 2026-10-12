@@ -28,6 +28,17 @@ static void row(const char *s) { put("{\"s\":\""); put(s); put("\""); }
 static void field(const char *k, unsigned long long v) { put(",\""); put(k); put("\":"); putu(v); }
 static void flag(const char *k, int v) { put(",\""); put(k); put(v ? "\":true" : "\":false"); }
 static void end(void) { put("}\n"); }
+/* A UTF-16 text field, ASCII as is and every other unit as \uXXXX (Sprint 061: the time zone's names). */
+static void text(const char *k, const WCHAR *w, unsigned max) {
+    static const char hex[] = "0123456789abcdef";
+    put(",\""); put(k); put("\":\"");
+    for (unsigned i = 0; i < max && w[i]; i++) {
+        WCHAR c = w[i];
+        if (c >= 0x20 && c < 0x7F && c != '"' && c != '\\') { out[n++] = (char)c; continue; }
+        put("\\u"); for (int sh = 12; sh >= 0; sh -= 4) out[n++] = hex[(c >> sh) & 15];
+    }
+    put("\"");
+}
 
 static DWORD err;
 static const WCHAR ROWS[] = L"w2m-error-mode-child.jsonl";
@@ -85,6 +96,8 @@ void start(void) {
     row("time_zone"); field("ret", id); field("err", err); field("bias", (unsigned long long)(long long)tz.Bias);
     field("standard_bias", (unsigned long long)(long long)tz.StandardBias); field("daylight_bias", (unsigned long long)(long long)tz.DaylightBias);
     field("standard_month", tz.StandardDate.wMonth); field("daylight_month", tz.DaylightDate.wMonth); end();
+    /* the names, which the game converts with WideCharToMultiByte (game run 38203364352 seq 921-924) */
+    row("time_zone.names"); text("standard_name", tz.StandardName, 32); text("daylight_name", tz.DaylightName, 32); end();
 
     SYSTEMTIME fixed = {2026, 10, 6, 10, 13, 45, 30, 125};    /* a Saturday; wDayOfWeek ignored on input */
     FILETIME out_ft;
