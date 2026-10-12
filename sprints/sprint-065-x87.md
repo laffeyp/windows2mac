@@ -50,6 +50,17 @@ and keep a plan row of their own.
    - **RtlAddGrowableFunctionTable's two calls** pair in opposite orders; its count argument is checked as a pairing
      question.
    The CreateFileW form gets its Windows rows in the file family.
+6. **Past the CreateFileW form** (amended 2026-10-12, before the work). With item 5's rows (fonts listed by probe run
+   38222954208 and copied by 38226907442; MB_ERR_INVALID_CHARS on code page 1252, run 38226019630; FILE_FLAG_SEQUENTIAL_SCAN,
+   run 38228020392) the frontier runs 50,784,721,550 instructions, writes 61 lines of unity.log equal to Windows' but
+   for two timings, and stops at LoadLibrary of steam_api64.dll: static TLS in a DLL loaded after the start, which
+   Windows supports and w2m refuses. A probe (probes/late_tls) records the index, each thread's block and DllMain's
+   view; the loader gives every thread the block and the index, as the rows show. Main-thread seq 3422-3426
+   (LoadImageW, GetFileInformationByHandleEx) lie past this load.
+   Set 065's judge: 13 of the 15 classes equal the Xeon 8573C on every case (the 8370C agrees bit for bit); FSIN and
+   FCOS differ in the last bit on 18 of 1,598 cases near a rounding boundary, where Intel publishes the 66-bit pi and
+   not the polynomial. The GC's 0x56000 heap growth happens on the main thread in all four Windows runs and on the
+   second thread in w2m (seq 2744): open.
 
 ## prerequisites
 
