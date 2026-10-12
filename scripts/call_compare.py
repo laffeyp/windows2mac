@@ -375,10 +375,10 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
     w, m = by_pair(windows), by_pair(w2m)
     found: list[Divergence] = []
     pairs: list[tuple[int, Call, Call]] = []
-    for pair, theirs in w.items():                 # a function Windows calls and w2m never does: each call missing
+    for pair, by_thread in w.items():              # a function Windows calls and w2m never does: each call missing
         if pair not in m:
             found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
-                      for calls in theirs.values() for k, c in enumerate(calls)]
+                      for calls in by_thread.values() for k, c in enumerate(calls)]
     for pair, ours in m.items():
         theirs = w.get(pair)
         if theirs is None:
