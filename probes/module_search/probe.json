@@ -1,0 +1,11 @@
+{
+ "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:start -Wl,/subsystem:console",
+ "libs": "-lkernel32 -lpsapi",
+ "mode": "stdout",
+ "dll": {
+  "name": "module_search_dll",
+  "source": "probes/module_search/module_search_dll.c",
+  "cflags": "-O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -Wl,/entry:dll_main",
+  "libs": "-lkernel32"
+ }
+}

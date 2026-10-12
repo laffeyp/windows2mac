@@ -2,13 +2,13 @@
 // Copyright (C) 2026 Peter Laffey
 /* console.c — standard handles, the console and the command line (Sprint 044, family "console").
  *
- * GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, GetConsoleCP, WriteConsoleW,
+ * GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, GetConsoleCP, GetConsoleOutputCP, WriteConsoleW,
  * FlushFileBuffers, GetCommandLineW and GetCommandLineA, as contracts/windows.console.gui_start
  * records Windows answering a GUI process started without handles (the Steam-like start; BLACKBOARD
  * 2026-10-10) on four runners:
  *   - GetStdHandle answers NULL for all three, leaving the last error
  *   - GetFileType(NULL): FILE_TYPE_UNKNOWN, ERROR_INVALID_HANDLE; a disk file: FILE_TYPE_DISK
- *   - GetConsoleMode, GetConsoleCP, WriteConsoleW without a console: 0, ERROR_INVALID_HANDLE;
+ *   - GetConsoleMode, GetConsoleCP, GetConsoleOutputCP, WriteConsoleW without a console: 0, ERROR_INVALID_HANDLE;
  *     WriteConsoleW leaves *lpNumberOfCharsWritten as it was
  *   - SetStdHandle succeeds and GetStdHandle then answers that handle
  * The start mode is the host's (src/w2m/vm_backend.py): 0, a console program whose standard output
@@ -83,6 +83,11 @@ u64 k32_GetConsoleMode(u64 handle, u64 mode) {
 
 u64 k32_GetConsoleCP(void) {
     return no_console(W2M_API_GetConsoleCP, 0);
+}
+
+/* GetConsoleOutputCP: mono reaches it through GetProcAddress (game run 38206263976 seq 2211); row console_output_cp */
+u64 k32_GetConsoleOutputCP(void) {
+    return no_console(W2M_API_GetConsoleOutputCP, 0);
 }
 
 u64 k32_WriteConsoleW(u64 handle, u64 buffer, u64 count, u64 written, u64 rsp) {

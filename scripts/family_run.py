@@ -100,6 +100,7 @@ class Family:
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
     dll_name: str | None = None           # the probe's own DLL, loaded from its directory (Sprint 046)
+    dll_on_disk: bool = False             # the DLL is also a file beside the probe, which the probe reads (Sprint 063)
     host_files: tuple[str, ...] = ()      # Python no runtime request reaches that implements it (the loader's)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -585,6 +586,43 @@ FAMILIES: dict[str, Family] = {
                                                "        h[0] = ((h[0] & ~DEPTH_MASK) + SEQUENCE_STEP) | (((h[0] & DEPTH_MASK) - 1) & DEPTH_MASK);",
                                                ("pop.1", "flush.full", "pop.after_flush", "push.after_flush",
                                                 "threads.push"))}),
+    "module_search": Family(
+        name="module_search",
+        contract_id="windows.module.search",
+        version="0.1.0",
+        summary=("EnumProcessModules on the current process lists the program, ntdll, KERNEL32 and KERNELBASE first, "
+                 "a DLL LoadLibrary maps last, and reports the whole list's length whatever the buffer holds, leaving "
+                 "the last error; SetDllDirectoryW adds a directory LoadLibrary searches for a bare name and NULL "
+                 "removes it, each answering 1 with the last error left (Sprint 063: mono's EnumProcessModules, "
+                 "UnityPlayer's SetDllDirectoryW around steam_api64.dll)."),
+        probe="module_search", guest_file="module.c", dll_name="module_search_dll.dll", dll_on_disk=True,
+        runs={
+              "38210455471": Run("windows-2025", "df6ca688fd04c4599788e7c9ce2ff311246e6d96bb2273edaa87282ece84c023", "module_search-1791784818-0", "AMD EPYC 7763 64-Core Processor", dll="735a3c71d68c4329e287bd1730b1bae07a5f448c80312daefd34f624f40d79cb"),
+              "38210458062": Run("windows-2022", "1924070efea39f066a9859354c9c77138e32db51f26e5426e51b669140ea016d", "module_search-1791784818-1", "AMD EPYC 7763 64-Core Processor", dll="14dc071ae4f8c7321ae556b887ea440281eb7070c3ae9b8998aba1ce195ee192"),
+        },
+        documented=(
+            documented("ms-setdlldirectoryw", "api/winbase/nf-winbase-setdlldirectoryw", "2025-07-01",
+                       "After calling SetDllDirectory, the standard DLL search path is: 1. The directory from which "
+                       "the application loaded. 2. The directory specified by the lpPathName parameter."),
+            documented("ms-setdlldirectoryw-null", "api/winbase/nf-winbase-setdlldirectoryw", "2025-07-01",
+                       "If this parameter is NULL, the function restores the default search order."),
+            documented("ms-enumprocessmodules", "api/psapi/nf-psapi-enumprocessmodules", "2024-02-22",
+                       "If PSAPI_VERSION is 1, this function is defined as EnumProcessModules in Psapi.h and exported "
+                       "in Psapi.lib and Psapi.dll as a wrapper that calls K32EnumProcessModules.")),
+        open_questions=(
+            "The list's length differs by machine (each loads other system DLLs), so the rows hold its first four "
+            "entries in load order and where a DLL the probe loads appears; w2m lists the program, ntdll, KERNEL32, "
+            "KERNELBASE and the DLLs it maps, not the other system DLLs a Windows process holds.",
+            "SetDllDirectoryW(\"\") (the current directory out of the search) has no row and stops the run."),
+        plants={
+            "directory_not_searched": Plant("    if (h || !dll_directory_too || !dll_directory[0]) return h;",
+                                            "    return h;",
+                                            ("search.load", "enum.after_load", "search.loaded_after_reset")),
+            "reset_kept": Plant("        dll_directory[0] = 0;\n        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);",
+                                "        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);", ("search.after_reset",)),
+            "needed_is_written": Plant("    *(u32 *)needed = (u32)(8 * count);",
+                                       "    *(u32 *)needed = (u32)(8 * (count < size / 8 ? count : size / 8));",
+                                       ("enum.short", "enum.size_only"))}),
     "modules": Family(
         name="modules",
         contract_id="windows.module.queries",
@@ -1079,16 +1117,14 @@ FAMILIES: dict[str, Family] = {
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
-        version="0.2.0",
+        version="0.3.0",
         summary=("A GUI process started without handles (as Steam starts the game) gets NULL standard handles, "
                  "no console, and Windows's answers from GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, "
                  "GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW, GetCommandLineW and GetCommandLineA."),
         probe="console", guest_file="console.c",
-        runs={
-              "38046095100": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-0", "AMD EPYC 7763 64-Core Processor"),
-              "38046096985": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-1", "AMD EPYC 7763 64-Core Processor"),
-              "38046099129": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38046100953": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-3", "AMD EPYC 7763 64-Core Processor"),
+        runs={   # Sprint 063: the child also asks GetConsoleOutputCP (row console_output_cp)
+              "38210455282": Run("windows-2025", "e182a66ebffa41eb86b7b12f9ef4256945ac1110c0d22b8289d7cc1ee1ebe139", "console-1791784818-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210458372": Run("windows-2022", "51d95fba138a0f0e8d6e891f911ea46ec32526334d8dc276cb97c115eb989e4a", "console-1791784818-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
         },
         documented=(),
         open_questions=(
@@ -1099,11 +1135,14 @@ FAMILIES: dict[str, Family] = {
             "the probe's fill survives (row startup_info.child.values).",
             "The title's length is the runner's path and is dropped from the rows; the title being the module path is kept."),
         derive=console_rows, gui=True, arguments="child", output_file="w2m-console-child.jsonl",
-        plants={"write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
+        plants={
+            "output_cp_answers": Plant("    return no_console(W2M_API_GetConsoleOutputCP, 0);",
+                                       "    return w2m_logged(W2M_API_GetConsoleOutputCP, 0, 437);", ("console_output_cp",)),
+            "write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
                                                    "    set_error(87);\n    return w2m_logged(api, arg, 0);",
                                                    # no_console serves GetConsoleMode too: the std rows' console_mode_err
                                                    ("std.input", "std.output", "std.error", "console_cp",
-                                                    "write_console.no_console")),
+                                                    "console_output_cp", "write_console.no_console")),
                 "file_type_null_no_error": Plant("    if (handle == 0 || handle == ~0ull) {\n        set_error(ERROR_INVALID_HANDLE);",
                                                  "    if (handle == 0 || handle == ~0ull) {",
                                                  ("std.input", "std.output", "std.error"))}),
@@ -1384,7 +1423,7 @@ FAMILIES: dict[str, Family] = {
             "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
             "(user32 1,007 against 1,041).",),
         plants={
-            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
     "known_folders": Family(
@@ -2503,6 +2542,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         if dll is None and f is not None and f.dll_name is not None:
             dll = next(r.dll for r in f.runs.values() if r.binary == binary)
         dll_bytes = None if dll is None else (ROOT / "store" / "binaries" / f"{dll}.dll").read_bytes()
+        if f is not None and f.dll_on_disk and f.dll_name is not None and dll_bytes is not None:
+            (Path(d) / f.dll_name).write_bytes(dll_bytes)    # as the runner's out/ has it beside probe.exe
 
         def dlls(name: str) -> bytes | None:
             return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None
