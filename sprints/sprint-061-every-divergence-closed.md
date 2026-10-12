@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 061
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -69,3 +69,37 @@ user). The divergences fall into seven causes:
 ## done criteria
 
 No divergence between the game's calls in w2m and on Windows, up to the frontier's stop; every family accepted.
+
+## observed
+
+- **No divergence remains.** The frontier's COMPARISON_COMPLETED against `game-run-38206263976` has verdict
+  `conforms` over 1,716 calls (record `frontier-643a6283510c-1791782586329441000`). The frontier stops where 060
+  stopped, at the appmodel API set, now after 57,445,097 instructions with 24 threads; the game starts six job
+  workers, as on Windows.
+- **Five defects fixed in w2m:**
+  - **FLS per thread.** `thread_storage.c` keeps a thread's values in a block behind TEB.FlsData (+0x17C8, Geoff
+    Chappell's TEB layout), made by the thread's first FlsSetValue. The threads probe reads FLS from a worker and
+    inside its DLL's thread attach; on both images the answer is NULL with error 0, which the static C runtime's
+    thread attach explains, having already set a value. The game's own threads show the rule: FlsGetValue(7) fails
+    with 87, an untraced FlsSetValue follows, and FlsGetValue(9) answers with error 0. windows.thread.threads is at
+    0.2.0, with plant fls_shared.
+  - **The time zone's names.** "Coordinated Universal Time" for both names on both images (row time_zone.names);
+    windows.time.local_and_error_mode is at 0.3.0, with plant time_zone_unnamed.
+  - **The runners' machine.** Four processors on two SMT cores (row machine of windows.system.processor_topology
+    0.2.0), in GetSystemInfo, the topology, the affinity masks and PEB.NumberOfProcessors (+0xB8, Chappell). Plants
+    one_core and count_off_mask; the old plant two_processors_one_bit lost its text with the fix and the gate caught it.
+  - **The runner's user.** The profile is `C:\Users\runneradmin`; TMP and TEMP stay at
+    `C:\Users\w2m\AppData\Local\Temp`, where the reference run put them.
+  - **The trace of a call that runs guest code.** CreateWindowExW and EnumDisplayMonitors are completed at
+    `w2m_return_to`. CreateWindowExW had not returned NULL to the game; the trace had recorded the service's early 0.
+- **Two of the 060 findings were the capture's, and the reference changed instead:**
+  - **LoadIconA.** The workflow runs the game through `jit_capture.exe` under the game's name, so LoadIconA(module,
+    103) read the launcher's resources. `copy_resources.c` gives the launcher the game exe's resources; in game run
+    38206263976 LoadIconA answers an icon, as w2m does.
+  - **The thread pairing.** The capture keeps a function's first 32 calls over all threads, so each Windows thread's
+    calls are a prefix of its own. w2m now keeps 32 per function per thread, and threads pair by agreement:
+    interchangeable workers trade places, and a test shows a fault on every worker still shows.
+- **The plants are still caught at their calls:** thread_priority_off_by_one at GetThreadPriority call 0, and
+  envvar_error_dropped at GetEnvironmentVariableW call 0.
+- **Every family is accepted, every plant caught as named,** and the Sprint 042 file run conforms. 1,965 tests
+  pass, and `scripts/gates.sh` passes.

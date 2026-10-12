@@ -223,6 +223,7 @@
 - **2026-10-11** — Sprint 058 (a review of Sprint 055) closed. Fixes in `src/w2m/kernel.py` (handles per process, released at its end; object ids from 2^32; the parent's environment and directory; a 4096-byte pipe; a deadlock as a stop), `processes.c`, `sync_objects.c`, `paths.c`, `file.c`, `runtime.c`, `vm_backend.py` (per-VM symbols, the directory in the inherit page); `tests/test_kernel.py`, `tests/test_vm_symbols.py`, three native harnesses; the processes probe and contract 0.2.0; `host_patched` reaches family_run. Dual contract: signal pass (processes' item run and ten plants; 56 item runs to CANDIDATE_ACCEPTED, every plant as named; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED GetCurrentDirectoryA); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 - **2026-10-11** — Sprint 059 (the process parameters) closed. `probes/process_parameters`, contract windows.process.parameters 0.1.0; `vm_backend._init_parameters` (the block in the heap's arena); console.c, process.c, environment.c, paths.c and heap.c read and keep it; CreateProcessW's handles-without-inheritance stop. Dual contract: signal pass (PROBE_AUTHORED; the item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; six plants as named; 57 families re-run; the frontier's EXECUTION_STARTED then EXECUTION_COMPLETED faulted at the appmodel API set, no fault dispatched); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 - **2026-10-11** — Sprint 060 (the frontier on the record, the game's calls as a judge) closed. Frontier records in `store/runs/` from a committed tree (`record.uncommitted`), `--plant`; a refused host request as SERVICE_UNIMPLEMENTED; `tools/guest_runtime/call_trace.c` and `VM(call_trace=, call_trace_from=)`: the traced images' calls as `call_trace.h` records them, labeled by hook, opened at UnityMain, closed around a traced image's DllMain; `scripts/signatures.py` and `specs/signatures.json` (win32metadata 71.0.30-preview, 220 functions); `scripts/call_compare.py` (relations by type, thread map, assigned values, addresses; the guest trace writer); `scripts/record_game_run.py` (game runs 38176899195 and 38203364352 as `windows_reference` executions); contract windows.game.calls 0.1.0 (proposed); `windows-game.yml` runs the game from `C:\w2m\app`. Five defects and one w2m choice found by the comparison, to plan row 062.
+- **2026-10-11** — Sprint 061 (every divergence of the game's calls closed) closed. `thread_storage.c` FLS per thread (TEB.FlsData); `time_and_error_mode.c` UTC's names; `topology.c`, `system_info.c`, `runtime.h` W2M_PROCESSORS and PEB.NumberOfProcessors: the runners' four processors on two SMT cores; `known_folders.c`, `file_bridge.py`, USER_ENVIRONMENT: the runners' user; `call_trace.c`: calls through guest code completed at `w2m_return_to`, 32 calls per function per thread; `call_compare.thread_map` by agreement; `tools/jit_capture/copy_resources.c` and the game workflow; contracts windows.thread.threads 0.2.0, windows.time.local_and_error_mode 0.3.0, error_mode_child 0.2.0, windows.system.processor_topology 0.2.0; reference game run 38206263976.
 
 ## Deferred
 
@@ -276,6 +277,16 @@
 ---
 
 ## Sprint tail
+
+### Sprint 061 (2026-10-11, closed: CI pending on the closing commit)
+- **Scope:** the 55 divergences of Sprint 060 closed by matching the reference (Decision 2026-10-11, user).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* three probes on two runners each (time_and_error_mode, threads twice, processor_topology); their families' item runs to CANDIDATE_ACCEPTED with new plants; a reference game run with the game's resources, recorded as `game-run-38206263976`; the frontier's SERVICE_UNIMPLEMENTED, TRACE_INGESTED, COMPARISON_COMPLETED `conforms`; two plant runs, each caught; 57 item runs and the file run.
+  - *Observation 1 (payload anomaly, of the reference):* LoadIconA's failure on Windows was the launcher's missing icon. Disposition: resolved-here (copy_resources.c; a new reference).
+  - *Observation 2 (payload anomaly, of the judge):* the capture's count over all threads makes each thread's calls a prefix, which pairing by first call did not respect. Disposition: resolved-here (32 per thread; pairing by agreement, tested to keep a fault on every worker).
+  - *Observation 3 (missing pair, of the probe):* reading FLS in the DLL's attach overwrote the thread's first last error, a row; caught by the row's change between rounds. Disposition: resolved-here (saved and restored).
+  - *Observation 4 (vocabulary gap, checked):* none.
+- **Closed:** on green CI of the closing commit.
 
 ### Sprint 060 (2026-10-11, closed: CI run 38205517561 success on 104f1db8)
 - **Scope:** the frontier's records on the record, and the game's own calls on Windows as a judge of w2m's (the ground-up review's G2, S4 and the missed finding).

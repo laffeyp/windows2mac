@@ -450,3 +450,11 @@ What remained was five defects in families that every row had accepted: FLS shar
 
 **Kit change suggested:** a comparison against an external reference records, for each class of divergence it rules out, the cause in the reference's setup and the evidence for it (a line of the capture's source, a path in its strings), the way a plant names its reach.
 
+### 2026-10-11 — Sprint 061: a reference whose process is not the program
+
+**What happened:** the comparison with the game's Windows calls said w2m's LoadIconA(module, 103) answered an icon where Windows failed. The game's exe has icon 103. The reference process was not running the game's exe, though: the capture runs the game through its own launcher under the game's name, and the launcher had no icon. Two other reference conditions came to light the same way. The runner's paths and user differed from w2m's. The capture keeps a function's first 32 calls over all threads, so which threads' calls it holds depends on the schedule. Each was fixed at the reference or in the judge, and the remaining divergences were w2m's own: FLS shared by every thread, empty time-zone names, and one processor.
+
+**Finding (#51):** an instrumented reference is a different program from the one it stands for wherever the instrument replaces part of it: its module, its paths, its sampling. Before a divergence is charged to the subject, ask what the instrument put in the subject's place, and make the instrument carry what it displaced (the exe's resources, the install path, the per-thread prefix).
+
+**Kit change suggested:** a reference capture lists what its instrument substitutes for the program (the launcher, the hooks, the sampling cap) and, for each, how the comparison or the capture restores it.
+
