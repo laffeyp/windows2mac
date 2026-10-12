@@ -180,10 +180,10 @@
   }
  },
  "display": {
-  "candidate_sha256": "sha256:cf2ca4680c1ffeb3d06a4dc8106f1f6d8c1c1c5f1ff9ca9b27177eb82d85f282",
+  "candidate_sha256": "sha256:974cd0b468e66b6bb50b3ac8bbb6995d92f66294513699790e1e38bc91f11104",
   "divergence": {
-   "38174316653": null,
-   "38174318347": null
+   "38273510163": null,
+   "38273513428": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
@@ -193,10 +193,10 @@
    "SESSION_INIT": 1
   },
   "family": "display",
-  "record": "store/runs/family-display-1791818967349464000",
+  "record": "store/runs/family-display-1791820756118382000",
   "verdicts": {
-   "38174316653": "conforms",
-   "38174318347": "conforms"
+   "38273510163": "conforms",
+   "38273513428": "conforms"
   }
  },
  "dxgi": {
