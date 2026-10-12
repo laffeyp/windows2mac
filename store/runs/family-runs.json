@@ -579,6 +579,26 @@
    "38099152338": "conforms"
   }
  },
+ "interlocked_lists": {
+  "candidate_sha256": "sha256:e78589a96e4a8311428ca66a2552f49ce759d8d5aff30c3636126b2fa5cc94e1",
+  "divergence": {
+   "38210349431": null,
+   "38210351696": null
+  },
+  "events": {
+   "CANDIDATE_ACCEPTED": 1,
+   "CANDIDATE_GENERATED": 1,
+   "COMPARISON_COMPLETED": 2,
+   "SESSION_COMPLETED": 1,
+   "SESSION_INIT": 1
+  },
+  "family": "interlocked_lists",
+  "record": "store/runs/family-interlocked_lists-1791784857821730000",
+  "verdicts": {
+   "38210349431": "conforms",
+   "38210351696": "conforms"
+  }
+ },
  "known_folders": {
   "candidate_sha256": "sha256:2c62d4e28dc719c5cd6c0e04d2887fbecd4e575247561f34971987b2ba5371eb",
   "divergence": {

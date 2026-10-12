@@ -412,6 +412,21 @@ def topology_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def slist_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Interlocked lists (Sprint 063): a push advances the header's sequence by 2 on Server 2025 and by 1 on 2022
+    (row push.1); pop and flush leave it. The sequence is kept as the count of pushes it stands for, the step
+    being push.1's."""
+    step = next(r["sequence"] for r in printed if r.get("s") == "push.1") or 1
+    out = []
+    for r in printed:
+        r = dict(r)
+        for k in ("sequence", "sequence_after"):
+            if k in r:
+                r[k.replace("sequence", "pushes")] = r.pop(k) // step
+        out.append(r)
+    return out
+
+
 def paths_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Paths (Sprint 048): the file part of "." and ".." is the length of the working directory's own last name,
     the machine's (a runner's "windows2mac", w2m's "app"), so it is dropped; the drive after "\\\\?\\" is the
@@ -538,6 +553,38 @@ FAMILIES: dict[str, Family] = {
                                                  ("time.qpf", "time.counter_tracks_time")),
                 "process_id_from_thread": Plant("(u32)w2m_teb()->client_process", "(u32)w2m_teb()->client_thread",
                                                 ("ids.process", "ids.thread"))}),
+    "interlocked_lists": Family(
+        name="interlocked_lists",
+        contract_id="windows.interlocked.lists",
+        version="0.1.0",
+        summary=("InterlockedPushEntrySList, InterlockedPopEntrySList and InterlockedFlushSList on headers "
+                 "InitializeSListHead made: the header's first entry, depth and sequence after each call, the values "
+                 "returned, the entries' links, the last error left, and two threads pushing onto one list at once."),
+        probe="slist", guest_file="slist.c",
+        runs={
+              "38210349431": Run("windows-2025", "3ab0c9d0351bc7663c61f28495315b4f3678935002714dac15a90a51774423a3", "slist-1791784738-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210351696": Run("windows-2022", "82d608691d4201d62b3fe2f93504429d969a156a34c8759a4e0836edc194de58", "slist-1791784738-1", "AMD EPYC 9V74 80-Core Processor"),
+        },
+        documented=(
+            documented("ms-interlockedpushentryslist", "api/interlockedapi/nf-interlockedapi-interlockedpushentryslist",
+                       "2024-02-22", "The return value is the previous first item in the list. If the list was "
+                       "previously empty, the return value is NULL. ... All list items must be aligned on a "
+                       "MEMORY_ALLOCATION_ALIGNMENT boundary; otherwise, this function will behave unpredictably."),),
+        open_questions=(
+            "The sequence advances by 2 a push on Server 2025 and by 1 on 2022; the rows keep the count of pushes, and "
+            "w2m advances it as Server 2025 does, the game's reference system (game run 38206263976).",
+            "A header or entry off a 16-byte boundary has no row: Microsoft Learn says the functions behave "
+            "unpredictably, and w2m stops the run."),
+        derive=slist_rows,
+        plants={"push_keeps_depth": Plant("(((h[0] & DEPTH_MASK) + 1) & DEPTH_MASK)", "(h[0] & DEPTH_MASK)",
+                                          ("push.1", "push.2", "push.3", "pop.1", "push.after_flush",
+                                           "threads.push")),
+                "flush_keeps_first": Plant("    h[1] = 0;\n    h[0] &= ~DEPTH_MASK;", "    h[0] &= ~DEPTH_MASK;",
+                                           ("flush.full", "pop.after_flush", "push.after_flush")),
+                "pop_advances_sequence": Plant("        h[0] = (h[0] & ~DEPTH_MASK) | (((h[0] & DEPTH_MASK) - 1) & DEPTH_MASK);",
+                                               "        h[0] = ((h[0] & ~DEPTH_MASK) + SEQUENCE_STEP) | (((h[0] & DEPTH_MASK) - 1) & DEPTH_MASK);",
+                                               ("pop.1", "flush.full", "pop.after_flush", "push.after_flush",
+                                                "threads.push"))}),
     "modules": Family(
         name="modules",
         contract_id="windows.module.queries",
