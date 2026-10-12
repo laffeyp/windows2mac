@@ -110,6 +110,15 @@ jobs:
           Move-Item "$env:GAME_DIR\${{ inputs.exe }}.exe" "$env:GAME_DIR\${{ inputs.exe }}.original.exe"
           Copy-Item jit_capture.exe "$env:GAME_DIR\${{ inputs.exe }}.exe"
           Copy-Item handler_trace.dll "$env:GAME_DIR\handler_trace.dll"
+          # The game runs from C:\w2m\app, a junction to the unpacked tree, with TMP and TEMP at
+          # C:\Users\w2m\AppData\Local\Temp and its log at C:\w2m\unity.log: the paths w2m gives it
+          # (vm_backend APP_PATH, USER_ENVIRONMENT; run_frontier BATCH_ARGUMENTS), so a value derived from a path
+          # has the same length on both (Sprint 060: the game at D:\w2m\game made each such value one longer).
+          New-Item -ItemType Directory -Force C:\w2m | Out-Null
+          if (Test-Path C:\w2m\app) { cmd /c rmdir C:\w2m\app }
+          New-Item -ItemType Junction -Path C:\w2m\app -Target "$env:GAME_DIR" | Out-Null
+          New-Item -ItemType Directory -Force C:\Users\w2m\AppData\Local\Temp | Out-Null
+          "APP_DIR=C:\w2m\app" | Out-File -Encoding ascii -Append $env:GITHUB_ENV
       - name: run
         shell: pwsh
         run: |
@@ -119,15 +128,17 @@ jobs:
           "gha-windows-2025-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)" | Out-File -Encoding ascii -NoNewline out/profile.txt
           (Get-CimInstance Win32_Processor | Select-Object -First 1).Name | Out-File -Encoding ascii -NoNewline out/cpu.txt
           $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
+          $env:TMP = "C:\Users\w2m\AppData\Local\Temp"
+          $env:TEMP = "C:\Users\w2m\AppData\Local\Temp"
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
           if ("${{ inputs.mode }}" -eq "play") {
             # a window on the runner's display; Unity picks its device (no GPU: Microsoft's software renderer
             # if Unity accepts it); Enter and Space every 3 s to pass the intro and the main menu
-            $gameArgs = @("-screen-fullscreen", "0", "-screen-width", "1280", "-screen-height", "720", "-logFile", "`"$PWD\out\unity.log`"")
+            $gameArgs = @("-screen-fullscreen", "0", "-screen-width", "1280", "-screen-height", "720", "-logFile", "`"C:\w2m\unity.log`"")
           } else {
-            $gameArgs = @("-batchmode", "-nographics", "-logFile", "`"$PWD\out\unity.log`"")
+            $gameArgs = @("-batchmode", "-nographics", "-logFile", "`"C:\w2m\unity.log`"")
           }
-          $p = Start-Process -FilePath "$env:GAME_DIR\${{ inputs.exe }}.exe" -WorkingDirectory "$env:GAME_DIR" `
+          $p = Start-Process -FilePath "$env:APP_DIR\${{ inputs.exe }}.exe" -WorkingDirectory "$env:APP_DIR" `
                -ArgumentList $gameArgs -PassThru
           $deadline = (Get-Date).AddSeconds([int]"${{ inputs.seconds }}")
           $shell = New-Object -ComObject WScript.Shell
@@ -143,9 +154,10 @@ jobs:
           # and the game's own children (UnityCrashHandler64) hold handles too (run 38006671518 failed
           # hashing a file still in use). Stop everything started from the game folder and wait for it.
           if (-not $done) { Stop-Process -Id $p.Id -Force; [void]$p.WaitForExit(30000); $code = $null } else { $code = $p.ExitCode }
-          Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($env:GAME_DIR) } | ForEach-Object {
+          Get-Process | Where-Object { $_.Path -and ($_.Path.StartsWith($env:GAME_DIR) -or $_.Path.StartsWith($env:APP_DIR)) } | ForEach-Object {
             Stop-Process -Id $_.Id -Force; [void]$_.WaitForExit(30000)
           }
+          if (Test-Path C:\w2m\unity.log) { Copy-Item C:\w2m\unity.log out\unity.log }
           $exit = if ($null -eq $code) { "null" } else { "$code" }
           "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds)}" | Out-File -Encoding ascii -NoNewline out/exec.json
           Get-Content out/exec.json
