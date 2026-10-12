@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 063
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -77,3 +77,35 @@ five independent groups (recounted against `service_for`, first seq of each):
 ## done criteria
 
 The five groups accepted and merged; the frontier past seq 3426 with a conforming comparison, its new stop recorded.
+
+## observed
+
+- **The API set.** `api-ms-win-appmodel-runtime-l1-1-2` is kernel.appcore.dll, and its
+  AppPolicyGetThreadInitializationType is `threads.c`'s service. The check failed first. The frontier then ran
+  102,817,503 instructions to EnumProcessModules (seq 2128), its comparison conforming over 2,152 calls.
+- **The five groups, each built in its own worktree by its own agent** (Decision 2026-10-11 on parallel worktrees),
+  then merged one at a time:
+  - **A, module_search 0.1.0 and console 0.3.0.** EnumProcessModules walks PEB.Ldr, which `_load_dll` now keeps
+    current; SetDllDirectoryW adds a directory for bare names; GetConsoleOutputCP answers 0 with error 6 with no
+    console. Probe runs 38210455471 and 38210458062, and 38210455282 and 38210458372.
+  - **B, interlocked_lists 0.1.0.** SList headers as both images lay them out; the sequence step is Server 2025's.
+    Runs 38210349431 and 38210351696.
+  - **C, registry 0.3.0.** The game's PlayerPrefs writes under `HKCU\Software\NSS\Hail to the Rainbow`; the
+    registry lasts one run. Runs 38210383833 and 38210386046.
+  - **D, windows 0.3.0.** The message loop's posted messages and WM_QUIT, SetFocus's messages in the game's order,
+    the device notification, and LoadImageW. Runs 38210803867 and 38210806334.
+  - **E, dxgi 0.1.0.** A factory with two Microsoft Basic Render Driver adapters and one output, as the GPU-less
+    runners give. Runs 38210591842 and 38210594155.
+  After the last merge, 60 families are accepted with every plant as named, 2,066 tests pass, and the gates pass.
+- **A defect found on the way: the frontier never kept the game's log.** `run_frontier.py` copied unity.log after
+  `close_all` had removed drive C:, so no run since Sprint 054 kept it. Fixed. The log now holds 13 lines, 12 equal
+  to Windows'; the 13th is the assembly reload's time: 113.9 s against 0.101 s.
+- **Not met: the frontier does not pass seq 3426.** A run of 4,000,000,009 instructions (689 s, record
+  `frontier-643a6283510c-1791787123623878000`) reaches none of groups A–E's functions after EnumProcessModules. Its
+  comparison conforms over 2,333 calls. At the stop:
+  - **Where the threads stand.** The main thread is in UnityPlayer's deserialization loop at RVA 0xde12d0, which
+    reads 4-byte values into 0x98-byte records. The 24 workers are in WaitForSingleObjectEx.
+  - **The call counts.** Between 1 and 4 billion instructions, HeapAlloc stays at 164,024 calls while
+    GetCurrentThreadId grows from 0.45 to 2.46 million.
+  The game works and is slow, so the criterion moves to plan row 064 (speed), by the partial-pass rule (Decision
+  2026-10-11, agent-resolved).
