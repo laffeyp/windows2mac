@@ -1,0 +1,13 @@
+Mono path[0] = 'C:/w2m/app/Hail to the Rainbow_Data/Managed'
+Mono config path = 'C:/w2m/app/MonoBleedingEdge/etc'
+Initialize engine version: 2019.4.40f1 (ffc62b691db5)
+[Subsystems] Discovering subsystems at path C:/w2m/app/Hail to the Rainbow_Data/UnitySubsystems
+Forcing GfxDevice: Null
+GfxDevice: creating device client; threaded=0
+NullGfxDevice:
+    Version:  NULL 1.0 [1.0]
+    Renderer: Null Device
+    Vendor:   Unity Technologies
+FMOD initialized on nosound output
+Begin MonoManager ReloadAssembly
+- Completed reload, in  8.078 seconds
