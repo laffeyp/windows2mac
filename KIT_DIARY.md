@@ -435,3 +435,18 @@
 
 **Kit change suggested:** a plant run asserts that the planted code ran (a counter or marker in the planted text), not only that rows changed, so an unreached plant fails even when its named reach is empty.
 
+### 2026-10-11 — Sprint 060: a judge the writer had not seen, and how much of its first verdict was the judge's own
+
+**What happened:** the frontier recorded the game's calls through UnityPlayer's and mono's imports, as the Windows capture records them, and compared them call by call with the game's Windows run. The first comparison reported 790 divergences. Before any relation was changed, each class was traced to its cause, and most were the capture's conditions, not the game's:
+- **The window.** The capture hooks after the DLLs' start and opens at UnityMain.
+- **Labels.** Its hooks label calls by the slot they pass through, and a pointer resolved before the hooks is never traced.
+- **A thread of its own.** The capture's monitor thread makes only DllMain thread-attach calls.
+- **The runner's paths.** The game was unpacked at `D:\w2m\game`, one character longer than `C:\w2m\app`.
+- **A parser defect.** The last error is printed in decimal and was read as hex.
+
+What remained was five defects in families that every row had accepted: FLS shared by every thread since threads arrived, empty time-zone names, a wrong EnumDisplayMonitors answer, LoadIconA succeeding where Windows fails, and CreateWindowExW returning NULL. A sixth difference was a value w2m chose, one processor, which changes how many worker threads the game starts.
+
+**Finding (#50):** an independent judge finds what the writer's rows cannot, but its first verdict mixes the judge's own conditions with the subject's defects. Reproduce the judge's conditions (its window, its labels, its threads, its machine's paths) until each remaining divergence has one cause in the subject, and never widen a relation to absorb a divergence whose cause is unknown. Five real defects came out of 790 divergences only because no class was waved through.
+
+**Kit change suggested:** a comparison against an external reference records, for each class of divergence it rules out, the cause in the reference's setup and the evidence for it (a line of the capture's source, a path in its strings), the way a plant names its reach.
+
