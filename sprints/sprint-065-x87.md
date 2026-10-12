@@ -118,6 +118,15 @@ and keep a plan row of their own.
       a write to one drops the blocks over that page and their dispatch slots, unprotects it and resumes; the next
       execution translates afresh. Judged by a probe that writes code, runs it, rewrites it and runs it again, and by
       the frontier: no stale block at the stop, line 160 equal to Windows' in runs alone and alongside.
+   f. (After the work.) Frontier 643a6283510c-1791842693323742000 (tree 429d9bf5) is the first full run with
+      translations dropped when mono rewrites code: 13,681 writes to translated code, 60,082 blocks dropped, 31 split
+      tables (the first try, 643a6283510c-1791841443768764000, stopped on the 64-table area at 50.5 billion
+      instructions; 17bbbf55 gives splits 1,024). A model step and a thread switch now go on through the dispatcher's
+      table (7c8f72ef): 1,487,645 dispatch misses where the run on f9c0bbf3 had 9,984,088. Its line 160 reads 16736,
+      not Windows' 16733; commit 8dc3e19f's message says the log equals Windows' but for timings, which is wrong.
+      Line 160 is 16733 in the two runs that shared the machine (81755030, stale code and all) and 16736 in the runs
+      alone, stale code or not: the count follows the run's timing, not the translations. The guest clock is the
+      host's (process.c, CNTVCT_EL0); v0.2 §3.1 asks for a controlled one.
 
 ## prerequisites
 
