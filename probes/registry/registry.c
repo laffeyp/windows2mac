@@ -7,6 +7,14 @@
  * open a missing key (one and two levels below Software), Software itself, the root by a NULL and an empty subkey,
  * a handle that is no key, and close keys, a closed key and no key. Each row keeps the code, what was written to
  * the result, and the last error after SetLastError(0xDEAD) (registry functions return their code).
+ *
+ * Sprint 063: the game's writes (game run 38206263976 seq 2734-3490, Unity's PlayerPrefs). RegCreateKeyW of its key
+ * HKEY_CURRENT_USER\Software\NSS\Hail to the Rainbow, RegSetValueExA of REG_BINARY (2 and 20 bytes) and REG_DWORD
+ * values under the game's own names, RegQueryValueExA in the game's two forms (type, data and size pointers; all
+ * NULL) for missing and present values, RegDeleteValueA of missing ones. Then the edges the code takes: a short
+ * buffer, a size-only query, data without a size pointer, REG_SZ with and without its NUL, names in another case
+ * (ASCII and Latin-1), writes through a KEY_READ handle, a delete and a query after it, creating an existing key.
+ * The probe deletes what it creates (RegDeleteKeyW), so a second run on the runner starts as the first did.
  */
 #include <windows.h>
 
@@ -49,6 +57,114 @@ static void close(const char *name, HKEY h) {
     row(name); field("ret", (DWORD)r); field("err", GetLastError()); end();
 }
 
+#define GAME_KEY L"Software\\NSS\\Hail to the Rainbow"
+
+static void bytes(const char *k, const unsigned char *b, DWORD count) {
+    static const char hex[] = "0123456789abcdef";
+    put(",\""); put(k); put("\":\"");
+    for (DWORD i = 0; i < count; i++) { char c[3] = {hex[b[i] >> 4], hex[b[i] & 15], 0}; put(c); }
+    put("\"");
+}
+
+static HKEY create(const char *name, HKEY root, const WCHAR *sub) {
+    HKEY h = UNTOUCHED;
+    SetLastError(SENTINEL);
+    LONG r = RegCreateKeyW(root, sub, &h);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError());
+    flag("result_null", h == NULL); flag("result_untouched", h == UNTOUCHED); flag("result_is_root", h == root); end();
+    return r == ERROR_SUCCESS ? h : NULL;
+}
+
+static void set(const char *name, HKEY h, const char *value, DWORD type, const void *data, DWORD size) {
+    SetLastError(SENTINEL);
+    LONG r = RegSetValueExA(h, value, 0, type, (const BYTE *)data, size);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError()); end();
+}
+
+/* RegQueryValueExA in the game's form (type, data and size pointers) with a buffer of `room` bytes; the row keeps
+ * the buffer's first room + 2 bytes, so a write past `room` would show */
+static void query(const char *name, HKEY h, const char *value, DWORD room) {
+    unsigned char data[64];
+    for (unsigned i = 0; i < sizeof data; i++) data[i] = 0xA5;
+    DWORD type = 0xA5A5, size = room;
+    SetLastError(SENTINEL);
+    LONG r = RegQueryValueExA(h, value, NULL, &type, data, &size);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError()); field("type", type); field("size", size);
+    bytes("data", data, room + 2); end();
+}
+
+static void query_null(const char *name, HKEY h, const char *value) {       /* the game's all-NULL form */
+    SetLastError(SENTINEL);
+    LONG r = RegQueryValueExA(h, value, NULL, NULL, NULL, NULL);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError()); end();
+}
+
+static void query_size(const char *name, HKEY h, const char *value) {       /* lpData NULL: the size alone */
+    DWORD type = 0xA5A5, size = 0xA5A5;
+    SetLastError(SENTINEL);
+    LONG r = RegQueryValueExA(h, value, NULL, &type, NULL, &size);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError()); field("type", type); field("size", size); end();
+}
+
+static void delete_value(const char *name, HKEY h, const char *value) {
+    SetLastError(SENTINEL);
+    LONG r = RegDeleteValueA(h, value);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError()); end();
+}
+
+static void delete_key(const char *name, HKEY root, const WCHAR *sub) {
+    SetLastError(SENTINEL);
+    LONG r = RegDeleteKeyW(root, sub);
+    row(name); field("ret", (DWORD)r); field("err", GetLastError()); end();
+}
+
+static void writes(void) {
+    open("write.open_before", HKEY_CURRENT_USER, GAME_KEY);                    /* seq 1652: missing */
+    HKEY game = create("write.create", HKEY_CURRENT_USER, GAME_KEY);           /* seq 2734 */
+    if (!game) return;
+    HKEY again = create("write.create_existing", HKEY_CURRENT_USER, GAME_KEY);
+    HKEY reader = open("write.open_after", HKEY_CURRENT_USER, GAME_KEY);       /* seq 2890: present, KEY_READ */
+    static const unsigned char two[2] = {0x31, 0x00};
+    static const unsigned char twenty[20] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+    DWORD quality = 4;
+    set("set.binary_2", game, "unity.player_session_count_h922449978", REG_BINARY, two, 2);       /* seq 2740 */
+    set("set.binary_20", game, "unity.player_sessionid_h1351336811", REG_BINARY, twenty, 20);     /* seq 2743 */
+    set("set.dword", game, "UnityGraphicsQuality_h1669003810", REG_DWORD, &quality, 4);         /* seq 2981 */
+    query("query.missing", reader, "_Level_Metka_h1161804037", 16);                             /* seq 2891 */
+    query_null("query.missing_all_null", reader, "VolID_h225847549");                           /* seq 2965 */
+    query("query.dword", reader, "UnityGraphicsQuality_h1669003810", 16);
+    query("query.dword_case", reader, "UNITYGRAPHICSQUALITY_H1669003810", 16);
+    query("query.binary_20", reader, "unity.player_sessionid_h1351336811", 32);
+    query("query.binary_20_short", reader, "unity.player_sessionid_h1351336811", 8);
+    query_size("query.binary_20_size_only", reader, "unity.player_sessionid_h1351336811");
+    query_null("query.present_all_null", reader, "unity.player_session_count_h922449978");
+    {
+        unsigned char data[8];
+        SetLastError(SENTINEL);
+        LONG r = RegQueryValueExA(reader, "UnityGraphicsQuality_h1669003810", NULL, NULL, data, NULL);
+        row("query.data_without_size"); field("ret", (DWORD)r); field("err", GetLastError()); end();
+    }
+    set("set.sz_with_nul", game, "w2m_sz_nul", REG_SZ, "abc", 4);
+    set("set.sz_without_nul", game, "w2m_sz_bare", REG_SZ, "abc", 3);
+    query("query.sz_with_nul", reader, "w2m_sz_nul", 16);
+    query("query.sz_without_nul", reader, "w2m_sz_bare", 16);
+    set("set.latin1", game, "caf\xe9", REG_DWORD, &quality, 4);
+    query("query.latin1_case", reader, "CAF\xc9", 16);
+    set("set.through_read_handle", reader, "w2m_denied", REG_DWORD, &quality, 4);
+    delete_value("delete.through_read_handle", reader, "caf\xe9");
+    delete_value("delete.missing", game, "CutScene_h877322457");                               /* seq 2957 */
+    delete_value("delete.present", game, "UnityGraphicsQuality_h1669003810");
+    query("query.after_delete", reader, "UnityGraphicsQuality_h1669003810", 16);
+    delete_value("delete.again", game, "UnityGraphicsQuality_h1669003810");
+    if (reader) close("write.close_reader", reader);
+    if (again) close("write.close_again", again);
+    close("write.close_game", game);
+    delete_key("delete_key.parent_first", HKEY_CURRENT_USER, L"Software\\NSS");
+    delete_key("delete_key.game", HKEY_CURRENT_USER, GAME_KEY);
+    delete_key("delete_key.parent", HKEY_CURRENT_USER, L"Software\\NSS");
+    open("write.open_after_delete", HKEY_CURRENT_USER, GAME_KEY);
+}
+
 void start(void) {
     open("open.missing", HKEY_CURRENT_USER, L"Software\\w2m-probe-missing-5d1c");
     open("open.missing_two_levels", HKEY_CURRENT_USER, L"Software\\w2m-probe-missing-5d1c\\Deeper");
@@ -71,5 +187,6 @@ void start(void) {
     if (by_empty) close("close.root_empty_subkey", by_empty);
     close("close.not_a_key", UNTOUCHED);
     close("close.null", NULL);
+    writes();
     ExitProcess(0);
 }
