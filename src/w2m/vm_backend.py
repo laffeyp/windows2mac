@@ -1298,13 +1298,16 @@ class VM:
         k32 = (m.kernel32, 0, 0x1000, system + "KERNEL32.DLL", "KERNEL32.DLL")
         kb = (m.kernelbase, 0, 0x1000, system + "KERNELBASE.dll", "KERNELBASE.dll")
         nt = (m.ntdll, 0, 0x1000, system + "ntdll.dll", "ntdll.dll")
-        dll = {d.name: (d.base, d.entry or 0, d.pe.size_of_image, APP_PATH + d.name, d.name) for d in self.ld.images[1:]}
+        dll = {d.name: (d.base, d.entry or 0, d.pe.size_of_image, m.dll_paths.get(d.name.lower(), APP_PATH + d.name),
+                        d.name) for d in self.ld.images[1:]}
         entries = [program, nt, k32, kb, *dll.values()]
         init = [nt, kb, k32, *(dll[d.name] for d in self.ld.dependency_order)]
         if 0x58 + LDR_ENTRY_SIZE * len(entries) > LOADER_DATA_SIZE // 2:
             raise CompileError(f"{len(entries)} loader entries: the area holds fewer")
         at = {e[0]: va0 + 0x58 + LDR_ENTRY_SIZE * i for i, e in enumerate(entries)}
-        strings = 0x58 + LDR_ENTRY_SIZE * len(entries)
+        # the names from the area's middle: the list is written again when LoadLibrary maps a DLL (Sprint 063), and
+        # an entry or a name the program already holds keeps its address, the order being load order
+        strings = LOADER_DATA_SIZE // 2
         for i, (base, entry, size, full, leaf) in enumerate(entries):
             e = area + 0x58 + LDR_ENTRY_SIZE * i
             struct.pack_into("<QQQ", self.mm, e + 0x30, base, entry, size)
@@ -1831,6 +1834,7 @@ class VM:
         root = self.files.root
         m.dll_paths[c] = APP_PATH + "\\".join(host.relative_to(root).parts) if root in host.parents else str(host)
         self.ld.images.append(Image(host.name, pe, base))
+        self._write_loader_data(m)                      # PEB.Ldr lists it, as EnumProcessModules reads (Sprint 063)
         self._trace_ranges()
         if pe.entry_rva:
             self._pending_init = self._init_stub(base, base + pe.entry_rva)

@@ -539,6 +539,43 @@ FAMILIES: dict[str, Family] = {
                                                  ("time.qpf", "time.counter_tracks_time")),
                 "process_id_from_thread": Plant("(u32)w2m_teb()->client_process", "(u32)w2m_teb()->client_thread",
                                                 ("ids.process", "ids.thread"))}),
+    "module_search": Family(
+        name="module_search",
+        contract_id="windows.module.search",
+        version="0.1.0",
+        summary=("EnumProcessModules on the current process lists the program, ntdll, KERNEL32 and KERNELBASE first, "
+                 "a DLL LoadLibrary maps last, and reports the whole list's length whatever the buffer holds, leaving "
+                 "the last error; SetDllDirectoryW adds a directory LoadLibrary searches for a bare name and NULL "
+                 "removes it, each answering 1 with the last error left (Sprint 063: mono's EnumProcessModules, "
+                 "UnityPlayer's SetDllDirectoryW around steam_api64.dll)."),
+        probe="module_search", guest_file="module.c", dll_name="module_search_dll.dll", dll_on_disk=True,
+        runs={
+              "38210455471": Run("windows-2025", "df6ca688fd04c4599788e7c9ce2ff311246e6d96bb2273edaa87282ece84c023", "module_search-1791784818-0", "AMD EPYC 7763 64-Core Processor", dll="735a3c71d68c4329e287bd1730b1bae07a5f448c80312daefd34f624f40d79cb"),
+              "38210458062": Run("windows-2022", "1924070efea39f066a9859354c9c77138e32db51f26e5426e51b669140ea016d", "module_search-1791784818-1", "AMD EPYC 7763 64-Core Processor", dll="14dc071ae4f8c7321ae556b887ea440281eb7070c3ae9b8998aba1ce195ee192"),
+        },
+        documented=(
+            documented("ms-setdlldirectoryw", "api/winbase/nf-winbase-setdlldirectoryw", "2025-07-01",
+                       "After calling SetDllDirectory, the standard DLL search path is: 1. The directory from which "
+                       "the application loaded. 2. The directory specified by the lpPathName parameter."),
+            documented("ms-setdlldirectoryw-null", "api/winbase/nf-winbase-setdlldirectoryw", "2025-07-01",
+                       "If this parameter is NULL, the function restores the default search order."),
+            documented("ms-enumprocessmodules", "api/psapi/nf-psapi-enumprocessmodules", "2024-02-22",
+                       "If PSAPI_VERSION is 1, this function is defined as EnumProcessModules in Psapi.h and exported "
+                       "in Psapi.lib and Psapi.dll as a wrapper that calls K32EnumProcessModules.")),
+        open_questions=(
+            "The list's length differs by machine (each loads other system DLLs), so the rows hold its first four "
+            "entries in load order and where a DLL the probe loads appears; w2m lists the program, ntdll, KERNEL32, "
+            "KERNELBASE and the DLLs it maps, not the other system DLLs a Windows process holds.",
+            "SetDllDirectoryW(\"\") (the current directory out of the search) has no row and stops the run."),
+        plants={
+            "directory_not_searched": Plant("    if (h || !dll_directory_too || !dll_directory[0]) return h;",
+                                            "    return h;",
+                                            ("search.load", "enum.after_load", "search.loaded_after_reset")),
+            "reset_kept": Plant("        dll_directory[0] = 0;\n        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);",
+                                "        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);", ("search.after_reset",)),
+            "needed_is_written": Plant("    *(u32 *)needed = (u32)(8 * count);",
+                                       "    *(u32 *)needed = (u32)(8 * (count < size / 8 ? count : size / 8));",
+                                       ("enum.short", "enum.size_only"))}),
     "modules": Family(
         name="modules",
         contract_id="windows.module.queries",
@@ -1339,7 +1376,7 @@ FAMILIES: dict[str, Family] = {
             "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
             "(user32 1,007 against 1,041).",),
         plants={
-            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
     "known_folders": Family(
