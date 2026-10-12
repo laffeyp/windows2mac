@@ -109,3 +109,4 @@ The five groups accepted and merged; the frontier past seq 3426 with a conformin
     GetCurrentThreadId grows from 0.45 to 2.46 million.
   The game works and is slow, so the criterion moves to plan row 064 (speed), by the partial-pass rule (Decision
   2026-10-11, agent-resolved).
+- **Closed partial on CI run 38215049553** (success on 71c0d80a).

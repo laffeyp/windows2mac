@@ -283,7 +283,7 @@
 
 ## Sprint tail
 
-### Sprint 063 (2026-10-11, closed partial: CI pending on the closing commit)
+### Sprint 063 (2026-10-11, closed partial: CI run 38215049553 success on 71c0d80a)
 - **Scope:** kernel.appcore and the 20 unserved functions to seq 3426, five groups in parallel worktrees.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the frontier's SERVICE_UNIMPLEMENTED at EnumProcessModules; five groups' PROBE_AUTHORED, item runs to CANDIDATE_ACCEPTED and plants, each in its own worktree; five merges, each followed by its families' item runs; two full sweeps (60 accepted); the frontier to its step limit, TRACE_INGESTED, COMPARISON_COMPLETED `conforms`.
@@ -291,7 +291,7 @@
   - *Observation 2 (order violation, of the parallel work):* three of five worktrees began at main, not the sprint's branch; the agents reset them onto sprint-063 before working. Disposition: recorded; a worktree's base is named in the next fan-out's instructions.
   - *Observation 3 (missing pair, of the criterion):* the game is slow, not stopped: 4 billion instructions stay in a deserialization loop. Disposition: deferred to 064 (Decision above).
   - *Observation 4 (vocabulary gap, checked):* the step limit is reported as EXECUTION_COMPLETED `faulted` with the limit in `unobserved`'s place in the stop text; P18's proposal covers a lift refusal, not a step limit. Disposition: recorded; a limit is the harness's, and EXECUTION_COMPLETED with `killed` may fit better — checked in 064.
-- **Closed:** on green CI of the closing commit.
+- **Closed:** CI run 38215049553 (success on 71c0d80a), partial.
 
 ### Sprint 062 (2026-10-11, closed: CI run 38209558822 success on 61690d7d)
 - **Scope:** the frontier's reruns: a profile, the quadratic sort, the snapshot and translation cache decided on the measurement.
