@@ -49,6 +49,7 @@ void w2m_call_guest(struct w2m_guest_call *c, u64 fn, u64 a0, u64 a1, u64 a2, u6
 
 void w2m_return_to(u64 rsp, u64 value) {
     struct w2m_state *st = w2m_state();
+    w2m_trace_return(rsp, value);             /* a traced call that ran guest code ends here (call_trace.c) */
     st->gpr[RAX] = value;
     st->gpr[RSP] = rsp + 8;
     st->redirect_rip = *(const u64 *)rsp;

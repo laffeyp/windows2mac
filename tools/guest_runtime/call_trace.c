@@ -11,7 +11,11 @@
  * the first W2M_TRACE_CALLS calls of each function under each label, a call gets a record: the sequence number taken on entry, the
  * thread id, the four register and four stack arguments, the return value and the last error after the call. A
  * call the service leaves unreturned (W2M_SCHEDULE_RETRY, a wait that cannot complete yet) gives its record back:
- * the thread re-enters the call, and that entry is the one recorded. The host reads the records after the run.
+ * the thread re-enters the call, and that entry is the one recorded. A call whose service runs guest code first
+ * (guest_calls.c: CreateWindowExW's window procedure, EnumDisplayMonitors' callback) returns to its caller later,
+ * through w2m_return_to; its record waits in `pending`, keyed by the call's stack pointer, and is completed there
+ * with the value the caller gets (Sprint 061: the first record held the service's early 0). The host reads the
+ * records after the run.
  */
 #include "runtime.h"
 
@@ -20,6 +24,7 @@
 #define W2M_TRACE_LABELS 3          /* the two images, then GetProcAddress */
 #define W2M_TRACE_DYNAMIC 2
 #define W2M_TRACE_RECORDS_OFF 0xD100
+#define W2M_TRACE_PENDING 8
 
 struct w2m_trace_record {
     u64 ready, seq, tid, image, thunk;
@@ -34,10 +39,28 @@ struct w2m_trace {
     u64 pad[7];
     u32 taken[W2M_TRACE_THUNKS][W2M_TRACE_LABELS];   /* calls recorded per thunk and label */
     u8 owner[W2M_TRACE_THUNKS];      /* 1 + the traced image whose import slot holds the thunk; 0: none; 0xFF: never */
+    u64 pending[W2M_TRACE_PENDING][2];   /* (the call's stack pointer, 1 + its record) for calls not yet returned */
 };
 _Static_assert(__builtin_offsetof(struct w2m_trace, taken) == 0x80, "trace header (vm_backend.py)");
 _Static_assert(__builtin_offsetof(struct w2m_trace, owner) == 0xC080, "trace owners (vm_backend.py TRACE_OWNER_OFF)");
 _Static_assert(sizeof(struct w2m_trace) <= W2M_TRACE_RECORDS_OFF, "trace records follow the counters");
+
+static void complete(struct w2m_trace_record *r, u64 ret) {
+    r->ret = ret;
+    r->error = w2m_get_last_error();
+    r->ready = 1;
+}
+
+/* guest_calls.c's w2m_return_to: the caller at `rsp` gets `value` now. */
+void w2m_trace_return(u64 rsp, u64 value) {
+    struct w2m_trace *t = (struct w2m_trace *)W2M_TRACE_VA;
+    for (int i = 0; i < W2M_TRACE_PENDING; i++)
+        if (t->pending[i][1] && t->pending[i][0] == rsp) {
+            complete((struct w2m_trace_record *)(W2M_TRACE_VA + W2M_TRACE_RECORDS_OFF) + (t->pending[i][1] - 1), value);
+            t->pending[i][1] = 0;
+            return;
+        }
+}
 
 typedef u64 (*w2m_service)(u64, u64, u64, u64, u64);
 
@@ -83,8 +106,21 @@ u64 w2m_traced(u64 a0, u64 a1, u64 a2, u64 a3, u64 rsp, u64 service, u64 thunk) 
         t->taken[thunk][image]--;    /* the slot stays, not ready: the re-entry is recorded */
         return ret;
     }
-    r->ret = ret;
-    r->error = w2m_get_last_error();
-    r->ready = 1;
+    struct w2m_state *st = w2m_state();
+    if (st->redirect_rip) {
+        if (st->redirect_rip == stack[0] && st->gpr[4] == rsp + 8) {     /* returned at once through w2m_return_to */
+            complete(r, st->gpr[0]);
+            return ret;
+        }
+        for (int i = 0; i < W2M_TRACE_PENDING; i++)
+            if (!t->pending[i][1]) {
+                t->pending[i][0] = rsp;
+                t->pending[i][1] = (u64)(r - (struct w2m_trace_record *)(W2M_TRACE_VA + W2M_TRACE_RECORDS_OFF)) + 1;
+                return ret;
+            }
+        t->dropped++;                /* more calls in guest code at once than `pending` holds: the record stays unready */
+        return ret;
+    }
+    complete(r, ret);
     return ret;
 }

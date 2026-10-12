@@ -310,5 +310,6 @@ enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_S
  * The default is tools/guest_runtime/last_error.c. */
 void w2m_set_last_error(u32 code);
 u32 w2m_get_last_error(void);
+void w2m_trace_return(u64 rsp, u64 value);   /* call_trace.c: a traced call that ran guest code returns (Sprint 061) */
 
 #endif

@@ -148,3 +148,19 @@ def test_a_call_through_getprocaddress_is_labeled_as_the_capture_labels_it() -> 
     assert ("GetProcAddress", "RtlAddGrowableFunctionTable") in labels
     assert ("probe.exe", "RtlAddGrowableFunctionTable") not in labels
     assert ("probe.exe", "GetModuleHandleW") in labels or ("probe.exe", "LoadLibraryW") in labels
+
+
+@pytest.mark.hvf
+def test_a_call_that_runs_guest_code_is_recorded_with_what_its_caller_gets() -> None:
+    """CreateWindowExW runs the window procedure through guest_calls.c and returns the window through w2m_return_to.
+    Sprint 060's trace recorded the service's early 0 (game run 38203364352 against the frontier: Windows 0x40184,
+    w2m 0); the record now waits for the real return."""
+    f = family_run.FAMILIES["windows"]
+    exe = (ROOT / "store" / "binaries" / f"{next(iter(f.runs.values())).binary}.exe").read_bytes()
+    calls, dropped, out, stop = traced(exe, ("probe.exe",))
+    assert stop == "ExitProcess" and dropped == 0
+    created = [c for c in calls if c[4] == "CreateWindowExW"]
+    assert [hex(c[6]) for c in created] == ["0x0", "0x20010", "0x20020", "0x20030"]   # the first: W2mProbeNoSuchClass
+    assert created[0][7] == 1407                                  # ERROR_CANNOT_FIND_WND_CLASS, after the failure
+    windows_used = {c[5][0] for c in calls if c[4] in ("GetClientRect", "DestroyWindow", "GetWindowRect")}
+    assert {c[6] for c in created} & windows_used
