@@ -1,0 +1,19 @@
+{"s":"load","module":1}
+{"s":"proc","found":1}
+{"s":"create.unknown_interface","hr":2147500034,"out_null":1,"out_untouched":0}
+{"s":"create.null_out","hr":2147500035}
+{"s":"create.factory","hr":0,"out_nonnull":1}
+{"s":"refcount","add_ref":2,"release":1}
+{"s":"query.unknown","hr":0,"same":1}
+{"s":"query.nothing","hr":2147500034,"out_null":1}
+{"s":"adapter.0","hr":0,"desc_hr":0,"description":"Microsoft Basic Render Driver","vendor":5140,"device":140,"subsys":0,"revision":0,"dedicated_video":0,"dedicated_system":0,"shared_system":8587180032,"luid_nonzero":1}
+{"s":"adapter.0.output.0","desc_hr":0,"device_name":"\u005c\u005c.\u005cDISPLAY1","left":0,"top":0,"right":1024,"bottom":768,"attached":1,"rotation":1,"monitor_is_primary":1}
+{"s":"adapter.0.outputs.end.1","hr":2289696770,"out_null":1}
+{"s":"adapter.0.release","count":0}
+{"s":"adapter.1","hr":0,"desc_hr":0,"description":"Microsoft Basic Render Driver","vendor":5140,"device":140,"subsys":0,"revision":0,"dedicated_video":0,"dedicated_system":0,"shared_system":8587180032,"luid_nonzero":1}
+{"s":"adapter.1.outputs.end.0","hr":2289696770,"out_null":1}
+{"s":"adapter.1.release","count":0}
+{"s":"adapters.end.2","hr":2289696770,"out_null":1}
+{"s":"game_walk","matched":1}
+{"s":"release.last","count":0}
+{"s":"free_library","ret":1}
