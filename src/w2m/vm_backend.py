@@ -36,6 +36,7 @@ import subprocess
 import tempfile
 import time
 from bisect import bisect_right
+from collections import Counter
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from functools import partial
@@ -1055,6 +1056,8 @@ class VM:
         self.out = bytearray()
         self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
         self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
+        self.exits: Counter[int] = Counter()            # hvc exits by number (Sprint 064's census)
+        self.exit_sites: Counter[tuple[int, int]] = Counter()   # (hvc number, x86 address at the exit)
         self._pending_init = 0                          # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
@@ -2393,6 +2396,8 @@ class VM:
                     break
                 imm = e.syndrome & 0xFFFF
                 where = self.x86_address_at(e.pc - 4)
+                self.exits[imm] += 1                          # the exit census (Sprint 064): kind, then the site
+                self.exit_sites[(imm, where)] += 1
                 if imm == 1:
                     if on_dispatch:
                         on_dispatch(self, x)                  # may replace the state in x

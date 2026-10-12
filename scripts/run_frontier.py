@@ -75,7 +75,7 @@ PLANTS = {
 def where(vm: Any, address: int) -> str:
     """An x86 address as module+RVA, or a thunk's import name (Sprint 063: where each thread stands at the stop)."""
     if address in vm.ld.thunks:
-        return vm.ld.thunks[address]
+        return str(vm.ld.thunks[address])
     base = vm.modules.containing(address)
     name = next((n for n, (b, _, _) in vm.modules.dlls.items() if b == base), vm.modules.image_name if base else "")
     return f"{name}+0x{address - base:x}" if base else hex(address)
@@ -159,6 +159,7 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
+        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12))
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -227,6 +228,11 @@ def main(argv: list[str]) -> int:
     for pid, (name, code, calls, threads) in state.get("processes", {}).items():
         print(f"process {pid} {name}: exit code {code}; threads {threads}; calls by service {calls}")
     print(f"unity.log lines {state.get('log_lines')}")
+    elapsed = time.monotonic() - t0
+    print(f"exits by hvc {dict(sorted(state.get('exits', {}).items(), key=lambda kv: -kv[1]))}; "
+          f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s")
+    for (imm, at), n in state.get("exit_sites", []):
+        print(f"  hvc {imm} at 0x{at:x}: {n}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
