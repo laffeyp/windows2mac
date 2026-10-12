@@ -418,3 +418,12 @@
 **Finding (#47):** a probe that copies the program's inputs proves the implementation on those inputs only; every input the code accepts without a row must either get a row or stop the run, and fixed buffers, narrowing conversions and unchecked host answers are where silent acceptance hides.
 
 **Kit change suggested:** each family's probe carries boundary rows (the longest name, a non-ASCII name, a changing input, an out-of-range geometry) for every input the implementation accepts, and a gate test rejects the patterns that accept silently.
+
+### 2026-10-11 — Sprint 057: planted faults whose text had gone
+
+**What happened:** each plant names a piece of source text and its replacement, and a plant run asserts the text is present before it runs. Only a local plant run checked that, and a sprint ran the plants of the families it worked on. Running every family's plants in one sweep stopped on six whose text had been rewritten (a ternary for a constant, a helper for a TEB offset, a refactored wait): those plants had tested nothing since their files changed, while every gate passed.
+
+**Finding (#48):** a check that runs only when someone asks for it decays silently; the cheap part of it (the plant's text still present once) belongs in the gate that runs on every push, and the expensive part (the plant run) in a sweep whenever the candidate changes.
+
+**Kit change suggested:** the gate checks every planted fault's anchor on each push, and a change that makes a family's candidate stale reruns that family's plants with its item run.
+

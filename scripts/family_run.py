@@ -17,9 +17,11 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fnmatch
+import functools
 import hashlib
 import importlib
 import json
+import re
 import sys
 import tempfile
 import time
@@ -35,7 +37,7 @@ import msgspec
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from w2m import VOCAB_VERSION, events  # noqa: E402
+from w2m import VOCAB_VERSION, events, guest_runtime  # noqa: E402
 from w2m.compare import compare_exact_rows  # noqa: E402
 from w2m.contract import Contract, ExactRows, load_contract  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
@@ -98,7 +100,7 @@ class Family:
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
     dll_name: str | None = None           # the probe's own DLL, loaded from its directory (Sprint 046)
-    host_files: tuple[str, ...] = ()      # host source that implements the family too (the loader's Python)
+    host_files: tuple[str, ...] = ()      # Python no runtime request reaches that implements it (the loader's)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The contract's rows from a probe's printed rows: derived, then the excluded rows dropped."""
@@ -355,7 +357,7 @@ def time_family(start: str, summary: str) -> Family:
         name="time_and_error_mode" + ("_child" if child else ""),
         contract_id="windows.time.error_mode_child" if child else "windows.time.local_and_error_mode",
         version="0.1.0" if child else "0.2.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
-        runs=TIME_RUNS, host_files=("tools/guest_runtime/processes.c", "src/w2m/kernel.py", "src/w2m/vm_backend.py"),
+        runs=TIME_RUNS,
         documented=(
             documented("ms-seterrormode", "api/errhandlingapi/nf-errhandlingapi-seterrormode", "2024-02-22",
                        "Each process has an associated error mode ... A child process inherits the error mode of its "
@@ -443,7 +445,7 @@ FAMILIES: dict[str, Family] = {
             "base on Windows is not observed, and w2m places it at its preferred base when free.",
             "ntdll's exports are not listed: GetProcAddress on ntdll stops the run."),
         derive=loader_rows, dll_name="loader_dll.dll",
-        host_files=("src/w2m/loader.py", "src/w2m/modules.py", "src/w2m/vm_backend.py"),
+        host_files=("src/w2m/loader.py",),
         plants={"init_order_kernel32_first": Plant(
                     "        init = [nt, kb, k32, *(dll[d.name] for d in self.ld.dependency_order)]",
                     "        init = [nt, k32, kb, *(dll[d.name] for d in self.ld.dependency_order)]",
@@ -803,8 +805,8 @@ FAMILIES: dict[str, Family] = {
         plants={"shared_count_low_bits": Plant("    *(u64 *)lock = (w ? w + SHARED_ONE : SHARED_ONE | EXCLUSIVE);",
                                                "    *(u64 *)lock = (w ? w + 1 : SHARED_ONE | EXCLUSIVE);",
                                                ("srw.shared_twice", "srw.shared_released_once", "srw.shared_released_twice")),
-                "sleep_leaves_error": Plant("    set_error(ERROR_TIMEOUT);\n    return w2m_logged(W2M_API_SleepConditionVariableSRW",
-                                           "    (void)set_error;\n    return w2m_logged(W2M_API_SleepConditionVariableSRW",
+                "sleep_leaves_error": Plant("    if (!woken) set_error(ERROR_TIMEOUT);",
+                                           "    if (!woken) (void)set_error;",
                                            ("cv.sleep_timeout_zero", "cv.sleep_timeout_one_ms"))}),
     "thread_queries": Family(
         name="thread_queries",
@@ -859,7 +861,7 @@ FAMILIES: dict[str, Family] = {
             "answers one processor, 16 GiB, and the guest counter's milliseconds."),
         plants={"two_processors_one_bit": Plant("    *(u32 *)(p + 32) = 1;", "    *(u32 *)(p + 32) = 2;",
                                                 ("native_system_info", "system_info")),
-                "version_build_off": Plant("    *(u32 *)(p + 12) = 9200;", "    *(u32 *)(p + 12) = 9600;", ("version_ex",))}),
+                "version_build_off": Plant("windows_10 ? 26100 : 9200;", "windows_10 ? 26100 : 9600;", ("version_ex",))}),
     "virtual_memory": Family(
         name="virtual_memory",
         contract_id="windows.memory.virtual",
@@ -887,7 +889,7 @@ FAMILIES: dict[str, Family] = {
             "it is at least the reservation.",
             "A writable image page counts as written when its bytes differ from load; a write of the same bytes is "
             "missed."),
-        derive=virtual_memory_rows, host_files=("src/w2m/virtual_memory.py", "src/w2m/vm_backend.py"),
+        derive=virtual_memory_rows,
         plants={"commit_null_refused": Plant("        if kind & MEM_RESERVE or not address:     # MEM_COMMIT alone at NULL reserves too (row alloc.commit_null)",
                                              "        if kind & MEM_RESERVE:",
                                              ("alloc.commit_null", "query.commit_null", "protect.commit_null_middle",
@@ -922,9 +924,9 @@ FAMILIES: dict[str, Family] = {
         open_questions=(
             "One thread: a finite wait on an unsignaled object returns WAIT_TIMEOUT at once in w2m (no thread can "
             "signal it); INFINITE waits, named objects and initially owned mutexes stop the run (Sprint 047).",),
-        plants={"auto_event_stays_set": Plant("    else if (o->kind != EVENT_MANUAL) o->count--;",
-                                              "    else if (o->kind == SEMAPHORE) o->count--;", ("event.auto.wait_consumed",)),
-                "create_leaves_error": Plant("            set_error(0);                              /* rows *.create: err 0 */\n",
+        plants={"auto_event_stays_set": Plant("    } else if (o->kind == SEMAPHORE || o->kind == EVENT_AUTO) {",
+                                              "    } else if (o->kind == SEMAPHORE) {", ("event.auto.wait_consumed",)),
+                "create_leaves_error": Plant("    set_error(0);                                  /* rows *.create: err 0 */\n",
                                              "", ("semaphore.create", "event.manual.create", "event.auto.create_set",
                                                   "mutex.create"))}),
     "storage_get2": Family(
@@ -991,7 +993,7 @@ FAMILIES: dict[str, Family] = {
             "Windows calls the DLL's entry with DLL_PROCESS_DETACH at ExitProcess; w2m does not yet, and no row reads it.",
             "The console start's standard input and error answer NULL and its standard output FILE_TYPE_DISK in w2m, "
             "which the DLL's C runtime asks at start-up; the rows do not read them."),
-        dll_name="static_tls_dll.dll", host_files=("src/w2m/loader.py", "src/w2m/vm_backend.py"),
+        dll_name="static_tls_dll.dll", host_files=("src/w2m/loader.py",),
         # (a first plant, indices from 0 with no program slot, was named for tls.index and faulted the run: the DLL's
         # block moved to slot 0 while it read slot 1; recorded in Sprint 046's card, replaced by this one)
         plants={"template_not_copied": Plant("        block = bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill)",
@@ -1079,7 +1081,7 @@ FAMILIES: dict[str, Family] = {
                  "entropy-in-buffer flag beside it accepted); a NULL buffer, another flag bit or a handle with the system "
                  "flag is STATUS_INVALID_PARAMETER; a NULL handle without it STATUS_INVALID_HANDLE; bytes past the length "
                  "kept; the last error untouched; two draws differ and 64 KB hold every byte value."),
-        probe="generate_random", guest_file="bcrypt.c", host_files=("src/w2m/vm_backend.py",),
+        probe="generate_random", guest_file="bcrypt.c",
         runs={
               "38085850021": Run("windows-2025", "4fb5e3ac666bfe211b8fdd30d94a94c9617ec850291c646c439b676aa6d64934", "generate_random-1791665930-0", "AMD EPYC 7763 64-Core Processor"),
               "38085852392": Run("windows-2022", "306d0d2ade5c08a2ed7dad9f327f09d978792cc1e545256790701bd3089a363f", "generate_random-1791665930-1", "AMD EPYC 7763 64-Core Processor")},
@@ -1146,7 +1148,6 @@ FAMILIES: dict[str, Family] = {
                  "wildcards (123) and an invalid level (87); times as relations to the clock; success leaves the last "
                  "error and failure the caller's structure."),
         probe="file_attributes", guest_file="file_attributes.c",
-        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/file.c"),
         runs={
               "38087355443": Run("windows-2025", "f7c82e7ade1ebdbea2207111490e87681ba1d74256df2a614cc5237d41e9a334", "file_attributes-1791667332-0", "AMD EPYC 9V74 80-Core Processor"),
               "38087357359": Run("windows-2022", "28cb58d08437a23643ec9661d294e90a72617def99961475c27e11c04516e248", "file_attributes-1791667332-1", "AMD EPYC 9V74 80-Core Processor"),
@@ -1177,7 +1178,6 @@ FAMILIES: dict[str, Family] = {
                  "\\\\?\\, UNC, dots, slashes, blanks, wildcards), SetCurrentDirectoryW, CreateDirectoryW and "
                  "RemoveDirectoryW with their errors; paths printed against <cwd>, <parent> and <root>."),
         probe="paths", guest_file="paths.c",
-        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/file.c"),
         runs={
               "38090281974": Run("windows-2025", "a720b00e8a38dcb0482217ade8c02b84281782fa011fafcd9f8fa613ef59bdd1", "paths-1791670095-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
               "38090284442": Run("windows-2022", "22e3d64701297ce3aa758740cfd378a143b49475321683ed7bfbf2d4e29ba2a4", "paths-1791670095-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1212,7 +1212,7 @@ FAMILIES: dict[str, Family] = {
         summary=("CreateFileW with SECURITY_ATTRIBUTES and no descriptor: nLength unchecked (0, 12, 1000 open), "
                  "bInheritHandle nonzero sets HANDLE_FLAG_INHERIT (GetHandleInformation), the open's result and error "
                  "as with no attributes."),
-        probe="file_security", guest_file="file.c", host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/paths.c"),
+        probe="file_security", guest_file="file.c",
         runs={
               "38090863707": Run("windows-2025", "54f99a38848d08f519159a5e922708481f6859da345febe832e457e753c46364", "file_security-1791670645-0", "AMD EPYC 7763 64-Core Processor"),
               "38090865352": Run("windows-2022", "30a17799849fecb415ae48da8d6a5ca42c71478579f4b263c9b007c5f245d8e8", "file_security-1791670645-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1270,7 +1270,7 @@ FAMILIES: dict[str, Family] = {
                  "with GENERIC_WRITE, FILE_GENERIC_WRITE, FILE_WRITE_DATA or FILE_APPEND_DATA; both with FILE_ALL_ACCESS, "
                  "GENERIC_ALL or MAXIMUM_ALLOWED, which also carry DELETE into sharing; FILE_READ_ATTRIBUTES, SYNCHRONIZE "
                  "and 0 open with no data access and no part in sharing."),
-        probe="file_access", guest_file="file.c", host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/paths.c"),
+        probe="file_access", guest_file="file.c",
         runs={
               "38093116676": Run("windows-2025", "0ee5b17f1b2961169e640617187689155381e46c2a8207c2966ffd6a76aa885e", "file_access-1791672842-0", "AMD EPYC 7763 64-Core Processor"),
               "38093118511": Run("windows-2022", "96bb232d78a05bf731dde8f6eba9671e7d06bcdf1ef95524aebf39923c3af8da", "file_access-1791672842-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1298,7 +1298,7 @@ FAMILIES: dict[str, Family] = {
                  "spelling (case, no extension, full path); GetModuleFileNameW gives C:\\Windows\\System32\\SHELL32.dll; "
                  "GetProcAddress gives the import's address for an imported name, an address for another export, NULL "
                  "and 127 for a name it does not export; FreeLibrary succeeds and the module stays."),
-        probe="system_modules", guest_file="module.c", host_files=("src/w2m/modules.py", "src/w2m/vm_backend.py"),
+        probe="system_modules", guest_file="module.c",
         runs={
               "38094160385": Run("windows-2025", "202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815", "system_modules-1791673893-0", "AMD EPYC 7763 64-Core Processor"),
               "38094162181": Run("windows-2022", "fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff", "system_modules-1791673893-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1325,7 +1325,7 @@ FAMILIES: dict[str, Family] = {
                  "backslash; the profile is C:\\Users\\<user>; LocalAppData and RoamingAppData are AppData\\Local and "
                  "AppData\\Roaming; KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE give the same path; ole32's CoTaskMemFree "
                  "frees it and leaves the last error, NULL included."),
-        probe="known_folders", guest_file="known_folders.c", host_files=("src/w2m/file_bridge.py",),
+        probe="known_folders", guest_file="known_folders.c",
         derive=described("Drops `err` from every row that holds `hr`.", lambda printed: [{k: v for k, v in r.items() if not ("hr" in r and k == "err")} for r in printed], "known_folders_rows"),
         runs={
               "38098265812": Run("windows-2025", "93fdcb0f8270b50ff9a2b03c38926f3ab49945806eca0c43fc4d53302cb2309a", "known_folders-1791678212-0", "AMD EPYC 9V45 96-Core Processor"),
@@ -1429,7 +1429,6 @@ FAMILIES: dict[str, Family] = {
                  "address and last error 0; CloseHandle closes the token. LocalAlloc (LMEM_FIXED, LPTR) gives a "
                  "16-aligned process-heap block of the size asked, LPTR zeroed; LocalFree answers NULL."),
         probe="integrity_level", guest_file="token.c",
-        host_files=("tools/guest_runtime/local_memory.c", "tools/guest_runtime/sync_objects.c"),
         derive=described("Replaces `rid` with `low`: whether it is 0x1000 (SECURITY_MANDATORY_LOW_RID).", lambda printed: [({k: v for k, v in r.items() if k != "rid"} | {"low": r["rid"] == 0x1000})
                                 if "rid" in r else r for r in printed], "integrity_level_rows"),
         runs={
@@ -1484,7 +1483,7 @@ FAMILIES: dict[str, Family] = {
                  "nSize - 1 bytes and a NUL, the answer nSize and error 122; success sets error 0. GetModuleHandleA finds "
                  "kernel32 under any case and without its extension, NULL is the image, a missing name is NULL and 126; "
                  "success leaves the last error."),
-        probe="module_names_ansi", guest_file="module.c", host_files=("src/w2m/modules.py",),
+        probe="module_names_ansi", guest_file="module.c",
         derive=described("Drops `w_len` from file.image, file.exact, file.short and file.one, and `ret` from the first three.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("file.image", "file.exact", "file.short", "file.one")
                                          and (k == "w_len" or (k == "ret" and r["s"] != "file.one")))}
@@ -1572,7 +1571,7 @@ FAMILIES: dict[str, Family] = {
                  "StackLimit - 3 pages, those 3 pages committed with PAGE_GUARD, committed read-write from StackLimit "
                  "to StackBase; VirtualQuery's BaseAddress is the queried page; GetCurrentThreadStackLimits answers "
                  "DeallocationStack and StackBase; the last error is left."),
-        probe="thread_stack", guest_file="thread_queries.c", host_files=("src/w2m/virtual_memory.py",),
+        probe="thread_stack", guest_file="thread_queries.c",
         derive=described("Drops `base_address` from query.sp and query.base_minus_one.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("query.sp", "query.base_minus_one") and k == "base_address")}
                                 for r in printed], "thread_stack_rows"),
@@ -1598,8 +1597,8 @@ FAMILIES: dict[str, Family] = {
             # the expression, not the constant: host_patched rebinds changed objects by identity, and small ints are shared
             "guard_one_page": Plant("        guard = limit - STACK_GUARD_PAGES * PAGE", "        guard = limit - 1 * PAGE",
                                     ("query.below_guard", "query.dealloc"), host="w2m.virtual_memory"),
-            "limits_swapped": Plant("    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x1478);",
-                                    "    *(u64 *)low = *(const u64 *)(W2M_TEB_VA + 0x10);", ("limits",))}),
+            "limits_swapped": Plant("    *(u64 *)low = *(const u64 *)((u8 *)w2m_teb() + 0x1478);",
+                                    "    *(u64 *)low = *(const u64 *)((u8 *)w2m_teb() + 0x10);", ("limits",))}),
     "thread_handles": Family(
         name="thread_handles",
         contract_id="windows.handle.thread_handles",
@@ -1611,7 +1610,6 @@ FAMILIES: dict[str, Family] = {
                  "the current thread's id gives a real handle, on an id no thread has NULL and 87. CreateSemaphoreW "
                  "sets error 0 on success; an initial count above the maximum is NULL and 87."),
         probe="thread_handles", guest_file="sync_objects.c",
-        host_files=("tools/guest_runtime/file.c", "tools/guest_runtime/console.c"),
         runs={
               "38114820680": Run("windows-2025", "42e42696025a5ee2c71994db9a47d4be2fe667d8b769e65a617b68359cf65703", "thread_handles-1791696424-0", "AMD EPYC 9V45 96-Core Processor"),
               "38114822014": Run("windows-2022", "6b75ead1c4597d8c4b1ec8426c3e775e4b8fbd9e859d861ef6a249f8a51c56a6", "thread_handles-1791696424-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1628,8 +1626,8 @@ FAMILIES: dict[str, Family] = {
         plants={
             "close_source_new_slot": Plant("        if (options & DUPLICATE_CLOSE_SOURCE) h = source;          /* the copy keeps the slot (row dup.close_source) */\n        else h",
                                            "        h", ("dup.close_source",)),
-            "thread_signals": Plant("    if (o->kind == THREAD || o->kind == PROCESS) return 0;",
-                                    "    if (o->kind == THREAD || o->kind == PROCESS) return 1;", ("wait.own_thread",)),
+            "thread_signals": Plant("    if (o->kind == THREAD) return w2m_thread_ended((u32)o->count);",
+                                    "    if (o->kind == THREAD) return 1;", ("wait.own_thread",)),
             "semaphore_leaves_error": Plant("    u64 h = handle_for(api, new_object(api, kind, count, max));\n    set_error(0);",
                                             "    u64 h = handle_for(api, new_object(api, kind, count, max));",
                                             ("semaphore.zero", "semaphore.one"))}),
@@ -1641,7 +1639,7 @@ FAMILIES: dict[str, Family] = {
                  "reservation whose base is the heap's handle (64 KB aligned), allocation protection read-write; "
                  "committed read-write where blocks lie, reserved after; BaseAddress is the queried page; the last "
                  "error is left."),
-        probe="heap_query", guest_file="heap.c", host_files=("src/w2m/virtual_memory.py",),
+        probe="heap_query", guest_file="heap.c",
         derive=described("Drops `allocation_base_below_block` from query.small and query.after_small_region.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("query.small", "query.after_small_region")
                                          and k == "allocation_base_below_block")}
@@ -1683,7 +1681,6 @@ FAMILIES: dict[str, Family] = {
         probe="files_more", guest_file="file.c",
         derive=described("Names each standard.sweep row by its size, standard.sweep.<size>.", lambda printed: [{**r, "s": f"standard.sweep.{r['size']}"} if r.get("s") == "standard.sweep" else r
                                 for r in printed], "files_more_rows"),                       # one row per swept size
-        host_files=("src/w2m/file_bridge.py", "tools/guest_runtime/system_info.c", "tools/guest_runtime/paths.c"),
         runs={
               "38119625685": Run("windows-2025", "4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8", "files_more-1791701711-0", "AMD EPYC 7763 64-Core Processor"),
               "38119627458": Run("windows-2022", "17d996052924c712ba56fb559c8b0f851988187a4ee4da56c368ac66ee9b02f0", "files_more-1791701711-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
@@ -1731,7 +1728,7 @@ FAMILIES: dict[str, Family] = {
                  "without a NUL and ERROR_INSUFFICIENT_BUFFER; size 0 gives 3; a negative size is "
                  "ERROR_INVALID_PARAMETER. GetUserDefaultLocaleName: \"en-US\", 6; a short buffer gets size - 1 units "
                  "and a NUL, and it and size 0 answer 0 with error 266. Success leaves the last error."),
-        probe="locale", guest_file="locale.c", host_files=("tools/guest_runtime/time_and_error_mode.c",),
+        probe="locale", guest_file="locale.c",
         runs={
               "38120346754": Run("windows-2025", "acbe1c6e43d39d53f83d838bf64f81750c95b6b45302c98238e58e4b1c15785d", "locale-1791702485-0", "AMD EPYC 7763 64-Core Processor"),
               "38120348019": Run("windows-2022", "cc344b3608f76dfe67851701a49772a4f967fb08ff02defe066c43367758c03d", "locale-1791702485-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1778,8 +1775,6 @@ FAMILIES: dict[str, Family] = {
                  "VirtualQuery reports it MEM_MAPPED, committed PAGE_READONLY, its pages rounded; the rest of the 64 KB "
                  "granule is free. Mapping more bytes than the file, or FILE_MAP_WRITE, is ERROR_ACCESS_DENIED."),
         probe="file_mapping", guest_file="file.c",
-        host_files=("src/w2m/file_bridge.py", "src/w2m/virtual_memory.py", "src/w2m/vm_backend.py",
-                    "tools/guest_runtime/sync_objects.c"),
         derive=described("Drops `region_size` from query.after_view and query.granule_end.", lambda printed: [{k: v for k, v in r.items()
                                  if not (r.get("s") in ("query.after_view", "query.granule_end") and k == "region_size")}
                                 for r in printed], "file_mapping_rows"),
@@ -1819,7 +1814,6 @@ FAMILIES: dict[str, Family] = {
                  "space. Success leaves the last error. The table itself (rows \"dump\", ids 0-16383) is "
                  "specs/system_messages.json, from build 26100."),
         probe="format_message", guest_file="messages.c",
-        host_files=("src/w2m/system_messages.py", "specs/system_messages.json", "tools/guest_runtime/local_memory.c"),
         derive=described("Drops the dump rows.", lambda printed: [r for r in printed if r.get("s") != "dump"], "format_message_rows"),
         runs={
               "38120951889": Run("windows-2025", "4224a823b406642df21fc8778e5fbd0182890b8063d6a1c28e0861c0dcabb926", "format_message-1791703140-0", "AMD EPYC 7763 64-Core Processor"),
@@ -1864,8 +1858,6 @@ FAMILIES: dict[str, Family] = {
                  "description calls answer 0x10000000; SleepEx answers 0; AppPolicyGetThreadInitializationType gives "
                  "policy 0."),
         probe="threads", guest_file="threads.c", dll_name="threads_dll.dll",
-        host_files=("src/w2m/scheduler.py", "src/w2m/vm_backend.py", "tools/guest_runtime/sync_objects.c",
-                    "tools/guest_runtime/thread_queries.c", "tools/guest_runtime/runtime.h"),
         runs={
               "38124576301": Run("windows-2025", "d71f0b8e07328ab48fb4e9023a07174c087dddd55d9654111c741513e202af8e", "threads-1791706952-0", "AMD EPYC 7763 64-Core Processor", dll="b8e8ccaaa31a472a4f845004cca183336414bd99cf8515f4efb4e4eb479cebce"),
               "38124578332": Run("windows-2022", "ba552c63ffe0fceef05c663c390ce1dd3a3c6670bab915e9165b13c6951e7a21", "threads-1791706952-1", "AMD EPYC 7763 64-Core Processor", dll="f119bb2d52de7ed7f7763790c0b4304796d2fb26fa42789c552dbf4f546f3dac"),
@@ -1907,7 +1899,6 @@ FAMILIES: dict[str, Family] = {
                  "GetDefaultAudioEndpoint E_NOTFOUND); notification clients registered without AddRef; "
                  "PropVariantClear, CoCreateGuid (version 4, variant 10), BSTRs and VariantClear."),
         probe="com", guest_file="com.c",
-        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/runtime.h"),
         runs={
               "38126872187": Run("windows-2025", "da7ca465e5f2b4e226c8f49a2d20f159c20e88b37d89e449dacf621fab691f09", "com-1791709273-0", "AMD EPYC 7763 64-Core Processor"),
               "38126873913": Run("windows-2022", "a6e5f68b6d7b952199acac0418054346609592ff7cd382c32d6608d6d9e8c229", "com-1791709273-1", "AMD EPYC 9V45 96-Core Processor"),
@@ -1937,7 +1928,7 @@ FAMILIES: dict[str, Family] = {
                  "second of GetTickCount, GetTickCount64's low half with GetTickCount; none going back over 1,000 reads, "
                  "each advancing 40 ms to 5 s across Sleep(50); timeBeginPeriod and timeEndPeriod answering 0, and 97 "
                  "(TIMERR_NOCANDO) for a period of 0."),
-        probe="time", guest_file="time.c", host_files=("src/w2m/vm_backend.py",),
+        probe="time", guest_file="time.c",
         runs={
               "38173127764": Run("windows-2025", "b96af5861876df13a97b0e822e3c03134b5ebedf40f6b027b8ec792e510239c6", "time-1791751169-0", "AMD EPYC 7763 64-Core Processor"),
               "38173129974": Run("windows-2022", "3cf5e2998c1778dc7f8e5d54fb9b55d9c0c59cc127649782e6a4987f95206c81", "time-1791751169-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1965,7 +1956,7 @@ FAMILIES: dict[str, Family] = {
                  "that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a "
                  "NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; "
                  "a key closes once; the last error is left."),
-        probe="registry", guest_file="registry.c", host_files=("src/w2m/vm_backend.py",),
+        probe="registry", guest_file="registry.c",
         runs={
               "38182330078": Run("windows-2025", "b9b66037b6a7f2f230bb3009c2dc5f1a083234466555848cbfd6d9a1311685af", "registry-1791759336-0", "AMD EPYC 7763 64-Core Processor"),
               "38182331638": Run("windows-2022", "07bfa9e5709c4d41c7ea02ab298b4c1c92df5e68159b782325b0eb00bfd9d653", "registry-1791759336-1", "AMD EPYC 7763 64-Core Processor"),
@@ -1996,8 +1987,6 @@ FAMILIES: dict[str, Family] = {
                  "without case; a plain name found as stored; ERROR_NO_MORE_FILES at the end; ERROR_PATH_NOT_FOUND for a "
                  "missing folder, ERROR_FILE_NOT_FOUND for no match; FindClose of INVALID_HANDLE_VALUE ERROR_INVALID_HANDLE."),
         probe="file_search", guest_file="file_search.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/file_bridge.py", "tools/guest_runtime/file.c", "tools/guest_runtime/paths.c",
-                    "tools/guest_runtime/heap.c"),
         runs={
               "38182330015": Run("windows-2025", "664269b73531514ae7e205d5f4f0f2ba62b5c2d6f6351779f6ed39fa015e86f2", "file_search-1791759336-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
               "38182331619": Run("windows-2022", "bd4cb3db57c693ffa810b711cd6b873ce8394565cb19f17688708783d78abc44", "file_search-1791759336-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2027,7 +2016,6 @@ FAMILIES: dict[str, Family] = {
                  "ERROR_OLD_WIN_VERSION; a type mask of 0 STATUS_INVALID_PARAMETER, ERROR_BAD_ARGUMENTS); GetVersionExW "
                  "10.0, platform 2, product 3, suite 0x190; SHELL32's DllGetVersion 10.0.10586."),
         probe="version", guest_file="version.c",
-        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/resources.c", "tools/guest_runtime/system_info.c"),
         runs={
               "38173733146": Run("windows-2025", "3a49efbae6b80ad79bc6226b6d41c39241097745e032f0848118c10d034fef4f", "version-1791751693-0", "AMD EPYC 9V45 96-Core Processor"),
               "38173735116": Run("windows-2022", "a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c11f7", "version-1791751693-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2062,8 +2050,6 @@ FAMILIES: dict[str, Family] = {
                  "EnumDisplaySettingsW's current settings and 13 modes; one 1024 x 768 monitor, the work area above the "
                  "taskbar."),
         probe="display", guest_file="display.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py", "tools/guest_runtime/guest_calls.c",
-                    "tools/guest_runtime/windows.c", "src/w2m/guest_stubs.py"),
         runs={
               "38174316653": Run("windows-2025", "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c", "display-1791752210-0", "AMD EPYC 9V74 80-Core Processor"),
               "38174318347": Run("windows-2022", "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b", "display-1791752210-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
@@ -2096,8 +2082,6 @@ FAMILIES: dict[str, Family] = {
                  "size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the "
                  "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW)."),
         probe="windows", guest_file="windows.c",
-        host_files=("src/w2m/vm_backend.py", "tools/guest_runtime/guest_calls.c", "tools/guest_runtime/display.c",
-                    "tools/guest_runtime/resources.c", "src/w2m/guest_stubs.py"),
         runs={
               "38182422811": Run("windows-2025", "97ad55015dfa144bb7322a90a651722686d5bb1df8d8e1df74180ac8afcdc09f", "windows-1791759423-0", "AMD EPYC 9V74 80-Core Processor"),
               "38182424645": Run("windows-2022", "f1655d9fd40c36838ab28f1d1de7aea5839ca99ea55fd91ed8e5c23408befdcd", "windows-1791759423-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2138,7 +2122,7 @@ FAMILIES: dict[str, Family] = {
         summary=("RoInitialize as UnityPlayer reaches it: the winrt, com and winrt-string API sets load as combase.dll, "
                  "whose RoInitialize is the COM apartment (S_OK, S_FALSE, RPC_E_CHANGED_MODE, E_INVALIDARG for another "
                  "type) and RoUninitialize balances it."),
-        probe="winrt", guest_file="com.c", host_files=("src/w2m/vm_backend.py", "src/w2m/modules.py"),
+        probe="winrt", guest_file="com.c",
         runs={
               "38178400798": Run("windows-2025", "3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5", "winrt-1791755781-0", "AMD EPYC 9V74 80-Core Processor"),
               "38178402576": Run("windows-2022", "11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d", "winrt-1791755781-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2160,8 +2144,6 @@ FAMILIES: dict[str, Family] = {
                  "writer is gone, OpenProcess by id, waits on a process (WAIT_TIMEOUT, STILL_ACTIVE, then the exit code), "
                  "WaitForMultipleObjectsEx; SetConsoleCtrlHandler."),
         probe="processes", guest_file="processes.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/kernel.py", "src/w2m/file_bridge.py",
-                    "tools/guest_runtime/sync_objects.c", "tools/guest_runtime/file.c", "tools/guest_runtime/console.c"),
         runs={
               "38178401014": Run("windows-2025", "2dc24b52d929259b223fdd69df721779b652416d8ad58edbbed39ece4b68147e", "processes-1791755781-0", "AMD EPYC 7763 64-Core Processor"),
               "38178402797": Run("windows-2022", "c319ac016f85d9bb6e7104cef6987ea4fd6069740e743ae8900eca6d418ceeb0", "processes-1791755781-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2191,7 +2173,7 @@ FAMILIES: dict[str, Family] = {
                  "most 2.2, wHighVersion 2.2, \"WinSock 2.0\" and \"Running\", socket limits 0 from 2.0 and 32767 and "
                  "65467 for 1.1; 0.0 is WSAVERNOTSUPPORTED, a NULL WSADATA WSAEFAULT; each success owes one "
                  "WSACleanup, which answers 0 and the last error 0, and SOCKET_ERROR with WSANOTINITIALISED after."),
-        probe="network", guest_file="network.c", host_files=("src/w2m/vm_backend.py",),
+        probe="network", guest_file="network.c",
         runs={
               "38127406287": Run("windows-2025", "5b9775dd1e1878ccb61334b584054ca1f631a3e9b6ebdb6b8ccc0e8fa6a65d02", "network-1791709809-0", "AMD EPYC 9V45 96-Core Processor"),
               "38127407661": Run("windows-2022", "b5a4a5e85883bc29f7f7765b0630090d2bc50484645e45bfdf70c6352f0c0a9b", "network-1791709809-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2217,7 +2199,6 @@ FAMILIES: dict[str, Family] = {
                  "address; RtlCaptureContext, RtlLookupFunctionEntry, RtlVirtualUnwind and RtlPcToFileHeader answer "
                  "for the probe's own code; an exception no frame takes reaches the top-level filter."),
         probe="exceptions", guest_file="exceptions.c",
-        host_files=("src/w2m/vm_backend.py", "src/w2m/guest_stubs.py", "tools/guest_runtime/guest_calls.c"),
         runs={
               "38165931122": Run("windows-2025", "a71f491c4e8b9c1a563597497a004b74add2cf9caca0c7a9d3b36b041f34553a", "exceptions-1791745002-0", "AMD EPYC 7763 64-Core Processor"),
               "38165933249": Run("windows-2022", "55369a03c431c6c2448a9ddbe99ebcfe452227a2fcb79c184015697bc57cb6b3", "exceptions-1791745002-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2328,6 +2309,9 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         machine = Machine(spawner(files, environment, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
         try:
             r = machine.run(vm)                                  # the clock probes spin until time advances
+            foreign = foreign_processes(machine, sources)
+            if foreign:
+                r.stop = foreign
         finally:
             for other in machine.processes.values():
                 if other.vm is not vm:
@@ -2340,6 +2324,20 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
             written = Path(d) / f.output_file
             out = written.read_bytes() if written.exists() else b""
     return out, r.stop, time.monotonic() - t0
+
+
+FOREIGN = "a process ran a runtime not built from the candidate's sources"
+
+
+def foreign_processes(machine: Machine, sources: dict[str, str] | None) -> str | None:
+    """Each process the run started (the main one, and every child the Machine built) holds the runtime image built
+    from `sources`, or the run says which did not (Sprint 057; KIT_DIARY #46: a plant reached the parent and not the
+    child, and its run reported nothing)."""
+    from w2m.vm_backend import build_runtime
+    want = build_runtime(sources=sources).sha256
+    other = [f"process {p.pid}: {p.vm.runtime.sha256[7:19]}"
+             for p in machine.processes.values() if p.vm.runtime.sha256 != want]
+    return f"{FOREIGN} ({want[7:19]}): {'; '.join(other)}" if other else None
 
 
 def derived_output(f: Family, out: bytes) -> bytes:
@@ -2360,11 +2358,94 @@ def named_reach(f: Family, p: Plant) -> list[str]:
     return [r["s"] for r in c.acceptance.rows if any(fnmatch.fnmatchcase(r["s"], pat) for pat in p.reach)]
 
 
+@functools.cache
+def runtime_objects() -> dict[str, guest_runtime.ObjectFile]:
+    """The runtime's object files as the VM's image links them: each file's external symbols and headers."""
+    from w2m.vm_backend import MONITOR_VA, RUNTIME_IMAGE, runtime_defines
+    return guest_runtime.objects(MONITOR_VA + RUNTIME_IMAGE, runtime_defines())
+
+
+def host_named_symbols() -> tuple[str, ...]:
+    """Runtime symbols the host reaches by name rather than through an import: the image's entry (guest_runtime's
+    ld -e) and each symbols["..."] and runtime_symbol("...") in vm_backend.py."""
+    text = (ROOT / "src" / "w2m" / "vm_backend.py").read_text()
+    return ("w2m_image_entry", *sorted(set(re.findall(HOST_NAMED, text))))
+
+
+HOST_NAMED = re.compile(r'(?:symbols\["|runtime_symbol\(")(\w+)"')
+
+
+def family_binaries(f: Family) -> list[bytes]:
+    """The probe binaries (and DLLs) the runners ran for the family."""
+    names = sorted({h for r in f.runs.values() for h in (f"{r.binary}.exe", f"{r.dll}.dll" if r.dll else None) if h})
+    return [(ROOT / "store" / "binaries" / n).read_bytes() for n in names]
+
+
+def runtime_files(f: Family) -> tuple[str, ...]:
+    """The runtime files a family's runs can reach (Sprint 057): from its guest file, the files defining the services
+    its probe binaries import and the symbols the host names, every file that defines a symbol a reached file uses."""
+    from w2m.pe import parse as parse_pe
+    from w2m.vm_backend import service_for
+    objects = runtime_objects()
+    definer = {symbol: name for name, o in objects.items() for symbol in o.defined}
+    by_name = {symbol: name for name, o in objects.items() for symbol in o.local} | definer
+    reached = {f.guest_file} | {by_name[s] for s in host_named_symbols()}
+    for data in family_binaries(f):
+        image = parse_pe(data)
+        for dll, names in [*image.imports.items(), *image.delay_imports.items()]:
+            for fn in names:
+                service = service_for(dll, fn)
+                if service is not None:
+                    reached.add(definer[service[0]])
+    todo = list(reached)
+    while todo:
+        for symbol in objects[todo.pop()].used:
+            name = definer.get(symbol)
+            if name is None:
+                raise ValueError(f"{symbol}: no runtime file defines it")
+            if name not in reached:
+                reached.add(name)
+                todo.append(name)
+    return tuple(sorted(reached))
+
+
+REQUEST = re.compile(r"\bW2M_(?:HOST|FILE)_[A-Z_]+\b")
+
+
+def candidate_files(f: Family) -> tuple[list[str], list[str], list[str]]:
+    """(runtime files, headers, host files) of the family's candidate: the runtime files it reaches, the headers they
+    include (api_ids.h aside: it numbers every file's services, and the build refuses a collision), and the Python
+    answering their requests (vm_backend.REQUEST_FILES) with the family's own host_files."""
+    files = runtime_files(f)
+    objects = runtime_objects()
+    headers = sorted({h for n in files for h in objects[n].headers} - {"api_ids.h"})
+    return list(files), headers, sorted(set(requested_host_files(files)) | set(f.host_files))
+
+
+def requested_host_files(files: tuple[str, ...]) -> tuple[str, ...]:
+    """The Python answering the requests runtime files `files` make (vm_backend.REQUEST_FILES)."""
+    from w2m.vm_backend import REQUEST_FILES
+    host: set[str] = set()
+    for n in files:
+        for request in set(REQUEST.findall((GUEST / n).read_text())):
+            if request not in REQUEST_FILES:
+                raise ValueError(f"{n}: {request} answers from no Python vm_backend.REQUEST_FILES names")
+            host.update(REQUEST_FILES[request])
+    return tuple(sorted(host))
+
+
 def candidate_sha256(f: Family, sources: dict[str, str] | None = None) -> str:
-    """The candidate is the family's guest file, and its host files when it names any (in order, each
-    preceded by its path): an edit to either makes a new candidate."""
-    text = (sources or {}).get(f.guest_file, (GUEST / f.guest_file).read_text())
-    for path in f.host_files:
+    """The candidate is every file a run of the family reaches (candidate_files), each preceded by its path, the
+    runtime's files as `sources` has them: an edit to any makes a new candidate (Sprint 057; before, a list kept by
+    hand missed heap.c)."""
+    files, headers, host = candidate_files(f)
+    generated = guest_runtime.generated_headers()
+    text = ""
+    for n in files:
+        text += f"\0tools/guest_runtime/{n}\0" + (sources or {}).get(n, (GUEST / n).read_text())
+    for h in headers:
+        text += f"\0{h}\0" + (generated[h] if h in generated else (GUEST / h).read_text())
+    for path in host:
         text += f"\0{path}\0" + (ROOT / path).read_text()
     return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
 
@@ -2514,6 +2595,28 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
             "verdicts": dict(state["verdicts"]), "divergence": dict(state["divergence"]), "events": dict(kinds)}
 
 
+def plant_run(f: Family, name: str) -> tuple[bool, str]:
+    """Plant `name` and run the family's first binary: (whether the unequal rows are those it names, and every process
+    ran the planted runtime; what it found)."""
+    from w2m.guest_runtime import BuildError
+    p = f.plants[name]
+    binary = next(iter(f.runs.values())).binary
+    try:
+        if p.host is not None:
+            with host_patched(p.host, p.old, p.new):
+                out, stop, _ = run_in_vm(binary, None, f)
+        else:
+            out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
+    except BuildError as e:                       # a plant that does not build tests nothing
+        return False, f"{name}: the planted runtime did not build: {str(e)[:300]}"
+    rows, named = unequal_rows(f, out), named_reach(f, p)
+    ok = rows == named and not stop.startswith(FOREIGN)
+    verdict = ("NOT judged: " + stop if stop.startswith(FOREIGN) else "as named" if rows == named
+               else f"NOT as named: named {named}")
+    shown = rows if len(rows) <= 20 else [*rows[:20], f"... {len(rows) - 20} more"]
+    return ok, f"{name}: {len(rows)} unequal rows {shown} ({stop}); {len(named)} named; {verdict}"
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("family", choices=sorted(FAMILIES))
@@ -2539,24 +2642,10 @@ def main(argv: list[str]) -> int:
         index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
         print(json.dumps(s, indent=1))
     if a.plants:
-        binary = next(iter(f.runs.values())).binary
-        from w2m.guest_runtime import BuildError
-        for name, p in f.plants.items():
-            try:
-                if p.host is not None:
-                    with host_patched(p.host, p.old, p.new):
-                        out, stop, _ = run_in_vm(binary, None, f)
-                else:
-                    out, stop, _ = run_in_vm(binary, planted_sources(f, name), f)
-            except BuildError as e:                       # a plant that does not build tests nothing
-                print(f"{name}: the planted runtime did not build: {str(e)[:300]}")
-                failed = True
-                continue
-            rows, named = unequal_rows(f, out), named_reach(f, p)
-            verdict = "as named" if rows == named else f"NOT as named: named {named}"
-            failed |= rows != named
-            shown = rows if len(rows) <= 20 else [*rows[:20], f"... {len(rows) - 20} more"]
-            print(f"{name}: {len(rows)} unequal rows {shown} ({stop}); {len(named)} named; {verdict}")
+        for name in f.plants:
+            ok, line = plant_run(f, name)
+            failed |= not ok
+            print(line)
     return 1 if failed else 0
 
 

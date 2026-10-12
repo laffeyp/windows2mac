@@ -26,3 +26,14 @@ def test_the_committed_index_accepts_every_family_on_its_current_file() -> None:
         assert s["candidate_sha256"] == family_run.candidate_sha256(f), \
             f"{name}: {f.guest_file} or its host files changed since its item run"
         assert (ROOT / s["record"]).is_dir(), s["record"]
+
+
+def test_every_plant_finds_its_text_once() -> None:
+    """A plant whose text left its file tests nothing, and only a plant run (not a gate) used to find it: six had
+    gone so when Sprint 057 ran every family's plants (their files had changed in Sprints 051-055)."""
+    import importlib
+    for name, f in family_run.FAMILIES.items():
+        for plant, p in f.plants.items():
+            path = (Path(importlib.import_module(p.host).__file__ or "") if p.host is not None
+                    else family_run.GUEST / (p.file or f.guest_file))
+            assert path.read_text().count(p.old) == 1, f"{name} plant {plant}: its text is not in {path.name} once"

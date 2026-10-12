@@ -117,12 +117,19 @@ def _parse(data: bytes) -> tuple[list[tuple[int, bytes]], dict[str, int]]:
     return segments, symbols
 
 
-def build(base_va: int, defines: dict[str, int], last_error_source: str | None = None,
-          file_source: str | None = None, sources: dict[str, str] | None = None) -> Image:
-    """Compile every .c file of tools/guest_runtime/ and link them at `base_va`. `sources` replaces
-    files by name (a planted fault, a model's draft: Sprints 042, 044); `last_error_source` (a
-    candidate's last-error pair, which has no includes) and `file_source` are its older spellings."""
-    texts = {p.name: p.read_text() for p in sorted(SOURCE.glob("*.c"))}
+@dataclass(frozen=True)
+class ObjectFile:
+    """One runtime file's object: the external symbols it defines and those it uses, the headers it includes, and its
+    file-local symbols (the host reaches some by name in the linked image: w2m_threads_blocked)."""
+    defined: frozenset[str]
+    used: frozenset[str]
+    headers: frozenset[str]
+    local: frozenset[str] = frozenset()
+
+
+def _texts_for(last_error_source: str | None, file_source: str | None,
+               sources: dict[str, str] | None) -> dict[str, str]:
+    texts = _texts()
     if last_error_source is not None:
         texts["last_error.c"] = '#include "runtime.h"\n' + last_error_source
     if file_source is not None:
@@ -131,35 +138,101 @@ def build(base_va: int, defines: dict[str, int], last_error_source: str | None =
         if name not in texts:
             raise BuildError(f"{name}: no such guest runtime file")
         texts[name] = text
-    header = (SOURCE / "runtime.h").read_text()
+    return texts
+
+
+def generated_headers() -> dict[str, str]:
+    """The headers the build writes from Python's tables (api_ids.h aside: it is written from the sources)."""
     from w2m.code_pages import c_header as code_page_header
     from w2m.cpuid import c_header
     from w2m.system_messages import c_header as message_header
-    cpuid_table = c_header()
-    code_page_table = code_page_header()
-    message_table = message_header()
+    return {"cpuid_table.h": c_header(), "code_page_tables.h": code_page_header(),
+            "system_messages.h": message_header()}
+
+
+def _compile(base_va: int, defines: dict[str, int], texts: dict[str, str]) -> tuple[Path, Path]:
+    """Every file compiled to an object (and its header list, clang -MD) under build/guest_runtime/<key>/, where
+    either is missing; (that folder, the image's path there is to be linked to)."""
+    header = (SOURCE / "runtime.h").read_text()
+    generated = generated_headers()
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
-    key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header, cpuid_table, code_page_table, message_table,
-                                    " ".join(CFLAGS), " ".join(dflags), f"{base_va:x}"]).encode()).hexdigest()
+    key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header,
+                                    generated["cpuid_table.h"], generated["code_page_tables.h"],
+                                    generated["system_messages.h"], " ".join(CFLAGS), " ".join(dflags),
+                                    f"{base_va:x}"]).encode()).hexdigest()
     out = CACHE / f"{key}.bin"
+    work = CACHE / key
+    names = sorted(texts)
+    if all((work / f"{Path(n).stem}.o").exists() and (work / f"{Path(n).stem}.d").exists() for n in names):
+        return work, out
+    work.mkdir(parents=True, exist_ok=True)
+    for name, text in generated.items():
+        (work / name).write_text(text)
+    (work / "api_ids.h").write_text(api_header(texts))
+    for name in names:
+        src = work / name
+        src.write_text(texts[name])
+        obj = work / (src.stem + ".o")
+        r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{work}", "-MD", "-MF", str(work / (src.stem + ".d")),
+                            "-c", str(src), "-o", str(obj)], capture_output=True, text=True)
+        if r.returncode:
+            raise BuildError(f"{name}: {r.stderr.strip()}")
+    return work, out
+
+
+def _object_symbols(data: bytes) -> tuple[set[str], set[str], set[str]]:
+    """An MH_OBJECT's symbols: (external and defined in a section, external and undefined, file-local and defined),
+    without the leading underscore."""
+    magic, _, _, _, ncmds = struct.unpack_from("<IiiII", data, 0)
+    if magic != MH_MAGIC_64:
+        raise BuildError(f"not a 64-bit Mach-O object: magic {magic:#x}")
+    defined: set[str] = set()
+    used: set[str] = set()
+    local: set[str] = set()
+    p = 32
+    for _ in range(ncmds):
+        cmd, size = struct.unpack_from("<II", data, p)
+        if cmd == LC_SYMTAB:
+            symoff, nsyms, stroff, _ = struct.unpack_from("<IIII", data, p + 8)
+            for i in range(nsyms):
+                strx, ntype, _, _, value = struct.unpack_from("<IBBHQ", data, symoff + 16 * i)
+                if ntype & 0xE0:                                 # a debugging entry (N_STAB)
+                    continue
+                end = data.index(b"\0", stroff + strx)
+                name = data[stroff + strx:end].decode()
+                name = name[1:] if name.startswith("_") else name
+                if ntype & 0x0E == 0x0E:                         # N_SECT
+                    (defined if ntype & 0x01 else local).add(name)
+                elif ntype & 0x0E == 0x00 and ntype & 0x01:      # N_UNDF, N_EXT: a common symbol (a tentative
+                    (defined if value else used).add(name)       # definition, its size in n_value) defines it
+        p += size
+    return defined, used, local
+
+
+def objects(base_va: int, defines: dict[str, int], sources: dict[str, str] | None = None) -> dict[str, ObjectFile]:
+    """Each runtime file's object, as build() links it (Sprint 057: a family's runtime files are read from these)."""
+    texts = _texts_for(None, None, sources)
+    work, _ = _compile(base_va, defines, texts)
+    out = {}
+    for name in sorted(texts):
+        stem = Path(name).stem
+        defined, used, local = _object_symbols((work / f"{stem}.o").read_bytes())
+        rule = (work / f"{stem}.d").read_text().replace("\\\n", " ")
+        listed = rule.split(":", 1)[1].split()
+        headers = frozenset(Path(h).name for h in listed if h.endswith(".h"))
+        out[name] = ObjectFile(frozenset(defined), frozenset(used), headers, frozenset(local))
+    return out
+
+
+def build(base_va: int, defines: dict[str, int], last_error_source: str | None = None,
+          file_source: str | None = None, sources: dict[str, str] | None = None) -> Image:
+    """Compile every .c file of tools/guest_runtime/ and link them at `base_va`. `sources` replaces
+    files by name (a planted fault, a model's draft: Sprints 042, 044); `last_error_source` (a
+    candidate's last-error pair, which has no includes) and `file_source` are its older spellings."""
+    texts = _texts_for(last_error_source, file_source, sources)
+    work, out = _compile(base_va, defines, texts)
     if not out.exists():
-        CACHE.mkdir(parents=True, exist_ok=True)
-        work = CACHE / key
-        work.mkdir(exist_ok=True)
-        (work / "cpuid_table.h").write_text(cpuid_table)
-        (work / "code_page_tables.h").write_text(code_page_table)
-        (work / "system_messages.h").write_text(message_table)
-        (work / "api_ids.h").write_text(api_header(texts))
-        objs = []
-        for name, text in sorted(texts.items()):
-            src = work / name
-            src.write_text(text)
-            obj = work / (src.stem + ".o")
-            r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{work}", "-c", str(src), "-o", str(obj)],
-                               capture_output=True, text=True)
-            if r.returncode:
-                raise BuildError(f"{name}: {r.stderr.strip()}")
-            objs.append(str(obj))
+        objs = [str(work / f"{Path(n).stem}.o") for n in sorted(texts)]
         r = subprocess.run(["ld", "-arch", "arm64", "-preload", "-e", "_w2m_image_entry",
                             "-segaddr", "__TEXT", f"0x{base_va:x}", "-o", str(out), *objs],
                            capture_output=True, text=True)

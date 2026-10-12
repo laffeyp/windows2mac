@@ -213,6 +213,7 @@
 - **2026-10-11** — Sprint 054 (the version check, the display and the game window) closed. `tools/guest_runtime/guest_calls.c` (services call the guest's code; exception dispatch moved onto it), `windows.c`, `display.c`, `version.c`, `time.c`, `registry.c`, `file_search.c`, `resources.c`; `src/w2m/guest_stubs.py`; FILE_LIST; PE resources; system DLLs loaded by name; six probes and contracts (version, display, windows, time, registry, file_search 0.1.0) and virtual_memory 0.2.0; the frontier given the batch run's arguments. Dual contract: signal pass (seven families' item runs, 34 plants caught as named; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED at the named CreateEventW); artifact pass (gates 0, CI on the closing commit). Observation: pass against the amended criterion — the crash handler (a second process) is Sprint 055.
 - **2026-10-11** — Sprint 055 (the crash handler: a second process) closed. `src/w2m/kernel.py`, VM.steps, `tools/guest_runtime/processes.c`, named events and inherited handles, RoInitialize, the fault log, `tools/jit_capture/call_trace.h` and `handler_trace.c`, game run 38176899195, contracts windows.process.processes and windows.winrt.winrt 0.1.0 and windows.time.local_and_error_mode 0.2.0. Dual contract: signal pass (item runs and plants of three families; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED GetCurrentDirectoryA with a fault logged); artifact pass (gates 0, CI on the closing commit). Observation: pass — the handler runs as a second VM and waits as on Windows; the next stop is a NULL PEB.ProcessParameters (Sprint 056).
 - **2026-10-11** — Sprint 056 (the review's findings) closed. `tests/test_runtime_native.py`, `tests/test_runtime_patterns.py`; fixes in file_search.c, registry.c, windows.c, display.c, console.c, file_bridge.py, vm_backend.py; contracts registry, file_search and windows 0.2.0; `derivation` in 24 contracts. Dual contract: signal pass (three families' item runs, 20 plants caught as named, 28 families re-run to CANDIDATE_ACCEPTED); artifact pass (gates 0, CI on the closing commit). Observation: pass.
+- **2026-10-11** — Sprint 057 (trustworthy evidence) closed. `guest_runtime.objects` (each object's symbols and headers), `vm_backend.REQUEST_FILES` and `service_for`, derived candidates and the per-process runtime check in `scripts/family_run.py`, `tests/test_family_dependencies.py`, the plant-anchor gate; six plants re-anchored. Dual contract: signal pass (56 item runs to CANDIDATE_ACCEPTED on derived candidates, every plant caught as named); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 
 ## Deferred
 
@@ -266,6 +267,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 057 (2026-10-11, closed: CI run 38188148154 success on f7b474c7)
+- **Scope:** each family's candidate derived from the runtime's objects, its probe's imports and the requests its files make; every process a run starts checked against the candidate's build.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the objects read; 56 item runs SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED per runner binary, CANDIDATE_ACCEPTED, SESSION_COMPLETED on the derived candidates; every family's plants run; five families' plant runs stopped on a lost anchor, re-anchored and run again.
+  - *Observation 1 (missing pair, of the judge):* six plants named text no longer in their files, and no gate ran plants. Disposition: resolved-here (re-anchored; a gate checks every anchor; KIT_DIARY #48).
+  - *Observation 2 (payload anomaly, of the reader):* `w2m_threads_blocked` is a common symbol, undefined with a size in its object, and the first derivation found no file defining it. Disposition: resolved-here (a common symbol counts as a definition, tested).
+  - *Observation 3 (vocabulary gap, checked):* a run whose process ran another runtime stops with a named stop; no tag needed. Disposition: recorded (vocabulary 0.7).
 
 ### Sprint 056 (2026-10-11, closed: CI run 38183215347 success on 79f13466)
 - **Scope:** the eight verified findings of the review of Sprint 054, the audit for their patterns, the claims.

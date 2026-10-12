@@ -153,6 +153,21 @@ HOST_THREAD = 30                    # threads.c's requests: a0 the W2M_THREAD_* 
 HOST_KERNEL = 33                    # kernel.py's shared objects (Sprint 055): a0 the sub-operation
 HOST_EXCEPTION = 31                 # exceptions.c's requests (Sprint 053): a0 1, the x86 stubs' page; 2, XMM0-15 to a1
 EXCEPTION_STUBS, EXCEPTION_CAPTURE_XMM = 1, 2
+# The Python that answers each request the runtime's C names (Sprint 057): a family's candidate holds the files its
+# runtime files' requests reach (scripts/family_run.py); _host_request receives every one of them
+_HERE, _FILES, _VIRTUAL = "src/w2m/vm_backend.py", "src/w2m/file_bridge.py", "src/w2m/virtual_memory.py"
+REQUEST_FILES: dict[str, tuple[str, ...]] = {
+    **{f"W2M_HOST_{n}": (_HERE,) for n in ("WRITE", "EXIT", "CLOCK", "UNIMPLEMENTED", "RUNTIME_FAULT", "FILETIME",
+                                            "RANDOM")},
+    **{f"W2M_HOST_{n}": (_HERE, "src/w2m/modules.py") for n in ("MODULE", "PROC", "MODULE_PATH", "MODULE_AT")},
+    **{f"W2M_HOST_VIRTUAL_{n}": (_HERE, _VIRTUAL) for n in ("ALLOC", "FREE", "PROTECT", "QUERY")},
+    "W2M_HOST_MAP_VIEW": (_HERE, _VIRTUAL, _FILES),
+    "W2M_HOST_THREAD": (_HERE, "src/w2m/scheduler.py"),
+    "W2M_HOST_KERNEL": (_HERE, "src/w2m/kernel.py"),
+    "W2M_HOST_EXCEPTION": (_HERE, "src/w2m/guest_stubs.py"),
+    **{f"W2M_FILE_{n}": (_HERE, _FILES) for n in ("LOOKUP", "OPEN", "CLOSE", "READ", "WRITE", "SIZE", "TRUNCATE",
+                                                   "UNLINK", "STAT", "MKDIR", "RMDIR", "FSTAT", "DUP", "LIST")},
+}
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
     THREAD_SIGNAL = range(1, 9)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
@@ -952,6 +967,18 @@ class _GuestView:
             self.vm.mem.write(va, data)
 
 
+def service_for(dll: str, fn: str) -> tuple[str, bool] | None:
+    """The runtime service an import binds to (its C symbol, whether it sets RAX), or None: hvc #9 at the call."""
+    fn = ORDINAL_NAMES.get(dll.upper(), {}).get(fn, fn)
+    service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
+               else DLL_SERVICES.get(dll.upper(), {}).get(fn))
+    if service is None and dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL"):
+        # kernel32 exports RtlUnwindEx, RtlCaptureContext and the other Rtl* exception functions as its own
+        # (not forwarders: specs/windows_exports.json) and they do ntdll's work: one service serves both names
+        service = DLL_SERVICES.get("NTDLL.DLL", {}).get(fn)
+    return service
+
+
 class VM:
     """One guest thread of `loaded` in a fresh Hypervisor.framework VM.
 
@@ -1509,13 +1536,7 @@ class VM:
         `thunk`, so the thread re-enters it; any schedule bit exits with hvc #12 to the scheduler."""
         dll, fn = import_name.split("!", 1)
         a = Assembler(MONITOR_VA + self.code_cursor)
-        fn = ORDINAL_NAMES.get(dll.upper(), {}).get(fn, fn)
-        service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
-                   else DLL_SERVICES.get(dll.upper(), {}).get(fn))
-        if service is None and dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL"):
-            # kernel32 exports RtlUnwindEx, RtlCaptureContext and the other Rtl* exception functions as its own
-            # (not forwarders: specs/windows_exports.json) and they do ntdll's work: one service serves both names
-            service = DLL_SERVICES.get("NTDLL.DLL", {}).get(fn)
+        service = service_for(dll, fn)
         state = PROCESS_VA + STATE_OFF
         if service is None:
             a.emit(a64.hvc(9))
