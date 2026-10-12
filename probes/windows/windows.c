@@ -12,8 +12,17 @@
  * 320, 240, ...). The procedure here records each message it receives with its parameters, passes it to
  * DefWindowProcW (WM_CREATE excepted, as UnityPlayer's procedure keeps it) and records the answer; after
  * CreateWindowExW returns the window's rectangles, styles and stored values are read back.
+ *
+ * Sprint 063 (batch run 38206263976, seq 2592-3497, the game's main thread): on a window of the batch class the game
+ * sets GWLP_USERDATA through SetWindowLongPtrA, drains its queue with PeekMessageA (PM_NOREMOVE, then PM_REMOVE),
+ * GetMessageExtraInfo, TranslateMessage and DispatchMessageA, registers a device notification (flags 4), asks
+ * GetFocus and calls SetFocus on the window, and loads a cursor it wrote to a temporary file with LoadImageW
+ * (IMAGE_CURSOR, LR_LOADFROMFILE | LR_DEFAULTSIZE). The probe does the same in that order on a window "game", then the
+ * boundaries: a posted message, WM_QUIT, SetFocus on another thread's window, LoadImageW of a resource the module
+ * lacks and of a file that is not there.
  */
 #include <windows.h>
+#include <dbt.h>
 
 #define SENTINEL 0xDEADu
 #define STORED ((LONG_PTR)0x5A5A5A5A12345678ll)
@@ -54,6 +63,15 @@ static void point(const char *k, POINT p) {
     key[m + 1] = 'y';
     sfield(key, p.y);
 }
+static void hexfield(const char *k, unsigned long long v) {
+    static const char d[] = "0123456789abcdef";
+    put(",\""); put(k); put("\":\"");
+    char t[17];
+    int m = 0;
+    do { t[m++] = d[v & 15]; v >>= 4; } while (v);
+    while (m) out[n++] = t[--m];
+    put("\"");
+}
 static void end(void) {
     put("}\n");
     DWORD written;
@@ -62,6 +80,8 @@ static void end(void) {
 }
 
 static HINSTANCE self;
+static HWND game_window;
+static ATOM batch_atom_for_threads;
 static const char *window_name;            /* "batch" or "play", the rows' prefix */
 static HWND current;
 static unsigned messages;
@@ -127,8 +147,22 @@ static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         r = 0;
         break;
     }
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:                         /* wParam: the window losing or gaining the focus */
+        flag("wparam_null", wp == 0); flag("wparam_is_self", (HWND)wp == w);
+        flag("lparam_null", lp == 0);
+        r = DefWindowProcW(w, msg, wp, lp);
+        break;
+    case WM_WINDOWPOSCHANGING:
+    case WM_WINDOWPOSCHANGED: {                /* lParam: a WINDOWPOS */
+        const WINDOWPOS *p = (const WINDOWPOS *)lp;
+        field("wparam", wp); flag("pos_hwnd_is_self", p->hwnd == w); field("pos_flags", p->flags);
+        flag("after_null", p->hwndInsertAfter == NULL);
+        r = DefWindowProcW(w, msg, wp, lp);
+        break;
+    }
     default:
-        field("wparam", wp); field("lparam", (ULONG_PTR)lp);
+        field("wparam", wp); hexfield("lparam", (ULONG_PTR)lp);
         r = DefWindowProcW(w, msg, wp, lp);
     }
     sfield("result", r);
@@ -137,6 +171,7 @@ static LRESULT CALLBACK procedure(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static char name[48];
+static void game_calls(void);
 static void named(const char *prefix, const char *s) {
     int m = 0;
     for (const char *p = prefix; *p; p++) name[m++] = *p;
@@ -227,6 +262,7 @@ void start(void) {
     hidden_class.lpszClassName = L"W2mProbeHidden";
     SetLastError(SENTINEL);
     ATOM hidden_atom = RegisterClassW(&hidden_class);
+    batch_atom_for_threads = hidden_atom;
     row("class.register"); flag("atom_in_range", hidden_atom >= 0xC000); flag("after_first", hidden_atom > main_atom);
     field("err", GetLastError()); end();
 
@@ -284,5 +320,161 @@ void start(void) {
         flag("primary_primary", MonitorFromWindow(away, MONITOR_DEFAULTTOPRIMARY) == primary);
         flag("nearest_primary", MonitorFromWindow(away, MONITOR_DEFAULTTONEAREST) == primary); end();
     }
+    game_calls();
     ExitProcess(0);
+}
+
+/* ---- Sprint 063: the game's later calls on its window, then the boundaries ---------------------------------------- */
+
+static void drain(const char *prefix) {
+    MSG m;
+    for (int i = 0; i < 12; i++) {
+        char key[48];
+        int k = 0;
+        for (const char *p = prefix; *p; p++) key[k++] = *p;
+        key[k++] = '.'; key[k++] = (char)('0' + i / 10); key[k++] = (char)('0' + i % 10); key[k] = 0;
+        for (unsigned j = 0; j < sizeof m; j++) ((char *)&m)[j] = 0;
+        SetLastError(SENTINEL);
+        BOOL looked = PeekMessageA(&m, NULL, 0, 0, PM_NOREMOVE);
+        DWORD e0 = GetLastError();
+        row(key); field("noremove", looked != 0); field("noremove_err", e0);
+        if (!looked) { end(); return; }
+        UINT seen = m.message;
+        SetLastError(SENTINEL);
+        BOOL got = PeekMessageA(&m, NULL, 0, 0, PM_REMOVE);
+        field("remove", got != 0); field("err", GetLastError()); field("same", m.message == seen);
+        field("msg", m.message); flag("hwnd_game", m.hwnd == game_window); flag("hwnd_null", m.hwnd == NULL);
+        field("wparam", m.wParam); hexfield("lparam", (ULONG_PTR)m.lParam);
+        field("extra_info", (ULONG_PTR)GetMessageExtraInfo());
+        if (m.message == WM_QUIT) { end(); return; }
+        SetLastError(SENTINEL);
+        BOOL translated = TranslateMessage(&m);
+        field("translated", translated != 0); field("translate_err", GetLastError());
+        end();
+        SetLastError(SENTINEL);
+        LRESULT dispatched = DispatchMessageA(&m);
+        DWORD e2 = GetLastError();
+        row(key); flag("after", 1); sfield("dispatched", dispatched); field("dispatch_err", e2); end();
+    }
+}
+
+static HANDLE other_ready, other_done;
+static HWND other_window;
+static DWORD WINAPI other_thread(LPVOID unused) {
+    (void)unused;
+    other_window = CreateWindowExW(0, (LPCWSTR)(ULONG_PTR)batch_atom_for_threads, L"other", 0, CW_USEDEFAULT,
+                                   CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, self, NULL);
+    SetEvent(other_ready);
+    WaitForSingleObject(other_done, INFINITE);
+    return 0;
+}
+
+static void game_calls(void) {
+    window_name = "game";
+    current = NULL;
+    messages = 0;
+    SetLastError(SENTINEL);
+    game_window = CreateWindowExW(0, (LPCWSTR)(ULONG_PTR)batch_atom_for_threads, L"Hail to the Rainbow", 0,
+                                  CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, self, NULL);
+    row("create.game"); flag("null", game_window == NULL); field("messages", messages); field("err", GetLastError()); end();
+    if (!game_window) return;
+
+    /* seq 2592: SetWindowLongPtrA(window, GWLP_USERDATA, 1) answered 0 */
+    SetLastError(SENTINEL);
+    LONG_PTR before = SetWindowLongPtrA(game_window, GWLP_USERDATA, 1);
+    DWORD e = GetLastError();
+    row("game.user_data_a"); field("before", (ULONG_PTR)before); field("err", e);
+    field("after", (ULONG_PTR)GetWindowLongPtrW(game_window, GWLP_USERDATA)); end();
+
+    /* seq 2945-2952: the queue as the game first drains it */
+    drain("queue.first");
+
+    /* seq 3382: RegisterDeviceNotificationW(window, a device interface filter, DEVICE_NOTIFY_ALL_INTERFACE_CLASSES) */
+    DEV_BROADCAST_DEVICEINTERFACE_W filter;
+    for (unsigned j = 0; j < sizeof filter; j++) ((char *)&filter)[j] = 0;
+    filter.dbcc_size = sizeof filter;
+    filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    SetLastError(SENTINEL);
+    HDEVNOTIFY note = RegisterDeviceNotificationW(game_window, &filter,
+                                                  DEVICE_NOTIFY_WINDOW_HANDLE | DEVICE_NOTIFY_ALL_INTERFACE_CLASSES);
+    row("device_notification"); flag("null", note == NULL); field("err", GetLastError()); end();
+
+    /* seq 3383-3395: GetFocus, then SetFocus on the window, and what the procedure is sent */
+    SetLastError(SENTINEL);
+    HWND focus = GetFocus();
+    DWORD ef = GetLastError();
+    row("focus.before"); flag("null", focus == NULL); flag("game", focus == game_window); field("err", ef); end();
+    unsigned before_set = messages;
+    SetLastError(SENTINEL);
+    HWND previous = SetFocus(game_window);
+    DWORD es = GetLastError();
+    row("focus.set"); flag("previous_null", previous == NULL); flag("previous_game", previous == game_window);
+    field("err", es); field("messages", messages - before_set); end();
+    row("focus.after"); flag("game", GetFocus() == game_window); end();
+
+    /* what the activation left in the queue (seq 3491-3493 dispatched one more message) */
+    drain("queue.after_focus");
+
+    /* seq 3423-3427: the game writes a cursor to a temporary file and loads it */
+    WCHAR dir[MAX_PATH], path[MAX_PATH];
+    GetTempPathW(MAX_PATH, dir);
+    GetTempFileNameW(dir, L"w2m", 0, path);
+    static unsigned char cur[22 + 40 + 32 * 32 * 4 + 32 * 32 / 8];
+    unsigned short *h16 = (unsigned short *)cur;
+    h16[0] = 0; h16[1] = 2; h16[2] = 1;                      /* ICONDIR: a cursor file, one image */
+    unsigned char *entry = cur + 6;
+    entry[0] = 32; entry[1] = 32;                            /* width, height */
+    *(unsigned short *)(entry + 4) = 3; *(unsigned short *)(entry + 6) = 5;   /* the hot spot */
+    *(DWORD *)(entry + 8) = sizeof cur - 22; *(DWORD *)(entry + 12) = 22;
+    BITMAPINFOHEADER *bih = (BITMAPINFOHEADER *)(cur + 22);
+    bih->biSize = 40; bih->biWidth = 32; bih->biHeight = 64; bih->biPlanes = 1; bih->biBitCount = 32;
+    for (unsigned j = 22 + 40; j < 22 + 40 + 32 * 32 * 4; j += 4) cur[j + 3] = 0xFF;   /* opaque black */
+    HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD wrote = 0;
+    WriteFile(f, cur, sizeof cur, &wrote, NULL);
+    CloseHandle(f);
+    SetLastError(SENTINEL);
+    HANDLE cursor = LoadImageW(NULL, path, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    DWORD ec = GetLastError();
+    row("image.cursor_file"); flag("null", cursor == NULL); field("err", ec); field("written", wrote); end();
+    SetLastError(SENTINEL);
+    HANDLE again = LoadImageW(NULL, path, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    DWORD ea = GetLastError();
+    row("image.cursor_file_again"); flag("null", again == NULL); flag("same", again == cursor); field("err", ea); end();
+    DeleteFileW(path);
+    SetLastError(SENTINEL);
+    HANDLE gone = LoadImageW(NULL, path, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    DWORD eg = GetLastError();
+    row("image.missing_file"); flag("null", gone == NULL); field("err", eg); end();
+    SetLastError(SENTINEL);
+    HANDLE no_resource = LoadImageW(self, MAKEINTRESOURCEW(999), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+    DWORD er = GetLastError();
+    row("image.missing_resource"); flag("null", no_resource == NULL); field("err", er); end();
+
+    /* a message posted to the window, then WM_QUIT */
+    SetLastError(SENTINEL);
+    BOOL posted = PostMessageW(game_window, WM_USER + 1, 2, 3);
+    DWORD ep = GetLastError();
+    row("post.user"); field("ret", posted != 0); field("err", ep); end();
+    drain("queue.posted");
+    PostQuitMessage(5);
+    drain("queue.quit");
+
+    /* SetFocus on a window another thread made */
+    other_ready = CreateEventW(NULL, TRUE, FALSE, NULL);
+    other_done = CreateEventW(NULL, TRUE, FALSE, NULL);
+    window_name = "other";
+    current = NULL;
+    messages = 0;
+    HANDLE t = CreateThread(NULL, 0, other_thread, NULL, 0, NULL);
+    WaitForSingleObject(other_ready, INFINITE);
+    row("create.other"); flag("null", other_window == NULL); field("messages", messages); end();
+    window_name = "game";
+    SetLastError(SENTINEL);
+    HWND cross = SetFocus(other_window);
+    DWORD ex = GetLastError();
+    row("focus.other_thread"); flag("previous_null", cross == NULL); flag("previous_game", cross == game_window);
+    field("err", ex); flag("focus_still_game", GetFocus() == game_window); end();
+    SetEvent(other_done);
+    WaitForSingleObject(t, INFINITE);
 }
