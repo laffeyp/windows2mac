@@ -81,6 +81,25 @@ def where(vm: Any, address: int) -> str:
     return f"{name}+0x{address - base:x}" if base else hex(address)
 
 
+def exit_classes(vm: Any) -> list[tuple[tuple[int, str], tuple[int, int]]]:
+    """The model exits (hvc #10, #11) by instruction class, most first: (hvc, class) -> (exits, sites). The site census
+    alone named 4M of the 48.7M slow-SSE exits of frontier-643a6283510c-1791802134771149000 (Sprint 065)."""
+    from w2m.loader import GuestFault
+    from w2m.x86dec import DecodeError, decode
+    by: dict[tuple[int, str], list[int]] = {}
+    for (imm, at), n in vm.exit_sites.items():
+        if imm not in (10, 11):
+            continue
+        try:
+            ic = decode(vm.mem.code_at(at)).iclass
+        except (DecodeError, GuestFault) as e:          # a site in memory released since: named by the error
+            ic = type(e).__name__
+        row = by.setdefault((imm, ic), [0, 0])
+        row[0] += n
+        row[1] += 1
+    return sorted(((k, (v[0], v[1])) for k, v in by.items()), key=lambda kv: -kv[1][0])
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -140,6 +159,7 @@ def main(argv: list[str]) -> int:
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()
+            state["exit_classes"] = exit_classes(vm)
             state["main_threads"] = {t.tid: (t.status, where(vm, t.x[17]) if t.x else "running") for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
                                           dict(sorted(p.vm.calls_total().items())),
@@ -243,6 +263,8 @@ def main(argv: list[str]) -> int:
           f"{state.get('thunks')} thunks")
     for (imm, at), n in state.get("exit_sites", []):
         print(f"  hvc {imm} at 0x{at:x}: {n}")
+    for (imm, ic), (n, sites) in state.get("exit_classes", [])[:40]:
+        print(f"  hvc {imm} {ic}: {n} at {sites} sites")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")

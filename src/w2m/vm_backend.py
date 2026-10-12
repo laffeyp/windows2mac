@@ -555,6 +555,8 @@ def _temps_read(op: Op) -> list[int]:
         return [op[1]]
     if k == "set":
         return [op[2][1]] if op[2][0] == "m" else []
+    if k == "mxcsr":                                    # ("mxcsr", "st"|"ld", m32): lowered in A64 (Sprint 065)
+        return [op[2][1]]
     if k == "sel":
         return [op[2], op[3], op[4]]
     if k in ("cst", "cstz"):
@@ -625,6 +627,35 @@ def fpcr_for(mxcsr: int) -> int:
 
 def mxcsr_flags_from_fpsr(fpsr: int) -> int:
     return sum(1 << m for f, m in FPSR_TO_MXCSR if fpsr >> f & 1)
+
+
+def _lower_mxcsr(a: Assembler, kind: str, loc: Op, reg_of: Callable[[int], int]) -> None:
+    """STMXCSR and LDMXCSR in A64 (Sprint 065), as `_slow_sse` leaves the state: frontier-643a6283510c-1791802134771149000
+    ran UnityPlayer.dll's STMXCSR / LDMXCSR pair at 0x1810bdae9 415,536 times through the model. x16 and x17 only:
+    TEMP_REGS holds x18, and the operand's address may be in it.
+    STMXCSR stores the saved MXCSR with FPSR's cumulative flags folded in (FPSR_TO_MXCSR). LDMXCSR with a reserved
+    bit (31:16) set leaves to the model, which raises #GP before any write; otherwise it saves the value, clears
+    FPSR (its flags are now in the saved value) and sets FPCR as fpcr_for does."""
+    addr = reg_of(loc[1])
+    if kind == "st":
+        a.emit(a64.mrs(17, a64.FPSR), a64.lsri(16, 17, 7),         # x16 bit 0: IDC
+               a64.bfi(17, 17, 1, 5),                               # bits 5:1: IOC DZC OFC UFC IXC
+               a64.bfi(17, 16, 1, 1),                               # bit 1: IDC -> DE; bit 0 stays IOC -> IE
+               a64.ubfx(17, 17, 0, 6),
+               a64.ldr(4, 16, 28, MXCSR_OFF), a64.orr(16, 16, 17), a64.str_(4, 16, addr))
+        return
+    ok = a.label()
+    a.emit(a64.ldr(4, 16, addr), a64.lsri(17, 16, 16))
+    a.branch(lambda off: a64.cbz(17, off), ok)
+    a.emit(a64.hvc(HVC_SLOW_STEP))
+    a.bind(ok)
+    a.emit(a64.str_(4, 16, 28, MXCSR_OFF), a64.msr(a64.FPSR, a64.ZR),
+           a64.ubfx(17, 16, 6, 1),                                  # FIZ = DAZ
+           a64.lsri(16, 16, 13), a64.bfi(17, 16, 23, 1),            # RMode bit 23 = RC bit 0 (MXCSR 13)
+           a64.lsri(16, 16, 1), a64.bfi(17, 16, 22, 1),             # RMode bit 22 = RC bit 1 (MXCSR 14)
+           a64.lsri(16, 16, 1), a64.bfi(17, 16, 24, 1),             # FZ = FTZ (MXCSR 15)
+           a64.movz(16, 1), a64.bfi(17, 16, 1, 1),                  # AH
+           a64.msr(a64.FPCR, 17))
 
 
 def build_runtime(last_error_source: str | None = None, file_source: str | None = None,
@@ -789,7 +820,9 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
-        elif k in ("mxcsr", "ud", "fcw", "xgetbv", "x87", "mmx"):       # run by the model (hvc #11): MXCSR's fault rule
+        elif k == "mxcsr":
+            _lower_mxcsr(a, op[1], op[2], reg_of)
+        elif k in ("ud", "fcw", "xgetbv", "x87", "mmx"):       # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())

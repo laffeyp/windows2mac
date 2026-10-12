@@ -12,6 +12,7 @@ wrong operands (lazy AF), and the reconstruction table mapping a host PC one byt
 from __future__ import annotations
 
 import sys
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -347,3 +348,51 @@ def test_xgetbv_reads_xcr0_under_the_profile() -> None:
         vm.close()
     assert r.stop.startswith("UnhandledException 0xc0000005 at x86 0x20000005"), r.stop
     assert exc is not None and exc["rip"] == code_va + 5
+
+
+@pytest.mark.hvf
+def test_native_mxcsr_access_sets_fpcr_and_folds_fpsr() -> None:
+    """Sprint 065 lowers LDMXCSR and STMXCSR in A64. A single-instruction case reads MXCSR back, not FPCR, so this
+    checks the rest: after LDMXCSR, FPCR is fpcr_for's for every RC, DAZ and FTZ and FPSR is clear; STMXCSR stores
+    each FPSR cumulative flag as its MXCSR bit, ORed with the saved value."""
+    from w2m.loader import Loaded, Memory
+    mem = Memory()
+    mem.map(sd.CODE_VA, 0x1000, "code")
+    mem.map(sd.STACK_VA, sd.STACK_SIZE, "stack")
+    vm = vm_backend.VM(Loaded(None, mem, sd.CODE_VA, {}, sd.STACK_VA + sd.STACK_SIZE),   # type: ignore[arg-type]
+                       lockstep=True)
+    slot = sd.STACK_VA + sd.STACK_OFF
+    loads = [rc << 13 | daz << 6 | ftz << 15 | 0x1F80 | flags
+             for rc in range(4) for daz in (0, 1) for ftz in (0, 1) for flags in (0, 0x3F)]
+    stores = [(1 << f, 0x1F80 | 1 << m) for f, m in vm_backend.FPSR_TO_MXCSR] + [(0x9F, 0x1FBF), (0, 0x1F80)]
+    steps = [("ld", v, 0) for v in loads] + [("st", 0, f) for f, _ in stores]    # (kind, value loaded, FPSR set)
+    seen: list[tuple[str, int, int, int]] = []
+    current: list[tuple[str, int, int]] = []
+
+    def on_dispatch(v: Any, x: list[int]) -> None:
+        if current:
+            kind, value, flags = current.pop()
+            _, fpcr, fpsr = v.vectors()
+            stored = int.from_bytes(v.mem.read(slot, 4), "little")
+            seen.append((kind, value if kind == "ld" else flags, fpcr if kind == "ld" else stored, fpsr))
+        if len(seen) == len(steps):
+            raise vm_backend.StopRun
+        kind, value, flags = steps[len(seen)]
+        current.append((kind, value, flags))
+        v.flush_translations()
+        code = bytes.fromhex("0fae1424" if kind == "ld" else "0fae1c24")       # LDMXCSR / STMXCSR [rsp]
+        v.mem.write(sd.CODE_VA, code + bytes(16))
+        v.mem.write(slot, value.to_bytes(4, "little"))
+        x[4], x[17] = slot, sd.CODE_VA
+        if kind == "st":
+            v.set_mxcsr(0x1F80, [0] * 16)
+            xmm, fpcr, _ = v.vectors()
+            v.set_vectors(xmm, fpcr, flags)
+
+    try:
+        r = vm.run(max_steps=1 << 20, timeout_ms=60_000, on_dispatch=on_dispatch)
+    finally:
+        vm.close()
+    assert r.stop == "stopped by on_dispatch", r.stop
+    expect = [("ld", v, vm_backend.fpcr_for(v), 0) for v in loads] + [("st", f, m, f) for f, m in stores]
+    assert seen == expect

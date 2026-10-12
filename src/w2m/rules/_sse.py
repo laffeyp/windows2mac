@@ -102,7 +102,8 @@ LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "UNPCKHPD": 
                 "PSUBW": ("sub", 1), "PCMPEQD": ("cmeq", 2), "PCMPGTD": ("cmgt", 2), "PSUBUSB": ("uqsub", 0),
                 "PSUBSB": ("sqsub", 0), "PADDSB": ("sqadd", 0), "PADDSW": ("sqadd", 1), "PMAXUB": ("umax", 0),
                 "PMULLW": ("mul", 1), "PUNPCKHBW": ("zip2", 0), "PUNPCKHDQ": ("zip2", 2), "PUNPCKHWD": ("zip2", 1),
-                "PUNPCKLWD": ("zip1", 1), "PCMPEQW": ("cmeq", 1)}
+                "PUNPCKLWD": ("zip1", 1), "PCMPEQW": ("cmeq", 1),
+                "PUNPCKHQDQ": ("zip2", 3)}      # Sprint 065: 1.4M model steps at UnityPlayer.dll+0x3cf4 and its neighbours
 SSE2_INT_LOWERED_APPROXIMATE = {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
 SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
           "PSRAW": (1, "arith"), "PSLLQ": (3, "left")}
@@ -110,6 +111,7 @@ SSE2_INT_LOWERED |= {'PADDSB', 'PACKUSWB', 'PUNPCKHDQ', 'PMAXUB', 'PSUBSB', 'PSR
 SSE2_INT_LOWERED |= SSE2_INT_LOWERED_APPROXIMATE
 SSE2_INT_LOWERED |= {"PCMPISTRI", "PCMPISTRI64", "UNPCKHPD"}                    # Sprint 047
 SSE2_INT_LOWERED |= {"PCMPEQW"}                                                  # Sprint 049
+SSE2_INT_LOWERED |= {"PUNPCKHQDQ"}                                               # Sprint 065
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
