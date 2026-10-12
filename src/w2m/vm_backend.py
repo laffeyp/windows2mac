@@ -200,10 +200,11 @@ VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: Unity
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
 FILETIME_UNIX_EPOCH = 116444736000000000   # 1970-01-01 in 100 ns units since 1601-01-01
 # The block w2m starts a game with (run_frontier.py; Sprint 048): the profile and its temporary directory, which
-# GetTempPathW reads (environment.c), in the block's sorted order. w2m's choice of variables; each directory exists
-# on drive C: (file_bridge.py PROFILE_FOLDERS).
+# GetTempPathW reads (environment.c), in the block's sorted order. The reference game run's (Sprint 061): the
+# runners' user, and TMP and TEMP where windows-game.yml sets them; each directory exists on drive C:
+# (file_bridge.py PROFILE_FOLDERS).
 USER_ENVIRONMENT = ("TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp", "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
-                    "USERPROFILE=C:\\Users\\w2m")
+                    "USERPROFILE=C:\\Users\\runneradmin")
 TLS_TAKEN = 16                      # the TLS index besides 0 a fresh Windows process holds: set from the rows
 PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids are nonzero multiples of 4 (Sprint 044 rows)
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used

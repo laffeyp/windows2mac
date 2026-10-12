@@ -580,7 +580,7 @@
   }
  },
  "known_folders": {
-  "candidate_sha256": "sha256:ccd2ad78194fa3c654d9d4e815f2368fffd0e0d8accea4c40e2884c67e4e7302",
+  "candidate_sha256": "sha256:b7e8cf0fce9802b04c7453f83fc44b7de07f07c8bf7c3832ab9bf7142ba91c2f",
   "divergence": {
    "38098265812": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1",
    "38098267402": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1"
@@ -593,7 +593,7 @@
    "SESSION_INIT": 1
   },
   "family": "known_folders",
-  "record": "store/runs/family-known_folders-1791779097749912000",
+  "record": "store/runs/family-known_folders-1791781840832489000",
   "verdicts": {
    "38098265812": "conforms",
    "38098267402": "conforms"
@@ -1118,7 +1118,7 @@
   }
  },
  "temp_path": {
-  "candidate_sha256": "sha256:fce72b42173597fd41187fd8985d3a7bc8633e3e9fe2765ec3501eb9f91ac298",
+  "candidate_sha256": "sha256:42b8e51442e4a60c7f356f3241b148cac0b108244f75cd4c911225e7013100e3",
   "divergence": {
    "38098847298": null,
    "38098848806": null
@@ -1131,7 +1131,7 @@
    "SESSION_INIT": 1
   },
   "family": "temp_path",
-  "record": "store/runs/family-temp_path-1791779101084099000",
+  "record": "store/runs/family-temp_path-1791781841241937000",
   "verdicts": {
    "38098847298": "conforms",
    "38098848806": "conforms"

@@ -7,7 +7,8 @@
  *     AppData\LocalLow, AppData\Local and AppData\Roaming, each an existing directory, no trailing backslash
  *   - KF_FLAG_DONT_VERIFY and KF_FLAG_CREATE give the same path for a folder that exists
  *   - the path is a new block (CoTaskMemFree frees it); CoTaskMemFree leaves the last error, and NULL is no block
- * w2m's user is "w2m": C:\Users\w2m, which the file bridge holds on drive C: (file_bridge.py). Any other folder
+ * w2m's user is the runners' "runneradmin": C:\Users\runneradmin (Sprint 061, Decision 2026-10-11 user: match the
+ * reference game run), which the file bridge holds on drive C: (file_bridge.py). Any other folder
  * GUID stops the run: which GUIDs a Windows system registers varies (Microsoft Learn, SHGetKnownFolderPath:
  * "Not all KNOWNFOLDERID values are present on all systems"), and an unregistered one answers 0x80070002 with
  * *ppszPath NULL. The last error after success is left as it was: Windows leaves 1008, 0 or 183 by folder and
@@ -25,7 +26,7 @@ u64 w2m_file_stat_full(const u16 *full, u64 out);       /* file.c */
 
 struct folder { u32 a; u16 b, c; u8 d[8]; const u16 *under; };
 
-static const u16 PROFILE[] = {'C', ':', '\\', 'U', 's', 'e', 'r', 's', '\\', 'w', '2', 'm', 0};
+static const u16 PROFILE[] = {'C', ':', '\\', 'U', 's', 'e', 'r', 's', '\\', 'r', 'u', 'n', 'n', 'e', 'r', 'a', 'd', 'm', 'i', 'n', 0};
 static const u16 NONE[] = {0};
 static const u16 LOCAL_LOW[] = {'\\', 'A', 'p', 'p', 'D', 'a', 't', 'a', '\\', 'L', 'o', 'c', 'a', 'l', 'L', 'o', 'w', 0};
 static const u16 LOCAL[] = {'\\', 'A', 'p', 'p', 'D', 'a', 't', 'a', '\\', 'L', 'o', 'c', 'a', 'l', 0};
