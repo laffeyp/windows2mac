@@ -124,7 +124,11 @@ def dispatch_slot(target: int) -> int:
     Sprint 064: the game's modules sit at 1 MB-aligned bases (0x140000000, 0x180000000, 0x1180000000, the thunks at
     0x7FFE00000000), so code at one offset in two modules shared a slot when only the low bits indexed it."""
     return (target ^ target >> DISPATCH_BITS ^ target >> 2 * DISPATCH_BITS) & (DISPATCH_ENTRIES - 1)
-MONITOR_SIZE = (DISPATCH_TABLE + 16 * DISPATCH_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
+# The tables that split a block descriptor where translated code makes 4 KB pages read-only (Sprint 065 item 9e):
+# frontier 643a6283510c-1791841443768764000 filled the 64 of TRANSLATION_TABLES at 50.5 billion instructions
+SPLIT_TABLES = DISPATCH_TABLE + 16 * DISPATCH_ENTRIES
+SPLIT_TABLES_SIZE = 0x40_0000             # 1,024 tables, sparse
+MONITOR_SIZE = (SPLIT_TABLES + SPLIT_TABLES_SIZE + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -1171,7 +1175,8 @@ class VM:
         maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE), (PROCESS_VA, IPA_BASE + MONITOR_SIZE, PROCESS_SIZE)]
         maps += [(r.base, IPA_BASE + off, _round_up(len(r.data))) for r, off in placed]
         maps += [(HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE), (VIRTUAL_VA, IPA_BASE + virtual_off, VIRTUAL_SIZE)]
-        self.ttbr, self._next_table = _write_translation_tables(self.mm, maps)
+        self.ttbr, _ = _write_translation_tables(self.mm, maps)
+        self._next_table = SPLIT_TABLES
         # Translated code is invalidated when its guest bytes change (Sprint 065 item 9e): the pages behind blocks are
         # read-only, a write to one faults (HVC_CODE_WRITE), and the blocks over it are dropped
         self.code_pages: dict[int, set[int]] = {}       # page VA -> the starts of the blocks over it
@@ -2403,8 +2408,8 @@ class VM:
                 base = desc & 0x0000_FFFF_FFFF_F000 & ~(size - 1)
                 attributes = desc & ~0x0000_FFFF_FFFF_F000 & ~0x3
                 new = self._next_table
-                if new + PAGE > TRANSLATION_TABLES + TRANSLATION_TABLES_SIZE:
-                    raise CompileError("stage-1 table area full")
+                if new + PAGE > SPLIT_TABLES + SPLIT_TABLES_SIZE:
+                    raise CompileError("stage-1 split table area full")
                 self._next_table += PAGE
                 low = 0x3 if level == 2 else 0x1                # pages at level 3, blocks at level 2
                 for i in range(512):

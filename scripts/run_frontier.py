@@ -50,7 +50,7 @@ from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.kernel import Machine, spawner  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.trace import trace_ingester  # noqa: E402
-from w2m.vm_backend import TRACED_IMAGES, USER_ENVIRONMENT, VM  # noqa: E402
+from w2m.vm_backend import SPLIT_TABLES, TRACED_IMAGES, USER_ENVIRONMENT, VM  # noqa: E402
 from w2m.record import producer, run_with_provenance, uncommitted  # noqa: E402
 
 import call_compare  # noqa: E402
@@ -217,7 +217,9 @@ def main(argv: list[str]) -> int:
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
         state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
-                     code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)))
+                     code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
+                     split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
+                     code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40])
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -304,7 +306,8 @@ def main(argv: list[str]) -> int:
     for (imm, ic), (n, sites) in state.get("exit_classes", [])[:40]:
         print(f"  hvc {imm} {ic}: {n} at {sites} sites")
     writes, dropped_blocks, pages = state.get("code_writes", (0, 0, 0))
-    print(f"writes to translated code {writes}, blocks dropped {dropped_blocks}, pages behind blocks at the stop {pages}")
+    print(f"writes to translated code {writes}, blocks dropped {dropped_blocks}, pages behind blocks at the stop {pages}; "
+          f"split tables {state.get('split_tables')}; 2 MB regions " + " ".join(hex(r) for r in state.get("code_regions", [])))
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
