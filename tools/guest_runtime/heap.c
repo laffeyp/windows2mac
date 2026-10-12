@@ -11,6 +11,9 @@
  *   - failure (a request Windows refuses, HEAP_REALLOC_IN_PLACE_ONLY that cannot grow) answers NULL
  *     and sets the last error to ERROR_NOT_ENOUGH_MEMORY; success leaves it untouched
  *   - HeapFree(NULL) is TRUE
+ *   - HEAP_REALLOC_IN_PLACE_ONLY grows a block to at most the larger of its size and 16 bytes
+ *     (contracts/windows.heap.in_place, Sprint 065: game run 38216081440 seq 3265-3268, where w2m granted
+ *     growths from a reused block's larger capacity); the block keeps that reach while it stays in place
  * The arena is W2M_HEAP_SIZE bytes at W2M_HEAP_VA (src/w2m/vm_backend.py), mapped sparse. A request
  * Windows would grant that the arena cannot hold stops the run instead of claiming no memory.
  */
@@ -24,9 +27,11 @@
 #define WINDOWS_REFUSES (1ull << 46)          /* row alloc.too_large: 2^46 bytes fail on every runner */
 #define BLOCK_MAGIC 0x6B6F6C6250414548ull     /* "HEAPblok" */
 
-struct header {                               /* 16 bytes before each payload */
+struct header {                               /* 32 bytes before each payload */
     u64 size_and_magic_check;                 /* the size asked for */
     u64 capacity;                             /* payload bytes available, a multiple of 16 */
+    u64 reach;                                /* how far HEAP_REALLOC_IN_PLACE_ONLY grows it (family "heap_in_place") */
+    u64 unused;                               /* keeps the payload 16-byte aligned */
 };
 
 struct heap {                                 /* the handle points here, the arena's first page */
@@ -107,6 +112,7 @@ u64 w2m_heap_take(u64 size) {
     struct header *b = take(size);
     if (!b) return 0;
     b->size_and_magic_check = size;
+    b->reach = size > 16 ? size : 16;
     return (u64)(b + 1);
 }
 
@@ -126,6 +132,7 @@ u64 k32_HeapAlloc(u64 heap, u64 flags, u64 size) {
     struct header *b = take(size);
     if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */
     b->size_and_magic_check = size;
+    b->reach = size > 16 ? size : 16;
     if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);
     return w2m_logged(W2M_API_HeapAlloc, size, (u64)(b + 1));
 }
@@ -152,9 +159,14 @@ u64 k32_HeapReAlloc(u64 heap, u64 flags, u64 p, u64 size) {
         set_error(ERROR_NOT_ENOUGH_MEMORY);
         return w2m_logged(W2M_API_HeapReAlloc, size, 0);
     }
+    if ((flags & HEAP_REALLOC_IN_PLACE_ONLY) && size > b->reach) {      /* Windows refuses past the reach */
+        set_error(ERROR_NOT_ENOUGH_MEMORY);
+        return w2m_logged(W2M_API_HeapReAlloc, size, 0);
+    }
     if (round16(size ? size : 1) <= b->capacity) {                       /* fits where it is */
         if ((flags & HEAP_ZERO_MEMORY) && size > old) zero((u8 *)p + old, size - old);
         b->size_and_magic_check = size;
+        if (size > b->reach) b->reach = size;
         return w2m_logged(W2M_API_HeapReAlloc, size, p);
     }
     if (flags & HEAP_REALLOC_IN_PLACE_ONLY) {
@@ -164,6 +176,7 @@ u64 k32_HeapReAlloc(u64 heap, u64 flags, u64 p, u64 size) {
     struct header *n = take(size);
     if (!n) w2m_unimplemented(W2M_API_HeapReAlloc, size);
     n->size_and_magic_check = size;
+    n->reach = size > 16 ? size : 16;
     copy((u8 *)(n + 1), (const u8 *)p, old);
     if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(n + 1) + old, n->capacity - old);
     give_back(b);

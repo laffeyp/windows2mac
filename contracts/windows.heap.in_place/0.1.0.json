@@ -1,0 +1,155 @@
+{
+ "contract_id": "windows.heap.in_place",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "How far HeapReAlloc(HEAP_REALLOC_IN_PLACE_ONLY) grows a process-heap block (Sprint 065; game run 38216081440 seq 3265-3268, where Windows refuses UnityPlayer's growths of a 0x417 block to 0x817 and on, and w2m granted three). Grown one byte at a time, a block of 1 to 0x10000 bytes stops at the larger of its size and 16, fresh or after 40 blocks of its size; the refusal answers NULL with ERROR_NOT_ENOUGH_MEMORY. A 0x417 block whose next block was freed does not grow to 0x817.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/heap_in_place/heap_in_place.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "limit.fresh.1",
+    "limit": 16,
+    "err": 8,
+    "size_after": 16
+   },
+   {
+    "s": "limit.fresh.10",
+    "limit": 16,
+    "err": 8,
+    "size_after": 16
+   },
+   {
+    "s": "limit.fresh.18",
+    "limit": 24,
+    "err": 8,
+    "size_after": 24
+   },
+   {
+    "s": "limit.fresh.100",
+    "limit": 256,
+    "err": 8,
+    "size_after": 256
+   },
+   {
+    "s": "limit.fresh.417",
+    "limit": 1047,
+    "err": 8,
+    "size_after": 1047
+   },
+   {
+    "s": "limit.fresh.4000",
+    "limit": 16384,
+    "err": 8,
+    "size_after": 16384
+   },
+   {
+    "s": "limit.fresh.10000",
+    "limit": 65536,
+    "err": 8,
+    "size_after": 65536
+   },
+   {
+    "s": "limit.warm.10",
+    "limit": 16,
+    "err": 8,
+    "size_after": 16
+   },
+   {
+    "s": "limit.warm.18",
+    "limit": 24,
+    "err": 8,
+    "size_after": 24
+   },
+   {
+    "s": "limit.warm.100",
+    "limit": 256,
+    "err": 8,
+    "size_after": 256
+   },
+   {
+    "s": "limit.warm.417",
+    "limit": 1047,
+    "err": 8,
+    "size_after": 1047
+   },
+   {
+    "s": "limit.warm.800",
+    "limit": 2048,
+    "err": 8,
+    "size_after": 2048
+   },
+   {
+    "s": "limit.warm.1000",
+    "limit": 4096,
+    "err": 8,
+    "size_after": 4096
+   },
+   {
+    "s": "limit.warm.4000",
+    "limit": 16384,
+    "err": 8,
+    "size_after": 16384
+   },
+   {
+    "s": "limit.warm.10000",
+    "limit": 65536,
+    "err": 8,
+    "size_after": 65536
+   },
+   {
+    "s": "neighbour_freed",
+    "granted": 0,
+    "same": 0,
+    "err": 8
+   }
+  ],
+  "derivation": "scripts/family_run.py no_steps: The step between two blocks (a limit row's step_forward and step_back, neighbour_freed's b_after_a) is an address relation that differs between runs; it is dropped."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38254640218: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:5419841125b5d6e9725bc821eb9c8d2d9ff50d992513aaeeaafd5ff596c3d1fb; run 38254643501: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:e8a6346e7051fd4f169b7aaddb5c8e7231f59e91e933ca96888e4887e2aba2e9",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "heap_in_place-0-1",
+    "heap_in_place-0-2",
+    "heap_in_place-1-1",
+    "heap_in_place-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-heaprealloc",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heaprealloc (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "HEAP_REALLOC_IN_PLACE_ONLY ... There can be no movement when reallocating a memory block. If this value is not specified, the function may move the block to a new location. If this value is specified and the block cannot be resized without moving, the function fails, leaving the original memory block unchanged."
+  }
+ ],
+ "open_questions": [
+  "Windows grows a block in place into a free next block (the excluded rows); w2m's heap neither keeps blocks in address order nor joins neighbours, so it refuses where Windows may grant. The game's four growths are refused on Windows.",
+  "A block shrunk in place keeps its reach in w2m; no row shows a shrink then a growth in place."
+ ],
+ "sections": {
+  "probe": "probes/heap_in_place (Sprint 044)",
+  "implementation": "tools/guest_runtime/heap.c",
+  "rows": "scripts/family_run.py heap_in_place",
+  "excluded": "limit.fresh.1000: the same run grew it to 4,880 bytes, its next block free.; limit.fresh.800: one run of six grew the block to 3,232 bytes: its next block was free (the second block lay before it); w2m's heap does not join free neighbours.; limit.warm.1: after 40 one-byte blocks Windows grows a one-byte block by nothing (its low-fragmentation heap serves the size), a fresh one to 16 bytes; w2m's heap has no low-fragmentation heap and answers 16."
+ }
+}

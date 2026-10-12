@@ -813,6 +813,52 @@ FAMILIES: dict[str, Family] = {
                                            "realloc.in_place_only_grow")),
                 "zero_flag_ignored": Plant("    if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);", "",
                                            ("alloc.zero_memory_after_dirty_free",))}),
+    "heap_in_place": Family(
+        name="heap_in_place",
+        contract_id="windows.heap.in_place",
+        version="0.1.0",
+        summary=("How far HeapReAlloc(HEAP_REALLOC_IN_PLACE_ONLY) grows a process-heap block (Sprint 065; game run "
+                 "38216081440 seq 3265-3268, where Windows refuses UnityPlayer's growths of a 0x417 block to 0x817 and "
+                 "on, and w2m granted three). Grown one byte at a time, a block of 1 to 0x10000 bytes stops at the "
+                 "larger of its size and 16, fresh or after 40 blocks of its size; the refusal answers NULL with "
+                 "ERROR_NOT_ENOUGH_MEMORY. A 0x417 block whose next block was freed does not grow to 0x817."),
+        probe="heap_in_place", guest_file="heap.c",
+        runs={
+              "38254640218": Run("windows-2025", "5419841125b5d6e9725bc821eb9c8d2d9ff50d992513aaeeaafd5ff596c3d1fb", "heap_in_place-0", "AMD EPYC 7763 64-Core Processor"),
+              "38254643501": Run("windows-2022", "e8a6346e7051fd4f169b7aaddb5c8e7231f59e91e933ca96888e4887e2aba2e9", "heap_in_place-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        derive=described("The step between two blocks (a limit row's step_forward and step_back, neighbour_freed's "
+                         "b_after_a) is an address relation that differs between runs; it is dropped.",
+                         lambda printed: [{k: v for k, v in r.items() if k not in ("step_forward", "step_back", "b_after_a")}
+                                          for r in printed], "no_steps"),
+        excluded={"limit.fresh.800": "one run of six grew the block to 3,232 bytes: its next block was free (the "
+                                     "second block lay before it); w2m's heap does not join free neighbours.",
+                  "limit.fresh.1000": "the same run grew it to 4,880 bytes, its next block free.",
+                  "limit.warm.1": "after 40 one-byte blocks Windows grows a one-byte block by nothing (its "
+                                  "low-fragmentation heap serves the size), a fresh one to 16 bytes; w2m's heap has "
+                                  "no low-fragmentation heap and answers 16."},
+        documented=(
+            documented("ms-heaprealloc", "api/heapapi/nf-heapapi-heaprealloc", "2024-02-22",
+                       "HEAP_REALLOC_IN_PLACE_ONLY ... There can be no movement when reallocating a memory block. If "
+                       "this value is not specified, the function may move the block to a new location. If this value "
+                       "is specified and the block cannot be resized without moving, the function fails, leaving the "
+                       "original memory block unchanged."),),
+        open_questions=(
+            "Windows grows a block in place into a free next block (the excluded rows); w2m's heap neither keeps "
+            "blocks in address order nor joins neighbours, so it refuses where Windows may grant. The game's four "
+            "growths are refused on Windows.",
+            "A block shrunk in place keeps its reach in w2m; no row shows a shrink then a growth in place."),
+        plants={"reach_is_capacity": Plant("&& size > b->reach)", "&& round16(size ? size : 1) > b->capacity)",
+                                           # named first as four rows; it changed five: neighbour_freed's 0x417
+                                           # block reuses a larger freed one and grows, as the game's did (recorded)
+                                           ("limit.fresh.18", "limit.warm.18", "limit.fresh.417", "limit.warm.417",
+                                            "neighbour_freed")),
+                "no_sixteen_byte_floor": Plant(
+                    "    if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */\n"
+                    "    b->size_and_magic_check = size;\n    b->reach = size > 16 ? size : 16;",
+                    "    if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */\n"
+                    "    b->size_and_magic_check = size;\n    b->reach = size;",
+                    ("limit.fresh.1",))}),
     "code_pages": Family(
         name="code_pages",
         contract_id="windows.code_pages.ansi_1252",
@@ -2116,18 +2162,22 @@ FAMILIES: dict[str, Family] = {
     "dxgi": Family(
         name="dxgi",
         contract_id="windows.dxgi.dxgi",
-        version="0.1.0",
+        version="0.2.0",
         summary=("CreateDXGIFactory and the walk UnityPlayer makes with the factory (RVA 0x520700; game run 38206263976 "
                  "seq 3298-3301): EnumAdapters to its end, each adapter's EnumOutputs to its end, the outputs' and "
                  "adapters' descriptions, Release. On the runners, which have no GPU: two Microsoft Basic Render Driver "
                  "adapters (0x1414, 0x8C), no dedicated memory, 8,587,180,032 bytes shared; the first with one output, "
                  "\\\\.\\DISPLAY1 at 0,0-1024,768 on the primary monitor; DXGI_ERROR_NOT_FOUND past each end; "
                  "E_NOINTERFACE for another interface, E_POINTER for a NULL out pointer; every object new with one "
-                 "reference."),
+                 "reference. Version 0.2.0 (Sprint 065): IDXGIOutput::GetDisplayModeList, which UnityPlayer RVA "
+                 "0xdc5084 calls next: 13 modes for six formats under any flags; for R8G8B8A8_UNORM under flags 0 and "
+                 "SCALING, 640x480 to 1920x1080 at 64/1 Hz, progressive, scaling unspecified (the 13 resolutions game "
+                 "run 38216081440's unity.log prints); DXGI_ERROR_MORE_DATA for a short buffer, DXGI_ERROR_INVALID_CALL "
+                 "for a NULL count."),
         probe="dxgi", guest_file="dxgi.c",
         runs={
-              "38210591842": Run("windows-2025", "15e0aa0873454d1bbacd5b9c343b730970d6df7b776afeeccdf273caf9168dc9", "dxgi-1791784916-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38210594155": Run("windows-2022", "8fa545b798033b50b3254efc6919816129e168d774fe7041270fc653cf4d3445", "dxgi-1791784916-1", "AMD EPYC 7763 64-Core Processor"),
+              "38254500336": Run("windows-2025", "08535c336744784880cc5ec5e18747bfc5f09086b736267403278c05afc25124", "dxgi-modes-0", "AMD EPYC 7763 64-Core Processor"),
+              "38254503636": Run("windows-2022", "8507070b2d998afb5db7a307bf6f3e428f2bf29df24d094e71fce47bcfb88c09", "dxgi-modes-1", "AMD EPYC 9V45 96-Core Processor"),
         },
         documented=(
             documented("ms-createdxgifactory", "api/dxgi/nf-dxgi-createdxgifactory", "2024-02-22",
@@ -2135,7 +2185,10 @@ FAMILIES: dict[str, Family] = {
             documented("ms-enumadapters", "api/dxgi/nf-dxgi-idxgifactory-enumadapters", "2024-02-22",
                        "Returns S_OK if successful; otherwise, returns DXGI_ERROR_NOT_FOUND if the index is greater than "
                        "or equal to the number of adapters in the local system, or DXGI_ERROR_INVALID_CALL if ppAdapter "
-                       "parameter is NULL.")),
+                       "parameter is NULL."),
+            documented("ms-getdisplaymodelist", "api/dxgi/nf-dxgi-idxgioutput-getdisplaymodelist", "2024-02-22",
+                       "Set pDesc to NULL so that pNumModes returns the number of display modes that match the format "
+                       "and the options. Otherwise, pNumModes returns the number of display modes returned in pDesc.")),
         open_questions=(
             "The runners have no GPU, and w2m answers as they do: the Basic Render Driver twice, one output. A Mac "
             "adapter backed by Metal is milestone B's (plan, phase 6), with rows from a machine that has a GPU.",
@@ -2152,7 +2205,12 @@ FAMILIES: dict[str, Family] = {
             "output_on_another_monitor": Plant("    *(u64 *)(p + 0x58) = MONITOR;", "    *(u64 *)(p + 0x58) = MONITOR + 0x10000;",
                                                ("adapter.0.output.0", "game_walk")),
             "release_keeps_count": Plant("    s64 left = --o->refs;", "    s64 left = o->refs;",
-                                         ("refcount", "adapter.0.release", "adapter.1.release", "release.last"))}),
+                                         ("refcount", "adapter.0.release", "adapter.1.release", "release.last")),
+            "modes_at_60_hz": Plant("        m[2] = 64;", "        m[2] = 60;",
+                                    tuple(f"modes.28.{f}.{i}" for f in (0, 2) for i in range(13))),
+            "short_buffer_answers_ok": Plant("    if (*n < 13) return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, DXGI_ERROR_MORE_DATA);",
+                                             "    if (*n < 13) return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, S_OK);",
+                                             ("modes.short",))}),
     "com": Family(
         name="com",
         contract_id="windows.com.com",
