@@ -75,6 +75,12 @@ def described(doc: str, fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]
     return fn
 
 
+def numbered_exceptions(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rows whose "exception" field numbers one of several under the same name: the name gains ".exception<n>"
+    (output_debug_string; Sprint 065)."""
+    return [{**r, "s": f"{r['s']}.exception{r['exception']}"} if "exception" in r else r for r in printed]
+
+
 def raw_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The rows as the probe printed them."""
     return printed
@@ -1170,6 +1176,31 @@ FAMILIES: dict[str, Family] = {
         plants={"block_not_copied": Plant("            self.mem.write(va, block)",
                                           "            self.mem.write(va, bytes(len(block)))",
                                           ("late.main", "late.before_load"), host="w2m.vm_backend")}),
+    "output_debug_string": Family(
+        name="output_debug_string",
+        contract_id="windows.debug.output_debug_string",
+        version="0.1.0",
+        summary=("OutputDebugStringA with no debugger, as steam_api64.dll calls it: a vectored handler sees one "
+                 "exception, DBG_PRINTEXCEPTION_C (0x40010006), flags 0x80, two parameters (the length with the NUL and "
+                 "the string's address); the call returns and the last error is left."),
+        probe="output_debug_string", guest_file="exceptions.c",
+        runs={
+              "38230799629": Run("windows-2025", "507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031", "output_debug_string-2-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38230802984": Run("windows-2022", "c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405", "output_debug_string-2-1", "AMD EPYC 7763 64-Core Processor"),
+              "38230806738": Run("windows-2025", "507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031", "output_debug_string-2-2", "AMD EPYC 7763 64-Core Processor"),
+              "38230809940": Run("windows-2022", "c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405", "output_debug_string-2-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "OutputDebugStringW raises DBG_PRINTEXCEPTION_WIDE_C (0x4001000A) with four parameters, then "
+            "DBG_PRINTEXCEPTION_C for its ANSI copy; the rows do not show the third and fourth parameters, and w2m "
+            "stops on the call.",),
+        derive=numbered_exceptions,
+        excluded={k: "w2m stops at OutputDebugStringW (its third and fourth parameters are in no row)"
+                  for k in ("w.short", "w.short.exception0", "w.short.exception1")},
+        expected_stop="Unimplemented: OutputDebugStringW argument form",
+        plants={"length_without_nul": Plant("    f->rec.information[0] = n + 1;", "    f->rec.information[0] = n;",
+                                            ("a.short.exception0", "a.empty.exception0"))}),
     "time_and_error_mode": time_family("parent", (
         "Local time on a UTC machine, the time zone (TIME_ZONE_ID_UNKNOWN, zero biases, error 0), exact SYSTEMTIME "
         "and FILETIME conversions and their invalid inputs (87), and the error mode a process inherits from the "

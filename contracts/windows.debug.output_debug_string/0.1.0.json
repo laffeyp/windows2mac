@@ -1,0 +1,83 @@
+{
+ "contract_id": "windows.debug.output_debug_string",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "OutputDebugStringA with no debugger, as steam_api64.dll calls it: a vectored handler sees one exception, DBG_PRINTEXCEPTION_C (0x40010006), flags 0x80, two parameters (the length with the NUL and the string's address); the call returns and the last error is left.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor); windows-2025 (INTEL(R) XEON(R) PLATINUM 8573C)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/output_debug_string/output_debug_string.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "a.short",
+    "error": 57005,
+    "exceptions": 1
+   },
+   {
+    "s": "a.short.exception0",
+    "exception": 0,
+    "code": 1073807366,
+    "flags": 128,
+    "parameters": 2,
+    "p0": 18,
+    "p1_is_text": true
+   },
+   {
+    "s": "a.empty",
+    "error": 57005,
+    "exceptions": 1
+   },
+   {
+    "s": "a.empty.exception0",
+    "exception": 0,
+    "code": 1073807366,
+    "flags": 128,
+    "parameters": 2,
+    "p0": 1,
+    "p1_is_text": true
+   }
+  ],
+  "derivation": "scripts/family_run.py numbered_exceptions: Rows whose \"exception\" field numbers one of several under the same name: the name gains \".exception<n>\" (output_debug_string; Sprint 065)."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38230799629: windows-2025, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031; run 38230802984: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405; run 38230806738: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031; run 38230809940: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "output_debug_string-2-0-1",
+    "output_debug_string-2-0-2",
+    "output_debug_string-2-1-1",
+    "output_debug_string-2-1-2",
+    "output_debug_string-2-2-1",
+    "output_debug_string-2-2-2",
+    "output_debug_string-2-3-1",
+    "output_debug_string-2-3-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "OutputDebugStringW raises DBG_PRINTEXCEPTION_WIDE_C (0x4001000A) with four parameters, then DBG_PRINTEXCEPTION_C for its ANSI copy; the rows do not show the third and fourth parameters, and w2m stops on the call."
+ ],
+ "sections": {
+  "probe": "probes/output_debug_string (Sprint 044)",
+  "implementation": "tools/guest_runtime/exceptions.c",
+  "rows": "scripts/family_run.py output_debug_string",
+  "excluded": "w.short: w2m stops at OutputDebugStringW (its third and fourth parameters are in no row); w.short.exception0: w2m stops at OutputDebugStringW (its third and fourth parameters are in no row); w.short.exception1: w2m stops at OutputDebugStringW (its third and fourth parameters are in no row)"
+ }
+}

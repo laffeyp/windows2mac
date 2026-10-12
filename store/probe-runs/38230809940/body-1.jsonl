@@ -1,0 +1,7 @@
+{"s":"a.short","error":57005,"exceptions":1}
+{"s":"a.short","exception":0,"code":1073807366,"flags":128,"parameters":2,"p0":18,"p1_is_text":true}
+{"s":"a.empty","error":57005,"exceptions":1}
+{"s":"a.empty","exception":0,"code":1073807366,"flags":128,"parameters":2,"p0":1,"p1_is_text":true}
+{"s":"w.short","error":57005,"exceptions":2}
+{"s":"w.short","exception":0,"code":1073807370,"flags":128,"parameters":4,"p0":17,"p1_is_text":true}
+{"s":"w.short","exception":1,"code":1073807366,"flags":128,"parameters":2,"p0":17,"p1_is_text":false}
