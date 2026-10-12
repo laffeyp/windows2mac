@@ -2502,7 +2502,7 @@ FAMILIES: dict[str, Family] = {
             "quit_code_dropped": Plant("    t->quit_code = (u64)(s64)(s32)code;", "    t->quit_code = 0;", ("queue.quit.00",)),
             "focus_any_thread": Plant("    if (w->owner != tid) {                                                  /* row focus.other_thread */",
                                       "    if (0) {", ("focus.other_thread",)),
-            "no_activate_app_to_others": Plant("        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, 1);",
+            "no_activate_app_to_others": Plant("        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, held ? 0 : 1);",
                                                "        if (0 && other) SEND(other, WM_ACTIVATEAPP, 1, 1);", ("msg.game.1[0-9]", "msg.game.2[0-2]", "focus.set")),
             "activate_sends_nothing": Plant("    int sends = ((u32)msg == WM_ACTIVATE && (u32)wparam == 1) ||", "    int sends = 0 ||",
                                             ("msg.game.1[5-9]", "msg.game.2[0-2]", "focus.set")),
