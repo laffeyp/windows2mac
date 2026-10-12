@@ -437,6 +437,12 @@ def fcvtl_2d(vd: int, vn: int) -> int:
     return 0x0E617800 | vn << 5 | vd
 
 
+def fcvtn_2s(vd: int, vn: int) -> int:
+    """FCVTN Vd.2S, Vn.2D: two doubles narrowed into the low half, the high half cleared (CVTPD2PS; Sprint 064)."""
+    _v(vd, vn)
+    return 0x0E616800 | vn << 5 | vd
+
+
 def umov_d(rd: int, vn: int, lane: int) -> int:
     """UMOV Xd, Vn.D[lane]."""
     _v(rd, vn)

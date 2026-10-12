@@ -337,6 +337,14 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         _unmasked_to_model(a)
         v = _sse_src(a, src, 8 if src[0] == "m" else 16, reg_of)
         a.emit(a64.fcvtl_2d(dst[1], v))
+    elif ic == "CVTPD2PS" and native_conversions:
+        # FCVTN narrows each double in FPCR's rounding mode (MXCSR's RC) into the low half and clears the high
+        # half, as x86 zeroes bits 127:64 (SDM CVTPD2PS); OE, UE, PE and IE (an SNaN) come as FPSR's OFC, UFC, IXC
+        # and IOC, with FPCR.AH's x86 tininess and NaN rules (Sprint 039 probe). Native from Sprint 064: a
+        # 20-billion-instruction frontier ran 663,562 model steps at one CVTPD2PS.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 16, reg_of)
+        a.emit(a64.fcvtn_2s(dst[1], v))
     elif ic == "CVTPD2DQ" and native_conversions:
         # Each double as CVTSD2SI converts it, the results in the low two lanes and the rest zeroed (SDM CVTPD2DQ):
         # FRINTX rounds in MXCSR's mode and FCVTZS converts; NaN or a value at or past 2^31 gives the integer

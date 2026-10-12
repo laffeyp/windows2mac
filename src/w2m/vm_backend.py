@@ -817,8 +817,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             rs, fast, done = reg_of(src), a.label(), a.label()
             if signed and signed[0]:
                 # IDIV (Sprint 046): fast only for a 64-bit dividend that is RAX sign-extended and a divisor
-                # neither 0 nor -1 (INT64_MIN / -1 overflows); the rest, every 8-, 16- and 32-bit form
-                # included, runs in the model
+                # neither 0 nor -1 (INT64_MIN / -1 overflows), and (Sprint 064) the 32-bit form whose quotient
+                # fits; the rest, every 8- and 16-bit form included, runs in the model
                 if bits == 64:
                     a.emit(a64.sbfx(16, RAX, 63, 1), a64.cmp(16, RDX))
                     a.branch(lambda off: a64.bcond("ne", off), done)
@@ -826,6 +826,17 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                     a.emit(a64.addi(16, rs, 1))
                     a.branch(lambda off: a64.cbz(16, off), done)
                     a.emit(a64.sdiv(16, RAX, rs), a64.msub(RDX, 16, rs, RAX), a64.mov(RAX, 16))
+                    a.branch(a64.b, fast)
+                elif bits == 32:
+                    # Sprint 064 (the frontier ran ~100,000 model steps at four 32-bit IDIVs): EDX:EAX as a signed
+                    # 64-bit dividend over the sign-extended divisor; a zero divisor or a quotient past 32 bits (the
+                    # #DE cases, INT64_MIN / -1 among them) still runs in the model. Temporaries only until the end.
+                    a.emit(a64.mov32(16, RDX), a64.eor(16, a64.ZR, 16, a64.LSL, 32), a64.bfi(16, RAX, 0, 32),
+                           a64.sbfx(17, rs, 0, 32))
+                    a.branch(lambda off: a64.cbz(17, off), done)
+                    a.emit(a64.sdiv(18, 16, 17), a64.msub(16, 18, 17, 16), a64.sbfx(17, 18, 0, 32), a64.cmp(17, 18))
+                    a.branch(lambda off: a64.bcond("ne", off), done)
+                    a.emit(a64.mov32(RAX, 18), a64.mov32(RDX, 16))
                     a.branch(a64.b, fast)
             elif bits == 64:
                 a.branch(lambda off: a64.cbnz(RDX, off), done)
