@@ -30,7 +30,11 @@ Of the exits, 1,088 are host requests and 61,498 are block compiles; the rest ar
    after item 2.
 4. **Native lowerings** for the model-step classes the census ranks highest, each judged against the Xeon as
    Sprint 050's classes were.
-5. **The frontier passes seq 3426** (from Sprint 063), its comparison with game run 38206263976 conforming.
+5. **The frontier passes seq 3426** (from Sprint 063), its comparison with the reference game run conforming.
+6. **Threads paired by their names** (amended 2026-10-12, before the work: the faster frontier schedules threads
+   differently, and pairing near-identical workers by agreement mispaired them). The capture records
+   SetThreadDescription's name, as it records other string arguments, in a new reference run. w2m's trace records the
+   same, and the comparison pairs threads by name before it pairs the rest by agreement.
 
 ## prerequisites
 
