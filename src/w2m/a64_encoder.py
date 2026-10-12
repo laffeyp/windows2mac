@@ -425,6 +425,24 @@ def scvtf_2d(vd: int, vn: int) -> int:
     return 0x4E61D800 | vn << 5 | vd
 
 
+def scvtf_4s(vd: int, vn: int) -> int:
+    """SCVTF Vd.4S, Vn.4S (CVTDQ2PS; Sprint 064)."""
+    _v(vd, vn)
+    return 0x4E21D800 | vn << 5 | vd
+
+
+def fcvtl_2d(vd: int, vn: int) -> int:
+    """FCVTL Vd.2D, Vn.2S: the low two singles widened (CVTPS2PD; Sprint 064)."""
+    _v(vd, vn)
+    return 0x0E617800 | vn << 5 | vd
+
+
+def fcvtn_2s(vd: int, vn: int) -> int:
+    """FCVTN Vd.2S, Vn.2D: two doubles narrowed into the low half, the high half cleared (CVTPD2PS; Sprint 064)."""
+    _v(vd, vn)
+    return 0x0E616800 | vn << 5 | vd
+
+
 def umov_d(rd: int, vn: int, lane: int) -> int:
     """UMOV Xd, Vn.D[lane]."""
     _v(rd, vn)

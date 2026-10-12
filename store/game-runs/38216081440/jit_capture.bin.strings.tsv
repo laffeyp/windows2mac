@@ -1,0 +1,376 @@
+6	3	UnityCrashHandler_3692
+7	3	UnityCrashHandlerResp_3692
+8	3	UnityCrashHandlerTerm_3692
+18	1	"C:\w2m\app\UnityCrashHandler64.exe" --attach 3692 2484225183744
+72	0	api-ms-win-core-winrt-l1-1-0.dll
+73	0	api-ms-win-core-com-l1-1-1.dll
+74	0	api-ms-win-core-winrt-string-l1-1-0.dll
+391	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+394	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+407	0	C:/w2m/app/Hail to the Rainbow_Data/boot.config
+422	0	C:\w2m\app\Hail to the Rainbow_Data\app.info
+426	0	C:\w2m\app\Hail to the Rainbow_Data\app.info
+434	0	C:
+437	0	C:
+440	0	C:\w2m
+443	0	C:\w2m
+446	0	C:
+449	0	C:
+452	0	C:\w2m
+455	0	C:\w2m
+460	0	C:/w2m/unity.log
+517	0	C:\w2m\app\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll
+518	0	C:\w2m\app\Hail to the Rainbow_Data\Mono\x86_64
+530	0	MONO_CFG_DIR
+539	0	MONO_DEBUG
+543	0	C:\w2m\app\Hail to the Rainbow_Data\Managed
+548	0	MONO_VERBOSE_HWCAP
+554	0	MONO_CONSERVATIVE_HWCAP
+560	0	MONO_VERBOSE_HWCAP
+566	0	MONO_CONSERVATIVE_HWCAP
+574	0	MONO_EXTERNAL_ENCODINGS
+585	0	MONO_EXTERNAL_ENCODINGS
+594	0	MONO_EXTERNAL_ENCODINGS
+600	0	MONO_EXTERNAL_ENCODINGS
+606	0	MONO_EXTERNAL_ENCODINGS
+613	0	DUMP_CROSS_OFFSETS
+648	0	MONO_DEBUG
+656	0	MONO_VERBOSE_HWCAP
+658	0	MONO_CONSERVATIVE_HWCAP
+684	0	MONO_LLDB
+686	0	UNITY_MIXED_CALLSTACK
+787	0	MONO_LASTAOT
+792	0	MONO_GC_DEBUG
+793	0	GC_DONT_GC
+794	0	kernel32.dll
+837	0	MONO_GC_PARAMS
+852	0	MONO_SLEEP_ABORT_LIMIT
+859	0	MONO_ENABLE_COOP
+860	0	MONO_ENABLE_COOP
+861	0	MONO_ENABLE_BLOCKING_TRANSITION
+887	0	MONO_DEBUG_ASSEMBLY_UNLOAD
+888	0	MONO_GAC_PREFIX
+909	0	MONO_LOG_MASK
+910	0	MONO_LOG_LEVEL
+911	0	MONO_LOG_HEADER
+912	0	MONO_LOG_DEST
+914	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\mscorlib.dll
+917	0	api-ms-win-core-file-l2-1-1
+941	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\mscorlib.dll.dll
+944	0	kernel32
+948	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\mscorlib.dll.dll.la
+953	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/mscorlib.dll.dll
+958	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/mscorlib.dll.dll.la
+964	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\mscorlib.dll.config
+969	0	C:\w2m\app\MonoBleedingEdge\etc\mono\assemblies\mscorlib\mscorlib.config
+976	0	C:\Users\runneradmin\.mono\assemblies\mscorlib\mscorlib.config
+1130	0	MONO_COM
+1288	0	C:\w2m\app\MonoBleedingEdge\etc\mono\config
+1342	0	kernel32.dll
+1391	1	Background Job.Worker 5
+1392	1	Background Job.Worker 6
+1395	1	Job.Worker 2
+1398	1	Background Job.Worker 4
+1400	1	Background Job.Worker 3
+1407	1	Background Job.Worker 2
+1409	1	Background Job.Worker 1
+1413	1	Job.Worker 1
+1432	1	Job.Worker 0
+1450	1	Background Job.Worker 0
+1462	1	Background Job.Worker 11
+1474	1	Background Job.Worker 12
+1479	1	Background Job.Worker 15
+1485	1	Background Job.Worker 10
+1491	1	Background Job.Worker 7
+1495	1	Background Job.Worker 14
+1499	1	Background Job.Worker 8
+1503	1	Background Job.Worker 13
+1507	1	Background Job.Worker 9
+1511	1	BatchDeleteObjects
+1512	1	Loading.AsyncRead
+1516	0	kernel32
+1517	0	iphlpapi.dll
+1518	0	ntdll
+1530	0	Dwmapi.dll
+1597	0	api-ms-win-core-sysinfo-l1-2-1
+1599	0	C:\w2m\app\Hail to the Rainbow_Data\data.unity3d
+1600	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+1601	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+1602	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+1603	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+1604	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers.resG
+1605	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers.resG
+1606	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers.res
+1607	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers.res
+1608	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers.resS
+1609	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers.resS
+1612	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+1613	0	C:\w2m\app\Hail to the Rainbow_Data\globalgamemanagers
+1648	1	Software\NSS\Hail to the Rainbow
+1654	0	shell32.dll
+1658	2	Hail to the Rainbow
+1664	0	shcore.dll
+1668	0	C:\w2m\app\Hail to the Rainbow_Data\UnitySubsystems\*
+1677	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources
+1678	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources
+1679	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources.resG
+1680	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources.resG
+1681	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources.res
+1682	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources.res
+1683	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources.resS
+1684	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources.resS
+1687	0	C:\w2m\app\Hail to the Rainbow_Data\Resources\unity default resources
+1760	0	api-ms-win-appmodel-runtime-l1-1-2
+1806	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.dll
+1809	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.dll.dll
+1814	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.dll.dll.la
+1818	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.dll.dll
+1823	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.dll.dll.la
+1826	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AIModule.dll
+1829	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AIModule.dll.dll
+1834	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AIModule.dll.dll.la
+1838	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AIModule.dll.dll
+1843	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AIModule.dll.dll.la
+1846	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ARModule.dll
+1849	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ARModule.dll.dll
+1854	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ARModule.dll.dll.la
+1858	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ARModule.dll.dll
+1863	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ARModule.dll.dll.la
+1866	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AccessibilityModule.dll
+1869	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AccessibilityModule.dll.dll
+1874	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AccessibilityModule.dll.dll.la
+1878	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AccessibilityModule.dll.dll
+1883	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AccessibilityModule.dll.dll.la
+1886	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AndroidJNIModule.dll
+1889	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AndroidJNIModule.dll.dll
+1894	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AndroidJNIModule.dll.dll.la
+1898	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AndroidJNIModule.dll.dll
+1903	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AndroidJNIModule.dll.dll.la
+1906	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AnimationModule.dll
+1909	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AnimationModule.dll.dll
+1912	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AnimationModule.dll.dll.la
+1916	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AnimationModule.dll.dll
+1919	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AnimationModule.dll.dll.la
+1922	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AssetBundleModule.dll
+1925	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AssetBundleModule.dll.dll
+1928	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AssetBundleModule.dll.dll.la
+1932	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AssetBundleModule.dll.dll
+1934	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AssetBundleModule.dll.dll.la
+1937	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AudioModule.dll
+1939	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AudioModule.dll.dll
+1952	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.AudioModule.dll.dll.la
+1955	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AudioModule.dll.dll
+1957	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.AudioModule.dll.dll.la
+1960	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClothModule.dll
+1962	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClothModule.dll.dll
+1964	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClothModule.dll.dll.la
+1967	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ClothModule.dll.dll
+1969	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ClothModule.dll.dll.la
+1972	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClusterInputModule.dll
+1974	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClusterInputModule.dll.dll
+1976	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClusterInputModule.dll.dll.la
+1979	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ClusterInputModule.dll.dll
+1981	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ClusterInputModule.dll.dll.la
+1984	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClusterRendererModule.dll
+1986	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClusterRendererModule.dll.dll
+1988	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ClusterRendererModule.dll.dll.la
+1991	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ClusterRendererModule.dll.dll
+1993	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.ClusterRendererModule.dll.dll.la
+1996	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.CoreModule.dll
+1998	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.CoreModule.dll.dll
+2000	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.CoreModule.dll.dll.la
+2003	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.CoreModule.dll.dll
+2005	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.CoreModule.dll.dll.la
+2008	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.CrashReportingModule.dll
+2010	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.CrashReportingModule.dll.dll
+2012	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.CrashReportingModule.dll.dll.la
+2015	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.CrashReportingModule.dll.dll
+2019	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.DSPGraphModule.dll
+2021	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.DSPGraphModule.dll.dll
+2024	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.DSPGraphModule.dll.dll
+2027	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.DirectorModule.dll
+2029	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.DirectorModule.dll.dll
+2032	0	C:\w2m\app\Hail to the Rainbow_Data\Managed/mono/aot-cache/amd64/UnityEngine.DirectorModule.dll.dll
+2035	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.GameCenterModule.dll
+2037	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.GridModule.dll
+2039	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.HotReloadModule.dll
+2041	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.IMGUIModule.dll
+2043	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ImageConversionModule.dll
+2045	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.InputModule.dll
+2047	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.InputLegacyModule.dll
+2049	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.JSONSerializeModule.dll
+2051	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.LocalizationModule.dll
+2053	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.ParticleSystemModule.dll
+2055	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.PerformanceReportingModule.dll
+2057	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\UnityEngine.PhysicsModule.dll
+2084	0	C:/w2m/app\System.Core.dll
+2085	0	C:/w2m/app\System.Core.exe
+2086	0	C:/w2m/app\System.Core\System.Core.dll
+2087	0	C:/w2m/app\System.Core\System.Core.exe
+2088	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\System.Core.dll
+2304	0	C:/w2m/app\System.Core.dll
+2305	0	C:/w2m/app\System.Core.exe
+2306	0	C:/w2m/app\System.Core\System.Core.dll
+2307	0	C:/w2m/app\System.Core\System.Core.exe
+2308	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\System.Core.dll
+2309	0	C:/w2m/app\System.Core.dll
+2310	0	C:/w2m/app\System.Core.exe
+2311	0	C:/w2m/app\System.Core\System.Core.dll
+2312	0	C:/w2m/app\System.Core\System.Core.exe
+2313	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\System.Core.dll
+2314	0	C:/w2m/app\System.Core.dll
+2315	0	C:/w2m/app\System.Core.exe
+2316	0	C:/w2m/app\System.Core\System.Core.dll
+2317	0	C:/w2m/app\System.Core\System.Core.exe
+2318	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\System.Core.dll
+2324	0	C:/w2m/app\System.dll
+2325	0	C:/w2m/app\System.exe
+2326	0	C:/w2m/app\System\System.dll
+2327	0	C:/w2m/app\System\System.exe
+2328	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\System.dll
+2351	0	C:/w2m/app\System.Core.dll
+2352	0	C:/w2m/app\System.Core.exe
+2353	0	C:/w2m/app\System.Core\System.Core.dll
+2354	0	C:/w2m/app\System.Core\System.Core.exe
+2355	0	C:\w2m\app\Hail to the Rainbow_Data\Managed\System.Core.dll
+2356	0	C:/w2m/app\System.Core.dll
+2357	0	C:/w2m/app\System.Core.exe
+2593	1	Loading.PreloadManager
+2727	1	Software\NSS\Hail to the Rainbow
+2728	1	Software\NSS\Hail to the Rainbow
+2729	1	Software\NSS\Hail to the Rainbow
+2730	1	Software\NSS\Hail to the Rainbow
+2731	0	kernel32
+2732	0	api-ms-win-core-string-l1-1-0
+2733	0	api-ms-win-core-datetime-l1-1-1
+2734	0	api-ms-win-core-localization-obsolete-l1-2-0
+2736	1	unity.player_session_count_h922449978
+2738	1	Software\NSS\Hail to the Rainbow
+2739	1	unity.player_sessionid_h1351336811
+2778	0	C:\Windows\Fonts\*
+2886	1	Software\NSS\Hail to the Rainbow
+2887	1	_Level_Metka_h1161804037
+2888	1	_Level_Metka
+2890	1	Software\NSS\Hail to the Rainbow
+2891	1	_Level_Metka_h1161804037
+2892	1	_Level_Metka
+2912	0	steam_api64.dll
+2915	0	steam_api64.dll
+2953	1	Software\NSS\Hail to the Rainbow
+2954	1	CutScene_h877322457
+2955	1	CutScene
+2957	1	Software\NSS\Hail to the Rainbow
+2958	1	RestartMode_h935521233
+2959	1	RestartMode
+2961	1	Software\NSS\Hail to the Rainbow
+2962	1	VolID_h225847549
+2963	1	VolID
+2965	1	Software\NSS\Hail to the Rainbow
+2966	1	CutScene_h877322457
+2967	1	CutScene
+2969	1	Software\NSS\Hail to the Rainbow
+2970	1	RestartMode_h935521233
+2971	1	RestartMode
+2973	1	Software\NSS\Hail to the Rainbow
+2974	1	VolID_h225847549
+2975	1	VolID
+2977	1	Software\NSS\Hail to the Rainbow
+2978	1	UnityGraphicsQuality_h1669003810
+3196	1	Software\NSS\Hail to the Rainbow
+3197	1	CloudMax_h658454496
+3198	1	CloudMax
+3201	0	shell32.dll
+3204	0	C:\Users\runneradmin\AppData\LocalLow\NSS
+3205	0	C:\Users\runneradmin\AppData\LocalLow\NSS\Hail to the Rainbow
+3297	0	dxgi.dll
+3323	1	Software\NSS\Hail to the Rainbow
+3324	1	_ColorCor_Mode_h2107870725
+3325	1	_ColorCor_Mode
+3327	1	Software\NSS\Hail to the Rainbow
+3328	1	_RobotsMuseum_h896981211
+3329	1	_RobotsMuseum
+3331	1	Software\NSS\Hail to the Rainbow
+3332	1	SaveSettings_h1557016833
+3333	1	SaveSettings
+3335	1	Software\NSS\Hail to the Rainbow
+3336	1	UnityGraphicsQuality_h1669003810
+3340	1	Software\NSS\Hail to the Rainbow
+3341	1	SaveSettings_h1557016833
+3342	1	SaveSettings
+3344	1	Software\NSS\Hail to the Rainbow
+3345	1	SaveSettings_h1557016833
+3346	1	SaveSettings
+3348	1	Software\NSS\Hail to the Rainbow
+3349	1	Glava_ID_h3809109642
+3350	1	Glava_ID
+3352	1	Software\NSS\Hail to the Rainbow
+3353	1	Glava_ID_h3809109642
+3354	1	Glava_ID
+3356	1	Software\NSS\Hail to the Rainbow
+3357	1	DLC_1_h207968096
+3358	1	DLC_1
+3360	1	Software\NSS\Hail to the Rainbow
+3361	1	DLC_2_h207968099
+3362	1	DLC_2
+3364	1	Software\NSS\Hail to the Rainbow
+3365	1	DLC_3_h207968098
+3366	1	DLC_3
+3368	1	Software\NSS\Hail to the Rainbow
+3369	1	SaveSettings_h1557016833
+3370	1	SaveSettings
+3392	1	Software\NSS\Hail to the Rainbow
+3393	1	Screenmanager Resolution Width Default_h680557497
+3395	1	Software\NSS\Hail to the Rainbow
+3396	1	Screenmanager Resolution Height Default_h1380706816
+3398	1	Software\NSS\Hail to the Rainbow
+3399	1	Screenmanager Resolution Use Native Default_h1405981789
+3401	1	Software\NSS\Hail to the Rainbow
+3402	1	Screenmanager Fullscreen mode Default_h401710285
+3404	1	Software\NSS\Hail to the Rainbow
+3405	1	Screenmanager Resolution Width_h182942802
+3407	1	Software\NSS\Hail to the Rainbow
+3408	1	Screenmanager Resolution Height_h2627697771
+3410	1	Software\NSS\Hail to the Rainbow
+3411	1	Screenmanager Fullscreen mode_h3630240806
+3416	1	Software\NSS\Hail to the Rainbow
+3417	1	Screenmanager Resolution Use Native_h1405027254
+3420	0	C:\Users\w2m\AppData\Local\Temp\
+3423	0	C:\Users\w2m\AppData\Local\Temp\cur6738.tmp
+3451	1	Software\NSS\Hail to the Rainbow
+3452	1	SaveSettings_h1557016833
+3453	1	Software\NSS\Hail to the Rainbow
+3454	1	Key_EnterKey_h905525138
+3455	1	Software\NSS\Hail to the Rainbow
+3456	1	Key_ForwMovKey_h873740642
+3457	1	Software\NSS\Hail to the Rainbow
+3458	1	Key_BackMovKey_h1932127749
+3459	1	Software\NSS\Hail to the Rainbow
+3460	1	Key_LeftMovKey_h3942980213
+3461	1	Software\NSS\Hail to the Rainbow
+3462	1	Key_RightMovKey_h220221454
+3463	1	Software\NSS\Hail to the Rainbow
+3464	1	Key_JumpKey_h2324723544
+3465	1	Software\NSS\Hail to the Rainbow
+3466	1	Key_RunKey_h3834294707
+3467	1	Software\NSS\Hail to the Rainbow
+3468	1	Key_BackKey_h3575912881
+3469	1	Software\NSS\Hail to the Rainbow
+3470	1	Key_FlashlightKey_h4149353780
+3471	1	Software\NSS\Hail to the Rainbow
+3472	1	Key_UpKey_h756416959
+3473	1	Software\NSS\Hail to the Rainbow
+3474	1	Key_DownKey_h3492309320
+3475	1	Software\NSS\Hail to the Rainbow
+3476	1	Key_LeftKey_h2124234753
+3477	1	Software\NSS\Hail to the Rainbow
+3478	1	Key_RightKey_h3453358874
+3479	1	Key_InventarKey_h1982812999
+3480	1	Key_SitKey_h3578960276
+3481	1	Key_Medic_Act_Key_h2276551210
+3482	1	Key_Photomode_Key_h1497661194
+3483	1	Key_Reverse_Key_h316283525
+3484	1	Key_Trans_Plus_Key_h956439962
+3485	1	Software\NSS\Hail to the Rainbow
+3486	1	SaveSettings_h1557016833
+3491	0	C:\Users\w2m\AppData\Local\Temp\
+3494	0	C:\Users\w2m\AppData\Local\Temp\cur698A.tmp

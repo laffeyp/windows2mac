@@ -69,6 +69,7 @@ static const struct { const char *fn; unsigned wide, ansi; } STRING_ARGS[] = {
     {"GetEnvironmentVariableW", 1u << 0, 0}, {"GetEnvironmentVariableA", 0, 1u << 0},
     {"SetEnvironmentVariableW", 1u << 0 | 1u << 1, 0}, {"CreateFileMappingW", 1u << 5, 0},
     {"OpenFileMappingW", 1u << 2, 0}, {"CreateNamedPipeW", 1u << 0, 0}, {"WaitNamedPipeW", 1u << 0, 0},
+    {"SetThreadDescription", 1u << 1, 0},     /* the thread's name: the comparison pairs threads by it (Sprint 064) */
     {NULL, 0, 0}};
 
 #define STRINGS 65536

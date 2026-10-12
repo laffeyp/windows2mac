@@ -36,7 +36,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import msgspec
 from substrate.api import PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
@@ -58,7 +58,7 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
-REFERENCE = ROOT / "store" / "game-runs" / "38206263976"     # the batch run: C:\\w2m\\app, the game's resources (Sprint 061)
+REFERENCE = ROOT / "store" / "game-runs" / "38216081440"     # the batch run with thread names (Sprint 064)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
 # exact text, its replacement, and the (function, field) the divergence names.
@@ -75,7 +75,7 @@ PLANTS = {
 def where(vm: Any, address: int) -> str:
     """An x86 address as module+RVA, or a thunk's import name (Sprint 063: where each thread stands at the stop)."""
     if address in vm.ld.thunks:
-        return vm.ld.thunks[address]
+        return str(vm.ld.thunks[address])
     base = vm.modules.containing(address)
     name = next((n for n, (b, _, _) in vm.modules.dlls.items() if b == base), vm.modules.image_name if base else "")
     return f"{name}+0x{address - base:x}" if base else hex(address)
@@ -136,6 +136,7 @@ def main(argv: list[str]) -> int:
             (base / "traces" / f"{trace_sha[7:]}.jsonl").write_bytes(text)
             (base / "frontier-calls").mkdir(parents=True, exist_ok=True)
             (base / "frontier-calls" / f"{xid}.tsv").write_text(call_compare.write_tsv(calls))
+            (base / "frontier-calls" / f"{xid}.strings.tsv").write_text(call_compare.write_strings(vm.traced_strings()))
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()
@@ -159,6 +160,7 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
+        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks))
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -176,13 +178,20 @@ def main(argv: list[str]) -> int:
         windows = call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
         found, compared = call_compare.compare(windows, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"),
                                                SIGNATURES, call_compare.excluded(
-                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name))
+                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name),
+                                               (call_compare.read_strings(REFERENCE / "jit_capture.bin.strings.tsv"),
+                                                call_compare.read_strings(
+                                                    base / "frontier-calls" / f"{xid}.strings.tsv")))
         state.update(divergences=found, compared=compared)
+        # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
+        verdict: Literal["conforms", "discrepancy", "inconclusive"] = (
+            "discrepancy" if found else "inconclusive" if state.get("dropped") else "conforms")
         yield events.validate(events.COMPARISON_COMPLETED(
             comparison_id=f"cmp-{xid}", contract_id=CONTRACT[0], contract_version=CONTRACT[1],
             relation="state_relation", reference_ref=record_game_run.execution_id(REFERENCE),
-            target_execution_id=xid, verdict="discrepancy" if found else "conforms",
-            **({"first_divergence": found[0].text()[:500]} if found else {})))
+            target_execution_id=xid, verdict=verdict,
+            **({"first_divergence": found[0].text()[:500]} if found else
+               {"first_divergence": f"the trace left out {state['dropped']} calls"} if state.get("dropped") else {})))
 
     async def closer(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         found = state.get("divergences", [])
@@ -227,6 +236,12 @@ def main(argv: list[str]) -> int:
     for pid, (name, code, calls, threads) in state.get("processes", {}).items():
         print(f"process {pid} {name}: exit code {code}; threads {threads}; calls by service {calls}")
     print(f"unity.log lines {state.get('log_lines')}")
+    elapsed = time.monotonic() - t0
+    print(f"exits by hvc {dict(sorted(state.get('exits', {}).items(), key=lambda kv: -kv[1]))}; "
+          f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s; "
+          f"{state.get('thunks')} thunks")
+    for (imm, at), n in state.get("exit_sites", []):
+        print(f"  hvc {imm} at 0x{at:x}: {n}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")

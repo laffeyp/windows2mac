@@ -15,8 +15,8 @@ specs/signatures.json allows, because pointers, handles and thread ids differ be
   void     the return of a function with none: not compared
 
 A last error is compared where the metadata marks the function as setting one (SupportsLastError) and the return
-says it failed (a BOOL of 0, a null handle or pointer, INVALID_HANDLE_VALUE): a function that succeeds leaves the last
-error as it was, which belongs to the call before. A function the metadata does not describe is compared on its
+says it failed (a BOOL of FALSE, a null handle or pointer, INVALID_HANDLE_VALUE): a function that succeeds leaves the
+last error as it was, which belongs to the call before. A function the metadata does not describe is compared on its
 return only. A pair w2m calls and Windows never does is a divergence of its own.
 
 Usage: uv run python scripts/call_compare.py <w2m calls.tsv> <game-run-dir> [--signatures specs/signatures.json]
@@ -131,13 +131,16 @@ def guest_trace(execution_id: str, calls: list[Call], threads: dict[int, tuple[i
     return b"".join(line + b"\n" for line in lines)
 
 
-def failed(kind: str, value: int, size: int | None) -> bool:
+def failed(kind: str, type_name: str, value: int) -> bool:
+    """Whether a return says the call failed, so its last error is the function's to set: a NULL or invalid handle, a
+    NULL pointer, a BOOL of FALSE. Other integers carry no failure value the metadata names (WaitForSingleObjectEx's 0
+    is WAIT_OBJECT_0; Sprint 064 found the earlier rule, any 4-byte 0, comparing a wait's stale last error)."""
     if kind == "handle":
         return value in (0, INVALID_HANDLE_VALUE)
     if kind == "pointer":
         return value == 0
-    if kind == "value" and size == 4:
-        return value & 0xFFFFFFFF == 0          # BOOL FALSE; a count of 0 for the functions that return one
+    if type_name in ("BOOL", "BOOLEAN"):
+        return value & 0xFFFFFFFF == 0
     return False
 
 
@@ -195,13 +198,45 @@ def carries_address(fn: str, field: str, args: tuple[int, ...]) -> bool:
     return False
 
 
-def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] | None = None) -> dict[int, int]:
+String = tuple[int, int, str]                       # seq, argument, text (<capture>.strings.tsv)
+
+
+def read_strings(path: Path) -> list[String]:
+    """A capture's string arguments: seq and argument in decimal, then the text."""
+    out = []
+    for line in path.read_text().splitlines() if path.is_file() else []:
+        f = line.split("\t", 2)
+        if len(f) == 3:
+            out.append((int(f[0]), int(f[1]), f[2]))
+    return out
+
+
+def write_strings(strings: list[String]) -> str:
+    return "".join(f"{s}\t{a}\t{t}\n" for s, a, t in strings)
+
+
+def thread_names(calls: list[Call], strings: list[String]) -> dict[int, str]:
+    """Each thread's first SetThreadDescription name, given to the thread that makes the call: the game's threads
+    name themselves at their start (game run 38216081440; Sprint 064)."""
+    by_seq = {c[0]: c for c in calls if c[4] == "SetThreadDescription"}
+    names: dict[int, str] = {}
+    for seq, arg, text in sorted(strings):
+        c = by_seq.get(seq)
+        if c is not None and arg == 1:
+            names.setdefault(c[1], text)
+    return names
+
+
+def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] | None = None,
+               names: tuple[dict[int, str], dict[int, str]] = ({}, {})) -> dict[int, int]:
     """Windows thread id -> w2m thread id. Neither trace links a thread to the CreateThread that made it, and a game's
     workers run one start routine in an order the scheduler picks; the capture keeps a function's first 32 calls over
     all threads, w2m 32 on each, so even the threads' first recorded calls differ. Each Windows thread, in the order it
     first appears, takes the unpaired w2m thread whose calls agree with its own most (per function, in order, each
     value by its relation; Sprint 061), the first to appear on a tie. A divergence every candidate thread shows
-    survives any pairing; only interchangeable threads trade places."""
+    survives any pairing; only interchangeable threads trade places. Threads the game names (SetThreadDescription,
+    `names`) pair by name first, in order of appearance where a name repeats (Sprint 064: near-identical workers
+    mispaired by agreement once the scheduler's order changed)."""
     def order(calls: list[Call]) -> list[int]:
         seen: list[int] = []
         for c in sorted(calls):
@@ -233,7 +268,16 @@ def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] 
 
     free = order(w2m)
     pairs: dict[int, int] = {}
+    named_w, named_m = names
     for tw in order(windows):
+        name = named_w.get(tw)
+        match = next((tm for tm in free if name is not None and named_m.get(tm) == name), None)
+        if match is not None:
+            pairs[tw] = match
+            free.remove(match)
+    for tw in order(windows):
+        if tw in pairs:
+            continue
         if not free:
             break
         best = max(free, key=lambda tm: (agreement(tw, tm), -free.index(tm)))
@@ -243,13 +287,15 @@ def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] 
 
 
 def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
-            excluded_threads: frozenset[int] = frozenset()) -> tuple[list[Divergence], int]:
+            excluded_threads: frozenset[int] = frozenset(),
+            strings: tuple[list[String], list[String]] = ([], [])) -> tuple[list[Divergence], int]:
     """Every divergence, in the order of the Windows calls they concern, and the count of calls compared. Each
     (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
     with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
     threads the game does not start (the capture's own)."""
     windows = [c for c in windows if c[1] not in excluded_threads]
-    threads = thread_map(windows, w2m, signatures)
+    threads = thread_map(windows, w2m, signatures,
+                         (thread_names(windows, strings[0]), thread_names(w2m, strings[1])))
 
     def by_pair(calls: list[Call]) -> dict[tuple[str, str], dict[int, list[Call]]]:
         out: dict[tuple[str, str], dict[int, list[Call]]] = {}
@@ -294,7 +340,7 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             fields = [(f"a{i}", p["kind"], p.get("bytes"), a[5][i], b[5][i], True)
                       for i, p in enumerate(sig["params"][:8])]
             fields.append(("ret", ret["kind"], ret.get("bytes"), a[6], b[6], False))
-            if sig["sets_last_error"] and failed(ret["kind"], a[6], ret.get("bytes")):
+            if sig["sets_last_error"] and failed(ret["kind"], ret["type"], a[6]):
                 fields.append(("error", "value", 4, a[7], b[7], False))
         for name, kind, size, x, y, argument in fields:
             space = ASSIGNED.get((fn, name))
@@ -323,7 +369,9 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     signatures = json.loads(a.signatures.read_text())["functions"]
     found, compared = compare(read_tsv(a.run / "jit_capture.bin.trace.tsv"), read_tsv(a.calls), signatures,
-                              excluded(json.loads(CONTRACT.read_text()), a.run.name))
+                              excluded(json.loads(CONTRACT.read_text()), a.run.name),
+                              (read_strings(a.run / "jit_capture.bin.strings.tsv"),
+                               read_strings(a.calls.with_suffix(".strings.tsv"))))
     print(f"{compared} calls compared; {len(found)} divergences")
     for d in found:
         print(f"  seq {d.windows_seq}: {d.text()}")

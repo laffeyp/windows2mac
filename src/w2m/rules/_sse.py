@@ -17,6 +17,18 @@ from w2m.vm_backend import (AF_OPERANDS, FP_CLASSES, HVC_SLOW_SSE, MXCSR_OFF, RE
 from w2m import a64_encoder as a64
 
 
+native_conversions = True        # Sprint 064's lowered conversions; False sends them to the model as before
+
+
+def _unmasked_to_model(a: Assembler) -> None:
+    """The model runs the instruction when MXCSR unmasks any exception: only the model raises the SIMD fault."""
+    fast = a.label()
+    a.emit(a64.ldr(4, 16, 28, MXCSR_OFF), a64.ubfx(16, 16, 7, 6), a64.cmpi(16, 0x3F))
+    a.branch(lambda off: a64.bcond("eq", off), fast)
+    a.emit(a64.hvc(HVC_SLOW_SSE))
+    a.bind(fast)
+
+
 def rule(ctx: Ctx) -> None:
     """One legacy-SSE instruction as one `sse` operation; the runtime (x86fp) and the lowering below
     compute it (lift.py's SSE rule, Sprint 039)."""
@@ -311,6 +323,60 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
     elif ic in ("XORPS", "XORPD", "ANDPS", "ANDPD", "ORPD"):
         v = _sse_src(a, src, 16, reg_of)
         a.emit((a64.eor_v if ic.startswith("XOR") else a64.orr_v if ic == "ORPD" else a64.and_v)(dst[1], dst[1], v))
+    elif ic == "CVTDQ2PS" and native_conversions:
+        # SCVTF rounds in FPCR's mode, which is MXCSR's RC (fpcr_for), and reports an inexact result as FPSR.IXC, MXCSR's
+        # PE; x86 reports only PE here (SDM CVTDQ2PS: Precision). Native from Sprint 064: the frontier ran 24,291 of its
+        # model steps here. An unmasked exception still goes to the model, which raises it.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 16, reg_of)
+        a.emit(a64.scvtf_4s(dst[1], v))
+    elif ic == "CVTPS2PD" and native_conversions:
+        # FCVTL widens the low two singles exactly; an SNaN becomes a QNaN with FPSR.IOC (MXCSR's IE), and FPCR.AH=1
+        # gives x86's NaN and denormal-input behavior (Sprint 039 probe). The memory form reads 8 bytes (SDM CVTPS2PD:
+        # m64). Native from Sprint 064: the frontier ran 50,333 of its model steps at one VCVTPS2PD.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 8 if src[0] == "m" else 16, reg_of)
+        a.emit(a64.fcvtl_2d(dst[1], v))
+    elif ic == "CVTPD2PS" and native_conversions:
+        # FCVTN narrows each double in FPCR's rounding mode (MXCSR's RC) into the low half and clears the high
+        # half, as x86 zeroes bits 127:64 (SDM CVTPD2PS); OE, UE, PE and IE (an SNaN) come as FPSR's OFC, UFC, IXC
+        # and IOC, with FPCR.AH's x86 tininess and NaN rules (Sprint 039 probe). Native from Sprint 064: a
+        # 20-billion-instruction frontier ran 663,562 model steps at one CVTPD2PS.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 16, reg_of)
+        a.emit(a64.fcvtn_2s(dst[1], v))
+    elif ic == "CVTPD2DQ" and native_conversions:
+        # Each double as CVTSD2SI converts it, the results in the low two lanes and the rest zeroed (SDM CVTPD2DQ):
+        # FRINTX rounds in MXCSR's mode and FCVTZS converts; NaN or a value at or past 2^31 gives the integer
+        # indefinite 0x80000000 and IE (FCVTZS saturates, and gives 0 for NaN), with this lane's other flags dropped;
+        # in range, the lane keeps PE and FPSR's IDC as it was. x18 holds FPSR before the lane. The source goes to
+        # V30, V29 holds the bound, and the two results pass through the spill slot. Native from Sprint 064: the
+        # frontier ran 47,825 of its model steps at VCVTPD2DQ and CVTPD2DQ.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 16, reg_of)
+        if v != 30:
+            a.emit(a64.mov_v(30, v))
+        for lane in (0, 1):
+            ok, low, done, indefinite = a.label(), a.label(), a.label(), a.label()
+            a.emit(a64.mrs(18, a64.FPSR), a64.umov_d(17, 30, lane), a64.fmov_to_v(8, 31, 17),
+                   a64.frintx(8, 31, 31), a64.fcvtzs(32, 8, 16, 31),
+                   a64.mov_imm(17, 0x41E0_0000_0000_0000), a64.fmov_to_v(8, 29, 17), a64.fcmp(8, 31, 29))
+            # in range when -2^31 <= the rounded value < 2^31 (x86fp.to_int); NaN is unordered, so not below 2^31.
+            # The lower bound matters for the flags only: below it FCVTZS gives 0x80000000 too, but FRINTX's IXC
+            # would survive as PE where the Xeon reports IE alone (set 050 case 227, MXCSR 0x9f80 -> 0x9f81)
+            a.branch(lambda off: a64.bcond("mi" if vb.CVT_INDEFINITE else "al", off), low)
+            a.branch(a64.b, indefinite)
+            a.bind(low)
+            a.emit(a64.mov_imm(17, 0xC1E0_0000_0000_0000), a64.fmov_to_v(8, 29, 17), a64.fcmp(8, 31, 29))
+            a.branch(lambda off: a64.bcond("ge" if vb.CVT_INDEFINITE else "al", off), ok)
+            a.bind(indefinite)
+            a.emit(a64.mov_imm(16, 0x8000_0000), a64.movz(17, 1), a64.orr(18, 18, 17), a64.msr(a64.FPSR, 18))
+            a.branch(a64.b, done)
+            a.bind(ok)                                           # in range: IDC as it was before the lane
+            a.emit(a64.mrs(17, a64.FPSR), a64.ubfx(18, 18, 7, 1), a64.bfi(17, 18, 7, 1), a64.msr(a64.FPSR, 17))
+            a.bind(done)
+            a.emit(a64.str_(4, 16, 28, vb.SPILL + 4 * lane))
+        a.emit(a64.ldr(8, 16, 28, vb.SPILL), a64.fmov_to_v(8, dst[1], 16))   # FMOV Dd zeroes bits 127:64
     elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD") or ic in SSE_050:  # in the model (x86fp; Sprints
         a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):

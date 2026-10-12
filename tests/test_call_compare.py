@@ -169,3 +169,31 @@ def test_workers_pair_by_agreement_and_a_fault_on_every_worker_survives() -> Non
              call(3, "SetThreadPriority", ((1 << 64) - 2, 0), 1, tid=12)]
     assert [(d.function, d.field) for d in call_compare.compare(windows, wrong, SIGNATURES)[0]] == \
         [("SetThreadPriority", "a1"), ("SetThreadPriority", "a1")]
+
+
+def test_a_wait_that_returns_wait_object_0_has_no_failure_to_judge() -> None:
+    """Sprint 064: the failure rule took any 4-byte 0 for failure and compared WaitForSingleObjectEx's stale last error
+    (Windows 0, w2m 187 left by the thread's start). Only a BOOL's FALSE, a NULL or a bad handle say a call failed."""
+    windows = [call(1, "WaitForSingleObjectEx", (0x1C4, 0xFFFFFFFF, 0), 0, 0)]
+    w2m = [call(1, "WaitForSingleObjectEx", (0x3000, 0xFFFFFFFF, 0), 0, 187)]
+    assert call_compare.compare(windows, w2m, SIGNATURES)[0] == []
+    failed_close = [call(1, "CloseHandle", (0x1C4,), 0, 6)]
+    assert [d.field for d in call_compare.compare(failed_close, [call(1, "CloseHandle", (0x3000,), 0, 0)],
+                                                  SIGNATURES)[0]] == ["error"]
+
+
+def test_named_threads_pair_by_name_before_agreement() -> None:
+    """Sprint 064: the game's workers name themselves (SetThreadDescription); the comparison pairs them by name, so a
+    priority wrong on one named worker shows even where pairing by agreement would swap the two workers."""
+    def worker(seq: int, tid: int, name: str, priority: int) -> list[call_compare.Call]:
+        return [call(seq, "SetThreadDescription", ((1 << 64) - 2, 0x50000 + seq), 0, tid=tid),
+                call(seq + 1, "SetThreadPriority", ((1 << 64) - 2, priority & 0xFFFFFFFF), 1, tid=tid)]
+    windows = worker(10, 200, "A", -1) + worker(20, 300, "B", -2)
+    w_strings = [(10, 1, "A"), (20, 1, "B")]
+    right = worker(10, 8, "B", -2) + worker(20, 12, "A", -1)
+    r_strings = [(10, 1, "B"), (20, 1, "A")]
+    assert call_compare.compare(windows, right, SIGNATURES, frozenset(), (w_strings, r_strings))[0] == []
+    wrong = worker(10, 8, "B", -1) + worker(20, 12, "A", -2)
+    found = call_compare.compare(windows, wrong, SIGNATURES, frozenset(), (w_strings, r_strings))[0]
+    assert [(d.function, d.field) for d in found] == [("SetThreadPriority", "a1"), ("SetThreadPriority", "a1")]
+    assert call_compare.compare(windows, wrong, SIGNATURES)[0] == []      # by agreement alone, the swap hides it

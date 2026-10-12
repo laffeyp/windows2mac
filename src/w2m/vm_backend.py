@@ -36,6 +36,7 @@ import subprocess
 import tempfile
 import time
 from bisect import bisect_right
+from collections import Counter
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from functools import partial
@@ -88,8 +89,7 @@ SAVE_VECTORS = 0x200
 VECTORS = 0x01000               # vector table, 16 slots of 0x80
 DISPATCHER = 0x01800
 EXCEPTION_ENTRY = 0x01C00           # EL1 synchronous-exception path into the guest runtime
-DISPATCH_TABLE = 0x02000             # 4096 entries of (x86 address, code VA)
-DISPATCH_ENTRIES = 4096
+EXCEPTION_ENTRY_END = 0x02000
 TRANSLATION_TABLES = 0x12000            # stage-1 translation tables
 TRANSLATION_TABLES_SIZE = 0x40000
 # Sprint 047: UnityPlayer filled the 4 MB code cache's 65,536-entry reconstruction table at 1,457,522 instructions.
@@ -103,7 +103,20 @@ RUNTIME_STACK = RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE   # the runtime's AArch64 sta
 RUNTIME_STACK_SIZE = 0x10000
 RECON_TABLE = RUNTIME_STACK + RUNTIME_STACK_SIZE     # reconstruction table: (host code VA, x86 address) pairs, sorted
 RECON_ENTRIES = 0x40_0000             # 4 Mi entries, 64 MB
-MONITOR_SIZE = (RECON_TABLE + 16 * RECON_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
+# The dispatch table: (x86 address, code VA) pairs indexed by the address's low DISPATCH_BITS bits. Sprint 064: with
+# 4,096 entries the game's 62,000 blocks evicted each other, and 8,474,510 of a billion-instruction frontier run's
+# 8,747,587 exits were misses back to the host; 2^20 entries (16 MB, sparse) hold them.
+DISPATCH_BITS = 20
+DISPATCH_ENTRIES = 1 << DISPATCH_BITS
+DISPATCH_TABLE = RECON_TABLE + 16 * RECON_ENTRIES
+
+
+def dispatch_slot(target: int) -> int:
+    """The dispatcher's index for an x86 address: its low DISPATCH_BITS bits folded with the next two DISPATCH_BITS.
+    Sprint 064: the game's modules sit at 1 MB-aligned bases (0x140000000, 0x180000000, 0x1180000000, the thunks at
+    0x7FFE00000000), so code at one offset in two modules shared a slot when only the low bits indexed it."""
+    return (target ^ target >> DISPATCH_BITS ^ target >> 2 * DISPATCH_BITS) & (DISPATCH_ENTRIES - 1)
+MONITOR_SIZE = (DISPATCH_TABLE + 16 * DISPATCH_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -128,8 +141,11 @@ INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
-TRACE_SIZE = 0x400000              # 4 MB: per-thread counters (768 KB), then about 28,000 records
-TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xC1300, 120, 4096, 0x80
+TRACE_SIZE = 0x800000              # 8 MB: per-thread counters (3 MB), then about 43,000 records
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0x34D000, 120, 16384, 0x80
+TRACE_WIDE_OFF, TRACE_STRINGS_OFF, TRACE_STRING = 0x4300, 0x308300, 136
+# call_trace.h's STRING_ARGS this trace keeps: bit i, argument i is a UTF-16 string (Sprint 064: thread names)
+TRACE_WIDE_ARGS = {"SetThreadDescription": 1 << 1}
 TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
 TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
 # call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
@@ -801,8 +817,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             rs, fast, done = reg_of(src), a.label(), a.label()
             if signed and signed[0]:
                 # IDIV (Sprint 046): fast only for a 64-bit dividend that is RAX sign-extended and a divisor
-                # neither 0 nor -1 (INT64_MIN / -1 overflows); the rest, every 8-, 16- and 32-bit form
-                # included, runs in the model
+                # neither 0 nor -1 (INT64_MIN / -1 overflows), and (Sprint 064) the 32-bit form whose quotient
+                # fits; the rest, every 8- and 16-bit form included, runs in the model
                 if bits == 64:
                     a.emit(a64.sbfx(16, RAX, 63, 1), a64.cmp(16, RDX))
                     a.branch(lambda off: a64.bcond("ne", off), done)
@@ -810,6 +826,17 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                     a.emit(a64.addi(16, rs, 1))
                     a.branch(lambda off: a64.cbz(16, off), done)
                     a.emit(a64.sdiv(16, RAX, rs), a64.msub(RDX, 16, rs, RAX), a64.mov(RAX, 16))
+                    a.branch(a64.b, fast)
+                elif bits == 32:
+                    # Sprint 064 (the frontier ran ~100,000 model steps at four 32-bit IDIVs): EDX:EAX as a signed
+                    # 64-bit dividend over the sign-extended divisor; a zero divisor or a quotient past 32 bits (the
+                    # #DE cases, INT64_MIN / -1 among them) still runs in the model. Temporaries only until the end.
+                    a.emit(a64.mov32(16, RDX), a64.eor(16, a64.ZR, 16, a64.LSL, 32), a64.bfi(16, RAX, 0, 32),
+                           a64.sbfx(17, rs, 0, 32))
+                    a.branch(lambda off: a64.cbz(17, off), done)
+                    a.emit(a64.sdiv(18, 16, 17), a64.msub(16, 18, 17, 16), a64.sbfx(17, 18, 0, 32), a64.cmp(17, 18))
+                    a.branch(lambda off: a64.bcond("ne", off), done)
+                    a.emit(a64.mov32(RAX, 18), a64.mov32(RDX, 16))
                     a.branch(a64.b, fast)
             elif bits == 64:
                 a.branch(lambda off: a64.cbnz(RDX, off), done)
@@ -1055,6 +1082,8 @@ class VM:
         self.out = bytearray()
         self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
         self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
+        self.exits: Counter[int] = Counter()            # hvc exits by number (Sprint 064's census)
+        self.exit_sites: Counter[tuple[int, int]] = Counter()   # (hvc number, x86 address at the exit)
         self._pending_init = 0                          # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
@@ -1675,6 +1704,8 @@ class VM:
             # a vtable, not an import) have no hook in the capture
             if self.call_trace and fn not in UNTRACED and not fn.startswith("W2m"):
                 a.emit(a64.mov_imm(5, self.runtime.symbols[symbol]), a64.mov_imm(6, (thunk - THUNK_BASE) // 16))
+                if fn in TRACE_WIDE_ARGS and (thunk - THUNK_BASE) // 16 < TRACE_THUNKS:
+                    self.mm[self._process(TRACE_OFF) + TRACE_WIDE_OFF + (thunk - THUNK_BASE) // 16] = TRACE_WIDE_ARGS[fn]
                 symbol = "w2m_traced"
             a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
             a.emit(a64.mov_imm(16, state))
@@ -1990,6 +2021,20 @@ class VM:
             out.append((seq, tid, label, dll, fn, tuple(rest[:8]), rest[8], rest[9]))
         return out, dropped
 
+    def traced_strings(self) -> list[tuple[int, int, str]]:
+        """The string arguments call_trace.c kept, as the capture's <capture>.strings.tsv has them: (seq, argument,
+        text with ASCII as is and every other unit as \\uXXXX)."""
+        t = self._process(TRACE_OFF)
+        n = struct.unpack_from("<Q", self.mm, t + TRACE_STRINGS_OFF)[0]
+        out = []
+        for k in range(n):
+            at = t + TRACE_STRINGS_OFF + 16 + TRACE_STRING * k
+            seq, arg = struct.unpack_from("<QQ", self.mm, at)
+            units = struct.unpack_from("<60H", self.mm, at + 16)
+            text = "".join(chr(u) if 0x20 <= u < 0x7F else f"\\u{u:04x}" for u in units[:units.index(0)])
+            out.append((seq, arg, text))
+        return out
+
     def calls_total(self) -> dict[str, int]:
         """Every service call by name, counted in the guest (exact past the ring's capacity)."""
         names = guest_runtime.api_ids()
@@ -2087,7 +2132,9 @@ class VM:
         d = Assembler(MONITOR_VA + DISPATCHER)
         top, miss = d.label(), d.label()
         d.bind(top)
-        d.emit(a64.ldr(8, 16, 28, 16), a64.ubfx(18, 17, 0, 12), a64.add(16, 16, 18, a64.LSL, 4),
+        d.emit(a64.ldr(8, 16, 28, 16), a64.eor(18, 17, 17, a64.LSR, DISPATCH_BITS),
+               a64.eor(18, 18, 17, a64.LSR, 2 * DISPATCH_BITS), a64.ubfx(18, 18, 0, DISPATCH_BITS),
+               a64.add(16, 16, 18, a64.LSL, 4),
                a64.ldp(18, 16, 16), a64.cmp(18, 17))
         d.branch(lambda off: a64.bcond("ne", off), miss)
         d.emit(a64.br(16))
@@ -2182,7 +2229,7 @@ class VM:
         e.emit(a64.ldr(8, 17, 16, STATE_REDIRECT), a64.str_(8, a64.ZR, 16, STATE_REDIRECT))
         e.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
         words = e.finish()
-        assert 4 * len(words) <= DISPATCH_TABLE - EXCEPTION_ENTRY
+        assert 4 * len(words) <= EXCEPTION_ENTRY_END - EXCEPTION_ENTRY
         self._write_words(EXCEPTION_ENTRY, words)
 
     def _write_words(self, off: int, words: list[int]) -> None:
@@ -2393,6 +2440,8 @@ class VM:
                     break
                 imm = e.syndrome & 0xFFFF
                 where = self.x86_address_at(e.pc - 4)
+                self.exits[imm] += 1                          # the exit census (Sprint 064): kind, then the site
+                self.exit_sites[(imm, where)] += 1
                 if imm == 1:
                     if on_dispatch:
                         on_dispatch(self, x)                  # may replace the state in x
@@ -2401,8 +2450,7 @@ class VM:
                         va = self.bridges[target]
                     else:
                         va = self.blocks.get(target) or self._compile(target)
-                    struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * (target & (DISPATCH_ENTRIES - 1)),
-                                     target, va)
+                    struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * dispatch_slot(target), target, va)
                     pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
                 elif imm == 8:
                     if not self._host_request(x):
