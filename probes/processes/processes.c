@@ -13,6 +13,10 @@
  * This probe is both: run with no argument it is the parent and starts itself with "child <parent id>"; the child
  * writes its rows to w2m_child_rows.txt, which the parent prints after the child exits. Ids and handles are kept as
  * relations.
+ * Sprint 058 (the review of Sprint 055) adds: a second child, "writer", started after the parent set a variable and
+ * changed its directory, which prints what it inherited down a pipe and exits holding the pipe's write end; and a
+ * pipe of UnityPlayer's size (0, game run 38176899195 seq 9) filled by a thread a byte at a time, then by one write
+ * larger than it holds.
  */
 #include <windows.h>
 
@@ -112,6 +116,84 @@ static void child(DWORD parent_id, const WCHAR *line) {
     ExitProcess(CHILD_EXIT);
 }
 
+/* ---- the second child: what a start inherits, and a writer that exits holding its end (Sprint 058) ------- */
+
+static void writer(void) {
+    WCHAR v[64];
+    SetLastError(SENTINEL);
+    DWORD k = GetEnvironmentVariableW(L"W2M_PROBE_VAR", v, 64);
+    row("writer.environment"); field("len", k); if (k && k < 64) wtext("value", v); end();
+    WCHAR d[MAX_PATH];
+    DWORD m = GetCurrentDirectoryW(MAX_PATH, d);
+    const WCHAR *tail = d;
+    for (DWORD i = 0; i < m && i < MAX_PATH; i++) if (d[i] == L'\\') tail = d + i + 1;
+    row("writer.directory"); wtext("tail", m && m < MAX_PATH ? tail : L"?"); end();
+    flush_to(GetStdHandle(STD_OUTPUT_HANDLE));
+    ExitProcess(5);                                          /* the pipe's write end still open */
+}
+
+/* ---- a pipe's capacity --------------------------------------------------------------------------------- */
+
+static HANDLE fill_end, big_end;
+static volatile LONG fill_count, big_done;
+static DWORD big_written;
+static char big[10000];
+
+static DWORD WINAPI fill(void *unused) {
+    (void)unused;
+    char b = 'x';
+    DWORD k;
+    for (int i = 0; i < 65536; i++) {
+        if (!WriteFile(fill_end, &b, 1, &k, NULL)) break;
+        fill_count++;
+    }
+    return 0;
+}
+
+static DWORD WINAPI big_write(void *unused) {
+    (void)unused;
+    WriteFile(big_end, big, sizeof big, &big_written, NULL);
+    big_done = 1;
+    return 0;
+}
+
+static DWORD drain(HANDLE r, DWORD want) {
+    static char buf[4096];
+    DWORD total = 0, got = 0;
+    while (total < want && ReadFile(r, buf, want - total < sizeof buf ? want - total : sizeof buf, &got, NULL) && got)
+        total += got;
+    return total;
+}
+
+static void capacity(void) {
+    HANDLE r, w;
+    CreatePipe(&r, &w, NULL, 0);
+    fill_end = w;
+    HANDLE t = CreateThread(NULL, 0, fill, NULL, 0, NULL);
+    Sleep(500);
+    LONG before = fill_count;
+    DWORD read = drain(r, 65536);
+    DWORD done = WaitForSingleObject(t, 10000);
+    row("pipe.capacity"); field("written_before_read", (unsigned long long)before); field("read", read);
+    field("writer_done", done); end();
+    CloseHandle(t); CloseHandle(r); CloseHandle(w);
+
+    CreatePipe(&r, &w, NULL, 0);
+    big_end = w;
+    t = CreateThread(NULL, 0, big_write, NULL, 0, NULL);
+    Sleep(500);
+    LONG done_before = big_done;
+    DWORD part = drain(r, 1000);
+    Sleep(500);
+    LONG done_after_part = big_done;
+    DWORD rest = drain(r, sizeof big - part);
+    done = WaitForSingleObject(t, 10000);
+    row("pipe.large_write"); field("done_before_read", (unsigned long long)done_before);
+    field("done_after_1000", (unsigned long long)done_after_part); field("read", part + rest);
+    field("written", big_written); field("writer_done", done); end();
+    CloseHandle(t); CloseHandle(r); CloseHandle(w);
+}
+
 /* ---- the parent, as UnityPlayer ----------------------------------------------------------------------- */
 
 static BOOL WINAPI ctrl_handler(DWORD type) { (void)type; return FALSE; }
@@ -130,6 +212,8 @@ void start(void) {
     while (*p) {                                             /* " child <id>" ends a child's command line */
         if (p[0] == L' ' && p[1] == L'c' && p[2] == L'h' && p[3] == L'i' && p[4] == L'l' && p[5] == L'd' && p[6] == L' ')
             child(parse(p + 7), p + 1);
+        if (p[0] == L' ' && p[1] == L'w' && p[2] == L'r' && p[3] == L'i' && p[4] == L't' && p[5] == L'e' && p[6] == L'r' && !p[7])
+            writer();
         p++;
     }
     HANDLE out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -212,6 +296,47 @@ void start(void) {
     row("process.exited"); field("wait", done); field("wait_0", WaitForSingleObject(pi.hProcess, 0)); field("exit_code", code); end();
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
+
+    SetEnvironmentVariableW(L"W2M_PROBE_VAR", L"from_parent");
+    CreateDirectoryW(L"w2m_probe_dir", NULL);
+    SetLastError(SENTINEL);
+    ok = SetCurrentDirectoryW(L"w2m_probe_dir");
+    row("writer.parent_directory"); field("ret", ok != 0); end();
+    HANDLE r2 = NULL, w2 = NULL;
+    CreatePipe(&r2, &w2, &sa, 0);
+    SetHandleInformation(r2, HANDLE_FLAG_INHERIT, 0);
+    k = 0;
+    cmd[k++] = L'"';
+    for (DWORD i = 0; i < len; i++) cmd[k++] = exe[i];
+    cmd[k++] = L'"';
+    static const WCHAR tail2[] = L" writer";
+    for (int i = 0; tail2[i]; i++) cmd[k++] = tail2[i];
+    cmd[k] = 0;
+    si.hStdInput = NULL;
+    si.hStdOutput = w2;
+    si.hStdError = NULL;
+    PROCESS_INFORMATION pi2 = {0};
+    ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, NULL, NULL, &si, &pi2);
+    CloseHandle(w2);
+    static char got_rows[4096];
+    DWORD total = 0, piece = 0;
+    SetLastError(SENTINEL);
+    while (total < sizeof got_rows - 1 && ReadFile(r2, got_rows + total, sizeof got_rows - 1 - total, &piece, NULL) && piece)
+        total += piece;
+    DWORD read_err = GetLastError();
+    DWORD wexit = WaitForSingleObject(pi2.hProcess, 10000);
+    code = 0xA5;
+    GetExitCodeProcess(pi2.hProcess, &code);
+    row("writer.pipe"); field("created", ok != 0); flag("bytes", total > 0); field("read_err", read_err);
+    field("wait", wexit); field("exit_code", code); end();
+    for (DWORD i = 0; i < total && n < sizeof out - 64; i++) out[n++] = got_rows[i];
+    CloseHandle(r2);
+    CloseHandle(pi2.hThread);
+    CloseHandle(pi2.hProcess);
+    SetCurrentDirectoryW(L"..");
+    RemoveDirectoryW(L"w2m_probe_dir");
+    SetEnvironmentVariableW(L"W2M_PROBE_VAR", NULL);
+    capacity();
 
     SetLastError(SENTINEL);
     ok = SetConsoleCtrlHandler(ctrl_handler, TRUE);
