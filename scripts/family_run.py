@@ -2985,9 +2985,12 @@ def main(argv: list[str]) -> int:
         failed |= not (s["verdicts"] and all(v == "conforms" for v in s["verdicts"].values())
                        and s["events"].get("CANDIDATE_ACCEPTED") == 1)
         index = a.runs / "family-runs.json"
-        done = json.loads(index.read_text()) if index.exists() else {}
-        done[f.name] = s
-        index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
+        import fcntl
+        with open(a.runs / "family-runs.lock", "w") as lock:   # families run in parallel share the index (Sprint 065:
+            fcntl.flock(lock, fcntl.LOCK_EX)                   # one read it half-written and failed)
+            done = json.loads(index.read_text()) if index.exists() else {}
+            done[f.name] = s
+            index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
         print(json.dumps(s, indent=1))
     if a.plants:
         for name in f.plants:
