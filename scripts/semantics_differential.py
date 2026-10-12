@@ -550,7 +550,12 @@ FIXED_050 = {"LOOP": "e20e", "LOOPE": "e10e", "LOOPNE": "e00e", "JRCXZ": "e30e",
 CLASSES_065 = frozenset(("FLD", "FSTP", "FMUL", "FSQRT", "FSIN", "FCOS", "FADD", "FWAIT", "FISTTP", "FIADD", "FISTP",
                          "FIDIVR", "FLDCW", "FNCLEX", "FNSTSW"))
 FORMAT_3 = frozenset(("049", "049b"))              # sets whose records carry the YMM upper halves
-FORMAT_4 = frozenset(("065",))                     # sets whose records carry the x87 state
+# set 065b: the MMX-register forms of the classes UnityPlayer.dll reaches (the census of 2026-10-12), on the x87
+# register file their state is part of (Sprint 065)
+CLASSES_065B = frozenset(("MOVQ", "PADDW", "MOVD", "PUNPCKLBW", "PMULLW", "PADDSW", "PACKUSWB", "PSRAW", "PUNPCKLDQ",
+                          "PXOR", "PSUBW", "PMULHW", "PUNPCKLWD", "PUNPCKHBW", "PSRLQ", "PUNPCKHWD", "PMADDUBSW", "PADDD",
+                          "PUNPCKHDQ", "PSRAD", "PEXTRW", "EMMS", "MOVDQ2Q"))
+FORMAT_4 = frozenset(("065", "065b"))              # sets whose records carry the x87 state
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -571,7 +576,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "049": (2026_10_11_49, CLASSES_049, (), False),
     "049b": (2026_10_11_491, CLASSES_049B, (), False),
     "050": (2026_10_11_50, CLASSES_050, (), False),
-    "065": (2026_10_12_65, CLASSES_065, (), False)}
+    "065": (2026_10_12_65, CLASSES_065, (), False),
+    "065b": (2026_10_12_651, CLASSES_065B, (), False)}
 
 
 def set_format(case_set: str) -> int:
@@ -593,7 +599,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                 locked: tuple[str, ...] = (), control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     ymm = classes in (CLASSES_049, CLASSES_049B)    # format 3 (FORMAT_3): states carry YMM upper halves
-    x87 = classes is CLASSES_065                     # format 4 (FORMAT_4): states carry the x87 state
+    x87 = classes in (CLASSES_065, CLASSES_065B)     # format 4 (FORMAT_4): states carry the x87 state
     out: list[Case] = []
     skipped: Counter[str] = Counter()
     source = list(encgen_cases()) + list(_locked_variants(locked))
@@ -606,6 +612,9 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             continue
         if d.iclass not in classes:
             skipped["not in this case file's class set"] += 1
+            continue
+        if classes is CLASSES_065B and not any(op[0] == "mmx" for op in ins.ops):
+            skipped["an SSE form of an MMX class (earlier sets)"] += 1
             continue
         if d.fields is not None and d.fields.ops and (0x64 in d.fields.prefixes or 0x65 in d.fields.prefixes) and \
                 any(o[0] in "MA" for o in operands(d.fields)):

@@ -35,3 +35,4 @@ probes/semantics_050/cases.bin
 probes/semantics_065/cases.bin
 store/runs/family-runs.lock
 runs/family-runs.lock
+probes/semantics_065b/cases.bin

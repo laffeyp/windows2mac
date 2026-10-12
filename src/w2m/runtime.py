@@ -14,6 +14,7 @@ import struct
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from w2m import cpuid
 from w2m import approximate, string_compare, x86fp as fp
@@ -160,6 +161,33 @@ class Runtime:
         th.fcw, th.x87_sw, th.x87_regs, th.x87_tags = fpu.cw, fpu.sw, fpu.regs, fpu.abridged_tags
         if ic == "FNSTSW" and mem is None:
             th.regs[0] = th.regs[0] & ~0xFFFF | ax[0]
+
+    def _mmx(self, op: Op, ins: Lifted) -> None:
+        """One MMX-register instruction on the thread's x87 register file (src/w2m/mmx.py; Sprint 065)."""
+        from w2m import mmx, x87
+        _, ic, dst, src, imm = op
+        th = self.th
+        fpu = x87.Fpu(cw=th.fcw, sw=th.x87_sw, regs=list(th.x87_regs))
+        fpu.set_abridged_tags(th.x87_tags)
+
+        def read(o: tuple[Any, ...]) -> int:
+            if o[0] == "x":
+                return int(th.xmm[o[1]])
+            if o[0] == "r":
+                return self._rd(o[1], o[2], o[3])
+            return int.from_bytes(self.mem.read(self._t[o[1]], o[2]), "little")
+
+        def write(o: tuple[Any, ...], v: int) -> None:
+            if o[0] == "r":
+                self._wr(o[1], o[2], o[3], v)
+            else:
+                self.mem.write(self._t[o[1]], (v & _mask(8 * o[2])).to_bytes(o[2], "little"))
+
+        try:
+            mmx.execute(fpu, ic, 0, dst, src, imm, read, write)
+        except x87.X87Unmasked as e:
+            raise Unimplemented(f"{ic} at 0x{ins.address:x}: {e}") from None
+        th.x87_sw, th.x87_regs, th.x87_tags = fpu.sw, fpu.regs, fpu.abridged_tags
 
     def _load(self, loc: Op, t: dict[int, int]) -> int:
         if loc[0] == "r":
@@ -1018,6 +1046,8 @@ class Runtime:
                 self.th.regs[0], self.th.regs[2] = XCR0, 0
             elif k == "fcw":
                 self._store(op[2], self.th.fcw)
+            elif k == "mmx":
+                self._mmx(op, ins)
             elif k == "x87":
                 self._x87(op, ins)
             elif k == "fence":

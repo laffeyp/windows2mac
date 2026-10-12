@@ -83,6 +83,15 @@ def operands(f: Fields) -> tuple[str, ...]:
             assert f.modrm is not None
             out.append(f"ST:{f.modrm & 7}")
             continue
+        if t in ("P", "N") or t[0] == "Q":       # MMX (SDM Table A-1; Sprint 065): P from ModRM.reg, N from r/m, Q from
+            assert f.modrm is not None          # r/m or memory; REX.R and REX.B do not extend an MMX register
+            if t == "P":
+                out.append(f"MM:{f.modrm >> 3 & 7}")
+            elif f.modrm >> 6 == 3:
+                out.append(f"MM:{f.modrm & 7}")
+            else:
+                out.append(_mem(f, SIZE[t[1:]] // 8))
+            continue
         if t == "Vx":                          # XMM or YMM from ModRM.reg, by VEX.L (SDM Table A-1 "x")
             assert f.modrm is not None
             out.append("R:" + vec[((f.modrm >> 3) & 7) | ((f.rex >> 2) & 1) << 3])

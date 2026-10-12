@@ -39,6 +39,9 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
                                   before later accesses; MFENCE "full": every access (Sprint 047)
   ("fcw", "st", loc)               FNSTCW (Sprint 049): the x87 control word to 2 bytes of memory
   ("x87", ic, opcode, reg, st, mem) one x87 instruction, run whole by the model (src/w2m/x87.py; Sprint 065)
+  ("mmx", ic, dst, src, imm)        one MMX-register instruction, run whole by the model (src/w2m/mmx.py; Sprint 065):
+                                    dst and src ("mm", n), ("x", n, bits), ("r", idx, bits, hi), ("m", t, bytes),
+                                    ("i",) for an immediate count, ("none",)
   ("ud",)                         an instruction the guest profile makes undefined (#UD)
   ("xgetbv",)                     XGETBV (Sprint 049): EDX:EAX = XCR0 (7) for ECX 0, #GP otherwise
   ("vex", base, d, s1, s2, L, align, imm)  a VEX instruction as its legacy-SSE base (Sprint 049; rules/_vex.py): d =
@@ -253,6 +256,8 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[1] == "st" else "load"
         if op[0] == "fcw":
             return "store"
+        if op[0] == "mmx":                                    # ("mmx", ic, dst, src, imm): Sprint 065
+            return "store" if op[2][0] == "m" else "load" if op[3][0] == "m" else None
         if op[0] == "x87":                                    # ("x87", ic, opcode, reg, st, mem): Sprint 065
             if op[5] is None:
                 return None
@@ -288,6 +293,29 @@ def commit_order(ins: Lifted) -> str | None:
     return None
 
 
+MMX_ONLY = ("EMMS", "MOVDQ2Q")                   # classes with no SSE form (Sprint 065)
+
+
+def lift_mmx(b: _OpBuilder, ic: str, ops: tuple[str, ...], nxt: int) -> None:
+    """("mmx", ic, dst, src, imm): the operands as src/w2m/mmx.py reads them."""
+    out: list[tuple[object, ...]] = []
+    imm = 0
+    for o in ops:
+        if o.startswith("MM:"):
+            out.append(("mm", int(o[3:])))
+        elif o.startswith("I:"):
+            imm = int(o.split(":")[2], 16)
+            out.append(("i",))
+        else:
+            _, loc, _ = _operand(b, o, nxt)
+            out.append(loc)                                   # type: ignore[arg-type]
+    if ic == "PEXTRW":
+        out = out[:2]
+    while len(out) < 2:
+        out.append(("none",))
+    b.emit("mmx", ic, out[0], out[1], imm)
+
+
 def lift(code: bytes, address: int) -> Lifted:
     """Lift the instruction at the start of `code`, located at guest `address`."""
     d: Decoded = decode(code)
@@ -302,6 +330,10 @@ def lift(code: bytes, address: int) -> Lifted:
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)
+
+    if ic in MMX_ONLY or any(o.startswith("MM:") for o in ops):   # an MMX-register form, whatever its class's SSE rule
+        lift_mmx(b, ic, ops, nxt)
+        return Lifted(address, d.length, ic, tuple(b.ops))
 
     found = registry().get(ic)
     if found is None:
