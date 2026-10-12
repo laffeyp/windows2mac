@@ -128,8 +128,8 @@ INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
-TRACE_SIZE = 0x200000
-TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xD100, 120, 4096, 0xC080
+TRACE_SIZE = 0x400000              # 4 MB: per-thread counters (768 KB), then about 28,000 records
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0xC1300, 120, 4096, 0x80
 TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
 TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
 # call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
