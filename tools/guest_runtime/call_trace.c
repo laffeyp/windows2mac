@@ -33,7 +33,7 @@ struct w2m_trace {
     u64 range[2][2];                 /* [image] = (base, end): UnityPlayer.dll, mono-2.0-bdwgc.dll; 0 until loaded */
     u64 pad[7];
     u32 taken[W2M_TRACE_THUNKS][W2M_TRACE_LABELS];   /* calls recorded per thunk and label */
-    u8 owner[W2M_TRACE_THUNKS];      /* 1 + the traced image whose import slot holds the thunk; 0: none */
+    u8 owner[W2M_TRACE_THUNKS];      /* 1 + the traced image whose import slot holds the thunk; 0: none; 0xFF: never */
 };
 _Static_assert(__builtin_offsetof(struct w2m_trace, taken) == 0x80, "trace header (vm_backend.py)");
 _Static_assert(__builtin_offsetof(struct w2m_trace, owner) == 0xC080, "trace owners (vm_backend.py TRACE_OWNER_OFF)");
@@ -50,6 +50,8 @@ u64 w2m_traced(u64 a0, u64 a1, u64 a2, u64 a3, u64 rsp, u64 service, u64 thunk) 
         t->dropped++;
         return call(a0, a1, a2, a3, rsp);
     }
+    if (t->owner[thunk] == 0xFF)     /* resolved while the trace was closed: the real function on Windows */
+        return call(a0, a1, a2, a3, rsp);
     int image = (int)t->owner[thunk] - 1;
     if (image < 0) {
         u64 caller = *(const u64 *)rsp;

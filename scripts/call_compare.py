@@ -171,6 +171,30 @@ ASSIGNED: dict[tuple[str, str], str] = {
     ("timeGetTime", "ret"): "clock", ("GetTickCount", "ret"): "clock", ("GetTickCount64", "ret"): "clock"}
 
 
+# Integers that carry an address, judged as pointers (null on both or on neither). Each is an address by the
+# function's documentation on Microsoft Learn: RtlAddGrowableFunctionTable's RangeBase and RangeEnd bound the code the
+# table describes; EnumDisplayMonitors' dwData and SetWindowLongPtrW's value at GWLP_WNDPROC, GWLP_HINSTANCE and
+# GWLP_USERDATA, and in the window's extra bytes (a non-negative index), are the caller's (a pointer in this game); a window message's lParam is a pointer for the messages
+# in POINTER_LPARAM, each page's lParam ("A pointer to a ... structure").
+ADDRESS_FIELDS = {("RtlAddGrowableFunctionTable", "a4"), ("RtlAddGrowableFunctionTable", "a5"),
+                  ("EnumDisplayMonitors", "a3")}
+WINDOW_LONG_ADDRESSES = {(-4) & 0xFFFFFFFF, (-6) & 0xFFFFFFFF, (-21) & 0xFFFFFFFF}
+POINTER_LPARAM = {0x01, 0x0C, 0x0D, 0x1A, 0x24, 0x46, 0x47, 0x4A, 0x4E, 0x7C, 0x7D, 0x81, 0x83, 0x2E0}
+MESSAGE_FUNCTIONS = {"DefWindowProcW", "DefWindowProcA", "SendMessageW", "SendMessageA", "CallWindowProcW",
+                     "CallWindowProcA", "PostMessageW", "PostMessageA"}
+
+
+def carries_address(fn: str, field: str, args: tuple[int, ...]) -> bool:
+    if (fn, field) in ADDRESS_FIELDS:
+        return True
+    if fn in ("SetWindowLongPtrW", "SetWindowLongPtrA") and field == "a2":
+        index = args[1] & 0xFFFFFFFF
+        return index in WINDOW_LONG_ADDRESSES or index < 0x80000000      # a non-negative index: the window's extra bytes
+    if fn in MESSAGE_FUNCTIONS and field == "a3":
+        return args[1] & 0xFFFFFFFF in POINTER_LPARAM
+    return False
+
+
 def thread_map(windows: list[Call], w2m: list[Call]) -> dict[int, int]:
     """Windows thread id -> w2m thread id, by the order each first makes a traced call: the game starts its threads
     in one order on both, and the first comparison showed each pair's calls the same in shape."""
@@ -239,7 +263,12 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
                 fields.append(("error", "value", 4, a[7], b[7], False))
         for name, kind, size, x, y, argument in fields:
             space = ASSIGNED.get((fn, name))
-            ok = same(space, x, y) if space is not None else judge(kind, size, x, y, argument)
+            if space is not None:
+                ok = same(space, x, y)
+            elif carries_address(fn, name, a[5]):
+                ok = judge("pointer", None, x, y, argument)
+            else:
+                ok = judge(kind, size, x, y, argument)
             if not ok:
                 found.append(Divergence(a[2], fn, k, name, x, y, a[0]))
     found.sort(key=lambda d: (d.windows_seq is None, d.windows_seq or 0, d.function))

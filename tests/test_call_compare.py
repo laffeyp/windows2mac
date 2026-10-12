@@ -10,6 +10,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -92,3 +94,64 @@ def test_the_last_error_column_is_decimal_as_call_trace_h_prints_it() -> None:
     windows = call_compare.read_tsv(ROOT / "store" / "game-runs" / "38176899195" / "jit_capture.bin.trace.tsv")
     errors = {c[7] for c in windows if c[4] == "GetEnvironmentVariableW"}
     assert 203 in errors and 0x203 not in errors
+
+
+def test_assigned_ids_map_one_to_one_and_thread_ids_through_the_thread_map() -> None:
+    windows = [call(1, "TlsAlloc", (), 0x20, tid=6024), call(2, "TlsSetValue", (0x20, 0x50000), 1, tid=6024),
+               call(3, "GetCurrentThreadId", (), 6024, tid=6024)]
+    w2m = [call(1, "TlsAlloc", (), 0x14), call(2, "TlsSetValue", (0x14, 0x60000), 1),
+           call(3, "GetCurrentThreadId", (), 4)]
+    assert call_compare.compare(windows, w2m, SIGNATURES)[0] == []
+    crossed = [call(1, "TlsAlloc", (), 0x14), call(2, "TlsSetValue", (0x15, 0x60000), 1),
+               call(3, "GetCurrentThreadId", (), 8)]
+    fields = [(d.function, d.field) for d in call_compare.compare(windows, crossed, SIGNATURES)[0]]
+    assert fields == [("TlsSetValue", "a0"), ("GetCurrentThreadId", "ret")]
+
+
+def test_threads_pair_by_first_appearance_and_excluded_threads_drop_out() -> None:
+    windows = [call(1, "GetACP", (), 1252, tid=6636), call(2, "GetACP", (), 1252, tid=6024),
+               call(3, "Sleep", (5,), 0, tid=7504), call(4, "Sleep", (0,), 0, tid=6024)]
+    w2m = [call(1, "GetACP", (), 1252, tid=4), call(2, "Sleep", (0,), 0, tid=4), call(3, "Sleep", (5,), 0, tid=8)]
+    assert call_compare.compare(windows, w2m, SIGNATURES, frozenset({6636}))[0] == []
+    assert call_compare.compare(windows, w2m, SIGNATURES)[0] != []      # the capture's thread shifts the map
+
+
+def test_an_integer_carrying_an_address_agrees_on_null() -> None:
+    windows = [call(1, "DefWindowProcW", (0x501D0, 0x24, 0, 0x807D90ED60), 0),
+               call(2, "DefWindowProcW", (0x501D0, 0x100, 0x41, 0x1E0001), 0)]
+    w2m = [call(1, "DefWindowProcW", (0x20010, 0x24, 0, 0xFFFEFB08), 0),
+           call(2, "DefWindowProcW", (0x20010, 0x100, 0x41, 0x1E0002), 0)]
+    found = call_compare.compare(windows, w2m, SIGNATURES)[0]
+    assert [(d.index, d.field) for d in found] == [(1, "a3")]           # WM_KEYDOWN's lParam is a value
+
+
+@pytest.mark.hvf
+def test_getprocaddress_while_the_trace_is_closed_answers_an_untraced_thunk() -> None:
+    import struct
+    import tempfile
+
+    from w2m.file_bridge import FileBridge
+    from w2m.loader import THUNK_BASE, load
+    from w2m.vm_backend import TRACE_OFF, TRACE_OWNER_OFF, VM
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import family_run
+    f = family_run.FAMILIES["threads"]
+    run = next(iter(f.runs.values()))
+    assert f.dll_name is not None and run.dll is not None
+    exe = (ROOT / "store" / "binaries" / f"{run.binary}.exe").read_bytes()
+    dll = (ROOT / "store" / "binaries" / f"{run.dll}.dll").read_bytes()
+    with tempfile.TemporaryDirectory() as d:
+        files = FileBridge(Path(d))
+        vm = VM(load(exe, lambda n: dll if n.lower() == "threads_dll.dll" else None, "probe.exe"), files=files,
+                image_name="probe.exe", call_trace=("probe.exe",), call_trace_from="threads_dll.dll!threads_dll_count")
+        try:
+            shared = vm.modules.proc(vm.modules.kernel32, "GetACP")
+            quiet = vm._traced_proc(shared)
+            assert quiet != shared and vm.ld.thunks[quiet] == vm.ld.thunks[shared]
+            assert vm.mm[vm._process(TRACE_OFF) + TRACE_OWNER_OFF + (quiet - THUNK_BASE) // 16] == 0xFF
+            assert vm._traced_proc(shared) == quiet                       # one per name
+            struct.pack_into("<Q", vm.mm, vm._process(TRACE_OFF), 1)       # the trace open
+            assert vm._traced_proc(shared) == shared
+        finally:
+            vm.close()
+            files.close_all()

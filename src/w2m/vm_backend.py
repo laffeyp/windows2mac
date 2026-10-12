@@ -1079,6 +1079,7 @@ class VM:
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
         self._trace_bound: set[str] = set()
+        self._trace_quiet: dict[str, int] = {}           # untraced thunks GetProcAddress gave while the trace was closed
         self._trace_ranges()
         # the trace opens when the guest first enters `call_trace_from` ("DLL!export"), as tools/jit_capture hooks the
         # images just before it calls UnityPlayer.dll!UnityMain (jit_capture.c wWinMain); 0: from the start
@@ -1645,7 +1646,9 @@ class VM:
                 a.emit(a64.stp(i, i + 1, 16, 8 * i))
             a.emit(a64.mov(0, 1), a64.mov(1, 2), a64.mov(2, 8), a64.mov(3, 9))   # x4 = RSP already
             a.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0))
-            if self.call_trace and fn not in UNTRACED:     # call_trace.c records the call around the service
+            # call_trace.c records the call around the service; w2m's own COM methods (MMDEVAPI!W2m*, reached through
+            # a vtable, not an import) have no hook in the capture
+            if self.call_trace and fn not in UNTRACED and not fn.startswith("W2m"):
                 a.emit(a64.mov_imm(5, self.runtime.symbols[symbol]), a64.mov_imm(6, (thunk - THUNK_BASE) // 16))
                 symbol = "w2m_traced"
             a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
@@ -1771,7 +1774,7 @@ class VM:
         if op == HOST_MODULE:
             return m.module(view.read(a0, 2 * a1).decode("utf-16-le"), loading=bool(a2))
         if op == HOST_PROC:
-            return m.proc(a0, view.read(a1, a2).decode("latin-1"))
+            return self._traced_proc(m.proc(a0, view.read(a1, a2).decode("latin-1")))
         if op == HOST_MODULE_AT:
             return m.containing(a0)
         path = m.file_name(a0)                                  # HOST_MODULE_PATH: buffer a1, a2 characters
@@ -1899,6 +1902,24 @@ class VM:
         off = self._process(FAULT_LOG_OFF)
         count = struct.unpack_from("<Q", self.mm, off)[0]
         return count, [struct.unpack_from("<4Q", self.mm, off + 8 + 32 * i) for i in range(min(count, 64))]
+
+    def _traced_proc(self, va: int) -> int:
+        """GetProcAddress's answer as the capture's process sees it (Sprint 060): a name resolved while the trace is
+        closed (a DLL's start before UnityMain, a traced image's DllMain) is the real function on Windows, resolved
+        before tools/jit_capture hooked GetProcAddress, and its calls are never traced; here it is a thunk of its
+        own marked untraced (owner 0xFF), the same service as the shared one."""
+        if not self.call_trace or va not in self.ld.thunks:
+            return va
+        if struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0]:
+            return va
+        key = self.ld.thunks[va]
+        quiet = self._trace_quiet.get(key)
+        if quiet is None:
+            quiet = self._trace_quiet[key] = self.modules.make_thunk(key)
+            index = (quiet - THUNK_BASE) // 16
+            if index < TRACE_THUNKS:
+                self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = 0xFF
+        return quiet
 
     def _trace_ranges(self) -> None:
         """The traced images' address ranges in the trace header, as each is mapped, and their import slots on thunks
