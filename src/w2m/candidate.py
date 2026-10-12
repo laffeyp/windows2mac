@@ -108,12 +108,13 @@ def admit(source: str, names: tuple[str, ...]) -> Candidate:
     return Candidate(source, sha256_of(source))
 
 
-PRELUDE = "extern unsigned char w2m_host_teb[];\n"
-HOST_SHIM = "unsigned char w2m_host_teb[0x1800] __attribute__((aligned(16)));\n"
+PRELUDE = "extern unsigned char w2m_host_teb[], w2m_host_peb[];\n"
+HOST_SHIM = ("unsigned char w2m_host_teb[0x1800] __attribute__((aligned(16)));\n"
+             "unsigned char w2m_host_peb[0x1000] __attribute__((aligned(16)));\n")   # runtime.h's PEB reads (Sprint 059)
 
 
 def _host_library(source: str) -> Path:
-    """Compile the candidate for this host as a shared library; its TEB is `w2m_host_teb`."""
+    """Compile the candidate for this host as a shared library; its TEB is `w2m_host_teb`, its PEB `w2m_host_peb`."""
     from w2m.guest_runtime import api_header
     header = (RUNTIME_SOURCE / "runtime.h").read_text()
     ids = api_header()                              # runtime.h includes the generated ids (Sprint 049)
@@ -130,7 +131,7 @@ def _host_library(source: str) -> Path:
     (work / "candidate.c").write_text('#include "runtime.h"\n' + source)
     r = subprocess.run(["clang", "-std=c11", "-O1", "-Wall", "-Werror", "-shared", "-fPIC",
                         "-include", str(work / "prelude.h"), f"-I{RUNTIME_SOURCE}", f"-I{work}",
-                        "-DW2M_TEB_VA=((u64)w2m_host_teb)", "-o", str(lib),
+                        "-DW2M_TEB_VA=((u64)w2m_host_teb)", "-DW2M_PEB_VA=((u64)w2m_host_peb)", "-o", str(lib),
                         str(work / "candidate.c"), str(work / "shim.c")],
                        capture_output=True, text=True)
     if r.returncode:

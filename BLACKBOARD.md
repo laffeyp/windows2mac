@@ -215,6 +215,7 @@
 - **2026-10-11** — Sprint 056 (the review's findings) closed. `tests/test_runtime_native.py`, `tests/test_runtime_patterns.py`; fixes in file_search.c, registry.c, windows.c, display.c, console.c, file_bridge.py, vm_backend.py; contracts registry, file_search and windows 0.2.0; `derivation` in 24 contracts. Dual contract: signal pass (three families' item runs, 20 plants caught as named, 28 families re-run to CANDIDATE_ACCEPTED); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 - **2026-10-11** — Sprint 057 (trustworthy evidence) closed. `guest_runtime.objects` (each object's symbols and headers), `vm_backend.REQUEST_FILES` and `service_for`, derived candidates and the per-process runtime check in `scripts/family_run.py`, `tests/test_family_dependencies.py`, the plant-anchor gate; six plants re-anchored. Dual contract: signal pass (56 item runs to CANDIDATE_ACCEPTED on derived candidates, every plant caught as named); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 - **2026-10-11** — Sprint 058 (a review of Sprint 055) closed. Fixes in `src/w2m/kernel.py` (handles per process, released at its end; object ids from 2^32; the parent's environment and directory; a 4096-byte pipe; a deadlock as a stop), `processes.c`, `sync_objects.c`, `paths.c`, `file.c`, `runtime.c`, `vm_backend.py` (per-VM symbols, the directory in the inherit page); `tests/test_kernel.py`, `tests/test_vm_symbols.py`, three native harnesses; the processes probe and contract 0.2.0; `host_patched` reaches family_run. Dual contract: signal pass (processes' item run and ten plants; 56 item runs to CANDIDATE_ACCEPTED, every plant as named; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED GetCurrentDirectoryA); artifact pass (gates 0, CI on the closing commit). Observation: pass.
+- **2026-10-11** — Sprint 059 (the process parameters) closed. `probes/process_parameters`, contract windows.process.parameters 0.1.0; `vm_backend._init_parameters` (the block in the heap's arena); console.c, process.c, environment.c, paths.c and heap.c read and keep it; CreateProcessW's handles-without-inheritance stop. Dual contract: signal pass (PROBE_AUTHORED; the item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; six plants as named; 57 families re-run; the frontier's EXECUTION_STARTED then EXECUTION_COMPLETED faulted at the appmodel API set, no fault dispatched); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 
 ## Deferred
 
@@ -268,6 +269,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 059 (2026-10-11, closed: CI pending)
+- **Scope:** PEB.ProcessParameters, which UnityPlayer's C runtime reads with no call; the 058 gap.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* a scan of the game's modules for direct reads (four, all of Flags); the probe on two runners; the item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; six plants; every family re-run; the frontier's EXECUTION_STARTED, then EXECUTION_COMPLETED faulted at the appmodel API set after 57,409,401 instructions, no fault dispatched.
+  - *Observation 1 (missing pair, of the host):* the host wrote an empty environment as one NUL and environment.c counts two; the new EnvironmentSize row exposed it. Disposition: resolved-here.
+  - *Observation 2 (payload anomaly, of the reference):* the parent's window values, title and environment version are the runner's start, not Windows's rule. Disposition: resolved-here (kept as relations, the reason in the derivation).
+  - *Observation 3 (vocabulary gap, checked):* the frontier's stop is an API set with no observed host, reported as EXECUTION_COMPLETED faulted with the stop in `unobserved` (Sprint 049's form). Disposition: recorded, no new tag.
 
 ### Sprint 058 (2026-10-11, closed: CI run 38190593421 success on 56ffb04b)
 - **Scope:** the seven defects a full read of Sprint 055's code found, each with a failing check first; the processes probe's new rows.

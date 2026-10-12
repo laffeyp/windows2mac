@@ -138,6 +138,8 @@ u64 k32_CreateProcessW(u64 application, u64 command_line, u64 process_attributes
     u32 si_flags = *(const u32 *)(si + 60);
     if (*(const u32 *)si < 104 || (si_flags & ~STARTF_USESTDHANDLES))
         w2m_unimplemented(W2M_API_CreateProcessW, si_flags);
+    if ((si_flags & STARTF_USESTDHANDLES) && !inherit)              /* "must be inheritable and ... bInheritHandles */
+        w2m_unimplemented(W2M_API_CreateProcessW, si_flags);         /* ... must be set to TRUE": not in the rows */
     static u64 list[INHERITED + 5][3];
     int n = inherit ? w2m_object_inheritable(list, INHERITED) : 0;
     for (int i = 0; (si_flags & STARTF_USESTDHANDLES) && i < 3; i++) {   /* hStdInput, hStdOutput, hStdError */

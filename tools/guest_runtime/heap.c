@@ -43,6 +43,9 @@ static struct heap *the_heap(void) {
         ready = 1;
         h->magic = BLOCK_MAGIC;
         h->next = W2M_HEAP_VA + 0x1000;
+        const u8 *params = w2m_parameters();                       /* ProcessParameters, in the arena's first pages */
+        if ((u64)params >= W2M_HEAP_VA && (u64)params < W2M_HEAP_VA + W2M_HEAP_SIZE)   /* (Sprint 059) */
+            h->next = ((u64)params + *(const u32 *)params + 15) & ~15ull;
         h->free_list = 0;
         *(volatile u64 *)(W2M_PEB_VA + 0x30) = W2M_HEAP_VA;          /* PEB.ProcessHeap */
     }

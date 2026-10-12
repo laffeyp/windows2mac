@@ -29,12 +29,13 @@ def _run(binary: str) -> tuple[dict[int, int], dict[str, int], str]:
 
 @pytest.mark.hvf
 def test_hot_services_make_no_host_exit() -> None:
-    from w2m.vm_backend import HOST_EXIT, HOST_FILETIME, HOST_MODULE_PATH, HOST_UNIMPLEMENTED, HOST_WRITE
+    from w2m.vm_backend import HOST_EXIT, HOST_FILETIME, HOST_UNIMPLEMENTED, HOST_WRITE
     requests, calls, stop = _run(PROCESS_QUERIES)
     assert stop == "ExitProcess", stop
     assert calls["QueryPerformanceCounter"] == 100_005 and calls["GetCurrentThreadId"] == 1
-    # one exit each: the wall clock once (then the counter), the module path, the rows, the exit
-    assert requests == {HOST_FILETIME: 1, HOST_MODULE_PATH: 1, HOST_WRITE: 1, HOST_EXIT: 1}, requests
+    # one exit each: the wall clock once (then the counter), the rows, the exit; GetStartupInfoW's title is
+    # ProcessParameters' since Sprint 059, not a module-path request
+    assert requests == {HOST_FILETIME: 1, HOST_WRITE: 1, HOST_EXIT: 1}, requests
     requests, calls, stop = _run(THREAD_STORAGE)
     assert stop == "Unimplemented: FlsFree argument form 0x1", stop        # the family's expected stop
     assert calls["TlsGetValue"] == 5

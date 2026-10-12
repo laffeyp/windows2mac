@@ -135,8 +135,6 @@ W2M_VOID u64 k32_InitializeSListHead(u64 head) {
 }
 
 static const unsigned short empty_string[1];
-static const unsigned short desktop[] = {'w', 'i', 'n', 's', 't', 'a', '0', '\\', 'd', 'e', 'f', 'a', 'u', 'l', 't', 0};
-static unsigned short title[520];
 
 /* "Retrieves the contents of the STARTUPINFO structure that was specified when the calling process
  * was created." The rows (contracts windows.process.queries, windows.console.gui_start) fix: cb 104,
@@ -148,11 +146,13 @@ W2M_VOID u64 k32_GetStartupInfoW(u64 si) {
     for (int i = 0; i < 80; i++) b[i] = 0;                /* through wShowWindow, cbReserved2, lpReserved2 */
     *(u32 *)si = 104;                                      /* cb */
     *(u64 *)(si + 8) = (u64)empty_string;                  /* lpReserved */
-    *(u64 *)(si + 16) = (u64)desktop;                      /* lpDesktop */
-    u64 image = *(const volatile u64 *)(W2M_PEB_VA + 0x10);
-    u64 n = w2m_host(W2M_HOST_MODULE_PATH, image, (u64)title, 519, 0, 0);
-    title[n < 519 ? n : 519] = 0;
-    *(u64 *)(si + 24) = (u64)title;                        /* lpTitle */
+    /* ProcessParameters' (Sprint 059: rows *.strings, *.window): the desktop's and the title's buffers themselves,
+     * the positions, counts, fill, flags and show state from +0x88 */
+    const u8 *p = w2m_parameters();
+    *(u64 *)(si + 16) = *(const u64 *)(p + 0xC8);          /* lpDesktop: DesktopInfo.Buffer */
+    *(u64 *)(si + 24) = *(const u64 *)(p + 0xB8);          /* lpTitle: WindowTitle.Buffer */
+    for (int i = 0; i < 8; i++) *(u32 *)(si + 32 + 4 * i) = *(const u32 *)(p + 0x88 + 4 * i);
+    *(unsigned short *)(si + 64) = (unsigned short)*(const u32 *)(p + 0xA8);   /* wShowWindow */
     return w2m_logged(W2M_API_GetStartupInfoW, si, 0);
 }
 

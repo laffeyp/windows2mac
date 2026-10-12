@@ -14,7 +14,7 @@
  * The start mode is the host's (src/w2m/vm_backend.py): 0, a console program whose standard output
  * the runner's cmd redirected (the probes), or 1, the GUI start. In the console start standard input
  * and error answer NULL, as for a process started without them: the runner's are its own pipes, no
- * probe reads them, and a probe's C runtime asks for them at start-up (Sprint 046). The command line is the host's too, a wide string at W2M_COMMAND_LINE_VA.
+ * probe reads them, and a probe's C runtime asks for them at start-up (Sprint 046). The command line is the host's too: ProcessParameters.CommandLine (Sprint 059).
  */
 #include "runtime.h"
 
@@ -26,8 +26,6 @@
 #define FILE_TYPE_UNKNOWN 0u
 #define FILE_TYPE_DISK 1u
 
-static u64 std_handles[3];
-static int std_ready;
 static char command_line_a[2048];           /* the process page holds 2047 units and a NUL (vm_backend.py) */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
@@ -41,27 +39,21 @@ static int std_index(u64 which) {
     return which == STD_INPUT_HANDLE ? 0 : which == STD_OUTPUT_HANDLE ? 1 : which == STD_ERROR_HANDLE ? 2 : -1;
 }
 
-static void std_init(void) {
-    if (std_ready) return;
-    std_ready = 1;
-    std_handles[1] = gui_start() ? 0 : STDOUT_HANDLE;   /* the GUI start: none of the three */
-    const u64 *inherit = (const u64 *)W2M_INHERIT_VA;    /* a child's standard handles from its parent (Sprint 055) */
-    if (inherit[511] == 1 && inherit[509] == 1)          /* a child given standard handles (the host's marks) */
-        for (int i = 0; i < 3; i++) std_handles[i] = inherit[1 + i];
-}
+/* The standard handles are ProcessParameters' (+0x20, +0x28, +0x30; Sprint 059): the host wrote the start's (the
+ * GUI start: none; the console start: STDOUT_HANDLE as output; a child: the ones its parent gave), and SetStdHandle
+ * changes them there (row after.set_std_handle). */
+static u64 *std_handles(void) { return (u64 *)(w2m_parameters() + 0x20); }
 
 u64 k32_GetStdHandle(u64 which) {
-    std_init();
     int i = std_index(which);
     if (i < 0) w2m_unimplemented(W2M_API_GetStdHandle, (u32)which);
-    return w2m_logged(W2M_API_GetStdHandle, (u32)which, std_handles[i]);
+    return w2m_logged(W2M_API_GetStdHandle, (u32)which, std_handles()[i]);
 }
 
 u64 k32_SetStdHandle(u64 which, u64 handle) {
-    std_init();
     int i = std_index(which);
     if (i < 0) w2m_unimplemented(W2M_API_SetStdHandle, (u32)which);
-    std_handles[i] = handle;
+    std_handles()[i] = handle;
     return w2m_logged(W2M_API_SetStdHandle, (u32)which, 1);
 }
 
@@ -105,13 +97,13 @@ u64 k32_FlushFileBuffers(u64 handle) {
 }
 
 u64 k32_GetCommandLineW(void) {
-    return w2m_logged(W2M_API_GetCommandLineW, 0, W2M_COMMAND_LINE_VA);
+    return w2m_logged(W2M_API_GetCommandLineW, 0, *(u64 *)(w2m_parameters() + 0x78));   /* CommandLine.Buffer */
 }
 
 /* GetCommandLineA: the same line, each character below 128 as itself (the line is ASCII; a wider
  * character would need the ANSI code page, which the code-pages family will bring). */
 u64 k32_GetCommandLineA(void) {
-    const unsigned short *w = (const unsigned short *)W2M_COMMAND_LINE_VA;
+    const unsigned short *w = *(const unsigned short *const *)(w2m_parameters() + 0x78);
     u64 i = 0;
     for (; w[i] && i + 1 < sizeof command_line_a; i++) {
         if (w[i] >= 128) w2m_unimplemented(W2M_API_GetCommandLineA, w[i]);
@@ -122,4 +114,7 @@ u64 k32_GetCommandLineA(void) {
 }
 
 /* For sync_objects.c's DuplicateHandle (Sprint 049): whether h is one of the standard handles. */
-int w2m_is_std_handle(u64 h) { return h && (h == std_handles[0] || h == std_handles[1] || h == std_handles[2] || h == STDOUT_HANDLE); }
+int w2m_is_std_handle(u64 h) {
+    const u64 *s = std_handles();
+    return h && (h == s[0] || h == s[1] || h == s[2] || h == STDOUT_HANDLE);
+}

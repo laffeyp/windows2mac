@@ -117,7 +117,7 @@ KERNELBASE_IMAGE_OFF = KERNEL32_IMAGE_OFF + 0x1000
 TLS_EXPANSION_OFF = KERNELBASE_IMAGE_OFF + 0x1000   # TEB.TlsExpansionSlots' array: 1024 values (thread_storage.c)
 COMMAND_LINE_OFF = TLS_EXPANSION_OFF + 0x2000    # the command line, UTF-16 with a NUL (console.c)
 ENVIRONMENT_OFF = COMMAND_LINE_OFF + 0x1000      # the environment block, UTF-16 entries and a NUL (environment.c)
-ENVIRONMENT_SIZE = 0x4000
+ENVIRONMENT_SIZE = 0x8000          # two halves: a change writes the other (Sprint 059: Windows moves the block)
 NTDLL_IMAGE_OFF = ENVIRONMENT_OFF + ENVIRONMENT_SIZE   # synthetic ntdll image, one page (modules.py; Sprint 046)
 LOADER_DATA_OFF = NTDLL_IMAGE_OFF + 0x1000     # PEB.Ldr: PEB_LDR_DATA, the LDR_DATA_TABLE_ENTRYs, their names
 LOADER_DATA_SIZE = 0x4000
@@ -125,9 +125,22 @@ SYSTEM_IMAGES_OFF = LOADER_DATA_OFF + LOADER_DATA_SIZE   # one page per other sy
 SYSTEM_IMAGES = 32
 LDR_ENTRY_SIZE = 0x120
 INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited handles (sync_objects.c; Sprint 055)
-INHERIT_DIRECTORY = 0x800          # in the inherit page: the parent's current directory (paths.c; Sprint 058)
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
-PROCESS_SIZE = FAULT_LOG_OFF + 0x1000
+CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
+PROCESS_SIZE = CURRENT_DIRECTORY_OFF + 0x1000
+# PEB.ProcessParameters (RTL_USER_PROCESS_PARAMETERS, Sprint 059), as contracts/windows.process.parameters records
+# Windows filling it: in the process heap's arena, its strings inside it, the current directory and the environment
+# outside. Offsets: phnt's ntrtl.h (ImagePathName 0x60 and CommandLine 0x70 as winternl.h has them).
+PARAMETERS_VA = HEAP_VA + 0x1000    # heap.c's first block follows its Length
+PARAMETERS_FIXED = 0x448            # the structure before its strings (Windows's is longer by build; the rows keep
+                                    # MaximumLength == Length only)
+PARAMETERS_FLAGS = 0x4001           # every start the rows hold
+CURRENT_DIRECTORY_MAX = 0x208       # CurrentDirectory.DosPath.MaximumLength: MAX_PATH units and a NUL, in bytes
+CURRENT_DIRECTORY_HANDLE = 0x10     # CurrentDirectory.Handle: non-null (rows *.current_directory); below every
+                                    # handle range w2m gives out (stdout 0x74, files 0x1000, objects 0x2000)
+DESKTOP = "winsta0\\default"
+START_GROUP = 1000                  # ProcessGroupId of a process w2m starts: neither 0 nor its own id (rows *.header);
+                                    # a child keeps its parent's
 STDOUT_HANDLE = 0x74
 # The services the guest runtime defines (Sprint 049: derived from its C files, guest_runtime.service_table):
 # kernel32 import name -> (C symbol, sets RAX), and for each other system DLL (upper case) the same
@@ -527,7 +540,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
         "W2M_INHERIT_VA": PROCESS_VA + INHERIT_OFF,
-        "W2M_INHERIT_DIRECTORY_VA": PROCESS_VA + INHERIT_OFF + INHERIT_DIRECTORY,
+        "W2M_CURRENT_DIRECTORY_VA": PROCESS_VA + CURRENT_DIRECTORY_OFF,
         "W2M_FAULT_LOG_VA": PROCESS_VA + FAULT_LOG_OFF,
         "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
         "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
@@ -987,7 +1000,8 @@ class VM:
                  runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe",
                  gui: bool = False, command_line: str | None = None,
                  environment: tuple[str, ...] = (), process_id: int = 0,
-                 inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None) -> None:
+                 inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None,
+                 process_group: int = START_GROUP) -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
@@ -999,6 +1013,8 @@ class VM:
         self.process_id = process_id or PROCESS_ID   # TEB.ClientId.UniqueProcess; a child's from kernel.Machine
         self.inherited = inherited         # a child's handles from its parent (kernel.py PROCESS_CREATE); None: none
         self.directory = directory         # a child's current directory, its parent's (Sprint 058); None: the program's
+        self.process_group = process_group   # ProcessParameters.ProcessGroupId (Sprint 059)
+        self.image_name = image_name
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
@@ -1092,9 +1108,12 @@ class VM:
         if any(not e or "\0" in e for e in self.environment):
             raise CompileError("an environment entry is empty or holds a NUL")
         block = "".join(e + "\0" for e in self.environment).encode("utf-16-le") + b"\0\0"
-        if len(block) > ENVIRONMENT_SIZE:
-            raise CompileError(f"environment of {len(block)} bytes: the area holds {ENVIRONMENT_SIZE}")
+        if not self.environment:
+            block = bytes(4)                                # an empty block is two NULs (row empty.heap)
+        if len(block) > ENVIRONMENT_SIZE // 2:
+            raise CompileError(f"environment of {len(block)} bytes: the area holds {ENVIRONMENT_SIZE // 2}")
         self.mm[self._process(ENVIRONMENT_OFF):self._process(ENVIRONMENT_OFF) + len(block)] = block
+        self._environment_bytes = len(block)
         teb, peb = PROCESS_VA + TEB_OFF, PROCESS_VA + PEB_OFF
         stack = next(r for r in self.mem.regions if r.name == "stack")
         t = self._process(TEB_OFF)
@@ -1105,20 +1124,15 @@ class VM:
             entries = [e for e in self.inherited if e[1] < KIND_STANDARD]
             std = {w: h for w, k, h in self.inherited if k == KIND_STANDARD}
             mode = [h for _, k, h in self.inherited if k == KIND_ERROR_MODE]
-            if 32 + 24 * len(entries) > INHERIT_DIRECTORY:   # the directory follows the entries (review of Sprint 054)
-                raise Unimplemented(f"{len(entries)} inherited handles: the page holds {(INHERIT_DIRECTORY - 32) // 24}")
+            if 32 + 24 * len(entries) > 0xFE8:           # the marks at 0xFE8 follow the entries (review of Sprint 054)
+                raise Unimplemented(f"{len(entries)} inherited handles: the page holds {(0xFE8 - 32) // 24}")
             page = self._process(INHERIT_OFF)
-            if self.directory is not None:          # paths.c's working directory, UTF-16 with a NUL (Sprint 058)
-                text = self.directory.encode("utf-16-le") + b"\0\0"
-                if INHERIT_DIRECTORY + len(text) > 0xFE8:
-                    raise Unimplemented(f"a current directory of {len(self.directory)} characters: the page holds "
-                                        f"{(0xFE8 - INHERIT_DIRECTORY) // 2 - 1}")
-                self.mm[page + INHERIT_DIRECTORY:page + INHERIT_DIRECTORY + len(text)] = text
             struct.pack_into("<QQQQ", self.mm, page, len(entries), std.get(0, 0), std.get(1, 0), std.get(2, 0))
             for i, e in enumerate(entries):
                 struct.pack_into("<QQQ", self.mm, page + 32 + 24 * i, *e)
             # [509] standard handles given, [510] the error mode + 1 (0: none), [511] a child's page
             struct.pack_into("<QQQ", self.mm, page + 0xFE8, 1 if std else 0, mode[0] + 1 if mode else 0, 1)
+        self._init_parameters()
         for field_off, value in ((0x08, self.ld.stack_top), (0x10, limit), (0x30, teb), (0x40, self.process_id),
                                  (0x48, tid), (0x58, self.ld.tls_array), (0x60, peb), (0x1478, stack.base)):
             struct.pack_into("<Q", self.mm, t + field_off, value)
@@ -1131,6 +1145,50 @@ class VM:
         struct.pack_into("<H", self.mm, st + 156, 0x27F)
         struct.pack_into("<QQQ", self.mm, st + 176, teb, teb, 0)
         struct.pack_into("<QQ", self.mm, self._process(RING_OFF), 0, (RING_SIZE - RING_HEADER) // 24)
+
+    def _init_parameters(self) -> None:
+        """PEB.ProcessParameters as the rows of contracts/windows.process.parameters show Windows filling it."""
+        std = [0, 0 if self.gui else STDOUT_HANDLE, 0]          # console.c's starts: the GUI start has none
+        given = {w: h for w, k, h in (self.inherited or []) if k == KIND_STANDARD}
+        if given:
+            std = [given.get(i, 0) for i in range(3)]
+        directory = self.directory if self.directory is not None else APP_PATH.rstrip("\\")
+        dos_path = directory + ("" if directory.endswith("\\") else "\\")
+        if 2 * len(dos_path) + 2 > CURRENT_DIRECTORY_MAX:
+            raise Unimplemented(f"a current directory of {len(dos_path)} characters: the buffer holds "
+                                f"{CURRENT_DIRECTORY_MAX // 2 - 1}")
+        cwd = self._process(CURRENT_DIRECTORY_OFF)
+        self.mm[cwd:cwd + 2 * len(dos_path) + 2] = dos_path.encode("utf-16-le") + b"\0\0"
+        image = APP_PATH + self.image_name
+        strings = [image, self.command_line, image, DESKTOP]   # ImagePathName, CommandLine, WindowTitle, DesktopInfo
+        at, laid = PARAMETERS_VA + PARAMETERS_FIXED, []
+        data = bytearray(PARAMETERS_FIXED)
+        for text in strings:
+            raw = text.encode("utf-16-le") + b"\0\0"
+            laid.append((len(raw) - 2, len(raw), at))
+            data += raw
+            at += len(raw)
+            data += bytes(-len(data) % 8)
+            at = PARAMETERS_VA + len(data)
+        length = len(data)
+
+        def unicode_string(off: int, n: int, maximum: int, buffer: int) -> None:
+            struct.pack_into("<HHIQ", data, off, n, maximum, 0, buffer)
+
+        struct.pack_into("<IIII", data, 0, length, length, PARAMETERS_FLAGS, 0)
+        struct.pack_into("<QQQQ", data, 0x18 - 8, 0, 0, std[0], std[1])        # ConsoleHandle 0x10, ConsoleFlags 0x18
+        struct.pack_into("<Q", data, 0x30, std[2])
+        unicode_string(0x38, 2 * len(dos_path), CURRENT_DIRECTORY_MAX, PROCESS_VA + CURRENT_DIRECTORY_OFF)
+        struct.pack_into("<Q", data, 0x48, CURRENT_DIRECTORY_HANDLE)
+        for off, (n, maximum, buffer) in zip((0x60, 0x70, 0xB0, 0xC0), laid):
+            unicode_string(off, n, maximum, buffer)
+        struct.pack_into("<Q", data, 0x80, PROCESS_VA + ENVIRONMENT_OFF)
+        struct.pack_into("<QQ", data, 0x3F0, self._environment_bytes, 3)        # EnvironmentSize, EnvironmentVersion
+        struct.pack_into("<I", data, 0x408, self.process_group)
+        if PARAMETERS_VA + length > HEAP_VA + 0x10000:
+            raise Unimplemented(f"process parameters of {length} bytes: the heap's first pages hold {0xF000}")
+        self.mem.write(PARAMETERS_VA, bytes(data))
+        struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x20, PARAMETERS_VA)   # PEB.ProcessParameters
 
     def _modules(self, image_name: str) -> Modules:
         """The module table (src/w2m/modules.py) and the synthetic kernel32 and kernelbase images."""
@@ -1501,9 +1559,14 @@ class VM:
         return self.read_bytes(va, 2 * chars).decode("utf-16-le", errors="replace")
 
     def environment_now(self) -> tuple[str, ...]:
-        """The environment block's entries as the guest holds them now (environment.c changes it in place): what a
-        child started with no environment of its own gets (kernel.py PROCESS_CREATE; Sprint 058)."""
-        block = bytes(self.mm[self._process(ENVIRONMENT_OFF):self._process(ENVIRONMENT_OFF) + ENVIRONMENT_SIZE])
+        """The environment block's entries as the guest holds them now (ProcessParameters.Environment, which
+        environment.c moves on each change): what a child started with no environment of its own gets (kernel.py
+        PROCESS_CREATE; Sprint 058)."""
+        at = struct.unpack("<Q", self.mem.read(PARAMETERS_VA + 0x80, 8))[0]
+        off = at - PROCESS_VA                            # environment.c keeps it in its area of the process area
+        if not ENVIRONMENT_OFF <= off <= ENVIRONMENT_OFF + ENVIRONMENT_SIZE // 2:
+            raise Unimplemented(f"ProcessParameters.Environment at 0x{at:x}, outside its area")
+        block = bytes(self.mm[self._process(off):self._process(off) + ENVIRONMENT_SIZE // 2])
         units = block.decode("utf-16-le")
         end = units.find("\0\0")
         if end < 0:
