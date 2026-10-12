@@ -19,7 +19,7 @@ resume the frontier arrive with the pools (roadmap Sprints 041, 045).
 
 The game is given the batch run's arguments (Sprint 054; .github/workflows/windows-game.yml, mode batch): the
 reference trace and unity.log of milestone A come from that run, so the frontier takes its path. The log the game
-writes to C:\\w2m\\unity.log is kept at store/frontier-logs/<execution id>/unity.log.
+writes to C:\\w2m\\unity.log is kept at store/frontier-logs/<execution id>/unity.log (runs/ for --scratch).
 
 The record goes to store/runs/ and names the commit that ran (Sprint 060): a run from a tree with uncommitted
 changes is refused there. --scratch writes to runs/ (not committed) and says so in the record's baseline.
@@ -58,7 +58,6 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
-LOGS = ROOT / "store" / "frontier-logs"
 REFERENCE = ROOT / "store" / "game-runs" / "38206263976"     # the batch run: C:\\w2m\\app, the game's resources (Sprint 061)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
@@ -142,11 +141,14 @@ def main(argv: list[str]) -> int:
                     other.vm.close()
                     other.vm.files.close_all()
             vm.close()
-            files.close_all()
+            # the log first: close_all removes the run's drive C: (file_bridge.py), and from Sprint 054 to 063 the copy
+            # came after it, so no frontier kept its log
             log = files.drive / "w2m" / "unity.log"
             if log.is_file():
-                (LOGS / xid).mkdir(parents=True, exist_ok=True)
-                (LOGS / xid / "unity.log").write_bytes(log.read_bytes())
+                (base / "frontier-logs" / xid).mkdir(parents=True, exist_ok=True)
+                (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
+                state["log_lines"] = len(log.read_bytes().splitlines())
+            files.close_all()
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -212,6 +214,7 @@ def main(argv: list[str]) -> int:
     print(f"faults dispatched {count}: " + "; ".join(f"0x{c:x} at 0x{rip:x} ({i0}, 0x{i1:x})" for c, rip, i0, i1 in first))
     for pid, (name, code, calls, threads) in state.get("processes", {}).items():
         print(f"process {pid} {name}: exit code {code}; threads {threads}; calls by service {calls}")
+    print(f"unity.log lines {state.get('log_lines')}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
