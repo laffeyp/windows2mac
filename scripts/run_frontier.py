@@ -75,7 +75,7 @@ def main(argv: list[str]) -> int:
                 image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
                 command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}')
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
-        machine = Machine(spawner(files, USER_ENVIRONMENT), max_steps=a.max_steps, timeout_ms=60_000)
+        machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
         try:
             r = machine.run(vm)
             totals = vm.calls_total()

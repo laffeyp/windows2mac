@@ -329,8 +329,9 @@ u32 *w2m_object_flags(u64 h) {
 }
 int w2m_object_inheritable(u64 (*out)[3], int room) {
     int n = 0;
-    for (int i = 0; i < OBJECTS && n < room; i++)
+    for (int i = 0; i < OBJECTS; i++)
         if (handle_object[i] && (handle_flags[i] & 1)) {
+            if (n == room) w2m_unimplemented(W2M_API_CreateProcessW, room);   /* more than the list holds */
             struct object *o = &objects[handle_object[i] - 1];
             if (o->kind != SHARED_EVENT && o->kind != PIPE_READ && o->kind != PIPE_WRITE && o->kind != PROCESS)
                 w2m_unimplemented(W2M_API_CreateProcessW, o->kind);    /* inheriting such a handle: not in the rows */

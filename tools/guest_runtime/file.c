@@ -273,8 +273,10 @@ static void note_size(u64 id, u64 size);           /* FileStandardInfo's allocat
 /* WriteFile on a file handle, after runtime.c zeroed *written. */
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written) {
     struct open_file *f = file_of(handle);
-    if (!f && w2m_pipe_write(handle, buffer, count, written) == 1) return 1;     /* processes.c (Sprint 055) */
     if (!f) {
+        int p = w2m_pipe_write(handle, buffer, count, written);                  /* processes.c (Sprint 055) */
+        if (p == -1) return W2M_BLOCKED;
+        if (p == 1) return 1;
         set_error(ERROR_INVALID_HANDLE);
         return 0;
     }

@@ -84,8 +84,11 @@ u64 k32_WriteFile(u64 handle, u64 buffer, u64 count, u64 written, u64 rsp) {
     count &= 0xFFFFFFFFull;
     if (written == 0 || overlapped != 0) w2m_unimplemented(W2M_API_WriteFile, written);
     *(u32 *)written = 0;
-    if (handle != STDOUT_HANDLE)
-        return w2m_logged(W2M_API_WriteFile, handle, w2m_file_write(handle, buffer, count, written));
+    if (handle != STDOUT_HANDLE) {
+        u64 done = w2m_file_write(handle, buffer, count, written);
+        if (done == W2M_BLOCKED) return 0;                        /* a full pipe: retried, no return */
+        return w2m_logged(W2M_API_WriteFile, handle, done);
+    }
     host_call(W2M_HOST_WRITE, buffer, count);
     *(u32 *)written = (u32)count;
     return w2m_logged(W2M_API_WriteFile, handle, 1);
