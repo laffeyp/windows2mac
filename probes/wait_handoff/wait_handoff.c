@@ -121,7 +121,7 @@ void start(void) {
 
     /* a mutex the main thread owns, one waiter: release, then wait on it at once */
     ResetEvent(fin);
-    HANDLE mx = CreateMutexW(NULL, FALSE, NULL);
+    HANDLE mx = CreateMutexA(NULL, FALSE, NULL);
     DWORD own = WaitForSingleObject(mx, 0);
     t[0] = spawn_as(&a, mx, fin, 1);
     BOOL rm = ReleaseMutex(mx);
