@@ -52,7 +52,8 @@ from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modu
 from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
-from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
+from w2m.loader import (DLL_INIT_FAILED, THUNK_BASE, TLS_SLOTS, GuestFault, Image, LoadError, Loaded, Memory, Region,
+                        map_image)
 from w2m.pe import parse as parse_pe
 from w2m.runtime import Result
 from w2m import guest_stubs
@@ -1396,9 +1397,10 @@ class VM:
 
     def _thread_static_tls(self) -> int:
         """A new thread's ThreadLocalStoragePointer: the pointer array and each module's block, copied from the
-        templates as loader._static_tls lays them out for the first thread; 0 when no module has static TLS."""
+        templates as loader._static_tls lays them out for the first thread, an array even when no module has static
+        TLS (probe run 38229311268)."""
         images = self.ld.images
-        if not images or all(i.pe.tls is None for i in images):
+        if not images:
             return 0
         blocks: list[bytes | None] = []
         for k, image in enumerate([images[0], *[i for i in images[1:] if i.pe.tls is not None]]):
@@ -1408,7 +1410,7 @@ class VM:
             start, end, _, zero_fill = (v - image.pe.image_base + image.base if j < 3 else v
                                         for j, v in enumerate(image.pe.tls))
             blocks.append(bytes(self.mem.read(start, end - start)) + bytes(zero_fill))
-        array = (8 * len(blocks) + 15) & ~15
+        array = 8 * TLS_SLOTS                             # room for DLLs loaded later (_late_static_tls)
         size = array + sum((len(b) + 15) & ~15 for b in blocks if b is not None)
         base, err = self.virtual.alloc(0, size, MEM_COMMIT | MEM_RESERVE, 0x04)
         if err:
@@ -1856,8 +1858,8 @@ class VM:
             return 0
         raw = host.read_bytes()
         pe = parse_pe(raw)
-        if pe.tls is not None or pe.tls_callbacks:
-            raise Unimplemented(f"LoadLibrary {name}: static TLS in a DLL loaded after the start")
+        if pe.tls_callbacks:                            # no row shows a late DLL's TLS callbacks
+            raise Unimplemented(f"LoadLibrary {name}: TLS callbacks in a DLL loaded after the start")
         base = self.virtual.place_image(pe)
         staging = Memory()
         map_image(staging, raw, pe, base, host.name)
@@ -1875,6 +1877,8 @@ class VM:
                 va = m.imports.get(key) or m.make_thunk(target)
                 m.imports[key] = va
             self.mem.write(base + slot, va.to_bytes(8, "little"))
+        if pe.tls is not None:
+            self._late_static_tls(pe, base)
         self.virtual.snapshot_image(base, pe)
         c = host.name.lower()
         m.dlls[c] = (base, pe.size_of_image, {n: base + rva for n, rva in pe.exports})
@@ -1887,6 +1891,41 @@ class VM:
         if pe.entry_rva:
             self._pending_init = self._init_stub(base, base + pe.entry_rva)
         return base
+
+    def _late_static_tls(self, pe: Any, base: int) -> None:
+        """Static TLS for a DLL loaded after the start, as probe run 38229055834 records Windows doing it: the DLL takes
+        the next index (written at its AddressOfIndex), and every thread of the process, those started before the load
+        and the loading one, gets its own block copied from the template with the zero fill, in the slot of a pointer
+        array that does not move (each has room for loader.TLS_SLOTS modules). DllMain then runs on the loading thread
+        with its block in place; threads started later get the block from _thread_static_tls."""
+        index = 1 + sum(1 for i in self.ld.images[1:] if i.pe.tls is not None)
+        if index >= TLS_SLOTS:
+            raise Unimplemented(f"static TLS index {index}: each thread's array holds {TLS_SLOTS}")
+        start, end, index_va, zero_fill = (v - pe.image_base + base if k < 3 else v for k, v in enumerate(pe.tls))
+        self.mem.write(index_va, index.to_bytes(4, "little"))
+        block = bytes(self.mem.read(start, end - start)) + bytes(zero_fill)
+        for t in self.threads.values():
+            if t.status == "ended":
+                continue
+            array = int.from_bytes(self._read_guest(t.teb + 0x58, 8), "little")
+            if array == 0:                              # no module had static TLS: the thread's first array
+                array, err = self.virtual.alloc(0, 8 * TLS_SLOTS, MEM_COMMIT | MEM_RESERVE, 0x04)
+                if err:
+                    raise Unimplemented(f"a thread's TLS array: VirtualAlloc error {err}")
+                self._write_guest(t.teb + 0x58, array.to_bytes(8, "little"))
+            va, err = self.virtual.alloc(0, max(len(block), 16), MEM_COMMIT | MEM_RESERVE, 0x04)
+            if err:
+                raise Unimplemented(f"a thread's TLS block: VirtualAlloc error {err}")
+            self.mem.write(va, block)
+            self.mem.write(array + 8 * index, va.to_bytes(8, "little"))
+
+    def _write_guest(self, va: int, data: bytes) -> None:
+        """Guest memory, the process area (the first thread's TEB, the PEB) included."""
+        off = va - PROCESS_VA
+        if 0 <= off and off + len(data) <= PROCESS_SIZE:
+            self.mm[self._process(off):self._process(off) + len(data)] = data
+        else:
+            self.mem.write(va, data)
 
     def _init_stub(self, base: int, entry: int) -> int:
         """x86 that LoadLibrary returns through (module.c writes the caller's return address at +0x80): DllMain(base,

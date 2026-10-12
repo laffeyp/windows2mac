@@ -32,6 +32,8 @@ THUNK_BASE = 0x7FFE_0000_0000          # host entry points live here, 16 bytes a
 DLL_BASE = 0x7FF8_0000_0000            # the DLLs w2m loads, in load order
 LOADER_STUB = 0x7FFD_0000_0000         # the entry stub that runs DllMains, then the program's entry
 TLS_VA = 0x7FFC_0000_0000              # the thread's static TLS: the pointer array, then each module's block
+TLS_SLOTS = 64                          # each thread's pointer array has room for this many modules: a DLL loaded later
+                                        # fills its slot in place (probe run 38229055834: the array does not move)
 DLL_PROCESS_ATTACH = 1
 HEAP_VA, HEAP_SIZE = 0x2_0000_0000, 0x1000_0000   # the VM's process heap (vm_backend.HEAP_VA, HEAP_SIZE)
 MONITOR_VA = 0x7F00_0000_0000                     # the VM's monitor and process areas (vm_backend)
@@ -120,7 +122,7 @@ class Loaded:
     image_entry: int = 0                 # the program's own entry point
     init_order: list[Image] = field(default_factory=list)   # DLLs whose entry runs, in the order it runs
     dependency_order: list[Image] = field(default_factory=list)   # every DLL, dependencies first (PEB init list)
-    tls_array: int = 0                   # TEB.ThreadLocalStoragePointer: 0 when no image has static TLS
+    tls_array: int = 0                   # TEB.ThreadLocalStoragePointer (set on Windows even when no image has static TLS)
 
 
 def map_image(mem: Memory, data: bytes, img: PeImage, base: int, name: str) -> None:
@@ -268,9 +270,8 @@ def _static_tls(mem: Memory, images: list[Image]) -> int:
     TLS Section: "The loader assigns the value of the TLS index to the place that was indicated by the
     Address of Index field"). The thread's block for an image copies its template, after relocation, and
     SizeOfZeroFill zero bytes; the program's slot is NULL when it has no TLS. The array of block pointers
-    is TEB.ThreadLocalStoragePointer."""
-    if all(i.pe.tls is None for i in images):
-        return 0
+    is TEB.ThreadLocalStoragePointer, set even when no image has static TLS (probe run 38229311268: a program without
+    TLS sees it set before it loads a DLL with TLS; Sprint 065)."""
     program, dlls = images[0], [i for i in images[1:] if i.pe.tls is not None]
     blocks: list[bytes | None] = [None]
     for index, image in enumerate([program, *dlls]):
@@ -285,7 +286,9 @@ def _static_tls(mem: Memory, images: list[Image]) -> int:
             blocks[0] = block
         else:
             blocks.append(block)
-    array_size = (8 * len(blocks) + 15) & ~15
+    if len(blocks) > TLS_SLOTS:
+        raise LoadError(f"{len(blocks)} modules with static TLS: the array holds {TLS_SLOTS}")
+    array_size = 8 * TLS_SLOTS
     size = array_size + sum((len(b) + 15) & ~15 for b in blocks if b is not None)
     tls = mem.map(TLS_VA, (size + 0xFFF) & ~0xFFF, "tls")
     at = array_size

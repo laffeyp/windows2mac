@@ -1143,6 +1143,33 @@ FAMILIES: dict[str, Family] = {
         plants={"template_not_copied": Plant("        block = bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill)",
                                             "        block = bytes(end - start) + bytes(zero_fill)",
                                             ("tls.values", "tls.write"), host="w2m.loader")}),
+    "late_tls": Family(
+        name="late_tls",
+        contract_id="windows.loader.late_tls",
+        version="0.1.0",
+        summary=("A program without TLS loads a DLL with static TLS (static C runtime) by LoadLibrary while a second "
+                 "thread waits: the DLL's TLS index is 1; TEB.ThreadLocalStoragePointer is set before the load and "
+                 "keeps its value; the loading thread (after DllMain), the thread started before the load and one "
+                 "started after it each read their own copy of the template with its zero fill, in the block their "
+                 "slot holds."),
+        probe="late_tls", guest_file="module.c",
+        runs={
+              "38229311268": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-2-0", "AMD EPYC 7763 64-Core Processor", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
+              "38229314900": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-2-1", "AMD EPYC 9V74 80-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
+              "38229318961": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-2-2", "AMD EPYC 9V45 96-Core Processor", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
+              "38229322883": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-2-3", "AMD EPYC 9V45 96-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
+        },
+        documented=(
+            documented("ms-pe-tls", "../../windows/win32/debug/pe-format", "2024-02-22",
+                       "The loader assigns the value of the TLS index to the place that was indicated by the Address "
+                       "of Index field."),),
+        open_questions=(
+            "A late DLL's TLS callbacks: no row has one (steam_api64.dll has none); w2m stops on one.",
+            "How many modules a thread's array holds before Windows moves it: w2m gives room for loader.TLS_SLOTS."),
+        dll_name="late_tls_dll.dll", host_files=("src/w2m/vm_backend.py", "src/w2m/loader.py"),
+        plants={"block_not_copied": Plant("            self.mem.write(va, block)",
+                                          "            self.mem.write(va, bytes(len(block)))",
+                                          ("late.main", "late.before_load"), host="w2m.vm_backend")}),
     "time_and_error_mode": time_family("parent", (
         "Local time on a UTC machine, the time zone (TIME_ZONE_ID_UNKNOWN, zero biases, error 0), exact SYSTEMTIME "
         "and FILETIME conversions and their invalid inputs (87), and the error mode a process inherits from the "
