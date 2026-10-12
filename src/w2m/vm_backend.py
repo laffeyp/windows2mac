@@ -2267,6 +2267,9 @@ class VM:
         d.emit(a64.hvc(1), a64.IC_IALLU, a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
         d.branch(a64.b, top)
         self.dispatch_va = MONITOR_VA + DISPATCHER
+        # where a thread goes on after a switch or a model step, x17 its next x86 address: the dispatcher's table,
+        # or in lockstep the miss stub, which exits at every instruction
+        self.resume_va = self.miss_va if self.lockstep else self.dispatch_va
         self._write_words(DISPATCHER, d.finish())
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
@@ -2318,7 +2321,10 @@ class VM:
             self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
-        return self.miss_va                                    # dispatch the next instruction
+        # on through the dispatcher's table: the next instruction's block is usually there already. Returning to the
+        # miss stub cost one hvc #1 per model step (frontier 643a6283510c-1791841443768764000: 207,514 misses at
+        # 0x18140b91a against 207,512 model steps at the PCMPISTRI before it)
+        return self.resume_va
 
     def _store_x87(self, st: int, th: Any) -> None:
         """The thread's x87 status, tags and registers back into the state block, ST(i) in FXSAVE's order."""
@@ -2744,7 +2750,7 @@ class VM:
                         self._save_thread(self.threads[self.current_tid], x)
                         yield "slice"                            # another VM's turn; this thread goes on after
                         x = self._load_thread(self.threads[self.current_tid])
-                        pc = self.miss_va
+                        pc = self.resume_va
                     elif len(self.threads) > 1:                 # the time slice ran out: another thread's turn
                         x[17] = where
                         switched = self._schedule(x, 0)
@@ -2753,7 +2759,7 @@ class VM:
                             switched = self._resume_idle(x)
                         assert switched is not None
                         x = switched
-                        pc = self.miss_va
+                        pc = self.resume_va
                     else:
                         pc = e.pc
                 elif imm == HVC_CODE_WRITE:                     # a write faulted: behind translated code?
@@ -2772,7 +2778,7 @@ class VM:
                         stop = "ExitProcess"
                         break
                     x = switched
-                    pc = self.miss_va
+                    pc = self.resume_va
                 elif imm & 0x40:
                     stop = f"UndefinedFlag: {'CZSOP'[imm & 7]} read while undefined at 0x{where:x}"
                     break
