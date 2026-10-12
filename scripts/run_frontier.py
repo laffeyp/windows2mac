@@ -61,14 +61,33 @@ BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the
 LOGS = ROOT / "store" / "frontier-logs"
 REFERENCE = ROOT / "store" / "game-runs" / "38176899195"     # the batch run (Decision 2026-10-11 on the command line)
 CONTRACT = ("windows.game.calls", "0.1.0")
+# Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
+# exact text, its replacement, and the (function, field) the divergence names.
+PLANTS = {
+    "thread_priority_off_by_one": ("thread_queries.c",
+                                   "(u32)w2m_thread_priority(tid));", "(u32)(w2m_thread_priority(tid) + 1));",
+                                   ("GetThreadPriority", "ret")),
+    "envvar_error_dropped": ("environment.c",
+                             "        set_error(ERROR_ENVVAR_NOT_FOUND);\n        return w2m_logged(W2M_API_GetEnvironmentVariableW",
+                             "        return w2m_logged(W2M_API_GetEnvironmentVariableW",
+                             ("GetEnvironmentVariableW", "error"))}
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
     ap.add_argument("--scratch", action="store_true", help="write to runs/, not store/runs/; a dirty tree allowed")
+    ap.add_argument("--plant", choices=sorted(PLANTS), help="run with a planted fault (recorded in the baseline)")
     ap.add_argument("--max-steps", type=int, default=1_000_000_000)    # a run goes to its stop (Sprint 050: 20.6 M)
     a = ap.parse_args(argv)
+    sources = None
+    if a.plant:
+        name, old, new, _ = PLANTS[a.plant]
+        text = (ROOT / "tools" / "guest_runtime" / name).read_text()
+        if text.count(old) != 1:
+            print(f"plant {a.plant}: its anchor is not once in {name}")
+            return 2
+        sources = {name: text.replace(old, new)}
     base = ROOT / ("runs" if a.scratch else "store")     # traces/ and frontier-calls/ beside the records
     runs = ROOT / "runs" if a.scratch else base / "runs"
     changed = uncommitted()
@@ -96,7 +115,7 @@ def main(argv: list[str]) -> int:
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
                 image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
                 command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}', call_trace=TRACED_IMAGES,
-                call_trace_from="UnityPlayer.dll!UnityMain")       # where jit_capture.c opens the Windows trace
+                call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources)       # where jit_capture.c opens the Windows trace
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
         machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
         try:
@@ -161,7 +180,8 @@ def main(argv: list[str]) -> int:
             elapsed_seconds=round(time.monotonic() - t0, 3)))
 
     def topology(b: TopologyBuilder) -> None:
-        b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm", scratch=a.scratch)
+        b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm", scratch=a.scratch,
+                   plant=a.plant or "")
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
                         events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
@@ -197,6 +217,10 @@ def main(argv: list[str]) -> int:
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
     for d in found[:60]:
         print(f"  seq {d.windows_seq}: {d.text()}")
+    if a.plant:
+        fn, field = PLANTS[a.plant][3]
+        hit = [d for d in found if d.function == fn and d.field == field]
+        print(f"plant {a.plant}: " + (f"caught at {hit[0].text()}" if hit else f"NOT caught ({fn} {field})"))
     print(f"record {result.record_root}")
     return 0
 
