@@ -62,19 +62,20 @@ def read_tsv(path: Path) -> list[Call]:
 
 
 def read_tsv_text(text: str) -> list[Call]:
-    """A trace in call_trace.h's text: seq and tid in decimal, the rest in hex without a prefix."""
+    """A trace in call_trace.h's text (its line 286): seq, tid and the last error in decimal, the arguments and the
+    return in hex without a prefix."""
     out = []
     for line in text.splitlines():
         if not line:
             continue
         f = line.split("\t")
         out.append((int(f[0]), int(f[1]), f[2], f[3], f[4], tuple(int(x, 16) for x in f[5:13]), int(f[13], 16),
-                    int(f[14], 16)))
+                    int(f[14])))
     return out
 
 
 def write_tsv(calls: list[Call]) -> str:
-    return "".join(f"{s}\t{t}\t{i}\t{d}\t{fn}\t" + "\t".join(f"{a:x}" for a in args) + f"\t{r:x}\t{e:x}\n"
+    return "".join(f"{s}\t{t}\t{i}\t{d}\t{fn}\t" + "\t".join(f"{a:x}" for a in args) + f"\t{r:x}\t{e}\n"
                    for s, t, i, d, fn, args, r, e in calls)
 
 

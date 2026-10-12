@@ -84,3 +84,11 @@ def test_the_call_stream_is_a_guest_trace_the_ingester_accepts(tmp_path: Path) -
     result = ingest(tmp_path, sha, "frontier-x")
     assert isinstance(result, events.TRACE_INGESTED), result
     assert (result.line_count, result.thread_count) == (7, 2)
+
+
+def test_the_last_error_column_is_decimal_as_call_trace_h_prints_it() -> None:
+    """call_trace.h line 286 prints the last error with %lu: the first comparison read 203 (ERROR_ENVVAR_NOT_FOUND)
+    as 0x203 and reported 32 GetEnvironmentVariableW divergences that were not there."""
+    windows = call_compare.read_tsv(ROOT / "store" / "game-runs" / "38176899195" / "jit_capture.bin.trace.tsv")
+    errors = {c[7] for c in windows if c[4] == "GetEnvironmentVariableW"}
+    assert 203 in errors and 0x203 not in errors

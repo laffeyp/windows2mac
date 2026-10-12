@@ -39,6 +39,19 @@ frontier records in `store/runs/` name a dirty tree, and each record carries `tr
    last error must be equal where the function's metadata says it sets one. The frontier records one COMPARISON_COMPLETED
    against the reference run, its first_divergence naming the function, the call's index and the field. The divergences
    are listed in full in the card's observed section, each with a disposition.
+4a. **The capture's conditions, reproduced** (amended 2026-10-11 after the first three comparisons, before the
+   work). The first runs showed divergences that are the capture's, not the game's:
+   - **The trace window.** `jit_capture.c` hooks after mono's and UnityPlayer's DllMain and opens at UnityMain;
+     w2m's trace opens at UnityMain and closes around a traced image's DllMain.
+   - **Hook labels.** An image's own import slots are labeled with the image, and GetProcAddress's answers with
+     "GetProcAddress"; a pointer resolved before the hooks is the real function and is never traced.
+   - **The monitor thread.** The capture's own thread is excluded in the contract.
+   - **Values the system assigns.** Ids, slots and atoms map one to one, and clocks are not compared.
+   - **Addresses in integer types.** An integer that carries an address (a range base, a message's lParam, a
+     window's user data) agrees on null.
+   - **The machine's paths.** The runner unpacked the game at `D:\w2m\game` (12 characters to w2m's 11 at
+     `C:\w2m\app`), so every length derived from a path differed by one. A new reference run starts the game
+     through a junction at `C:\w2m\app`, with TMP and TEMP at w2m's temp directory, and becomes the reference.
 5. **The documents.**
    - **K1 Decision.** One Decision with grounds on parallel worktrees.
    - **G3 Decision.** One Decision stating the runtime architecture as built, with waits, scheduling, virtual memory
@@ -75,7 +88,8 @@ frontier records in `store/runs/` name a dirty tree, and each record carries `tr
 - created: `specs/signatures.json` and `scripts/signatures.py`; `tools/guest_runtime/call_trace.c`;
   `scripts/call_compare.py` and its tests; `contracts/windows.game.calls/0.1.0.json` (the comparison's relations and
   reference)
-- modified: `scripts/run_frontier.py`, `src/w2m/vm_backend.py`, `WORKING_AGREEMENT.md`, `docs/plan.md`,
+- modified: `scripts/run_frontier.py`, `src/w2m/vm_backend.py`, `.github/workflows/windows-game.yml`,
+  `WORKING_AGREEMENT.md`, `docs/plan.md`,
   `signals/proposals.json`, BLACKBOARD
 - gates 0 and CI `success` on the closing commit
 
