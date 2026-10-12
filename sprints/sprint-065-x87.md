@@ -127,6 +127,18 @@ and keep a plan row of their own.
       Line 160 is 16733 in the two runs that shared the machine (81755030, stale code and all) and 16736 in the runs
       alone, stale code or not: the count follows the run's timing, not the translations. The guest clock is the
       host's (process.c, CNTVCT_EL0); v0.2 §3.1 asks for a controlled one.
+10. **A clock the run controls** (amended 2026-10-12, before the work; v0.2 §3.1: "A controlled replay can inject
+    equivalent clock observations"). Line 160 and the thread-order divergences follow the run's timing (item 9f); the
+    guest reads the host's clock while it runs 27 to 600 times slower than Windows. The model is QEMU's `-icount
+    shift=N,sleep=off` (qemu-options.hx: "The virtual cpu will execute one instruction every 2^N ns of virtual time";
+    with sleep=off "the virtual time will jump to the next timer deadline instantly whenever the virtual cpu goes to
+    sleep mode ... This behavior gives deterministic execution times from the guest point of view"), which also warns
+    that instruction counts have "little or no correlation with actual performance". Clock mode 2: the 10 MHz counter
+    is the VM's executed instructions at a set rate, plus a warp; when no thread can run, the warp moves the counter to
+    the earliest deadline and that thread wakes, with no real sleep; the host's random bytes come from a fixed seed.
+    The rate is set from one run, so that a duration unity.log prints matches Windows'. Judged: two frontier runs of
+    one tree give the same calls and the same log; line 160 against the eight Windows runs; the comparison's
+    divergences.
 
 ## prerequisites
 
