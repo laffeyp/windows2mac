@@ -1979,22 +1979,31 @@ FAMILIES: dict[str, Family] = {
     "registry": Family(
         name="registry",
         contract_id="windows.registry.registry",
-        version="0.2.0",
+        version="0.3.0",
         summary=("RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software "
                  "that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a "
                  "NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; "
-                 "a key closes once; the last error is left."),
+                 "a key closes once; the last error is left. Sprint 063, the game's writes (Unity's PlayerPrefs, game run "
+                 "38206263976 seq 2734-3490): RegCreateKeyW of its key, RegSetValueExA of REG_BINARY, REG_DWORD and "
+                 "REG_SZ, RegQueryValueExA in the game's two forms and at its edges (REG_NONE written for a missing "
+                 "value, ERROR_MORE_DATA, the size alone, ERROR_INVALID_PARAMETER for data without a size), names "
+                 "without case in ASCII and Latin-1, ERROR_ACCESS_DENIED through a handle opened for reading, "
+                 "RegDeleteValueA, and RegDeleteKeyW refusing a key with a subkey."),
         probe="registry", guest_file="registry.c",
-        runs={
-              "38182330078": Run("windows-2025", "b9b66037b6a7f2f230bb3009c2dc5f1a083234466555848cbfd6d9a1311685af", "registry-1791759336-0", "AMD EPYC 7763 64-Core Processor"),
-              "38182331638": Run("windows-2022", "07bfa9e5709c4d41c7ea02ab298b4c1c92df5e68159b782325b0eb00bfd9d653", "registry-1791759336-1", "AMD EPYC 7763 64-Core Processor"),
+        runs={   # Sprint 063: the game's writes and their edges
+              "38210383833": Run("windows-2025", "5cffb57fa38d5a97fb95f46607823da0d42a4ec3232e9cff9b797f1a282828c6", "registry-1791784765-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210386046": Run("windows-2022", "c560b178aa6e68c0b37ddf59f16feb181fe47b6cade16234896b04f7a4b3a225", "registry-1791784765-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(),
-        open_questions=("w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not "
-                        "exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run.",),
+        open_questions=("w2m's registry starts each run with HKEY_CURRENT_USER\\Software and nothing below it, as a fresh "
+                        "machine has; what a run writes stays for the rest of the run and nothing persists between runs "
+                        "(the reference is the game's first run on a fresh runner). Other roots, value types and sizes "
+                        "outside the rows stop the run.",),
         plants={
             "missing_untouched": Plant("    if (!exists(path)) {\n        *(u64 *)result = 0;", "    if (!exists(path)) {",
-                                       ("open.missing", "open.missing_two_levels", "open.missing_case", "open.missing_below_software_handle", "open.u0173_oftware", "open.software_u0100_x", "open.long_s_oftware", "open.software_dotless_i")),
+                                       ("open.missing", "open.missing_two_levels", "open.missing_case", "open.missing_below_software_handle", "open.u0173_oftware", "open.software_u0100_x", "open.long_s_oftware", "open.software_dotless_i",
+                                        # Sprint 063: the game's key opened before it is made and after it is deleted
+                                        "write.open_before", "write.open_after_delete")),
             "case_kept": Plant("return c >= 'A' && c <= 'Z' ? (u16)(c + 32) : c;", "return c;",
                                ("open.software", "open.software_case", "open.missing_below_software_handle",
                                 "close.software", "close.software_case", "close.software_again")),
@@ -2004,7 +2013,23 @@ FAMILIES: dict[str, Family] = {
                                     ("open.u0173_oftware", "open.software_u0100_x")),
             "root_new_handle": Plant("        *(u64 *)result = root;\n", "        *(u64 *)result = KEY_BASE + 0x100;\n",
                                      ("open.root_null_subkey", "open.root_empty_subkey", "close.root_null_subkey",
-                                      "close.root_empty_subkey"))}),
+                                      "close.root_empty_subkey")),
+            # Sprint 063: the value functions
+            "latin1_unfolded": Plant("if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c = (u16)(c + 32);",
+                                     "if (c >= 'A' && c <= 'Z') c = (u16)(c + 32);", ("query.latin1_case",)),
+            "missing_type_untouched": Plant("        if (type) *(u32 *)type = REG_NONE;\n", "",
+                                            ("query.missing", "query.after_delete")),
+            "short_buffer_copies": Plant("        if (*size < n) {", "        if (0) {", ("query.binary_20_short",)),
+            "read_handle_writes": Plant(
+                "    if (!(keys[slot].access & right)) { *status = ERROR_ACCESS_DENIED; return -1; }\n", "",
+                ("set.through_read_handle", "delete.through_read_handle")),
+            "sz_utf16_copy_skipped": Plant(
+                "        for (u32 i = 0; i < n; i++) data[2 * i] = values[v].data[i], data[2 * i + 1] = 0;\n", "",
+                ("query.sz_with_nul", "query.sz_without_nul")),
+            "delete_value_kept": Plant(
+                "    values[v].used = 0;\n    return w2m_logged(W2M_API_RegDeleteValueA, h, ERROR_SUCCESS);",
+                "    return w2m_logged(W2M_API_RegDeleteValueA, h, ERROR_SUCCESS);",
+                ("query.after_delete", "delete.again"))}),
     "file_search": Family(
         name="file_search",
         contract_id="windows.file.file_search",
