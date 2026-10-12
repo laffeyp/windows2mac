@@ -51,7 +51,9 @@ struct w2m_thread_scratch {
     u32 phase;                       /* a retried call's progress (SleepConditionVariableSRW: 1 released, 2 woken) */
     u32 com_inits;                   /* CoInitialize(Ex) calls not yet balanced by CoUninitialize (com.c; Sprint 052) */
     u32 com_model;                   /* their apartment: 1 multithreaded, 2 single-threaded */
+    u64 progress;                    /* a retried WriteFile to a pipe: the bytes the pipe took so far (Sprint 058) */
 };
+#define W2M_BLOCKED (~0ull)          /* a service's helper blocked the thread: the call is retried, not returned */
 #define W2M_THREAD_SCRATCH_OFF 0x1900
 static inline struct w2m_thread_scratch *w2m_thread_scratch(void) {
     return (struct w2m_thread_scratch *)((u8 *)w2m_teb() + W2M_THREAD_SCRATCH_OFF);
@@ -286,6 +288,7 @@ enum { W2M_KERNEL_EVENT_OPEN = 1, W2M_KERNEL_EVENT_STATE, W2M_KERNEL_EVENT_TAKE,
 #define W2M_OBJECT_REMOTE_THREAD 12
 #define W2M_INHERIT_STANDARD 100              /* an inherited-list entry naming a standard handle */
 #define W2M_INHERIT_ERROR_MODE 101            /* ... the parent's error mode, which the child inherits */
+#define W2M_INHERIT_DIRECTORY 102             /* ... the parent's current directory: (characters, kind, address) */
 u32 w2m_error_mode(void);                                               /* time_and_error_mode.c */
 int w2m_pipe_read(u64 handle, u64 buffer, u64 count, u64 read);        /* processes.c */
 int w2m_pipe_write(u64 handle, u64 buffer, u64 count, u64 written);

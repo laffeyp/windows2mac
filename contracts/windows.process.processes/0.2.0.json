@@ -1,0 +1,271 @@
+{
+ "contract_id": "windows.process.processes",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "A second process as UnityPlayer starts its crash handler: named events shared by name (ERROR_ALREADY_EXISTS, one object), CreatePipe and SetHandleInformation, CreateProcessW with inherited handles and the pipe as the child's standard input, framed writes and reads, ERROR_BROKEN_PIPE when the writer is gone, OpenProcess by id, waits on a process (WAIT_TIMEOUT, STILL_ACTIVE, then the exit code), WaitForMultipleObjectsEx; SetConsoleCtrlHandler. Since 0.2.0 (Sprint 058, the review of Sprint 055): a child gets the parent's environment and directory as they are when it starts; a writer's process ending breaks its pipe; a pipe of size 0 holds 4096 bytes, and a writer waits for room.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/processes/processes.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "event.create_0",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "event.create_1",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "event.create_2",
+    "non_null": true,
+    "err": 0
+   },
+   {
+    "s": "event.create_again",
+    "non_null": true,
+    "same_handle": false,
+    "err": 183
+   },
+   {
+    "s": "event.one_object",
+    "wait_first_handle": 0
+   },
+   {
+    "s": "pipe.create",
+    "ret": 1,
+    "err": 57005,
+    "distinct": true,
+    "read_type": 3,
+    "write_type": 3
+   },
+   {
+    "s": "pipe.write_inherit_before",
+    "flags": 1
+   },
+   {
+    "s": "pipe.write_inherit_cleared",
+    "ret": 1,
+    "err": 57005,
+    "flags": 0
+   },
+   {
+    "s": "process.create",
+    "ret": 1,
+    "err": 0,
+    "process": true,
+    "thread": true,
+    "id_differs": true,
+    "thread_id": true
+   },
+   {
+    "s": "process.running",
+    "wait_0": 258,
+    "exit_code": 259
+   },
+   {
+    "s": "pipe.write_0",
+    "header": true,
+    "body": true,
+    "err": 57005
+   },
+   {
+    "s": "pipe.write_1",
+    "header": true,
+    "body": true,
+    "err": 57005
+   },
+   {
+    "s": "pipe.write_2",
+    "header": true,
+    "body": true,
+    "err": 57005
+   },
+   {
+    "s": "process.response",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "process.exited",
+    "wait": 1,
+    "wait_0": 0,
+    "exit_code": 7
+   },
+   {
+    "s": "writer.parent_directory",
+    "ret": 1
+   },
+   {
+    "s": "writer.pipe",
+    "created": 1,
+    "bytes": true,
+    "read_err": 109,
+    "wait": 0,
+    "exit_code": 5
+   },
+   {
+    "s": "writer.environment",
+    "len": 11,
+    "value": "from_parent"
+   },
+   {
+    "s": "writer.directory",
+    "tail": "w2m_probe_dir"
+   },
+   {
+    "s": "pipe.capacity",
+    "written_before_read": 4096,
+    "read": 65536,
+    "writer_done": 0
+   },
+   {
+    "s": "pipe.large_write",
+    "done_before_read": 0,
+    "done_after_1000": 0,
+    "done_after_6000": 1,
+    "read": 10000,
+    "written": 10000,
+    "writer_done": 0
+   },
+   {
+    "s": "ctrl.add",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "ctrl.remove",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "ctrl.remove_again",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "child.command_line",
+    "tail": "child <id>"
+   },
+   {
+    "s": "child.open_parent",
+    "non_null": true,
+    "err": 57005
+   },
+   {
+    "s": "child.event_0",
+    "non_null": true,
+    "err": 183
+   },
+   {
+    "s": "child.event_1",
+    "non_null": true,
+    "err": 183
+   },
+   {
+    "s": "child.event_2",
+    "non_null": true,
+    "err": 183
+   },
+   {
+    "s": "child.std_handles",
+    "input": true,
+    "input_type": 3,
+    "output_null": true,
+    "error_null": true
+   },
+   {
+    "s": "child.record_0",
+    "header": true,
+    "header_err": 57005,
+    "kind": 1,
+    "size": 31,
+    "body": true,
+    "first": 97
+   },
+   {
+    "s": "child.record_1",
+    "header": true,
+    "header_err": 57005,
+    "kind": 2,
+    "size": 12,
+    "body": true,
+    "first": 104
+   },
+   {
+    "s": "child.record_2",
+    "header": true,
+    "header_err": 57005,
+    "kind": 3,
+    "size": 1,
+    "body": true,
+    "first": 120
+   },
+   {
+    "s": "child.record_3",
+    "header": false,
+    "header_err": 109
+   },
+   {
+    "s": "child.wait_parent_or_term",
+    "ret": 1,
+    "err": 57005
+   }
+  ],
+  "derivation": "scripts/family_run.py processes_rows: The child's command line ends in the parent's process id, which differs by run: the row keeps that it is the word \"child\" and a number."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38189162864: windows-2025, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:6a37ef1f1ea85d0e2fbc5bb09c1b1daae97c78729d65796f3ffea7d2de96fce9; run 38189164581: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:232d481b305e92488da79d45bd0bb1b13409d74b268fb7ee0c536bb5e665a0d3",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "processes-1791765864-0-1",
+    "processes-1791765864-0-2",
+    "processes-1791765864-1-1",
+    "processes-1791765864-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-createprocessw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "If this parameter is NULL, the new process uses the environment of the calling process. ... If this parameter is NULL, the new process will have the same current drive and directory as the calling process."
+  },
+  {
+   "evidence_id": "ms-createpipe",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createpipe (page updated 2021-10-13; retrieved 2026-10-10)",
+   "quote": "nSize: The size of the buffer for the pipe, in bytes. The size is only a suggestion; the system uses the value to calculate an appropriate buffering mechanism. If this parameter is zero, the system uses the default buffer size."
+  }
+ ],
+ "open_questions": [
+  "Each process is a VM of its own; the objects they share are the host's (src/w2m/kernel.py).",
+  "An application name, an environment, a directory, creation flags other than NORMAL_PRIORITY_CLASS, a child with no standard handles, and a write no process reads are not in the rows and stop the run."
+ ],
+ "sections": {
+  "probe": "probes/processes (Sprint 044)",
+  "implementation": "tools/guest_runtime/processes.c",
+  "rows": "scripts/family_run.py processes",
+  "excluded": "none"
+ }
+}

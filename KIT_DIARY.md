@@ -427,3 +427,11 @@
 
 **Kit change suggested:** the gate checks every planted fault's anchor on each push, and a change that makes a family's candidate stale reruns that family's plants with its item run.
 
+### 2026-10-11 — Sprint 058: a planted fault in a module the run had copied names from
+
+**What happened:** a host plant replaces a Python module's source, runs, and restores it. It repoints the names other w2m modules imported from the patched one, and only those. The family runner imports `Machine` and `spawner` from the kernel itself, so the two plants on the kernel changed a module the run never called: both reported 0 unequal rows where they named 1 and 2. The plant run said "NOT as named", which is how it was found; a plant whose named reach had been empty would have passed.
+
+**Finding (#49):** a plant reaches the code under test only through the references the running program holds; patching a module is not patching the copies of its names that callers took at import. Every holder of a reference, the runner included, must see the planted object, or the plant is checked against code it never touched.
+
+**Kit change suggested:** a plant run asserts that the planted code ran (a counter or marker in the planted text), not only that rows changed, so an unreached plant fails even when its named reach is empty.
+

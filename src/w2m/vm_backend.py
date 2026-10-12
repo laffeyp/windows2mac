@@ -125,6 +125,7 @@ SYSTEM_IMAGES_OFF = LOADER_DATA_OFF + LOADER_DATA_SIZE   # one page per other sy
 SYSTEM_IMAGES = 32
 LDR_ENTRY_SIZE = 0x120
 INHERIT_OFF = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000   # a child's inherited handles (sync_objects.c; Sprint 055)
+INHERIT_DIRECTORY = 0x800          # in the inherit page: the parent's current directory (paths.c; Sprint 058)
 FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the first 64 as (code, RIP, info 0, info 1)
 PROCESS_SIZE = FAULT_LOG_OFF + 0x1000
 STDOUT_HANDLE = 0x74
@@ -526,6 +527,7 @@ def runtime_defines() -> dict[str, int]:
         "W2M_HEAP_VA": HEAP_VA, "W2M_HEAP_SIZE": HEAP_SIZE,
         "W2M_COMMAND_LINE_VA": PROCESS_VA + COMMAND_LINE_OFF,
         "W2M_INHERIT_VA": PROCESS_VA + INHERIT_OFF,
+        "W2M_INHERIT_DIRECTORY_VA": PROCESS_VA + INHERIT_OFF + INHERIT_DIRECTORY,
         "W2M_FAULT_LOG_VA": PROCESS_VA + FAULT_LOG_OFF,
         "W2M_ENVIRONMENT_VA": PROCESS_VA + ENVIRONMENT_OFF, "W2M_ENVIRONMENT_SIZE": ENVIRONMENT_SIZE,
         "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
@@ -566,9 +568,6 @@ def mxcsr_flags_from_fpsr(fpsr: int) -> int:
     return sum(1 << m for f, m in FPSR_TO_MXCSR if fpsr >> f & 1)
 
 
-_RUNTIME_SYMBOLS: dict[str, int] = {}
-
-
 def build_runtime(last_error_source: str | None = None, file_source: str | None = None,
                   sources: dict[str, str] | None = None) -> guest_runtime.Image:
     """The guest runtime image, refused if it lacks a service SERVICES names (a candidate file.c or
@@ -580,14 +579,10 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
     return image
 
 
-def runtime_symbol(name: str) -> int:
-    """A guest runtime symbol's address; the VM sets the table when it builds its runtime image.
-    Compiled outside a VM (an assembler check), the address is 0."""
-    return _RUNTIME_SYMBOLS.get(name, 0)
-
-
-def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
-    """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`.
+def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None) -> bool:
+    """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`. `symbols` are the
+    compiling VM's runtime image's (CPUID calls its w2m_cpuid; Sprint 058: one table for every VM in the host gave a
+    parent the child's addresses); without them, as in an assembler check, the address is 0.
     Returns True when control never falls through (an unconditional branch)."""
     last: dict[int, int] = {}
     for i, op in enumerate(ins.ops):
@@ -861,7 +856,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int) -> bool:
             for i in range(0, 16, 2):
                 a.emit(a64.stp(i, i + 1, 16, 8 * i))
             a.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
-                   a64.mov_imm(16, runtime_symbol("w2m_cpuid")), a64.blr(16), a64.mov_imm(16, state))
+                   a64.mov_imm(16, symbols["w2m_cpuid"] if symbols else 0), a64.blr(16), a64.mov_imm(16, state))
             for i in range(0, 16, 2):
                 a.emit(a64.ldp(i, i + 1, 16, 8 * i))
         elif k == "df":                                         # CLD, STD
@@ -992,7 +987,7 @@ class VM:
                  runtime_sources: dict[str, str] | None = None, image_name: str = "app.exe",
                  gui: bool = False, command_line: str | None = None,
                  environment: tuple[str, ...] = (), process_id: int = 0,
-                 inherited: list[tuple[int, int, int]] | None = None) -> None:
+                 inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None) -> None:
         self.ld = loaded
         self.files = files                 # the file system's root on the Mac (Sprint 042); None: no file calls
         self.lockstep = lockstep
@@ -1003,6 +998,7 @@ class VM:
         self.environment = environment     # the block's entries, in order ("NAME=value"; "=C:=..." too)
         self.process_id = process_id or PROCESS_ID   # TEB.ClientId.UniqueProcess; a child's from kernel.Machine
         self.inherited = inherited         # a child's handles from its parent (kernel.py PROCESS_CREATE); None: none
+        self.directory = directory         # a child's current directory, its parent's (Sprint 058); None: the program's
         self.th = Thread(tid)
         self.exit_code: int | None = None
         self.out = bytearray()
@@ -1033,8 +1029,6 @@ class VM:
         self.mem.regions.append(Region(HEAP_VA, view[heap_off:heap_off + HEAP_SIZE], "heap"))   # sparse: no copy
         self.mem.regions.append(Region(VIRTUAL_VA, view[virtual_off:virtual_off + VIRTUAL_SIZE], "virtual"))
         self.runtime = build_runtime(last_error_source, file_source, runtime_sources)
-        _RUNTIME_SYMBOLS.clear()
-        _RUNTIME_SYMBOLS.update(self.runtime.symbols)
         if self.runtime.end > MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
             raise CompileError(f"guest runtime image ends at 0x{self.runtime.end:x}, past its area")
         for va, data in self.runtime.segments:
@@ -1111,9 +1105,15 @@ class VM:
             entries = [e for e in self.inherited if e[1] < KIND_STANDARD]
             std = {w: h for w, k, h in self.inherited if k == KIND_STANDARD}
             mode = [h for _, k, h in self.inherited if k == KIND_ERROR_MODE]
-            if 32 + 24 * len(entries) > 0xFE8:           # the marks at 0xFE8 follow the entries (review of Sprint 054)
-                raise Unimplemented(f"{len(entries)} inherited handles: the page holds {(0xFE8 - 32) // 24}")
+            if 32 + 24 * len(entries) > INHERIT_DIRECTORY:   # the directory follows the entries (review of Sprint 054)
+                raise Unimplemented(f"{len(entries)} inherited handles: the page holds {(INHERIT_DIRECTORY - 32) // 24}")
             page = self._process(INHERIT_OFF)
+            if self.directory is not None:          # paths.c's working directory, UTF-16 with a NUL (Sprint 058)
+                text = self.directory.encode("utf-16-le") + b"\0\0"
+                if INHERIT_DIRECTORY + len(text) > 0xFE8:
+                    raise Unimplemented(f"a current directory of {len(self.directory)} characters: the page holds "
+                                        f"{(0xFE8 - INHERIT_DIRECTORY) // 2 - 1}")
+                self.mm[page + INHERIT_DIRECTORY:page + INHERIT_DIRECTORY + len(text)] = text
             struct.pack_into("<QQQQ", self.mm, page, len(entries), std.get(0, 0), std.get(1, 0), std.get(2, 0))
             for i, e in enumerate(entries):
                 struct.pack_into("<QQQ", self.mm, page + 32 + 24 * i, *e)
@@ -1499,6 +1499,16 @@ class VM:
 
     def read_text(self, va: int, chars: int) -> str:
         return self.read_bytes(va, 2 * chars).decode("utf-16-le", errors="replace")
+
+    def environment_now(self) -> tuple[str, ...]:
+        """The environment block's entries as the guest holds them now (environment.c changes it in place): what a
+        child started with no environment of its own gets (kernel.py PROCESS_CREATE; Sprint 058)."""
+        block = bytes(self.mm[self._process(ENVIRONMENT_OFF):self._process(ENVIRONMENT_OFF) + ENVIRONMENT_SIZE])
+        units = block.decode("utf-16-le")
+        end = units.find("\0\0")
+        if end < 0:
+            raise Unimplemented("the environment block has no end within its area")
+        return tuple(e for e in units[:end].split("\0") if e)
 
     def _resume_idle(self, x: list[int]) -> list[int] | None:
         """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
@@ -1999,7 +2009,7 @@ class VM:
         ended = False
         for ins in insns:
             pc_marks.append((a.here(), ins.address))
-            ended = compile_insn(a, ins, exit_va)
+            ended = compile_insn(a, ins, exit_va, self.runtime.symbols)
         if not ended:
             a.emit(a64.mov_imm(17, addr))
             a.branch(a64.b, exit_va)

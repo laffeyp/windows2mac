@@ -38,8 +38,9 @@ void w2m_unimplemented(u64 a, u64 b) { fprintf(stderr, "unimplemented %llu %llu\
 """
 
 
-def run_native(sources: list[str], body: str) -> subprocess.CompletedProcess[str]:
-    """Build runtime files `sources` (the first with `body` appended) under AddressSanitizer and run the result."""
+def run_native(sources: list[str], body: str, prefix: str = "") -> subprocess.CompletedProcess[str]:
+    """Build runtime files `sources` (the first with `body` appended, each after `prefix`) under AddressSanitizer
+    and run the result."""
     if CLANG is None:
         pytest.skip("no clang on this host")
     with tempfile.TemporaryDirectory(prefix="w2m-native-") as d:
@@ -47,7 +48,7 @@ def run_native(sources: list[str], body: str) -> subprocess.CompletedProcess[str
         (work / "api_ids.h").write_text(api_header())
         units = []
         for i, name in enumerate(sources):
-            text = PREFIX + f'#include "{RUNTIME / name}"\n' + (COMMON + body if i == 0 else "")
+            text = PREFIX + prefix + f'#include "{RUNTIME / name}"\n' + (COMMON + body if i == 0 else "")
             (work / f"unit{i}.c").write_text(text)
             units.append(str(work / f"unit{i}.c"))
         exe = work / "check"
@@ -252,3 +253,90 @@ def test_listing_the_mount_parent_names_the_mount(tmp_path: Path) -> None:
         assert m.read(512, size).decode("utf-16-le").split("\0")[:-2] == ["app"]
     finally:
         files.close_all()
+
+
+# ---- the review of Sprint 055 (Sprint 058) ---------------------------------------------------------------------
+
+INHERIT = """static unsigned long long inherit_page[512];
+#define W2M_INHERIT_VA ((unsigned long long)inherit_page)
+#define W2M_INHERIT_DIRECTORY_VA ((unsigned long long)inherit_page + 0x800)
+"""
+PROCESS_STUBS = """
+static u64 started = ~0ull, room = 4096;
+u64 w2m_host(u64 op, u64 a, u64 b, u64 c, u64 d, u64 *second) {
+    (void)op; (void)d;
+    if (a == W2M_KERNEL_PROCESS_CREATE) { started = c >> 32; if (second) *second = 8; return 4100; }
+    if (a == W2M_KERNEL_PIPE_WRITE) { u64 n = d < room ? d : room; room -= n; return n; }
+    (void)b; return 0;
+}
+static int blocked;
+void w2m_block(u64 deadline) { (void)deadline; blocked++; }
+u64 w2m_counter_now(void) { return 0; }
+u32 w2m_error_mode(void) { return 0; }
+int w2m_is_file_handle(u64 h) { (void)h; return 0; }
+int w2m_is_std_handle(u64 h) { (void)h; return 0; }
+void w2m_signal(void) {}
+int w2m_thread_ended(u32 tid) { (void)tid; return 0; }
+static const u16 here[] = {'C', ':', '\\\\', 'w', '2', 'm', 0};
+const u16 *w2m_working_directory(void) { return here; }
+"""
+
+
+def test_more_than_64_inheritable_handles_stop_the_run() -> None:
+    """Defect 4 of the review of Sprint 055: w2m_object_inheritable filled 64 entries and left the rest out, and the
+    child started without them. A 65th inheritable handle stops the run."""
+    r = run_native(["processes.c", "sync_objects.c"], PROCESS_STUBS + """
+int main(void) {
+    for (int i = 0; i < 65; i++) w2m_object_new(0, W2M_OBJECT_SHARED_EVENT, i, 1);
+    u16 line[] = {'c', 0};
+    u8 si[104] = {0}, info[24] = {0};
+    *(u32 *)si = 104;
+    u64 stack[16] = {0};
+    stack[5] = 1; stack[9] = (u64)si; stack[10] = (u64)info;
+    k32_CreateProcessW(0, (u64)line, 0, 0, (u64)stack);
+    printf("%llu\\n", started);
+    return 0;
+}
+""", INHERIT)
+    assert r.returncode == STOPPED, (r.returncode, r.stdout, r.stderr[-2000:])
+
+
+def test_a_full_pipe_makes_its_writer_wait() -> None:
+    """Defect 6: WriteFile reported every byte written when the pipe took 4096 of 10000. The writer blocks and is
+    retried; the call returns once the pipe has taken every byte (row pipe.large_write)."""
+    r = run_native(["processes.c", "sync_objects.c"], PROCESS_STUBS + """
+int main(void) {
+    u64 h = w2m_object_new(0, W2M_OBJECT_PIPE_WRITE, 1, 0);
+    static u8 data[10000];
+    u32 written = 0;
+    int first = w2m_pipe_write(h, (u64)data, sizeof data, (u64)&written);
+    room = 6000;                                              /* the reader took 6000 */
+    int second = w2m_pipe_write(h, (u64)data, sizeof data, (u64)&written);
+    printf("%d %d %d %u\\n", first, blocked, second, written);
+    return 0;
+}
+""", INHERIT)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert r.stdout.split() == ["-1", "1", "1", "10000"]
+
+
+def test_a_child_starts_in_its_parents_directory() -> None:
+    """Defect 3: a child's GetCurrentDirectoryW answered the program's directory. The parent's, which the host writes
+    to the inherit page beside the child's mark, is the child's (row writer.directory)."""
+    r = run_native(["paths.c"], """
+u64 w2m_file_stat_full(const u16 *full, u64 out) { (void)full; (void)out; return 2; }
+u64 w2m_host(u64 op, u64 a, u64 b, u64 c, u64 d, u64 *e) { (void)op; (void)a; (void)b; (void)c; (void)d; (void)e; return 0; }
+int main(void) {
+    inherit_page[511] = 1;
+    const char *d = "C:\\\\w2m\\\\app\\\\w2m_probe_dir";
+    u16 *to = (u16 *)(inherit_page + 0x100);
+    for (int i = 0; d[i]; i++) to[i] = (u16)d[i];
+    u16 out[64];
+    u64 n = k32_GetCurrentDirectoryW(64, (u64)out);
+    for (u64 i = 0; i < n; i++) putchar((char)out[i]);
+    putchar('\\n');
+    return 0;
+}
+""", INHERIT)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert r.stdout.strip() == "C:\\w2m\\app\\w2m_probe_dir"

@@ -214,6 +214,7 @@
 - **2026-10-11** — Sprint 055 (the crash handler: a second process) closed. `src/w2m/kernel.py`, VM.steps, `tools/guest_runtime/processes.c`, named events and inherited handles, RoInitialize, the fault log, `tools/jit_capture/call_trace.h` and `handler_trace.c`, game run 38176899195, contracts windows.process.processes and windows.winrt.winrt 0.1.0 and windows.time.local_and_error_mode 0.2.0. Dual contract: signal pass (item runs and plants of three families; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED GetCurrentDirectoryA with a fault logged); artifact pass (gates 0, CI on the closing commit). Observation: pass — the handler runs as a second VM and waits as on Windows; the next stop is a NULL PEB.ProcessParameters (Sprint 056).
 - **2026-10-11** — Sprint 056 (the review's findings) closed. `tests/test_runtime_native.py`, `tests/test_runtime_patterns.py`; fixes in file_search.c, registry.c, windows.c, display.c, console.c, file_bridge.py, vm_backend.py; contracts registry, file_search and windows 0.2.0; `derivation` in 24 contracts. Dual contract: signal pass (three families' item runs, 20 plants caught as named, 28 families re-run to CANDIDATE_ACCEPTED); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 - **2026-10-11** — Sprint 057 (trustworthy evidence) closed. `guest_runtime.objects` (each object's symbols and headers), `vm_backend.REQUEST_FILES` and `service_for`, derived candidates and the per-process runtime check in `scripts/family_run.py`, `tests/test_family_dependencies.py`, the plant-anchor gate; six plants re-anchored. Dual contract: signal pass (56 item runs to CANDIDATE_ACCEPTED on derived candidates, every plant caught as named); artifact pass (gates 0, CI on the closing commit). Observation: pass.
+- **2026-10-11** — Sprint 058 (a review of Sprint 055) closed. Fixes in `src/w2m/kernel.py` (handles per process, released at its end; object ids from 2^32; the parent's environment and directory; a 4096-byte pipe; a deadlock as a stop), `processes.c`, `sync_objects.c`, `paths.c`, `file.c`, `runtime.c`, `vm_backend.py` (per-VM symbols, the directory in the inherit page); `tests/test_kernel.py`, `tests/test_vm_symbols.py`, three native harnesses; the processes probe and contract 0.2.0; `host_patched` reaches family_run. Dual contract: signal pass (processes' item run and ten plants; 56 item runs to CANDIDATE_ACCEPTED, every plant as named; the frontier's EXECUTION_STARTED then SERVICE_UNIMPLEMENTED GetCurrentDirectoryA); artifact pass (gates 0, CI on the closing commit). Observation: pass.
 
 ## Deferred
 
@@ -267,6 +268,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 058 (2026-10-11, closed: CI run 38190593421 success on 56ffb04b)
+- **Scope:** the seven defects a full read of Sprint 055's code found, each with a failing check first; the processes probe's new rows.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the checks run on d5ecffe8 and fail; the probe on two runners twice (the second round asks the large write again with 4000 bytes left); the processes item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; its plants; 56 item runs to CANDIDATE_ACCEPTED, twice; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for GetCurrentDirectoryA after 57,411,545 instructions.
+  - *Observation 1 (missing pair, of the judge):* the two plants on kernel.py changed nothing: the plant patched the module, and the run used the names family_run had imported from it. Disposition: resolved-here (family_run rebound; KIT_DIARY #49).
+  - *Observation 2 (payload anomaly, of the Machine):* a deadlock raised out of Machine.run and the run's rows were lost. Disposition: resolved-here (a stop, tested).
+  - *Observation 3 (order violation, of the reaches):* two reaches were named before the rows that their plants now also change existed. Disposition: resolved-here (amended with the reason, as in Sprint 048).
+  - *Observation 4 (vocabulary gap, checked):* none.
 
 ### Sprint 057 (2026-10-11, closed: CI run 38188148154 success on f7b474c7)
 - **Scope:** each family's candidate derived from the runtime's objects, its probe's imports and the requests its files make; every process a run starts checked against the candidate's build.

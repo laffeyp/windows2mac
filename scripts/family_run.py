@@ -2137,18 +2137,28 @@ FAMILIES: dict[str, Family] = {
     "processes": Family(
         name="processes",
         contract_id="windows.process.processes",
-        version="0.1.0",
+        version="0.2.0",
         summary=("A second process as UnityPlayer starts its crash handler: named events shared by name "
                  "(ERROR_ALREADY_EXISTS, one object), CreatePipe and SetHandleInformation, CreateProcessW with inherited "
                  "handles and the pipe as the child's standard input, framed writes and reads, ERROR_BROKEN_PIPE when the "
                  "writer is gone, OpenProcess by id, waits on a process (WAIT_TIMEOUT, STILL_ACTIVE, then the exit code), "
-                 "WaitForMultipleObjectsEx; SetConsoleCtrlHandler."),
+                 "WaitForMultipleObjectsEx; SetConsoleCtrlHandler. Since 0.2.0 (Sprint 058, the review of Sprint 055): a "
+                 "child gets the parent's environment and directory as they are when it starts; a writer's process "
+                 "ending breaks its pipe; a pipe of size 0 holds 4096 bytes, and a writer waits for room."),
         probe="processes", guest_file="processes.c",
         runs={
-              "38178401014": Run("windows-2025", "2dc24b52d929259b223fdd69df721779b652416d8ad58edbbed39ece4b68147e", "processes-1791755781-0", "AMD EPYC 7763 64-Core Processor"),
-              "38178402797": Run("windows-2022", "c319ac016f85d9bb6e7104cef6987ea4fd6069740e743ae8900eca6d418ceeb0", "processes-1791755781-1", "AMD EPYC 7763 64-Core Processor"),
+              "38189162864": Run("windows-2025", "6a37ef1f1ea85d0e2fbc5bb09c1b1daae97c78729d65796f3ffea7d2de96fce9", "processes-1791765864-0", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
+              "38189164581": Run("windows-2022", "232d481b305e92488da79d45bd0bb1b13409d74b268fb7ee0c536bb5e665a0d3", "processes-1791765864-1", "AMD EPYC 7763 64-Core Processor"),
         },
-        documented=(),
+        documented=(
+            documented("ms-createprocessw", "api/processthreadsapi/nf-processthreadsapi-createprocessw", "2024-02-22",
+                       "If this parameter is NULL, the new process uses the environment of the calling process. ... "
+                       "If this parameter is NULL, the new process will have the same current drive and directory as "
+                       "the calling process."),
+            documented("ms-createpipe", "api/namedpipeapi/nf-namedpipeapi-createpipe", "2021-10-13",
+                       "nSize: The size of the buffer for the pipe, in bytes. The size is only a suggestion; the "
+                       "system uses the value to calculate an appropriate buffering mechanism. If this parameter is "
+                       "zero, the system uses the default buffer size."),),
         open_questions=("Each process is a VM of its own; the objects they share are the host's (src/w2m/kernel.py).",
                         "An application name, an environment, a directory, creation flags other than "
                         "NORMAL_PRIORITY_CLASS, a child with no standard handles, and a write no process reads are not "
@@ -2156,15 +2166,28 @@ FAMILIES: dict[str, Family] = {
         derive=processes_rows,
         plants={
             "broken_pipe_as_end_of_file": Plant("        set_error(ERROR_BROKEN_PIPE);\n        return 0;", "        return 1;",
-                                                ("child.record_3",)),
+                                                ("child.record_3", "writer.pipe")),
             "exists_unreported": Plant("    set_error(existed ? ERROR_ALREADY_EXISTS : 0);", "    set_error(0);", ("event.create_again", "child.event_0", "child.event_1", "child.event_2"),
                                        file="sync_objects.c"),
             "exit_code_unread": Plant("    u64 code = (u32)pid == current_pid() ? STILL_ACTIVE\n                                          : w2m_host(",
-                                      "    u64 code = (u32)pid != 0 ? STILL_ACTIVE\n                                          : w2m_host(", ("process.exited",)),
+                                      "    u64 code = (u32)pid != 0 ? STILL_ACTIVE\n                                          : w2m_host(",
+                                      ("process.exited", "writer.pipe")),
             "remove_missing_accepted": Plant("    set_error(ERROR_INVALID_PARAMETER);\n    return w2m_logged(W2M_API_SetConsoleCtrlHandler, routine, 0);",
                                              "    return w2m_logged(W2M_API_SetConsoleCtrlHandler, routine, 1);", ("ctrl.remove_again",)),
             "create_error_left": Plant("    set_error(0);                                                     /* row process.create */", "",
-                                       ("process.create",))}),
+                                       ("process.create",)),
+            # Sprint 058: one plant per defect the review of Sprint 055 found and the new rows judge
+            "environment_at_start": Plant("vm.environment_now(), directories[0]", "vm.environment, directories[0]",
+                                          ("writer.environment",), host="w2m.kernel"),
+            "directory_not_inherited": Plant("        if (((const u64 *)W2M_INHERIT_VA)[511] && parent[0]) {",
+                                             "        if (0 && parent[0]) {", ("writer.directory",), file="paths.c"),
+            "pipe_unbounded": Plant("                n = min(a[3], PIPE_CAPACITY - len(pipe.data))",
+                                    "                n = a[3]", ("pipe.capacity", "pipe.large_write"), host="w2m.kernel"),
+            # a short write reported whole: the filler counts 65536 bytes into a pipe holding 4096, the drain waits for
+            # the rest, and the run deadlocks before the probe prints its rows (all at the end)
+            "write_reports_part": Plant("    if (done < (count & 0xFFFFFFFFull)) {", "    if (0) {", ("*",)),
+            "ended_process_keeps_handles": Plant("                    self._release(current)\n", "",
+                                                 ("*",), host="w2m.kernel")}),
     "network": Family(
         name="network",
         contract_id="windows.network.network",
@@ -2306,7 +2329,7 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
                 gui=f is not None and f.gui, command_line=line, environment=environment)
         # every probe runs on a kernel.Machine: a probe that starts a process gets it (Sprint 055)
-        machine = Machine(spawner(files, environment, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
+        machine = Machine(spawner(files, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
         try:
             r = machine.run(vm)                                  # the clock probes spin until time advances
             foreign = foreign_processes(machine, sources)
@@ -2464,7 +2487,8 @@ def host_patched(module_name: str, old: str, new: str) -> Iterator[None]:
     moved = {id(v): module.__dict__[k] for k, v in saved.items() if not k.startswith("__") and module.__dict__.get(k) is not v}
     rebound: list[tuple[Any, str, Any]] = []
     for name, other in list(sys.modules.items()):
-        if other is module or not name.startswith("w2m") or other is None:
+        # this module too: it imports Machine and spawner (Sprint 058: kernel plants changed nothing until it did)
+        if other is module or other is None or not (name.startswith("w2m") or other is sys.modules.get(__name__)):
             continue
         for k, v in list(vars(other).items()):
             if id(v) in moved:

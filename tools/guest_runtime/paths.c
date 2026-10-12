@@ -38,7 +38,25 @@ static const u16 START[] = {'C', ':', '\\', 'w', '2', 'm', '\\', 'a', 'p', 'p', 
 static u16 scratch[MAX_CHARS];
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
-static const u16 *working(void) { return cwd[0] ? cwd : START; }
+/* The working directory: one SetCurrentDirectoryW set, or a child's parent's (CreateProcessW with no directory:
+ * "the same current drive and directory as the calling process"; vm_backend.py writes it to the inherit page beside
+ * the child's mark; Sprint 058), or the program's. */
+static const u16 *working(void) {
+    static int inherited;
+    if (!cwd[0] && !inherited) {
+        inherited = 1;
+        const u16 *parent = (const u16 *)W2M_INHERIT_DIRECTORY_VA;
+        if (((const u64 *)W2M_INHERIT_VA)[511] && parent[0]) {
+            u64 k = 0;
+            for (; parent[k]; k++) {
+                if (k + 1 >= MAX_CHARS) w2m_unimplemented(W2M_API_GetCurrentDirectoryW, k);
+                cwd[k] = parent[k];
+            }
+            cwd[k] = 0;
+        }
+    }
+    return cwd[0] ? cwd : START;
+}
 static int sep(u16 c) { return c == '\\' || c == '/'; }
 static u16 upper(u16 c) { return c >= 'a' && c <= 'z' ? (u16)(c - 32) : c; }
 static u64 length(const u16 *s) { u64 n = 0; while (s[n]) n++; return n; }
@@ -135,6 +153,9 @@ u64 k32_GetFullPathNameW(u64 name, u64 size, u64 buffer, u64 part) {
     }
     return w2m_logged(W2M_API_GetFullPathNameW, n, n + 1);
 }
+
+/* For processes.c: the directory a child started with no directory of its own gets (Sprint 058). */
+const u16 *w2m_working_directory(void) { return working(); }
 
 u64 k32_GetCurrentDirectoryW(u64 size, u64 buffer) {
     const u16 *w = working();

@@ -14,7 +14,10 @@
  *   - a running child: WaitForSingleObject(0) WAIT_TIMEOUT, GetExitCodeProcess STILL_ACTIVE (259); after it exits,
  *     WAIT_OBJECT_0 and its exit code
  *   - a pipe's reader gets what was written, in order, as much as it asks and is there; with the writers' handles
- *     all closed and nothing left, ReadFile answers FALSE with ERROR_BROKEN_PIPE (109)
+ *     all closed and nothing left, ReadFile answers FALSE with ERROR_BROKEN_PIPE (109), a writer's process ending
+ *     included (rows writer.*; Sprint 058)
+ *   - a pipe made with size 0 holds 4096 bytes: a writer waits while it is full, and a write larger than the room
+ *     left returns once the reader has taken enough that the rest fits (rows pipe.capacity, pipe.large_write)
  *   - OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, the parent's id) answers a handle, the last
  *     error left; WaitForMultipleObjectsEx answers the first signaled index, as WaitForMultipleObjects
  *   - (contracts windows.time.local_and_error_mode 0.2.0) an application name that names the command line's exe, no
@@ -42,6 +45,7 @@ u64 w2m_object_new(u64 api, u32 kind, s64 count, u32 flags);    /* sync_objects.
 u32 w2m_object_kind(u64 h, s64 *count);
 u32 *w2m_object_flags(u64 h);
 int w2m_object_inheritable(u64 (*out)[3], int room);
+const u16 *w2m_working_directory(void);                         /* paths.c */
 u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms);
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
@@ -49,7 +53,7 @@ static u32 current_pid(void) { return (u32)w2m_teb()->client_process; }
 
 /* CreatePipe(hReadPipe, hWritePipe, lpPipeAttributes, nSize) */
 u64 k32_CreatePipe(u64 read, u64 write, u64 attributes, u64 size) {
-    (void)size;                                            /* the buffer's size: not in the rows; the host's grows */
+    if ((u32)size) w2m_unimplemented(W2M_API_CreatePipe, size);   /* a size of its own: not in the rows */
     u32 inherit = 0;
     if (attributes) {
         const u8 *sa = (const u8 *)attributes;             /* nLength, lpSecurityDescriptor, bInheritHandle */
@@ -82,13 +86,23 @@ int w2m_pipe_read(u64 handle, u64 buffer, u64 count, u64 read) {
     return 1;
 }
 
-/* file.c's WriteFile on a pipe's write end: 1 written, -2 not a pipe. */
+/* file.c's WriteFile on a pipe's write end: 1 written, -1 the pipe is full (the thread blocks and retries, the bytes
+ * taken so far in its scratch), -2 not a pipe. The host takes what fits. */
 int w2m_pipe_write(u64 handle, u64 buffer, u64 count, u64 written) {
     s64 id = 0;
     if (w2m_object_kind(handle, &id) != W2M_OBJECT_PIPE_WRITE) return -2;
-    u64 n = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_PIPE_WRITE, (u64)id, buffer, count & 0xFFFFFFFFull, 0);
-    *(u32 *)written = (u32)n;
+    struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    u64 done = sc->progress;
+    done += w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_PIPE_WRITE, (u64)id, buffer + done, (count & 0xFFFFFFFFull) - done, 0);
     w2m_signal();
+    if (done < (count & 0xFFFFFFFFull)) {
+        sc->progress = done;
+        w2m_block(~0ull);
+        return -1;
+    }
+    sc->progress = 0;
+    sc->wait_deadline = 0;
+    *(u32 *)written = (u32)done;
     return 1;
 }
 
@@ -124,7 +138,7 @@ u64 k32_CreateProcessW(u64 application, u64 command_line, u64 process_attributes
     u32 si_flags = *(const u32 *)(si + 60);
     if (*(const u32 *)si < 104 || (si_flags & ~STARTF_USESTDHANDLES))
         w2m_unimplemented(W2M_API_CreateProcessW, si_flags);
-    static u64 list[INHERITED + 4][3];
+    static u64 list[INHERITED + 5][3];
     int n = inherit ? w2m_object_inheritable(list, INHERITED) : 0;
     for (int i = 0; (si_flags & STARTF_USESTDHANDLES) && i < 3; i++) {   /* hStdInput, hStdOutput, hStdError */
         list[n][0] = (u64)i;
@@ -135,6 +149,13 @@ u64 k32_CreateProcessW(u64 application, u64 command_line, u64 process_attributes
     list[n][0] = 0;                                                   /* "A child process inherits the error mode" */
     list[n][1] = W2M_INHERIT_ERROR_MODE;
     list[n][2] = w2m_error_mode();
+    n++;
+    const u16 *working = w2m_working_directory();                     /* "the same current drive and directory" */
+    u64 working_chars = 0;
+    while (working[working_chars]) working_chars++;
+    list[n][0] = working_chars;
+    list[n][1] = W2M_INHERIT_DIRECTORY;
+    list[n][2] = (u64)working;
     n++;
     u64 chars = 0;
     while (((const u16 *)command_line)[chars]) chars++;
