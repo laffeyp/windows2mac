@@ -74,6 +74,58 @@ static void end(void) {
     n = 0;
 }
 
+/* IDXGIOutput::GetDisplayModeList (slot 8), as UnityPlayer RVA 0xdc5084 calls it after the walk (frontier
+ * 643a6283510c-1791802134771149000 stopped there; Sprint 065): EnumFormat DXGI_FORMAT_R8G8B8A8_UNORM (28), Flags 0,
+ * first with a NULL list for the count, then with a buffer of that count. The game prints the resolutions it keeps
+ * (game run 38216081440's unity.log: 640x480 and 800x600 to 1920x1080). Rows: the count for six formats under each
+ * of the flags INTERLACED (1) and SCALING (2); every mode of format 28 under flags 0 and 2; a buffer one short, one
+ * long, and a NULL count. */
+typedef struct { UINT Width, Height, Numerator, Denominator, Format, ScanlineOrdering, Scaling; } MODE_DESC;
+typedef HRESULT (WINAPI *modes_fn)(void *, UINT, UINT, UINT *, MODE_DESC *);
+static MODE_DESC list[512];
+
+static void mode_rows(const char *name, void *output, UINT format, UINT flags) {
+    UINT count = 0;
+    HRESULT hr = ((modes_fn)SLOT(output, 8))(output, format, flags, &count, NULL);
+    if (hr != S_OK || count > 512) return;
+    for (unsigned k = 0; k < sizeof list; k++) ((char *)list)[k] = (char)0xA5;
+    UINT got = count;
+    hr = ((modes_fn)SLOT(output, 8))(output, format, flags, &got, list);
+    row(name); field("hr", (DWORD)hr); field("count", got); end();
+    for (UINT k = 0; k < got && hr == S_OK; k++) {
+        rowi(name, k, "", NONE);
+        field("width", list[k].Width); field("height", list[k].Height); field("numerator", list[k].Numerator);
+        field("denominator", list[k].Denominator); field("format", list[k].Format);
+        field("scanline", list[k].ScanlineOrdering); field("scaling", list[k].Scaling); end();
+    }
+}
+
+static void modes(void *output) {
+    static const UINT formats[] = {28, 29, 87, 91, 24, 10};    /* R8G8B8A8_UNORM, _SRGB, B8G8R8A8_UNORM, _SRGB,
+                                                                  R10G10B10A2_UNORM, R16G16B16A16_FLOAT */
+    for (unsigned f = 0; f < sizeof formats / sizeof formats[0]; f++)
+        for (UINT flags = 0; flags < 4; flags++) {
+            UINT count = 0xA5A5A5A5u;
+            HRESULT hr = ((modes_fn)SLOT(output, 8))(output, formats[f], flags, &count, NULL);
+            rowi("modes.count.", formats[f], ".", flags); field("hr", (DWORD)hr); field("count", count); end();
+        }
+    mode_rows("modes.28.0.", output, 28, 0);
+    mode_rows("modes.28.2.", output, 28, 2);
+
+    UINT count = 0;
+    ((modes_fn)SLOT(output, 8))(output, 28, 0, &count, NULL);
+    UINT shortby = count - 1;
+    for (unsigned k = 0; k < sizeof list; k++) ((char *)list)[k] = (char)0xA5;
+    HRESULT hr = ((modes_fn)SLOT(output, 8))(output, 28, 0, &shortby, list);
+    row("modes.short"); field("hr", (DWORD)hr); field("count", shortby);
+    field("last_written", count >= 2 && list[count - 2].Width != 0xA5A5A5A5u); end();
+    UINT longby = count + 5;
+    hr = ((modes_fn)SLOT(output, 8))(output, 28, 0, &longby, list);
+    row("modes.long"); field("hr", (DWORD)hr); field("count", longby); end();
+    hr = ((modes_fn)SLOT(output, 8))(output, 28, 0, NULL, NULL);
+    row("modes.null_count"); field("hr", (DWORD)hr); end();
+}
+
 static void walk(void) {
     POINT zero = {0, 0};
     HMONITOR primary = MonitorFromPoint(zero, MONITOR_DEFAULTTOPRIMARY);
@@ -139,6 +191,7 @@ static void walk(void) {
             field("attached", od.AttachedToDesktop != 0); field("rotation", od.Rotation);
             field("monitor_is_primary", od.Monitor == primary); end();
             if (od.Monitor == primary) matched = 1;
+            if (i == 0 && j == 0) modes(output);
             ((ref_fn)SLOT(output, 2))(output);
         }
         ULONG ra = ((ref_fn)SLOT(adapter, 2))(adapter);
