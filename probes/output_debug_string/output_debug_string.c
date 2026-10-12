@@ -7,7 +7,7 @@
  * OutputDebugStringA. A vectored handler records each exception it sees (code, flags, parameter count and the first
  * two parameters, the second as an offset from the string when it points into it) and continues the search. Rows:
  * per call (A with a short string, A with an empty one, W with a short string), the exceptions seen in order and the
- * last error after SetLastError(0xDEAD).
+ * last error after SetLastError(0xDEAD). The A rows are written before the W call.
  */
 #include <windows.h>
 
@@ -60,10 +60,12 @@ void start(void) {
     SetLastError(0xDEAD);
     OutputDebugStringA("");
     report("a.empty", "", GetLastError());
+    DWORD written;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);   /* the A rows, before the W call */
+    n = 0;
     SetLastError(0xDEAD);
     OutputDebugStringW(w);
     report("w.short", w, GetLastError());
-    DWORD written;
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), out, n, &written, NULL);
     ExitProcess(0);
 }
