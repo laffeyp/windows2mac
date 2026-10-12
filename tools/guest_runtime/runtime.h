@@ -229,6 +229,7 @@ u64 w2m_host(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 *second);
 u64 w2m_logged(u64 api, u64 arg0, u64 ret);
 void w2m_unimplemented(u64 api, u64 detail);
 u64 w2m_file_write(u64 handle, u64 buffer, u64 count, u64 written);   /* file.c: WriteFile on a file handle */
+u32 w2m_file_read_all(const unsigned short *name, u8 *buf, u64 max, u64 *size);   /* file.c: a whole file (Sprint 063) */
 void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtime.c: the guest CPUID profile */
 int w2m_file_is_open(u64 handle);                                       /* file.c */
 u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */

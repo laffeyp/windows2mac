@@ -1374,10 +1374,10 @@
   }
  },
  "windows": {
-  "candidate_sha256": "sha256:6c2cf9043aa341a0a93afa46cf2054e4e8732fc56274f527cbe2b87fc9bb0cc0",
+  "candidate_sha256": "sha256:293409121841e95f2537d196855f9acacc6de7b603141858f9f4f897aba63c81",
   "divergence": {
-   "38182422811": null,
-   "38182424645": null
+   "38210803867": null,
+   "38210806334": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
@@ -1387,10 +1387,10 @@
    "SESSION_INIT": 1
   },
   "family": "windows",
-  "record": "store/runs/family-windows-1791783960675221000",
+  "record": "store/runs/family-windows-1791785586253651000",
   "verdicts": {
-   "38182422811": "conforms",
-   "38182424645": "conforms"
+   "38210803867": "conforms",
+   "38210806334": "conforms"
   }
  },
  "winrt": {

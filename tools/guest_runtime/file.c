@@ -132,6 +132,25 @@ static u64 lookup(u64 chars, u64 *id) {
     return w2m_host(W2M_FILE_LOOKUP, (u64)path, chars, 0, 0, id);
 }
 
+/* For windows.c's LoadImageW with LR_LOADFROMFILE (Sprint 063): the whole file `name` names, read into buf (at most
+ * max bytes, its size at *size); 0, or the Windows error CreateFileW(OPEN_EXISTING) gives for the name. */
+u32 w2m_file_read_all(const unsigned short *name, u8 *buf, u64 max, u64 *size) {
+    u64 id = 0;
+    u64 chars = normalize((u64)name);
+    if (!chars) return ERROR_PATH_NOT_FOUND;
+    u64 kind = lookup(chars, &id);
+    if (kind == LOOKUP_PARENT_MISSING) return ERROR_PATH_NOT_FOUND;
+    if (kind == LOOKUP_ABSENT) return ERROR_FILE_NOT_FOUND;
+    if (kind == LOOKUP_DIRECTORY) return ERROR_ACCESS_DENIED;
+    u64 fd = w2m_host(W2M_FILE_OPEN, (u64)path, chars, 0, 0, &id);
+    if ((long long)fd < 0) w2m_unimplemented(W2M_API_LoadImageW, fd);
+    u64 n = w2m_host(W2M_FILE_SIZE, fd, 0, 0, 0, 0);
+    if (n > max) w2m_unimplemented(W2M_API_LoadImageW, n);              /* a larger image: no row */
+    *size = w2m_host(W2M_FILE_READ, fd, (u64)buf, n, 0, 0);
+    w2m_host(W2M_FILE_CLOSE, fd, 0, 0, 0, 0);
+    return 0;
+}
+
 /* For file_attributes.c (Sprint 047): the name normalized as CreateFileW's, then FILE_STAT (32 bytes at `out`:
  * size, birth, access and write times). Returns the kind. */
 u64 w2m_file_stat(u64 name, u64 out) {
