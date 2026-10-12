@@ -18,9 +18,9 @@
 #define QPC_FREQUENCY 10000000ull     /* QueryPerformanceFrequency on every observed runner */
 #define NO_CPUID 0xFFFFFFFFu
 
-static int clock_from_host(void) {
-    return *(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_CLOCK_MODE_OFF) != 0;
-}
+static u64 clock_mode(void) { return *(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_CLOCK_MODE_OFF); }
+static int clock_from_host(void) { return clock_mode() == 1; }
+static u64 monitor_word(u64 off) { return *(const volatile u64 *)(W2M_MONITOR_DATA_VA + off); }
 
 static u64 cntvct(void) {
     u64 v;
@@ -41,6 +41,8 @@ static u64 rescale(u64 ticks, u64 from, u64 to) {
 
 static u64 counter_now(void) {
     if (clock_from_host()) return w2m_host(W2M_HOST_CLOCK, 0, 0, 0, 0, 0);
+    if (clock_mode() == 2)                 /* the instructions this process ran at a set rate, plus the idle warp */
+        return rescale(monitor_word(0), monitor_word(W2M_CLOCK_RATE_OFF), QPC_FREQUENCY) + monitor_word(W2M_CLOCK_WARP_OFF);
     return rescale(cntvct(), cntfrq(), QPC_FREQUENCY);
 }
 
@@ -67,9 +69,9 @@ static u64 base_filetime, base_counter;
  * (thread_queries.c reads it too). */
 u64 w2m_filetime_now(void) {
     if (clock_from_host()) return w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
-    u64 c = rescale(cntvct(), cntfrq(), QPC_FREQUENCY);             /* 10 MHz: one tick is 100 ns */
+    u64 c = counter_now();                                          /* 10 MHz: one tick is 100 ns */
     if (base_filetime == 0) {
-        base_filetime = w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
+        base_filetime = clock_mode() == 2 ? monitor_word(W2M_CLOCK_EPOCH_OFF) : w2m_host(W2M_HOST_FILETIME, 0, 0, 0, 0, 0);
         base_counter = c;
     }
     return base_filetime + (c - base_counter);

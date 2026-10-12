@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import mmap
 import os
+import random
 import struct
 import subprocess
 import sys
@@ -84,7 +85,9 @@ STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_stat
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 FOREGROUND_MODE = 0x80              # MONITOR_DATA + this: 0 the process takes the foreground, 1 another holds it (windows.c)
 PROGRESS_SECONDS = 30               # a run prints a progress line this often (wall clock) on stderr
-CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
+CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock,
+                                    # 2 the instructions run at CLOCK_RATE a second plus CLOCK_WARP (process.c)
+CLOCK_RATE, CLOCK_WARP, CLOCK_EPOCH = 0x90, 0x98, 0xA0   # MONITOR_DATA + these (runtime.h; Sprint 065 item 10)
 YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
 FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
 X87_SW_OFF, X87_ST_OFF = 158, 768    # the state block's x87_status_word (x87_tag_abridged after it) and st0-st7
@@ -1116,7 +1119,8 @@ class VM:
                  environment: tuple[str, ...] = (), process_id: int = 0,
                  inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None,
                  process_group: int = START_GROUP, call_trace: tuple[str, ...] = (),
-                 call_trace_from: str | None = None, foreground_held: bool = False) -> None:
+                 call_trace_from: str | None = None, foreground_held: bool = False,
+                 instruction_clock: tuple[int, int] | None = None) -> None:
         self.ld = loaded
         self.call_trace = call_trace       # the images whose calls call_trace.c records, at most 2 (Sprint 060)
         if len(call_trace) > 2:
@@ -1125,6 +1129,11 @@ class VM:
         self.lockstep = lockstep
         self.clock = clock if clock is not None else monotonic_count   # a given clock is served by the host
         self.clock_from_host = clock is not None
+        # (instructions a second, the wall clock's start as a FILETIME): the guest's clock counts the instructions it
+        # runs, and jumps to the next deadline when no thread can run (Sprint 065 item 10); the host's random bytes
+        # come from a fixed seed, so two runs of one tree make the same calls
+        self.instruction_clock = instruction_clock
+        self._random = random.Random(0x5EED) if instruction_clock else None
         self.gui = gui                     # the Steam-like start: no standard handles (console.c)
         self.foreground_held = foreground_held   # another process keeps the foreground (windows.c SetFocus; Sprint 065)
         self.command_line = command_line if command_line is not None else f'"C:\\w2m\\app\\{image_name}"'
@@ -1237,7 +1246,11 @@ class VM:
 
     def _init_process(self, tid: int) -> None:
         """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode."""
-        struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE, 1 if self.clock_from_host else 0)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE,
+                         1 if self.clock_from_host else 2 if self.instruction_clock else 0)
+        if self.instruction_clock:
+            struct.pack_into("<QQQ", self.mm, MONITOR_DATA + CLOCK_RATE, self.instruction_clock[0], 0,
+                             self.instruction_clock[1])
         struct.pack_into("<Q", self.mm, MONITOR_DATA + START_MODE, 1 if self.gui else 0)
         struct.pack_into("<Q", self.mm, MONITOR_DATA + FOREGROUND_MODE, 1 if self.foreground_held else 0)
         line = self.command_line.encode("utf-16-le") + b"\0\0"
@@ -1683,9 +1696,12 @@ class VM:
                 return IDLE
             if not timed:
                 raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
-            time.sleep(0.001)
-            nxt = timed[0]
-            nxt.status = "ready"
+            if self.warp_to_deadline():
+                nxt = next(t for t in (self.threads[k] for k in rotation) if t.status == "ready")
+            else:
+                time.sleep(0.001)
+                nxt = timed[0]
+                nxt.status = "ready"
         if schedule & SCHEDULE_ANSWER:
             x[0] = int(nxt is not cur)                       # SwitchToThread: nonzero when another thread runs
         self._publish_blocked()
@@ -1719,13 +1735,32 @@ class VM:
             raise Unimplemented("the environment block has no end within its area")
         return tuple(e for e in units[:end].split("\0") if e)
 
+    def warp_to_deadline(self) -> bool:
+        """With the instruction clock and no thread ready: move the clock to the earliest deadline of a blocked thread
+        and make that thread ready, as QEMU's -icount sleep=off does; False when no thread waits with a deadline."""
+        timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
+        if not timed or not self.instruction_clock:
+            return False
+        first = min(timed, key=lambda t: (t.deadline, t.tid))
+        rate = self.instruction_clock[0]
+        executed, warp = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0], self._clock_warp()
+        now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
+        if first.deadline > now:
+            struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_WARP, warp + first.deadline - now)
+        first.status = "ready"
+        return True
+
+    def _clock_warp(self) -> int:
+        return int(struct.unpack_from("<Q", self.mm, MONITOR_DATA + CLOCK_WARP)[0])
+
     def _resume_idle(self, x: list[int]) -> list[int] | None:
         """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
         deadline runs to check it."""
         assert self._idle is not None
         cur, schedule, _ = self._idle
         self._idle = None
-        if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()):
+        if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()) \
+                and not self.warp_to_deadline():
             timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
             if timed:
                 timed[0].status = "ready"
@@ -1842,7 +1877,7 @@ class VM:
         elif op == HOST_CLOCK:
             result = self.clock() & M64
         elif op == HOST_RANDOM:
-            self.mem.write(a1, os.urandom(a0))
+            self.mem.write(a1, self._random.randbytes(a0) if self._random else os.urandom(a0))
             result = a0
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH

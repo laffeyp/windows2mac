@@ -60,6 +60,11 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
+# The rate at which the guest's clock counts instructions (Sprint 065 item 10): a scratch run at 4e9 logged "Completed
+# reload, in 0.053 seconds" (Windows 0.154) and "UnloadTime: 0.352600 ms" (Windows 0.996900), ratios 0.344 and 0.354,
+# so Windows' work runs at about 1.4e9 of w2m's instructions a second
+CLOCK_RATE = 1_400_000_000
+REFERENCE_START = 134362624920000000   # game run 38216081440's start, 2026-10-12T07:08:12Z, as a FILETIME
 REACH_AFTER_LOG = 20_000_000_000    # instructions a run goes on past the reference's last line for its main thread
 HARNESS_STOPS = ("stopped by signal", "the log holds", "max_steps", "timeout")    # stops the harness chose: killed
 REFERENCE = ROOT / "store" / "game-runs" / "38216081440"     # the batch run with thread names (Sprint 064)
@@ -110,6 +115,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--scratch", action="store_true", help="write to runs/, not store/runs/; a dirty tree allowed")
     ap.add_argument("--plant", choices=sorted(PLANTS), help="run with a planted fault (recorded in the baseline)")
     ap.add_argument("--max-steps", type=int, default=1_000_000_000)    # a run goes to its stop (Sprint 050: 20.6 M)
+    # the guest's clock counts instructions at this rate (Sprint 065 item 10); 0: the host's clock
+    ap.add_argument("--clock-rate", type=int, default=CLOCK_RATE)
     a = ap.parse_args(argv)
     sources = None
     if a.plant:
@@ -146,7 +153,8 @@ def main(argv: list[str]) -> int:
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
                 image_name=Path(a.exe).name, gui=True, foreground_held=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
                 command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}', call_trace=TRACED_IMAGES,
-                call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources)       # where jit_capture.c opens the Windows trace
+                call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources,       # where jit_capture.c opens the Windows trace
+                instruction_clock=(a.clock_rate, REFERENCE_START) if a.clock_rate else None)
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
         machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
         # the run ends where its reference does: all eight batch-mode game runs (37982448071 to 38275716702) end at

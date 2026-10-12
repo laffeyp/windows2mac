@@ -313,7 +313,8 @@ class Machine:
                 return p
         timed = [p for p in rotation if p.vm.waits_with_deadline()]
         if timed:
-            time.sleep(0.001)
+            if not getattr(timed[0].vm, "instruction_clock", None):   # an instruction clock jumps instead of waiting
+                time.sleep(0.001)
             return timed[0]
         return None
 
