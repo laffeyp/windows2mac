@@ -173,6 +173,7 @@ void w2m_call_guest(struct w2m_guest_call *c, u64 f, u64 a, u64 b, u64 d, u64 e)
     (void)c; (void)f; (void)a; (void)b; (void)d; (void)e;
 }
 void w2m_return_to(u64 a, u64 b) { (void)a; (void)b; }
+u32 w2m_file_read_all(const unsigned short *a, u8 *b, u64 c, u64 *d) { (void)a; (void)b; (void)c; (void)d; return 2; }
 u64 user32_MonitorFromWindow(u64, u64);
 u64 user32_MonitorFromRect(u64, u64);
 """
@@ -220,7 +221,7 @@ int main(void) {
     u16 title[301]; for (int i = 0; i < 300; i++) title[i] = 't'; title[300] = 0;
     u8 cs[80] = {0};
     *(u64 *)(cs + 56) = (u64)title;
-    user32_DefWindowProcW(WINDOW_BASE, 0x81, 0, (u64)cs);
+    user32_DefWindowProcW(WINDOW_BASE, 0x81, 0, (u64)cs, 0);    /* answers through w2m_return_to (Sprint 063) */
     int n = 0; while (windows[0].title[n]) n++;
     printf("%d\\n", n);
     return 0;

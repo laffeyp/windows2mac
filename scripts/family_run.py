@@ -298,38 +298,73 @@ def parameters_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def without_message_0x60(printed: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+    """The probe's drains (rows queue.<drain>.<NN> and their "after" rows) without message 0x60, renumbered. An
+    empty queue's last error after the window was activated is 0 or left as the system's own messages fall (the
+    second executions of runs 38210803867 and 38210806334 differ there), so it is kept only for the first drain."""
+    dropped: set[str] = set()
+    kept: dict[str, int] = {}
+    for r in printed:
+        s = r.get("s", "")
+        parts = s.split(".")
+        if parts[0] != "queue" or len(parts) != 3:
+            yield r
+            continue
+        if r.get("after"):
+            if s in dropped:
+                continue
+            yield r | {"s": f"queue.{parts[1]}.{kept[s]:02d}"}
+            continue
+        if r.get("msg") == 0x60:
+            dropped.add(s)
+            continue
+        n = sum(1 for k in kept if k.startswith(f"queue.{parts[1]}."))
+        kept[s] = n
+        if parts[1] != "first" and not r.get("noremove"):
+            r = {k: v for k, v in r.items() if k != "noremove_err"}
+        yield r | {"s": f"queue.{parts[1]}.{n:02d}"}
+
+
 def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
     windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
     work area's less 21 (519 on Server 2025's 720, 525 on 2022's 728: the taskbars differ). The rows keep each
     window's geometry from its own origin, positions as relations (x = y, a multiple of 26, the second window 26 past
     the first), the batch window's heights as their excess over that default, and the work area's bottom as lying
-    above the screen's."""
+    above the screen's. Sprint 063: the game's window and another thread's ("game", "other", rows msg.game.*,
+    msg.other.*) are placed as the batch window is; a drained message's row after DispatchMessageA shares its key and
+    is keyed "<key>.after". With five windows the cascade did not always advance (the second executions of runs
+    38210803867 and 38210806334 put the play window on the batch window's 26), so a window's place past the first is
+    no longer kept, only that it lies on the cascade. Message 0x60, which Windows posts to a system window of the
+    thread on its own schedule after activation (open question), is taken out of each drain's rows, and the drain's
+    later rows are numbered without it."""
+    printed = list(without_message_0x60(printed))
     work = next((r for r in printed if r["s"] == "screen.work_area"), None)
     default_height = (work["rect_bottom"] - work["rect_top"]) * 3 // 4 - 21 if work else 0
     origin: dict[str, tuple[int, int]] = {}
     for r in printed:
-        if r["s"] in ("msg.batch.1", "msg.play.1") and "x" in r:
+        if r["s"] in ("msg.batch.1", "msg.play.1", "msg.game.1", "msg.other.1") and "x" in r:
             origin[r["s"].split(".")[1]] = (r["x"], r["y"])
     out = []
     for r in printed:
+        if r.get("after"):
+            r = {k: v for k, v in r.items() if k != "after"} | {"s": r["s"] + ".after"}
         s = r["s"]
         if s == "screen.work_area":
             out.append({"s": s, "left": r["rect_left"], "top": r["rect_top"], "right": r["rect_right"],
                         "bottom_above_768": r["rect_bottom"] < 768})
             continue
-        which = "batch" if s.startswith(("msg.batch.", "batch.")) else "play" if s.startswith(("msg.play.", "play.")) else None
+        which = next((w for w in ("batch", "play", "game", "other") if s.startswith((f"msg.{w}.", f"{w}."))), None)
         if which is None or which not in origin:
             out.append(r)
             continue
         x, y = origin[which]
-        tall = which == "batch"                     # CW_USEDEFAULT height: from the work area
+        tall = which != "play"                      # CW_USEDEFAULT height: from the work area
         r = dict(r)
         if "x" in r:
-            first = origin.get("batch", (x, y))[0]
             r |= {"x": None, "y": None}
             r = {k: v for k, v in r.items() if v is not None} | {
-                "x_equals_y": x == y, "x_in_cascade": x > 0 and x % 26 == 0, "past_first": x - first}
+                "x_equals_y": x == y, "x_in_cascade": x > 0 and x % 26 == 0}
         for prefix in ("in", "out", "rect"):
             if f"{prefix}_left" not in r:
                 continue
@@ -2254,32 +2289,54 @@ FAMILIES: dict[str, Family] = {
     "windows": Family(
         name="windows",
         contract_id="windows.windows.windows",
-        version="0.2.0",
+        version="0.3.0",
         summary=("Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, "
                  "CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, "
                  "WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default "
                  "size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the "
-                 "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW)."),
+                 "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW). Sprint 063: the game's "
+                 "later calls on its window (batch run 38206263976): SetWindowLongPtrA, the queue (WM_DWMNCRENDERINGCHANGED "
+                 "posted to each new window; PeekMessageA, GetMessageExtraInfo, TranslateMessage, DispatchMessageA; "
+                 "PostMessageW, WM_QUIT), RegisterDeviceNotificationW, GetFocus and SetFocus with the activation's "
+                 "messages, LoadImageW of a cursor file, a missing file and a missing icon."),
         probe="windows", guest_file="windows.c",
-        runs={
-              "38182422811": Run("windows-2025", "97ad55015dfa144bb7322a90a651722686d5bb1df8d8e1df74180ac8afcdc09f", "windows-1791759423-0", "AMD EPYC 9V74 80-Core Processor"),
-              "38182424645": Run("windows-2022", "f1655d9fd40c36838ab28f1d1de7aea5839ca99ea55fd91ed8e5c23408befdcd", "windows-1791759423-1", "AMD EPYC 7763 64-Core Processor"),
+        # the probe writes its cursor file under GetTempPathW, which reads TMP (set on the runners; Sprint 063)
+        environment=("TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp", "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"),
+        runs={   # Sprint 063: the game's later calls and the boundaries (probe windows, rows from create.game on)
+              "38210803867": Run("windows-2025", "2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bba172", "windows-1791785079-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38210806334": Run("windows-2022", "6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7", "windows-1791785079-1", "AMD EPYC 9V74 80-Core Processor"),
         },
         documented=(),
         open_questions=("Where CW_USEDEFAULT places a window depends on the windows the desktop made before (52, 78, 130 "
                         "seen for a probe's first); w2m's cascade starts at 52.",
                         "The default height is fitted: 3/4 of the work area's height less 21 on both runners (519, 525).",
-                        "Windows are records; nothing is drawn, and ShowWindow, the message loop and every message after "
-                        "WM_CREATE are later work."),
+                        "Windows are records; nothing is drawn, and ShowWindow is later work.",
+                        "Message 0x60, undocumented (wiert.me, 2020-12-22, lists it among loop messages without "
+                        "documentation), is posted to a system window of the thread some time after its window is "
+                        "activated: the probe met it after a posted WM_USER message on every run (wParam 0x80000001 on "
+                        "Server 2025, 1 on 2022), and the game dispatched one at seq 3491-3493 to a procedure it never "
+                        "saw. Its arrival varies (one execution met two in the WM_QUIT drain); w2m posts none, and the "
+                        "derivation takes it out of each drain (windows_rows).",
+                        "On Windows DefWindowProcW's WM_ACTIVATE sends WM_IME_SETCONTEXT, WM_IME_NOTIFY and the first "
+                        "WM_SETFOCUS from inside; w2m sends them from SetFocus in the same order. A procedure that keeps "
+                        "WM_ACTIVATE from DefWindowProcW would get them in w2m and not on Windows.",
+                        "LoadImageW of a cursor file left the last error 0 in the probe; the game's call left 6 (its "
+                        "file, written past the capture's 32-call count, is not on the record)."),
         derive=windows_rows,
         plants={
             "minmax_not_sent": Plant("    w2m_call_guest(&f->call, w->procedure, h, WM_GETMINMAXINFO, 0, (u64)f->minmax);",
                                      "    f->step = 1;\n    w2m_call_guest(&f->call, w->procedure, h, WM_NCCREATE, 0, (u64)f->create);",
-                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*", "create.play", "play.window_rect", "msg.offscreen.*", "create.offscreen")),
+                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*", "create.play", "play.window_rect", "msg.offscreen.*", "create.offscreen",
+                                      # Sprint 063: the game's and the other thread's windows; the game window's later
+                                      # messages are numbered after its creation's, so one fewer moves each of them
+                                      # (msg.game.4, 5, 10 and 11 land on rows of the same message)
+                                      "msg.game.0", "msg.game.1", "msg.game.2", "msg.game.3", "create.game", "msg.game.6", "msg.game.7", "msg.game.8", "msg.game.9",
+                                      "msg.game.12", "msg.game.13", "msg.game.14", "msg.game.15", "msg.game.16", "msg.game.17", "msg.game.18", "msg.game.19", "msg.game.20",
+                                      "msg.game.21", "msg.game.22", "msg.other.*", "create.other")),
             "frame_thin": Plant("#define FRAME_TOP 31 ", "#define FRAME_TOP 26 ",
-                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect", "msg.offscreen.2")),
+                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect", "msg.offscreen.2", "msg.game.2", "msg.other.2")),
             "height_from_screen": Plant("        cy = (work[3] - work[1]) * 3 / 4 - 21;", "        cy = 768 * 3 / 4 - 21;",
-                                        ("msg.batch.2", "batch.client_rect", "batch.window_rect")),
+                                        ("msg.batch.2", "batch.client_rect", "batch.window_rect", "msg.game.2", "msg.other.2")),
             "no_edge_in_create": Plant("    *(u32 *)(cs + 72) = ((u32)style & WS_CAPTION) == WS_CAPTION ? WS_EX_WINDOWEDGE : 0;",
                                        "    *(u32 *)(cs + 72) = 0;", ("msg.play.1", "msg.play.3", "msg.offscreen.1", "msg.offscreen.3")),
             "extra_unbounded": Plant("        if (index + 8 > classes[w->cls].extra) return 0;", "        if (index + 8 > EXTRA) return 0;",
@@ -2293,7 +2350,23 @@ FAMILIES: dict[str, Family] = {
                                             "        if (1)\n            return w2m_logged(W2M_API_MonitorFromWindow",
                                             ("offscreen.monitor",), file="display.c"),
             "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
-                                     ("icon.own_103",))}),
+                                     ("icon.own_103",)),
+            # Sprint 063
+            "no_render_message": Plant("        post(w->owner, f->window, WM_DWMNCRENDERINGCHANGED, 1, 0);", "",
+                                       ("queue.first.*", "msg.game.[4-9]", "msg.game.1[0-9]", "msg.game.2[0-2]")),
+            "quit_code_dropped": Plant("    t->quit_code = (u64)(s64)(s32)code;", "    t->quit_code = 0;", ("queue.quit.00",)),
+            "focus_any_thread": Plant("    if (w->owner != tid) {                                                  /* row focus.other_thread */",
+                                      "    if (0) {", ("focus.other_thread",)),
+            "no_activate_app_to_others": Plant("        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, 1);",
+                                               "        if (0 && other) SEND(other, WM_ACTIVATEAPP, 1, 1);", ("msg.game.1[0-9]", "msg.game.2[0-2]", "focus.set")),
+            "activate_sends_nothing": Plant("    int sends = ((u32)msg == WM_ACTIVATE && (u32)wparam == 1) ||", "    int sends = 0 ||",
+                                            ("msg.game.1[5-9]", "msg.game.2[0-2]", "focus.set")),
+            "focus_returns_null": Plant("        w2m_return_to(f->rsp, w2m_logged(W2M_API_SetFocus, f->window, f->window));",
+                                        "        w2m_return_to(f->rsp, w2m_logged(W2M_API_SetFocus, f->window, 0));", ("focus.set",)),
+            "cursor_same_handle": Plant("CURSOR_BASE + 0x10 * ++cursors);", "CURSOR_BASE + 0x10 * (cursors = 1));", ("image.cursor_file_again",)),
+            "missing_file_error_3": Plant("            set_error(error);                                                  /* row image.missing_file */",
+                                          "            set_error(3);", ("image.missing_file",)),
+            "notification_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_RegisterDeviceNotificationW", "    return w2m_logged(W2M_API_RegisterDeviceNotificationW", ("device_notification",))}),
     "winrt": Family(
         name="winrt",
         contract_id="windows.winrt.winrt",
