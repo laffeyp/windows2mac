@@ -665,8 +665,10 @@ def execute(fpu: Fpu, ic: str, opcode: int, reg: int, rm: int | None, mem_read: 
             r, flags = div(b, a, p, rc)
         if rm is None and ic in ("FADD", "FMUL", "FDIVR"):
             flags |= load_flags & IE                       # an SNaN operand
-            if not (is_nan(a) or _unsupported(a)):         # a NaN or unsupported ST(0) decides alone: no DE (set 065)
-                flags |= load_flags & DE
+            if not (is_nan(a) or _unsupported(a) or flags & ZE):   # a NaN or unsupported ST(0) decides alone, and a
+                flags |= load_flags & DE                   # division by zero raises ZE alone: no DE (sets 065, 065c)
+            if load_flags & IE and is_nan(b) and is_nan(a) and not is_snan(a):
+                r = quiet(a)                               # an SNaN and a QNaN: the QNaN (Vol 1 Table 4-7, x87; set 065c)
         fpu.raise_flags(flags)
         fpu.set_st(dest, r)
         return
