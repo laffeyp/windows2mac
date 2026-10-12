@@ -33,6 +33,7 @@ import mmap
 import os
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 from bisect import bisect_right
@@ -81,6 +82,7 @@ MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits 
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 FOREGROUND_MODE = 0x80              # MONITOR_DATA + this: 0 the process takes the foreground, 1 another holds it (windows.c)
+PROGRESS_SECONDS = 30               # a run prints a progress line this often (wall clock) on stderr
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
 YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
 FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
@@ -2520,8 +2522,13 @@ class VM:
         pc = self.dispatch_va
         cpsr = CPSR_EL1H
         stop = "timeout"
+        report_at = time.monotonic() + PROGRESS_SECONDS
+        reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()))
         try:
             while True:
+                if time.monotonic() >= report_at:             # a run that goes quiet says where it is
+                    reported = self._progress(reported, x)
+                    report_at = time.monotonic() + PROGRESS_SECONDS
                 cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
                 r = cmd(f"run {interrupt_every_ms if interrupt_every_ms is not None else timeout_ms}")
                 e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
@@ -2661,6 +2668,24 @@ class VM:
         self.final = x
         return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop,
                       self.calls_total(), self.calls_dropped())
+
+    def _progress(self, before: tuple[int, Counter[int], Counter[tuple[int, int]], int],
+                  x: list[int]) -> tuple[int, Counter[int], Counter[tuple[int, int]], int]:
+        """One progress line on stderr: instructions and their rate over the last PROGRESS_SECONDS, exits by
+        hvc and the busiest exit sites since the last line, calls made, each thread's status, and the x86
+        address the current thread is at."""
+        executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+        calls = sum(self.calls_total().values())
+        exits = Counter(self.exits)
+        exits.subtract(before[1])
+        sites = Counter(self.exit_sites)
+        sites.subtract(before[2])
+        threads = Counter(t.status for t in self.threads.values())
+        print(f"progress: {executed} instructions ({(executed - before[0]) / PROGRESS_SECONDS / 1e6:.2f}M/s); "
+              f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
+              + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
+              + f"; threads {dict(threads)}; thread {self.current_tid} at 0x{x[17]:x}", file=sys.stderr, flush=True)
+        return executed, Counter(self.exits), Counter(self.exit_sites), calls
 
     def close(self) -> None:
         for r in self.mem.regions:
