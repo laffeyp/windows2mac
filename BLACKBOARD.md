@@ -269,7 +269,7 @@
 
 ## Sprint tail
 
-### Sprint 058 (2026-10-11, closed: CI pending)
+### Sprint 058 (2026-10-11, closed: CI run 38190593421 success on 56ffb04b)
 - **Scope:** the seven defects a full read of Sprint 055's code found, each with a failing check first; the processes probe's new rows.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the checks run on d5ecffe8 and fail; the probe on two runners twice (the second round asks the large write again with 4000 bytes left); the processes item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; its plants; 56 item runs to CANDIDATE_ACCEPTED, twice; the frontier's EXECUTION_STARTED, then SERVICE_UNIMPLEMENTED for GetCurrentDirectoryA after 57,411,545 instructions.

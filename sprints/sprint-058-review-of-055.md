@@ -115,3 +115,4 @@ All seven fixed and checked; processes re-accepted at 0.2.0; every family accept
 - **The frontier** stops where Sprint 055 left it: GetCurrentDirectoryA after 57,411,545 instructions.
 - **Left:** CreateProcessW with STARTF_USESTDHANDLES and bInheritHandles FALSE still runs instead of stopping (the
   card's item 4, for 059's start).
+- **Closed on CI run 38190593421** (success on 56ffb04b).
