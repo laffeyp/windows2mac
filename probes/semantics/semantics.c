@@ -32,6 +32,12 @@
  * and each result record the same after its xmm; run_case inserts them with VINSERTF128 before the XMM loads
  * (legacy MOVDQU leaves bits 255:128 alone) and the collectors extract them with VEXTRACTF128; at a fault they
  * come from the CONTEXT's AVX state (LocateXStateFeature). Format 2 files run without any AVX instruction.
+ * Format 4 (Sprint 065): each case record and each result record has a 96-byte x87 block after xmm: FCW, FSW
+ * (u16 each), FXSAVE's abridged tag byte, 11 pad, ST0-ST7 in stack order (10 bytes each). run_case saves the
+ * harness's FXSAVE image and loads the case's with FXRSTOR before MXCSR and the XMM loads (an image of the
+ * harness's own state with the case's FCW, FSW, tags and registers, FOP, FIP and FDP zero); the collectors store
+ * FXSAVE; at a fault the state comes from the CONTEXT's FltSave, which has the FXSAVE layout. restore reloads the
+ * harness's image. Formats 2 and 3 run without FXSAVE or FXRSTOR.
  */
 #include <windows.h>
 #include <stdio.h>
@@ -46,13 +52,15 @@
 #define WINDOW 64
 #define EDGE 32
 #define CODE_BYTES 32
+#define X87_BLOCK 96
 
 typedef unsigned long long u64;
 
 __attribute__((used)) u64 case_regs[16], case_rflags, out_regs[16], out_rflags, out_marker, out_fault, out_fault_rip;
 __attribute__((used)) unsigned int case_mxcsr, out_mxcsr, h_mxcsr;
 __attribute__((used, aligned(16))) u64 case_xmm[32], out_xmm[32], h_xmm[20], case_ymmhi[32], out_ymmhi[32];
-__attribute__((used)) unsigned char use_ymm;
+__attribute__((used)) unsigned char use_ymm, use_x87;
+__attribute__((used, aligned(16))) unsigned char case_fx[512], out_fx[512], h_fx[512];
 __attribute__((used)) u64 h_rsp, h_rbx, h_rbp, h_rsi, h_rdi, h_r12, h_r13, h_r14, h_r15;
 __attribute__((used)) void *code_ptr;
 __attribute__((used, aligned(16))) unsigned char flag_stack[256], collect_stack[256];
@@ -81,6 +89,11 @@ __asm__(
     "  movdqu %xmm9, h_xmm+48(%rip)\n  movdqu %xmm10, h_xmm+64(%rip)\n  movdqu %xmm11, h_xmm+80(%rip)\n"
     "  movdqu %xmm12, h_xmm+96(%rip)\n  movdqu %xmm13, h_xmm+112(%rip)\n  movdqu %xmm14, h_xmm+128(%rip)\n"
     "  movdqu %xmm15, h_xmm+144(%rip)\n"
+    "  cmpb $0, use_x87(%rip)\n"
+    "  je 2f\n"
+    "  fxsave64 h_fx(%rip)\n"
+    "  fxrstor64 case_fx(%rip)\n"
+    "2:\n"
     "  ldmxcsr case_mxcsr(%rip)\n"
     "  cmpb $0, use_ymm(%rip)\n"
     "  je 1f\n"
@@ -119,10 +132,18 @@ __asm__(
     "  movq %r13, out_regs+104(%rip)\n  movq %r14, out_regs+112(%rip)\n  movq %r15, out_regs+120(%rip)\n"
     "  stmxcsr out_mxcsr(%rip)\n"
     X16(STORE_XMM)
+    "  cmpb $0, use_x87(%rip)\n"
+    "  je 4f\n"
+    "  fxsave64 out_fx(%rip)\n"
+    "4:\n"
     "  cmpb $0, use_ymm(%rip)\n"
     "  je restore\n"
     X16(STORE_YMMHI)
     "restore:\n"
+    "  cmpb $0, use_x87(%rip)\n"
+    "  je 5f\n"
+    "  fxrstor64 h_fx(%rip)\n"
+    "5:\n"
     "  movq h_rsp(%rip), %rsp\n  movq h_rbx(%rip), %rbx\n  movq h_rbp(%rip), %rbp\n"
     "  movq h_rsi(%rip), %rsi\n  movq h_rdi(%rip), %rdi\n  movq h_r12(%rip), %r12\n"
     "  movq h_r13(%rip), %r13\n  movq h_r14(%rip), %r14\n  movq h_r15(%rip), %r15\n"
@@ -154,6 +175,7 @@ static LONG CALLBACK on_fault(EXCEPTION_POINTERS *ep) {
         out_xmm[2 * i] = c->FltSave.XmmRegisters[i].Low;
         out_xmm[2 * i + 1] = (u64)c->FltSave.XmmRegisters[i].High;
     }
+    if (use_x87) memcpy(out_fx, &c->FltSave, sizeof out_fx);      /* XSAVE_FORMAT: the FXSAVE image at the fault */
     if (use_ymm) {
         DWORD len = 0;
         void *avx = LocateXStateFeature(c, XSTATE_AVX, &len);
@@ -194,11 +216,14 @@ int main(int argc, char **argv) {
     char magic[4];
     unsigned int format, count;
     if (fread(magic, 1, 4, in) != 4 || memcmp(magic, "W2MS", 4) || fread(&format, 4, 1, in) != 1 ||
-        (format != 2 && format != 3) || fread(&count, 4, 1, in) != 1) {
-        fprintf(stderr, "semantics: not a format 2 or 3 case file\n");
+        format < 2 || format > 4 || fread(&count, 4, 1, in) != 1) {
+        fprintf(stderr, "semantics: not a format 2, 3 or 4 case file\n");
         return 2;
     }
     use_ymm = format == 3;
+    use_x87 = format == 4;
+    static __attribute__((aligned(16))) unsigned char template_fx[512];
+    __asm__ volatile("fxsave64 %0" : "=m"(template_fx));             /* the harness's state: MXCSR and the rest valid */
     unsigned char *code = alloc_at(CODE_VA, 0x1000, PAGE_EXECUTE_READWRITE);
     unsigned char *data = alloc_at(DATA_VA, 0x1000, PAGE_READWRITE);
     unsigned char *stack = alloc_at(STACK_VA, 0x10000, PAGE_READWRITE);
@@ -213,16 +238,28 @@ int main(int argc, char **argv) {
     for (unsigned int n = 0; n < count; n++) {
         unsigned char head[8], bytes[CODE_BYTES];
         u64 mxcsr;
+        unsigned char x87[X87_BLOCK];
         if (fread(head, 1, 8, in) != 8 || fread(bytes, 1, CODE_BYTES, in) != CODE_BYTES ||
             fread(case_regs, 8, 16, in) != 16 || fread(&case_rflags, 8, 1, in) != 1 ||
             fread(&mxcsr, 8, 1, in) != 1 || fread(case_xmm, 8, 32, in) != 32 ||
-            (use_ymm && fread(case_ymmhi, 8, 32, in) != 32) ||
+            (use_ymm && fread(case_ymmhi, 8, 32, in) != 32) || (use_x87 && fread(x87, 1, X87_BLOCK, in) != X87_BLOCK) ||
             fread(data + DATA_OFF, 1, WINDOW, in) != WINDOW || fread(stack + STACK_OFF, 1, WINDOW, in) != WINDOW ||
             fread(data + EDGE_OFF, 1, EDGE, in) != EDGE) {
             fprintf(stderr, "semantics: case %u truncated\n", n);
             return 2;
         }
         case_mxcsr = (unsigned int)mxcsr;
+        if (use_x87) {
+            memcpy(case_fx, template_fx, sizeof case_fx);
+            memcpy(case_fx + 0, x87 + 0, 2);                       /* FCW */
+            memcpy(case_fx + 2, x87 + 2, 2);                       /* FSW */
+            case_fx[4] = x87[4];                                   /* abridged FTW */
+            memset(case_fx + 6, 0, 18);                            /* FOP, FIP, FDP */
+            for (int i = 0; i < 8; i++) {
+                memset(case_fx + 32 + 16 * i, 0, 16);
+                memcpy(case_fx + 32 + 16 * i, x87 + 16 + 10 * i, 10);
+            }
+        }
         unsigned len = head[0];
         memset(code, 0xCC, 0x1000);                            /* int3 everywhere else */
         memcpy(code, bytes, len);
@@ -233,6 +270,7 @@ int main(int argc, char **argv) {
         memset(out_regs, 0, sizeof out_regs);
         memset(out_xmm, 0, sizeof out_xmm);
         memset(out_ymmhi, 0, sizeof out_ymmhi);
+        memset(out_fx, 0, sizeof out_fx);
         out_rflags = out_marker = out_fault = out_fault_rip = 0;
         out_mxcsr = 0;
         in_case = 1;
@@ -248,6 +286,12 @@ int main(int argc, char **argv) {
         fwrite(&mx, 8, 1, out);
         fwrite(out_xmm, 8, 32, out);
         if (use_ymm) fwrite(out_ymmhi, 8, 32, out);
+        if (use_x87) {
+            unsigned char block[X87_BLOCK] = {0};
+            memcpy(block, out_fx, 5);                              /* FCW, FSW, abridged FTW */
+            for (int i = 0; i < 8; i++) memcpy(block + 16 + 10 * i, out_fx + 32 + 16 * i, 10);
+            fwrite(block, 1, X87_BLOCK, out);
+        }
         fwrite(data + DATA_OFF, 1, WINDOW, out);
         fwrite(stack + STACK_OFF, 1, WINDOW, out);
         fwrite(data + EDGE_OFF, 1, EDGE, out);

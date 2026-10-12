@@ -117,6 +117,8 @@ def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory, vm: 
         for i, v in enumerate(vm.ymm_hi()):
             if v != r.ymm_hi[i]:
                 diffs.append((f"fault ymm{i}.hi", f"vm {v:032x}, cpu {r.ymm_hi[i]:032x}"))
+    if r.x87 is not None and vm is not None:                    # format 4: the x87 state as the fault left it
+        diffs += [(f"fault {k.split(' ', 1)[1]}", d) for k, d in sd.judge_x87(c.label, c, sd.X87State(*vm.x87()), r.x87)]
     diffs += windows(mem, r)
     return diffs
 
@@ -148,6 +150,8 @@ def judge_done(c: sd.Case, r: sd.Result, vm: VM, x: list[int], mem: Memory) -> l
         for i, v in enumerate(vm.ymm_hi()):
             if v != r.ymm_hi[i]:
                 diffs.append((f"ymm{i}.hi", f"vm {v:032x}, cpu {r.ymm_hi[i]:032x}"))
+    if r.x87 is not None:                                       # format 4 (Sprint 065)
+        diffs += [(k.split(" ", 1)[1], d) for k, d in sd.judge_x87(c.label, c, sd.X87State(*vm.x87()), r.x87)]
     diffs += windows(mem, r)
     return diffs
 
@@ -219,6 +223,8 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
         v.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1))
         v.set_mxcsr(c.mxcsr, list(c.xmm))
         v.set_ymm_hi(list(c.ymm_hi))
+        if c.x87 is not None:
+            v.set_x87(c.x87.cw, c.x87.sw, c.x87.tags, list(c.x87.st))
 
     def on_dispatch(v: VM, x: list[int]) -> None:
         if state["current"] >= 0:

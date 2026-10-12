@@ -27,7 +27,9 @@ compared: the SDM leaves it undefined), DF, MXCSR, XMM0-15, the three windows; f
 fault code, the faulting RIP and the whole state at the fault.
 
 Format 1 (Sprint 037's case file, now store/probe-runs/semantics-037-cases.bin) is read by
-read_cases_format1 and judged by judge_format1.
+read_cases_format1 and judged by judge_format1. Format 3 (Sprint 049) adds YMM bits 255:128; format 4
+(Sprint 065) adds the x87 state, an X87_BLOCK after the XMM registers of each case and each result:
+FCW, FSW and FXSAVE's abridged tag byte, 11 bytes of padding, then ST0-ST7 in stack order, 10 bytes each.
 """
 
 from __future__ import annotations
@@ -68,11 +70,13 @@ STACK_SIZE = 0x10000
 RET_TARGET = CODE_VA + 0x100
 STATES = 4
 SSE_STATES = 8
+X87_STATES = 48                                         # set 065: 15 classes, few encodings, many stack shapes
 CONTROL_STATES = 16
 FLAG_BITS = {"C": 0, "P": 2, "A": 4, "Z": 6, "S": 7, "O": 11}
 DF_BIT = 10
 CASE_SIZE = 8 + CODE_BYTES + 8 * 16 + 8 + 8 + 16 * 16 + WINDOW + WINDOW + EDGE
 RESULT_SIZE = 8 * 16 + 8 * 5 + 16 * 16 + WINDOW + WINDOW + EDGE
+X87_BLOCK = 16 + 8 * 10                                  # format 4: FCW, FSW, abridged tags, padding, ST0-ST7
 CASE_SIZE_1 = 8 + CODE_BYTES + 8 * 16 + 8 + WINDOW + WINDOW
 RESULT_SIZE_1 = 8 * 16 + 8 + 8 + 8 + WINDOW + WINDOW
 EDGE_VALUES = (0, 1, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, 0x7FFF_FFFF, 0x8000_0000, 0xFFFF_FFFF,
@@ -108,6 +112,26 @@ class Case:
     edge: bytes = bytes(EDGE)
     kind: int = 0                 # 0 ordinary, 1 fault placement
     ymm_hi: list[int] = field(default_factory=lambda: [0] * 16)   # YMM bits 255:128 (format 3, Sprint 049)
+    x87: X87State | None = None                                   # format 4 (Sprint 065)
+
+
+@dataclass
+class X87State:
+    """The x87 state as FXSAVE holds it: the control and status words, the abridged tags (bit p: physical
+    register p in use) and ST0-ST7 in stack order, each an 80-bit pattern."""
+    cw: int
+    sw: int
+    tags: int
+    st: list[int]
+
+    def pack(self) -> bytes:
+        return struct.pack("<HHB11x", self.cw, self.sw, self.tags) + b"".join(x.to_bytes(10, "little") for x in self.st)
+
+    @staticmethod
+    def unpack(raw: bytes, at: int = 0) -> X87State:
+        cw, sw, tags = struct.unpack_from("<HHB", raw, at)
+        return X87State(cw, sw, tags, [int.from_bytes(raw[at + 16 + 10 * i:at + 26 + 10 * i], "little")
+                                       for i in range(8)])
 
 
 def _value(rng: random.Random) -> int:
@@ -145,7 +169,68 @@ def _mxcsr(rng: random.Random) -> int:
     return v
 
 
-def _state(rng: random.Random, sse: bool, ymm: bool = False) -> Case:
+def _e80(sign: int, e: int, m: int) -> int:
+    return sign << 79 | e << 64 | m
+
+
+# 80-bit boundaries (SDM Vol. 1 §8.2.2, Table 8-3): zeros, denormals and a pseudo-denormal, the smallest and
+# largest normals, 1, 2^63 and 2^64 (FSIN/FCOS's reduction range, FIST's limits), infinities, quiet and
+# signalling NaNs, the indefinite, a pseudo-infinity and pseudo-NaN and an unnormal (invalid encodings)
+X87_EDGES = (_e80(0, 0, 0), _e80(1, 0, 0), _e80(0, 0, 1), _e80(0, 0, (1 << 63) - 1), _e80(0, 0, 1 << 63),
+             _e80(0, 1, 1 << 63), _e80(1, 1, 1 << 63), _e80(0, 0x7FFE, M64), _e80(1, 0x7FFE, M64),
+             _e80(0, 16383, 1 << 63), _e80(1, 16383, 1 << 63), _e80(0, 16383 + 62, M64), _e80(0, 16383 + 63, 1 << 63),
+             _e80(1, 16383 + 63, 1 << 63), _e80(0, 16383 + 64, 1 << 63), _e80(0, 16383 + 30, 1 << 63),
+             _e80(1, 16383 + 31, 1 << 63), _e80(0, 16383 + 31, 1 << 63), _e80(0, 16383 + 15, 1 << 63),
+             _e80(0, 0x7FFF, 1 << 63), _e80(1, 0x7FFF, 1 << 63), _e80(0, 0x7FFF, 0xC000_0000_0000_0000),
+             _e80(1, 0x7FFF, 0xC000_0000_0000_0000), _e80(0, 0x7FFF, 0x8000_0000_0000_0001),
+             _e80(1, 0x7FFF, 0xA000_0000_0000_0000), _e80(0, 0x7FFF, 0), _e80(0, 0x7FFF, 0x4000_0000_0000_0000),
+             _e80(0, 16383, 0x4000_0000_0000_0000), _e80(0, 16384, 0xC90F_DAA2_2168_C235))   # last: pi
+
+
+def _x87_value(rng: random.Random) -> int:
+    r = rng.random()
+    if r < 0.35:
+        return rng.choice(X87_EDGES)
+    if r < 0.55:                                  # a double or a float widened: what compiled code holds
+        from w2m import x87
+        f, m = (fp.F64, x87.M64) if rng.getrandbits(1) else (fp.F32, x87.M32)
+        return x87.from_ieee(m, _fp_lane(rng, f))[0]
+    if r < 0.9:                                   # an ordinary number of wide exponent range: rounding is exercised
+        return _e80(rng.getrandbits(1), 16383 + rng.randrange(-70, 71), 1 << 63 | rng.getrandbits(63))
+    return rng.getrandbits(80)
+
+
+def _x87_state(rng: random.Random) -> X87State:
+    """A register stack of random depth at a random TOP, a control word with every exception masked (an unmasked
+    one is #MF, which the model does not raise) and random precision and rounding, and a status word with random
+    condition codes and sticky flags (ES and B clear: no exception is pending)."""
+    depth = rng.choice((0, 1, 1, 2, 2, 3, 4, 7, 8))
+    top = rng.randrange(8)
+    pc = rng.choice((2, 2, 3, 3, 0, 1))
+    cw = 0x40 | 0x3F | pc << 8 | rng.getrandbits(2) << 10 | (0x1000 if rng.random() < 0.1 else 0)
+    sw = top << 11 | rng.getrandbits(1) << 14 | rng.getrandbits(3) << 8
+    sw |= rng.getrandbits(7) & 0x7F if rng.random() < 0.5 else 0
+    tags = sum(1 << ((top + i) & 7) for i in range(depth))
+    st = [_x87_value(rng) if i < depth else rng.choice((0, rng.getrandbits(80))) for i in range(8)]
+    return X87State(cw, sw, tags, st)
+
+
+def _x87_data(rng: random.Random) -> bytes:
+    """A data window of 16-byte slots, each an 80-bit value (padded), a double pair, or random bytes: FLD m80, m64
+    and m32 and the integer loads each read meaningful bits wherever the operand lands."""
+    out = b""
+    for _ in range(WINDOW // 16):
+        r = rng.random()
+        if r < 0.4:
+            out += _x87_value(rng).to_bytes(10, "little") + rng.randbytes(6)
+        elif r < 0.8:
+            out += _xmm(rng).to_bytes(16, "little")
+        else:
+            out += b"".join(_value(rng).to_bytes(8, "little") for _ in range(2))
+    return out
+
+
+def _state(rng: random.Random, sse: bool, ymm: bool = False, x87: bool = False) -> Case:
     regs = [_value(rng) for _ in range(16)]
     regs[4] = STACK_VA + STACK_OFF + 0x20 + 8 * rng.randrange(4)      # push and pop stay inside the window
     rflags = 0x2 | sum(1 << b for b in FLAG_BITS.values() if rng.getrandbits(1))
@@ -158,6 +243,9 @@ def _state(rng: random.Random, sse: bool, ymm: bool = False) -> Case:
              [_xmm(rng) for _ in range(16)], rng.randbytes(EDGE))
     if ymm:                                                    # format-3 sets only: older sets draw nothing more
         c.ymm_hi = [_xmm(rng) for _ in range(16)]
+    if x87:                                                    # format-4 sets only
+        c.x87 = _x87_state(rng)
+        c.data = _x87_data(rng)
     return c
 
 
@@ -458,7 +546,11 @@ CLASSES_050 = frozenset((
 FIXED_050 = {"LOOP": "e20e", "LOOPE": "e10e", "LOOPNE": "e00e", "JRCXZ": "e30e", "LEAVE": "c9", "POPFQ": "9d",
              "LODSB": "ac", "STOSB": "aa", "MOVSB": "a4", "MOVSD": "a5", "SCASB": "ae", "SCASD": "af", "CMPSB": "a6",
              "CMPSD": "a7"}
+# set 065: the x87 classes Mono's JIT and the C runtime reach (run_frontier stops past seq 3426; Sprint 065)
+CLASSES_065 = frozenset(("FLD", "FSTP", "FMUL", "FSQRT", "FSIN", "FCOS", "FADD", "FWAIT", "FISTTP", "FIADD", "FISTP",
+                         "FIDIVR", "FLDCW", "FNCLEX", "FNSTSW"))
 FORMAT_3 = frozenset(("049", "049b"))              # sets whose records carry the YMM upper halves
+FORMAT_4 = frozenset(("065",))                     # sets whose records carry the x87 state
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -478,7 +570,12 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "048": (2026_10_10_48, CLASSES_048, (), False),
     "049": (2026_10_11_49, CLASSES_049, (), False),
     "049b": (2026_10_11_491, CLASSES_049B, (), False),
-    "050": (2026_10_11_50, CLASSES_050, (), False)}
+    "050": (2026_10_11_50, CLASSES_050, (), False),
+    "065": (2026_10_12_65, CLASSES_065, (), False)}
+
+
+def set_format(case_set: str) -> int:
+    return 3 if case_set in FORMAT_3 else 4 if case_set in FORMAT_4 else 2
 
 
 def _locked_variants(lockable: tuple[str, ...]) -> Iterator[Any]:
@@ -496,6 +593,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                 locked: tuple[str, ...] = (), control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     ymm = classes in (CLASSES_049, CLASSES_049B)    # format 3 (FORMAT_3): states carry YMM upper halves
+    x87 = classes is CLASSES_065                     # format 4 (FORMAT_4): states carry the x87 state
     out: list[Case] = []
     skipped: Counter[str] = Counter()
     source = list(encgen_cases()) + list(_locked_variants(locked))
@@ -538,8 +636,8 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             sse = True
         placeable = True
         wide = (_memory_size(c.raw[:d.length]) or 0) if ymm else 0
-        for _ in range(SSE_STATES if sse else STATES):
-            s = _state(rng, sse, ymm)
+        for _ in range(X87_STATES if x87 else SSE_STATES if sse else STATES):
+            s = _state(rng, sse, ymm, x87)
             if not _place(ins, s.regs, rng, size=wide):
                 skipped["address not placeable (RIP-relative or absolute)"] += 1
                 placeable = False
@@ -556,7 +654,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
             out.append(s)
         size = _memory_size(raw)
         if placeable and size is not None:
-            s = _state(rng, sse, ymm)
+            s = _state(rng, sse, ymm, x87)
             target = PAGE_END - rng.randrange(1, size) if size > 1 else PAGE_END
             if _place(ins, s.regs, rng, lambda target=target: target):
                 s.code, s.label, s.kind = raw, d.iclass, 1
@@ -628,11 +726,15 @@ def write_cases(cases: list[Case], path: Path, fmt: int = 2) -> None:
             f.write(b"".join(x.to_bytes(16, "little") for x in c.xmm))
             if fmt == 3:
                 f.write(b"".join(x.to_bytes(16, "little") for x in c.ymm_hi))
+            if fmt == 4:
+                assert c.x87 is not None
+                f.write(c.x87.pack())
             f.write(c.data + c.stack + c.edge)
 
 
 def case_format(path: Path) -> int:
-    """2 or 3, from a case file's header (format 3: the records carry YMM upper halves; Sprint 049)."""
+    """2, 3 or 4 from a case file's header (format 3: the records carry YMM upper halves, Sprint 049; format 4 the
+    x87 state, Sprint 065)."""
     raw = path.read_bytes()[:8]
     assert raw[:4] == b"W2MS"
     return int(struct.unpack_from("<I", raw, 4)[0])
@@ -641,9 +743,9 @@ def case_format(path: Path) -> int:
 def read_cases(path: Path) -> list[Case]:
     raw = path.read_bytes()
     fmt = struct.unpack_from("<I", raw, 4)[0]
-    assert raw[:4] == b"W2MS" and fmt in (2, 3)
+    assert raw[:4] == b"W2MS" and fmt in (2, 3, 4)
     count = struct.unpack_from("<I", raw, 8)[0]
-    size = CASE_SIZE + (256 if fmt == 3 else 0)
+    size = CASE_SIZE + (256 if fmt == 3 else X87_BLOCK if fmt == 4 else 0)
     out = []
     for n in range(count):
         p = 12 + n * size
@@ -658,8 +760,12 @@ def read_cases(path: Path) -> list[Case]:
         if fmt == 3:
             ymm_hi = [int.from_bytes(raw[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
             q += 256
+        x87 = None
+        if fmt == 4:
+            x87 = X87State.unpack(raw, q)
+            q += X87_BLOCK
         out.append(Case(code, regs, rflags, raw[q:q + WINDOW], raw[q + WINDOW:q + 2 * WINDOW], "", mxcsr, xmm,
-                        raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], raw[p + 1], ymm_hi))
+                        raw[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], raw[p + 1], ymm_hi, x87))
     return out
 
 
@@ -691,6 +797,7 @@ class Result:
     xmm: list[int] = field(default_factory=lambda: [0] * 16)
     edge: bytes = bytes(EDGE)
     ymm_hi: list[int] | None = None       # format 3: YMM bits 255:128 after the case
+    x87: X87State | None = None           # format 4: the x87 state after the case (at a fault, the CONTEXT's)
 
 
 def read_results(path: Path, fmt: int = 2) -> list[Result]:
@@ -699,11 +806,11 @@ def read_results(path: Path, fmt: int = 2) -> list[Result]:
 
 
 def result_size(fmt: int) -> int:
-    return RESULT_SIZE + (256 if fmt == 3 else 0)
+    return RESULT_SIZE + (256 if fmt == 3 else X87_BLOCK if fmt == 4 else 0)
 
 
 def parse_result(rec: bytes, fmt: int = 2) -> Result:
-    """One result record (format 2, or 3 with YMM upper halves after the XMM registers)."""
+    """One result record (format 2; 3 with YMM upper halves after the XMM registers; 4 with the x87 state there)."""
     regs = list(struct.unpack_from("<16Q", rec, 0))
     rflags, marker, fault, fault_rip, mxcsr = struct.unpack_from("<5Q", rec, 128)
     q = 168
@@ -713,8 +820,12 @@ def parse_result(rec: bytes, fmt: int = 2) -> Result:
     if fmt == 3:
         ymm_hi = [int.from_bytes(rec[q + 16 * i:q + 16 * i + 16], "little") for i in range(16)]
         q += 256
+    x87 = None
+    if fmt == 4:
+        x87 = X87State.unpack(rec, q)
+        q += X87_BLOCK
     return Result(regs, rflags, marker, fault, rec[q:q + WINDOW], rec[q + WINDOW:q + 2 * WINDOW],
-                  fault_rip, mxcsr, xmm, rec[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], ymm_hi)
+                  fault_rip, mxcsr, xmm, rec[q + 2 * WINDOW:q + 2 * WINDOW + EDGE], ymm_hi, x87)
 
 
 def read_results_format1(path: Path) -> list[Result]:
@@ -755,6 +866,11 @@ def model(c: Case) -> ModelRun | str:
     th.mxcsr = c.mxcsr
     th.xmm = list(c.xmm)
     th.ymm_hi = list(c.ymm_hi)
+    if c.x87 is not None:
+        th.fcw, th.x87_sw, th.x87_tags = c.x87.cw, c.x87.sw, c.x87.tags
+        top = c.x87.sw >> 11 & 7
+        for i, v in enumerate(c.x87.st):
+            th.x87_regs[(top + i) & 7] = v
     try:
         rt.step()
     except GuestFault as e:
@@ -833,12 +949,46 @@ def judge(c: Case, r: Result, label: str) -> list[tuple[str, str]]:
         for i in range(16):
             if th.ymm_hi[i] != r.ymm_hi[i]:
                 diffs.append((f"{label} ymm{i}.hi", f"model {th.ymm_hi[i]:032x}, cpu {r.ymm_hi[i]:032x}"))
+    if r.x87 is not None:                                       # format 4 (Sprint 065)
+        diffs += judge_x87(label, c, model_x87(th), r.x87)
     if rt.mem.read(DATA_VA + DATA_OFF, WINDOW) != r.data:
         diffs.append((f"{label} data", "data window differs"))
     if rt.mem.read(STACK_VA + STACK_OFF, WINDOW) != r.stack:
         diffs.append((f"{label} stack", "stack window differs"))
     if rt.mem.read(DATA_VA + EDGE_OFF, EDGE) != r.edge:
         diffs.append((f"{label} edge", "edge window differs"))
+    return diffs
+
+
+# FSW condition codes the SDM leaves undefined after each class (Vol. 2 "FPU Flags Affected"); FNSTSW and FWAIT
+# change none, so every bit they leave is the case's own
+C0, C1, C2, C3 = 1 << 8, 1 << 9, 1 << 10, 1 << 14
+X87_UNDEFINED = {"FLD": C0 | C2 | C3, "FSTP": C0 | C2 | C3, "FMUL": C0 | C2 | C3, "FADD": C0 | C2 | C3,
+                 "FIADD": C0 | C2 | C3, "FIDIVR": C0 | C2 | C3, "FSQRT": C0 | C2 | C3, "FISTP": C0 | C2 | C3,
+                 "FISTTP": C0 | C2 | C3, "FSIN": C0 | C3, "FCOS": C0 | C3, "FLDCW": C0 | C1 | C2 | C3,
+                 "FNCLEX": C0 | C1 | C2 | C3}
+
+
+def model_x87(th: Any) -> X87State:
+    top = th.x87_sw >> 11 & 7
+    return X87State(th.fcw, th.x87_sw, th.x87_tags, [th.x87_regs[(top + i) & 7] for i in range(8)])
+
+
+def judge_x87(label: str, c: Case, m: X87State, r: X87State) -> list[tuple[str, str]]:
+    """The x87 state after a case: FCW, FSW without the condition codes the class leaves undefined, the abridged
+    tags, and ST0-ST7 (an empty register too: neither the CPU nor the model changes one it does not write)."""
+    diffs = []
+    if m.cw != r.cw:
+        diffs.append((f"{label} FCW", f"model 0x{m.cw:x}, cpu 0x{r.cw:x}"))
+    keep = ~X87_UNDEFINED.get(label, 0) & 0xFFFF
+    if m.sw & keep != r.sw & keep:
+        before = f" (in 0x{c.x87.sw:x})" if c.x87 is not None else ""
+        diffs.append((f"{label} FSW", f"model 0x{m.sw:x}, cpu 0x{r.sw:x}{before}"))
+    if m.tags != r.tags:
+        diffs.append((f"{label} FTW", f"model 0x{m.tags:02x}, cpu 0x{r.tags:02x}"))
+    for i in range(8):
+        if m.st[i] != r.st[i]:
+            diffs.append((f"{label} st{i}", f"model {m.st[i]:020x}, cpu {r.st[i]:020x}"))
     return diffs
 
 
@@ -882,7 +1032,7 @@ def main(argv: list[str]) -> int:
     if a.cases:
         seed, class_set, locked, control = CASE_SETS[a.set]
         cs, skipped = build_cases(seed, class_set, locked, control)
-        write_cases(cs, a.out, 3 if a.set in FORMAT_3 else 2)
+        write_cases(cs, a.out, set_format(a.set))
         labels = Counter(c.label for c in cs)
         print(f"{len(cs)} cases over {len(labels)} iclasses ({sum(c.kind for c in cs)} fault placements) -> "
               f"{a.out} ({a.out.stat().st_size} bytes); skipped {dict(skipped)}")
@@ -914,7 +1064,7 @@ def judge_run(a: argparse.Namespace) -> int:
 
     def key(x: Result) -> tuple[Any, ...]:
         return (tuple(x.regs), x.rflags, x.marker, x.fault, x.mxcsr, tuple(x.xmm), x.data, x.stack, x.edge,
-                tuple(x.ymm_hi or ()))
+                tuple(x.ymm_hi or ()), x.x87.pack() if x.x87 else b"")
     unstable = sum(1 for i in range(len(built)) if len({key(x[i]) for x in runs}) > 1)
     classes: Counter[str] = Counter()
     example: dict[str, str] = {}

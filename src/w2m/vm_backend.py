@@ -2094,6 +2094,22 @@ class VM:
         for i, v in enumerate(values):
             self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
 
+    def x87(self) -> tuple[int, int, int, list[int]]:
+        """FCW, FSW, the abridged tags and ST0-ST7 in stack order (the monitor data page's control word and the state
+        block's x87 fields; Sprint 065)."""
+        st = self._process(STATE_OFF)
+        cw = struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0]
+        sw, tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
+        regs = [int.from_bytes(self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10], "little") for i in range(8)]
+        return int(cw), int(sw), int(tags), regs
+
+    def set_x87(self, cw: int, sw: int, tags: int, regs: list[int]) -> None:
+        st = self._process(STATE_OFF)
+        struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, cw)
+        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, sw, tags)
+        for i, v in enumerate(regs):
+            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = v.to_bytes(10, "little")
+
     def mxcsr(self) -> int:
         """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
         stored = struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]
