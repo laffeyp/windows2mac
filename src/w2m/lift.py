@@ -72,7 +72,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from w2m.x86dec import Decoded, decode
+from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86ops import GPR8_LEGACY, GPR8_REX, GPR16, GPR32, GPR64, operands
 
 REG: dict[str, tuple[int, int, bool]] = {}
@@ -133,6 +133,11 @@ SSE_050 = {"CVTDQ2PS", "CVTPS2DQ", "CVTTPS2DQ", "CVTPS2PD", "CVTPD2PS", "CMPPS",
 SSE |= SSE_050
 SSE_ALIGNED |= SSE_050 - {"CVTPS2PD", "CMPSS", "MOVLPS", "MOVHPD", "PINSRB", "PINSRD", "PMOVSXDQ", "PMOVZXWD", "PEXTRW"}
 SSE |= SSE2_INT
+# Sprint 065: LDDQU (SSE3; an unaligned 16-byte load) and MPSADBW (SSE4.1; its m128 needs 16-byte alignment, as a
+# legacy-SSE packed operand), which UnityPlayer.dll reaches and the decode spec had no row for
+SSE_065 = {"LDDQU", "MPSADBW"}
+SSE |= SSE_065
+SSE_ALIGNED |= {"MPSADBW"}
 # Sprint 050: integer classes whose operands are all implicit (flags, the stack, RSI and RDI)
 IMPLICIT_050 = {"STC", "CLC", "CMC", "SAHF", "PUSHFQ", "POPFQ", "LEAVE", "PAUSE", "LODSB", "SCASB", "SCASD", "STOSB",
                 "MOVSB", "MOVSD", "CMPSB", "CMPSD"}
@@ -309,7 +314,7 @@ def lift_mmx(b: _OpBuilder, ic: str, ops: tuple[str, ...], nxt: int) -> None:
         else:
             _, loc, _ = _operand(b, o, nxt)
             out.append(loc)                                   # type: ignore[arg-type]
-    if ic == "PEXTRW":
+    if ic in ("PEXTRW", "PSHUFW"):                       # the immediate is imm, not an operand
         out = out[:2]
     while len(out) < 2:
         out.append(("none",))
@@ -317,8 +322,13 @@ def lift_mmx(b: _OpBuilder, ic: str, ops: tuple[str, ...], nxt: int) -> None:
 
 
 def lift(code: bytes, address: int) -> Lifted:
-    """Lift the instruction at the start of `code`, located at guest `address`."""
-    d: Decoded = decode(code)
+    """Lift the instruction at the start of `code`, located at guest `address`. Bytes the decode spec has no row for
+    are a LiftError too, so the run stops by name (Sprint 065: a DecodeError for PSHUFW ended a frontier run's
+    producer instead)."""
+    try:
+        d: Decoded = decode(code)
+    except DecodeError as e:
+        raise LiftError(f"{e} at 0x{address:x} ({code[:15].hex()})") from None
     f = d.fields
     ic = d.iclass
     nxt = address + d.length

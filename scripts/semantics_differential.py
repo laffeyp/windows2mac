@@ -555,7 +555,11 @@ FORMAT_3 = frozenset(("049", "049b"))              # sets whose records carry th
 CLASSES_065B = frozenset(("MOVQ", "PADDW", "MOVD", "PUNPCKLBW", "PMULLW", "PADDSW", "PACKUSWB", "PSRAW", "PUNPCKLDQ",
                           "PXOR", "PSUBW", "PMULHW", "PUNPCKLWD", "PUNPCKHBW", "PSRLQ", "PUNPCKHWD", "PMADDUBSW", "PADDD",
                           "PUNPCKHDQ", "PSRAD", "PEXTRW", "EMMS", "MOVDQ2Q"))
-FORMAT_4 = frozenset(("065", "065b"))              # sets whose records carry the x87 state
+# set 065c: the rows decode spec 0.11.0 adds for UnityPlayer.dll's undecoded instructions (Sprint 065); PSADBW's MMX form
+# only (its SSE form is set 050's)
+ROWS_BEFORE_065C = 1061                            # decode spec 0.10.0's entry count; 0.11.0 appends six rows
+CLASSES_065C = frozenset(("PSHUFW", "PSADBW", "LDDQU", "MPSADBW", "FDIVR", "FIMUL"))
+FORMAT_4 = frozenset(("065", "065b", "065c"))      # sets whose records carry the x87 state
 # set -> (seed, class set, classes given LOCK-prefixed memory variants, fixed control-flow encodings)
 CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "039": (2026_10_09_39, CLASSES_039, (), True),
@@ -577,7 +581,8 @@ CASE_SETS: dict[str, tuple[int, frozenset[str], tuple[str, ...], bool]] = {
     "049b": (2026_10_11_491, CLASSES_049B, (), False),
     "050": (2026_10_11_50, CLASSES_050, (), False),
     "065": (2026_10_12_65, CLASSES_065, (), False),
-    "065b": (2026_10_12_651, CLASSES_065B, (), False)}
+    "065b": (2026_10_12_651, CLASSES_065B, (), False),
+    "065c": (2026_10_12_652, CLASSES_065C, (), False)}
 
 
 def set_format(case_set: str) -> int:
@@ -599,7 +604,7 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
                 locked: tuple[str, ...] = (), control_flow: bool = True) -> tuple[list[Case], Counter[str]]:
     rng = random.Random(seed)
     ymm = classes in (CLASSES_049, CLASSES_049B)    # format 3 (FORMAT_3): states carry YMM upper halves
-    x87 = classes in (CLASSES_065, CLASSES_065B)     # format 4 (FORMAT_4): states carry the x87 state
+    x87 = classes in (CLASSES_065, CLASSES_065B, CLASSES_065C)     # format 4 (FORMAT_4): states carry the x87 state
     out: list[Case] = []
     skipped: Counter[str] = Counter()
     source = list(encgen_cases()) + list(_locked_variants(locked))
@@ -610,13 +615,21 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
         except (DecodeError, LiftError, IndexError) as e:
             skipped[f"not lifted: {type(e).__name__}"] += 1
             continue
+        if classes is not CLASSES_065C and c.row >= ROWS_BEFORE_065C:
+            # an encoding generated from a row decode spec 0.11.0 added (its prefixed variants decode as older classes:
+            # 66 + PSADBW's MMX row is the SSE PSADBW of set 050); earlier sets keep what the runners ran (KIT_DIARY #23)
+            skipped["row added by decode spec 0.11.0 (set 065c)"] += 1
+            continue
         if d.iclass not in classes:
             skipped["not in this case file's class set"] += 1
             continue
         if classes is CLASSES_065B and not any(op[0] == "mmx" for op in ins.ops):
             skipped["an SSE form of an MMX class (earlier sets)"] += 1
             continue
-        if classes is not CLASSES_065B and any(op[0] == "mmx" for op in ins.ops):
+        if classes is CLASSES_065C and d.iclass == "PSADBW" and not any(op[0] == "mmx" for op in ins.ops):
+            skipped["PSADBW's SSE form (set 050)"] += 1
+            continue
+        if classes not in (CLASSES_065B, CLASSES_065C) and any(op[0] == "mmx" for op in ins.ops):
             # MMX-register forms lift since decode spec 0.10.0; the sets before keep the old refusal so their frozen
             # files stay what the runners ran (KIT_DIARY #23)
             skipped["MMX-register form (set 065b)"] += 1

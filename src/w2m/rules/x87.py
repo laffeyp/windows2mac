@@ -13,7 +13,7 @@ from w2m.lift import _operand
 from w2m.rules import Ctx
 
 ICLASSES = ("FLD", "FSTP", "FMUL", "FSQRT", "FSIN", "FCOS", "FADD", "FWAIT", "FISTTP", "FIADD", "FISTP", "FIDIVR",
-            "FLDCW", "FNCLEX", "FNSTSW")
+            "FLDCW", "FNCLEX", "FNSTSW", "FDIVR", "FIMUL")
 SHARED = ()
 
 

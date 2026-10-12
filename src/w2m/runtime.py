@@ -93,7 +93,7 @@ LANE_ARITH["PMULHW"] = (16, lambda p, q, w: (_signed(p, w) * _signed(q, w)) >> 1
 LANE_ARITH["PMULLD"] = (32, lambda p, q, w: p * q)
 LANE_ARITH["PABSW"] = (16, lambda p, q, w: abs(_signed(q, w)))
 SSE_050_NEW = {"CVTPS2DQ", "CVTPD2PS", "CMPPS", "CMPPD", "CMPSS", "SHUFPD", "MOVLPS", "MOVHPD", "MOVNTDQ", "PSADBW",
-           "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB", "PMOVZXWD", "PSLLW"}
+           "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB", "PMOVZXWD", "PSLLW", "MPSADBW"}
 INTERLEAVE = {"PUNPCKHQDQ": (64, True), "PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "UNPCKHPD": (64, True), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
               "PUNPCKHWD": (16, True), "PUNPCKLWD": (16, False)}
 
@@ -400,7 +400,7 @@ class Runtime:
                 raise GuestFault(f"#GP: {ic} memory operand at 0x{self._t[loc[1]]:x} not {align}-byte aligned")
         msize = next((loc[2] for loc in (dst, src) if loc[0] == "m"), 16)
         x = th.xmm
-        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "MOVDQA", "MOVDQU", "MOVNTPS"):
+        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "MOVDQA", "MOVDQU", "MOVNTPS", "LDDQU"):
             v = self._xread(src, 16)
             self._xwrite(dst, v, 16)
         elif ic in SSE_049B:
@@ -620,6 +620,11 @@ class Runtime:
         elif ic == "SHUFPD":
             assert imm is not None
             x[dst[1]] = (a >> (64 * (imm & 1)) & _mask(64)) | (v >> (64 * (imm >> 1 & 1)) & _mask(64)) << 64
+        elif ic == "MPSADBW":                                    # Sprint 065: eight sums of |a - v| over 4 bytes, the
+            assert imm is not None                               # destination's block sliding a byte each (SDM MPSADBW)
+            ab, vb = lanes(a, 8), lanes(v, 8)
+            d0, s0 = 4 * (imm >> 2 & 1), 4 * (imm & 3)
+            x[dst[1]] = pack([sum(abs(ab[d0 + i + j] - vb[s0 + j]) for j in range(4)) for i in range(8)], 16)
         elif ic == "PSADBW":                                     # per quadword: the sum of |a - v| over its bytes
             ab, vb = lanes(a, 8), lanes(v, 8)
             x[dst[1]] = pack([sum(abs(ab[i] - vb[i]) for i in range(h, h + 8)) for h in (0, 8)], 64)

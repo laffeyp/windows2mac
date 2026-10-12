@@ -636,11 +636,11 @@ def execute(fpu: Fpu, ic: str, opcode: int, reg: int, rm: int | None, mem_read: 
         fpu.raise_flags(flags)
         fpu.pop()
         return
-    if ic in ("FADD", "FMUL", "FIADD", "FIDIVR"):
+    if ic in ("FADD", "FMUL", "FIADD", "FIDIVR", "FIMUL", "FDIVR"):
         load_flags = 0
         a: int | None
         b: int | None
-        if ic in ("FIADD", "FIDIVR"):
+        if ic in ("FIADD", "FIDIVR", "FIMUL"):
             bits = 32 if opcode == 0xDA else 16
             other = from_int(read(bits // 8), bits)
             dest, a, b = 0, _read(fpu, 0), other
@@ -657,11 +657,13 @@ def execute(fpu: Fpu, ic: str, opcode: int, reg: int, rm: int | None, mem_read: 
             return
         if ic == "FADD" or ic == "FIADD":
             r, flags = add(a, b, p, rc)
-        elif ic == "FMUL":
+        elif ic in ("FMUL", "FIMUL"):
             r, flags = mul(a, b, p, rc)
+        elif ic == "FDIVR":                                # the source divided by ST(0) (memory forms; Sprint 065)
+            r, flags = div(b, a, p, rc)
         else:                                              # FIDIVR: the integer divided by ST(0)
             r, flags = div(b, a, p, rc)
-        if rm is None and ic in ("FADD", "FMUL"):
+        if rm is None and ic in ("FADD", "FMUL", "FDIVR"):
             flags |= load_flags & IE                       # an SNaN operand
             if not (is_nan(a) or _unsupported(a)):         # a NaN or unsupported ST(0) decides alone: no DE (set 065)
                 flags |= load_flags & DE

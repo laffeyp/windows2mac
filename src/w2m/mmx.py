@@ -73,6 +73,10 @@ def compute(ic: str, d: int, s: int, count: int) -> int:
         return join([signed(x, bits) >> n for x in lanes(d, bits)], bits)
     if ic == "PSRLQ":
         return 0 if count > 63 else d >> count
+    if ic == "PSADBW":                               # the sum of |d - s| over the 8 bytes, in bits 15:0
+        return sum(abs(x - y) for x, y in zip(lanes(d, 8), lanes(s, 8), strict=True))
+    if ic == "PSHUFW":                               # word i of the result is the source's word imm[2i+1:2i]
+        return join([lanes(s, 16)[count >> (2 * i) & 3] for i in range(4)], 16)
     raise ValueError(f"MMX {ic} is not modelled")
 
 
@@ -110,7 +114,7 @@ def execute(fpu: Fpu, ic: str, opcode: int, dst: tuple[Any, ...], src: tuple[Any
         put(dst, v)
     else:
         shift = ic in ("PSRAW", "PSRAD", "PSRLQ")
-        count = (imm if src[0] == "i" else get(src)) if shift else 0
+        count = (imm if src[0] == "i" else get(src)) if shift else imm
         v = compute(ic, get(dst), 0 if shift else get(src), count)
         transition()
         put(dst, v)

@@ -291,7 +291,7 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
     if ic in SSE2_INT_LOWERED:
         _lower_int(a, ic, dst, src, imm, reg_of)
         return
-    if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD"):
+    if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "LDDQU"):     # LDDQU: a 16-byte load, memory only (Sprint 065)
         if dst[0] == "x" and src[0] == "x":
             a.emit(a64.mov_v(dst[1], src[1]))
         elif dst[0] == "x":
@@ -377,7 +377,7 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
             a.bind(done)
             a.emit(a64.str_(4, 16, 28, vb.SPILL + 4 * lane))
         a.emit(a64.ldr(8, 16, 28, vb.SPILL), a64.fmov_to_v(8, dst[1], 16))   # FMOV Dd zeroes bits 127:64
-    elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD") or ic in SSE_050:  # in the model (x86fp; Sprints
+    elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD", "MPSADBW") or ic in SSE_050:  # in the model (x86fp; Sprints
         a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
         kind, form = ic[:-2].lower(), ic[-2:]
