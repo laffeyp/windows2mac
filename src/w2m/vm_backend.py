@@ -1011,7 +1011,8 @@ class VM:
                  gui: bool = False, command_line: str | None = None,
                  environment: tuple[str, ...] = (), process_id: int = 0,
                  inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None,
-                 process_group: int = START_GROUP, call_trace: tuple[str, ...] = ()) -> None:
+                 process_group: int = START_GROUP, call_trace: tuple[str, ...] = (),
+                 call_trace_from: str | None = None) -> None:
         self.ld = loaded
         self.call_trace = call_trace       # the images whose calls call_trace.c records, at most 2 (Sprint 060)
         if len(call_trace) > 2:
@@ -1078,6 +1079,13 @@ class VM:
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
         self._trace_ranges()
+        # the trace opens when the guest first enters `call_trace_from` ("DLL!export"), as tools/jit_capture hooks the
+        # images just before it calls UnityPlayer.dll!UnityMain (jit_capture.c wWinMain); 0: from the start
+        self._trace_from = 0
+        if call_trace_from is not None:
+            dll, export = call_trace_from.split("!", 1)
+            self._trace_from = self.modules.dlls[dll.lower()][2][export]
+            struct.pack_into("<Q", self.mm, self._process(TRACE_OFF), 0)
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
         self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
@@ -1820,12 +1828,20 @@ class VM:
     def _init_stub(self, base: int, entry: int) -> int:
         """x86 that LoadLibrary returns through (module.c writes the caller's return address at +0x80): DllMain(base,
         DLL_PROCESS_ATTACH, NULL) with the shadow space (RSP is 16-aligned after the service's ret), a FALSE return
-        calls a thunk that stops the run by name, else RAX = base and a jump to the caller."""
+        calls a thunk that stops the run by name, else RAX = base and a jump to the caller. A traced image's DllMain
+        runs with the call trace closed (Sprint 060): on Windows tools/jit_capture loads mono-2.0-bdwgc.dll, and its
+        DllMain runs, before it hooks the images, and UnityPlayer.dll's later load of it runs no DllMain."""
+        trace = PROCESS_VA + TRACE_OFF
+        pause = (any(base == self.modules.dlls.get(n.lower(), (None,))[0] for n in self.call_trace)
+                 and struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0] == 1)
         page, error = self.virtual.alloc(0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
         if error:
             raise Unimplemented(f"LoadLibrary: no page for the DllMain stub (error {error})")
         failed = self.modules.make_thunk(DLL_INIT_FAILED)
         code = bytearray()
+        if pause:
+            code += bytes.fromhex("48b9") + trace.to_bytes(8, "little")        # mov rcx, the trace header
+            code += bytes.fromhex("48c70100000000")                            # mov qword [rcx], 0: closed
         code += bytes.fromhex("4883ec20")                                      # sub rsp, 0x20
         code += bytes.fromhex("48b9") + base.to_bytes(8, "little")             # mov rcx, instance
         code += bytes.fromhex("ba01000000")                                    # mov edx, DLL_PROCESS_ATTACH
@@ -1833,6 +1849,9 @@ class VM:
         code += bytes.fromhex("48b8") + entry.to_bytes(8, "little")            # mov rax, DllMain
         code += bytes.fromhex("ffd0")                                          # call rax
         code += bytes.fromhex("4883c420")                                      # add rsp, 0x20
+        if pause:
+            code += bytes.fromhex("48b9") + trace.to_bytes(8, "little")        # mov rcx, the trace header
+            code += bytes.fromhex("48c70101000000")                            # mov qword [rcx], 1: open again
         code += bytes.fromhex("85c0")                                          # test eax, eax
         code += bytes.fromhex("750c")                                          # jnz past the failure call
         code += bytes.fromhex("48b8") + failed.to_bytes(8, "little") + bytes.fromhex("ffd0")
@@ -2107,6 +2126,8 @@ class VM:
 
     # blocks ----------------------------------------------------------------------------------
     def _compile(self, start: int) -> int:
+        if start == self._trace_from and self._trace_from:
+            struct.pack_into("<Q", self.mm, self._process(TRACE_OFF), 1)     # the trace opens (call_trace_from)
         a = Assembler(MONITOR_VA + self.code_cursor)
         insns: list[Lifted] = []
         addr = start

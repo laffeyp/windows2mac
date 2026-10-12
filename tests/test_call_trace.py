@@ -73,3 +73,61 @@ def test_a_retried_wait_is_recorded_once_with_its_final_answer_and_the_rows_are_
     waits = [c for c in calls if c[4] == "WaitForSingleObject"]
     assert waits and all(c[6] == 0 for c in waits)               # WAIT_OBJECT_0, never a retry's interim value
     assert len({c[1] for c in calls}) > 1                        # the workers' calls carry their own thread ids
+
+
+def traced_threads(start: str | None) -> list[Any]:
+    from w2m.file_bridge import FileBridge
+    from w2m.kernel import Machine
+    from w2m.loader import load
+    from w2m.vm_backend import VM
+    f = family_run.FAMILIES["threads"]
+    run = next(iter(f.runs.values()))
+    assert f.dll_name is not None and run.dll is not None
+    exe = (ROOT / "store" / "binaries" / f"{run.binary}.exe").read_bytes()
+    dll = (ROOT / "store" / "binaries" / f"{run.dll}.dll").read_bytes()
+    with tempfile.TemporaryDirectory() as d:
+        files = FileBridge(Path(d))
+        loaded = load(exe, lambda n: dll if n.lower() == f.dll_name.lower() else None, "probe.exe")   # type: ignore[union-attr]
+        vm = VM(loaded, files=files, image_name="probe.exe", call_trace=("probe.exe", f.dll_name),
+                call_trace_from=start)
+        try:
+            Machine(lambda *a: None, max_steps=1 << 40, timeout_ms=60_000).run(vm)
+            calls, _ = vm.traced_calls()
+        finally:
+            vm.close()
+            files.close_all()
+    return calls
+
+
+@pytest.mark.hvf
+def test_the_trace_opens_where_it_is_told_to() -> None:
+    """jit_capture.c hooks the images just before UnityMain, after the DLLs' DllMain ran their C runtime's start; the
+    frontier opens w2m's trace at UnityMain. Here the threads DLL's start (InitializeCriticalSectionEx, from its C
+    runtime) is in a trace open from the start and absent from one opened at the program's first call into the DLL."""
+    whole = traced_threads(None)
+    opened = traced_threads("threads_dll.dll!threads_dll_count")
+    start_calls = [c for c in whole if c[2] == "threads_dll.dll" and c[4] == "InitializeCriticalSectionEx"]
+    assert start_calls
+    assert not [c for c in opened if c[2] == "threads_dll.dll" and c[4] == "InitializeCriticalSectionEx"]
+    assert 0 < len(opened) < len(whole)
+
+
+@pytest.mark.hvf
+def test_a_traced_images_dllmain_runs_with_the_trace_closed() -> None:
+    """A traced image loaded after the trace opened (mono-2.0-bdwgc.dll in the game) has its DllMain run between a
+    close and an open of the trace header's `on` word: on Windows its DllMain ran before the hooks."""
+    import struct
+
+    from w2m.loader import load
+    from w2m.vm_backend import PROCESS_VA, TRACE_OFF, VM
+    vm = VM(load(CODE_PAGES.read_bytes()), image_name="probe.exe", call_trace=("probe.exe", "fake.dll"))
+    try:
+        vm.modules.dlls["fake.dll"] = (0x180000000, 0x1000, {})
+        traced_stub = bytes(vm.mem.read(vm._init_stub(0x180000000, 0x180000100), 0x80))
+        plain_stub = bytes(vm.mem.read(vm._init_stub(0x190000000, 0x190000100), 0x80))
+    finally:
+        vm.close()
+    header = struct.pack("<Q", PROCESS_VA + TRACE_OFF)
+    close, reopen = b"\x48\xb9" + header + bytes.fromhex("48c70100000000"), b"\x48\xb9" + header + bytes.fromhex("48c70101000000")
+    assert traced_stub.index(close) < traced_stub.index(b"\xff\xd0") < traced_stub.index(reopen)
+    assert close not in plain_stub and reopen not in plain_stub
