@@ -393,7 +393,7 @@ def excluded(contract: dict[str, Any], run: str) -> frozenset[int]:
 def undetermined(contract: dict[str, Any]) -> frozenset[tuple[str, str]]:
     """The (function, field) values a contract does not compare: those two Windows runs of the game disagree on (its
     `undetermined`, keyed "Function field", each with its evidence)."""
-    return frozenset(tuple(k.split(" ")) for k in contract.get("undetermined", {}))   # type: ignore[misc]
+    return frozenset((k.split(" ")[0], k.split(" ")[1]) for k in contract.get("undetermined", {}))
 
 
 def main(argv: list[str]) -> int:
