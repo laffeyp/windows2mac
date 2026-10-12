@@ -136,6 +136,7 @@ def main(argv: list[str]) -> int:
             (base / "traces" / f"{trace_sha[7:]}.jsonl").write_bytes(text)
             (base / "frontier-calls").mkdir(parents=True, exist_ok=True)
             (base / "frontier-calls" / f"{xid}.tsv").write_text(call_compare.write_tsv(calls))
+            (base / "frontier-calls" / f"{xid}.strings.tsv").write_text(call_compare.write_strings(vm.traced_strings()))
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()
@@ -177,7 +178,10 @@ def main(argv: list[str]) -> int:
         windows = call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
         found, compared = call_compare.compare(windows, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"),
                                                SIGNATURES, call_compare.excluded(
-                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name))
+                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name),
+                                               (call_compare.read_strings(REFERENCE / "jit_capture.bin.strings.tsv"),
+                                                call_compare.read_strings(
+                                                    base / "frontier-calls" / f"{xid}.strings.tsv")))
         state.update(divergences=found, compared=compared)
         # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
         verdict: Literal["conforms", "discrepancy", "inconclusive"] = (

@@ -135,7 +135,10 @@ FAULT_LOG_OFF = INHERIT_OFF + 0x1000   # faults dispatched: a count, then the fi
 CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDirectory's two buffers (paths.c)
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
 TRACE_SIZE = 0x800000              # 8 MB: per-thread counters (3 MB), then about 43,000 records
-TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0x304300, 120, 16384, 0x80
+TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0x34D000, 120, 16384, 0x80
+TRACE_WIDE_OFF, TRACE_STRINGS_OFF, TRACE_STRING = 0x4300, 0x308300, 136
+# call_trace.h's STRING_ARGS this trace keeps: bit i, argument i is a UTF-16 string (Sprint 064: thread names)
+TRACE_WIDE_ARGS = {"SetThreadDescription": 1 << 1}
 TRACE_CAPACITY = (TRACE_SIZE - TRACE_RECORDS_OFF) // TRACE_RECORD
 TRACED_IMAGES = ("UnityPlayer.dll", "mono-2.0-bdwgc.dll")     # the images tools/jit_capture/call_trace.h hooks
 # call_trace.h's UNTRACED: functions that read or unwind their caller's context or never return keep a plain jump
@@ -1683,6 +1686,8 @@ class VM:
             # a vtable, not an import) have no hook in the capture
             if self.call_trace and fn not in UNTRACED and not fn.startswith("W2m"):
                 a.emit(a64.mov_imm(5, self.runtime.symbols[symbol]), a64.mov_imm(6, (thunk - THUNK_BASE) // 16))
+                if fn in TRACE_WIDE_ARGS and (thunk - THUNK_BASE) // 16 < TRACE_THUNKS:
+                    self.mm[self._process(TRACE_OFF) + TRACE_WIDE_OFF + (thunk - THUNK_BASE) // 16] = TRACE_WIDE_ARGS[fn]
                 symbol = "w2m_traced"
             a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
             a.emit(a64.mov_imm(16, state))
@@ -1997,6 +2002,20 @@ class VM:
             label = self.call_trace[image] if image < len(self.call_trace) else "GetProcAddress"
             out.append((seq, tid, label, dll, fn, tuple(rest[:8]), rest[8], rest[9]))
         return out, dropped
+
+    def traced_strings(self) -> list[tuple[int, int, str]]:
+        """The string arguments call_trace.c kept, as the capture's <capture>.strings.tsv has them: (seq, argument,
+        text with ASCII as is and every other unit as \\uXXXX)."""
+        t = self._process(TRACE_OFF)
+        n = struct.unpack_from("<Q", self.mm, t + TRACE_STRINGS_OFF)[0]
+        out = []
+        for k in range(n):
+            at = t + TRACE_STRINGS_OFF + 16 + TRACE_STRING * k
+            seq, arg = struct.unpack_from("<QQ", self.mm, at)
+            units = struct.unpack_from("<60H", self.mm, at + 16)
+            text = "".join(chr(u) if 0x20 <= u < 0x7F else f"\\u{u:04x}" for u in units[:units.index(0)])
+            out.append((seq, arg, text))
+        return out
 
     def calls_total(self) -> dict[str, int]:
         """Every service call by name, counted in the guest (exact past the ring's capacity)."""

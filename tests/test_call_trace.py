@@ -193,3 +193,32 @@ def test_a_retried_wait_gives_its_slot_back() -> None:
             vm.close()
             files.close_all()
     assert used == len(calls)
+
+
+@pytest.mark.hvf
+def test_a_thread_name_is_kept_with_its_call() -> None:
+    """Sprint 064: the comparison pairs threads by the names SetThreadDescription gives them, as the capture records
+    them (call_trace.h STRING_ARGS). The threads probe names a thread."""
+    from w2m.file_bridge import FileBridge
+    from w2m.kernel import Machine
+    from w2m.loader import load
+    from w2m.vm_backend import VM
+    f = family_run.FAMILIES["threads"]
+    run = next(iter(f.runs.values()))
+    assert f.dll_name is not None and run.dll is not None
+    exe = (ROOT / "store" / "binaries" / f"{run.binary}.exe").read_bytes()
+    dll = (ROOT / "store" / "binaries" / f"{run.dll}.dll").read_bytes()
+    with tempfile.TemporaryDirectory() as d:
+        files = FileBridge(Path(d))
+        vm = VM(load(exe, lambda n: dll if n.lower() == "threads_dll.dll" else None, "probe.exe"), files=files,
+                image_name="probe.exe", call_trace=("probe.exe",))
+        try:
+            Machine(lambda *a: None, max_steps=1 << 40, timeout_ms=60_000).run(vm)
+            calls, _ = vm.traced_calls()
+            strings = vm.traced_strings()
+        finally:
+            vm.close()
+            files.close_all()
+    named = {c[0] for c in calls if c[4] == "SetThreadDescription"}
+    kept = [(seq, arg, text) for seq, arg, text in strings if seq in named]
+    assert kept and all(arg == 1 and text.startswith("w2m") for _, arg, text in kept), strings

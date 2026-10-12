@@ -19,13 +19,17 @@
  */
 #include "runtime.h"
 
+typedef unsigned short u16;
+
 #define W2M_TRACE_CALLS 32          /* call_trace.h TRACE_CALLS */
 #define W2M_TRACE_THUNKS 16384      /* Sprint 064: 4096 left a frontier run's later thunks untraced */
 #define W2M_TRACE_LABELS 3          /* the two images, then GetProcAddress */
 #define W2M_TRACE_DYNAMIC 2
 #define W2M_TRACE_PENDING 8
 #define W2M_TRACE_THREADS 64
-#define W2M_TRACE_RECORDS_OFF 0x304300
+#define W2M_TRACE_STRINGS 2048
+#define W2M_TRACE_STRING_UNITS 60
+#define W2M_TRACE_RECORDS_OFF 0x34D000
 
 struct w2m_trace_record {
     u64 ready, seq, tid, image, thunk;
@@ -41,13 +45,19 @@ struct w2m_trace {
     u8 owner[W2M_TRACE_THUNKS];      /* 1 + the traced image whose import slot holds the thunk; 0: none; 0xFF: never */
     u64 pending[W2M_TRACE_PENDING][2];   /* (the call's stack pointer, 1 + its record) for calls not yet returned */
     u64 thread[W2M_TRACE_THREADS];   /* the thread ids `taken` is kept for, in order of their first traced call */
+    u8 wide[W2M_TRACE_THUNKS];       /* bit i: argument i is a UTF-16 string the record keeps (call_trace.h STRING_ARGS) */
     /* calls recorded per thread, thunk and label. The capture keeps a function's first 32 calls over all threads, so
      * each Windows thread's recorded calls are a prefix of its own; keeping 32 a thread here holds that prefix for
      * every thread whatever the schedule (Sprint 061: a count over all threads kept other threads' calls than
      * Windows kept). */
     u8 taken[W2M_TRACE_THREADS][W2M_TRACE_THUNKS][W2M_TRACE_LABELS];
+    u64 strings;                     /* the strings kept, each the text of one string argument of a recorded call */
+    u64 pad2;
+    struct { u64 seq, arg; u16 text[W2M_TRACE_STRING_UNITS]; } string[W2M_TRACE_STRINGS];
 };
 _Static_assert(__builtin_offsetof(struct w2m_trace, owner) == 0x80, "trace owners (vm_backend.py TRACE_OWNER_OFF)");
+_Static_assert(__builtin_offsetof(struct w2m_trace, wide) == 0x4300, "trace string masks (vm_backend.py TRACE_WIDE_OFF)");
+_Static_assert(__builtin_offsetof(struct w2m_trace, strings) == 0x308300, "trace strings (vm_backend.py TRACE_STRINGS_OFF)");
 _Static_assert(sizeof(struct w2m_trace) <= W2M_TRACE_RECORDS_OFF, "trace records follow the counters");
 
 static void complete(struct w2m_trace_record *r, u64 ret) {
@@ -111,6 +121,15 @@ u64 w2m_traced(u64 a0, u64 a1, u64 a2, u64 a3, u64 rsp, u64 service, u64 thunk) 
     r->a[0] = a0, r->a[1] = a1, r->a[2] = a2, r->a[3] = a3;
     for (int i = 0; i < 4; i++)
         r->a[4 + i] = stack[5 + i];  /* above the return address and the 32-byte home area */
+    for (int i = 0; i < 8; i++)      /* a string argument's text, as the capture keeps it (Sprint 064: thread names) */
+        if (t->wide[thunk] >> i & 1 && r->a[i] >= 0x10000 && t->strings < W2M_TRACE_STRINGS) {
+            const u16 *w = (const u16 *)r->a[i];
+            u64 k = t->strings++, n = 0;
+            t->string[k].seq = r->seq;
+            t->string[k].arg = (u64)i;
+            while (n < W2M_TRACE_STRING_UNITS - 1 && w[n]) { t->string[k].text[n] = w[n]; n++; }
+            t->string[k].text[n] = 0;
+        }
     u64 ret = call(a0, a1, a2, a3, rsp);
     if (w2m_state()->schedule & W2M_SCHEDULE_RETRY) {
         (*taken)--;                  /* the re-entry is recorded */
