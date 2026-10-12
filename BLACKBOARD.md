@@ -278,7 +278,7 @@
 
 ## Sprint tail
 
-### Sprint 061 (2026-10-11, closed: CI pending on the closing commit)
+### Sprint 061 (2026-10-11, closed: CI run 38208477502 success on aee379d6)
 - **Scope:** the 55 divergences of Sprint 060 closed by matching the reference (Decision 2026-10-11, user).
 - **Rubber Duck Pass:**
   - *Sequence narration:* three probes on two runners each (time_and_error_mode, threads twice, processor_topology); their families' item runs to CANDIDATE_ACCEPTED with new plants; a reference game run with the game's resources, recorded as `game-run-38206263976`; the frontier's SERVICE_UNIMPLEMENTED, TRACE_INGESTED, COMPARISON_COMPLETED `conforms`; two plant runs, each caught; 57 item runs and the file run.
@@ -286,7 +286,7 @@
   - *Observation 2 (payload anomaly, of the judge):* the capture's count over all threads makes each thread's calls a prefix, which pairing by first call did not respect. Disposition: resolved-here (32 per thread; pairing by agreement, tested to keep a fault on every worker).
   - *Observation 3 (missing pair, of the probe):* reading FLS in the DLL's attach overwrote the thread's first last error, a row; caught by the row's change between rounds. Disposition: resolved-here (saved and restored).
   - *Observation 4 (vocabulary gap, checked):* none.
-- **Closed:** on green CI of the closing commit.
+- **Closed:** CI run 38208477502 (success on aee379d6).
 
 ### Sprint 060 (2026-10-11, closed: CI run 38205517561 success on 104f1db8)
 - **Scope:** the frontier's records on the record, and the game's own calls on Windows as a judge of w2m's (the ground-up review's G2, S4 and the missed finding).

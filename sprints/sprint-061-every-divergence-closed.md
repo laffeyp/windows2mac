@@ -103,3 +103,4 @@ No divergence between the game's calls in w2m and on Windows, up to the frontier
   envvar_error_dropped at GetEnvironmentVariableW call 0.
 - **Every family is accepted, every plant caught as named,** and the Sprint 042 file run conforms. 1,965 tests
   pass, and `scripts/gates.sh` passes.
+- **Closed on CI run 38208477502** (success on aee379d6).
