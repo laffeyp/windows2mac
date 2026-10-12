@@ -145,6 +145,19 @@ void start(void) {
     }
     row("classic.query"); field("ret", ok != 0); field("err", err); flag("length_unchanged", len == need);
     flag("core_bits_are_n", core_bits == active); flag("cores_le_n", cores <= active); field("packages", packages); field("numa_nodes", numa); end();
+    /* the machine's numbers, which the rows above keep as relations (Sprint 061: w2m reports the runner's own; Unity
+     * sizes its job workers by them), and each cache level's count and size */
+    unsigned l1d = 0, l2 = 0, l3 = 0, l1d_size = 0, l2_size = 0, l3_size = 0, smt = 0;
+    for (DWORD i = 0; ok && i < len / 32; i++) {
+        PSYSTEM_LOGICAL_PROCESSOR_INFORMATION e = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)buf + i;
+        if (e->Relationship == RelationProcessorCore) smt |= e->ProcessorCore.Flags == 1;
+        if (e->Relationship != RelationCache) continue;
+        if (e->Cache.Level == 1 && e->Cache.Type == CacheData) { l1d++; l1d_size = e->Cache.Size; }
+        if (e->Cache.Level == 2) { l2++; l2_size = e->Cache.Size; }
+        if (e->Cache.Level == 3) { l3++; l3_size = e->Cache.Size; }
+    }
+    row("machine"); field("active", active); field("cores", cores); field("smt", smt); field("l1d", l1d);
+    field("l1d_size", l1d_size); field("l2", l2); field("l2_size", l2_size); field("l3", l3); field("l3_size", l3_size); end();
 
     DWORD_PTR process = 0, system = 0;
     SetLastError(SENTINEL);
