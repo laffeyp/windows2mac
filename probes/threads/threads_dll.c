@@ -36,10 +36,12 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
     (void)instance; (void)reserved;
     log_event(2, reason);
     if (reason == DLL_THREAD_ATTACH && fls_watch) {
+        DWORD kept = GetLastError();                   /* the thread's first last error is a row (worker.start) */
         SetLastError(0xDEAD);
         fls_at_attach = (ULONG_PTR)FlsGetValue(fls_watch);
         fls_err_at_attach = GetLastError();
         fls_watch = 0;                                 /* the first thread's attach only */
+        SetLastError(kept);
     }
     return TRUE;
 }
