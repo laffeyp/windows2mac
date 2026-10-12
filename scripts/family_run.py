@@ -1172,7 +1172,7 @@ FAMILIES: dict[str, Family] = {
         open_questions=(
             "A late DLL's TLS callbacks: no row has one (steam_api64.dll has none); w2m stops on one.",
             "How many modules a thread's array holds before Windows moves it: w2m gives room for loader.TLS_SLOTS."),
-        dll_name="late_tls_dll.dll", dll_on_disk=True, host_files=("src/w2m/vm_backend.py", "src/w2m/loader.py"),
+        dll_name="late_tls_dll.dll", dll_on_disk=True, host_files=("src/w2m/loader.py",),
         plants={"block_not_copied": Plant("            self.mem.write(va, block)",
                                           "            self.mem.write(va, bytes(len(block)))",
                                           ("late.main", "late.before_load"), host="w2m.vm_backend")}),

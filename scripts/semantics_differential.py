@@ -616,6 +616,11 @@ def build_cases(seed: int = 2026_10_09_39, classes: frozenset[str] = CLASSES_039
         if classes is CLASSES_065B and not any(op[0] == "mmx" for op in ins.ops):
             skipped["an SSE form of an MMX class (earlier sets)"] += 1
             continue
+        if classes is not CLASSES_065B and any(op[0] == "mmx" for op in ins.ops):
+            # MMX-register forms lift since decode spec 0.10.0; the sets before keep the old refusal so their frozen
+            # files stay what the runners ran (KIT_DIARY #23)
+            skipped["MMX-register form (set 065b)"] += 1
+            continue
         if d.fields is not None and d.fields.ops and (0x64 in d.fields.prefixes or 0x65 in d.fields.prefixes) and \
                 any(o[0] in "MA" for o in operands(d.fields)):
             # an FS/GS override with a memory or address operand: the lifter refused these before Sprint 044
