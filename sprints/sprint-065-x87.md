@@ -74,7 +74,10 @@ and keep a plan row of their own.
    `dxgi.dll!W2mOutputGetDisplayModeList`. It runs 9.14M instructions a second over 8,013 s, against 131M before:
    48.7M slow-SSE exits and 19.3M model steps, each followed by a dispatch miss (70.3M hvc #1).
    - **Speed.** PUNPCKHQDQ (ZIP2), STMXCSR and LDMXCSR are lowered in A64 (a9dd06a5); run_frontier counts model exits
-     by class, since the site census named 4M of the 48.7M.
+     by class, since the site census named 4M of the 48.7M. Frontier 643a6283510c-1791810726153034000's census names
+     PACKSSWB, PADDUSB, PCMPGTB, MOVLPS, PMULHW, PSHUFB and PADDB (39.5M slow-SSE exits) and the MMX forms (18.0M model
+     steps, MOVQ 11.6M); a3373038 lowers them, the MMX forms on the state block's x87 slots when TOP is 0 and no x87
+     exception is pending. PSHUFW enters the registry as an MMX-only class, judged by set 065c.
    - **GetDisplayModeList.** The dxgi probe records the runners' 13 modes (runs 38254500336, 38254503636); the game's
      unity.log prints the same 13. Contract windows.dxgi.dxgi 0.2.0.
    - **HeapReAlloc in place (seq 3265-3267).** Windows refuses UnityPlayer's growth of a 0x417 block to 0x817; w2m
