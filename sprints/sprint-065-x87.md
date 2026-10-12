@@ -84,6 +84,10 @@ and keep a plan row of their own.
      reach shared lists. In the three Windows runs no pop finds an entry and list +0x80 is never popped; on w2m a
      worker pops +0x80 after the main thread's push. Threads share one vCPU in 200,000-instruction slices; the runners
      run them on several cores. Open, for the threads sprint (plan row 066).
+   - **Job pools in the comparison.** Frontier 643a6283510c-1791810726153034000 (tree a9dd06a5) runs 73,496,378,143
+     instructions and stops at GetDisplayModeList; its comparison shows nine HeapSize divergences (seq 2548-2575).
+     Windows' Job.Worker 1 made the walk, w2m's Job.Worker 0 made it with the same 32 answers, and pairing by name set
+     it against Job.Worker 1's later walk. scripts/call_compare.py pairs a pool's workers per function by agreement.
 
 ## prerequisites
 

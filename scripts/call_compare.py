@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -251,6 +252,18 @@ def thread_names(calls: list[Call], strings: list[String]) -> dict[int, str]:
     return names
 
 
+POOLED = re.compile(r"^(.+) \d+$")
+
+
+def pools(names: dict[int, str]) -> dict[int, str]:
+    """Each thread of a job pool -> the pool's name (Sprint 065). The game names its workers "Job.Worker 0", "Job.Worker
+    1" ... and "Background Job.Worker 0" ...: a name that ends in a number and is shared, but for the number, by two
+    threads or more names a pool."""
+    stems = {t: m.group(1) for t, n in names.items() if (m := POOLED.match(n))}
+    shared = {s for s in stems.values() if list(stems.values()).count(s) > 1}
+    return {t: s for t, s in stems.items() if s in shared}
+
+
 def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] | None = None,
                names: tuple[dict[int, str], dict[int, str]] = ({}, {})) -> dict[int, int]:
     """Windows thread id -> w2m thread id. Neither trace links a thread to the CreateThread that made it, and a game's
@@ -310,6 +323,22 @@ def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] 
     return pairs
 
 
+def agreeing(windows: list[Call], w2m: list[Call], signatures: dict[str, Any]) -> int:
+    """How many of two threads' calls to one function agree in every value their types let the comparison judge here
+    (an assigned id is left to the stream's maps)."""
+    count = 0
+    for a, b in zip(windows, w2m):
+        sig = signatures.get(a[4])
+        if sig is None:
+            count += a[6] == b[6]
+            continue
+        values = [(f"a{i}", p["kind"], p.get("bytes"), a[5][i], b[5][i], True) for i, p in enumerate(sig["params"][:8])]
+        values.append(("ret", sig["return"]["kind"], sig["return"].get("bytes"), a[6], b[6], False))
+        count += all(judge("pointer", None, x, y, arg) if carries_address(a[4], f, a[5]) else judge(k, n, x, y, arg)
+                     for f, k, n, x, y, arg in values if (a[4], f) not in ASSIGNED)
+    return count
+
+
 def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             excluded_threads: frozenset[int] = frozenset(),
             strings: tuple[list[String], list[String]] = ([], []),
@@ -318,11 +347,18 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
     (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
     with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
     threads the game does not start (the capture's own); `undecided` are (function, field) values two Windows runs of
-    the game disagree on, which are not compared (the contract's `undetermined`)."""
+    the game disagree on, which are not compared (the contract's `undetermined`).
+
+    A job pool's workers (`pools`) take jobs from one queue, and which free worker takes a job is the scheduler's
+    choice (frontier 643a6283510c-1791810726153034000: the HeapSize walk Windows' Job.Worker 1 made, w2m's Job.Worker 0
+    made, answer for answer). For each function, a pool's Windows workers, in the order of their first call to it,
+    take the unpaired w2m worker of the pool whose calls to it agree with theirs most, the worker the thread map pairs
+    it with on a tie."""
     windows = placed([c for c in windows if c[1] not in excluded_threads])
     w2m = placed(w2m)
-    threads = thread_map(windows, w2m, signatures,
-                         (thread_names(windows, strings[0]), thread_names(w2m, strings[1])))
+    names = (thread_names(windows, strings[0]), thread_names(w2m, strings[1]))
+    threads = thread_map(windows, w2m, signatures, names)
+    pool_w, pool_m = pools(names[0]), pools(names[1])
 
     def by_pair(calls: list[Call]) -> dict[tuple[str, str], dict[int, list[Call]]]:
         out: dict[tuple[str, str], dict[int, list[Call]]] = {}
@@ -339,8 +375,17 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             first = min(c for calls in ours.values() for c in calls)
             found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None))
             continue
+        chosen = dict(threads)
+        for pool in sorted(set(pool_w.values())):
+            free = [t for t in ours if pool_m.get(t) == pool]
+            for tw in sorted((t for t in theirs if pool_w.get(t) == pool), key=lambda t: theirs[t][0][0]):
+                if not free:
+                    break
+                best = max(free, key=lambda tm: (agreeing(theirs[tw], ours[tm], signatures), tm == threads.get(tw)))
+                chosen[tw] = best
+                free.remove(best)
         for tid, calls in theirs.items():
-            mine = ours.get(threads.get(tid, -1), [])
+            mine = ours.get(chosen.get(tid, -1), [])
             pairs += [(k, a, b) for k, (a, b) in enumerate(zip(calls, mine))]
     maps: dict[str, tuple[dict[int, int], dict[int, int]]] = {}
 
@@ -348,7 +393,10 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
         if space == "clock":
             return True
         if space == "thread":
-            return threads.get(x & 0xFFFFFFFF) == y & 0xFFFFFFFF
+            x, y = x & 0xFFFFFFFF, y & 0xFFFFFFFF
+            if x in pool_w:
+                return pool_m.get(y) == pool_w[x]
+            return threads.get(x) == y
         forward, backward = maps.setdefault(space, ({}, {}))
         if space == "atom" and (x >= 0x10000 or y >= 0x10000):
             return (x == 0) == (y == 0)            # a class name, not an atom: a pointer

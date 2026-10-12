@@ -216,3 +216,25 @@ def test_a_value_two_windows_runs_disagree_on_is_not_compared() -> None:
     undecided = call_compare.undetermined(json.loads(call_compare.CONTRACT.read_text()))
     assert ("TryEnterCriticalSection", "ret") in undecided
     assert call_compare.compare(windows, w2m, SIGNATURES, undecided=undecided)[0] == []
+
+
+def test_a_pools_workers_pair_per_function_by_agreement() -> None:
+    """Sprint 065: Windows' Job.Worker 1 made a HeapSize walk that w2m's Job.Worker 0 made, answer for answer; pairing
+    by name compared the walk with Job.Worker 1's later one. Each function pairs a pool's workers by agreement, so each
+    worker's own start-up calls stay with the worker of its name and the walk goes to the worker that made it."""
+    def worker(seq: int, tid: int, name: str) -> list[call_compare.Call]:
+        return [call(seq, "SetThreadDescription", ((1 << 64) - 2, 0x50000 + seq), 0, tid=tid),
+                call(seq + 1, "SetThreadPriority", ((1 << 64) - 2, (-1) & 0xFFFFFFFF), 1, tid=tid)]
+    def walk(seq: int, tid: int, sizes: list[int]) -> list[call_compare.Call]:
+        return [call(seq + i, "HeapSize", (0x30000, 0, 0x40000 + i * 16), s, tid=tid) for i, s in enumerate(sizes)]
+    names = ([(10, 1, "Job.Worker 0"), (20, 1, "Job.Worker 1")], [(10, 1, "Job.Worker 0"), (20, 1, "Job.Worker 1")])
+    windows = worker(10, 200, "Job.Worker 0") + worker(20, 300, "Job.Worker 1") + walk(30, 300, [0x28, 0x422])
+    w2m = worker(10, 8, "Job.Worker 0") + worker(20, 12, "Job.Worker 1") + walk(30, 8, [0x28, 0x422]) + \
+        walk(40, 12, [0x34, 0x94e])
+    assert call_compare.compare(windows, w2m, SIGNATURES, frozenset(), names)[0] == []
+    wrong = worker(10, 8, "Job.Worker 0") + worker(20, 12, "Job.Worker 1") + walk(30, 8, [0x28, 0x423]) + \
+        walk(40, 12, [0x34, 0x94e])
+    found = call_compare.compare(windows, wrong, SIGNATURES, frozenset(), names)[0]
+    assert [(d.function, d.field, d.w2m) for d in found] == [("HeapSize", "ret", 0x423)]
+    assert call_compare.pools({1: "Job.Worker 0", 2: "Job.Worker 1", 3: "Loading.AsyncRead", 4: "Worker 7"}) == \
+        {1: "Job.Worker", 2: "Job.Worker"}
