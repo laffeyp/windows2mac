@@ -1,0 +1,140 @@
+{
+ "contract_id": "windows.module.search",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "EnumProcessModules on the current process lists the program, ntdll, KERNEL32 and KERNELBASE first, a DLL LoadLibrary maps last, and reports the whole list's length whatever the buffer holds, leaving the last error; SetDllDirectoryW adds a directory LoadLibrary searches for a bare name and NULL removes it, each answering 1 with the last error left (Sprint 063: mono's EnumProcessModules, UnityPlayer's SetDllDirectoryW around steam_api64.dll).",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/module_search/module_search.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "enum.full",
+    "ret": 1,
+    "err": 57005,
+    "needed_whole": true,
+    "at_least_four": true,
+    "fits": true,
+    "first_is_program": true,
+    "second_is_ntdll": true,
+    "third_is_kernel32": true,
+    "fourth_is_kernelbase": true,
+    "all_nonzero": true
+   },
+   {
+    "s": "enum.short",
+    "ret": 1,
+    "err": 57005,
+    "needed_is_full": true,
+    "first_is_program": true
+   },
+   {
+    "s": "enum.size_only",
+    "ret": 1,
+    "err": 57005,
+    "needed_is_full": true
+   },
+   {
+    "s": "search.setup",
+    "copied": true
+   },
+   {
+    "s": "search.before",
+    "loaded": false,
+    "err": 126
+   },
+   {
+    "s": "search.set",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "search.load",
+    "loaded": true,
+    "err": 57005,
+    "value": 42,
+    "path_in_directory": true
+   },
+   {
+    "s": "enum.after_load",
+    "one_more": 1,
+    "listed": true,
+    "last": true
+   },
+   {
+    "s": "search.reset",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "search.loaded_after_reset",
+    "same": true,
+    "err": 57005
+   },
+   {
+    "s": "search.after_reset",
+    "loaded": false,
+    "err": 126
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38210455471: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:df6ca688fd04c4599788e7c9ce2ff311246e6d96bb2273edaa87282ece84c023; run 38210458062: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:1924070efea39f066a9859354c9c77138e32db51f26e5426e51b669140ea016d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "module_search-1791784818-0-1",
+    "module_search-1791784818-0-2",
+    "module_search-1791784818-1-1",
+    "module_search-1791784818-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-setdlldirectoryw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setdlldirectoryw (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "After calling SetDllDirectory, the standard DLL search path is: 1. The directory from which the application loaded. 2. The directory specified by the lpPathName parameter."
+  },
+  {
+   "evidence_id": "ms-setdlldirectoryw-null",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setdlldirectoryw (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "If this parameter is NULL, the function restores the default search order."
+  },
+  {
+   "evidence_id": "ms-enumprocessmodules",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-enumprocessmodules (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "If PSAPI_VERSION is 1, this function is defined as EnumProcessModules in Psapi.h and exported in Psapi.lib and Psapi.dll as a wrapper that calls K32EnumProcessModules."
+  }
+ ],
+ "open_questions": [
+  "The list's length differs by machine (each loads other system DLLs), so the rows hold its first four entries in load order and where a DLL the probe loads appears; w2m lists the program, ntdll, KERNEL32, KERNELBASE and the DLLs it maps, not the other system DLLs a Windows process holds.",
+  "SetDllDirectoryW(\"\") (the current directory out of the search) has no row and stops the run."
+ ],
+ "sections": {
+  "probe": "probes/module_search (Sprint 044)",
+  "implementation": "tools/guest_runtime/module.c",
+  "rows": "scripts/family_run.py module_search",
+  "excluded": "none"
+ }
+}

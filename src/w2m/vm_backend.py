@@ -170,10 +170,25 @@ HOST_MAP_VIEW = 29                  # a view of a0 bytes of file descriptor a1 w
 ORDINAL_NAMES = {"OLEAUT32.DLL": {"#2": "SysAllocString", "#6": "SysFreeString", "#7": "SysStringLen",
                                   "#8": "VariantInit", "#9": "VariantClear"},
                  "WS2_32.DLL": {"#111": "WSAGetLastError", "#115": "WSAStartup", "#116": "WSACleanup"}}   # ws2_32.spec
-COM_VTABLES = {"w2m_enumerator_vtable": ("QueryInterface", "AddRef", "Release", "EnumAudioEndpoints",
-                                         "GetDefaultAudioEndpoint", "GetDevice", "RegisterEndpointNotificationCallback",
-                                         "UnregisterEndpointNotificationCallback"),
-               "w2m_collection_vtable": ("QueryInterface", "AddRef", "Release", "GetCount", "Item")}
+# Each COM class's vtable in the runtime image: (its DLL, its methods' name prefix, the methods in vtable order).
+# A slot whose method has no service stops the run by its name when called (hvc #9).
+_DXGI_OBJECT = ("QueryInterface", "AddRef", "Release", "SetPrivateData", "SetPrivateDataInterface", "GetPrivateData",
+                "GetParent")
+COM_VTABLES = {"w2m_enumerator_vtable": ("MMDEVAPI.dll", "W2mEnumerator", (
+                   "QueryInterface", "AddRef", "Release", "EnumAudioEndpoints", "GetDefaultAudioEndpoint", "GetDevice",
+                   "RegisterEndpointNotificationCallback", "UnregisterEndpointNotificationCallback")),
+               "w2m_collection_vtable": ("MMDEVAPI.dll", "W2mCollection",
+                                         ("QueryInterface", "AddRef", "Release", "GetCount", "Item")),
+               # dxgi.h (Sprint 063): IDXGIFactory, IDXGIAdapter, IDXGIOutput
+               "w2m_dxgi_factory_vtable": ("dxgi.dll", "W2mFactory", _DXGI_OBJECT + (
+                   "EnumAdapters", "MakeWindowAssociation", "GetWindowAssociation", "CreateSwapChain",
+                   "CreateSoftwareAdapter")),
+               "w2m_dxgi_adapter_vtable": ("dxgi.dll", "W2mAdapter", _DXGI_OBJECT + (
+                   "EnumOutputs", "GetDesc", "CheckInterfaceSupport")),
+               "w2m_dxgi_output_vtable": ("dxgi.dll", "W2mOutput", _DXGI_OBJECT + (
+                   "GetDesc", "GetDisplayModeList", "FindClosestMatchingMode", "WaitForVBlank", "TakeOwnership",
+                   "ReleaseOwnership", "GetGammaControlCapabilities", "SetGammaControl", "GetGammaControl",
+                   "SetDisplaySurface", "GetDisplaySurfaceData", "GetFrameStatistics"))}
 HOST_THREAD = 30                    # threads.c's requests: a0 the W2M_THREAD_* sub-operation (scheduler.py; Sprint 051)
 HOST_KERNEL = 33                    # kernel.py's shared objects (Sprint 055): a0 the sub-operation
 HOST_EXCEPTION = 31                 # exceptions.c's requests (Sprint 053): a0 1, the x86 stubs' page; 2, XMM0-15 to a1
@@ -992,6 +1007,10 @@ def service_for(dll: str, fn: str) -> tuple[str, bool] | None:
     fn = ORDINAL_NAMES.get(dll.upper(), {}).get(fn, fn)
     service = (SERVICES.get(fn) if dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL")
                else DLL_SERVICES.get(dll.upper(), {}).get(fn))
+    if service is None and dll.upper() == "KERNEL.APPCORE.DLL":
+        # kernel.appcore's AppPolicy* functions are threads.c's k32_ services; a C symbol cannot carry the dot in the
+        # DLL's name (guest_runtime.service_table), so its names are answered from kernel32's table (Sprint 063)
+        service = SERVICES.get(fn)
     if service is None and dll.upper() in ("KERNEL32.DLL", "KERNELBASE.DLL"):
         # kernel32 exports RtlUnwindEx, RtlCaptureContext and the other Rtl* exception functions as its own
         # (not forwarders: specs/windows_exports.json) and they do ntdll's work: one service serves both names
@@ -1294,13 +1313,16 @@ class VM:
         k32 = (m.kernel32, 0, 0x1000, system + "KERNEL32.DLL", "KERNEL32.DLL")
         kb = (m.kernelbase, 0, 0x1000, system + "KERNELBASE.dll", "KERNELBASE.dll")
         nt = (m.ntdll, 0, 0x1000, system + "ntdll.dll", "ntdll.dll")
-        dll = {d.name: (d.base, d.entry or 0, d.pe.size_of_image, APP_PATH + d.name, d.name) for d in self.ld.images[1:]}
+        dll = {d.name: (d.base, d.entry or 0, d.pe.size_of_image, m.dll_paths.get(d.name.lower(), APP_PATH + d.name),
+                        d.name) for d in self.ld.images[1:]}
         entries = [program, nt, k32, kb, *dll.values()]
         init = [nt, kb, k32, *(dll[d.name] for d in self.ld.dependency_order)]
         if 0x58 + LDR_ENTRY_SIZE * len(entries) > LOADER_DATA_SIZE // 2:
             raise CompileError(f"{len(entries)} loader entries: the area holds fewer")
         at = {e[0]: va0 + 0x58 + LDR_ENTRY_SIZE * i for i, e in enumerate(entries)}
-        strings = 0x58 + LDR_ENTRY_SIZE * len(entries)
+        # the names from the area's middle: the list is written again when LoadLibrary maps a DLL (Sprint 063), and
+        # an entry or a name the program already holds keeps its address, the order being load order
+        strings = LOADER_DATA_SIZE // 2
         for i, (base, entry, size, full, leaf) in enumerate(entries):
             e = area + 0x58 + LDR_ENTRY_SIZE * i
             struct.pack_into("<QQQ", self.mm, e + 0x30, base, entry, size)
@@ -1386,13 +1408,13 @@ class VM:
         return self._stub_page
 
     def _com_vtables(self) -> None:
-        """Each COM class's vtable (com.c, in the runtime image) filled with its methods' thunks: the services
-        MMDEVAPI!W2mEnumerator<Method> and MMDEVAPI!W2mCollection<Method> (Sprint 052)."""
-        for symbol, methods in COM_VTABLES.items():
-            prefix = "W2mEnumerator" if "enumerator" in symbol else "W2mCollection"
+        """Each COM class's vtable (com.c, dxgi.c, in the runtime image) filled with its methods' thunks: the services
+        MMDEVAPI!W2mEnumerator<Method> and W2mCollection<Method> (Sprint 052), dxgi!W2mFactory<Method>,
+        W2mAdapter<Method> and W2mOutput<Method> (Sprint 063)."""
+        for symbol, (dll, prefix, methods) in COM_VTABLES.items():
             at = self.runtime.symbols[symbol] - MONITOR_VA
             for i, method in enumerate(methods):
-                struct.pack_into("<Q", self.mm, at + 8 * i, self._import_thunk(f"MMDEVAPI.dll!{prefix}{method}"))
+                struct.pack_into("<Q", self.mm, at + 8 * i, self._import_thunk(f"{dll}!{prefix}{method}"))
 
     def _import_thunk(self, name: str) -> int:
         key = name.lower()
@@ -1827,6 +1849,7 @@ class VM:
         root = self.files.root
         m.dll_paths[c] = APP_PATH + "\\".join(host.relative_to(root).parts) if root in host.parents else str(host)
         self.ld.images.append(Image(host.name, pe, base))
+        self._write_loader_data(m)                      # PEB.Ldr lists it, as EnumProcessModules reads (Sprint 063)
         self._trace_ranges()
         if pe.entry_rva:
             self._pending_init = self._init_stub(base, base + pe.entry_rva)

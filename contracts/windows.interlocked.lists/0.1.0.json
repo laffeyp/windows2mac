@@ -1,0 +1,165 @@
+{
+ "contract_id": "windows.interlocked.lists",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "InterlockedPushEntrySList, InterlockedPopEntrySList and InterlockedFlushSList on headers InitializeSListHead made: the header's first entry, depth and sequence after each call, the values returned, the entries' links, the last error left, and two threads pushing onto one list at once.",
+ "applicability": "windows-2022 (AMD EPYC 9V74 80-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/slist/slist.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "init",
+    "err": 57005,
+    "low": 0,
+    "high": 0
+   },
+   {
+    "s": "pop.empty",
+    "null": true,
+    "err": 57005,
+    "depth": 0,
+    "low_bits": 0,
+    "first_is": true,
+    "pushes": 0
+   },
+   {
+    "s": "flush.empty",
+    "null": true,
+    "err": 57005,
+    "depth": 0,
+    "low_bits": 0,
+    "first_is": true,
+    "pushes": 0
+   },
+   {
+    "s": "push.1",
+    "returns_previous": true,
+    "err": 57005,
+    "depth": 1,
+    "low_bits": 0,
+    "first_is": true,
+    "entry_links_previous": true,
+    "pushes": 1
+   },
+   {
+    "s": "push.2",
+    "returns_previous": true,
+    "err": 57005,
+    "depth": 2,
+    "low_bits": 0,
+    "first_is": true,
+    "entry_links_previous": true,
+    "pushes": 2
+   },
+   {
+    "s": "push.3",
+    "returns_previous": true,
+    "err": 57005,
+    "depth": 3,
+    "low_bits": 0,
+    "first_is": true,
+    "entry_links_previous": true,
+    "pushes": 3
+   },
+   {
+    "s": "pop.1",
+    "returns_first": true,
+    "err": 57005,
+    "depth": 2,
+    "low_bits": 0,
+    "first_is": true,
+    "popped_keeps_next": true,
+    "pushes": 3
+   },
+   {
+    "s": "flush.full",
+    "returns_first": true,
+    "err": 57005,
+    "depth": 0,
+    "low_bits": 0,
+    "first_is": true,
+    "chain_kept": true,
+    "pushes": 3
+   },
+   {
+    "s": "pop.after_flush",
+    "null": true,
+    "err": 57005,
+    "depth": 0,
+    "low_bits": 0,
+    "first_is": true,
+    "pushes": 3
+   },
+   {
+    "s": "push.after_flush",
+    "returns_previous": true,
+    "err": 57005,
+    "depth": 1,
+    "low_bits": 0,
+    "first_is": true,
+    "pushes": 4
+   },
+   {
+    "s": "init.again",
+    "low": 0,
+    "high": 0
+   },
+   {
+    "s": "threads.push",
+    "depth": 1000,
+    "popped": 1000,
+    "distinct": true,
+    "depth_after": 0,
+    "pushes": 1000,
+    "pushes_after": 1000
+   }
+  ],
+  "derivation": "scripts/family_run.py slist_rows: Interlocked lists (Sprint 063): a push advances the header's sequence by 2 on Server 2025 and by 1 on 2022 (row push.1); pop and flush leave it. The sequence is kept as the count of pushes it stands for, the step being push.1's."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38210349431: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:3ab0c9d0351bc7663c61f28495315b4f3678935002714dac15a90a51774423a3; run 38210351696: windows-2022, AMD EPYC 9V74 80-Core Processor, probe sha256:82d608691d4201d62b3fe2f93504429d969a156a34c8759a4e0836edc194de58",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "slist-1791784738-0-1",
+    "slist-1791784738-0-2",
+    "slist-1791784738-1-1",
+    "slist-1791784738-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-interlockedpushentryslist",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/interlockedapi/nf-interlockedapi-interlockedpushentryslist (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "The return value is the previous first item in the list. If the list was previously empty, the return value is NULL. ... All list items must be aligned on a MEMORY_ALLOCATION_ALIGNMENT boundary; otherwise, this function will behave unpredictably."
+  }
+ ],
+ "open_questions": [
+  "The sequence advances by 2 a push on Server 2025 and by 1 on 2022; the rows keep the count of pushes, and w2m advances it as Server 2025 does, the game's reference system (game run 38206263976).",
+  "A header or entry off a 16-byte boundary has no row: Microsoft Learn says the functions behave unpredictably, and w2m stops the run."
+ ],
+ "sections": {
+  "probe": "probes/slist (Sprint 044)",
+  "implementation": "tools/guest_runtime/slist.c",
+  "rows": "scripts/family_run.py interlocked_lists",
+  "excluded": "none"
+ }
+}

@@ -160,7 +160,7 @@ def test_a_call_that_runs_guest_code_is_recorded_with_what_its_caller_gets() -> 
     calls, dropped, out, stop = traced(exe, ("probe.exe",))
     assert stop == "ExitProcess" and dropped == 0
     created = [c for c in calls if c[4] == "CreateWindowExW"]
-    assert [hex(c[6]) for c in created] == ["0x0", "0x20010", "0x20020", "0x20030"]   # the first: W2mProbeNoSuchClass
+    assert [hex(c[6]) for c in created] == ["0x0", "0x20010", "0x20020", "0x20030", "0x20040", "0x20050"]   # the first: W2mProbeNoSuchClass; the last two: Sprint 063's game and other-thread windows
     assert created[0][7] == 1407                                  # ERROR_CANNOT_FIND_WND_CLASS, after the failure
     windows_used = {c[5][0] for c in calls if c[4] in ("GetClientRect", "DestroyWindow", "GetWindowRect")}
     assert {c[6] for c in created} & windows_used

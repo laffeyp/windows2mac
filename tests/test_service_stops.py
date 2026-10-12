@@ -47,7 +47,7 @@ def test_an_api_set_with_no_observed_host_names_the_set_and_its_return_address()
     source = (ROOT / "tools" / "guest_runtime" / "code_pages.c").read_text()
     old = "u64 k32_GetACP(void) { return w2m_logged(W2M_API_GetACP, 0, ANSI_CP); }"
     assert source.count(old) == 1
-    name = "api-ms-win-appmodel-runtime-l1-1-2"
+    name = "ext-ms-win-ntuser-window-l1-1-0"          # a set with no observed host (the appmodel set has one: 063)
     units = ", ".join(str(ord(c)) for c in name)
     planted = source.replace(old, "u64 k32_GetACP(void) { static const u16 set[] = {" + units + ", 0}; "
                              f"return w2m_host(W2M_HOST_MODULE, (u64)set, {len(name)}, 1, 0, 0); }}")
@@ -78,3 +78,13 @@ def test_the_pc_map_stays_sorted_as_blocks_are_compiled() -> None:
     finally:
         vm.close()
     assert len(marks) > 1000 and marks == sorted(marks)
+
+
+def test_the_appmodel_api_set_is_kernel_appcore_and_its_policy_is_served() -> None:
+    """Sprint 063: the frontier stopped at LoadLibraryExW("api-ms-win-appmodel-runtime-l1-1-2"); on Windows the set is
+    kernel.appcore.dll (game run 38206263976 seq 1764-1765) and AppPolicyGetThreadInitializationType answers 0."""
+    from w2m.modules import API_SET_HOSTS
+    from w2m.vm_backend import service_for
+    assert API_SET_HOSTS["api-ms-win-appmodel-runtime-l1-1-2.dll"] == "kernel.appcore.dll"
+    assert service_for("kernel.appcore.dll", "AppPolicyGetThreadInitializationType") == \
+        ("k32_AppPolicyGetThreadInitializationType", True)

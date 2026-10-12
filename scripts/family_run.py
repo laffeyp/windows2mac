@@ -100,6 +100,7 @@ class Family:
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
     dll_name: str | None = None           # the probe's own DLL, loaded from its directory (Sprint 046)
+    dll_on_disk: bool = False             # the DLL is also a file beside the probe, which the probe reads (Sprint 063)
     host_files: tuple[str, ...] = ()      # Python no runtime request reaches that implements it (the loader's)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -297,38 +298,73 @@ def parameters_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def without_message_0x60(printed: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+    """The probe's drains (rows queue.<drain>.<NN> and their "after" rows) without message 0x60, renumbered. An
+    empty queue's last error after the window was activated is 0 or left as the system's own messages fall (the
+    second executions of runs 38210803867 and 38210806334 differ there), so it is kept only for the first drain."""
+    dropped: set[str] = set()
+    kept: dict[str, int] = {}
+    for r in printed:
+        s = r.get("s", "")
+        parts = s.split(".")
+        if parts[0] != "queue" or len(parts) != 3:
+            yield r
+            continue
+        if r.get("after"):
+            if s in dropped:
+                continue
+            yield r | {"s": f"queue.{parts[1]}.{kept[s]:02d}"}
+            continue
+        if r.get("msg") == 0x60:
+            dropped.add(s)
+            continue
+        n = sum(1 for k in kept if k.startswith(f"queue.{parts[1]}."))
+        kept[s] = n
+        if parts[1] != "first" and not r.get("noremove"):
+            r = {k: v for k, v in r.items() if k != "noremove_err"}
+        yield r | {"s": f"queue.{parts[1]}.{n:02d}"}
+
+
 def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Where a window lands depends on the desktop: CW_USEDEFAULT cascades in steps of 26 from a start set by the
     windows the session made before (52, 78 and 130 seen for a first window), and the default height is 3/4 of the
     work area's less 21 (519 on Server 2025's 720, 525 on 2022's 728: the taskbars differ). The rows keep each
     window's geometry from its own origin, positions as relations (x = y, a multiple of 26, the second window 26 past
     the first), the batch window's heights as their excess over that default, and the work area's bottom as lying
-    above the screen's."""
+    above the screen's. Sprint 063: the game's window and another thread's ("game", "other", rows msg.game.*,
+    msg.other.*) are placed as the batch window is; a drained message's row after DispatchMessageA shares its key and
+    is keyed "<key>.after". With five windows the cascade did not always advance (the second executions of runs
+    38210803867 and 38210806334 put the play window on the batch window's 26), so a window's place past the first is
+    no longer kept, only that it lies on the cascade. Message 0x60, which Windows posts to a system window of the
+    thread on its own schedule after activation (open question), is taken out of each drain's rows, and the drain's
+    later rows are numbered without it."""
+    printed = list(without_message_0x60(printed))
     work = next((r for r in printed if r["s"] == "screen.work_area"), None)
     default_height = (work["rect_bottom"] - work["rect_top"]) * 3 // 4 - 21 if work else 0
     origin: dict[str, tuple[int, int]] = {}
     for r in printed:
-        if r["s"] in ("msg.batch.1", "msg.play.1") and "x" in r:
+        if r["s"] in ("msg.batch.1", "msg.play.1", "msg.game.1", "msg.other.1") and "x" in r:
             origin[r["s"].split(".")[1]] = (r["x"], r["y"])
     out = []
     for r in printed:
+        if r.get("after"):
+            r = {k: v for k, v in r.items() if k != "after"} | {"s": r["s"] + ".after"}
         s = r["s"]
         if s == "screen.work_area":
             out.append({"s": s, "left": r["rect_left"], "top": r["rect_top"], "right": r["rect_right"],
                         "bottom_above_768": r["rect_bottom"] < 768})
             continue
-        which = "batch" if s.startswith(("msg.batch.", "batch.")) else "play" if s.startswith(("msg.play.", "play.")) else None
+        which = next((w for w in ("batch", "play", "game", "other") if s.startswith((f"msg.{w}.", f"{w}."))), None)
         if which is None or which not in origin:
             out.append(r)
             continue
         x, y = origin[which]
-        tall = which == "batch"                     # CW_USEDEFAULT height: from the work area
+        tall = which != "play"                      # CW_USEDEFAULT height: from the work area
         r = dict(r)
         if "x" in r:
-            first = origin.get("batch", (x, y))[0]
             r |= {"x": None, "y": None}
             r = {k: v for k, v in r.items() if v is not None} | {
-                "x_equals_y": x == y, "x_in_cascade": x > 0 and x % 26 == 0, "past_first": x - first}
+                "x_equals_y": x == y, "x_in_cascade": x > 0 and x % 26 == 0}
         for prefix in ("in", "out", "rect"):
             if f"{prefix}_left" not in r:
                 continue
@@ -408,6 +444,21 @@ def topology_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if r.get("s") == "ex.query.65535":
             r.pop("modules", None)
             r.pop("size_other", None)                 # the module entry's size, 48, on 2025 only
+        out.append(r)
+    return out
+
+
+def slist_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Interlocked lists (Sprint 063): a push advances the header's sequence by 2 on Server 2025 and by 1 on 2022
+    (row push.1); pop and flush leave it. The sequence is kept as the count of pushes it stands for, the step
+    being push.1's."""
+    step = next(r["sequence"] for r in printed if r.get("s") == "push.1") or 1
+    out = []
+    for r in printed:
+        r = dict(r)
+        for k in ("sequence", "sequence_after"):
+            if k in r:
+                r[k.replace("sequence", "pushes")] = r.pop(k) // step
         out.append(r)
     return out
 
@@ -538,6 +589,75 @@ FAMILIES: dict[str, Family] = {
                                                  ("time.qpf", "time.counter_tracks_time")),
                 "process_id_from_thread": Plant("(u32)w2m_teb()->client_process", "(u32)w2m_teb()->client_thread",
                                                 ("ids.process", "ids.thread"))}),
+    "interlocked_lists": Family(
+        name="interlocked_lists",
+        contract_id="windows.interlocked.lists",
+        version="0.1.0",
+        summary=("InterlockedPushEntrySList, InterlockedPopEntrySList and InterlockedFlushSList on headers "
+                 "InitializeSListHead made: the header's first entry, depth and sequence after each call, the values "
+                 "returned, the entries' links, the last error left, and two threads pushing onto one list at once."),
+        probe="slist", guest_file="slist.c",
+        runs={
+              "38210349431": Run("windows-2025", "3ab0c9d0351bc7663c61f28495315b4f3678935002714dac15a90a51774423a3", "slist-1791784738-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210351696": Run("windows-2022", "82d608691d4201d62b3fe2f93504429d969a156a34c8759a4e0836edc194de58", "slist-1791784738-1", "AMD EPYC 9V74 80-Core Processor"),
+        },
+        documented=(
+            documented("ms-interlockedpushentryslist", "api/interlockedapi/nf-interlockedapi-interlockedpushentryslist",
+                       "2024-02-22", "The return value is the previous first item in the list. If the list was "
+                       "previously empty, the return value is NULL. ... All list items must be aligned on a "
+                       "MEMORY_ALLOCATION_ALIGNMENT boundary; otherwise, this function will behave unpredictably."),),
+        open_questions=(
+            "The sequence advances by 2 a push on Server 2025 and by 1 on 2022; the rows keep the count of pushes, and "
+            "w2m advances it as Server 2025 does, the game's reference system (game run 38206263976).",
+            "A header or entry off a 16-byte boundary has no row: Microsoft Learn says the functions behave "
+            "unpredictably, and w2m stops the run."),
+        derive=slist_rows,
+        plants={"push_keeps_depth": Plant("(((h[0] & DEPTH_MASK) + 1) & DEPTH_MASK)", "(h[0] & DEPTH_MASK)",
+                                          ("push.1", "push.2", "push.3", "pop.1", "push.after_flush",
+                                           "threads.push")),
+                "flush_keeps_first": Plant("    h[1] = 0;\n    h[0] &= ~DEPTH_MASK;", "    h[0] &= ~DEPTH_MASK;",
+                                           ("flush.full", "pop.after_flush", "push.after_flush")),
+                "pop_advances_sequence": Plant("        h[0] = (h[0] & ~DEPTH_MASK) | (((h[0] & DEPTH_MASK) - 1) & DEPTH_MASK);",
+                                               "        h[0] = ((h[0] & ~DEPTH_MASK) + SEQUENCE_STEP) | (((h[0] & DEPTH_MASK) - 1) & DEPTH_MASK);",
+                                               ("pop.1", "flush.full", "pop.after_flush", "push.after_flush",
+                                                "threads.push"))}),
+    "module_search": Family(
+        name="module_search",
+        contract_id="windows.module.search",
+        version="0.1.0",
+        summary=("EnumProcessModules on the current process lists the program, ntdll, KERNEL32 and KERNELBASE first, "
+                 "a DLL LoadLibrary maps last, and reports the whole list's length whatever the buffer holds, leaving "
+                 "the last error; SetDllDirectoryW adds a directory LoadLibrary searches for a bare name and NULL "
+                 "removes it, each answering 1 with the last error left (Sprint 063: mono's EnumProcessModules, "
+                 "UnityPlayer's SetDllDirectoryW around steam_api64.dll)."),
+        probe="module_search", guest_file="module.c", dll_name="module_search_dll.dll", dll_on_disk=True,
+        runs={
+              "38210455471": Run("windows-2025", "df6ca688fd04c4599788e7c9ce2ff311246e6d96bb2273edaa87282ece84c023", "module_search-1791784818-0", "AMD EPYC 7763 64-Core Processor", dll="735a3c71d68c4329e287bd1730b1bae07a5f448c80312daefd34f624f40d79cb"),
+              "38210458062": Run("windows-2022", "1924070efea39f066a9859354c9c77138e32db51f26e5426e51b669140ea016d", "module_search-1791784818-1", "AMD EPYC 7763 64-Core Processor", dll="14dc071ae4f8c7321ae556b887ea440281eb7070c3ae9b8998aba1ce195ee192"),
+        },
+        documented=(
+            documented("ms-setdlldirectoryw", "api/winbase/nf-winbase-setdlldirectoryw", "2025-07-01",
+                       "After calling SetDllDirectory, the standard DLL search path is: 1. The directory from which "
+                       "the application loaded. 2. The directory specified by the lpPathName parameter."),
+            documented("ms-setdlldirectoryw-null", "api/winbase/nf-winbase-setdlldirectoryw", "2025-07-01",
+                       "If this parameter is NULL, the function restores the default search order."),
+            documented("ms-enumprocessmodules", "api/psapi/nf-psapi-enumprocessmodules", "2024-02-22",
+                       "If PSAPI_VERSION is 1, this function is defined as EnumProcessModules in Psapi.h and exported "
+                       "in Psapi.lib and Psapi.dll as a wrapper that calls K32EnumProcessModules.")),
+        open_questions=(
+            "The list's length differs by machine (each loads other system DLLs), so the rows hold its first four "
+            "entries in load order and where a DLL the probe loads appears; w2m lists the program, ntdll, KERNEL32, "
+            "KERNELBASE and the DLLs it maps, not the other system DLLs a Windows process holds.",
+            "SetDllDirectoryW(\"\") (the current directory out of the search) has no row and stops the run."),
+        plants={
+            "directory_not_searched": Plant("    if (h || !dll_directory_too || !dll_directory[0]) return h;",
+                                            "    return h;",
+                                            ("search.load", "enum.after_load", "search.loaded_after_reset")),
+            "reset_kept": Plant("        dll_directory[0] = 0;\n        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);",
+                                "        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);", ("search.after_reset",)),
+            "needed_is_written": Plant("    *(u32 *)needed = (u32)(8 * count);",
+                                       "    *(u32 *)needed = (u32)(8 * (count < size / 8 ? count : size / 8));",
+                                       ("enum.short", "enum.size_only"))}),
     "modules": Family(
         name="modules",
         contract_id="windows.module.queries",
@@ -1032,16 +1152,14 @@ FAMILIES: dict[str, Family] = {
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
-        version="0.2.0",
+        version="0.3.0",
         summary=("A GUI process started without handles (as Steam starts the game) gets NULL standard handles, "
                  "no console, and Windows's answers from GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, "
                  "GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW, GetCommandLineW and GetCommandLineA."),
         probe="console", guest_file="console.c",
-        runs={
-              "38046095100": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-0", "AMD EPYC 7763 64-Core Processor"),
-              "38046096985": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-1", "AMD EPYC 7763 64-Core Processor"),
-              "38046099129": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38046100953": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-3", "AMD EPYC 7763 64-Core Processor"),
+        runs={   # Sprint 063: the child also asks GetConsoleOutputCP (row console_output_cp)
+              "38210455282": Run("windows-2025", "e182a66ebffa41eb86b7b12f9ef4256945ac1110c0d22b8289d7cc1ee1ebe139", "console-1791784818-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210458372": Run("windows-2022", "51d95fba138a0f0e8d6e891f911ea46ec32526334d8dc276cb97c115eb989e4a", "console-1791784818-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
         },
         documented=(),
         open_questions=(
@@ -1052,11 +1170,14 @@ FAMILIES: dict[str, Family] = {
             "the probe's fill survives (row startup_info.child.values).",
             "The title's length is the runner's path and is dropped from the rows; the title being the module path is kept."),
         derive=console_rows, gui=True, arguments="child", output_file="w2m-console-child.jsonl",
-        plants={"write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
+        plants={
+            "output_cp_answers": Plant("    return no_console(W2M_API_GetConsoleOutputCP, 0);",
+                                       "    return w2m_logged(W2M_API_GetConsoleOutputCP, 0, 437);", ("console_output_cp",)),
+            "write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
                                                    "    set_error(87);\n    return w2m_logged(api, arg, 0);",
                                                    # no_console serves GetConsoleMode too: the std rows' console_mode_err
                                                    ("std.input", "std.output", "std.error", "console_cp",
-                                                    "write_console.no_console")),
+                                                    "console_output_cp", "write_console.no_console")),
                 "file_type_null_no_error": Plant("    if (handle == 0 || handle == ~0ull) {\n        set_error(ERROR_INVALID_HANDLE);",
                                                  "    if (handle == 0 || handle == ~0ull) {",
                                                  ("std.input", "std.output", "std.error"))}),
@@ -1337,7 +1458,7 @@ FAMILIES: dict[str, Family] = {
             "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts "
             "(user32 1,007 against 1,041).",),
         plants={
-            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
+            "loadlibraryw_not_found": Plant("    u64 h = load(name, rsp, 1);\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             "    u64 h = 0;\n    if (!h) set_error(ERROR_MOD_NOT_FOUND);\n    return w2m_logged(W2M_API_LoadLibraryW",
                                             ("load.lower", "load.upper", "load.no_extension", "load.full_path"))}),
     "known_folders": Family(
@@ -1915,6 +2036,46 @@ FAMILIES: dict[str, Family] = {
             "exited_suspend_error": Plant("        set_error(ERROR_ACCESS_DENIED);\n        return w2m_logged(W2M_API_SuspendThread",
                                           "        set_error(6);\n        return w2m_logged(W2M_API_SuspendThread",
                                           ("suspend.exited",))}),
+    "dxgi": Family(
+        name="dxgi",
+        contract_id="windows.dxgi.dxgi",
+        version="0.1.0",
+        summary=("CreateDXGIFactory and the walk UnityPlayer makes with the factory (RVA 0x520700; game run 38206263976 "
+                 "seq 3298-3301): EnumAdapters to its end, each adapter's EnumOutputs to its end, the outputs' and "
+                 "adapters' descriptions, Release. On the runners, which have no GPU: two Microsoft Basic Render Driver "
+                 "adapters (0x1414, 0x8C), no dedicated memory, 8,587,180,032 bytes shared; the first with one output, "
+                 "\\\\.\\DISPLAY1 at 0,0-1024,768 on the primary monitor; DXGI_ERROR_NOT_FOUND past each end; "
+                 "E_NOINTERFACE for another interface, E_POINTER for a NULL out pointer; every object new with one "
+                 "reference."),
+        probe="dxgi", guest_file="dxgi.c",
+        runs={
+              "38210591842": Run("windows-2025", "15e0aa0873454d1bbacd5b9c343b730970d6df7b776afeeccdf273caf9168dc9", "dxgi-1791784916-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38210594155": Run("windows-2022", "8fa545b798033b50b3254efc6919816129e168d774fe7041270fc653cf4d3445", "dxgi-1791784916-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(
+            documented("ms-createdxgifactory", "api/dxgi/nf-dxgi-createdxgifactory", "2024-02-22",
+                       "Creates a DXGI 1.0 factory that you can use to generate other DXGI objects."),
+            documented("ms-enumadapters", "api/dxgi/nf-dxgi-idxgifactory-enumadapters", "2024-02-22",
+                       "Returns S_OK if successful; otherwise, returns DXGI_ERROR_NOT_FOUND if the index is greater than "
+                       "or equal to the number of adapters in the local system, or DXGI_ERROR_INVALID_CALL if ppAdapter "
+                       "parameter is NULL.")),
+        open_questions=(
+            "The runners have no GPU, and w2m answers as they do: the Basic Render Driver twice, one output. A Mac "
+            "adapter backed by Metal is milestone B's (plan, phase 6), with rows from a machine that has a GPU.",
+            "The adapters' LUIDs are the machine's; the rows hold only that each is nonzero.",
+            "IDXGIFactory1 and IDXGIFactory2, the adapters' and outputs' QueryInterface and every method the game does "
+            "not call stop the run by name: no row shows them."),
+        plants={
+            "second_adapter_has_output": Plant("    if (((struct object *)self)->index != 0 || (u32)index >= 1) {",
+                                               "    if ((u32)index >= 1) {",
+                                               ("adapter.1.outputs.end.0",)),   # its Release still answers 0
+            "null_out_invalid_arg": Plant("    if (!out) return w2m_logged(W2M_API_CreateDXGIFactory, iid, E_POINTER);",
+                                          "    if (!out) return w2m_logged(W2M_API_CreateDXGIFactory, iid, 0x80070057u);",
+                                          ("create.null_out",)),
+            "output_on_another_monitor": Plant("    *(u64 *)(p + 0x58) = MONITOR;", "    *(u64 *)(p + 0x58) = MONITOR + 0x10000;",
+                                               ("adapter.0.output.0", "game_walk")),
+            "release_keeps_count": Plant("    s64 left = --o->refs;", "    s64 left = o->refs;",
+                                         ("refcount", "adapter.0.release", "adapter.1.release", "release.last"))}),
     "com": Family(
         name="com",
         contract_id="windows.com.com",
@@ -1979,22 +2140,31 @@ FAMILIES: dict[str, Family] = {
     "registry": Family(
         name="registry",
         contract_id="windows.registry.registry",
-        version="0.2.0",
+        version="0.3.0",
         summary=("RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software "
                  "that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a "
                  "NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; "
-                 "a key closes once; the last error is left."),
+                 "a key closes once; the last error is left. Sprint 063, the game's writes (Unity's PlayerPrefs, game run "
+                 "38206263976 seq 2734-3490): RegCreateKeyW of its key, RegSetValueExA of REG_BINARY, REG_DWORD and "
+                 "REG_SZ, RegQueryValueExA in the game's two forms and at its edges (REG_NONE written for a missing "
+                 "value, ERROR_MORE_DATA, the size alone, ERROR_INVALID_PARAMETER for data without a size), names "
+                 "without case in ASCII and Latin-1, ERROR_ACCESS_DENIED through a handle opened for reading, "
+                 "RegDeleteValueA, and RegDeleteKeyW refusing a key with a subkey."),
         probe="registry", guest_file="registry.c",
-        runs={
-              "38182330078": Run("windows-2025", "b9b66037b6a7f2f230bb3009c2dc5f1a083234466555848cbfd6d9a1311685af", "registry-1791759336-0", "AMD EPYC 7763 64-Core Processor"),
-              "38182331638": Run("windows-2022", "07bfa9e5709c4d41c7ea02ab298b4c1c92df5e68159b782325b0eb00bfd9d653", "registry-1791759336-1", "AMD EPYC 7763 64-Core Processor"),
+        runs={   # Sprint 063: the game's writes and their edges
+              "38210383833": Run("windows-2025", "5cffb57fa38d5a97fb95f46607823da0d42a4ec3232e9cff9b797f1a282828c6", "registry-1791784765-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210386046": Run("windows-2022", "c560b178aa6e68c0b37ddf59f16feb181fe47b6cade16234896b04f7a4b3a225", "registry-1791784765-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(),
-        open_questions=("w2m's registry holds HKEY_CURRENT_USER\\Software and nothing below it: the game's keys do not "
-                        "exist on a fresh machine. Writes (RegCreateKeyW, values) are not served; other roots stop the run.",),
+        open_questions=("w2m's registry starts each run with HKEY_CURRENT_USER\\Software and nothing below it, as a fresh "
+                        "machine has; what a run writes stays for the rest of the run and nothing persists between runs "
+                        "(the reference is the game's first run on a fresh runner). Other roots, value types and sizes "
+                        "outside the rows stop the run.",),
         plants={
             "missing_untouched": Plant("    if (!exists(path)) {\n        *(u64 *)result = 0;", "    if (!exists(path)) {",
-                                       ("open.missing", "open.missing_two_levels", "open.missing_case", "open.missing_below_software_handle", "open.u0173_oftware", "open.software_u0100_x", "open.long_s_oftware", "open.software_dotless_i")),
+                                       ("open.missing", "open.missing_two_levels", "open.missing_case", "open.missing_below_software_handle", "open.u0173_oftware", "open.software_u0100_x", "open.long_s_oftware", "open.software_dotless_i",
+                                        # Sprint 063: the game's key opened before it is made and after it is deleted
+                                        "write.open_before", "write.open_after_delete")),
             "case_kept": Plant("return c >= 'A' && c <= 'Z' ? (u16)(c + 32) : c;", "return c;",
                                ("open.software", "open.software_case", "open.missing_below_software_handle",
                                 "close.software", "close.software_case", "close.software_again")),
@@ -2004,7 +2174,23 @@ FAMILIES: dict[str, Family] = {
                                     ("open.u0173_oftware", "open.software_u0100_x")),
             "root_new_handle": Plant("        *(u64 *)result = root;\n", "        *(u64 *)result = KEY_BASE + 0x100;\n",
                                      ("open.root_null_subkey", "open.root_empty_subkey", "close.root_null_subkey",
-                                      "close.root_empty_subkey"))}),
+                                      "close.root_empty_subkey")),
+            # Sprint 063: the value functions
+            "latin1_unfolded": Plant("if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c = (u16)(c + 32);",
+                                     "if (c >= 'A' && c <= 'Z') c = (u16)(c + 32);", ("query.latin1_case",)),
+            "missing_type_untouched": Plant("        if (type) *(u32 *)type = REG_NONE;\n", "",
+                                            ("query.missing", "query.after_delete")),
+            "short_buffer_copies": Plant("        if (*size < n) {", "        if (0) {", ("query.binary_20_short",)),
+            "read_handle_writes": Plant(
+                "    if (!(keys[slot].access & right)) { *status = ERROR_ACCESS_DENIED; return -1; }\n", "",
+                ("set.through_read_handle", "delete.through_read_handle")),
+            "sz_utf16_copy_skipped": Plant(
+                "        for (u32 i = 0; i < n; i++) data[2 * i] = values[v].data[i], data[2 * i + 1] = 0;\n", "",
+                ("query.sz_with_nul", "query.sz_without_nul")),
+            "delete_value_kept": Plant(
+                "    values[v].used = 0;\n    return w2m_logged(W2M_API_RegDeleteValueA, h, ERROR_SUCCESS);",
+                "    return w2m_logged(W2M_API_RegDeleteValueA, h, ERROR_SUCCESS);",
+                ("query.after_delete", "delete.again"))}),
     "file_search": Family(
         name="file_search",
         contract_id="windows.file.file_search",
@@ -2103,32 +2289,54 @@ FAMILIES: dict[str, Family] = {
     "windows": Family(
         name="windows",
         contract_id="windows.windows.windows",
-        version="0.2.0",
+        version="0.3.0",
         summary=("Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, "
                  "CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, "
                  "WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default "
                  "size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the "
-                 "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW)."),
+                 "rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW). Sprint 063: the game's "
+                 "later calls on its window (batch run 38206263976): SetWindowLongPtrA, the queue (WM_DWMNCRENDERINGCHANGED "
+                 "posted to each new window; PeekMessageA, GetMessageExtraInfo, TranslateMessage, DispatchMessageA; "
+                 "PostMessageW, WM_QUIT), RegisterDeviceNotificationW, GetFocus and SetFocus with the activation's "
+                 "messages, LoadImageW of a cursor file, a missing file and a missing icon."),
         probe="windows", guest_file="windows.c",
-        runs={
-              "38182422811": Run("windows-2025", "97ad55015dfa144bb7322a90a651722686d5bb1df8d8e1df74180ac8afcdc09f", "windows-1791759423-0", "AMD EPYC 9V74 80-Core Processor"),
-              "38182424645": Run("windows-2022", "f1655d9fd40c36838ab28f1d1de7aea5839ca99ea55fd91ed8e5c23408befdcd", "windows-1791759423-1", "AMD EPYC 7763 64-Core Processor"),
+        # the probe writes its cursor file under GetTempPathW, which reads TMP (set on the runners; Sprint 063)
+        environment=("TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp", "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"),
+        runs={   # Sprint 063: the game's later calls and the boundaries (probe windows, rows from create.game on)
+              "38210803867": Run("windows-2025", "2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bba172", "windows-1791785079-0", "AMD EPYC 9V74 80-Core Processor"),
+              "38210806334": Run("windows-2022", "6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7", "windows-1791785079-1", "AMD EPYC 9V74 80-Core Processor"),
         },
         documented=(),
         open_questions=("Where CW_USEDEFAULT places a window depends on the windows the desktop made before (52, 78, 130 "
                         "seen for a probe's first); w2m's cascade starts at 52.",
                         "The default height is fitted: 3/4 of the work area's height less 21 on both runners (519, 525).",
-                        "Windows are records; nothing is drawn, and ShowWindow, the message loop and every message after "
-                        "WM_CREATE are later work."),
+                        "Windows are records; nothing is drawn, and ShowWindow is later work.",
+                        "Message 0x60, undocumented (wiert.me, 2020-12-22, lists it among loop messages without "
+                        "documentation), is posted to a system window of the thread some time after its window is "
+                        "activated: the probe met it after a posted WM_USER message on every run (wParam 0x80000001 on "
+                        "Server 2025, 1 on 2022), and the game dispatched one at seq 3491-3493 to a procedure it never "
+                        "saw. Its arrival varies (one execution met two in the WM_QUIT drain); w2m posts none, and the "
+                        "derivation takes it out of each drain (windows_rows).",
+                        "On Windows DefWindowProcW's WM_ACTIVATE sends WM_IME_SETCONTEXT, WM_IME_NOTIFY and the first "
+                        "WM_SETFOCUS from inside; w2m sends them from SetFocus in the same order. A procedure that keeps "
+                        "WM_ACTIVATE from DefWindowProcW would get them in w2m and not on Windows.",
+                        "LoadImageW of a cursor file left the last error 0 in the probe; the game's call left 6 (its "
+                        "file, written past the capture's 32-call count, is not on the record)."),
         derive=windows_rows,
         plants={
             "minmax_not_sent": Plant("    w2m_call_guest(&f->call, w->procedure, h, WM_GETMINMAXINFO, 0, (u64)f->minmax);",
                                      "    f->step = 1;\n    w2m_call_guest(&f->call, w->procedure, h, WM_NCCREATE, 0, (u64)f->create);",
-                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*", "create.play", "play.window_rect", "msg.offscreen.*", "create.offscreen")),
+                                     ("msg.batch.*", "create.batch", "batch.client_rect", "batch.window_rect", "msg.play.*", "create.play", "play.window_rect", "msg.offscreen.*", "create.offscreen",
+                                      # Sprint 063: the game's and the other thread's windows; the game window's later
+                                      # messages are numbered after its creation's, so one fewer moves each of them
+                                      # (msg.game.4, 5, 10 and 11 land on rows of the same message)
+                                      "msg.game.0", "msg.game.1", "msg.game.2", "msg.game.3", "create.game", "msg.game.6", "msg.game.7", "msg.game.8", "msg.game.9",
+                                      "msg.game.12", "msg.game.13", "msg.game.14", "msg.game.15", "msg.game.16", "msg.game.17", "msg.game.18", "msg.game.19", "msg.game.20",
+                                      "msg.game.21", "msg.game.22", "msg.other.*", "create.other")),
             "frame_thin": Plant("#define FRAME_TOP 31 ", "#define FRAME_TOP 26 ",
-                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect", "msg.offscreen.2")),
+                                ("msg.batch.2", "batch.client_rect", "msg.play.2", "play.client_rect", "msg.offscreen.2", "msg.game.2", "msg.other.2")),
             "height_from_screen": Plant("        cy = (work[3] - work[1]) * 3 / 4 - 21;", "        cy = 768 * 3 / 4 - 21;",
-                                        ("msg.batch.2", "batch.client_rect", "batch.window_rect")),
+                                        ("msg.batch.2", "batch.client_rect", "batch.window_rect", "msg.game.2", "msg.other.2")),
             "no_edge_in_create": Plant("    *(u32 *)(cs + 72) = ((u32)style & WS_CAPTION) == WS_CAPTION ? WS_EX_WINDOWEDGE : 0;",
                                        "    *(u32 *)(cs + 72) = 0;", ("msg.play.1", "msg.play.3", "msg.offscreen.1", "msg.offscreen.3")),
             "extra_unbounded": Plant("        if (index + 8 > classes[w->cls].extra) return 0;", "        if (index + 8 > EXTRA) return 0;",
@@ -2142,7 +2350,23 @@ FAMILIES: dict[str, Family] = {
                                             "        if (1)\n            return w2m_logged(W2M_API_MonitorFromWindow",
                                             ("offscreen.monitor",), file="display.c"),
             "icon_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_LoadIconA", "    return w2m_logged(W2M_API_LoadIconA",
-                                     ("icon.own_103",))}),
+                                     ("icon.own_103",)),
+            # Sprint 063
+            "no_render_message": Plant("        post(w->owner, f->window, WM_DWMNCRENDERINGCHANGED, 1, 0);", "",
+                                       ("queue.first.*", "msg.game.[4-9]", "msg.game.1[0-9]", "msg.game.2[0-2]")),
+            "quit_code_dropped": Plant("    t->quit_code = (u64)(s64)(s32)code;", "    t->quit_code = 0;", ("queue.quit.00",)),
+            "focus_any_thread": Plant("    if (w->owner != tid) {                                                  /* row focus.other_thread */",
+                                      "    if (0) {", ("focus.other_thread",)),
+            "no_activate_app_to_others": Plant("        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, 1);",
+                                               "        if (0 && other) SEND(other, WM_ACTIVATEAPP, 1, 1);", ("msg.game.1[0-9]", "msg.game.2[0-2]", "focus.set")),
+            "activate_sends_nothing": Plant("    int sends = ((u32)msg == WM_ACTIVATE && (u32)wparam == 1) ||", "    int sends = 0 ||",
+                                            ("msg.game.1[5-9]", "msg.game.2[0-2]", "focus.set")),
+            "focus_returns_null": Plant("        w2m_return_to(f->rsp, w2m_logged(W2M_API_SetFocus, f->window, f->window));",
+                                        "        w2m_return_to(f->rsp, w2m_logged(W2M_API_SetFocus, f->window, 0));", ("focus.set",)),
+            "cursor_same_handle": Plant("CURSOR_BASE + 0x10 * ++cursors);", "CURSOR_BASE + 0x10 * (cursors = 1));", ("image.cursor_file_again",)),
+            "missing_file_error_3": Plant("            set_error(error);                                                  /* row image.missing_file */",
+                                          "            set_error(3);", ("image.missing_file",)),
+            "notification_error_left": Plant("    set_error(0);\n    return w2m_logged(W2M_API_RegisterDeviceNotificationW", "    return w2m_logged(W2M_API_RegisterDeviceNotificationW", ("device_notification",))}),
     "winrt": Family(
         name="winrt",
         contract_id="windows.winrt.winrt",
@@ -2391,6 +2615,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         if dll is None and f is not None and f.dll_name is not None:
             dll = next(r.dll for r in f.runs.values() if r.binary == binary)
         dll_bytes = None if dll is None else (ROOT / "store" / "binaries" / f"{dll}.dll").read_bytes()
+        if f is not None and f.dll_on_disk and f.dll_name is not None and dll_bytes is not None:
+            (Path(d) / f.dll_name).write_bytes(dll_bytes)    # as the runner's out/ has it beside probe.exe
 
         def dlls(name: str) -> bytes | None:
             return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None

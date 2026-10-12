@@ -88,6 +88,12 @@ static void child(void) {
     err = GetLastError();
     row("console_cp"); field("value", cp); field("err", err); end();
 
+    /* GetConsoleOutputCP, which mono reaches through GetProcAddress (game run 38206263976 seq 2211: 0, error 6) */
+    SetLastError(SENTINEL);
+    cp = GetConsoleOutputCP();
+    err = GetLastError();
+    row("console_output_cp"); field("value", cp); field("err", err); end();
+
     DWORD wrote = 77;
     SetLastError(SENTINEL);
     BOOL ok = WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), L"x", 1, &wrote, NULL);

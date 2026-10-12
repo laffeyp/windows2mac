@@ -11,6 +11,12 @@
  *   - GetModuleFileNameW into a buffer too small: nSize - 1 characters and a NUL, returns nSize,
  *     ERROR_INSUFFICIENT_BUFFER
  * Argument forms no row covers stop the run (w2m_unimplemented).
+ *
+ * SetDllDirectoryW and EnumProcessModules (Sprint 063, contracts/windows.module.search): a directory set with
+ * SetDllDirectoryW is searched for a bare name after the program's directory and forgotten on SetDllDirectoryW(NULL);
+ * EnumProcessModules lists the modules in PEB.Ldr's load order (the program, ntdll, KERNEL32, KERNELBASE, then the
+ * DLLs as loaded; vm_backend.py adds a DLL LoadLibrary maps), as PSAPI reads them on Windows, and reports the whole
+ * list's length whatever the buffer holds.
  */
 #include "runtime.h"
 
@@ -24,6 +30,7 @@
 #define PATH_CHARS 520
 
 static unsigned short path[PATH_CHARS];
+static unsigned short dll_directory[PATH_CHARS];   /* SetDllDirectoryW's directory; empty: none */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -50,7 +57,7 @@ static u64 find(u64 name, u64 loading) {
 /* LoadLibrary's search. A DLL the host maps now (Sprint 049) comes with a stub that runs its DllMain: the caller's
  * return address goes into the stub at W2M_INIT_STUB_SLOT and the stub becomes the return address, so the service
  * returns into DllMain, and DllMain's return into the caller with RAX the handle. */
-static u64 load(u64 name, u64 rsp) {
+static u64 load_named(u64 name, u64 rsp) {
     u64 init = 0;
     u64 h = w2m_host(W2M_HOST_MODULE, name, wide_length(name), 1, 0, &init);
     if (init) {
@@ -60,13 +67,32 @@ static u64 load(u64 name, u64 rsp) {
     return h;
 }
 
+/* A bare name the program's directory and the system lack, looked for in SetDllDirectoryW's directory. */
+static u64 load(u64 name, u64 rsp, int dll_directory_too) {
+    u64 h = load_named(name, rsp);
+    const unsigned short *n = (const unsigned short *)name;
+    if (h || !dll_directory_too || !dll_directory[0]) return h;
+    for (u64 i = 0; n[i]; i++)
+        if (n[i] == '\\' || n[i] == '/' || n[i] == ':') return 0;
+    static unsigned short joined[PATH_CHARS];
+    u64 k = 0;
+    while (dll_directory[k]) { joined[k] = dll_directory[k]; k++; }
+    if (joined[k - 1] != '\\') joined[k++] = '\\';
+    for (u64 i = 0; n[i]; i++) {
+        if (k + 1 >= PATH_CHARS) w2m_unimplemented(W2M_API_LoadLibraryW, k);
+        joined[k++] = n[i];
+    }
+    joined[k] = 0;
+    return load_named((u64)joined, rsp);
+}
+
 /* LoadLibraryExW(lpLibFileName, hFile, dwFlags): the module's handle, or NULL with the error. */
 u64 k32_LoadLibraryExW(u64 name, u64 file, u64 flags, u64 unused, u64 rsp) {
     (void)unused;
     flags = (u32)flags;
     if (name == 0 || file != 0 || (flags != 0 && flags != LOAD_LIBRARY_SEARCH_SYSTEM32))
         w2m_unimplemented(W2M_API_LoadLibraryExW, flags);
-    u64 h = load(name, rsp);
+    u64 h = load(name, rsp, flags == 0);              /* LOAD_LIBRARY_SEARCH_SYSTEM32 searches System32 alone */
     if (!h) set_error(ERROR_MOD_NOT_FOUND);
     return w2m_logged(W2M_API_LoadLibraryExW, name, h);
 }
@@ -76,7 +102,7 @@ u64 k32_LoadLibraryExW(u64 name, u64 file, u64 flags, u64 unused, u64 rsp) {
 u64 k32_LoadLibraryW(u64 name, u64 unused1, u64 unused2, u64 unused3, u64 rsp) {
     (void)unused1; (void)unused2; (void)unused3;
     if (name == 0) w2m_unimplemented(W2M_API_LoadLibraryW, 0);
-    u64 h = load(name, rsp);
+    u64 h = load(name, rsp, 1);
     if (!h) set_error(ERROR_MOD_NOT_FOUND);
     return w2m_logged(W2M_API_LoadLibraryW, name, h);
 }
@@ -178,4 +204,47 @@ u64 k32_GetProcAddress(u64 module, u64 name) {
 u64 k32_FreeLibrary(u64 module) {
     if (w2m_host(W2M_HOST_MODULE_PATH, module, 0, 0, 0, 0) == ~0ull) w2m_unimplemented(W2M_API_FreeLibrary, module);
     return w2m_logged(W2M_API_FreeLibrary, module, 1);
+}
+
+/* SetDllDirectoryW(lpPathName): the directory LoadLibrary searches after the program's (rows search.*); NULL forgets
+ * it. An empty string (Windows: the current directory leaves the search) has no row and stops the run. */
+u64 k32_SetDllDirectoryW(u64 name) {
+    const unsigned short *n = (const unsigned short *)name;
+    if (!name) {
+        dll_directory[0] = 0;
+        return w2m_logged(W2M_API_SetDllDirectoryW, 0, 1);
+    }
+    if (!n[0]) w2m_unimplemented(W2M_API_SetDllDirectoryW, 0);
+    u64 k = 0;
+    for (; n[k]; k++) {
+        if (k + 1 >= PATH_CHARS) w2m_unimplemented(W2M_API_SetDllDirectoryW, k);
+        dll_directory[k] = n[k];
+    }
+    dll_directory[k] = 0;
+    return w2m_logged(W2M_API_SetDllDirectoryW, name, 1);
+}
+
+/* EnumProcessModules(hProcess, lphModule, cb, lpcbNeeded): the current process's modules in PEB.Ldr's load order
+ * (InLoadOrderModuleList, PEB_LDR_DATA+0x10; DllBase at +0x30 of each entry), as many as cb holds, and the whole list's
+ * length in *lpcbNeeded (rows enum.full, enum.short, enum.size_only); 1, the last error left. Another process, a
+ * missing lpcbNeeded and a cb that is not whole handles have no rows and stop the run. PSAPI.DLL's EnumProcessModules
+ * (mono's import) is "a wrapper that calls K32EnumProcessModules" (Microsoft Learn), the probe's kernel32 import. */
+static u64 enum_process_modules(u64 api, u64 process, u64 modules, u64 size, u64 needed) {
+    size = (u32)size;
+    if (process != ~0ull || !needed || size % 8 || (size && !modules))
+        w2m_unimplemented(api, process);
+    u64 ldr = *(const volatile u64 *)(W2M_PEB_VA + 0x18);
+    u64 head = ldr + 0x10, count = 0;
+    for (u64 e = *(const u64 *)head; e != head; e = *(const u64 *)e, count++)
+        if (count < size / 8) ((u64 *)modules)[count] = *(const u64 *)(e + 0x30);
+    *(u32 *)needed = (u32)(8 * count);
+    return w2m_logged(api, process, 1);
+}
+
+u64 k32_K32EnumProcessModules(u64 process, u64 modules, u64 size, u64 needed) {
+    return enum_process_modules(W2M_API_K32EnumProcessModules, process, modules, size, needed);
+}
+
+u64 psapi_EnumProcessModules(u64 process, u64 modules, u64 size, u64 needed) {
+    return enum_process_modules(W2M_API_EnumProcessModules, process, modules, size, needed);
 }

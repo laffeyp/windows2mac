@@ -1,0 +1,408 @@
+{
+ "contract_id": "windows.registry.registry",
+ "version": "0.3.0",
+ "status": "accepted",
+ "summary": "RegOpenKeyExW and RegCloseKey as the game first calls them: a key below HKEY_CURRENT_USER\\Software that does not exist is ERROR_FILE_NOT_FOUND with NULL written, names without case, Software opens, a NULL or empty subkey gives the root's predefined handle, a handle that is no key ERROR_INVALID_HANDLE; a key closes once; the last error is left. Sprint 063, the game's writes (Unity's PlayerPrefs, game run 38206263976 seq 2734-3490): RegCreateKeyW of its key, RegSetValueExA of REG_BINARY, REG_DWORD and REG_SZ, RegQueryValueExA in the game's two forms and at its edges (REG_NONE written for a missing value, ERROR_MORE_DATA, the size alone, ERROR_INVALID_PARAMETER for data without a size), names without case in ASCII and Latin-1, ERROR_ACCESS_DENIED through a handle opened for reading, RegDeleteValueA, and RegDeleteKeyW refusing a key with a subkey.",
+ "applicability": "windows-2022 (INTEL(R) XEON(R) PLATINUM 8573C); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/registry/registry.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "open.missing",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_two_levels",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_case",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_case",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.missing_below_software_handle",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.root_null_subkey",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": true
+   },
+   {
+    "s": "open.root_empty_subkey",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": true
+   },
+   {
+    "s": "open.not_a_key",
+    "ret": 6,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.u0173_oftware",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_u0100_x",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.long_s_oftware",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "open.software_dotless_i",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "close.software",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.software_case",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.software_again",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "close.root_null_subkey",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.root_empty_subkey",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "close.not_a_key",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "close.null",
+    "ret": 6,
+    "err": 57005
+   },
+   {
+    "s": "write.open_before",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "write.create",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "write.create_existing",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "write.open_after",
+    "ret": 0,
+    "err": 57005,
+    "result_null": false,
+    "result_untouched": false,
+    "result_is_root": false
+   },
+   {
+    "s": "set.binary_2",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "set.binary_20",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "set.dword",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "query.missing",
+    "ret": 2,
+    "err": 57005,
+    "type": 0,
+    "size": 16,
+    "data": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "query.missing_all_null",
+    "ret": 2,
+    "err": 57005
+   },
+   {
+    "s": "query.dword",
+    "ret": 0,
+    "err": 57005,
+    "type": 4,
+    "size": 4,
+    "data": "04000000a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "query.dword_case",
+    "ret": 0,
+    "err": 57005,
+    "type": 4,
+    "size": 4,
+    "data": "04000000a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "query.binary_20",
+    "ret": 0,
+    "err": 57005,
+    "type": 3,
+    "size": 20,
+    "data": "0102030405060708090a0b0c0d0e0f1011121314a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "query.binary_20_short",
+    "ret": 234,
+    "err": 57005,
+    "type": 3,
+    "size": 20,
+    "data": "a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "query.binary_20_size_only",
+    "ret": 0,
+    "err": 57005,
+    "type": 3,
+    "size": 20
+   },
+   {
+    "s": "query.present_all_null",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "query.data_without_size",
+    "ret": 87,
+    "err": 57005
+   },
+   {
+    "s": "set.sz_with_nul",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "set.sz_without_nul",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "query.sz_with_nul",
+    "ret": 0,
+    "err": 57005,
+    "type": 1,
+    "size": 4,
+    "data": "6162630063000000a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "query.sz_without_nul",
+    "ret": 0,
+    "err": 57005,
+    "type": 1,
+    "size": 4,
+    "data": "6162630063000000a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "set.latin1",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "query.latin1_case",
+    "ret": 0,
+    "err": 57005,
+    "type": 4,
+    "size": 4,
+    "data": "04000000a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "set.through_read_handle",
+    "ret": 5,
+    "err": 57005
+   },
+   {
+    "s": "delete.through_read_handle",
+    "ret": 5,
+    "err": 57005
+   },
+   {
+    "s": "delete.missing",
+    "ret": 2,
+    "err": 57005
+   },
+   {
+    "s": "delete.present",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "query.after_delete",
+    "ret": 2,
+    "err": 57005,
+    "type": 0,
+    "size": 16,
+    "data": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+   },
+   {
+    "s": "delete.again",
+    "ret": 2,
+    "err": 57005
+   },
+   {
+    "s": "write.close_reader",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "write.close_again",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "write.close_game",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "delete_key.parent_first",
+    "ret": 5,
+    "err": 57005
+   },
+   {
+    "s": "delete_key.game",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "delete_key.parent",
+    "ret": 0,
+    "err": 57005
+   },
+   {
+    "s": "write.open_after_delete",
+    "ret": 2,
+    "err": 57005,
+    "result_null": true,
+    "result_untouched": false,
+    "result_is_root": false
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38210383833: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:5cffb57fa38d5a97fb95f46607823da0d42a4ec3232e9cff9b797f1a282828c6; run 38210386046: windows-2022, INTEL(R) XEON(R) PLATINUM 8573C, probe sha256:c560b178aa6e68c0b37ddf59f16feb181fe47b6cade16234896b04f7a4b3a225",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "registry-1791784765-0-1",
+    "registry-1791784765-0-2",
+    "registry-1791784765-1-1",
+    "registry-1791784765-1-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "w2m's registry starts each run with HKEY_CURRENT_USER\\Software and nothing below it, as a fresh machine has; what a run writes stays for the rest of the run and nothing persists between runs (the reference is the game's first run on a fresh runner). Other roots, value types and sizes outside the rows stop the run."
+ ],
+ "sections": {
+  "probe": "probes/registry (Sprint 044)",
+  "implementation": "tools/guest_runtime/registry.c",
+  "rows": "scripts/family_run.py registry",
+  "excluded": "none"
+ }
+}

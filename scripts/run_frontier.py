@@ -19,7 +19,7 @@ resume the frontier arrive with the pools (roadmap Sprints 041, 045).
 
 The game is given the batch run's arguments (Sprint 054; .github/workflows/windows-game.yml, mode batch): the
 reference trace and unity.log of milestone A come from that run, so the frontier takes its path. The log the game
-writes to C:\\w2m\\unity.log is kept at store/frontier-logs/<execution id>/unity.log.
+writes to C:\\w2m\\unity.log is kept at store/frontier-logs/<execution id>/unity.log (runs/ for --scratch).
 
 The record goes to store/runs/ and names the commit that ran (Sprint 060): a run from a tree with uncommitted
 changes is refused there. --scratch writes to runs/ (not committed) and says so in the record's baseline.
@@ -58,7 +58,6 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
-LOGS = ROOT / "store" / "frontier-logs"
 REFERENCE = ROOT / "store" / "game-runs" / "38206263976"     # the batch run: C:\\w2m\\app, the game's resources (Sprint 061)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
@@ -71,6 +70,15 @@ PLANTS = {
                              "        set_error(ERROR_ENVVAR_NOT_FOUND);\n        return w2m_logged(W2M_API_GetEnvironmentVariableW",
                              "        return w2m_logged(W2M_API_GetEnvironmentVariableW",
                              ("GetEnvironmentVariableW", "error"))}
+
+
+def where(vm: Any, address: int) -> str:
+    """An x86 address as module+RVA, or a thunk's import name (Sprint 063: where each thread stands at the stop)."""
+    if address in vm.ld.thunks:
+        return vm.ld.thunks[address]
+    base = vm.modules.containing(address)
+    name = next((n for n, (b, _, _) in vm.modules.dlls.items() if b == base), vm.modules.image_name if base else "")
+    return f"{name}+0x{address - base:x}" if base else hex(address)
 
 
 def main(argv: list[str]) -> int:
@@ -131,6 +139,7 @@ def main(argv: list[str]) -> int:
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()
+            state["main_threads"] = {t.tid: (t.status, where(vm, t.x[17]) if t.x else "running") for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
                                           dict(sorted(p.vm.calls_total().items())),
                                           {t.tid: (t.status, p.vm.ld.thunks.get(t.x[17], hex(t.x[17])) if t.x else "running")
@@ -142,11 +151,14 @@ def main(argv: list[str]) -> int:
                     other.vm.close()
                     other.vm.files.close_all()
             vm.close()
-            files.close_all()
+            # the log first: close_all removes the run's drive C: (file_bridge.py), and from Sprint 054 to 063 the copy
+            # came after it, so no frontier kept its log
             log = files.drive / "w2m" / "unity.log"
             if log.is_file():
-                (LOGS / xid).mkdir(parents=True, exist_ok=True)
-                (LOGS / xid / "unity.log").write_bytes(log.read_bytes())
+                (base / "frontier-logs" / xid).mkdir(parents=True, exist_ok=True)
+                (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
+                state["log_lines"] = len(log.read_bytes().splitlines())
+            files.close_all()
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -210,8 +222,11 @@ def main(argv: list[str]) -> int:
     print(f"host requests by op {state.get('host_requests')}; calls by service {state.get('calls_total')}")
     count, first = state.get("faults", (0, []))
     print(f"faults dispatched {count}: " + "; ".join(f"0x{c:x} at 0x{rip:x} ({i0}, 0x{i1:x})" for c, rip, i0, i1 in first))
+    for tid, (status, at) in state.get("main_threads", {}).items():
+        print(f"main process thread {tid}: {status} at {at}")
     for pid, (name, code, calls, threads) in state.get("processes", {}).items():
         print(f"process {pid} {name}: exit code {code}; threads {threads}; calls by service {calls}")
+    print(f"unity.log lines {state.get('log_lines')}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
