@@ -270,7 +270,7 @@
 
 ## Sprint tail
 
-### Sprint 059 (2026-10-11, closed: CI pending)
+### Sprint 059 (2026-10-11, closed: CI run 38195353233 success on 4a27afe9)
 - **Scope:** PEB.ProcessParameters, which UnityPlayer's C runtime reads with no call; the 058 gap.
 - **Rubber Duck Pass:**
   - *Sequence narration:* a scan of the game's modules for direct reads (four, all of Flags); the probe on two runners; the item run SESSION_INIT, CANDIDATE_GENERATED, two COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; six plants; every family re-run; the frontier's EXECUTION_STARTED, then EXECUTION_COMPLETED faulted at the appmodel API set after 57,409,401 instructions, no fault dispatched.
