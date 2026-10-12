@@ -33,6 +33,8 @@ static unsigned char test_teb[8192];
 #define W2M_TEB_VA ((unsigned long long)test_teb)
 static unsigned long long test_peb[8];
 #define W2M_PEB_VA ((unsigned long long)test_peb)
+static unsigned long long test_monitor_data[512];   /* zero: a console start, the foreground taken (Sprint 065) */
+#define W2M_MONITOR_DATA_VA ((unsigned long long)test_monitor_data)
 """
 COMMON = """
 u64 w2m_logged(u64 a, u64 b, u64 c) { (void)a; (void)b; return c; }
