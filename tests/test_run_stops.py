@@ -54,3 +54,14 @@ def test_the_runs_test_ends_it_at_the_first_progress_line(monkeypatch: pytest.Mo
 def test_a_test_that_names_no_reason_leaves_the_run_to_its_end(monkeypatch: pytest.MonkeyPatch) -> None:
     stop, _, asked = stopped(None, None, monkeypatch)
     assert stop == "ExitProcess" and asked > 1
+
+
+def test_a_stop_the_harness_chose_is_killed_not_faulted() -> None:
+    # review of 2026-10-12, B4: frontier 643a6283510c-1791830368398119000, ended by the log rule, was recorded faulted
+    import sys
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import run_frontier
+    for stop in ("stopped by signal 15", "the log holds the reference's 168 lines", "max_steps"):
+        assert stop.startswith(run_frontier.HARNESS_STOPS)
+    for stop in ("GuestFault: access at 0x10 outside mapped memory (x86 0x1)", "LiftError: no operand template for FLD"):
+        assert not stop.startswith(run_frontier.HARNESS_STOPS)

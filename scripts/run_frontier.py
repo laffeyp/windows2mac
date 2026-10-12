@@ -35,6 +35,7 @@ import json
 import signal
 import sys
 import time
+from collections import Counter
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal
@@ -59,6 +60,8 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
+REACH_AFTER_LOG = 20_000_000_000    # instructions a run goes on past the reference's last line for its main thread
+HARNESS_STOPS = ("stopped by signal", "the log holds", "max_steps", "timeout")    # stops the harness chose: killed
 REFERENCE = ROOT / "store" / "game-runs" / "38216081440"     # the batch run with thread names (Sprint 064)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
@@ -146,13 +149,36 @@ def main(argv: list[str]) -> int:
                 call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources)       # where jit_capture.c opens the Windows trace
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
         machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
-        # the run ends where its reference does: the Windows run logged REFERENCE's lines in 180 s and was stopped
-        # (exec.json), so past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond
+        # the run ends where its reference does: all eight batch-mode game runs (37982448071 to 38275716702) end at
+        # the same 168 lines, run 180.3 to 190.0 s and are stopped, so the lines are the game's plateau in batch mode
+        # and past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond
+        # and past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond. The main thread
+        # makes calls past the last line (frontier 643a6283510c-1791836968921539000 stopped at the line and left nine
+        # of Windows' calls, seq 3444-3489, unmade), so the run also waits for each function's calls the Windows main
+        # thread made, for every function w2m's main thread calls at all (one it never calls is a divergence the
+        # comparison reports), at most REACH_AFTER_LOG instructions past the line
         reference_lines = len((REFERENCE / "unity.log").read_bytes().splitlines())
         log = files.drive / "w2m" / "unity.log"
-        machine.stop_when = lambda: (f"the log holds the reference's {reference_lines} lines"
-                                     if log.is_file() and len(log.read_bytes().splitlines()) >= reference_lines
-                                     else None)
+        capture_threads = call_compare.excluded(json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name)
+        reference_calls = [c for c in call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
+                           if c[1] not in capture_threads]                    # thread 1640 is jit_capture's own
+        windows_main = Counter((c[2].lower(), c[4]) for c in reference_calls if c[1] == min(reference_calls)[1])
+        log_end: list[int] = []
+
+        def stop_when() -> str | None:
+            if not (log.is_file() and len(log.read_bytes().splitlines()) >= reference_lines):
+                return None
+            executed = vm.instructions_executed()
+            log_end[:1] = log_end[:1] or [executed]
+            mine = Counter((c[2].lower(), c[4]) for c in vm.traced_calls()[0] if c[1] == min(vm.threads))       # tid 4, the first
+            short = [f for f, n in windows_main.items() if 0 < mine[f] < n]
+            if not short:
+                return f"the log holds the reference's {reference_lines} lines and the main thread its calls"
+            if executed - log_end[0] >= REACH_AFTER_LOG:
+                return (f"the log holds the reference's {reference_lines} lines; the main thread short of "
+                        f"{len(short)} functions' calls {REACH_AFTER_LOG} instructions later")
+            return None
+        machine.stop_when = stop_when
         for number in (signal.SIGINT, signal.SIGTERM):       # a stopped run still writes its record
             signal.signal(number, lambda n, _f: setattr(machine, "stop_requested", f"stopped by signal {n}"))
         try:
@@ -199,7 +225,8 @@ def main(argv: list[str]) -> int:
                 execution_id=xid, service=name, guest_address=ret, instructions_executed=r.instructions_executed))
             return
         yield events.validate(events.EXECUTION_COMPLETED(
-            execution_id=xid, exit_status="exited" if r.exit_code is not None else "faulted",
+            execution_id=xid, exit_status=("exited" if r.exit_code is not None else
+                                           "killed" if r.stop.startswith(HARNESS_STOPS) else "faulted"),
             trace_sha256=state["trace"], guest_line_count=state["trace_lines"],
             **({"exit_code": r.exit_code} if r.exit_code is not None else {}),
             unobserved=f"the guest trace holds the traced images' calls only; the run stopped: {r.stop}"))
@@ -285,6 +312,13 @@ def main(argv: list[str]) -> int:
         hit = [d for d in found if d.function == fn and d.field == field]
         print(f"plant {a.plant}: " + (f"caught at {hit[0].text()}" if hit else f"NOT caught ({fn} {field})"))
     print(f"record {result.record_root}")
+    # the exit status is the verdict (KIT_DIARY #35; review of 2026-10-12, R4 and B5): 2 when the record holds a failed
+    # producer or no closing event, 1 for a divergence or a plant not caught, 0 when the calls conform
+    kinds = [e["kind"] for e in read_record(result.record_root)]
+    if "substrate.ProducerFailed" in kinds or "SESSION_COMPLETED" not in kinds:
+        return 2
+    if found or (a.plant and not hit):
+        return 1
     return 0
 
 

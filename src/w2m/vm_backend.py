@@ -56,6 +56,7 @@ from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import (DLL_INIT_FAILED, THUNK_BASE, TLS_SLOTS, GuestFault, Image, LoadError, Loaded, Memory, Region,
                         map_image)
 from w2m.pe import parse as parse_pe
+from w2m.x86dec import DecodeError
 from w2m.runtime import Result
 from w2m import guest_stubs
 from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
@@ -2089,6 +2090,10 @@ class VM:
                 if index < TRACE_THUNKS:
                     self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = i + 1
 
+    def instructions_executed(self) -> int:
+        """The guest instructions this VM has run (the monitor data's count)."""
+        return int(struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0])
+
     def traced_calls(self) -> tuple[list[tuple[int, int, str, str, str, tuple[int, ...], int, int]], int]:
         """The calls call_trace.c recorded, in the Windows trace's shape (tools/jit_capture/call_trace.h): (seq, tid,
         image, dll, function, a0..a7, ret, last error), and the count of calls the full area left out."""
@@ -2567,7 +2572,8 @@ class VM:
                     stop = f"VmExit: {e.kind} syndrome 0x{e.syndrome:x} at pc 0x{e.pc:x}"
                     break
                 imm = e.syndrome & 0xFFFF
-                where = self.x86_address_at(e.pc - 4)
+                # a dispatch miss exits from the dispatcher, outside every block: its site is the target it missed
+                where = x[17] if imm == 1 else self.x86_address_at(e.pc - 4)
                 self.exits[imm] += 1                          # the exit census (Sprint 064): kind, then the site
                 self.exit_sites[(imm, where)] += 1
                 if imm == 1:
@@ -2663,7 +2669,8 @@ class VM:
                     break
         except StopRun:
             stop = "stopped by on_dispatch"
-        except (LiftError, GuestFault, Unimplemented, HandlerFailed, CompileError, BridgeRequestError) as ex:
+        except (LiftError, DecodeError, GuestFault, Unimplemented, HandlerFailed, CompileError,
+                BridgeRequestError) as ex:              # DecodeError: record frontier-...1791800847886016000 crashed
             stop = f"{type(ex).__name__}: {ex}"
         finally:
             try:
