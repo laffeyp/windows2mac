@@ -49,7 +49,7 @@ static DWORD WINAPI waiter(LPVOID p) {
     return 0;
 }
 
-static HANDLE start_as(waiter_t *w, HANDLE object, HANDLE finish, int mutex) {
+static HANDLE spawn_as(waiter_t *w, HANDLE object, HANDLE finish, int mutex) {
     w->object = object;
     w->mutex = mutex;
     w->ready = CreateEventW(NULL, FALSE, FALSE, NULL);
@@ -62,21 +62,20 @@ static HANDLE start_as(waiter_t *w, HANDLE object, HANDLE finish, int mutex) {
     return h;
 }
 
-static HANDLE start(waiter_t *w, HANDLE object, HANDLE finish) { return start_as(w, object, finish, 0); }
+static HANDLE spawn(waiter_t *w, HANDLE object, HANDLE finish) { return spawn_as(w, object, finish, 0); }
 
 static void finish(HANDLE ev, HANDLE *threads, int count) {
     SetEvent(ev);
     WaitForMultipleObjects((DWORD)count, threads, TRUE, INFINITE);
 }
 
-void start_probe(void) __asm__("start");
-void start_probe(void) {
+void start(void) {
     /* a semaphore at 0, one waiter: release one, then wait on it at once */
     HANDLE fin = CreateEventW(NULL, TRUE, FALSE, NULL);
     HANDLE sem = CreateSemaphoreW(NULL, 0, 0x7FFFFFFF, NULL);
     waiter_t a, b, c;
     HANDLE t[3];
-    t[0] = start(&a, sem, fin);
+    t[0] = spawn(&a, sem, fin);
     LONG prev = -1;
     BOOL r = ReleaseSemaphore(sem, 1, &prev);
     DWORD mine = WaitForSingleObject(sem, 0);
@@ -87,9 +86,9 @@ void start_probe(void) {
 
     /* three waiters, release two: the releaser's wait, how many finish */
     ResetEvent(fin);
-    t[0] = start(&a, sem, fin);
-    t[1] = start(&b, sem, fin);
-    t[2] = start(&c, sem, fin);
+    t[0] = spawn(&a, sem, fin);
+    t[1] = spawn(&b, sem, fin);
+    t[2] = spawn(&c, sem, fin);
     ReleaseSemaphore(sem, 2, &prev);
     mine = WaitForSingleObject(sem, 0);
     Sleep(200);
@@ -101,8 +100,8 @@ void start_probe(void) {
 
     /* two waiters, release one: which wakes */
     ResetEvent(fin);
-    t[0] = start(&a, sem, fin);
-    t[1] = start(&b, sem, fin);
+    t[0] = spawn(&a, sem, fin);
+    t[1] = spawn(&b, sem, fin);
     ReleaseSemaphore(sem, 1, NULL);
     Sleep(200);
     row("semaphore.order"); field("first_done", a.done); field("second_done", b.done); end();
@@ -112,7 +111,7 @@ void start_probe(void) {
     /* an auto-reset event, one waiter: set, then wait on it at once */
     ResetEvent(fin);
     HANDLE ev = CreateEventW(NULL, FALSE, FALSE, NULL);
-    t[0] = start(&a, ev, fin);
+    t[0] = spawn(&a, ev, fin);
     BOOL s = SetEvent(ev);
     mine = WaitForSingleObject(ev, 0);
     Sleep(200);
@@ -124,7 +123,7 @@ void start_probe(void) {
     ResetEvent(fin);
     HANDLE mx = CreateMutexW(NULL, FALSE, NULL);
     DWORD own = WaitForSingleObject(mx, 0);
-    t[0] = start_as(&a, mx, fin, 1);
+    t[0] = spawn_as(&a, mx, fin, 1);
     BOOL rm = ReleaseMutex(mx);
     mine = WaitForSingleObject(mx, 0);
     Sleep(200);
