@@ -1,0 +1,64 @@
+{
+ "contract_id": "windows.time.error_mode_child",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "The error mode of a child whose parent set 0 and passed no flag: 0 (the Steam-like start).",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/time_and_error_mode/time_and_error_mode.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "error_mode.child_inherited",
+    "value": 0,
+    "err": 57005
+   }
+  ],
+  "derivation": "scripts/family_run.py time_rows.derive: The child's family keeps only error_mode.child_inherited; the parent's keeps every row (time_rows)."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38206225386: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:214581358977175f87eac5e82de8663bdcc29d83433e1b23493583324645703b; run 38206227300: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:111a16ac4849950896efb41851003c6ee840734fb8e82fce280a6df0348bba1e",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "time_and_error_mode-1791781331-0-1",
+    "time_and_error_mode-1791781331-0-2",
+    "time_and_error_mode-1791781331-1-1",
+    "time_and_error_mode-1791781331-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-seterrormode",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-seterrormode (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Each process has an associated error mode ... A child process inherits the error mode of its parent process."
+  }
+ ],
+ "open_questions": [
+  "The runners keep UTC and w2m does too; a player's machine has its own zone (its names are UTC's: \"Coordinated Universal Time\" twice, row time_zone.names, Sprint 061).",
+  "Steam's error mode, which the game inherits, is not observed; w2m's GUI start uses 0, as the child of a parent that set 0."
+ ],
+ "sections": {
+  "probe": "probes/time_and_error_mode (Sprint 044)",
+  "implementation": "tools/guest_runtime/time_and_error_mode.c",
+  "rows": "scripts/family_run.py time_and_error_mode_child",
+  "excluded": "none"
+ }
+}

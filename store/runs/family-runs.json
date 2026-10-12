@@ -1278,67 +1278,43 @@
   }
  },
  "time_and_error_mode": {
-  "candidate_sha256": "sha256:c45c47780e122a3c269e8b7f8cdbfb257fcc9a83d240702ed56669157f2ef8bb",
+  "candidate_sha256": "sha256:fb0194bda70f0781c17e1d0644ede470c6c6124ec06e00d35e53d080b14294ba",
   "divergence": {
-   "38053043702": null,
-   "38053047590": null,
-   "38053049693": null,
-   "38053053337": null,
-   "38053109812": null,
-   "38053112133": null,
-   "38053114329": null,
-   "38053116643": null
+   "38206225386": null,
+   "38206227300": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
    "CANDIDATE_GENERATED": 1,
-   "COMPARISON_COMPLETED": 8,
+   "COMPARISON_COMPLETED": 2,
    "SESSION_COMPLETED": 1,
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode",
-  "record": "store/runs/family-time_and_error_mode-1791779049868010000",
+  "record": "store/runs/family-time_and_error_mode-1791781485254619000",
   "verdicts": {
-   "38053043702": "conforms",
-   "38053047590": "conforms",
-   "38053049693": "conforms",
-   "38053053337": "conforms",
-   "38053109812": "conforms",
-   "38053112133": "conforms",
-   "38053114329": "conforms",
-   "38053116643": "conforms"
+   "38206225386": "conforms",
+   "38206227300": "conforms"
   }
  },
  "time_and_error_mode_child": {
-  "candidate_sha256": "sha256:c45c47780e122a3c269e8b7f8cdbfb257fcc9a83d240702ed56669157f2ef8bb",
+  "candidate_sha256": "sha256:fb0194bda70f0781c17e1d0644ede470c6c6124ec06e00d35e53d080b14294ba",
   "divergence": {
-   "38053043702": null,
-   "38053047590": null,
-   "38053049693": null,
-   "38053053337": null,
-   "38053109812": null,
-   "38053112133": null,
-   "38053114329": null,
-   "38053116643": null
+   "38206225386": null,
+   "38206227300": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
    "CANDIDATE_GENERATED": 1,
-   "COMPARISON_COMPLETED": 8,
+   "COMPARISON_COMPLETED": 2,
    "SESSION_COMPLETED": 1,
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode_child",
-  "record": "store/runs/family-time_and_error_mode_child-1791779056587007000",
+  "record": "store/runs/family-time_and_error_mode_child-1791781485860437000",
   "verdicts": {
-   "38053043702": "conforms",
-   "38053047590": "conforms",
-   "38053049693": "conforms",
-   "38053053337": "conforms",
-   "38053109812": "conforms",
-   "38053112133": "conforms",
-   "38053114329": "conforms",
-   "38053116643": "conforms"
+   "38206225386": "conforms",
+   "38206227300": "conforms"
   }
  },
  "vectored_handlers": {

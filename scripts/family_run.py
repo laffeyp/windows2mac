@@ -344,16 +344,9 @@ def windows_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-TIME_RUNS = {
-              "38053043702": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-0", "AMD EPYC 7763 64-Core Processor"),
-              "38053047590": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-1", "AMD EPYC 9V74 80-Core Processor"),
-              "38053049693": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636241-2", "AMD EPYC 9V74 80-Core Processor"),
-              "38053053337": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636241-3", "AMD EPYC 9V74 80-Core Processor"),
-              "38053109812": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636304-0", "AMD EPYC 7763 64-Core Processor"),
-              "38053112133": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636304-1", "AMD EPYC 9V45 96-Core Processor"),
-              "38053114329": Run("windows-2025", "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186", "time_and_error_mode-1791636304-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38053116643": Run("windows-2022", "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957", "time_and_error_mode-1791636304-3", "AMD EPYC 7763 64-Core Processor"),
-
+TIME_RUNS = {   # Sprint 061: the probe records the zone's names (row time_zone.names)
+              "38206225386": Run("windows-2025", "214581358977175f87eac5e82de8663bdcc29d83433e1b23493583324645703b", "time_and_error_mode-1791781331-0", "AMD EPYC 7763 64-Core Processor"),
+              "38206227300": Run("windows-2022", "111a16ac4849950896efb41851003c6ee840734fb8e82fce280a6df0348bba1e", "time_and_error_mode-1791781331-1", "AMD EPYC 7763 64-Core Processor"),
 }
 
 
@@ -376,6 +369,7 @@ def time_family(start: str, summary: str) -> Family:
         # February of a common year moves instead (recorded in Sprint 046's card)
         "february_29_always": Plant("    return days[m - 1] + (m == 2 && leap(y));",
                                     "    return days[m - 1] + (m == 2);", ("system_to_file.fixed", "file_to_system.fixed")),
+        "time_zone_unnamed": Plant("        ((u16 *)(p + 4))[i] = (u16)UTC_NAME[i];\n", "", ("time_zone.names",)),
         "time_zone_leaves_error": Plant("    set_error(0);\n    return w2m_logged(W2M_API_GetTimeZoneInformation",
                                         "    return w2m_logged(W2M_API_GetTimeZoneInformation", ("time_zone",)),
         "error_mode_not_inherited": Plant("    list[n][2] = w2m_error_mode();", "    list[n][2] = 0x8003;",
@@ -383,15 +377,15 @@ def time_family(start: str, summary: str) -> Family:
     return Family(
         name="time_and_error_mode" + ("_child" if child else ""),
         contract_id="windows.time.error_mode_child" if child else "windows.time.local_and_error_mode",
-        version="0.1.0" if child else "0.2.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
+        version="0.2.0" if child else "0.3.0", summary=summary, probe="time_and_error_mode", guest_file="time_and_error_mode.c",
         runs=TIME_RUNS,
         documented=(
             documented("ms-seterrormode", "api/errhandlingapi/nf-errhandlingapi-seterrormode", "2024-02-22",
                        "Each process has an associated error mode ... A child process inherits the error mode of its "
                        "parent process."),),
         open_questions=(
-            "The runners keep UTC and w2m does too; a player's machine has its own zone. The zone's names are not in "
-            "the rows.",
+            "The runners keep UTC and w2m does too; a player's machine has its own zone (its names are UTC's: "
+            "\"Coordinated Universal Time\" twice, row time_zone.names, Sprint 061).",
             "Steam's error mode, which the game inherits, is not observed; w2m's GUI start uses 0, as the child of a "
             "parent that set 0."),
         derive=time_rows(start),
