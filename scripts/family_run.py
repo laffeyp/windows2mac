@@ -100,6 +100,7 @@ class Family:
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
     dll_name: str | None = None           # the probe's own DLL, loaded from its directory (Sprint 046)
+    dll_on_disk: bool = False             # the DLL is also a file beside the probe, which the probe reads (Sprint 063)
     host_files: tuple[str, ...] = ()      # Python no runtime request reaches that implements it (the loader's)
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1032,16 +1033,14 @@ FAMILIES: dict[str, Family] = {
     "console": Family(
         name="console",
         contract_id="windows.console.gui_start",
-        version="0.2.0",
+        version="0.3.0",
         summary=("A GUI process started without handles (as Steam starts the game) gets NULL standard handles, "
                  "no console, and Windows's answers from GetStdHandle, SetStdHandle, GetFileType, GetConsoleMode, "
                  "GetConsoleCP, WriteConsoleW, FlushFileBuffers, GetStartupInfoW, GetCommandLineW and GetCommandLineA."),
         probe="console", guest_file="console.c",
-        runs={
-              "38046095100": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-0", "AMD EPYC 7763 64-Core Processor"),
-              "38046096985": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-1", "AMD EPYC 7763 64-Core Processor"),
-              "38046099129": Run("windows-2025", "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6", "console-1791629208-2", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38046100953": Run("windows-2022", "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45", "console-1791629208-3", "AMD EPYC 7763 64-Core Processor"),
+        runs={   # Sprint 063: the child also asks GetConsoleOutputCP (row console_output_cp)
+              "38210455282": Run("windows-2025", "e182a66ebffa41eb86b7b12f9ef4256945ac1110c0d22b8289d7cc1ee1ebe139", "console-1791784818-0", "AMD EPYC 7763 64-Core Processor"),
+              "38210458372": Run("windows-2022", "51d95fba138a0f0e8d6e891f911ea46ec32526334d8dc276cb97c115eb989e4a", "console-1791784818-1", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
         },
         documented=(),
         open_questions=(
@@ -1052,11 +1051,14 @@ FAMILIES: dict[str, Family] = {
             "the probe's fill survives (row startup_info.child.values).",
             "The title's length is the runner's path and is dropped from the rows; the title being the module path is kept."),
         derive=console_rows, gui=True, arguments="child", output_file="w2m-console-child.jsonl",
-        plants={"write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
+        plants={
+            "output_cp_answers": Plant("    return no_console(W2M_API_GetConsoleOutputCP, 0);",
+                                       "    return w2m_logged(W2M_API_GetConsoleOutputCP, 0, 437);", ("console_output_cp",)),
+            "write_console_wrong_error": Plant("    set_error(ERROR_INVALID_HANDLE);\n    return w2m_logged(api, arg, 0);",
                                                    "    set_error(87);\n    return w2m_logged(api, arg, 0);",
                                                    # no_console serves GetConsoleMode too: the std rows' console_mode_err
                                                    ("std.input", "std.output", "std.error", "console_cp",
-                                                    "write_console.no_console")),
+                                                    "console_output_cp", "write_console.no_console")),
                 "file_type_null_no_error": Plant("    if (handle == 0 || handle == ~0ull) {\n        set_error(ERROR_INVALID_HANDLE);",
                                                  "    if (handle == 0 || handle == ~0ull) {",
                                                  ("std.input", "std.output", "std.error"))}),
@@ -2391,6 +2393,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         if dll is None and f is not None and f.dll_name is not None:
             dll = next(r.dll for r in f.runs.values() if r.binary == binary)
         dll_bytes = None if dll is None else (ROOT / "store" / "binaries" / f"{dll}.dll").read_bytes()
+        if f is not None and f.dll_on_disk and f.dll_name is not None and dll_bytes is not None:
+            (Path(d) / f.dll_name).write_bytes(dll_bytes)    # as the runner's out/ has it beside probe.exe
 
         def dlls(name: str) -> bytes | None:
             return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None
