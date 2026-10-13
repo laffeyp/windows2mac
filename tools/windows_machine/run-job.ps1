@@ -11,7 +11,12 @@
 #   batch   runs many stored binaries one after another (calibration, §6 step 2): job.json `items` lists each item's
 #           probe, execution id, binary (bin\<sha256>.exe) and DLL (bin\<sha256>.dll, its name `dll_name`);
 #           tree.tar holds probes\; each item's rows go to out\<execution id>\. One profile, one copy each way, one
-#           lock for the whole batch, a fresh workspace for each item.
+#           lock for the whole batch, a fresh workspace for each item;
+#   game    runs the game as .github/workflows/windows-game.yml does, `executions` times one after another
+#           (job.json `game`, `exe`, `seconds`, `mode`): the launcher built from tree.tar's tools\jit_capture, the
+#           game mirrored from C:\w2m\games\<game> to D:\w2m\game (the runners' GAME_DIR) and checked against
+#           files.json, C:\w2m\app a junction to it, and before each execution the game's saved state removed
+#           (HKCU\Software\<company>\<product>, LocalLow\<company>\<product>; §5) so each starts as a runner's does.
 # Every input's sha256 is in job.json `inputs`; a mismatch stops the job before anything runs. job.json `cpu_class`
 # ("performance" or "efficiency") pins the job to that core type (G1); the processes it starts inherit the affinity,
 # and each exec-<i>.json records it.
@@ -21,7 +26,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 function Note([string] $what) { "$((Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff')) $what" }   # run-job.log
 $spec = Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json
-if ($spec.kind -notin 'probe', 'binary', 'batch') { throw "job kind $($spec.kind): probe, binary and batch jobs only" }
+if ($spec.kind -notin 'probe', 'binary', 'batch', 'game') { throw "job kind $($spec.kind): probe, binary, batch and game jobs only" }
 Note "job $($spec.execution_id): $($spec.kind) $($spec.probe), repeat $($spec.repeat), commit $($spec.commit)"
 foreach ($p in $spec.inputs.PSObject.Properties) {
   $h = (Get-FileHash -Algorithm SHA256 (Join-Path $Job $p.Name)).Hash.ToLower()
@@ -70,7 +75,7 @@ try {
   Note "profile taken"
 
   # A fresh workspace: the whole committed tree for a probe build, the probe's own folder for a stored binary.
-  function Reset-Workspace([string] $probe, [bool] $whole) {
+  function Reset-Workspace([string] $probe, [bool] $whole) {   # $whole: the whole of tree.tar
     if (Test-Path $src) { Remove-Item $src -Recurse -Force }
     New-Item -ItemType Directory -Force $src | Out-Null
     if ($whole) { Copy-Item (Join-Path $tree '*') $src -Recurse -Force }
@@ -121,7 +126,89 @@ try {
     }
   }
 
-  if ($spec.kind -eq 'batch') {
+  if ($spec.kind -eq 'game') {
+    Reset-Workspace '' $true
+    Push-Location $src
+    try {
+      # build launcher (windows-game.yml)
+      $m = @()
+      if (Test-Path "games/$($spec.game)/manifest.xml") {
+        "1 24 `"games/$($spec.game)/manifest.xml`"" | Out-File -Encoding ascii manifest.rc
+        llvm-rc /nologo /I . /fo manifest.res manifest.rc
+        if ($LASTEXITCODE -ne 0) { throw "llvm-rc: $LASTEXITCODE" }
+        $m = @('manifest.res', '-Wl,/manifest:no')
+      }
+      clang -O1 -Wall -Werror -o jit_capture.exe tools/jit_capture/jit_capture.c '-Wl,/subsystem:windows' @m
+      if ($LASTEXITCODE -ne 0) { throw "jit_capture build: $LASTEXITCODE" }
+      clang -O1 -Wall -Werror -shared -o handler_trace.dll tools/jit_capture/handler_trace.c
+      if ($LASTEXITCODE -ne 0) { throw "handler_trace build: $LASTEXITCODE" }
+      clang -O1 -Wall -Werror -o copy_resources.exe tools/jit_capture/copy_resources.c
+      if ($LASTEXITCODE -ne 0) { throw "copy_resources build: $LASTEXITCODE" }
+      Note "launcher built"
+      $pristine = "C:\w2m\games\$($spec.game)"; $gameDir = 'D:\w2m\game'; $app = 'C:\w2m\app'; $exe = $spec.exe
+      $listing = (Get-Content "games/$($spec.game)/files.json" -Raw | ConvertFrom-Json).listing
+      $info = Get-Content (Join-Path $pristine "$($exe)_Data\app.info")
+      $company = $info[0].Trim(); $product = $info[1].Trim()
+      for ($i = 1; $i -le [int]$spec.executions; $i++) {
+        # the game as the release unpacks it: mirrored from the pristine copy (the launcher's install and the
+        # game's own writes undone), every file checked against files.json, nothing else present
+        robocopy $pristine $gameDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "robocopy: $LASTEXITCODE" }
+        $bad = @(foreach ($f in $listing) {
+          $q = Join-Path $gameDir $f.path
+          if (-not (Test-Path -LiteralPath $q) -or (Get-FileHash -LiteralPath $q -Algorithm SHA256).Hash.ToLower() -ne $f.sha256) { $f.path }
+        })
+        $present = (Get-ChildItem $gameDir -Recurse -File).Count
+        if ($bad.Count -or $present -ne $listing.Count) { throw "game tree: $($bad.Count) files differ from files.json, $present present of $($listing.Count)" }
+        Note "execution $i`: game tree verified, $present files"
+        # install launcher (windows-game.yml)
+        Move-Item "$gameDir\$exe.exe" "$gameDir\$exe.original.exe"
+        Copy-Item jit_capture.exe "$gameDir\$exe.exe"
+        .\copy_resources.exe "$gameDir\$exe.original.exe" "$gameDir\$exe.exe"
+        if ($LASTEXITCODE -ne 0) { throw "copy_resources: $LASTEXITCODE" }
+        Copy-Item handler_trace.dll "$gameDir\handler_trace.dll"
+        if (Test-Path $app) { cmd /c rmdir $app }
+        New-Item -ItemType Junction -Path $app -Target $gameDir | Out-Null
+        New-Item -ItemType Directory -Force C:\Users\w2m\AppData\Local\Temp | Out-Null
+        # the initial state (§5): no saved settings, no log, no game process
+        Remove-Item "HKCU:\Software\$company\$product" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "$env:USERPROFILE\AppData\LocalLow\$company\$product" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item C:\w2m\unity.log -Force -ErrorAction SilentlyContinue
+        # run (windows-game.yml)
+        if (Test-Path out) { Remove-Item out -Recurse -Force }
+        New-Item -ItemType Directory -Force out | Out-Null
+        $machine | Out-File -Encoding ascii -NoNewline out/profile.txt
+        $cpuName | Out-File -Encoding ascii -NoNewline out/cpu.txt
+        $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
+        $env:TMP = 'C:\Users\w2m\AppData\Local\Temp'; $env:TEMP = 'C:\Users\w2m\AppData\Local\Temp'
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $gameArgs = if ($spec.mode -eq 'play') { @('-screen-fullscreen', '0', '-screen-width', '1280', '-screen-height', '720', '-logFile', '"C:\w2m\unity.log"') }
+                    else { @('-batchmode', '-nographics', '-logFile', '"C:\w2m\unity.log"') }
+        $p = Start-Process -FilePath "$app\$exe.exe" -WorkingDirectory $app -ArgumentList $gameArgs -PassThru
+        $deadline = (Get-Date).AddSeconds([int]$spec.seconds)
+        $shell = New-Object -ComObject WScript.Shell
+        $done = $false
+        while ((Get-Date) -lt $deadline -and -not $done) {
+          $done = $p.WaitForExit(3000)
+          if (-not $done -and $spec.mode -eq 'play') { [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ') }
+        }
+        $sw.Stop()
+        if (-not $done) { Stop-Process -Id $p.Id -Force; [void]$p.WaitForExit(30000); $code = $null } else { $code = $p.ExitCode }
+        Get-Process | Where-Object { $_.Path -and ($_.Path.StartsWith($gameDir) -or $_.Path.StartsWith($app)) } | ForEach-Object {
+          Stop-Process -Id $_.Id -Force; [void]$_.WaitForExit(30000)
+        }
+        if (Test-Path C:\w2m\unity.log) { Copy-Item C:\w2m\unity.log out\unity.log }
+        $exit = if ($null -eq $code) { 'null' } else { "$code" }
+        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds)}" | Out-File -Encoding ascii -NoNewline out/exec.json
+        if (Test-Path out\jit_capture.bin) {        # the store keeps the capture's digest, not the capture
+          (Get-FileHash -Algorithm SHA256 out\jit_capture.bin).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out\jit_capture.sha256
+          Remove-Item out\jit_capture.bin
+        }
+        Move-Item out (Join-Path $out "$i")
+        Note "execution $i`: exited_by_itself $done after $([int]$sw.Elapsed.TotalSeconds) s"
+      }
+    } finally { Pop-Location; if (Test-Path C:\w2m\app) { cmd /c rmdir C:\w2m\app } }
+  } elseif ($spec.kind -eq 'batch') {
     foreach ($item in $spec.items) {
       Reset-Workspace $item.probe $false
       Push-Location $src

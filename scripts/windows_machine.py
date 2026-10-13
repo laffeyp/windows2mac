@@ -22,6 +22,11 @@ a batch.txt naming the batch; the batch's profile.json, run-job.log and job.json
 Usage: uv run python scripts/windows_machine.py probe <probe> [--repeat 2] [--pin performance|efficiency]
        uv run python scripts/windows_machine.py binary <family> [--run <stored run id>] [--repeat 2] [--pin ...]
        uv run python scripts/windows_machine.py batch [<family> ...] [--repeat 2] [--pin ...]   (no family: all)
+       uv run python scripts/windows_machine.py game [--executions 10] [--seconds 180] [--mode batch|play]
+
+A `game` job runs the game as windows-game.yml does, `executions` times in one job (the game tree is the laptop's
+copy at C:\w2m\games\<game>, sent once); each execution comes back as build/game-runs/<run>-<i>/, the layout
+store/game-runs/ holds.
 """
 
 from __future__ import annotations
@@ -222,9 +227,67 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
     return code or (1 if short else 0)
 
 
+def run_game(game: str, exe: str, executions: int, seconds: int, mode: str) -> int:
+    head = git("rev-parse", "HEAD").decode().strip()
+    (ROOT / "build").mkdir(exist_ok=True)
+    with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        now = time.time()
+        stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(now)) + f"{int(now * 1000) % 1000:03d}Z"
+        run = f"lap-{stamp}-{head[:8]}"
+        # each execution: the tree's mirror and check (about 1 minute), the game's seconds, and its stop
+        limit = executions * (seconds + 180) // 60 + 10
+        spec: dict[str, object] = {"kind": "game", "execution_id": run, "game": game, "exe": exe, "seconds": seconds,
+                                   "mode": mode, "executions": executions, "repeat": 0, "commit": head,
+                                   "session": "desktop", "limit_minutes": limit}
+        with tempfile.TemporaryDirectory() as d:
+            job = Path(d) / run
+            job.mkdir()
+            (job / "tree.tar").write_bytes(git("archive", "--format=tar", "HEAD", "--", "tools/jit_capture",
+                                               f"games/{game}"))
+            for script in EXECUTOR:
+                (job / script).write_bytes(git("show", f"HEAD:tools/windows_machine/{script}"))
+            spec["inputs"] = {"tree.tar": sha256(job / "tree.tar")}
+            (job / "job.json").write_text(json.dumps(spec, indent=1))
+            if not copy("-r", str(job), f"{HOST}:{JOBS}/"):
+                raise RuntimeError(f"{run}: the job could not be copied to the laptop")
+            try:
+                code = subprocess.run(["ssh", *LINK, HOST, f"{JOBS}/{run}/run-in-desktop.ps1 -Job {JOBS}/{run}"],
+                                      timeout=limit * 60 + 600).returncode
+            except subprocess.TimeoutExpired:
+                code = 124
+            bundle = ROOT / "build" / "batches" / run
+            bundle.parent.mkdir(parents=True, exist_ok=True)
+            fetched = copy("-r", f"{HOST}:{JOBS}/{run}/out", str(bundle))
+            if fetched:
+                (bundle / "job.json").write_text((job / "job.json").read_text())
+                subprocess.run(["ssh", *LINK, HOST, f"Remove-Item -Recurse -Force {JOBS}/{run}"])
+    if not fetched:
+        print(f"{run}: bundle not copied back; the laptop's job folder is kept")
+        return code or 1
+    done = 0
+    for i in range(1, executions + 1):
+        src = bundle / str(i)
+        if not (src / "exec.json").is_file():
+            print(f"{run}-{i:02d}: no exec.json")
+            continue
+        dst = ROOT / "build" / "game-runs" / f"{run}-{i:02d}"
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        (dst / "batch.txt").write_text(run)
+        done += 1
+    print(f"{run}: {done} of {executions} executions back; run-job exit {code}; bundle {bundle.relative_to(ROOT)}")
+    return code or (0 if done == executions else 1)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="kind", required=True)
+    gm = sub.add_parser("game")
+    gm.add_argument("--game", default="hail-to-the-rainbow")
+    gm.add_argument("--exe", default="Hail to the Rainbow")
+    gm.add_argument("--executions", type=int, default=10)
+    gm.add_argument("--seconds", type=int, default=180)
+    gm.add_argument("--mode", choices=("batch", "play"), default="batch")
     bt = sub.add_parser("batch")
     bt.add_argument("families", nargs="*")
     bt.add_argument("--repeat", type=int, default=2)
@@ -240,6 +303,8 @@ def main(argv: list[str]) -> int:
         p.add_argument("--session", choices=("desktop", "ssh"), default="desktop")
         p.add_argument("--pin", choices=("performance", "efficiency"), help="run on one core type only (G1)")
     a = ap.parse_args(argv)
+    if a.kind == "game":
+        return run_game(a.game, a.exe, a.executions, a.seconds, a.mode)
     if a.kind == "batch":
         sys.path.insert(0, str(ROOT / "scripts"))
         import family_run

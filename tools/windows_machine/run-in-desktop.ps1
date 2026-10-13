@@ -22,7 +22,9 @@ $principal = New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\w2m" -LogonTy
 # a task left behind by a dropped SSH session is removed here, before the next job registers its own
 Get-ScheduledTask -TaskName 'w2m-job-*' -ErrorAction SilentlyContinue | Where-Object State -ne 'Running' |
   Unregister-ScheduledTask -Confirm:$false
-$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$minutes = (Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json).limit_minutes
+if (-not $minutes) { $minutes = 60 }
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 try {
   if (-not (Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -like '*\w2m')) {
