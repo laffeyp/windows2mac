@@ -77,11 +77,26 @@ Kept: Microsoft 365, the Copilot desktop app, the NVIDIA App and drivers, Defend
 
 ## 5. Machine settings
 
+Sleep. The laptop entered Modern Standby (S0 low-power idle, its only standby state) at 14:15:41 and 14:23:14 with
+the display off, which cut SSH. Every timeout on AC and battery is 0, hibernation is off, and Modern Standby is off
+(`PlatformAoAcOverride` = 0, read at boot); after the restart `powercfg /a` lists no sleep state as available.
+
 ```powershell
-powercfg /change standby-timeout-ac 0          # was 300 s
-powercfg /change hibernate-timeout-ac 0
-powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+foreach ($m in 'ac','dc') { foreach ($s in 'monitor','standby','hibernate','disk') { powercfg /change "$s-timeout-$m" 0 } }
+foreach ($v in '/setacvalueindex','/setdcvalueindex') {
+  powercfg $v SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+  powercfg $v SCHEME_CURRENT SUB_SLEEP UNATTENDSLEEP 0
+  powercfg $v SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 0
+  powercfg $v SCHEME_CURRENT SUB_VIDEO VIDEOIDLE 0
+}
 powercfg /setactive SCHEME_CURRENT
+powercfg /hibernate off
+New-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Power -Name PlatformAoAcOverride -PropertyType DWord -Value 0 -Force
+New-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -Name HiberbootEnabled -PropertyType DWord -Value 0 -Force
+shutdown /r /t 5
+```
+
+```powershell
 New-Item C:\w2m\bin, C:\w2m\jobs, C:\w2m\games -ItemType Directory -Force
 Add-MpPreference -ExclusionPath C:\w2m
 ```
@@ -100,3 +115,35 @@ for Microsoft.PowerShell, Git.Git, Meta.Zstandard and astral-sh.uv (each exit 0)
 the runners' clang (run 38304235237's log: `clang version 20.1.8`, `Target: x86_64-pc-windows-msvc`).
 Python.Python.3.12 through winget hung with TrustedInstaller busy and was stopped; Python 3.12 came from
 `uv python install 3.12`.
+
+The tools must be machine-wide, since jobs run as `w2m`: winget is registered per user and is absent for `w2m`, the
+winget uv and zstd went to `laffe`'s profile, and winget's PowerShell 7 was the Store package. So:
+
+```powershell
+# uv, uvx, zstd copied from laffe's WinGet\Packages to C:\w2m\tools; Python into C:\w2m\python
+[Environment]::SetEnvironmentVariable('UV_PYTHON_INSTALL_DIR', 'C:\w2m\python', 'Machine')
+[Environment]::SetEnvironmentVariable('UV_PYTHON_BIN_DIR', 'C:\w2m\tools', 'Machine')
+C:\w2m\tools\uv.exe python install 3.12 --default          # cpython 3.12.15
+# machine Path += C:\Program Files\LLVM\bin; C:\w2m\tools
+# PowerShell 7.6.7 from the release MSI (Authenticode: Microsoft Corporation, valid)
+msiexec /i PowerShell-7.6.7-win-x64.msi /qn /norestart ADD_PATH=1
+New-ItemProperty -Path HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -PropertyType String -Force -Value 'C:\Program Files\PowerShell\7\pwsh.exe'
+Restart-Service sshd
+```
+
+As `w2m`: pwsh 7.6.7, git, clang and llvm-rc 20.1.8, zstd, uv, python and tar all resolve.
+
+## 7. The linker and SDK
+
+clang for `x86_64-pc-windows-msvc` links with MSVC's link.exe and libraries and the Windows SDK; without them the
+first probe build failed (`unable to find a Visual Studio installation`). The runners' binaries say which linker
+built them (the PE optional header's linker version): all 141 Server 2025 binaries in `store/binaries` were linked
+by 14.51 (Visual Studio 2026), all 132 Server 2022 binaries by 14.44 (Visual Studio 2022).
+
+```powershell
+vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools `
+  --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.26100
+```
+
+from `https://aka.ms/vs/17/release/vs_BuildTools.exe` (Visual Studio 2022); Visual Studio 2026's Build Tools
+(`https://aka.ms/vs/stable/vs_buildtools.exe`, per Microsoft Learn's command-line page) follow for 14.51.

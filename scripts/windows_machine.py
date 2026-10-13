@@ -5,7 +5,8 @@
 The controller's half of docs/windows-reference-machine.md §3. A job is the committed tree (`git archive HEAD`,
 store/ left out) and, for a probe with a `generate` step, substrate at substrate.commit, each named by sha256 in
 job.json. The job is copied to C:\\w2m\\jobs\\<run>\\ over SSH (host `w2m-laptop` in ~/.ssh/config) with the
-committed tools/windows_machine/run-job.ps1 and profile.ps1, run by that run-job.ps1, and its out\\ folder copied
+committed tools/windows_machine/run-job.ps1, profile.ps1 and run-in-desktop.ps1, run by run-job.ps1 inside w2m's
+signed-in desktop session (run-in-desktop.ps1; `--session ssh` runs it in SSH's session 0 instead), and its out\\ folder copied
 back to build/probe-runs/<run>/traces-<execution id>/, the layout scripts/store_probe_runs.py reads; the job folder
 is then deleted on the laptop.
 
@@ -40,7 +41,7 @@ def ssh(command: str) -> int:
     return subprocess.run(["ssh", HOST, command]).returncode
 
 
-def probe(name: str, repeat: int, binary: str | None = None, dll: str | None = None) -> int:
+def probe(name: str, repeat: int, binary: str | None = None, dll: str | None = None, session: str = "desktop") -> int:
     if not (ROOT / "probes" / name).is_dir():
         print(f"no probes/{name}", file=sys.stderr)
         return 1
@@ -55,7 +56,7 @@ def probe(name: str, repeat: int, binary: str | None = None, dll: str | None = N
         job.mkdir()
         subprocess.run(["git", "-C", str(ROOT), "archive", "--format=tar", "-o", str(job / "tree.tar"), "HEAD",
                         "--", ".", ":!store"], check=True)
-        for script in ("run-job.ps1", "profile.ps1"):     # the executor itself comes from the committed tree
+        for script in ("run-job.ps1", "profile.ps1", "run-in-desktop.ps1"):     # the executor itself comes from the committed tree
             shown = subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:tools/windows_machine/{script}"],
                                    capture_output=True, check=True)
             (job / script).write_bytes(shown.stdout)
@@ -76,7 +77,8 @@ def probe(name: str, repeat: int, binary: str | None = None, dll: str | None = N
         (job / "job.json").write_text(json.dumps({"kind": "binary" if binary else "probe", "probe": name, "execution_id": execution,
                                                   "repeat": repeat, "commit": head, "inputs": inputs}, indent=1))
         subprocess.run(["scp", "-q", "-r", str(job), f"{HOST}:{JOBS}/"], check=True)
-    code = ssh(f"{JOBS}/{run}/run-job.ps1 -Job {JOBS}/{run}")
+    runner = "run-in-desktop.ps1" if session == "desktop" else "run-job.ps1"   # desktop: as the runners run (G7)
+    code = ssh(f"{JOBS}/{run}/{runner} -Job {JOBS}/{run}")
     dst = ROOT / "build" / "probe-runs" / run / f"traces-{execution}"
     dst.parent.mkdir(parents=True, exist_ok=True)
     fetched = subprocess.run(["scp", "-q", "-r", f"{HOST}:{JOBS}/{run}/out", str(dst)]).returncode
@@ -91,18 +93,20 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("probe")
     p.add_argument("probe")
     p.add_argument("--repeat", type=int, default=2)
+    p.add_argument("--session", choices=("desktop", "ssh"), default="desktop")
     b = sub.add_parser("binary")
     b.add_argument("family")
     b.add_argument("--run", help="the stored run whose binary runs (default: the family's first)")
     b.add_argument("--repeat", type=int, default=2)
+    b.add_argument("--session", choices=("desktop", "ssh"), default="desktop")
     a = ap.parse_args(argv)
     if a.kind == "probe":
-        return probe(a.probe, a.repeat)
+        return probe(a.probe, a.repeat, session=a.session)
     sys.path.insert(0, str(ROOT / "scripts"))
     import family_run
     fam = family_run.FAMILIES[a.family]
     chosen = fam.runs[a.run] if a.run else next(iter(fam.runs.values()))
-    return probe(fam.probe, a.repeat, chosen.binary, chosen.dll)
+    return probe(fam.probe, a.repeat, chosen.binary, chosen.dll, a.session)
 
 
 if __name__ == "__main__":
