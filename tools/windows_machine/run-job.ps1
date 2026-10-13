@@ -4,6 +4,9 @@
 # C:\w2m\jobs\<id>\ and leaves the bundle in its out\ folder. A probe job is built and run as
 # .github/workflows/windows-probe.yml's build and run steps do, so the two machines' rows differ only in the machine.
 #
+# A `binary` job runs a stored probe binary unchanged (calibration, §6 step 2): probe.exe (and the DLL it imports)
+# come with the job, and the build step is skipped.
+#
 # The job folder holds job.json ({"kind": "probe", "probe", "execution_id", "repeat"}), tree.tar (a `git archive`
 # of the committed tree the job names) and, for a probe with a `generate` step, substrate.tar (substrate.commit's
 # tree). Every input's sha256 is in job.json `inputs`; a mismatch stops the job before anything runs.
@@ -24,7 +27,7 @@ if ($LASTEXITCODE -ne 0) { throw "tar: $LASTEXITCODE" }
 & (Join-Path $PSScriptRoot 'profile.ps1') -Out (Join-Path $out 'profile.json')
 Push-Location $src
 try {
-  if ($spec.kind -ne 'probe') { throw "job kind $($spec.kind): only probe jobs so far" }
+  if ($spec.kind -notin 'probe', 'binary') { throw "job kind $($spec.kind): probe and binary jobs only" }
   $probe = $spec.probe
   $cfg = "probes/$probe/probe.json"
   $c = if (Test-Path $cfg) { Get-Content $cfg -Raw | ConvertFrom-Json } else { $null }
@@ -37,24 +40,29 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "generate: $LASTEXITCODE" }
   }
 
-  # build
-  clang --version
-  $flags = @('-O1', '-Wall', '-Werror'); $libs = @('-ladvapi32', '-lbcrypt')
-  if ($c) { $flags = $c.cflags -split ' '; $libs = $c.libs -split ' ' }
-  $source = if ($c -and $c.source) { $c.source } else { "probes/$probe/$probe.c" }
-  if ($c -and $c.dll) {
-    $d = $c.dll
-    clang ($d.cflags -split ' ') -shared '-Wl,/Brepro' "-Wl,/implib:$($d.name).lib" -o "$($d.name).dll" $d.source ($d.libs -split ' ')
-    if ($LASTEXITCODE -ne 0) { throw "dll build: $LASTEXITCODE" }
-    $libs += "$($d.name).lib"
+  if ($spec.kind -eq 'binary') {
+    Copy-Item (Join-Path $Job 'probe.exe') probe.exe
+    if ($c -and $c.dll) { Copy-Item (Join-Path $Job "$($c.dll.name).dll") "$($c.dll.name).dll" }
+  } else {
+    # build
+    clang --version
+    $flags = @('-O1', '-Wall', '-Werror'); $libs = @('-ladvapi32', '-lbcrypt')
+    if ($c) { $flags = $c.cflags -split ' '; $libs = $c.libs -split ' ' }
+    $source = if ($c -and $c.source) { $c.source } else { "probes/$probe/$probe.c" }
+    if ($c -and $c.dll) {
+      $d = $c.dll
+      clang ($d.cflags -split ' ') -shared '-Wl,/Brepro' "-Wl,/implib:$($d.name).lib" -o "$($d.name).dll" $d.source ($d.libs -split ' ')
+      if ($LASTEXITCODE -ne 0) { throw "dll build: $LASTEXITCODE" }
+      $libs += "$($d.name).lib"
+    }
+    if ($c -and $c.rc) {
+      llvm-rc /nologo /I . /fo probe.res $c.rc
+      if ($LASTEXITCODE -ne 0) { throw "llvm-rc: $LASTEXITCODE" }
+      $libs += 'probe.res'
+    }
+    clang @flags '-Wl,/Brepro' -o probe.exe $source @libs
+    if ($LASTEXITCODE -ne 0) { throw "build: $LASTEXITCODE" }
   }
-  if ($c -and $c.rc) {
-    llvm-rc /nologo /I . /fo probe.res $c.rc
-    if ($LASTEXITCODE -ne 0) { throw "llvm-rc: $LASTEXITCODE" }
-    $libs += 'probe.res'
-  }
-  clang @flags '-Wl,/Brepro' -o probe.exe $source @libs
-  if ($LASTEXITCODE -ne 0) { throw "build: $LASTEXITCODE" }
 
   # run
   (Get-FileHash -Algorithm SHA256 probe.exe).Hash.ToLower() | Out-File -Encoding ascii -NoNewline "$out/probe.sha256"
