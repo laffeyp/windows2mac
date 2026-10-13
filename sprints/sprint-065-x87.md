@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 065
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -176,3 +176,32 @@ and keep a plan row of their own.
 ## done criteria
 
 The table's classes accepted; the frontier past seq 3426 with a conforming comparison.
+
+## observed
+
+- **x87 and MMX.** 13 of the 15 x87 classes equal the Xeon 8573C on every case of set 065 in the model and the VM;
+  FSIN and FCOS differ in the last bit on 18 of 1,598 cases, pinned (d5decd3f). Set 065b judges the MMX-register
+  forms, 065c PSHUFW. The frontier passes the FLD (064's stop) and seq 3426.
+- **Past the FLD**, in order of the stops met: the system font folder, hinted VirtualAlloc out of the pairing,
+  CreateFileW's FILE_FLAG_SEQUENTIAL_SCAN, static TLS in a DLL loaded late, the MMX forms,
+  GetDisplayModeList's 13 modes, HeapReAlloc in place, EnumDisplaySettingsW of a named device, and the window
+  activated with another process holding the foreground (items 5 to 8, each with its Windows rows).
+- **Speed.** Lowered SSE classes and MMX forms (a3373038), invalidation's split tables, and model steps and thread
+  switches resumed through the dispatcher's table: 9,984,088 dispatch misses per frontier fell to 1,487,645.
+- **The red team (item 9)** found the comparison blind to calls w2m does not make (now `missing`), a release that
+  did not hand the object to its waiter (probe wait_handoff), a stop rule that ended runs before the reference's
+  calls, and 11,365 translated blocks gone stale in mono's JIT region. Translations are now dropped when their
+  bytes change (probe code_rewrite: 13,681 writes and 60,082 blocks dropped in a frontier).
+- **The clock (item 10).** On the instruction clock at 1.4e9 a second, frontier
+  643a6283510c-1791846403001347000 writes unity.log equal to Windows' 168 lines but for timings, line 160
+  included, its timings near Windows' (reload 0.152 s against 0.154; on the host's clock 5.981). A second run
+  (643a6283510c-1791848771286087000) writes the same log byte for byte and the same 9,831 calls but for two
+  GetFileAttributesExW stack slots holding host file times. VirtualAlloc 2744 and 2861 conform.
+- **Not met: a conforming comparison.** 14 divergences over 3,443 calls remain: InterlockedFlushSList 3044-3093
+  and InterlockedPopEntrySList 3132 find entries Windows did not, and SetEvent 3144, 3146 and 3157 are missing, as
+  Windows' job workers on other cores take each item at once while w2m's threads share one vCPU in
+  200,000-instruction slices; HeapReAlloc 3268 and the second message-pump turn (3487-3489) are missing;
+  GetConsoleCP and GetConsoleOutputCP are never called. FSIN and FCOS stay open. By the partial-pass rule they move
+  to plan row 066 (Decision 2026-10-12).
+- **Late amendments.** Items 7 and 8, and 9 a-d and f, were written after the work they record.
+
