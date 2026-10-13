@@ -9,6 +9,9 @@ param([string] $AutoSignInPassword = '')
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 function Step([string] $what) { "== $what" }
+# A registry key made only when it is missing: New-Item -Force on an existing key makes it again, empty, deleting
+# its values (2026-10-13: Windows Update's UX\Settings and PasswordLess\Device lost theirs to the first version).
+function Add-Key([string] $path) { if (-not (Test-Path $path)) { New-Item $path -Force | Out-Null } }
 
 Step 'SSH: key-only, PowerShell 7, starts with Windows'
 $cfg = "$env:ProgramData\ssh\sshd_config"
@@ -64,7 +67,7 @@ Step 'Windows Update: paused for the measurement series (Home allows 35 days)'
 $until = (Get-Date).ToUniversalTime().AddDays(35).ToString('yyyy-MM-ddTHH:mm:ssZ')
 $now = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $ux = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
-New-Item $ux -Force | Out-Null
+Add-Key $ux
 foreach ($k in 'PauseFeatureUpdates', 'PauseQualityUpdates') {
   Set-ItemProperty $ux "${k}StartTime" $now; Set-ItemProperty $ux "${k}EndTime" $until
 }
@@ -72,17 +75,41 @@ Set-ItemProperty $ux PauseUpdatesStartTime $now; Set-ItemProperty $ux PauseUpdat
 "  paused until $until"
 
 Step 'Sync and suggestions off'
-$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive'; New-Item $p -Force | Out-Null; Set-ItemProperty $p DisableFileSyncNGSC 1 -Type DWord
-$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync'; New-Item $p -Force | Out-Null
+$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive'; Add-Key $p; Set-ItemProperty $p DisableFileSyncNGSC 1 -Type DWord
+$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync'; Add-Key $p
 Set-ItemProperty $p DisableSettingSync 2 -Type DWord; Set-ItemProperty $p DisableSettingSyncUserOverride 1 -Type DWord
-$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; New-Item $p -Force | Out-Null; Set-ItemProperty $p SyncDisabled 1 -Type DWord
+$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; Add-Key $p; Set-ItemProperty $p SyncDisabled 1 -Type DWord
+
+Step 'First sign-in pages and suggestions off for w2m and for accounts made later'
+# Windows 11 shows "let's finish setting up" and welcome pages at an account's first sign-ins (2026-10-13: on the
+# laptop's screen in w2m's new session; WebExperienceHostApp). A window in the foreground changes what the window
+# probes see, and each job signs w2m in afresh. Written to w2m's hive (loaded while it is signed in, else loaded
+# here) and to the Default profile's.
+function Set-FirstRunOff([string] $root) {
+  $cdm = "$root\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+  Add-Key $cdm
+  foreach ($v in 'SubscribedContent-310093Enabled', 'SubscribedContent-338388Enabled', 'SubscribedContent-338389Enabled',
+                 'SubscribedContent-338393Enabled', 'SubscribedContent-353694Enabled', 'SubscribedContent-353696Enabled',
+                 'SystemPaneSuggestionsEnabled', 'SoftLandingEnabled', 'SilentInstalledAppsEnabled', 'ContentDeliveryAllowed',
+                 'OemPreInstalledAppsEnabled', 'PreInstalledAppsEnabled') { Set-ItemProperty $cdm $v 0 -Type DWord }
+  $upe = "$root\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement"
+  Add-Key $upe; Set-ItemProperty $upe ScoobeSystemSettingEnabled 0 -Type DWord
+  $adv = "$root\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+  Add-Key $adv; Set-ItemProperty $adv Start_IrisRecommendations 0 -Type DWord
+}
+$sid = (Get-LocalUser w2m).SID.Value
+if (Test-Path "Registry::HKEY_USERS\$sid") { Set-FirstRunOff "Registry::HKEY_USERS\$sid" }
+else { reg.exe load 'HKU\w2m-provision' 'C:\Users\w2m\NTUSER.DAT' | Out-Null; Set-FirstRunOff 'Registry::HKEY_USERS\w2m-provision'; [gc]::Collect(); reg.exe unload 'HKU\w2m-provision' | Out-Null }
+reg.exe load 'HKU\default-provision' 'C:\Users\Default\NTUSER.DAT' | Out-Null
+Set-FirstRunOff 'Registry::HKEY_USERS\default-provision'; [gc]::Collect()
+reg.exe unload 'HKU\default-provision' | Out-Null
 
 Step 'The w2m account and its automatic sign-in (an accepted risk: section 4 of the plan)'
 if (-not (Get-LocalUser -Name w2m -ErrorAction SilentlyContinue)) { throw 'no local user w2m: create it first (SETUP.md 5)' }
 $wl = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
 $pl = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device'
-New-Item $pl -Force | Out-Null; Set-ItemProperty $pl DevicePasswordLessBuildVersion 0 -Type DWord
-$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization'; New-Item $p -Force | Out-Null; Set-ItemProperty $p NoLockScreen 1 -Type DWord
+Add-Key $pl; Set-ItemProperty $pl DevicePasswordLessBuildVersion 0 -Type DWord
+$p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization'; Add-Key $p; Set-ItemProperty $p NoLockScreen 1 -Type DWord
 if ($AutoSignInPassword) {
   Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
