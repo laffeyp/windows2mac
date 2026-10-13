@@ -86,3 +86,49 @@ writable by every user, and no laptop run on the record. Repaired in cd964062 an
 ## done criteria
 
 Steps A-E and G of the plan done; F done or moved by a Decision with its blocker named.
+
+## observed
+
+### Calibration, step 2 (2026-10-13)
+
+Batch `lap-20261013T231059422Z-136bec80` (commit 136bec80): every family's stored runner binaries, 195 in all,
+each run twice on the laptop in w2m's desktop session from `D:\a\windows2mac\windows2mac`, one profile for the
+batch, 2 minutes 46 seconds of executions. Judged by `scripts/laptop_calibration.py` with family_run's own
+comparison (each family's derivation and exclusions, rows keyed by `s`). On the record: `store/probe-runs/`
+(the batch's profile, job and log once in `store/probe-runs/lap-20261013T231059422Z-136bec80/`) and one
+`windows_reference` session per run in `store/runs/probe-run-<run>`.
+
+164 binaries equal, 31 differ, 0 failed. The 31, sorted:
+
+| Cause | Families (rows) | Kind |
+|---|---|---|
+| Time zone: Pacific Standard Time against the runners' UTC | locale (5 rows, every result 8 hours off; `local.first_day` fails with error 87 because 1601-01-01 00:00 local is before 1601), time_and_error_mode (`time_zone`, `time_zone.names`, `local_time`) | machine setting |
+| Edition and build: Windows 11 Home 26200 against Server 26100/20348 | version (`get_version.*`, `verify.product_*`: workstation, build above 26100, suite 768 against 400), system_info `version_ex` (product type 1 against 3) | machine |
+| The Windows directory is `C:\windows`, lower case, on the laptop | files_more `windows.*`, system_modules `file_name`, temp_path `temp.none`, system_info `system_directory` | machine (installation) |
+| Hardware | processor_topology `machine` (12 logical, 8 cores, 5 L2), process_queries `ipfp.89` (feature 89 against CPUID), com (an audio device: endpoints and defaults answer), display and dxgi (1920x1080 at 120 DPI, two adapters) | machine |
+| The workspace volume: directory "." reports size 0, on the runners 4096 | file_attributes `ex.dot`, `ex.dot.backslash` | machine (volume); unconfirmed |
+| Session state | windows: `msg.game.9` (WM_ACTIVATEAPP's lParam null: no other application in the foreground, under hidden, minimized and normal consoles), `class.register` (`after_first` changes between executions: the session's atom table) | executor, open |
+| Windows' own variance | late_tls `late.blocks` (the laptop's two executions of one binary disagree; equal in the next batch) | the reference set (item D) |
+
+The windows family's other rows follow from the display (work area, frame sizes, the first window's position).
+
+Executor differences found and removed by calibration: the session (STARTUPINFO desktop name), the workspace path
+(the module path's length), and the error mode a probe inherits (0x8001 against 0x8003; run-job.ps1 now sets
+0x8003). Each was the executor's, not the machine's, and is the class to look for first when a family differs.
+
+Speed: one job per binary took about 25 s each, 80 minutes for the 195; one batch takes about 5 minutes.
+
+### Audit of 2026-10-13
+
+An agent audit for the review's defect classes across the repository found 18; fixed in 307b6024 and 3372c2a4
+(failures that passed in run_frontier.py, the laptop verdict and calibration store; git errors read as a clean
+tree; untracked runtime sources; a case file unchecked against its run; unbounded scp, ssh and task waits; a
+probe without a time limit; unrecorded frontier settings; the third execution dropped by store_probe_runs.py;
+positional row naming). Open, each needing a Windows game run to test:
+
+- `tools/jit_capture/call_trace.h:335` writes its logs every 5 s and never at exit, and windows-game.yml stops
+  the game with `Stop-Process -Force`, so up to 5 s of the reference's last calls can be missing unmarked.
+- `tools/jit_capture/jit_capture.c:176-177`: a failed VirtualAllocEx, WriteProcessMemory or QueueUserAPC leaves
+  the crash handler untraced with nothing recorded.
+- `scripts/family_run.py:2828`: `max_steps` 2^40 with a per-command `timeout_ms`, so a spinning probe in the VM
+  has no wall-clock limit.
