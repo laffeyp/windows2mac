@@ -9,12 +9,16 @@ param([Parameter(Mandatory)] [string] $Job)
 $ErrorActionPreference = 'Stop'
 
 $name = 'w2m-job-' + (Split-Path $Job -Leaf)
-$log = Join-Path $Job 'run-job.log'
+$log = Join-Path $Job 'out\run-job.log'             # saved with the results
+New-Item -ItemType Directory -Force (Join-Path $Job 'out') | Out-Null
 $pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
 $arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -Command `"& '$Job\run-job.ps1' -Job '$Job' *> '$log'; exit `$LASTEXITCODE`""
 $action = New-ScheduledTaskAction -Execute $pwsh -Argument $arguments -WorkingDirectory $Job
 $principal = New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\w2m" -LogonType Interactive -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+# a task left behind by a dropped SSH session is removed here, before the next job registers its own
+Get-ScheduledTask -TaskName 'w2m-job-*' -ErrorAction SilentlyContinue | Where-Object State -ne 'Running' |
+  Unregister-ScheduledTask -Confirm:$false
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 try {
   if (-not (Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -like '*\w2m')) {

@@ -5,7 +5,8 @@
 For each run id, build/probe-runs/<run>/traces-<execution id>/ (scripts/probe_on_intel.py) is copied to
 store/probe-runs/<run>/ (the bodies, exec, cpu, profile and probe.sha256) and its probe.exe to
 store/binaries/<sha256>.exe; then one `Run(...)` line per run is printed for scripts/family_run.py, the runner
-image read from profile.txt.
+image read from profile.txt. A laptop run (scripts/windows_machine.py, Sprint 067: profile.txt `laptop-...`) keeps
+its profile.json, job.json and run-job.log too, and its image is `laptop`.
 
 Usage: uv run python scripts/store_probe_runs.py <run id> [<run id> ...]
 """
@@ -17,7 +18,15 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-KEPT = ("body-1.jsonl", "body-2.jsonl", "cpu.txt", "exec-1.json", "exec-2.json", "probe.sha256", "profile.txt")
+KEPT = ("body-1.jsonl", "body-2.jsonl", "cpu.txt", "exec-1.json", "exec-2.json", "probe.sha256", "profile.txt",
+        "profile.json", "job.json", "run-job.log")
+
+
+def image(profile: str) -> str:
+    """The machine a run came from, by its profile.txt."""
+    if profile.startswith("laptop-"):
+        return "laptop"
+    return "windows-2025" if "windows-2025" in profile else "windows-2022"
 
 
 def main(argv: list[str]) -> int:
@@ -36,10 +45,10 @@ def main(argv: list[str]) -> int:
         binary = ROOT / "store" / "binaries" / f"{sha}.exe"
         if not binary.exists():
             shutil.copyfile(src / "probe.exe", binary)
-        image = "windows-2025" if "windows-2025" in (src / "profile.txt").read_text() else "windows-2022"
+        machine = image((src / "profile.txt").read_text())
         execution = src.name.removeprefix("traces-")
         cpu = (src / "cpu.txt").read_text().strip()
-        print(f'              "{run}": Run("{image}", "{sha}", "{execution}", "{cpu}"),')
+        print(f'              "{run}": Run("{machine}", "{sha}", "{execution}", "{cpu}"),')
     return 0
 
 
