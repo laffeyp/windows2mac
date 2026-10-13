@@ -109,6 +109,7 @@ public static class W2mLsa {
   if ($r -ne 0) { throw "LsaStorePrivateData: win32 error $r" }
   Set-ItemProperty $wl AutoAdminLogon '1'; Set-ItemProperty $wl DefaultUserName 'w2m'; Set-ItemProperty $wl DefaultDomainName $env:COMPUTERNAME
 }
+Set-ItemProperty $wl ForceAutoLogon '1'      # signed in again after each sign-out (a fresh session per job)
 Remove-ItemProperty $wl DefaultPassword -ErrorAction SilentlyContinue      # never a plain-text copy
 "  automatic sign-in: $((Get-ItemProperty $wl).AutoAdminLogon) as $((Get-ItemProperty $wl).DefaultUserName)"
 

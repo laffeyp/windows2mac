@@ -25,6 +25,25 @@ Get-ScheduledTask -TaskName 'w2m-job-*' -ErrorAction SilentlyContinue | Where-Ob
 $minutes = (Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json).limit_minutes
 if (-not $minutes) { $minutes = 60 }
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+# A fresh session for each job (job.json `fresh_session`, default true): the desktop's own state carries from one
+# job to the next (calibration 2026-10-13: a window-class atom's order, the application in the foreground, and
+# where CW_USEDEFAULT places a window, each matching the runners only in a new session). w2m is signed out and
+# Winlogon signs it in again (ForceAutoLogon = 1, provision.ps1).
+$fresh = (Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json).fresh_session
+if ($null -eq $fresh -or $fresh) {
+  if (-not ('W2mWts' -as [type])) {
+    Add-Type -Name W2mWts -Namespace '' -MemberDefinition '[DllImport("wtsapi32.dll", SetLastError=true)] public static extern bool WTSLogoffSession(System.IntPtr server, int session, bool wait);'
+  }
+  $old = Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -like '*\w2m'
+  if ($old) { [void][W2mWts]::WTSLogoffSession([IntPtr]::Zero, $old.SessionId, $true) }
+  $signedIn = [Diagnostics.Stopwatch]::StartNew()
+  do {
+    Start-Sleep -Milliseconds 500
+    $new = Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Where-Object { $_.UserName -like '*\w2m' -and $_.Id -ne $old.Id }
+    if ($signedIn.Elapsed.TotalMinutes -ge 3) { throw 'w2m was not signed in again within 3 minutes' }
+  } while (-not $new)
+  Start-Sleep -Seconds 15          # the shell's start-up programs settle before the job's first window
+}
 Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 try {
   if (-not (Get-Process explorer -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -like '*\w2m')) {
