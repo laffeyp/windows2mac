@@ -6,7 +6,8 @@ For each run id, build/probe-runs/<run>/traces-<execution id>/ (scripts/probe_on
 store/probe-runs/<run>/ (the bodies, exec, cpu, profile and probe.sha256) and its probe.exe to
 store/binaries/<sha256>.exe; then one `Run(...)` line per run is printed for scripts/family_run.py, the runner
 image read from profile.txt. A laptop run (scripts/windows_machine.py, Sprint 067: profile.txt `laptop-...`) keeps
-its profile.json, job.json and run-job.log too, and its image is `laptop`.
+its profile.json, job.json and run-job.log too (a batch's run keeps batch.txt, and the batch's three files go once
+to store/probe-runs/<batch>/), and its image is `laptop`.
 
 Usage: uv run python scripts/store_probe_runs.py <run id> [<run id> ...]
 """
@@ -19,7 +20,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 KEPT = ("body-1.jsonl", "body-2.jsonl", "cpu.txt", "exec-1.json", "exec-2.json", "probe.sha256", "profile.txt",
-        "profile.json", "job.json", "run-job.log")
+        "profile.json", "job.json", "run-job.log", "batch.txt")
+BATCH_FILES = ("profile.json", "job.json", "run-job.log")    # a laptop batch's, kept once in store/probe-runs/<batch>/
 
 
 def image(profile: str) -> str:
@@ -41,6 +43,13 @@ def main(argv: list[str]) -> int:
         for name in KEPT:
             if (src / name).is_file():
                 shutil.copyfile(src / name, dst / name)
+        if (src / "batch.txt").is_file():
+            batch = (src / "batch.txt").read_text().strip()
+            kept = ROOT / "store" / "probe-runs" / batch
+            kept.mkdir(parents=True, exist_ok=True)
+            for name in BATCH_FILES:
+                if not (kept / name).exists():
+                    shutil.copyfile(ROOT / "build" / "batches" / batch / name, kept / name)
         sha = (src / "probe.sha256").read_text().strip()
         binary = ROOT / "store" / "binaries" / f"{sha}.exe"
         if not binary.exists():

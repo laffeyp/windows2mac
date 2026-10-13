@@ -17,7 +17,7 @@ whose executions number fewer than `repeat` fails.
 
 A `batch` job runs many stored binaries in one job (calibration): one profile, one copy each way, one workspace
 lock, a fresh workspace per binary. Its bundle is split into one run per binary, lap-<stamp>-<commit>-<n>, each with
-the batch's profile.json, run-job.log and job.json.
+a batch.txt naming the batch; the batch's profile.json, run-job.log and job.json stay once, in build/batches/<batch>/.
 
 Usage: uv run python scripts/windows_machine.py probe <probe> [--repeat 2] [--pin performance|efficiency]
        uv run python scripts/windows_machine.py binary <family> [--run <stored run id>] [--repeat 2] [--pin ...]
@@ -196,9 +196,7 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
         if src.is_dir():
             shutil.copytree(src, dst, dirs_exist_ok=True)
         dst.mkdir(parents=True, exist_ok=True)
-        for shared in ("profile.json", "run-job.log", "job.json"):
-            if (bundle / shared).is_file():
-                shutil.copyfile(bundle / shared, dst / shared)
+        (dst / "batch.txt").write_text(run)          # its profile.json, run-job.log and job.json: the batch's
         status, line = verdict(0, True, dst, repeat)
         short += status != 0
         if status:
