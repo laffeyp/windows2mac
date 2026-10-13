@@ -226,3 +226,34 @@ def test_a_thread_name_is_kept_with_its_call() -> None:
     named = {c[0] for c in calls if c[4] == "SetThreadDescription"}
     kept = [(seq, arg, text) for seq, arg, text in strings if seq in named]
     assert kept and all(arg == 1 and text.startswith("w2m") for _, arg, text in kept), strings
+
+
+@pytest.mark.hvf
+def test_getprocaddress_from_a_traced_image_answers_a_traced_thunk_of_its_own() -> None:
+    """call_trace.h's log_get_proc_address hooks only the traced images' GetProcAddress slots, and its answer for a
+    Windows DLL's name is a traced thunk every caller's calls go through (Sprint 066: mono's JIT code calls
+    GetConsoleCP so, game run 38216081440 seq 2146). w2m gives a traced image's GetProcAddress a thunk of its own,
+    owned by the GetProcAddress label and the same for the same name; any other caller gets the shared thunk."""
+    import struct
+
+    from w2m.loader import THUNK_BASE, load
+    from w2m.vm_backend import STATE_OFF, TRACE_DYNAMIC, TRACE_OFF, TRACE_OWNER_OFF, VM
+    vm = VM(load(CODE_PAGES.read_bytes()), image_name="probe.exe", call_trace=("probe.exe",))
+    try:
+        shared = next(a for a, k in vm.ld.thunks.items() if k == "KERNEL32.dll!GetACP")
+        t = vm._process(TRACE_OFF)
+        struct.pack_into("<Q", vm.mm, t, 1)                                     # the trace is open
+        lo, hi = struct.unpack_from("<QQ", vm.mm, t + 40)
+        stack = lo + 0x800                                                      # a mapped quadword: the header page
+        struct.pack_into("<Q", vm.mm, vm._process(STATE_OFF) + 8 * 4, stack)
+
+        def answer(caller: int) -> int:
+            vm.mem.write(stack, caller.to_bytes(8, "little"))
+            return vm._traced_proc(shared)
+
+        assert answer(hi + 0x1000) == shared                                   # a caller outside the traced images
+        hooked = answer(lo + 0x10)
+        assert hooked != shared and vm.ld.thunks[hooked] == "KERNEL32.dll!GetACP" and answer(lo + 0x20) == hooked
+        assert vm.mm[t + TRACE_OWNER_OFF + (hooked - THUNK_BASE) // 16] == 1 + TRACE_DYNAMIC
+    finally:
+        vm.close()

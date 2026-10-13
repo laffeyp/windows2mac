@@ -6,8 +6,9 @@
  * When the host turns the trace on (VM call_trace), every import bridge with a service calls w2m_traced with the
  * service's address and the thunk's index instead of the service. The capture's labels follow its hooks: each
  * traced image's import slots (UnityPlayer.dll, mono-2.0-bdwgc.dll: the images call_trace.h hooks) hold thunks of
- * their own (`owner`: 1 + the image), and a call through one is that image's; a call through any other thunk, as
- * GetProcAddress hands out, from code in a traced image is the "GetProcAddress" hook's (W2M_TRACE_DYNAMIC). For
+ * their own (`owner`: 1 + the image), and a call through one is that image's; a call through a thunk a traced
+ * image's GetProcAddress handed out while the trace was open, from any code, is the "GetProcAddress" hook's
+ * (owner 1 + W2M_TRACE_DYNAMIC; Sprint 066: mono's JIT code calls GetConsoleCP so). For
  * the first W2M_TRACE_CALLS calls of each function under each label on each thread, a call gets a record: the sequence number taken on entry, the
  * thread id, the four register and four stack arguments, the return value and the last error after the call. A
  * call the service leaves unreturned (W2M_SCHEDULE_RETRY, a wait that cannot complete yet) gives its record back:
@@ -40,9 +41,11 @@ _Static_assert(sizeof(struct w2m_trace_record) == 120, "trace record (vm_backend
 
 struct w2m_trace {
     u64 on, seq, count, capacity, dropped;
-    u64 range[2][2];                 /* [image] = (base, end): UnityPlayer.dll, mono-2.0-bdwgc.dll; 0 until loaded */
+    u64 range[2][2];                 /* [image] = (base, end): UnityPlayer.dll, mono-2.0-bdwgc.dll; 0 until loaded; the
+                                        host reads it for GetProcAddress's caller (vm_backend.py _traced_proc) */
     u64 pad[7];
-    u8 owner[W2M_TRACE_THUNKS];      /* 1 + the traced image whose import slot holds the thunk; 0: none; 0xFF: never */
+    u8 owner[W2M_TRACE_THUNKS];      /* 1 + the traced image whose import slot holds the thunk, or 1 + W2M_TRACE_DYNAMIC:
+                                        GetProcAddress's hook; 0: none; 0xFF: never */
     u64 pending[W2M_TRACE_PENDING][2];   /* (the call's stack pointer, 1 + its record) for calls not yet returned */
     u64 thread[W2M_TRACE_THREADS];   /* the thread ids `taken` is kept for, in order of their first traced call */
     u8 wide[W2M_TRACE_THUNKS];       /* bit i: argument i is a UTF-16 string the record keeps (call_trace.h STRING_ARGS) */
@@ -91,13 +94,7 @@ u64 w2m_traced(u64 a0, u64 a1, u64 a2, u64 a3, u64 rsp, u64 service, u64 thunk) 
     if (t->owner[thunk] == 0xFF)     /* resolved while the trace was closed: the real function on Windows */
         return call(a0, a1, a2, a3, rsp);
     int image = (int)t->owner[thunk] - 1;
-    if (image < 0) {
-        u64 caller = *(const u64 *)rsp;
-        for (int i = 0; i < 2; i++)
-            if (t->range[i][0] <= caller && caller < t->range[i][1])
-                image = W2M_TRACE_DYNAMIC;
-    }
-    if (image < 0)
+    if (image < 0)                   /* a thunk no hook handed out: the capture's process calls the function itself */
         return call(a0, a1, a2, a3, rsp);
     u64 tid = w2m_teb()->client_thread;
     int slot = 0;

@@ -158,6 +158,7 @@ CURRENT_DIRECTORY_OFF = FAULT_LOG_OFF + 0x1000   # ProcessParameters.CurrentDire
 TRACE_OFF = CURRENT_DIRECTORY_OFF + 0x1000   # the game's calls as w2m answers them (call_trace.c; Sprint 060)
 TRACE_SIZE = 0x800000              # 8 MB: per-thread counters (3 MB), then about 43,000 records
 TRACE_RECORDS_OFF, TRACE_RECORD, TRACE_THUNKS, TRACE_OWNER_OFF = 0x34D000, 120, 16384, 0x80
+TRACE_DYNAMIC = 2                                # call_trace.c W2M_TRACE_DYNAMIC: the GetProcAddress label
 TRACE_WIDE_OFF, TRACE_STRINGS_OFF, TRACE_STRING = 0x4300, 0x308300, 136
 # call_trace.h's STRING_ARGS this trace keeps: bit i, argument i is a UTF-16 string (Sprint 064: thread names)
 TRACE_WIDE_ARGS = {"SetThreadDescription": 1 << 1}
@@ -1203,6 +1204,7 @@ class VM:
         self.modules = self._modules(image_name)
         self._trace_bound: set[str] = set()
         self._trace_quiet: dict[str, int] = {}           # untraced thunks GetProcAddress gave while the trace was closed
+        self._trace_dynamic: dict[str, int] = {}         # the GetProcAddress hook's traced thunks, by name
         self._trace_ranges()
         # the trace opens when the guest first enters `call_trace_from` ("DLL!export"), as tools/jit_capture hooks the
         # images just before it calls UnityPlayer.dll!UnityMain (jit_capture.c wWinMain); 0: from the start
@@ -2102,12 +2104,30 @@ class VM:
         """GetProcAddress's answer as the capture's process sees it (Sprint 060): a name resolved while the trace is
         closed (a DLL's start before UnityMain, a traced image's DllMain) is the real function on Windows, resolved
         before tools/jit_capture hooked GetProcAddress, and its calls are never traced; here it is a thunk of its
-        own marked untraced (owner 0xFF), the same service as the shared one."""
+        own marked untraced (owner 0xFF), the same service as the shared one. With the trace open, a traced image's
+        GetProcAddress is call_trace.h's log_get_proc_address, whose answer for a Windows DLL's name is a traced
+        thunk that records every call through it, whoever makes it (Sprint 066: mono's p/invoke wrappers, JIT code,
+        call GetConsoleCP so, game run 38216081440 seq 2146); here that is a thunk of its own with the
+        GetProcAddress label (owner 1 + W2M_TRACE_DYNAMIC). Another caller's GetProcAddress is the real one, and
+        its answer the shared, untraced thunk."""
         if not self.call_trace or va not in self.ld.thunks:
             return va
-        if struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0]:
-            return va
         key = self.ld.thunks[va]
+        if struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0]:
+            # the bridge saved the guest's GPRs in the state block; RSP (slot 4) holds the call's return address
+            rsp = struct.unpack_from("<Q", self.mm, self._process(STATE_OFF) + 8 * 4)[0]
+            caller = int.from_bytes(self.mem.read(rsp, 8), "little")
+            t = self._process(TRACE_OFF)
+            if not any(lo <= caller < hi for lo, hi in (struct.unpack_from("<QQ", self.mm, t + 40 + 16 * i)
+                                                        for i in range(2))):
+                return va
+            hooked = self._trace_dynamic.get(key)
+            if hooked is None:
+                hooked = self._trace_dynamic[key] = self.modules.make_thunk(key)
+                index = (hooked - THUNK_BASE) // 16
+                if index < TRACE_THUNKS:
+                    self.mm[t + TRACE_OWNER_OFF + index] = 1 + TRACE_DYNAMIC
+            return hooked
         quiet = self._trace_quiet.get(key)
         if quiet is None:
             quiet = self._trace_quiet[key] = self.modules.make_thunk(key)

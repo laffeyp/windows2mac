@@ -132,7 +132,7 @@ def test_getprocaddress_while_the_trace_is_closed_answers_an_untraced_thunk() ->
 
     from w2m.file_bridge import FileBridge
     from w2m.loader import THUNK_BASE, load
-    from w2m.vm_backend import TRACE_OFF, TRACE_OWNER_OFF, VM
+    from w2m.vm_backend import STATE_OFF, TRACE_OFF, TRACE_OWNER_OFF, VM
     sys.path.insert(0, str(ROOT / "scripts"))
     import family_run
     f = family_run.FAMILIES["threads"]
@@ -151,6 +151,9 @@ def test_getprocaddress_while_the_trace_is_closed_answers_an_untraced_thunk() ->
             assert vm.mm[vm._process(TRACE_OFF) + TRACE_OWNER_OFF + (quiet - THUNK_BASE) // 16] == 0xFF
             assert vm._traced_proc(shared) == quiet                       # one per name
             struct.pack_into("<Q", vm.mm, vm._process(TRACE_OFF), 1)       # the trace open
+            stack = vm.ld.image.image_base + 0x800                         # a mapped quadword: the header page
+            struct.pack_into("<Q", vm.mm, vm._process(STATE_OFF) + 8 * 4, stack)
+            vm.mem.write(stack, (0x7000_0000_0000).to_bytes(8, "little"))  # a caller outside the traced images
             assert vm._traced_proc(shared) == shared
         finally:
             vm.close()
