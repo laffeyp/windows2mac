@@ -31,8 +31,10 @@ from __future__ import annotations
 import json
 import mmap
 import os
+import random
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 from bisect import bisect_right
@@ -52,8 +54,10 @@ from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modu
 from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
-from w2m.loader import DLL_INIT_FAILED, THUNK_BASE, GuestFault, Image, LoadError, Loaded, Memory, Region, map_image
+from w2m.loader import (DLL_INIT_FAILED, THUNK_BASE, TLS_SLOTS, GuestFault, Image, LoadError, Loaded, Memory, Region,
+                        map_image)
 from w2m.pe import parse as parse_pe
+from w2m.x86dec import DecodeError
 from w2m.runtime import Result
 from w2m import guest_stubs
 from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
@@ -79,10 +83,17 @@ RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the recons
 MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits and the flags not yet in FPSR
 STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_state.json state_block; runtime.h)
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
-CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock
+FOREGROUND_MODE = 0x80              # MONITOR_DATA + this: 0 the process takes the foreground, 1 another holds it (windows.c)
+PROGRESS_SECONDS = 30               # a run prints a progress line this often (wall clock) on stderr
+CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock,
+                                    # 2 the instructions run at CLOCK_RATE a second plus CLOCK_WARP (process.c)
+CLOCK_RATE, CLOCK_WARP, CLOCK_EPOCH = 0x90, 0x98, 0xA0   # MONITOR_DATA + these (runtime.h; Sprint 065 item 10)
 YMM_HI_OFF = 0x400                  # MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (rules/_vex.py; Sprint 049)
 FCW_OFF = 0x70                      # MONITOR_DATA + this: the x87 control word (FNSTCW, run by the model; Sprint 049)
+X87_SW_OFF, X87_ST_OFF = 158, 768    # the state block's x87_status_word (x87_tag_abridged after it) and st0-st7
+                                     # (specs/guest_state.json; Sprint 065: the model's x87 steps keep them)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
+CODE_WRITE_SPILL = 0x88             # MONITOR_DATA + this: x17 while the exception entry asks about a write to code
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
@@ -116,7 +127,11 @@ def dispatch_slot(target: int) -> int:
     Sprint 064: the game's modules sit at 1 MB-aligned bases (0x140000000, 0x180000000, 0x1180000000, the thunks at
     0x7FFE00000000), so code at one offset in two modules shared a slot when only the low bits indexed it."""
     return (target ^ target >> DISPATCH_BITS ^ target >> 2 * DISPATCH_BITS) & (DISPATCH_ENTRIES - 1)
-MONITOR_SIZE = (DISPATCH_TABLE + 16 * DISPATCH_ENTRIES + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
+# The tables that split a block descriptor where translated code makes 4 KB pages read-only (Sprint 065 item 9e):
+# frontier 643a6283510c-1791841443768764000 filled the 64 of TRANSLATION_TABLES at 50.5 billion instructions
+SPLIT_TABLES = DISPATCH_TABLE + 16 * DISPATCH_ENTRIES
+SPLIT_TABLES_SIZE = 0x40_0000             # 1,024 tables, sparse
+MONITOR_SIZE = (SPLIT_TABLES + SPLIT_TABLES_SIZE + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -552,6 +567,10 @@ def _temps_read(op: Op) -> list[int]:
         return [op[1]]
     if k == "set":
         return [op[2][1]] if op[2][0] == "m" else []
+    if k == "mxcsr":                                    # ("mxcsr", "st"|"ld", m32): lowered in A64 (Sprint 065)
+        return [op[2][1]]
+    if k == "mmx":                                      # ("mmx", ic, dst, src, imm): lowered in A64 (Sprint 065)
+        return [o[1] for o in (op[2], op[3]) if o[0] == "m"]
     if k == "sel":
         return [op[2], op[3], op[4]]
     if k in ("cst", "cstz"):
@@ -606,6 +625,11 @@ FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, 
 HVC_SLOW_SSE = 10
 HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
 HVC_SCHEDULE = 12            # a service handed the vCPU to the scheduler (state.schedule; Sprint 051)
+HVC_CODE_WRITE = 13          # a write faulted on a page behind translated code: x17 the address (Sprint 065)
+AP_READ_ONLY = 1 << 7        # a descriptor's AP[2]: no writes at EL1 (Arm ARM D8.4.1)
+# A level-3 permission fault on a write from the current EL: ESR's EC 0x25, WnR, DFSC 0x0F (Arm ARM D17.2.40)
+CODE_WRITE_ESR_MASK = (0x3F << 26) | (1 << 6) | 0x3F
+CODE_WRITE_ESR = (0x25 << 26) | (1 << 6) | 0x0F
 STATE_REDIRECT, STATE_SCHEDULE = 0xE8, 0xF0       # runtime.h w2m_state.redirect_rip, .schedule
 SCHEDULE_YIELD, SCHEDULE_RETRY, SCHEDULE_END, SCHEDULE_ANSWER = 1, 2, 4, 8
 STATE_SIZE = 896
@@ -622,6 +646,35 @@ def fpcr_for(mxcsr: int) -> int:
 
 def mxcsr_flags_from_fpsr(fpsr: int) -> int:
     return sum(1 << m for f, m in FPSR_TO_MXCSR if fpsr >> f & 1)
+
+
+def _lower_mxcsr(a: Assembler, kind: str, loc: Op, reg_of: Callable[[int], int]) -> None:
+    """STMXCSR and LDMXCSR in A64 (Sprint 065), as `_slow_sse` leaves the state: frontier-643a6283510c-1791802134771149000
+    ran UnityPlayer.dll's STMXCSR / LDMXCSR pair at 0x1810bdae9 415,536 times through the model. x16 and x17 only:
+    TEMP_REGS holds x18, and the operand's address may be in it.
+    STMXCSR stores the saved MXCSR with FPSR's cumulative flags folded in (FPSR_TO_MXCSR). LDMXCSR with a reserved
+    bit (31:16) set leaves to the model, which raises #GP before any write; otherwise it saves the value, clears
+    FPSR (its flags are now in the saved value) and sets FPCR as fpcr_for does."""
+    addr = reg_of(loc[1])
+    if kind == "st":
+        a.emit(a64.mrs(17, a64.FPSR), a64.lsri(16, 17, 7),         # x16 bit 0: IDC
+               a64.bfi(17, 17, 1, 5),                               # bits 5:1: IOC DZC OFC UFC IXC
+               a64.bfi(17, 16, 1, 1),                               # bit 1: IDC -> DE; bit 0 stays IOC -> IE
+               a64.ubfx(17, 17, 0, 6),
+               a64.ldr(4, 16, 28, MXCSR_OFF), a64.orr(16, 16, 17), a64.str_(4, 16, addr))
+        return
+    ok = a.label()
+    a.emit(a64.ldr(4, 16, addr), a64.lsri(17, 16, 16))
+    a.branch(lambda off: a64.cbz(17, off), ok)
+    a.emit(a64.hvc(HVC_SLOW_STEP))
+    a.bind(ok)
+    a.emit(a64.str_(4, 16, 28, MXCSR_OFF), a64.msr(a64.FPSR, a64.ZR),
+           a64.ubfx(17, 16, 6, 1),                                  # FIZ = DAZ
+           a64.lsri(16, 16, 13), a64.bfi(17, 16, 23, 1),            # RMode bit 23 = RC bit 0 (MXCSR 13)
+           a64.lsri(16, 16, 1), a64.bfi(17, 16, 22, 1),             # RMode bit 22 = RC bit 1 (MXCSR 14)
+           a64.lsri(16, 16, 1), a64.bfi(17, 16, 24, 1),             # FZ = FTZ (MXCSR 15)
+           a64.movz(16, 1), a64.bfi(17, 16, 1, 1),                  # AH
+           a64.msr(a64.FPCR, 17))
 
 
 def build_runtime(last_error_source: str | None = None, file_source: str | None = None,
@@ -786,7 +839,12 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "flags":
             _, kind, x, y, r, bits = op
             _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
-        elif k in ("mxcsr", "ud", "fcw", "xgetbv"):              # run by the model (hvc #11): MXCSR's fault rule
+        elif k == "mxcsr":
+            _lower_mxcsr(a, op[1], op[2], reg_of)
+        elif k == "mmx":                                         # Sprint 065: src/w2m/rules/_mmx.py
+            from w2m.rules import _mmx
+            _mmx.lower(a, op, reg_of)
+        elif k in ("ud", "fcw", "xgetbv", "x87"):              # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())
@@ -962,9 +1020,10 @@ class VcpuExit:
     x: list[int]
 
 
-def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -> int:
+def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -> tuple[int, int]:
     """Write 4-level stage-1 tables for (va, ipa, size) maps into the TRANSLATION_TABLES area; return the
-    root table's IPA. Descriptor layout: Arm ARM D8.3 (VMSAv8-64 translation table format)."""
+    root table's IPA and the offset of the next free table. Descriptor layout: Arm ARM D8.3 (VMSAv8-64 translation
+    table format)."""
     nxt = [TRANSLATION_TABLES + PAGE]
 
     def table_at(off: int, idx: int) -> int:
@@ -999,7 +1058,7 @@ def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -
             for level in (0, 1, 2):
                 off = table_at(off, (v >> (39 - 9 * level)) & 0x1FF)
             struct.pack_into("<Q", mm, off + 8 * ((v >> 12) & 0x1FF), (ipa + p) | PAGE_ATTRIBUTES | 0x3)
-    return IPA_BASE + TRANSLATION_TABLES
+    return IPA_BASE + TRANSLATION_TABLES, nxt[0]
 
 
 def _round_up(n: int, to: int = PAGE) -> int:
@@ -1060,7 +1119,8 @@ class VM:
                  environment: tuple[str, ...] = (), process_id: int = 0,
                  inherited: list[tuple[int, int, int]] | None = None, directory: str | None = None,
                  process_group: int = START_GROUP, call_trace: tuple[str, ...] = (),
-                 call_trace_from: str | None = None) -> None:
+                 call_trace_from: str | None = None, foreground_held: bool = False,
+                 instruction_clock: tuple[int, int] | None = None) -> None:
         self.ld = loaded
         self.call_trace = call_trace       # the images whose calls call_trace.c records, at most 2 (Sprint 060)
         if len(call_trace) > 2:
@@ -1069,7 +1129,13 @@ class VM:
         self.lockstep = lockstep
         self.clock = clock if clock is not None else monotonic_count   # a given clock is served by the host
         self.clock_from_host = clock is not None
+        # (instructions a second, the wall clock's start as a FILETIME): the guest's clock counts the instructions it
+        # runs, and jumps to the next deadline when no thread can run (Sprint 065 item 10); the host's random bytes
+        # come from a fixed seed, so two runs of one tree make the same calls
+        self.instruction_clock = instruction_clock
+        self._random = random.Random(0x5EED) if instruction_clock else None
         self.gui = gui                     # the Steam-like start: no standard handles (console.c)
+        self.foreground_held = foreground_held   # another process keeps the foreground (windows.c SetFocus; Sprint 065)
         self.command_line = command_line if command_line is not None else f'"C:\\w2m\\app\\{image_name}"'
         self.environment = environment     # the block's entries, in order ("NAME=value"; "=C:=..." too)
         self.process_id = process_id or PROCESS_ID   # TEB.ClientId.UniqueProcess; a child's from kernel.Machine
@@ -1118,7 +1184,14 @@ class VM:
         maps = [(MONITOR_VA, IPA_BASE, MONITOR_SIZE), (PROCESS_VA, IPA_BASE + MONITOR_SIZE, PROCESS_SIZE)]
         maps += [(r.base, IPA_BASE + off, _round_up(len(r.data))) for r, off in placed]
         maps += [(HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE), (VIRTUAL_VA, IPA_BASE + virtual_off, VIRTUAL_SIZE)]
-        self.ttbr = _write_translation_tables(self.mm, maps)
+        self.ttbr, _ = _write_translation_tables(self.mm, maps)
+        self._next_table = SPLIT_TABLES
+        # Translated code is invalidated when its guest bytes change (Sprint 065 item 9e): the pages behind blocks are
+        # read-only, a write to one faults (HVC_CODE_WRITE), and the blocks over it are dropped
+        self.code_pages: dict[int, set[int]] = {}       # page VA -> the starts of the blocks over it
+        self.code_writes = 0                            # writes that dropped blocks
+        self.blocks_dropped = 0
+        self.mem.on_write = self._host_wrote            # the host's own writes into guest memory fault on nothing
         self.code_cursor = CODE_CACHE
         self.blocks: dict[int, int] = {}                 # x86 address -> code VA
         self.addrs: set[int] = set()                     # x86 instructions compiled into blocks
@@ -1173,8 +1246,13 @@ class VM:
 
     def _init_process(self, tid: int) -> None:
         """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode."""
-        struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE, 1 if self.clock_from_host else 0)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_MODE,
+                         1 if self.clock_from_host else 2 if self.instruction_clock else 0)
+        if self.instruction_clock:
+            struct.pack_into("<QQQ", self.mm, MONITOR_DATA + CLOCK_RATE, self.instruction_clock[0], 0,
+                             self.instruction_clock[1])
         struct.pack_into("<Q", self.mm, MONITOR_DATA + START_MODE, 1 if self.gui else 0)
+        struct.pack_into("<Q", self.mm, MONITOR_DATA + FOREGROUND_MODE, 1 if self.foreground_held else 0)
         line = self.command_line.encode("utf-16-le") + b"\0\0"
         if len(line) > 0x1000:
             raise CompileError(f"command line of {len(line)} bytes: the page holds 4096")
@@ -1394,9 +1472,10 @@ class VM:
 
     def _thread_static_tls(self) -> int:
         """A new thread's ThreadLocalStoragePointer: the pointer array and each module's block, copied from the
-        templates as loader._static_tls lays them out for the first thread; 0 when no module has static TLS."""
+        templates as loader._static_tls lays them out for the first thread, an array even when no module has static
+        TLS (probe run 38229311268)."""
         images = self.ld.images
-        if not images or all(i.pe.tls is None for i in images):
+        if not images:
             return 0
         blocks: list[bytes | None] = []
         for k, image in enumerate([images[0], *[i for i in images[1:] if i.pe.tls is not None]]):
@@ -1406,7 +1485,7 @@ class VM:
             start, end, _, zero_fill = (v - image.pe.image_base + image.base if j < 3 else v
                                         for j, v in enumerate(image.pe.tls))
             blocks.append(bytes(self.mem.read(start, end - start)) + bytes(zero_fill))
-        array = (8 * len(blocks) + 15) & ~15
+        array = 8 * TLS_SLOTS                             # room for DLLs loaded later (_late_static_tls)
         size = array + sum((len(b) + 15) & ~15 for b in blocks if b is not None)
         base, err = self.virtual.alloc(0, size, MEM_COMMIT | MEM_RESERVE, 0x04)
         if err:
@@ -1617,9 +1696,12 @@ class VM:
                 return IDLE
             if not timed:
                 raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
-            time.sleep(0.001)
-            nxt = timed[0]
-            nxt.status = "ready"
+            if self.warp_to_deadline():
+                nxt = next(t for t in (self.threads[k] for k in rotation) if t.status == "ready")
+            else:
+                time.sleep(0.001)
+                nxt = timed[0]
+                nxt.status = "ready"
         if schedule & SCHEDULE_ANSWER:
             x[0] = int(nxt is not cur)                       # SwitchToThread: nonzero when another thread runs
         self._publish_blocked()
@@ -1653,13 +1735,32 @@ class VM:
             raise Unimplemented("the environment block has no end within its area")
         return tuple(e for e in units[:end].split("\0") if e)
 
+    def warp_to_deadline(self) -> bool:
+        """With the instruction clock and no thread ready: move the clock to the earliest deadline of a blocked thread
+        and make that thread ready, as QEMU's -icount sleep=off does; False when no thread waits with a deadline."""
+        timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
+        if not timed or not self.instruction_clock:
+            return False
+        first = min(timed, key=lambda t: (t.deadline, t.tid))
+        rate = self.instruction_clock[0]
+        executed, warp = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0], self._clock_warp()
+        now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
+        if first.deadline > now:
+            struct.pack_into("<Q", self.mm, MONITOR_DATA + CLOCK_WARP, warp + first.deadline - now)
+        first.status = "ready"
+        return True
+
+    def _clock_warp(self) -> int:
+        return int(struct.unpack_from("<Q", self.mm, MONITOR_DATA + CLOCK_WARP)[0])
+
     def _resume_idle(self, x: list[int]) -> list[int] | None:
         """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
         deadline runs to check it."""
         assert self._idle is not None
         cur, schedule, _ = self._idle
         self._idle = None
-        if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()):
+        if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()) \
+                and not self.warp_to_deadline():
             timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
             if timed:
                 timed[0].status = "ready"
@@ -1776,7 +1877,7 @@ class VM:
         elif op == HOST_CLOCK:
             result = self.clock() & M64
         elif op == HOST_RANDOM:
-            self.mem.write(a1, os.urandom(a0))
+            self.mem.write(a1, self._random.randbytes(a0) if self._random else os.urandom(a0))
             result = a0
         elif op == HOST_FILETIME:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
@@ -1854,8 +1955,8 @@ class VM:
             return 0
         raw = host.read_bytes()
         pe = parse_pe(raw)
-        if pe.tls is not None or pe.tls_callbacks:
-            raise Unimplemented(f"LoadLibrary {name}: static TLS in a DLL loaded after the start")
+        if pe.tls_callbacks:                            # no row shows a late DLL's TLS callbacks
+            raise Unimplemented(f"LoadLibrary {name}: TLS callbacks in a DLL loaded after the start")
         base = self.virtual.place_image(pe)
         staging = Memory()
         map_image(staging, raw, pe, base, host.name)
@@ -1873,6 +1974,8 @@ class VM:
                 va = m.imports.get(key) or m.make_thunk(target)
                 m.imports[key] = va
             self.mem.write(base + slot, va.to_bytes(8, "little"))
+        if pe.tls is not None:
+            self._late_static_tls(pe, base)
         self.virtual.snapshot_image(base, pe)
         c = host.name.lower()
         m.dlls[c] = (base, pe.size_of_image, {n: base + rva for n, rva in pe.exports})
@@ -1885,6 +1988,41 @@ class VM:
         if pe.entry_rva:
             self._pending_init = self._init_stub(base, base + pe.entry_rva)
         return base
+
+    def _late_static_tls(self, pe: Any, base: int) -> None:
+        """Static TLS for a DLL loaded after the start, as probe run 38229055834 records Windows doing it: the DLL takes
+        the next index (written at its AddressOfIndex), and every thread of the process, those started before the load
+        and the loading one, gets its own block copied from the template with the zero fill, in the slot of a pointer
+        array that does not move (each has room for loader.TLS_SLOTS modules). DllMain then runs on the loading thread
+        with its block in place; threads started later get the block from _thread_static_tls."""
+        index = 1 + sum(1 for i in self.ld.images[1:] if i.pe.tls is not None)
+        if index >= TLS_SLOTS:
+            raise Unimplemented(f"static TLS index {index}: each thread's array holds {TLS_SLOTS}")
+        start, end, index_va, zero_fill = (v - pe.image_base + base if k < 3 else v for k, v in enumerate(pe.tls))
+        self.mem.write(index_va, index.to_bytes(4, "little"))
+        block = bytes(self.mem.read(start, end - start)) + bytes(zero_fill)
+        for t in self.threads.values():
+            if t.status == "ended":
+                continue
+            array = int.from_bytes(self._read_guest(t.teb + 0x58, 8), "little")
+            if array == 0:                              # no module had static TLS: the thread's first array
+                array, err = self.virtual.alloc(0, 8 * TLS_SLOTS, MEM_COMMIT | MEM_RESERVE, 0x04)
+                if err:
+                    raise Unimplemented(f"a thread's TLS array: VirtualAlloc error {err}")
+                self._write_guest(t.teb + 0x58, array.to_bytes(8, "little"))
+            va, err = self.virtual.alloc(0, max(len(block), 16), MEM_COMMIT | MEM_RESERVE, 0x04)
+            if err:
+                raise Unimplemented(f"a thread's TLS block: VirtualAlloc error {err}")
+            self.mem.write(va, block)
+            self.mem.write(array + 8 * index, va.to_bytes(8, "little"))
+
+    def _write_guest(self, va: int, data: bytes) -> None:
+        """Guest memory, the process area (the first thread's TEB, the PEB) included."""
+        off = va - PROCESS_VA
+        if 0 <= off and off + len(data) <= PROCESS_SIZE:
+            self.mm[self._process(off):self._process(off) + len(data)] = data
+        else:
+            self.mem.write(va, data)
 
     def _init_stub(self, base: int, entry: int) -> int:
         """x86 that LoadLibrary returns through (module.c writes the caller's return address at +0x80): DllMain(base,
@@ -2005,6 +2143,10 @@ class VM:
                 if index < TRACE_THUNKS:
                     self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = i + 1
 
+    def instructions_executed(self) -> int:
+        """The guest instructions this VM has run (the monitor data's count)."""
+        return int(struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0])
+
     def traced_calls(self) -> tuple[list[tuple[int, int, str, str, str, tuple[int, ...], int, int]], int]:
         """The calls call_trace.c recorded, in the Windows trace's shape (tools/jit_capture/call_trace.h): (seq, tid,
         image, dll, function, a0..a7, ret, last error), and the count of calls the full area left out."""
@@ -2092,6 +2234,22 @@ class VM:
         for i, v in enumerate(values):
             self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
 
+    def x87(self) -> tuple[int, int, int, list[int]]:
+        """FCW, FSW, the abridged tags and ST0-ST7 in stack order (the monitor data page's control word and the state
+        block's x87 fields; Sprint 065)."""
+        st = self._process(STATE_OFF)
+        cw = struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0]
+        sw, tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
+        regs = [int.from_bytes(self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10], "little") for i in range(8)]
+        return int(cw), int(sw), int(tags), regs
+
+    def set_x87(self, cw: int, sw: int, tags: int, regs: list[int]) -> None:
+        st = self._process(STATE_OFF)
+        struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, cw)
+        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, sw, tags)
+        for i, v in enumerate(regs):
+            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = v.to_bytes(10, "little")
+
     def mxcsr(self) -> int:
         """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
         stored = struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]
@@ -2140,9 +2298,13 @@ class VM:
         d.emit(a64.br(16))
         d.bind(miss)
         self.miss_va = d.here()
-        d.emit(a64.hvc(1), a64.IC_IALLU, a64.DSB_ISH, a64.ISB)
+        # the host may have compiled a block and made its pages read-only (_protect_code): drop stale TLB entries too
+        d.emit(a64.hvc(1), a64.IC_IALLU, a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
         d.branch(a64.b, top)
         self.dispatch_va = MONITOR_VA + DISPATCHER
+        # where a thread goes on after a switch or a model step, x17 its next x86 address: the dispatcher's table,
+        # or in lockstep the miss stub, which exits at every instruction
+        self.resume_va = self.miss_va if self.lockstep else self.dispatch_va
         self._write_words(DISPATCHER, d.finish())
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
@@ -2167,11 +2329,18 @@ class VM:
         th.ymm_hi = [int.from_bytes(self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16],
                                     "little") for i in range(16)]
         th.flags = x86_flags(x, self)
+        st = self._process(STATE_OFF)
+        th.x87_sw, th.x87_tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
+        top = th.x87_sw >> 11 & 7                              # the state block keeps ST(i) as FXSAVE does
+        for i in range(8):
+            raw = self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10]
+            th.x87_regs[(top + i) & 7] = int.from_bytes(raw, "little")
         try:
             rt.step()
         except (fp.SimdFault, GuestFault) as e:
             code = fp.xm_status(th.mxcsr) if isinstance(e, fp.SimdFault) else e.code
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
+            self._store_x87(st, th)                    # a faulting MMX store has set TOP 0 (set 065b)
             self.set_vectors(xmm, fpcr, 0)
             return self._raise_in_guest(x, xmm, code, rip)
         x[:16] = th.regs
@@ -2182,11 +2351,22 @@ class VM:
         self.set_af_df(bool(th.flags["A"]), th.df)
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
         struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
+        self._store_x87(st, th)
         for i, v in enumerate(th.ymm_hi):
             self.mm[MONITOR_DATA + YMM_HI_OFF + 16 * i:MONITOR_DATA + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
         self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
-        return self.miss_va                                    # dispatch the next instruction
+        # on through the dispatcher's table: the next instruction's block is usually there already. Returning to the
+        # miss stub cost one hvc #1 per model step (frontier 643a6283510c-1791841443768764000: 207,514 misses at
+        # 0x18140b91a against 207,512 model steps at the PCMPISTRI before it)
+        return self.resume_va
+
+    def _store_x87(self, st: int, th: Any) -> None:
+        """The thread's x87 status, tags and registers back into the state block, ST(i) in FXSAVE's order."""
+        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, th.x87_sw, th.x87_tags)
+        top = th.x87_sw >> 11 & 7
+        for i in range(8):
+            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = th.x87_regs[(top + i) & 7].to_bytes(10, "little")
 
     def _raise_in_guest(self, x: list[int], xmm: list[int], code: int, rip: int) -> int:
         """Have the guest runtime raise exception `code` at `rip` with the state in `x` and `xmm`:
@@ -2208,6 +2388,21 @@ class VM:
         Translated code keeps nothing in SP, and x16 and x17 are temporaries, so the routine may use
         them; x19-x28 (flags and the monitor's registers) survive the call."""
         e = Assembler(MONITOR_VA + EXCEPTION_ENTRY)
+        # First, a write to a page behind translated code (Sprint 065 item 9e): ask the host, which drops the blocks
+        # and makes the page writable, then return to the store. The faulting code may hold live values in x16 and
+        # x17, so x16 waits in SP (translated code keeps nothing there) and x17 in the monitor data.
+        other, back = e.label(), e.label()
+        e.emit(a64.addi(31, 16, 0), a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL),
+               a64.str_(8, 17, 16, 0), a64.mrs(17, a64.ESR_EL1), a64.mov_imm(16, CODE_WRITE_ESR_MASK),
+               a64.and_(17, 17, 16), a64.mov_imm(16, CODE_WRITE_ESR), a64.cmp(17, 16))
+        e.branch(lambda off: a64.bcond("ne", off), other)
+        e.emit(a64.mrs(17, a64.FAR_EL1), a64.hvc(HVC_CODE_WRITE))           # x17: 1 when the host dropped blocks
+        e.branch(lambda off: a64.cbz(17, off), other)
+        e.emit(a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
+        e.branch(a64.b, back)
+        e.bind(other)
+        e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL), a64.ldr(8, 17, 16, 0),
+               a64.addi(16, 31, 0))
         e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + SAVE_AREA))
         for i in range(0, 30, 2):
             e.emit(a64.stp(i, i + 1, 16, 8 * i))
@@ -2228,12 +2423,85 @@ class VM:
             e.emit(a64.ldp(i, i + 1, 16, 8 * i))
         e.emit(a64.ldr(8, 17, 16, STATE_REDIRECT), a64.str_(8, a64.ZR, 16, STATE_REDIRECT))
         e.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
+        e.bind(back)
+        e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL), a64.ldr(8, 17, 16, 0),
+               a64.addi(16, 31, 0), a64.ERET)
         words = e.finish()
         assert 4 * len(words) <= EXCEPTION_ENTRY_END - EXCEPTION_ENTRY
         self._write_words(EXCEPTION_ENTRY, words)
 
     def _write_words(self, off: int, words: list[int]) -> None:
         self.mm[off:off + 4 * len(words)] = struct.pack(f"<{len(words)}I", *words)
+
+    # code pages ------------------------------------------------------------------------------
+    def _page_descriptor(self, va: int) -> int:
+        """The offset in the memory file of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB block over it
+        split into the next level's 512 descriptors with the block's attributes (Arm ARM D8.3); 0 when nothing maps
+        it."""
+        off = TRANSLATION_TABLES
+        for level, shift in ((0, 39), (1, 30), (2, 21)):
+            at = off + 8 * ((va >> shift) & 0x1FF)
+            desc = struct.unpack_from("<Q", self.mm, at)[0]
+            if not desc & 1:
+                return 0
+            if not desc & 2:                                   # a block: split it
+                size = 1 << shift
+                base = desc & 0x0000_FFFF_FFFF_F000 & ~(size - 1)
+                attributes = desc & ~0x0000_FFFF_FFFF_F000 & ~0x3
+                new = self._next_table
+                if new + PAGE > SPLIT_TABLES + SPLIT_TABLES_SIZE:
+                    raise CompileError("stage-1 split table area full")
+                self._next_table += PAGE
+                low = 0x3 if level == 2 else 0x1                # pages at level 3, blocks at level 2
+                for i in range(512):
+                    struct.pack_into("<Q", self.mm, new + 8 * i, (base + i * (size >> 9)) | attributes | low)
+                struct.pack_into("<Q", self.mm, at, (IPA_BASE + new) | 0x3)
+                desc = (IPA_BASE + new) | 0x3
+            off = int((desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE)
+        return off + 8 * ((va >> 12) & 0x1FF)
+
+    def _protect_code(self, start: int, end: int) -> None:
+        """Make the pages under guest bytes [start, end) read-only and note the block over them. The thunks and the
+        process area are the host's and never written by the guest; they stay as they are."""
+        if start >= PROCESS_VA:
+            return
+        for page in range(start & ~(PAGE - 1), end, PAGE):
+            blocks = self.code_pages.get(page)
+            if blocks is None:
+                at = self._page_descriptor(page)
+                if not at:
+                    continue
+                desc = struct.unpack_from("<Q", self.mm, at)[0]
+                struct.pack_into("<Q", self.mm, at, desc | AP_READ_ONLY)
+                blocks = self.code_pages[page] = set()
+            blocks.add(start)
+
+    def _code_written(self, address: int) -> bool:
+        """A write faulted at `address`: when its page is behind translated code, drop the blocks over the page and
+        their dispatch slots and make the page writable again; the next execution translates afresh."""
+        page = address & ~(PAGE - 1)
+        blocks = self.code_pages.pop(page, None)
+        if blocks is None:
+            return False
+        for start in blocks:
+            if self.blocks.pop(start, None) is None:
+                continue
+            slot = DISPATCH_TABLE + 16 * dispatch_slot(start)
+            if struct.unpack_from("<Q", self.mm, slot)[0] == start:
+                struct.pack_into("<QQ", self.mm, slot, M64, self.miss_va)
+            self.blocks_dropped += 1
+        at = self._page_descriptor(page)
+        struct.pack_into("<Q", self.mm, at, struct.unpack_from("<Q", self.mm, at)[0] & ~AP_READ_ONLY)
+        self.code_writes += 1
+        return True
+
+    def _host_wrote(self, address: int, size: int) -> None:
+        """The host wrote guest bytes [address, address + size) (a file read, a context, a parameter block): drop the
+        translations over them as a guest write would."""
+        if self.code_pages:
+            for page in range(address & ~(PAGE - 1), address + size, PAGE):
+                if page in self.code_pages:
+                    self._code_written(page)
 
     # blocks ----------------------------------------------------------------------------------
     def _compile(self, start: int) -> int:
@@ -2278,6 +2546,8 @@ class VM:
         self._recon_append(pc_marks)
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
+        if not self.lockstep:
+            self._protect_code(start, addr)
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
         return va
 
@@ -2407,8 +2677,21 @@ class VM:
         pc = self.dispatch_va
         cpsr = CPSR_EL1H
         stop = "timeout"
+        report_at = time.monotonic() + PROGRESS_SECONDS
+        reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()), time.monotonic())
         try:
             while True:
+                machine = self.machine if self.machine is not None and self.machine.main is self else None
+                if machine is not None and machine.stop_requested:
+                    stop = machine.stop_requested
+                    break
+                if time.monotonic() >= report_at:             # a run that goes quiet says where it is
+                    reported = self._progress(reported, x)
+                    report_at = time.monotonic() + PROGRESS_SECONDS
+                    why = machine.stop_when() if machine is not None and machine.stop_when is not None else None
+                    if why:
+                        stop = why
+                        break
                 cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
                 r = cmd(f"run {interrupt_every_ms if interrupt_every_ms is not None else timeout_ms}")
                 e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
@@ -2439,7 +2722,8 @@ class VM:
                     stop = f"VmExit: {e.kind} syndrome 0x{e.syndrome:x} at pc 0x{e.pc:x}"
                     break
                 imm = e.syndrome & 0xFFFF
-                where = self.x86_address_at(e.pc - 4)
+                # a dispatch miss exits from the dispatcher, outside every block: its site is the target it missed
+                where = x[17] if imm == 1 else self.x86_address_at(e.pc - 4)
                 self.exits[imm] += 1                          # the exit census (Sprint 064): kind, then the site
                 self.exit_sites[(imm, where)] += 1
                 if imm == 1:
@@ -2501,7 +2785,7 @@ class VM:
                         self._save_thread(self.threads[self.current_tid], x)
                         yield "slice"                            # another VM's turn; this thread goes on after
                         x = self._load_thread(self.threads[self.current_tid])
-                        pc = self.miss_va
+                        pc = self.resume_va
                     elif len(self.threads) > 1:                 # the time slice ran out: another thread's turn
                         x[17] = where
                         switched = self._schedule(x, 0)
@@ -2510,9 +2794,12 @@ class VM:
                             switched = self._resume_idle(x)
                         assert switched is not None
                         x = switched
-                        pc = self.miss_va
+                        pc = self.resume_va
                     else:
                         pc = e.pc
+                elif imm == HVC_CODE_WRITE:                     # a write faulted: behind translated code?
+                    x[17] = 1 if self._code_written(x[17]) else 0
+                    pc = e.pc
                 elif imm == HVC_SCHEDULE:                       # a service handed the vCPU over (state.schedule)
                     st = self._process(STATE_OFF)
                     schedule = struct.unpack_from("<I", self.mm, st + STATE_SCHEDULE)[0]
@@ -2526,7 +2813,7 @@ class VM:
                         stop = "ExitProcess"
                         break
                     x = switched
-                    pc = self.miss_va
+                    pc = self.resume_va
                 elif imm & 0x40:
                     stop = f"UndefinedFlag: {'CZSOP'[imm & 7]} read while undefined at 0x{where:x}"
                     break
@@ -2535,7 +2822,8 @@ class VM:
                     break
         except StopRun:
             stop = "stopped by on_dispatch"
-        except (LiftError, GuestFault, Unimplemented, HandlerFailed, CompileError, BridgeRequestError) as ex:
+        except (LiftError, DecodeError, GuestFault, Unimplemented, HandlerFailed, CompileError,
+                BridgeRequestError) as ex:              # DecodeError: record frontier-...1791800847886016000 crashed
             stop = f"{type(ex).__name__}: {ex}"
         finally:
             try:
@@ -2548,6 +2836,25 @@ class VM:
         self.final = x
         return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop,
                       self.calls_total(), self.calls_dropped())
+
+    def _progress(self, before: tuple[int, Counter[int], Counter[tuple[int, int]], int, float],
+                  x: list[int]) -> tuple[int, Counter[int], Counter[tuple[int, int]], int, float]:
+        """One progress line on stderr: instructions and their rate since the last line, exits by
+        hvc and the busiest exit sites since then, calls made, each thread's status, and the x86
+        address the current thread is at."""
+        executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+        calls = sum(self.calls_total().values())
+        now = time.monotonic()
+        exits = Counter(self.exits)
+        exits.subtract(before[1])
+        sites = Counter(self.exit_sites)
+        sites.subtract(before[2])
+        threads = Counter(t.status for t in self.threads.values())
+        print(f"progress: {self.modules.image_name}: {executed} instructions ({(executed - before[0]) / max(now - before[4], 1e-6) / 1e6:.2f}M/s); "
+              f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
+              + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
+              + f"; threads {dict(threads)}; thread {self.current_tid} at 0x{x[17]:x}", file=sys.stderr, flush=True)
+        return executed, Counter(self.exits), Counter(self.exit_sites), calls, now
 
     def close(self) -> None:
         for r in self.mem.regions:

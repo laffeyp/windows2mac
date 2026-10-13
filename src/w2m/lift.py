@@ -38,6 +38,10 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("fence", kind)                 SFENCE "st": earlier stores before later ones; LFENCE "ld": earlier loads
                                   before later accesses; MFENCE "full": every access (Sprint 047)
   ("fcw", "st", loc)               FNSTCW (Sprint 049): the x87 control word to 2 bytes of memory
+  ("x87", ic, opcode, reg, st, mem) one x87 instruction, run whole by the model (src/w2m/x87.py; Sprint 065)
+  ("mmx", ic, dst, src, imm)        one MMX-register instruction, run whole by the model (src/w2m/mmx.py; Sprint 065):
+                                    dst and src ("mm", n), ("x", n, bits), ("r", idx, bits, hi), ("m", t, bytes),
+                                    ("i",) for an immediate count, ("none",)
   ("ud",)                         an instruction the guest profile makes undefined (#UD)
   ("xgetbv",)                     XGETBV (Sprint 049): EDX:EAX = XCR0 (7) for ECX 0, #GP otherwise
   ("vex", base, d, s1, s2, L, align, imm)  a VEX instruction as its legacy-SSE base (Sprint 049; rules/_vex.py): d =
@@ -68,7 +72,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from w2m.x86dec import Decoded, decode
+from w2m.x86dec import DecodeError, Decoded, decode
 from w2m.x86ops import GPR8_LEGACY, GPR8_REX, GPR16, GPR32, GPR64, operands
 
 REG: dict[str, tuple[int, int, bool]] = {}
@@ -129,6 +133,11 @@ SSE_050 = {"CVTDQ2PS", "CVTPS2DQ", "CVTTPS2DQ", "CVTPS2PD", "CVTPD2PS", "CMPPS",
 SSE |= SSE_050
 SSE_ALIGNED |= SSE_050 - {"CVTPS2PD", "CMPSS", "MOVLPS", "MOVHPD", "PINSRB", "PINSRD", "PMOVSXDQ", "PMOVZXWD", "PEXTRW"}
 SSE |= SSE2_INT
+# Sprint 065: LDDQU (SSE3; an unaligned 16-byte load) and MPSADBW (SSE4.1; its m128 needs 16-byte alignment, as a
+# legacy-SSE packed operand), which UnityPlayer.dll reaches and the decode spec had no row for
+SSE_065 = {"LDDQU", "MPSADBW"}
+SSE |= SSE_065
+SSE_ALIGNED |= {"MPSADBW"}
 # Sprint 050: integer classes whose operands are all implicit (flags, the stack, RSI and RDI)
 IMPLICIT_050 = {"STC", "CLC", "CMC", "SAHF", "PUSHFQ", "POPFQ", "LEAVE", "PAUSE", "LODSB", "SCASB", "SCASD", "STOSB",
                 "MOVSB", "MOVSD", "CMPSB", "CMPSD"}
@@ -252,6 +261,12 @@ def commit_order(ins: Lifted) -> str | None:
             return "store" if op[1] == "st" else "load"
         if op[0] == "fcw":
             return "store"
+        if op[0] == "mmx":                                    # ("mmx", ic, dst, src, imm): Sprint 065
+            return "store" if op[2][0] == "m" else "load" if op[3][0] == "m" else None
+        if op[0] == "x87":                                    # ("x87", ic, opcode, reg, st, mem): Sprint 065
+            if op[5] is None:
+                return None
+            return "store" if op[1] in ("FSTP", "FISTP", "FISTTP", "FNSTSW") else "load"
         if op[0] == "vexs":                                   # ("vexs", ic, d, s1, s2, L, imm)
             return "store" if op[2][0] == "m" else "load" if op[4][0] == "m" else None
         if op[0] == "vex":                                    # ("vex", base, d, s1, s2, L, align, imm)
@@ -283,19 +298,52 @@ def commit_order(ins: Lifted) -> str | None:
     return None
 
 
+MMX_ONLY = ("EMMS", "MOVDQ2Q", "PSHUFW")         # classes with no SSE form (Sprint 065)
+
+
+def lift_mmx(b: _OpBuilder, ic: str, ops: tuple[str, ...], nxt: int) -> None:
+    """("mmx", ic, dst, src, imm): the operands as src/w2m/mmx.py reads them."""
+    out: list[tuple[object, ...]] = []
+    imm = 0
+    for o in ops:
+        if o.startswith("MM:"):
+            out.append(("mm", int(o[3:])))
+        elif o.startswith("I:"):
+            imm = int(o.split(":")[2], 16)
+            out.append(("i",))
+        else:
+            _, loc, _ = _operand(b, o, nxt)
+            out.append(loc)                                   # type: ignore[arg-type]
+    if ic in ("PEXTRW", "PSHUFW"):                       # the immediate is imm, not an operand
+        out = out[:2]
+    while len(out) < 2:
+        out.append(("none",))
+    b.emit("mmx", ic, out[0], out[1], imm)
+
+
 def lift(code: bytes, address: int) -> Lifted:
-    """Lift the instruction at the start of `code`, located at guest `address`."""
-    d: Decoded = decode(code)
+    """Lift the instruction at the start of `code`, located at guest `address`. Bytes the decode spec has no row for
+    are a LiftError too, so the run stops by name (Sprint 065: a DecodeError for PSHUFW ended a frontier run's
+    producer instead)."""
+    try:
+        d: Decoded = decode(code)
+    except DecodeError as e:
+        raise LiftError(f"{e} at 0x{address:x} ({code[:15].hex()})") from None
     f = d.fields
     ic = d.iclass
     nxt = address + d.length
     b = _OpBuilder()
     ops = operands(f) if f is not None and f.ops else ()
-    if not ops and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER", "VZEROALL",
+    declared_none = f is not None and f.ops == "-"       # the spec says the row has no explicit operand (Sprint 065)
+    if not ops and not declared_none and ic not in ("NOP", "RET_NEAR", "CLD", "STD", "CPUID", "CDQ", "CDQE", "CQO", "CWDE", "SFENCE", "LFENCE", "MFENCE", "XGETBV", "VZEROUPPER", "VZEROALL",
                               *REP_STRING, *IMPLICIT_050):
         # a row without an operand template (moffs MOV A0-A3, implicit forms): not lifted yet
         raise LiftError(f"no operand template for {ic} at 0x{address:x} ({code[:d.length].hex()})")
     from w2m.rules import Ctx, registry               # the rule for each class (src/w2m/rules, Sprint 041)
+
+    if ic in MMX_ONLY or any(o.startswith("MM:") for o in ops):   # an MMX-register form, whatever its class's SSE rule
+        lift_mmx(b, ic, ops, nxt)
+        return Lifted(address, d.length, ic, tuple(b.ops))
 
     found = registry().get(ic)
     if found is None:

@@ -88,6 +88,7 @@ struct frame {
     u64 establisher;                     /* the frame whose handler runs */
     u64 target_frame, target_ip, return_value, history;
     u64 frames;                          /* frames walked */
+    u64 vectored_only;                   /* OutputDebugStringA: the vectored handlers, then back to the caller */
 };
 #define FRAME_GAP 0x40                       /* guest_calls.c's: bytes left free below the stack pointer */
 _Static_assert(sizeof(struct w2m_context) % 16 == 0, "the walk context stays 16-aligned");
@@ -340,6 +341,10 @@ static void next_vectored(struct frame *f) {
         call_guest(f, h, (u64)f->pointers, 0, 0, 0);
         return;
     }
+    if (f->vectored_only) {                          /* KERNELBASE's own __except takes it: the caller goes on */
+        resume_context(&f->ctx);
+        return;
+    }
     f->step = STEP_FRAME;
     f->walk = f->ctx;
     next_frame(f);
@@ -463,6 +468,36 @@ W2M_VOID u64 k32_RaiseException(u64 code, u64 flags, u64 count, u64 args, u64 rs
     for (u32 i = 0; i < (u32)count; i++) f->rec.information[i] = ((const u64 *)args)[i];
     capture(&f->ctx, rsp, stubs() + STUB_RETURN);
     dispatch_begin(f);
+    return 0;
+}
+
+/* OutputDebugStringA(lpOutputString) with no debugger (contracts/windows.debug.output_debug_string, probe runs
+ * 38230596053-38230605428, Server 2025 and 2022): DBG_PRINTEXCEPTION_C, software-originated, with two parameters,
+ * the string's length with its NUL and its address, reaches the vectored handlers; KERNELBASE's own handler takes it,
+ * so no frame of the caller's sees it, and the call returns with the last error left. OutputDebugStringW raises
+ * DBG_PRINTEXCEPTION_WIDE_C with four parameters first, two of which no row shows: it stops the run. */
+#define DBG_PRINTEXCEPTION_C 0x40010006u
+W2M_VOID u64 k32_OutputDebugStringA(u64 text, u64 a1, u64 a2, u64 a3, u64 rsp) {
+    (void)a1; (void)a2; (void)a3;
+    if (!text) w2m_unimplemented(W2M_API_OutputDebugStringA, 0);                 /* no row passes NULL */
+    u64 n = 0;
+    while (((const u8 *)text)[n]) n++;
+    w2m_logged(W2M_API_OutputDebugStringA, n, 0);
+    struct frame *f = place(rsp);
+    f->rec.code = DBG_PRINTEXCEPTION_C;
+    f->rec.flags = EXCEPTION_SOFTWARE_ORIGINATE;
+    f->rec.address = stubs() + STUB_RETURN;
+    f->rec.number_parameters = 2;
+    f->rec.information[0] = n + 1;
+    f->rec.information[1] = text;
+    f->vectored_only = 1;
+    capture(&f->ctx, rsp, stubs() + STUB_RETURN);
+    dispatch_begin(f);
+    return 0;
+}
+
+W2M_VOID u64 k32_OutputDebugStringW(u64 text) {
+    w2m_unimplemented(W2M_API_OutputDebugStringW, text);
     return 0;
 }
 

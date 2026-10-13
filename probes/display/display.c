@@ -105,12 +105,12 @@ static void dpi(const char *name, dpi_fn f, HMONITOR m, int type) {
     row(name); field("hr", (DWORD)hr); field("x", x); field("y", y); end();
 }
 
-static void settings(const char *name, DWORD mode) {
+static void settings_of(const char *name, const WCHAR *device, DWORD mode) {
     DEVMODEW dm;
     zero(&dm, sizeof dm);
     dm.dmSize = sizeof dm;
     SetLastError(SENTINEL);
-    BOOL ok = EnumDisplaySettingsW(NULL, mode, &dm);
+    BOOL ok = EnumDisplaySettingsW(device, mode, &dm);
     row(name); field("ret", ok != 0); field("err", GetLastError());
     if (ok) {
         wtext("device", dm.dmDeviceName); field("size", dm.dmSize); field("fields", dm.dmFields);
@@ -121,6 +121,8 @@ static void settings(const char *name, DWORD mode) {
     }
     end();
 }
+
+static void settings(const char *name, DWORD mode) { settings_of(name, NULL, mode); }
 
 void start(void) {
     char name[32];
@@ -212,5 +214,16 @@ void start(void) {
         settings(mode, modes);
     }
     row("settings.mode_count"); field("value", modes); end();
+
+    /* Sprint 065: the game names the device, MONITORINFOEXW.szDevice from GetMonitorInfoW (game run 38216081440
+     * seq 3413-3415: EnumDisplaySettingsW(L"\\.\DISPLAY1", ENUM_CURRENT_SETTINGS, ...)) */
+    settings_of("settings.named.current", L"\\\\.\\DISPLAY1", ENUM_CURRENT_SETTINGS);
+    settings_of("settings.named.registry", L"\\\\.\\DISPLAY1", ENUM_REGISTRY_SETTINGS);
+    settings_of("settings.named.mode_0", L"\\\\.\\DISPLAY1", 0);
+    settings_of("settings.named.mode_12", L"\\\\.\\DISPLAY1", 12);
+    settings_of("settings.named.mode_13", L"\\\\.\\DISPLAY1", 13);
+    settings_of("settings.named_lower.current", L"\\\\.\\display1", ENUM_CURRENT_SETTINGS);
+    settings_of("settings.other_device.current", L"\\\\.\\DISPLAY2", ENUM_CURRENT_SETTINGS);
+    settings_of("settings.monitor_name.current", L"\\\\.\\DISPLAY1\\Monitor0", ENUM_CURRENT_SETTINGS);
     ExitProcess(0);
 }

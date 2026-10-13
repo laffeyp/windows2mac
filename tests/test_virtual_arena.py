@@ -20,3 +20,15 @@ def test_unityplayer_s_reservations_fit_many_times_over() -> None:
     assert v.alloc(last, 0x2000, MEM_COMMIT, PAGE_READWRITE) == (last, 0)
     assert touched == [(last, 0x1000), (last + 0x1000, 0x1000)]    # a commit zeroes only its own pages
     assert VIRTUAL_SIZE // 0x2000_0000 == 1024
+
+
+def test_a_reservation_at_an_address_a_loaded_dll_holds_is_refused() -> None:
+    # Sprint 065: steam_api64.dll was placed at 0x1222ff0000 and mono's hinted reservation there was granted, so its
+    # JIT code overwrote the image; Windows answers ERROR_INVALID_ADDRESS (487) for an address in use
+    from types import SimpleNamespace
+    v = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, lambda va, n: None)
+    pe = SimpleNamespace(image_base=VIRTUAL_VA, size_of_image=0x5B000, sections=())
+    base = v.place_image(pe)  # type: ignore[arg-type]
+    assert v.alloc(base, 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) == (0, 487)
+    assert v.alloc(base + 0x50000, 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) == (0, 487)
+    assert v.alloc(base + 0x60000, 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) == (base + 0x60000, 0)

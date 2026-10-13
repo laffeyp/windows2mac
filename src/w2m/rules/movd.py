@@ -6,6 +6,6 @@ the shared SSE lowering in the VM."""
 from w2m.rules import _sse
 
 ICLASSES = ("MOVD",)
-SHARED = ("_sse",)
+SHARED = ("_sse", "_mmx")
 rule = _sse.rule
 lower = _sse.lower

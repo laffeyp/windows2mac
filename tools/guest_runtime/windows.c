@@ -640,12 +640,16 @@ W2M_VOID u64 user32_SetFocus(u64 h, u64 a1, u64 a2, u64 a3, u64 rsp) {
     u64 n = 0;
 #define SEND(T, M, W, L) (f->to[n] = (T), f->msg[n] = (M), f->wparam[n] = (W), f->lparam[n] = (L), n++)
     SEND(h, WM_WINDOWPOSCHANGING, 0, (u64)f->pos);
-    SEND(h, WM_ACTIVATEAPP, 1, 1);           /* lParam: the deactivated program's thread, not NULL (rows) */
+    /* lParam: the deactivated program's thread, not NULL (rows); wParam of WM_NCACTIVATE: 1. A window that activates
+     * while another process keeps the foreground has neither: lParam 0 and WM_NCACTIVATE 0 (game run 38275716702's
+     * hook: the messages as Windows sent them, a Windows Terminal window the foreground throughout) */
+    u64 held = *(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_FOREGROUND_MODE_OFF) == 1;
+    SEND(h, WM_ACTIVATEAPP, 1, held ? 0 : 1);
     for (int i = 0; i < WINDOWS; i++) {
         u64 other = WINDOW_BASE + 0x10 * (u64)i;
-        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, 1);
+        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, held ? 0 : 1);
     }
-    SEND(h, WM_NCACTIVATE, 1, 0);
+    SEND(h, WM_NCACTIVATE, held ? 0 : 1, 0);
     SEND(h, WM_ACTIVATE, 1, 0);              /* WA_ACTIVE: DefWindowProcW sends the IME pair and WM_SETFOCUS */
     SEND(h, WM_KILLFOCUS, h, 0);
     SEND(h, WM_IME_SETCONTEXT, 0, ISC_SHOWUI);

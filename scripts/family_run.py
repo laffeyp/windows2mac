@@ -75,6 +75,12 @@ def described(doc: str, fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]
     return fn
 
 
+def numbered_exceptions(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rows whose "exception" field numbers one of several under the same name: the name gains ".exception<n>"
+    (output_debug_string; Sprint 065)."""
+    return [{**r, "s": f"{r['s']}.exception{r['exception']}"} if "exception" in r else r for r in printed]
+
+
 def raw_rows(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The rows as the probe printed them."""
     return printed
@@ -96,6 +102,7 @@ class Family:
     excluded: dict[str, str] = field(default_factory=dict)    # row -> why the runners may differ on it
     expected_stop: str | None = None      # the stop an excluded row causes in w2m (a prefix of the stop text)
     gui: bool = False                     # the Steam-like start: no standard handles (console.c)
+    foreground_held: bool = False         # another process keeps the foreground (windows.c SetFocus; Sprint 065)
     arguments: str = ""                   # after the quoted module path on the command line
     output_file: str | None = None        # rows come from this file the probe writes, not standard output
     environment: tuple[str, ...] = ()     # the block the start passes (environment.c)
@@ -807,6 +814,104 @@ FAMILIES: dict[str, Family] = {
                                            "realloc.in_place_only_grow")),
                 "zero_flag_ignored": Plant("    if (flags & HEAP_ZERO_MEMORY) zero((u8 *)(b + 1), b->capacity);", "",
                                            ("alloc.zero_memory_after_dirty_free",))}),
+    "heap_in_place": Family(
+        name="heap_in_place",
+        contract_id="windows.heap.in_place",
+        version="0.1.0",
+        summary=("How far HeapReAlloc(HEAP_REALLOC_IN_PLACE_ONLY) grows a process-heap block (Sprint 065; game run "
+                 "38216081440 seq 3265-3268, where Windows refuses UnityPlayer's growths of a 0x417 block to 0x817 and "
+                 "on, and w2m granted three). Grown one byte at a time, a block of 1 to 0x10000 bytes stops at the "
+                 "larger of its size and 16, fresh or after 40 blocks of its size; the refusal answers NULL with "
+                 "ERROR_NOT_ENOUGH_MEMORY. A 0x417 block whose next block was freed does not grow to 0x817."),
+        probe="heap_in_place", guest_file="heap.c",
+        runs={
+              "38254640218": Run("windows-2025", "5419841125b5d6e9725bc821eb9c8d2d9ff50d992513aaeeaafd5ff596c3d1fb", "heap_in_place-0", "AMD EPYC 7763 64-Core Processor"),
+              "38254643501": Run("windows-2022", "e8a6346e7051fd4f169b7aaddb5c8e7231f59e91e933ca96888e4887e2aba2e9", "heap_in_place-1", "AMD EPYC 7763 64-Core Processor"),
+        },
+        derive=described("The step between two blocks (a limit row's step_forward and step_back, neighbour_freed's "
+                         "b_after_a) is an address relation that differs between runs; it is dropped.",
+                         lambda printed: [{k: v for k, v in r.items() if k not in ("step_forward", "step_back", "b_after_a")}
+                                          for r in printed], "no_steps"),
+        excluded={"limit.fresh.800": "one run of six grew the block to 3,232 bytes: its next block was free (the "
+                                     "second block lay before it); w2m's heap does not join free neighbours.",
+                  "limit.fresh.1000": "the same run grew it to 4,880 bytes, its next block free.",
+                  "limit.warm.1": "after 40 one-byte blocks Windows grows a one-byte block by nothing (its "
+                                  "low-fragmentation heap serves the size), a fresh one to 16 bytes; w2m's heap has "
+                                  "no low-fragmentation heap and answers 16."},
+        documented=(
+            documented("ms-heaprealloc", "api/heapapi/nf-heapapi-heaprealloc", "2024-02-22",
+                       "HEAP_REALLOC_IN_PLACE_ONLY ... There can be no movement when reallocating a memory block. If "
+                       "this value is not specified, the function may move the block to a new location. If this value "
+                       "is specified and the block cannot be resized without moving, the function fails, leaving the "
+                       "original memory block unchanged."),),
+        open_questions=(
+            "Windows grows a block in place into a free next block (the excluded rows); w2m's heap neither keeps "
+            "blocks in address order nor joins neighbours, so it refuses where Windows may grant. The game's four "
+            "growths are refused on Windows.",
+            "A block shrunk in place keeps its reach in w2m; no row shows a shrink then a growth in place."),
+        plants={"reach_is_capacity": Plant("&& size > b->reach)", "&& round16(size ? size : 1) > b->capacity)",
+                                           # named first as four rows; it changed five: neighbour_freed's 0x417
+                                           # block reuses a larger freed one and grows, as the game's did (recorded)
+                                           ("limit.fresh.18", "limit.warm.18", "limit.fresh.417", "limit.warm.417",
+                                            "neighbour_freed")),
+                "no_sixteen_byte_floor": Plant(
+                    "    if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */\n"
+                    "    b->size_and_magic_check = size;\n    b->reach = size > 16 ? size : 16;",
+                    "    if (!b) w2m_unimplemented(W2M_API_HeapAlloc, size);                  /* Windows would grant it */\n"
+                    "    b->size_and_magic_check = size;\n    b->reach = size;",
+                    ("limit.fresh.1",))}),
+    "code_rewrite": Family(
+        name="code_rewrite",
+        contract_id="windows.memory.code_rewrite",
+        version="0.1.0",
+        summary=("Code written into PAGE_EXECUTE_READWRITE memory, run, rewritten and run again (Sprint 065 item 9e). "
+                 "mono writes and patches its methods with plain stores and no FlushInstructionCache; a scratch "
+                 "frontier found 11,365 translated blocks whose guest bytes had changed by the stop. Each rewrite "
+                 "takes effect at the next call; a write to data on the code's page leaves the code as it is."),
+        probe="code_rewrite", guest_file="virtual_memory.c",
+        runs={
+              "38311776331": Run("windows-2025", "f8ec2085c159f9663eb52f25b2df9eef541af13bc3c8a1008d1865d5fd13b3c6", "code-rewrite-windows-2025", "AMD EPYC 9V74 80-Core Processor"),
+              "38311779649": Run("windows-2022", "0e380e63488ae0166d4ba694b9ce3e7a9e3821c693bc8dad5fbdbdf81f362dba", "code-rewrite-windows-2022", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "A store that rewrites the block it is in takes effect at the next execution of that block in w2m (the "
+            "running translation completes); no row shows code that rewrites itself ahead of its own execution.",
+            "The host's own writes into guest memory (a file read, a context) drop translations through "
+            "Memory.on_write; no row reads a file into code."),
+        plants={"pages_not_protected": Plant("        if not self.lockstep:\n            self._protect_code(start, addr)",
+                                             "        if not self.lockstep:\n            pass",
+                                             ("immediate", "rewrite", "second_page", "protect"), host="w2m.vm_backend")}),
+    "wait_handoff": Family(
+        name="wait_handoff",
+        contract_id="windows.sync.wait_handoff",
+        version="0.1.0",
+        summary=("Who gets a semaphore, auto-reset event or mutex released while threads wait for it (Sprint 065; game "
+                 "run 38216081440 seq 1317 and 1402-1508, where all 16 Background Job.Worker waits on one semaphore "
+                 "return and in w2m 15 never did). The release hands the object to the waiters at once, in the order "
+                 "they began to wait: the releaser's own zero-timeout wait right after finds it taken, two units go to "
+                 "the first two of three waiters, and of two waiters the first wakes."),
+        probe="wait_handoff", guest_file="sync_objects.c",
+        runs={
+              "38304235237": Run("windows-2025", "73c18f39bd61a10312d657b439fd27519beceddbb5b382dd07f9609b390d9dc2", "wait-handoff-windows-2025", "AMD EPYC 7763 64-Core Processor"),
+              "38304238413": Run("windows-2022", "f566a7d163bcbecf6b005e9e7abe9e6e02f6a1d8e242342c4bd6bbced32a934f", "wait-handoff-windows-2022", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "The order (first waiter first) is the rows' on two runners, three runs each; no Microsoft page read for "
+            "this family promises it.",
+            "WaitForMultipleObjects re-checks its objects on each retry; no row shows a release while a thread waits "
+            "on several."),
+        plants={"semaphore_not_handed_over": Plant("    o->count += (s32)count;\n    grant(o);", "    o->count += (s32)count;",
+                                                   # named first as 2 rows; it changed 5: the releaser keeps the
+                                                   # unit, the waiter never ends, and the probe deadlocks (recorded)
+                                                   ("semaphore.one_waiter", "semaphore.three_waiters_two_released",
+                                                    "semaphore.order", "event_auto.one_waiter", "mutex.one_waiter")),
+                "last_waiter_first": Plant("    for (int i = 0; i < nwaiters; i++) {\n        if (waiters[i].object != index",
+                                           "    for (int i = nwaiters - 1; i >= 0; i--) {\n        if (waiters[i].object != index",
+                                           ("semaphore.three_waiters_two_released", "semaphore.order")),
+                "mutex_not_handed_over": Plant("        o->max = 0;\n        grant(o);", "        o->max = 0;",
+                                               ("mutex.one_waiter",))}),
     "code_pages": Family(
         name="code_pages",
         contract_id="windows.code_pages.ansi_1252",
@@ -1143,6 +1248,77 @@ FAMILIES: dict[str, Family] = {
         plants={"template_not_copied": Plant("        block = bytes(region.data[start - image.base:end - image.base]) + bytes(zero_fill)",
                                             "        block = bytes(end - start) + bytes(zero_fill)",
                                             ("tls.values", "tls.write"), host="w2m.loader")}),
+    "late_tls": Family(
+        name="late_tls",
+        contract_id="windows.loader.late_tls",
+        version="0.1.0",
+        summary=("A program without TLS loads a DLL with static TLS (static C runtime) by LoadLibrary while a second "
+                 "thread waits: the DLL's TLS index is 1; TEB.ThreadLocalStoragePointer is set before the load and "
+                 "keeps its value; the loading thread (after DllMain), the thread started before the load and one "
+                 "started after it each read their own copy of the template with its zero fill, in the block their "
+                 "slot holds."),
+        probe="late_tls", guest_file="module.c",
+        runs={
+              "38229484497": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-3-0", "INTEL(R) XEON(R) PLATINUM 8573C", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
+              "38229488362": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-3-1", "AMD EPYC 9V74 80-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
+              "38229493876": Run("windows-2025", "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6", "late_tls-3-2", "AMD EPYC 7763 64-Core Processor", dll="3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e"),
+              "38229497641": Run("windows-2022", "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b", "late_tls-3-3", "AMD EPYC 7763 64-Core Processor", dll="f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695"),
+        },
+        documented=(
+            documented("ms-pe-tls", "../../windows/win32/debug/pe-format", "2024-02-22",
+                       "The loader assigns the value of the TLS index to the place that was indicated by the Address "
+                       "of Index field."),),
+        open_questions=(
+            "A late DLL's TLS callbacks: no row has one (steam_api64.dll has none); w2m stops on one.",
+            "How many modules a thread's array holds before Windows moves it: w2m gives room for loader.TLS_SLOTS."),
+        dll_name="late_tls_dll.dll", dll_on_disk=True, host_files=("src/w2m/loader.py",),
+        plants={"block_not_copied": Plant("            self.mem.write(va, block)",
+                                          "            self.mem.write(va, bytes(len(block)))",
+                                          ("late.main", "late.before_load"), host="w2m.vm_backend")}),
+    "output_debug_string": Family(
+        name="output_debug_string",
+        contract_id="windows.debug.output_debug_string",
+        version="0.1.0",
+        summary=("OutputDebugStringA with no debugger, as steam_api64.dll calls it: a vectored handler sees one "
+                 "exception, DBG_PRINTEXCEPTION_C (0x40010006), flags 0x80, two parameters (the length with the NUL and "
+                 "the string's address); the call returns and the last error is left."),
+        probe="output_debug_string", guest_file="exceptions.c",
+        runs={
+              "38230799629": Run("windows-2025", "507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031", "output_debug_string-2-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38230802984": Run("windows-2022", "c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405", "output_debug_string-2-1", "AMD EPYC 7763 64-Core Processor"),
+              "38230806738": Run("windows-2025", "507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031", "output_debug_string-2-2", "AMD EPYC 7763 64-Core Processor"),
+              "38230809940": Run("windows-2022", "c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405", "output_debug_string-2-3", "AMD EPYC 7763 64-Core Processor"),
+        },
+        documented=(),
+        open_questions=(
+            "OutputDebugStringW raises DBG_PRINTEXCEPTION_WIDE_C (0x4001000A) with four parameters, then "
+            "DBG_PRINTEXCEPTION_C for its ANSI copy; the rows do not show the third and fourth parameters, and w2m "
+            "stops on the call.",),
+        derive=numbered_exceptions,
+        excluded={k: "w2m stops at OutputDebugStringW (its third and fourth parameters are in no row)"
+                  for k in ("w.short", "w.short.exception0", "w.short.exception1")},
+        expected_stop="Unimplemented: OutputDebugStringW argument form",
+        plants={"length_without_nul": Plant("    f->rec.information[0] = n + 1;", "    f->rec.information[0] = n;",
+                                            ("a.short.exception0", "a.empty.exception0"))}),
+    "current_directory_ansi": Family(
+        name="current_directory_ansi",
+        contract_id="windows.paths.current_directory_ansi",
+        version="0.1.0",
+        summary=("GetCurrentDirectoryA, as steam_api64.dll calls it, beside GetCurrentDirectoryW on an ASCII working "
+                 "directory: by buffer size (NULL, 1, the length, the length + 1, MAX_PATH) the return, the last error, "
+                 "the bytes written and the fill left."),
+        probe="current_directory_ansi", guest_file="paths.c",
+        runs={
+              "38231721988": Run("windows-2025", "6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65", "current_directory_ansi-1-0", "AMD EPYC 7763 64-Core Processor", ),
+              "38231725219": Run("windows-2022", "666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d", "current_directory_ansi-1-1", "AMD EPYC 7763 64-Core Processor", ),
+              "38231728407": Run("windows-2025", "6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65", "current_directory_ansi-1-2", "AMD EPYC 7763 64-Core Processor", ),
+              "38231731700": Run("windows-2022", "666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d", "current_directory_ansi-1-3", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz", ),
+        },
+        documented=(),
+        open_questions=("A working directory with characters outside ASCII: no row has one.",),
+        plants={"size_without_nul": Plant("    if (!buffer || (u32)size <= n) return w2m_logged(W2M_API_GetCurrentDirectoryA, n, n + 1);",
+                                          "    if (!buffer || (u32)size <= n) return w2m_logged(W2M_API_GetCurrentDirectoryA, n, n);",
+                                          ("a.null", "a.one", "a.exact"))}),
     "time_and_error_mode": time_family("parent", (
         "Local time on a UTC machine, the time zone (TIME_ZONE_ID_UNKNOWN, zero biases, error 0), exact SYSTEMTIME "
         "and FILETIME conversions and their invalid inputs (87), and the error mode a process inherits from the "
@@ -2039,18 +2215,22 @@ FAMILIES: dict[str, Family] = {
     "dxgi": Family(
         name="dxgi",
         contract_id="windows.dxgi.dxgi",
-        version="0.1.0",
+        version="0.2.0",
         summary=("CreateDXGIFactory and the walk UnityPlayer makes with the factory (RVA 0x520700; game run 38206263976 "
                  "seq 3298-3301): EnumAdapters to its end, each adapter's EnumOutputs to its end, the outputs' and "
                  "adapters' descriptions, Release. On the runners, which have no GPU: two Microsoft Basic Render Driver "
                  "adapters (0x1414, 0x8C), no dedicated memory, 8,587,180,032 bytes shared; the first with one output, "
                  "\\\\.\\DISPLAY1 at 0,0-1024,768 on the primary monitor; DXGI_ERROR_NOT_FOUND past each end; "
                  "E_NOINTERFACE for another interface, E_POINTER for a NULL out pointer; every object new with one "
-                 "reference."),
+                 "reference. Version 0.2.0 (Sprint 065): IDXGIOutput::GetDisplayModeList, which UnityPlayer RVA "
+                 "0xdc5084 calls next: 13 modes for six formats under any flags; for R8G8B8A8_UNORM under flags 0 and "
+                 "SCALING, 640x480 to 1920x1080 at 64/1 Hz, progressive, scaling unspecified (the 13 resolutions game "
+                 "run 38216081440's unity.log prints); DXGI_ERROR_MORE_DATA for a short buffer, DXGI_ERROR_INVALID_CALL "
+                 "for a NULL count."),
         probe="dxgi", guest_file="dxgi.c",
         runs={
-              "38210591842": Run("windows-2025", "15e0aa0873454d1bbacd5b9c343b730970d6df7b776afeeccdf273caf9168dc9", "dxgi-1791784916-0", "INTEL(R) XEON(R) PLATINUM 8573C"),
-              "38210594155": Run("windows-2022", "8fa545b798033b50b3254efc6919816129e168d774fe7041270fc653cf4d3445", "dxgi-1791784916-1", "AMD EPYC 7763 64-Core Processor"),
+              "38254500336": Run("windows-2025", "08535c336744784880cc5ec5e18747bfc5f09086b736267403278c05afc25124", "dxgi-modes-0", "AMD EPYC 7763 64-Core Processor"),
+              "38254503636": Run("windows-2022", "8507070b2d998afb5db7a307bf6f3e428f2bf29df24d094e71fce47bcfb88c09", "dxgi-modes-1", "AMD EPYC 9V45 96-Core Processor"),
         },
         documented=(
             documented("ms-createdxgifactory", "api/dxgi/nf-dxgi-createdxgifactory", "2024-02-22",
@@ -2058,7 +2238,10 @@ FAMILIES: dict[str, Family] = {
             documented("ms-enumadapters", "api/dxgi/nf-dxgi-idxgifactory-enumadapters", "2024-02-22",
                        "Returns S_OK if successful; otherwise, returns DXGI_ERROR_NOT_FOUND if the index is greater than "
                        "or equal to the number of adapters in the local system, or DXGI_ERROR_INVALID_CALL if ppAdapter "
-                       "parameter is NULL.")),
+                       "parameter is NULL."),
+            documented("ms-getdisplaymodelist", "api/dxgi/nf-dxgi-idxgioutput-getdisplaymodelist", "2024-02-22",
+                       "Set pDesc to NULL so that pNumModes returns the number of display modes that match the format "
+                       "and the options. Otherwise, pNumModes returns the number of display modes returned in pDesc.")),
         open_questions=(
             "The runners have no GPU, and w2m answers as they do: the Basic Render Driver twice, one output. A Mac "
             "adapter backed by Metal is milestone B's (plan, phase 6), with rows from a machine that has a GPU.",
@@ -2075,7 +2258,12 @@ FAMILIES: dict[str, Family] = {
             "output_on_another_monitor": Plant("    *(u64 *)(p + 0x58) = MONITOR;", "    *(u64 *)(p + 0x58) = MONITOR + 0x10000;",
                                                ("adapter.0.output.0", "game_walk")),
             "release_keeps_count": Plant("    s64 left = --o->refs;", "    s64 left = o->refs;",
-                                         ("refcount", "adapter.0.release", "adapter.1.release", "release.last"))}),
+                                         ("refcount", "adapter.0.release", "adapter.1.release", "release.last")),
+            "modes_at_60_hz": Plant("        m[2] = 64;", "        m[2] = 60;",
+                                    tuple(f"modes.28.{f}.{i}" for f in (0, 2) for i in range(13))),
+            "short_buffer_answers_ok": Plant("    if (*n < 13) return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, DXGI_ERROR_MORE_DATA);",
+                                             "    if (*n < 13) return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, S_OK);",
+                                             ("modes.short",))}),
     "com": Family(
         name="com",
         contract_id="windows.com.com",
@@ -2257,16 +2445,17 @@ FAMILIES: dict[str, Family] = {
     "display": Family(
         name="display",
         contract_id="windows.display.display",
-        version="0.1.0",
+        version="0.2.0",
         summary=("The display as the game queries it, under its manifest (PerMonitorV2): GetSystemMetrics 0-99, the "
                  "Hyper-V adapter and its one monitor (EnumDisplayDevicesA), EnumDisplayMonitors' one callback, "
                  "GetMonitorInfoA and W, MonitorFromPoint, Rect and Window, shcore's GetDpiForMonitor (96 x 96), "
                  "EnumDisplaySettingsW's current settings and 13 modes; one 1024 x 768 monitor, the work area above the "
-                 "taskbar."),
+                 "taskbar. Sprint 065: EnumDisplaySettingsW of the device \\\\.\\DISPLAY1, in any case, answers as "
+                 "NULL does; another device or the monitor's name answers FALSE and leaves the last error."),
         probe="display", guest_file="display.c",
         runs={
-              "38174316653": Run("windows-2025", "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c", "display-1791752210-0", "AMD EPYC 9V74 80-Core Processor"),
-              "38174318347": Run("windows-2022", "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b", "display-1791752210-1", "INTEL(R) XEON(R) PLATINUM 8573C"),
+              "38273510163": Run("windows-2025", "d4b4751fefdeb2b8ebecaba82e8d4670e561f7a422f428b713860141b3197564", "display-windows-2025", "AMD EPYC 7763 64-Core Processor"),
+              "38273513428": Run("windows-2022", "459c45e187bc43eeddcb361c58b4fd2c50e0461af5b4afaffd463880df33c662", "display-windows-2022", "INTEL(R) XEON(R) PLATINUM 8573C"),
         },
         documented=(),
         open_questions=("w2m's display is the runners' (one 1024 x 768 monitor at 96 DPI, Server 2025's taskbar) until "
@@ -2284,8 +2473,16 @@ FAMILIES: dict[str, Family] = {
             "null_window_null": Plant("    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return outside(",
                                       "    if (window) w2m_unimplemented(W2M_API_MonitorFromWindow, window);           /* not a window: no row */\n    return flags == 2 ? w2m_logged(W2M_API_MonitorFromWindow, 0, 0) : outside(",
                                       ("from_window.null_nearest",)),
+            "named_device_refused": Plant("    if (device && !display_one((const u16 *)device)) {",
+                                          "    if (device && display_one((const u16 *)device)) {",
+                                          ("settings.named.current", "settings.named.registry", "settings.named.mode_0",
+                                           "settings.named.mode_12", "settings.named_lower.current",
+                                           "settings.other_device.current", "settings.monitor_name.current")),
             "one_mode_short": Plant("    else if (m >= 0 && m < 13) {", "    else if (m >= 0 && m < 12) {",
-                                    ("settings.mode_12", "settings.mode_count"))}),
+                                    ("settings.mode_12", "settings.mode_count", "settings.named.current",
+                                     "settings.named.registry", "settings.named.mode_0", "settings.named.mode_12",
+                                     "settings.named.mode_13", "settings.named_lower.current",
+                                     "settings.other_device.current", "settings.monitor_name.current"))}),
     "windows": Family(
         name="windows",
         contract_id="windows.windows.windows",
@@ -2357,7 +2554,7 @@ FAMILIES: dict[str, Family] = {
             "quit_code_dropped": Plant("    t->quit_code = (u64)(s64)(s32)code;", "    t->quit_code = 0;", ("queue.quit.00",)),
             "focus_any_thread": Plant("    if (w->owner != tid) {                                                  /* row focus.other_thread */",
                                       "    if (0) {", ("focus.other_thread",)),
-            "no_activate_app_to_others": Plant("        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, 1);",
+            "no_activate_app_to_others": Plant("        if (windows[i].used && other != h && windows[i].owner == tid) SEND(other, WM_ACTIVATEAPP, 1, held ? 0 : 1);",
                                                "        if (0 && other) SEND(other, WM_ACTIVATEAPP, 1, 1);", ("msg.game.1[0-9]", "msg.game.2[0-2]", "focus.set")),
             "activate_sends_nothing": Plant("    int sends = ((u32)msg == WM_ACTIVATE && (u32)wparam == 1) ||", "    int sends = 0 ||",
                                             ("msg.game.1[5-9]", "msg.game.2[0-2]", "focus.set")),
@@ -2624,7 +2821,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         environment = () if f is None else f.environment
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes(), dlls, "probe.exe"), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
-                gui=f is not None and f.gui, command_line=line, environment=environment)
+                gui=f is not None and f.gui, command_line=line, environment=environment,
+                foreground_held=f is not None and f.foreground_held)
         # every probe runs on a kernel.Machine: a probe that starts a process gets it (Sprint 055)
         machine = Machine(spawner(files, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
         try:
@@ -2958,9 +3156,12 @@ def main(argv: list[str]) -> int:
         failed |= not (s["verdicts"] and all(v == "conforms" for v in s["verdicts"].values())
                        and s["events"].get("CANDIDATE_ACCEPTED") == 1)
         index = a.runs / "family-runs.json"
-        done = json.loads(index.read_text()) if index.exists() else {}
-        done[f.name] = s
-        index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
+        import fcntl
+        with open(a.runs / "family-runs.lock", "w") as lock:   # families run in parallel share the index (Sprint 065:
+            fcntl.flock(lock, fcntl.LOCK_EX)                   # one read it half-written and failed)
+            done = json.loads(index.read_text()) if index.exists() else {}
+            done[f.name] = s
+            index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
         print(json.dumps(s, indent=1))
     if a.plants:
         for name in f.plants:

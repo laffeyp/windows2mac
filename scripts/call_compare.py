@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,7 +47,8 @@ class Divergence:
     image: str
     function: str
     index: int                  # the call's place among this pair's calls (0: the first)
-    field: str                  # "a0".."a7", "ret", "error", or "called" (w2m calls it, Windows never does)
+    field: str                  # "a0".."a7", "ret", "error", "called" (w2m calls it, Windows never does) or
+                                # "missing" (Windows makes the call, the w2m thread paired with it does not)
     windows: int | None
     w2m: int | None
     windows_seq: int | None     # the Windows call's sequence number: the order the divergences are reported in
@@ -183,6 +185,10 @@ ADDRESS_FIELDS = {("RtlAddGrowableFunctionTable", "a4"), ("RtlAddGrowableFunctio
                   ("EnumDisplayMonitors", "a3")}
 WINDOW_LONG_ADDRESSES = {(-4) & 0xFFFFFFFF, (-6) & 0xFFFFFFFF, (-21) & 0xFFFFFFFF}
 POINTER_LPARAM = {0x01, 0x0C, 0x0D, 0x1A, 0x24, 0x46, 0x47, 0x4A, 0x4E, 0x7C, 0x7D, 0x81, 0x83, 0x2E0}
+# A window message's wParam that is a window handle (Microsoft Learn: WM_SETFOCUS "A handle to the window that has lost
+# the keyboard focus", WM_KILLFOCUS "A handle to the window that receives the keyboard focus"; either can be NULL):
+# judged, with each message function's window (a0), in one map from Windows' windows to w2m's (Sprint 065).
+WINDOW_WPARAM = {0x07, 0x08}
 MESSAGE_FUNCTIONS = {"DefWindowProcW", "DefWindowProcA", "SendMessageW", "SendMessageA", "CallWindowProcW",
                      "CallWindowProcA", "PostMessageW", "PostMessageA"}
 
@@ -196,6 +202,30 @@ def carries_address(fn: str, field: str, args: tuple[int, ...]) -> bool:
     if fn in MESSAGE_FUNCTIONS and field == "a3":
         return args[1] & 0xFFFFFFFF in POINTER_LPARAM
     return False
+
+
+MEM_RESERVE = 0x2000
+
+
+def placed(calls: list[Call]) -> list[Call]:
+    """`calls` without the reservations made at an address the caller chose, and the retry each failed one leads to
+    (Sprint 065). mono reserves its next code block at the address past its last one (VirtualAlloc(hint, 0x10000,
+    MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)) and, when the system answers ERROR_INVALID_ADDRESS, asks again
+    without the hint. Whether that address is free depends on the address space's layout, which on Windows ASLR
+    draws per run (game run 38216081440: the same call failed at seq 2745 and succeeded at 2749), so neither the
+    hinted call nor its retry is a value the game decides."""
+    out: list[Call] = []
+    retry: dict[int, int] = {}                     # thread -> the size a failed hinted reservation asked for
+    for c in sorted(calls):
+        if c[4] == "VirtualAlloc":
+            if c[5][0] and c[5][2] & MEM_RESERVE:
+                if c[6] == 0:
+                    retry[c[1]] = c[5][1]
+                continue
+            if c[5][0] == 0 and retry.pop(c[1], None) == c[5][1]:
+                continue
+        out.append(c)
+    return out
 
 
 String = tuple[int, int, str]                       # seq, argument, text (<capture>.strings.tsv)
@@ -225,6 +255,18 @@ def thread_names(calls: list[Call], strings: list[String]) -> dict[int, str]:
         if c is not None and arg == 1:
             names.setdefault(c[1], text)
     return names
+
+
+POOLED = re.compile(r"^(.+) \d+$")
+
+
+def pools(names: dict[int, str]) -> dict[int, str]:
+    """Each thread of a job pool -> the pool's name (Sprint 065). The game names its workers "Job.Worker 0", "Job.Worker
+    1" ... and "Background Job.Worker 0" ...: a name that ends in a number and is shared, but for the number, by two
+    threads or more names a pool."""
+    stems = {t: m.group(1) for t, n in names.items() if (m := POOLED.match(n))}
+    shared = {s for s in stems.values() if list(stems.values()).count(s) > 1}
+    return {t: s for t, s in stems.items() if s in shared}
 
 
 def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] | None = None,
@@ -286,16 +328,43 @@ def thread_map(windows: list[Call], w2m: list[Call], signatures: dict[str, Any] 
     return pairs
 
 
+def agreeing(windows: list[Call], w2m: list[Call], signatures: dict[str, Any]) -> int:
+    """How many of two threads' calls to one function agree in every value their types let the comparison judge here
+    (an assigned id is left to the stream's maps)."""
+    count = 0
+    for a, b in zip(windows, w2m):
+        sig = signatures.get(a[4])
+        if sig is None:
+            count += a[6] == b[6]
+            continue
+        values = [(f"a{i}", p["kind"], p.get("bytes"), a[5][i], b[5][i], True) for i, p in enumerate(sig["params"][:8])]
+        values.append(("ret", sig["return"]["kind"], sig["return"].get("bytes"), a[6], b[6], False))
+        count += all(judge("pointer", None, x, y, arg) if carries_address(a[4], f, a[5]) else judge(k, n, x, y, arg)
+                     for f, k, n, x, y, arg in values if (a[4], f) not in ASSIGNED)
+    return count
+
+
 def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             excluded_threads: frozenset[int] = frozenset(),
-            strings: tuple[list[String], list[String]] = ([], [])) -> tuple[list[Divergence], int]:
+            strings: tuple[list[String], list[String]] = ([], []),
+            undecided: frozenset[tuple[str, str]] = frozenset()) -> tuple[list[Divergence], int]:
     """Every divergence, in the order of the Windows calls they concern, and the count of calls compared. Each
     (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
-    with, in order, as far as both go: across threads the order is the scheduler's. `excluded_threads` are reference
-    threads the game does not start (the capture's own)."""
-    windows = [c for c in windows if c[1] not in excluded_threads]
-    threads = thread_map(windows, w2m, signatures,
-                         (thread_names(windows, strings[0]), thread_names(w2m, strings[1])))
+    with, in order; a Windows call past the end of its partner's, or to a function w2m never calls, is missing. Across
+    threads the order is the scheduler's. `excluded_threads` are reference
+    threads the game does not start (the capture's own); `undecided` are (function, field) values two Windows runs of
+    the game disagree on, which are not compared (the contract's `undetermined`).
+
+    A job pool's workers (`pools`) take jobs from one queue, and which free worker takes a job is the scheduler's
+    choice (frontier 643a6283510c-1791810726153034000: the HeapSize walk Windows' Job.Worker 1 made, w2m's Job.Worker 0
+    made, answer for answer). For each function, a pool's Windows workers, in the order of their first call to it,
+    take the unpaired w2m worker of the pool whose calls to it agree with theirs most, the worker the thread map pairs
+    it with on a tie."""
+    windows = placed([c for c in windows if c[1] not in excluded_threads])
+    w2m = placed(w2m)
+    names = (thread_names(windows, strings[0]), thread_names(w2m, strings[1]))
+    threads = thread_map(windows, w2m, signatures, names)
+    pool_w, pool_m = pools(names[0]), pools(names[1])
 
     def by_pair(calls: list[Call]) -> dict[tuple[str, str], dict[int, list[Call]]]:
         out: dict[tuple[str, str], dict[int, list[Call]]] = {}
@@ -306,22 +375,42 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
     w, m = by_pair(windows), by_pair(w2m)
     found: list[Divergence] = []
     pairs: list[tuple[int, Call, Call]] = []
+    for pair, by_thread in w.items():              # a function Windows calls and w2m never does: each call missing
+        if pair not in m:
+            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
+                      for calls in by_thread.values() for k, c in enumerate(calls)]
     for pair, ours in m.items():
         theirs = w.get(pair)
         if theirs is None:
             first = min(c for calls in ours.values() for c in calls)
             found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None))
             continue
+        chosen = dict(threads)
+        for pool in sorted(set(pool_w.values())):
+            free = [t for t in ours if pool_m.get(t) == pool]
+            for tw in sorted((t for t in theirs if pool_w.get(t) == pool), key=lambda t: theirs[t][0][0]):
+                if not free:
+                    break
+                best = max(free, key=lambda tm: (agreeing(theirs[tw], ours[tm], signatures), tm == threads.get(tw)))
+                chosen[tw] = best
+                free.remove(best)
         for tid, calls in theirs.items():
-            mine = ours.get(threads.get(tid, -1), [])
+            mine = ours.get(chosen.get(tid, -1), [])
             pairs += [(k, a, b) for k, (a, b) in enumerate(zip(calls, mine))]
+            # past the paired thread's last call: Windows makes the call, w2m does not (review of 2026-10-12, B1:
+            # 21 calls of frontier 643a6283510c-1791830368398119000 went unjudged here)
+            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
+                      for k, c in enumerate(calls[len(mine):], len(mine))]
     maps: dict[str, tuple[dict[int, int], dict[int, int]]] = {}
 
     def same(space: str, x: int, y: int) -> bool:
         if space == "clock":
             return True
         if space == "thread":
-            return threads.get(x & 0xFFFFFFFF) == y & 0xFFFFFFFF
+            x, y = x & 0xFFFFFFFF, y & 0xFFFFFFFF
+            if x in pool_w:
+                return pool_m.get(y) == pool_w[x]
+            return threads.get(x) == y
         forward, backward = maps.setdefault(space, ({}, {}))
         if space == "atom" and (x >= 0x10000 or y >= 0x10000):
             return (x == 0) == (y == 0)            # a class name, not an atom: a pointer
@@ -343,7 +432,11 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             if sig["sets_last_error"] and failed(ret["kind"], ret["type"], a[6]):
                 fields.append(("error", "value", 4, a[7], b[7], False))
         for name, kind, size, x, y, argument in fields:
+            if (fn, name) in undecided:
+                continue
             space = ASSIGNED.get((fn, name))
+            if fn in MESSAGE_FUNCTIONS and (name == "a0" or name == "a2" and a[5][1] & 0xFFFFFFFF in WINDOW_WPARAM):
+                space = "window"
             if space is not None:
                 ok = same(space, x, y)
             elif carries_address(fn, name, a[5]):
@@ -361,6 +454,12 @@ def excluded(contract: dict[str, Any], run: str) -> frozenset[int]:
     return frozenset(int(t) for t in contract.get("excluded_threads", {}).get(run, {}))
 
 
+def undetermined(contract: dict[str, Any]) -> frozenset[tuple[str, str]]:
+    """The (function, field) values a contract does not compare: those two Windows runs of the game disagree on (its
+    `undetermined`, keyed "Function field", each with its evidence)."""
+    return frozenset((k.split(" ")[0], k.split(" ")[1]) for k in contract.get("undetermined", {}))
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("calls", type=Path)
@@ -368,10 +467,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--signatures", type=Path, default=SIGNATURES)
     a = ap.parse_args(argv)
     signatures = json.loads(a.signatures.read_text())["functions"]
+    contract = json.loads(CONTRACT.read_text())
     found, compared = compare(read_tsv(a.run / "jit_capture.bin.trace.tsv"), read_tsv(a.calls), signatures,
-                              excluded(json.loads(CONTRACT.read_text()), a.run.name),
+                              excluded(contract, a.run.name),
                               (read_strings(a.run / "jit_capture.bin.strings.tsv"),
-                               read_strings(a.calls.with_suffix(".strings.tsv"))))
+                               read_strings(a.calls.with_suffix(".strings.tsv"))), undetermined(contract))
     print(f"{compared} calls compared; {len(found)} divergences")
     for d in found:
         print(f"  seq {d.windows_seq}: {d.text()}")

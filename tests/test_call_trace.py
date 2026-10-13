@@ -22,7 +22,8 @@ import family_run  # noqa: E402
 CODE_PAGES = ROOT / "store" / "binaries" / "9395509bfe645a3c33c322e88efdd81285f919b9897020d7a134db5e8cbd45bf.exe"
 
 
-def traced(exe: bytes, images: tuple[str, ...], dll: tuple[str, bytes] | None = None) -> tuple[list[Any], int, bytes, str]:
+def traced(exe: bytes, images: tuple[str, ...], dll: tuple[str, bytes] | None = None,
+           environment: tuple[str, ...] = ()) -> tuple[list[Any], int, bytes, str]:
     from w2m.file_bridge import FileBridge
     from w2m.kernel import Machine
     from w2m.loader import load
@@ -30,7 +31,8 @@ def traced(exe: bytes, images: tuple[str, ...], dll: tuple[str, bytes] | None = 
     with tempfile.TemporaryDirectory() as d:
         files = FileBridge(Path(d))
         loaded = load(exe, lambda n: dll[1] if dll is not None and n.lower() == dll[0].lower() else None, "probe.exe")
-        vm = VM(loaded, files=files, image_name="probe.exe", call_trace=images)
+        vm = (VM(loaded, files=files, image_name="probe.exe", call_trace=images, environment=environment) if environment
+              else VM(loaded, files=files, image_name="probe.exe", call_trace=images))
         try:
             r = Machine(lambda *a: None, max_steps=1 << 40, timeout_ms=60_000).run(vm)
             calls, dropped = vm.traced_calls()
@@ -157,7 +159,9 @@ def test_a_call_that_runs_guest_code_is_recorded_with_what_its_caller_gets() -> 
     w2m 0); the record now waits for the real return."""
     f = family_run.FAMILIES["windows"]
     exe = (ROOT / "store" / "binaries" / f"{next(iter(f.runs.values())).binary}.exe").read_bytes()
-    calls, dropped, out, stop = traced(exe, ("probe.exe",))
+    # the family's environment (TMP and TEMP): without one GetTempPathW answers C:\\Windows\\, whose listing w2m holds
+    # only for the font folder (Sprint 065)
+    calls, dropped, out, stop = traced(exe, ("probe.exe",), environment=f.environment)
     assert stop == "ExitProcess" and dropped == 0
     created = [c for c in calls if c[4] == "CreateWindowExW"]
     assert [hex(c[6]) for c in created] == ["0x0", "0x20010", "0x20020", "0x20030", "0x20040", "0x20050"]   # the first: W2mProbeNoSuchClass; the last two: Sprint 063's game and other-thread windows

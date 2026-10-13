@@ -17,6 +17,9 @@
  *   - MB_ERR_INVALID_CHARS refuses exactly the inputs that would make a U+FFFD:
  *     ERROR_NO_UNICODE_TRANSLATION
  *   - MB_PRECOMPOSED changes nothing on code page 1252 (row forms.m2w.precomposed)
+ *   - on code page 1252 (and CP_ACP) MB_ERR_INVALID_CHARS, with or without MB_PRECOMPOSED, refuses no byte: all 256
+ *     convert as with no flags (probe run 38226019630, probes/code_pages_strict, Server 2025; Sprint 065: the frontier
+ *     stopped at flags 0x9 after 49,662,520,368 instructions); on UTF-8 MB_PRECOMPOSED is taken and ignored
  *   - a destination too small: 0, ERROR_INSUFFICIENT_BUFFER; a length of 0 or an unknown code page:
  *     0, ERROR_INVALID_PARAMETER; success leaves the last error, GetStringTypeW's and LCMapStringEx's too
  * Anything the rows do not show stops the run (w2m_unimplemented): another code page, other flags,
@@ -127,7 +130,7 @@ u64 k32_MultiByteToWideChar(u64 cp, u64 flags, u64 src, u64 src_len, u64 rsp) {
     int utf8 = cp == CP_UTF8;
     if (cp == UNKNOWN_CP) { set_error(ERROR_INVALID_PARAMETER); return w2m_logged(W2M_API_MultiByteToWideChar, cp, 0); }
     if (!(cp == CP_ACP || cp == ANSI_CP || utf8)) w2m_unimplemented(W2M_API_MultiByteToWideChar, cp);
-    if (utf8 ? (flags & ~(MB_PRECOMPOSED | MB_ERR_INVALID_CHARS)) != 0 : (flags & ~MB_PRECOMPOSED) != 0)
+    if ((flags & ~(MB_PRECOMPOSED | MB_ERR_INVALID_CHARS)) != 0)
         w2m_unimplemented(W2M_API_MultiByteToWideChar, flags);
     if (len == 0) { set_error(ERROR_INVALID_PARAMETER); return w2m_logged(W2M_API_MultiByteToWideChar, cp, 0); }
     if (len < -1 || cap < 0 || (cap > 0 && dst == 0)) w2m_unimplemented(W2M_API_MultiByteToWideChar, (u64)len);

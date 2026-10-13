@@ -1,0 +1,591 @@
+{
+ "contract_id": "windows.dxgi.dxgi",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "CreateDXGIFactory and the walk UnityPlayer makes with the factory (RVA 0x520700; game run 38206263976 seq 3298-3301): EnumAdapters to its end, each adapter's EnumOutputs to its end, the outputs' and adapters' descriptions, Release. On the runners, which have no GPU: two Microsoft Basic Render Driver adapters (0x1414, 0x8C), no dedicated memory, 8,587,180,032 bytes shared; the first with one output, \\\\.\\DISPLAY1 at 0,0-1024,768 on the primary monitor; DXGI_ERROR_NOT_FOUND past each end; E_NOINTERFACE for another interface, E_POINTER for a NULL out pointer; every object new with one reference. Version 0.2.0 (Sprint 065): IDXGIOutput::GetDisplayModeList, which UnityPlayer RVA 0xdc5084 calls next: 13 modes for six formats under any flags; for R8G8B8A8_UNORM under flags 0 and SCALING, 640x480 to 1920x1080 at 64/1 Hz, progressive, scaling unspecified (the 13 resolutions game run 38216081440's unity.log prints); DXGI_ERROR_MORE_DATA for a short buffer, DXGI_ERROR_INVALID_CALL for a NULL count.",
+ "applicability": "windows-2022 (AMD EPYC 9V45 96-Core Processor); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/dxgi/dxgi.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "load",
+    "module": 1
+   },
+   {
+    "s": "proc",
+    "found": 1
+   },
+   {
+    "s": "create.unknown_interface",
+    "hr": 2147500034,
+    "out_null": 1,
+    "out_untouched": 0
+   },
+   {
+    "s": "create.null_out",
+    "hr": 2147500035
+   },
+   {
+    "s": "create.factory",
+    "hr": 0,
+    "out_nonnull": 1
+   },
+   {
+    "s": "refcount",
+    "add_ref": 2,
+    "release": 1
+   },
+   {
+    "s": "query.unknown",
+    "hr": 0,
+    "same": 1
+   },
+   {
+    "s": "query.nothing",
+    "hr": 2147500034,
+    "out_null": 1
+   },
+   {
+    "s": "adapter.0",
+    "hr": 0,
+    "desc_hr": 0,
+    "description": "Microsoft Basic Render Driver",
+    "vendor": 5140,
+    "device": 140,
+    "subsys": 0,
+    "revision": 0,
+    "dedicated_video": 0,
+    "dedicated_system": 0,
+    "shared_system": 8587180032,
+    "luid_nonzero": 1
+   },
+   {
+    "s": "adapter.0.output.0",
+    "desc_hr": 0,
+    "device_name": "\\\\.\\DISPLAY1",
+    "left": 0,
+    "top": 0,
+    "right": 1024,
+    "bottom": 768,
+    "attached": 1,
+    "rotation": 1,
+    "monitor_is_primary": 1
+   },
+   {
+    "s": "modes.count.28.0",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.28.1",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.28.2",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.28.3",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.29.0",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.29.1",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.29.2",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.29.3",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.87.0",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.87.1",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.87.2",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.87.3",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.91.0",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.91.1",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.91.2",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.91.3",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.24.0",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.24.1",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.24.2",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.24.3",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.10.0",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.10.1",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.10.2",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.count.10.3",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.28.0.",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.28.0.0",
+    "width": 640,
+    "height": 480,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.1",
+    "width": 800,
+    "height": 600,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.2",
+    "width": 1024,
+    "height": 768,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.3",
+    "width": 1152,
+    "height": 864,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.4",
+    "width": 1280,
+    "height": 720,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.5",
+    "width": 1280,
+    "height": 800,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.6",
+    "width": 1280,
+    "height": 1024,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.7",
+    "width": 1366,
+    "height": 768,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.8",
+    "width": 1440,
+    "height": 900,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.9",
+    "width": 1600,
+    "height": 900,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.10",
+    "width": 1600,
+    "height": 1200,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.11",
+    "width": 1680,
+    "height": 1050,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.0.12",
+    "width": 1920,
+    "height": 1080,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.28.2.0",
+    "width": 640,
+    "height": 480,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.1",
+    "width": 800,
+    "height": 600,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.2",
+    "width": 1024,
+    "height": 768,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.3",
+    "width": 1152,
+    "height": 864,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.4",
+    "width": 1280,
+    "height": 720,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.5",
+    "width": 1280,
+    "height": 800,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.6",
+    "width": 1280,
+    "height": 1024,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.7",
+    "width": 1366,
+    "height": 768,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.8",
+    "width": 1440,
+    "height": 900,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.9",
+    "width": 1600,
+    "height": 900,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.10",
+    "width": 1600,
+    "height": 1200,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.11",
+    "width": 1680,
+    "height": 1050,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.28.2.12",
+    "width": 1920,
+    "height": 1080,
+    "numerator": 64,
+    "denominator": 1,
+    "format": 28,
+    "scanline": 1,
+    "scaling": 0
+   },
+   {
+    "s": "modes.short",
+    "hr": 2289696771,
+    "count": 12,
+    "last_written": 1
+   },
+   {
+    "s": "modes.long",
+    "hr": 0,
+    "count": 13
+   },
+   {
+    "s": "modes.null_count",
+    "hr": 2289696769
+   },
+   {
+    "s": "adapter.0.outputs.end.1",
+    "hr": 2289696770,
+    "out_null": 1
+   },
+   {
+    "s": "adapter.0.release",
+    "count": 0
+   },
+   {
+    "s": "adapter.1",
+    "hr": 0,
+    "desc_hr": 0,
+    "description": "Microsoft Basic Render Driver",
+    "vendor": 5140,
+    "device": 140,
+    "subsys": 0,
+    "revision": 0,
+    "dedicated_video": 0,
+    "dedicated_system": 0,
+    "shared_system": 8587180032,
+    "luid_nonzero": 1
+   },
+   {
+    "s": "adapter.1.outputs.end.0",
+    "hr": 2289696770,
+    "out_null": 1
+   },
+   {
+    "s": "adapter.1.release",
+    "count": 0
+   },
+   {
+    "s": "adapters.end.2",
+    "hr": 2289696770,
+    "out_null": 1
+   },
+   {
+    "s": "game_walk",
+    "matched": 1
+   },
+   {
+    "s": "release.last",
+    "count": 0
+   },
+   {
+    "s": "free_library",
+    "ret": 1
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38254500336: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:08535c336744784880cc5ec5e18747bfc5f09086b736267403278c05afc25124; run 38254503636: windows-2022, AMD EPYC 9V45 96-Core Processor, probe sha256:8507070b2d998afb5db7a307bf6f3e428f2bf29df24d094e71fce47bcfb88c09",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "dxgi-modes-0-1",
+    "dxgi-modes-0-2",
+    "dxgi-modes-1-1",
+    "dxgi-modes-1-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-createdxgifactory",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-createdxgifactory (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Creates a DXGI 1.0 factory that you can use to generate other DXGI objects."
+  },
+  {
+   "evidence_id": "ms-enumadapters",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgifactory-enumadapters (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Returns S_OK if successful; otherwise, returns DXGI_ERROR_NOT_FOUND if the index is greater than or equal to the number of adapters in the local system, or DXGI_ERROR_INVALID_CALL if ppAdapter parameter is NULL."
+  },
+  {
+   "evidence_id": "ms-getdisplaymodelist",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgioutput-getdisplaymodelist (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "Set pDesc to NULL so that pNumModes returns the number of display modes that match the format and the options. Otherwise, pNumModes returns the number of display modes returned in pDesc."
+  }
+ ],
+ "open_questions": [
+  "The runners have no GPU, and w2m answers as they do: the Basic Render Driver twice, one output. A Mac adapter backed by Metal is milestone B's (plan, phase 6), with rows from a machine that has a GPU.",
+  "The adapters' LUIDs are the machine's; the rows hold only that each is nonzero.",
+  "IDXGIFactory1 and IDXGIFactory2, the adapters' and outputs' QueryInterface and every method the game does not call stop the run by name: no row shows them."
+ ],
+ "sections": {
+  "probe": "probes/dxgi (Sprint 044)",
+  "implementation": "tools/guest_runtime/dxgi.c",
+  "rows": "scripts/family_run.py dxgi",
+  "excluded": "none"
+ }
+}

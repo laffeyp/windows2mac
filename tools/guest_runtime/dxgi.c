@@ -165,3 +165,45 @@ u64 dxgi_W2mOutputGetDesc(u64 self, u64 desc) {
     *(u64 *)(p + 0x58) = MONITOR;                                    /* Monitor */
     return w2m_logged(W2M_API_W2mOutputGetDesc, desc, S_OK);
 }
+
+/* GetDisplayModeList(EnumFormat, Flags, pNumModes, pDesc) (Sprint 065; UnityPlayer RVA 0xdc5084 asks for
+ * DXGI_FORMAT_R8G8B8A8_UNORM, flags 0, the count first). The rows (runs 38254500336, 38254503636): 13 modes for each
+ * of six formats under any of the flags INTERLACED and SCALING; for format 28 under flags 0 and 2 the same list,
+ * 640x480 to 1920x1080, each at 64/1 Hz, progressive (1), scaling unspecified (0), the format asked for; a buffer
+ * short of 13: DXGI_ERROR_MORE_DATA, the first *pNumModes written and the count left; a longer one: S_OK and 13; a
+ * NULL pNumModes: DXGI_ERROR_INVALID_CALL. Other formats and flags, and the lists the rows lack, stop the run. */
+#define DXGI_ERROR_INVALID_CALL 0x887A0001u
+#define DXGI_ERROR_MORE_DATA 0x887A0003u
+static const u16 MODES[13][2] = {{640, 480}, {800, 600}, {1024, 768}, {1152, 864}, {1280, 720}, {1280, 800},
+                                 {1280, 1024}, {1366, 768}, {1440, 900}, {1600, 900}, {1600, 1200}, {1680, 1050},
+                                 {1920, 1080}};
+
+u64 dxgi_W2mOutputGetDisplayModeList(u64 self, u64 format, u64 flags, u64 count, u64 rsp) {
+    (void)self;
+    u64 desc = *(u64 *)(rsp + 0x28);
+    format = (u32)format;
+    flags = (u32)flags;
+    if (!(format == 28 || format == 29 || format == 87 || format == 91 || format == 24 || format == 10) || flags > 3)
+        w2m_unimplemented(W2M_API_W2mOutputGetDisplayModeList, format);
+    if (!count) return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, DXGI_ERROR_INVALID_CALL);
+    u32 *n = (u32 *)count;
+    if (!desc) {
+        *n = 13;
+        return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, S_OK);
+    }
+    if (format != 28 || (flags != 0 && flags != 2)) w2m_unimplemented(W2M_API_W2mOutputGetDisplayModeList, format);
+    u32 room = *n < 13 ? *n : 13;
+    for (u32 i = 0; i < room; i++) {                                 /* DXGI_MODE_DESC: 7 UINTs */
+        u32 *m = (u32 *)desc + 7 * i;
+        m[0] = MODES[i][0];
+        m[1] = MODES[i][1];
+        m[2] = 64;
+        m[3] = 1;
+        m[4] = (u32)format;
+        m[5] = 1;                                                    /* DXGI_MODE_SCANLINE_ORDER_PROGRESSIVE */
+        m[6] = 0;                                                    /* DXGI_MODE_SCALING_UNSPECIFIED */
+    }
+    if (*n < 13) return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, DXGI_ERROR_MORE_DATA);
+    *n = 13;
+    return w2m_logged(W2M_API_W2mOutputGetDisplayModeList, format, S_OK);
+}

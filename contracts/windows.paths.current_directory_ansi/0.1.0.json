@@ -1,0 +1,87 @@
+{
+ "contract_id": "windows.paths.current_directory_ansi",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetCurrentDirectoryA, as steam_api64.dll calls it, beside GetCurrentDirectoryW on an ASCII working directory: by buffer size (NULL, 1, the length, the length + 1, MAX_PATH) the return, the last error, the bytes written and the fill left.",
+ "applicability": "windows-2022 (AMD EPYC 7763 64-Core Processor); windows-2022 (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz); windows-2025 (AMD EPYC 7763 64-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/current_directory_ansi/current_directory_ansi.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "a.null",
+    "ret_less_n": 1,
+    "error": 57005
+   },
+   {
+    "s": "a.one",
+    "ret_less_n": 1,
+    "error": 57005,
+    "text_equal": false,
+    "fill_kept": true
+   },
+   {
+    "s": "a.exact",
+    "ret_less_n": 1,
+    "error": 57005,
+    "text_equal": false,
+    "fill_kept": true
+   },
+   {
+    "s": "a.room",
+    "ret_less_n": 0,
+    "error": 57005,
+    "text_equal": true,
+    "fill_kept": true
+   },
+   {
+    "s": "a.max_path",
+    "ret_less_n": 0,
+    "error": 57005,
+    "text_equal": true,
+    "fill_kept": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 38231721988: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65; run 38231725219: windows-2022, AMD EPYC 7763 64-Core Processor, probe sha256:666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d; run 38231728407: windows-2025, AMD EPYC 7763 64-Core Processor, probe sha256:6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65; run 38231731700: windows-2022, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, probe sha256:666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "current_directory_ansi-1-0-1",
+    "current_directory_ansi-1-0-2",
+    "current_directory_ansi-1-1-1",
+    "current_directory_ansi-1-1-2",
+    "current_directory_ansi-1-2-1",
+    "current_directory_ansi-1-2-2",
+    "current_directory_ansi-1-3-1",
+    "current_directory_ansi-1-3-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "A working directory with characters outside ASCII: no row has one."
+ ],
+ "sections": {
+  "probe": "probes/current_directory_ansi (Sprint 044)",
+  "implementation": "tools/guest_runtime/paths.c",
+  "rows": "scripts/family_run.py current_directory_ansi",
+  "excluded": "none"
+ }
+}

@@ -25,6 +25,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import class_run  # noqa: E402
 
 JUDGED_ELSEWHERE = {"CPUID", "XGETBV"}      # the guest profile, not the runner's CPU
+# Classes whose discrepancy is open, each pinned to the differences its record holds (Sprint 065): FSIN and FCOS
+# differ from the Xeon 8573C (and the 8370C, bit for bit the same) in the last bit of 18 of 1,598 results, each within
+# 0.08 ulp of a rounding boundary. Intel documents the 66-bit pi it reduces with, not the polynomial or its internal
+# precision (Intel community thread "x87 FSIN/FCOS mediocre accuracy"); rounding the reduced argument or the result to
+# 66-72 bits matches fewer cases, not more. The rule stays the exact rounding of the 66-bit-pi reduction.
+OPEN = {"FSIN": {"FSIN st0": 8, "FSIN FSW": 4}, "FCOS": {"FCOS st0": 10, "FCOS FSW": 4}}
 
 
 def test_every_rule_has_cases_or_a_named_judge() -> None:
@@ -37,6 +43,10 @@ def test_the_committed_index_accepts_every_class_on_its_current_rule() -> None:
     index = {s["iclass"]: s for s in json.loads((ROOT / "store" / "runs" / "class-runs.json").read_text())}
     assert set(index) == set(class_run.classes_in_case_file())
     for ic, s in index.items():
+        if ic in OPEN:
+            assert s["verdicts"] == {"model": "discrepancy", "managed_vm": "discrepancy"}, ic
+            assert s["rule_sha256"] == registry()[ic].sha256, f"{ic}: rule changed since its item run"
+            continue
         assert s["verdicts"] == {"model": "conforms", "managed_vm": "conforms"}, ic
         assert s["rule_sha256"] == registry()[ic].sha256, f"{ic}: rule changed since its item run"
         assert (ROOT / s["record"]).exists(), s["record"]
@@ -99,3 +109,11 @@ def test_every_index_names_its_records_relative_to_the_repository() -> None:
         index = json.loads((ROOT / "store" / "runs" / name).read_text())
         entries = index if isinstance(index, list) else list(index.values())
         assert [s["record"] for s in entries if Path(s["record"]).is_absolute()] == [], name
+
+
+@pytest.mark.parametrize("ic", sorted(OPEN))
+def test_an_open_class_differs_exactly_as_pinned(ic: str) -> None:
+    """The model's differences on the open class are those OPEN names, no more and no fewer: a change either way
+    shows here before it reaches the index."""
+    _, cases, results = class_run.cases_for(ic)
+    assert dict(class_run.judge_model(cases, results)) == OPEN[ic]

@@ -156,12 +156,24 @@ u64 k32_GetCurrentDirectoryW(u64 size, u64 buffer) {
     return w2m_logged(W2M_API_GetCurrentDirectoryW, n, n);
 }
 
-u64 w2m_file_stat_full(const u16 *full, u64 out);       /* file.c: FILE_STAT on a full path */
+/* GetCurrentDirectoryA(nBufferLength, lpBuffer) (contracts/windows.paths.current_directory_ansi; Sprint 065): as the W
+ * form, in bytes, on an ASCII working directory; a character outside ASCII is in no row and stops the run. */
+u64 k32_GetCurrentDirectoryA(u64 size, u64 buffer) {
+    const u16 *w = working();
+    u64 n = length(w);
+    for (u64 k = 0; k < n; k++)
+        if (w[k] > 0x7F) w2m_unimplemented(W2M_API_GetCurrentDirectoryA, w[k]);
+    if (!buffer || (u32)size <= n) return w2m_logged(W2M_API_GetCurrentDirectoryA, n, n + 1);
+    for (u64 k = 0; k <= n; k++) ((u8 *)buffer)[k] = (u8)w[k];
+    return w2m_logged(W2M_API_GetCurrentDirectoryA, n, n);
+}
+
+u64 w2m_file_stat_full(const u16 *full, u64 out, u64 *attributes);   /* file.c: FILE_STAT on a full path */
 
 /* The kind of a full path: 0 absent, 1 file, 2 directory, 3 a directory on the way is missing. */
 static u64 kind_of(const u16 *full) {
     static u64 st[4];
-    return w2m_file_stat_full(full, (u64)st);
+    return w2m_file_stat_full(full, (u64)st, 0);
 }
 
 static int same(const u16 *a, const u16 *b) {

@@ -50,6 +50,9 @@ class Thread:
     mxcsr: int = 0x1F80                                               # reset value, SDM Vol 1 10.2.3
     fcw: int = 0x27F                                                  # x87 control word as a Windows thread starts
                                                                       # (53-bit precision; specs/guest_state.json)
+    x87_sw: int = 0                                                   # the x87 status word, TOP in bits 11-13 (Sprint 065)
+    x87_tags: int = 0                                                 # FXSAVE's abridged tags: bit p, register p in use
+    x87_regs: list[int] = field(default_factory=lambda: [0] * 8)      # the physical registers R0-R7, 80-bit patterns
     df: bool = False
 
 

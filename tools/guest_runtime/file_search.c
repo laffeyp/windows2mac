@@ -38,7 +38,7 @@ typedef unsigned short u16;
 #define LISTING_TRIES 8
 
 u64 w2m_full_path(const u16 *in, u16 *out, long *part);       /* paths.c */
-u64 w2m_file_stat_full(const u16 *full, u64 out);              /* file.c */
+u64 w2m_file_stat_full(const u16 *full, u64 out, u64 *attributes);   /* file.c */
 
 /* A search: its folder's full path, the matching names (each with a NUL) in a heap block, pointers to them in the
  * order they are answered, and the next to answer. */
@@ -92,10 +92,11 @@ static void fill(const struct search *f, const u16 *name, u64 data) {
         full[n] = 0;
     }
     u64 st[4] = {0, 0, 0, 0};
-    u64 kind = w2m_file_stat_full(full, (u64)st);
+    u64 recorded = 0;                                    /* a folder recorded from the runners (Sprint 065) */
+    u64 kind = w2m_file_stat_full(full, (u64)st, &recorded);
     u8 *d = (u8 *)data;
     for (int i = 0; i < 592; i++) d[i] = 0;
-    *(u32 *)d = kind == 2 ? ATTRIBUTE_DIRECTORY : ATTRIBUTE_ARCHIVE;
+    *(u32 *)d = recorded ? (u32)recorded : kind == 2 ? ATTRIBUTE_DIRECTORY : ATTRIBUTE_ARCHIVE;
     *(u64 *)(d + 4) = st[1];                             /* ftCreationTime */
     *(u64 *)(d + 12) = st[2];                            /* ftLastAccessTime */
     *(u64 *)(d + 20) = st[3];                            /* ftLastWriteTime */

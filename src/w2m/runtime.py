@@ -14,6 +14,7 @@ import struct
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from w2m import cpuid
 from w2m import approximate, string_compare, x86fp as fp
@@ -92,7 +93,7 @@ LANE_ARITH["PMULHW"] = (16, lambda p, q, w: (_signed(p, w) * _signed(q, w)) >> 1
 LANE_ARITH["PMULLD"] = (32, lambda p, q, w: p * q)
 LANE_ARITH["PABSW"] = (16, lambda p, q, w: abs(_signed(q, w)))
 SSE_050_NEW = {"CVTPS2DQ", "CVTPD2PS", "CMPPS", "CMPPD", "CMPSS", "SHUFPD", "MOVLPS", "MOVHPD", "MOVNTDQ", "PSADBW",
-           "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB", "PMOVZXWD", "PSLLW"}
+           "PACKSSWB", "PACKSSDW", "PMADDUBSW", "PMADDWD", "PEXTRW", "PINSRB", "PMOVZXWD", "PSLLW", "MPSADBW"}
 INTERLEAVE = {"PUNPCKHQDQ": (64, True), "PUNPCKLQDQ": (64, False), "UNPCKLPD": (64, False), "UNPCKHPD": (64, True), "PUNPCKHBW": (8, True), "PUNPCKHDQ": (32, True),
               "PUNPCKHWD": (16, True), "PUNPCKLWD": (16, False)}
 
@@ -135,6 +136,59 @@ class Runtime:
             self.th.regs[idx] = v & M64
         else:
             self.th.regs[idx] = (old & ~_mask(bits) & M64) | (v & _mask(bits))
+
+    def _x87(self, op: Op, ins: Lifted) -> None:
+        """One x87 instruction on the thread's register stack (src/w2m/x87.py; Sprint 065). An exception the control
+        word does not mask has no rows and stops the run by name."""
+        from w2m import x87
+        _, ic, opcode, reg, st, mem = op
+        th = self.th
+        fpu = x87.Fpu(cw=th.fcw, sw=th.x87_sw, regs=list(th.x87_regs))
+        fpu.set_abridged_tags(th.x87_tags)
+        address = self._t[mem[1]] if mem is not None else 0
+
+        def read(n: int) -> int:
+            return int.from_bytes(self.mem.read(address, n), "little")
+
+        def write(n: int, v: int, offset: int = 0) -> None:
+            self.mem.write(address + offset, (v & _mask(8 * n)).to_bytes(n, "little"))
+
+        ax = [th.regs[0] & 0xFFFF]
+        try:
+            x87.execute(fpu, ic, opcode, reg, st, read, write, ax)
+        except x87.X87Unmasked as e:
+            raise Unimplemented(f"{ic} at 0x{ins.address:x}: {e}") from None
+        th.fcw, th.x87_sw, th.x87_regs, th.x87_tags = fpu.cw, fpu.sw, fpu.regs, fpu.abridged_tags
+        if ic == "FNSTSW" and mem is None:
+            th.regs[0] = th.regs[0] & ~0xFFFF | ax[0]
+
+    def _mmx(self, op: Op, ins: Lifted) -> None:
+        """One MMX-register instruction on the thread's x87 register file (src/w2m/mmx.py; Sprint 065)."""
+        from w2m import mmx, x87
+        _, ic, dst, src, imm = op
+        th = self.th
+        fpu = x87.Fpu(cw=th.fcw, sw=th.x87_sw, regs=list(th.x87_regs))
+        fpu.set_abridged_tags(th.x87_tags)
+
+        def read(o: tuple[Any, ...]) -> int:
+            if o[0] == "x":
+                return int(th.xmm[o[1]])
+            if o[0] == "r":
+                return self._rd(o[1], o[2], o[3])
+            return int.from_bytes(self.mem.read(self._t[o[1]], o[2]), "little")
+
+        def write(o: tuple[Any, ...], v: int) -> None:
+            if o[0] == "r":
+                self._wr(o[1], o[2], o[3], v)
+            else:
+                self.mem.write(self._t[o[1]], (v & _mask(8 * o[2])).to_bytes(o[2], "little"))
+
+        try:
+            mmx.execute(fpu, ic, 0, dst, src, imm, read, write)
+        except x87.X87Unmasked as e:
+            raise Unimplemented(f"{ic} at 0x{ins.address:x}: {e}") from None
+        finally:                                                  # a fault keeps TOP 0 and the tags (set 065b)
+            th.x87_sw, th.x87_regs, th.x87_tags = fpu.sw, fpu.regs, fpu.abridged_tags
 
     def _load(self, loc: Op, t: dict[int, int]) -> int:
         if loc[0] == "r":
@@ -346,7 +400,7 @@ class Runtime:
                 raise GuestFault(f"#GP: {ic} memory operand at 0x{self._t[loc[1]]:x} not {align}-byte aligned")
         msize = next((loc[2] for loc in (dst, src) if loc[0] == "m"), 16)
         x = th.xmm
-        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "MOVDQA", "MOVDQU", "MOVNTPS"):
+        if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "MOVDQA", "MOVDQU", "MOVNTPS", "LDDQU"):
             v = self._xread(src, 16)
             self._xwrite(dst, v, 16)
         elif ic in SSE_049B:
@@ -566,6 +620,11 @@ class Runtime:
         elif ic == "SHUFPD":
             assert imm is not None
             x[dst[1]] = (a >> (64 * (imm & 1)) & _mask(64)) | (v >> (64 * (imm >> 1 & 1)) & _mask(64)) << 64
+        elif ic == "MPSADBW":                                    # Sprint 065: eight sums of |a - v| over 4 bytes, the
+            assert imm is not None                               # destination's block sliding a byte each (SDM MPSADBW)
+            ab, vb = lanes(a, 8), lanes(v, 8)
+            d0, s0 = 4 * (imm >> 2 & 1), 4 * (imm & 3)
+            x[dst[1]] = pack([sum(abs(ab[d0 + i + j] - vb[s0 + j]) for j in range(4)) for i in range(8)], 16)
         elif ic == "PSADBW":                                     # per quadword: the sum of |a - v| over its bytes
             ab, vb = lanes(a, 8), lanes(v, 8)
             x[dst[1]] = pack([sum(abs(ab[i] - vb[i]) for i in range(h, h + 8)) for h in (0, 8)], 64)
@@ -993,6 +1052,10 @@ class Runtime:
                 self.th.regs[0], self.th.regs[2] = XCR0, 0
             elif k == "fcw":
                 self._store(op[2], self.th.fcw)
+            elif k == "mmx":
+                self._mmx(op, ins)
+            elif k == "x87":
+                self._x87(op, ins)
             elif k == "fence":
                 pass
             elif k == "ud":

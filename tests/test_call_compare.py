@@ -197,3 +197,64 @@ def test_named_threads_pair_by_name_before_agreement() -> None:
     found = call_compare.compare(windows, wrong, SIGNATURES, frozenset(), (w_strings, r_strings))[0]
     assert [(d.function, d.field) for d in found] == [("SetThreadPriority", "a1"), ("SetThreadPriority", "a1")]
     assert call_compare.compare(windows, wrong, SIGNATURES)[0] == []      # by agreement alone, the swap hides it
+
+
+def test_a_hinted_reservation_and_its_retry_drop_out_on_both_sides() -> None:
+    # mono asks for the address past its last code block; whether it is free is the address space's (Sprint 065)
+    windows = [call(1, "VirtualAlloc", (0x2448B3C0000, 0x10000, 0x3000, 0x40), 0x2448B3C0000, image="mono-2.0-bdwgc.dll"),
+               call(2, "VirtualAlloc", (0, 0x56000, 0x3000, 4), 0x2448B3D0000, image="mono-2.0-bdwgc.dll")]
+    w2m = [call(1, "VirtualAlloc", (0x1222E70000, 0x10000, 0x3000, 0x40), 0, 487, image="mono-2.0-bdwgc.dll"),
+           call(2, "VirtualAlloc", (0, 0x10000, 0x3000, 0x40), 0x1222ED0000, image="mono-2.0-bdwgc.dll"),
+           call(3, "VirtualAlloc", (0, 0x56000, 0x3000, 4), 0x1222F00000, image="mono-2.0-bdwgc.dll")]
+    assert call_compare.compare(windows, w2m, SIGNATURES) == ([], 1)
+
+
+def test_a_value_two_windows_runs_disagree_on_is_not_compared() -> None:
+    windows = [call(1, "TryEnterCriticalSection", (0x242F01BFB80,), 1)]
+    w2m = [call(1, "TryEnterCriticalSection", (0x11804AA120,), 0)]
+    assert len(call_compare.compare(windows, w2m, SIGNATURES)[0]) == 1
+    undecided = call_compare.undetermined(json.loads(call_compare.CONTRACT.read_text()))
+    assert ("TryEnterCriticalSection", "ret") in undecided
+    assert call_compare.compare(windows, w2m, SIGNATURES, undecided=undecided)[0] == []
+
+
+def test_a_pools_workers_pair_per_function_by_agreement() -> None:
+    """Sprint 065: Windows' Job.Worker 1 made a HeapSize walk that w2m's Job.Worker 0 made, answer for answer; pairing
+    by name compared the walk with Job.Worker 1's later one. Each function pairs a pool's workers by agreement, so each
+    worker's own start-up calls stay with the worker of its name and the walk goes to the worker that made it."""
+    def worker(seq: int, tid: int, name: str) -> list[call_compare.Call]:
+        return [call(seq, "SetThreadDescription", ((1 << 64) - 2, 0x50000 + seq), 0, tid=tid),
+                call(seq + 1, "SetThreadPriority", ((1 << 64) - 2, (-1) & 0xFFFFFFFF), 1, tid=tid)]
+    def walk(seq: int, tid: int, sizes: list[int]) -> list[call_compare.Call]:
+        return [call(seq + i, "HeapSize", (0x30000, 0, 0x40000 + i * 16), s, tid=tid) for i, s in enumerate(sizes)]
+    names = ([(10, 1, "Job.Worker 0"), (20, 1, "Job.Worker 1")], [(10, 1, "Job.Worker 0"), (20, 1, "Job.Worker 1")])
+    windows = worker(10, 200, "Job.Worker 0") + worker(20, 300, "Job.Worker 1") + walk(30, 300, [0x28, 0x422])
+    w2m = worker(10, 8, "Job.Worker 0") + worker(20, 12, "Job.Worker 1") + walk(30, 8, [0x28, 0x422]) + \
+        walk(40, 12, [0x34, 0x94e])
+    assert call_compare.compare(windows, w2m, SIGNATURES, frozenset(), names)[0] == []
+    wrong = worker(10, 8, "Job.Worker 0") + worker(20, 12, "Job.Worker 1") + walk(30, 8, [0x28, 0x423]) + \
+        walk(40, 12, [0x34, 0x94e])
+    found = call_compare.compare(windows, wrong, SIGNATURES, frozenset(), names)[0]
+    assert [(d.function, d.field, d.w2m) for d in found] == [("HeapSize", "ret", 0x423)]
+    assert call_compare.pools({1: "Job.Worker 0", 2: "Job.Worker 1", 3: "Loading.AsyncRead", 4: "Worker 7"}) == \
+        {1: "Job.Worker", 2: "Job.Worker"}
+
+
+def test_a_focus_messages_window_maps_to_the_same_window() -> None:
+    """Sprint 065: WM_KILLFOCUS's and WM_SETFOCUS's wParam is a window (0x50150 on Windows, 0x20010 on w2m: the game's
+    own); it maps one to one with the message functions' windows, so another window there is a divergence."""
+    def msgs(window: int, focus: int) -> list[call_compare.Call]:
+        return [call(1, "DefWindowProcW", (window, 0x08, window, 0), 0), call(2, "DefWindowProcW", (window, 0x07, focus, 0), 0)]
+    assert call_compare.compare(msgs(0x50150, 0x50150), msgs(0x20010, 0x20010), SIGNATURES)[0] == []
+    found = call_compare.compare(msgs(0x50150, 0x50150), msgs(0x20010, 0x30020), SIGNATURES)[0]
+    assert [(d.function, d.index, d.field) for d in found] == [("DefWindowProcW", 1, "a2")]
+
+
+def test_a_call_windows_makes_and_w2m_does_not_is_missing() -> None:
+    # review of 2026-10-12, B1: the comparison walked w2m's calls only, and a Windows call with no partner went unseen
+    windows = [call(1, "GetACP", (), 1252), call(2, "GetACP", (), 1252), call(3, "GetOEMCP", (), 437)]
+    w2m = [call(1, "GetACP", (), 1252)]
+    found, compared = call_compare.compare(windows, w2m, SIGNATURES)
+    assert compared == 1
+    assert [d.text() for d in found] == ["UnityPlayer.dll!GetACP call 1 missing: Windows 0x4e4, w2m none",
+                                         "UnityPlayer.dll!GetOEMCP call 0 missing: Windows 0x1b5, w2m none"]

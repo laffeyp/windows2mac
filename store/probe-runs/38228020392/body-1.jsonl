@@ -1,0 +1,20 @@
+{"flags": 128, "disp": "create_new", "existing": 0, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 128, "disp": "create_new", "existing": 1, "ok": 0, "err": 80}
+{"flags": 128, "disp": "create_always", "existing": 0, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 128, "disp": "create_always", "existing": 1, "ok": 1, "err": 183, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 128, "disp": "open_existing", "existing": 0, "ok": 0, "err": 2}
+{"flags": 128, "disp": "open_existing", "existing": 1, "ok": 1, "err": 0, "attributes": 32, "size": 10, "wrote": 1, "written": 4, "read": 1, "got": "abcd45", "second_ok": 0, "second_err": 32}
+{"flags": 128, "disp": "open_always", "existing": 0, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 128, "disp": "open_always", "existing": 1, "ok": 1, "err": 183, "attributes": 32, "size": 10, "wrote": 1, "written": 4, "read": 1, "got": "abcd45", "second_ok": 0, "second_err": 32}
+{"flags": 128, "disp": "truncate_existing", "existing": 0, "ok": 0, "err": 2}
+{"flags": 128, "disp": "truncate_existing", "existing": 1, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "create_new", "existing": 0, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "create_new", "existing": 1, "ok": 0, "err": 80}
+{"flags": 134217856, "disp": "create_always", "existing": 0, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "create_always", "existing": 1, "ok": 1, "err": 183, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "open_existing", "existing": 0, "ok": 0, "err": 2}
+{"flags": 134217856, "disp": "open_existing", "existing": 1, "ok": 1, "err": 0, "attributes": 32, "size": 10, "wrote": 1, "written": 4, "read": 1, "got": "abcd45", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "open_always", "existing": 0, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "open_always", "existing": 1, "ok": 1, "err": 183, "attributes": 32, "size": 10, "wrote": 1, "written": 4, "read": 1, "got": "abcd45", "second_ok": 0, "second_err": 32}
+{"flags": 134217856, "disp": "truncate_existing", "existing": 0, "ok": 0, "err": 2}
+{"flags": 134217856, "disp": "truncate_existing", "existing": 1, "ok": 1, "err": 0, "attributes": 32, "size": 0, "wrote": 1, "written": 4, "read": 1, "got": "abcd", "second_ok": 0, "second_err": 32}

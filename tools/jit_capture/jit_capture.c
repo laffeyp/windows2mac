@@ -25,11 +25,18 @@
  *                  desc is the method's full name for METHOD-typed buffers, the C string for
  *                  SPECIFIC_TRAMPOLINE, empty otherwise.
  * Bytes are copied when the hook fires, before Mono patches call sites in them.
+ * <capture>.activation.tsv (Sprint 065): a WH_CALLWNDPROC hook on the main thread, installed before UnityMain, writes
+ * one line for each WM_WINDOWPOSCHANGING, WM_ACTIVATEAPP, WM_NCACTIVATE, WM_ACTIVATE, WM_SETFOCUS and WM_KILLFOCUS
+ * Windows sends: the message, wParam, lParam, the window, the foreground window, its thread and process, its class,
+ * and this thread and process; a first line "start" holds the same foreground fields and
+ * SPI_GETFOREGROUNDLOCKTIMEOUT. Game run 38216081440 has WM_ACTIVATEAPP's lParam 0 and WM_NCACTIVATE's wParam 0
+ * where seventeen ways of starting a probe give a thread and 1 (probe activation): the lines say what Windows sent.
  * WriteFile goes straight to the OS, so whole records survive the process being stopped. A
  * failed or short write stops all later writes, so the file stays a valid prefix, and writes
  * "<capture>.error" with the Windows error code.
  */
 #include <windows.h>
+#pragma comment(lib, "user32.lib")      /* the activation hook (Sprint 065) */
 #include <intrin.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -186,6 +193,35 @@ static void fail(const char *what) {
     ExitProcess(2);
 }
 
+static HANDLE activation = INVALID_HANDLE_VALUE;
+
+static void activation_line(const char *what, UINT msg, WPARAM wp, LPARAM lp, HWND w) {
+    char line[512];
+    WCHAR cls[64];
+    char cls8[64];
+    HWND fg = GetForegroundWindow();
+    DWORD fg_pid = 0, fg_tid = fg ? GetWindowThreadProcessId(fg, &fg_pid) : 0;
+    cls[0] = 0;
+    if (fg) GetClassNameW(fg, cls, 64);
+    int i = 0;
+    for (; cls[i] && i < 63; i++) cls8[i] = cls[i] < 128 ? (char)cls[i] : '?';
+    cls8[i] = 0;
+    int n = snprintf(line, sizeof line, "%s\t%x\t%llx\t%llx\t%llx\t%llx\t%lu\t%lu\t%s\t%lu\t%lu\n", what, msg,
+                     (unsigned long long)wp, (unsigned long long)lp, (unsigned long long)(ULONG_PTR)w,
+                     (unsigned long long)(ULONG_PTR)fg, fg_tid, fg_pid, cls8, GetCurrentThreadId(), GetCurrentProcessId());
+    DWORD written;
+    if (n > 0) WriteFile(activation, line, (DWORD)n, &written, NULL);
+}
+
+static LRESULT CALLBACK activation_hook(int code, WPARAM wp, LPARAM lp) {
+    const CWPSTRUCT *c = (const CWPSTRUCT *)lp;
+    if (code == HC_ACTION && (c->message == WM_WINDOWPOSCHANGING || c->message == WM_ACTIVATEAPP ||
+                              c->message == WM_NCACTIVATE || c->message == WM_ACTIVATE || c->message == WM_SETFOCUS ||
+                              c->message == WM_KILLFOCUS))
+        activation_line("msg", c->message, c->wParam, c->lParam, c->hwnd);
+    return CallNextHookEx(NULL, code, wp, lp);
+}
+
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, LPWSTR cmd, int show) {
     WCHAR dir[MAX_PATH], path[MAX_PATH], cap[MAX_PATH];
     DWORD n = GetModuleFileNameW(NULL, dir, MAX_PATH);
@@ -233,6 +269,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, LPWSTR cmd, int show) {
     hook_image(unity, "UnityPlayer.dll");
     hook_image(mono, "mono-2.0-bdwgc.dll");
     CreateThread(NULL, 0, monitor, NULL, 0, NULL);
+    lstrcpyW(path, cap);
+    lstrcatW(path, L".activation.tsv");
+    activation = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (activation != INVALID_HANDLE_VALUE) {
+        UINT timeout = 0;
+        SystemParametersInfoW(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, &timeout, 0);
+        activation_line("start", timeout, 0, 0, NULL);
+        SetWindowsHookExW(WH_CALLWNDPROC, activation_hook, NULL, GetCurrentThreadId());
+    }
     unity_main_fn unity_main = (unity_main_fn)GetProcAddress(unity, "UnityMain");
     if (!unity_main) fail("jit_capture: UnityMain missing\n");
     return unity_main(inst, prev, cmd, show);

@@ -161,6 +161,7 @@
 - **2026-10-11 user** — Speed comes next, ahead of MMX and x87 and thread stacks (chat 2026-10-11: "yeahhhh go" to the proposal). Grounds: the frontier writes the first 13 lines of the game's unity.log, 12 equal to Windows', and the 13th is the cost line ("Completed reload, in 113.912 seconds" against Windows' 0.101); a billion instructions take about 264 s; Sprint 062's profile puts about 20 s of a 33-second run in the monitor's text pipe (1,659,004 exits) and 21 s in model steps. Decision: the model-step and host shares row becomes 064 and takes the transport (review F1's measured pipe) with the native lowerings; MMX and x87 become 065, thread stacks and the collector 066; the JIT region 067, milestone A 068, the audio endpoint 069 and the product slice 070 keep their numbers.
 - **2026-10-11 agent-resolved** — Sprint 063 closes partial. Its groups are merged and accepted and its comparisons conform, but the frontier does not pass seq 3426 within 4 billion instructions. The game is in UnityPlayer's deserialization loop (RVA 0xde12d0), working and slow: its unity.log stops at "Completed reload, in 113.912 seconds" against Windows' 0.101. Decision: the criterion "the frontier passes seq 3426" moves to Sprint 064 (speed, Decision 2026-10-11 user), whose done criteria take it. Grounds: project — Sprint 063's observed section; SDD — AGENTS.md partial-pass rule; practice — none beyond the project's. Revisit if: 064's faster frontier stops at a function and not at its step limit before seq 3426.
 - **2026-10-12 agent-resolved** — Sprint 064 closes partial: about 100 times the speed, and the frontier past the compute phase, but stopping at mono's x87 FLD after 23.4 billion instructions, before seq 3426. Decision: "the frontier passes seq 3426" moves to plan row 065 (MMX and x87), which the stop names. Grounds: project — Sprint 064's observed section; SDD — AGENTS.md partial-pass rule; practice — none beyond the project's. Revisit if: 065's frontier stops at a function rather than an instruction class before seq 3426.
+- **2026-10-12 agent-resolved** — Sprint 065 closes partial: the x87 and MMX classes accepted but FSIN and FCOS (pinned, 18 last-bit cases of 1,598), the frontier past the FLD and seq 3426 with unity.log equal to Windows' 168 lines but for timings on the instruction clock, and two runs of one tree equal; the comparison not conforming (14 divergences over 3,443 calls). Decision: the divergences that follow from threads sharing one vCPU (InterlockedFlushSList 3044-3093, InterlockedPopEntrySList 3132, SetEvent 3144-3157), HeapReAlloc 3268, the second message-pump turn (3487-3489) and GetConsoleCP/GetConsoleOutputCP move to plan row 066 with "a conforming comparison"; FSIN and FCOS stay pinned. Grounds: project — Sprint 065's observed section, frontiers 643a6283510c-1791846403001347000 and -1791848771286087000; SDD — AGENTS.md partial-pass rule; practice — QEMU's -icount (qemu-options.hx) for the clock. Revisit if: 066's frontier conforms but for FSIN and FCOS, or a game value is seen to depend on sin or cos.
 
 ## Built
 
@@ -284,6 +285,16 @@
 ---
 
 ## Sprint tail
+
+### Sprint 065 (2026-10-12, closed partial: CI run 38327467991 success on 91a8e77b)
+- **Scope:** x87 and the MMX-register forms; past the FLD and seq 3426; the red team's findings; a clock the run controls.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* class runs of the x87 and MMX classes to CANDIDATE_ACCEPTED (FSIN and FCOS discrepancy, pinned); family runs of 66 families, new: display 0.2.0, wait_handoff, code_rewrite, each CANDIDATE_ACCEPTED with plants caught; frontiers each with EXECUTION_STARTED, EXECUTION_COMPLETED `killed` at the reach rule, TRACE_INGESTED, COMPARISON_COMPLETED `discrepancy` (14 over 3,443) and SESSION_COMPLETED.
+  - *Observation 1 (missing pair, of the judge):* the comparison never reported a Windows call w2m does not make. Disposition: resolved-here (`missing`).
+  - *Observation 2 (payload anomaly, of the work):* a frontier stopped by the harness was recorded `faulted`, and run_frontier exited 0 on divergences. Disposition: resolved-here (`killed`; the exit status is the verdict).
+  - *Observation 3 (order violation, of the work):* a run went two hours past its reference with no output; the clock experiment slowed 100 times stalled at 79 lines. Disposition: resolved-here (progress lines, the reach rule, the instruction clock).
+  - *Observation 4 (vocabulary gap, checked):* PROBE_AUTHORED is in the card's Emits list and no 065 probe emitted it. Disposition: recorded; the probes' records carry their runs, and PROBE_AUTHORED's emission moves with 066's harness work.
+- **Closed:** CI run 38327467991 (success on 91a8e77b), partial.
 
 ### Sprint 064 (2026-10-12, closed partial: CI run 38219168662 success on cc88048a)
 - **Scope:** speed: the exits counted, their causes removed, the hot model-step classes native.

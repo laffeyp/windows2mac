@@ -32,8 +32,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import signal
 import sys
 import time
+from collections import Counter
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal
@@ -48,7 +50,7 @@ from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.kernel import Machine, spawner  # noqa: E402
 from w2m.loader import load  # noqa: E402
 from w2m.trace import trace_ingester  # noqa: E402
-from w2m.vm_backend import TRACED_IMAGES, USER_ENVIRONMENT, VM  # noqa: E402
+from w2m.vm_backend import SPLIT_TABLES, TRACED_IMAGES, USER_ENVIRONMENT, VM  # noqa: E402
 from w2m.record import producer, run_with_provenance, uncommitted  # noqa: E402
 
 import call_compare  # noqa: E402
@@ -58,6 +60,13 @@ SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
 EMPTY = "sha256:" + hashlib.sha256(b"").hexdigest()
 BATCH_ARGUMENTS = '-batchmode -nographics -logFile "C:\\w2m\\unity.log"'   # the runner's batch mode, the log on C:
+# The rate at which the guest's clock counts instructions (Sprint 065 item 10): a scratch run at 4e9 logged "Completed
+# reload, in 0.053 seconds" (Windows 0.154) and "UnloadTime: 0.352600 ms" (Windows 0.996900), ratios 0.344 and 0.354,
+# so Windows' work runs at about 1.4e9 of w2m's instructions a second
+CLOCK_RATE = 1_400_000_000
+REFERENCE_START = 134362624920000000   # game run 38216081440's start, 2026-10-12T07:08:12Z, as a FILETIME
+REACH_AFTER_LOG = 20_000_000_000    # instructions a run goes on past the reference's last line for its main thread
+HARNESS_STOPS = ("stopped by signal", "the log holds", "max_steps", "timeout")    # stops the harness chose: killed
 REFERENCE = ROOT / "store" / "game-runs" / "38216081440"     # the batch run with thread names (Sprint 064)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
@@ -81,12 +90,33 @@ def where(vm: Any, address: int) -> str:
     return f"{name}+0x{address - base:x}" if base else hex(address)
 
 
+def exit_classes(vm: Any) -> list[tuple[tuple[int, str], tuple[int, int]]]:
+    """The model exits (hvc #10, #11) by instruction class, most first: (hvc, class) -> (exits, sites). The site census
+    alone named 4M of the 48.7M slow-SSE exits of frontier-643a6283510c-1791802134771149000 (Sprint 065)."""
+    from w2m.loader import GuestFault
+    from w2m.x86dec import DecodeError, decode
+    by: dict[tuple[int, str], list[int]] = {}
+    for (imm, at), n in vm.exit_sites.items():
+        if imm not in (10, 11):
+            continue
+        try:
+            ic = decode(vm.mem.code_at(at)).iclass
+        except (DecodeError, GuestFault) as e:          # a site in memory released since: named by the error
+            ic = type(e).__name__
+        row = by.setdefault((imm, ic), [0, 0])
+        row[0] += n
+        row[1] += 1
+    return sorted(((k, (v[0], v[1])) for k, v in by.items()), key=lambda kv: -kv[1][0])
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
     ap.add_argument("--scratch", action="store_true", help="write to runs/, not store/runs/; a dirty tree allowed")
     ap.add_argument("--plant", choices=sorted(PLANTS), help="run with a planted fault (recorded in the baseline)")
     ap.add_argument("--max-steps", type=int, default=1_000_000_000)    # a run goes to its stop (Sprint 050: 20.6 M)
+    # the guest's clock counts instructions at this rate (Sprint 065 item 10); 0: the host's clock
+    ap.add_argument("--clock-rate", type=int, default=CLOCK_RATE)
     a = ap.parse_args(argv)
     sources = None
     if a.plant:
@@ -121,11 +151,44 @@ def main(argv: list[str]) -> int:
         # the program's directory is C:\\w2m\\app and the working directory, read-only (Sprint 048)
         files = FileBridge(here, read_only=True)
         vm = VM(load(data, lambda n: (here / n).read_bytes() if (here / n).is_file() else None, Path(a.exe).name),
-                image_name=Path(a.exe).name, gui=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
+                image_name=Path(a.exe).name, gui=True, foreground_held=True, files=files, environment=USER_ENVIRONMENT,     # a GUI program started by Steam
                 command_line=f'"C:\\w2m\\app\\{Path(a.exe).name}" {BATCH_ARGUMENTS}', call_trace=TRACED_IMAGES,
-                call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources)       # where jit_capture.c opens the Windows trace
+                call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources,       # where jit_capture.c opens the Windows trace
+                instruction_clock=(a.clock_rate, REFERENCE_START) if a.clock_rate else None)
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
         machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
+        # the run ends where its reference does: all eight batch-mode game runs (37982448071 to 38275716702) end at
+        # the same 168 lines, run 180.3 to 190.0 s and are stopped, so the lines are the game's plateau in batch mode
+        # and past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond
+        # and past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond. The main thread
+        # makes calls past the last line (frontier 643a6283510c-1791836968921539000 stopped at the line and left nine
+        # of Windows' calls, seq 3444-3489, unmade), so the run also waits for each function's calls the Windows main
+        # thread made, for every function w2m's main thread calls at all (one it never calls is a divergence the
+        # comparison reports), at most REACH_AFTER_LOG instructions past the line
+        reference_lines = len((REFERENCE / "unity.log").read_bytes().splitlines())
+        log = files.drive / "w2m" / "unity.log"
+        capture_threads = call_compare.excluded(json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name)
+        reference_calls = [c for c in call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
+                           if c[1] not in capture_threads]                    # thread 1640 is jit_capture's own
+        windows_main = Counter((c[2].lower(), c[4]) for c in reference_calls if c[1] == min(reference_calls)[1])
+        log_end: list[int] = []
+
+        def stop_when() -> str | None:
+            if not (log.is_file() and len(log.read_bytes().splitlines()) >= reference_lines):
+                return None
+            executed = vm.instructions_executed()
+            log_end[:1] = log_end[:1] or [executed]
+            mine = Counter((c[2].lower(), c[4]) for c in vm.traced_calls()[0] if c[1] == min(vm.threads))       # tid 4, the first
+            short = [f for f, n in windows_main.items() if 0 < mine[f] < n]
+            if not short:
+                return f"the log holds the reference's {reference_lines} lines and the main thread its calls"
+            if executed - log_end[0] >= REACH_AFTER_LOG:
+                return (f"the log holds the reference's {reference_lines} lines; the main thread short of "
+                        f"{len(short)} functions' calls {REACH_AFTER_LOG} instructions later")
+            return None
+        machine.stop_when = stop_when
+        for number in (signal.SIGINT, signal.SIGTERM):       # a stopped run still writes its record
+            signal.signal(number, lambda n, _f: setattr(machine, "stop_requested", f"stopped by signal {n}"))
         try:
             r = machine.run(vm)
             calls, dropped = vm.traced_calls()
@@ -140,6 +203,7 @@ def main(argv: list[str]) -> int:
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()
+            state["exit_classes"] = exit_classes(vm)
             state["main_threads"] = {t.tid: (t.status, where(vm, t.x[17]) if t.x else "running") for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
                                           dict(sorted(p.vm.calls_total().items())),
@@ -160,7 +224,10 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
-        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks))
+        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
+                     code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
+                     split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
+                     code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40])
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -169,19 +236,21 @@ def main(argv: list[str]) -> int:
                 execution_id=xid, service=name, guest_address=ret, instructions_executed=r.instructions_executed))
             return
         yield events.validate(events.EXECUTION_COMPLETED(
-            execution_id=xid, exit_status="exited" if r.exit_code is not None else "faulted",
+            execution_id=xid, exit_status=("exited" if r.exit_code is not None else
+                                           "killed" if r.stop.startswith(HARNESS_STOPS) else "faulted"),
             trace_sha256=state["trace"], guest_line_count=state["trace_lines"],
             **({"exit_code": r.exit_code} if r.exit_code is not None else {}),
             unobserved=f"the guest trace holds the traced images' calls only; the run stopped: {r.stop}"))
 
     async def comparator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         windows = call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
+        contract = json.loads(call_compare.CONTRACT.read_text())
         found, compared = call_compare.compare(windows, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"),
-                                               SIGNATURES, call_compare.excluded(
-                                                   json.loads(call_compare.CONTRACT.read_text()), REFERENCE.name),
+                                               SIGNATURES, call_compare.excluded(contract, REFERENCE.name),
                                                (call_compare.read_strings(REFERENCE / "jit_capture.bin.strings.tsv"),
                                                 call_compare.read_strings(
-                                                    base / "frontier-calls" / f"{xid}.strings.tsv")))
+                                                    base / "frontier-calls" / f"{xid}.strings.tsv")),
+                                               call_compare.undetermined(contract))
         state.update(divergences=found, compared=compared)
         # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
         verdict: Literal["conforms", "discrepancy", "inconclusive"] = (
@@ -242,6 +311,11 @@ def main(argv: list[str]) -> int:
           f"{state.get('thunks')} thunks")
     for (imm, at), n in state.get("exit_sites", []):
         print(f"  hvc {imm} at 0x{at:x}: {n}")
+    for (imm, ic), (n, sites) in state.get("exit_classes", [])[:40]:
+        print(f"  hvc {imm} {ic}: {n} at {sites} sites")
+    writes, dropped_blocks, pages = state.get("code_writes", (0, 0, 0))
+    print(f"writes to translated code {writes}, blocks dropped {dropped_blocks}, pages behind blocks at the stop {pages}; "
+          f"split tables {state.get('split_tables')}; 2 MB regions " + " ".join(hex(r) for r in state.get("code_regions", [])))
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
@@ -252,6 +326,13 @@ def main(argv: list[str]) -> int:
         hit = [d for d in found if d.function == fn and d.field == field]
         print(f"plant {a.plant}: " + (f"caught at {hit[0].text()}" if hit else f"NOT caught ({fn} {field})"))
     print(f"record {result.record_root}")
+    # the exit status is the verdict (KIT_DIARY #35; review of 2026-10-12, R4 and B5): 2 when the record holds a failed
+    # producer or no closing event, 1 for a divergence or a plant not caught, 0 when the calls conform
+    kinds = [e["kind"] for e in read_record(result.record_root)]
+    if "substrate.ProducerFailed" in kinds or "SESSION_COMPLETED" not in kinds:
+        return 2
+    if found or (a.plant and not hit):
+        return 1
     return 0
 
 

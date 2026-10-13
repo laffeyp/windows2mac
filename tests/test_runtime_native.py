@@ -33,6 +33,8 @@ static unsigned char test_teb[8192];
 #define W2M_TEB_VA ((unsigned long long)test_teb)
 static unsigned long long test_peb[8];
 #define W2M_PEB_VA ((unsigned long long)test_peb)
+static unsigned long long test_monitor_data[512];   /* zero: a console start, the foreground taken (Sprint 065) */
+#define W2M_MONITOR_DATA_VA ((unsigned long long)test_monitor_data)
 """
 COMMON = """
 u64 w2m_logged(u64 a, u64 b, u64 c) { (void)a; (void)b; return c; }
@@ -65,7 +67,7 @@ def run_native(sources: list[str], body: str, prefix: str = "") -> subprocess.Co
 
 FIND_STUBS = """
 u64 w2m_full_path(const u16 *in, u16 *out, long *part) { (void)part; u64 n = 0; while ((out[n] = in[n])) n++; return n; }
-u64 w2m_file_stat_full(const u16 *full, u64 out) { (void)full; (void)out; return 2; }
+u64 w2m_file_stat_full(const u16 *full, u64 out, u64 *attributes) { (void)full; (void)out; (void)attributes; return 2; }
 static int heap_fails;
 u64 w2m_heap_take(u64 n) { return heap_fails ? 0 : (u64)calloc(1, n); }
 void w2m_heap_release(u64 a, u64 p) { (void)a; free((void *)p); }
@@ -335,7 +337,7 @@ def test_the_working_directory_is_the_process_parameters() -> None:
     (a child's: its parent's) with a final backslash; SetCurrentDirectoryW writes the other of its two buffers (rows
     *.current_directory, after.current_directory)."""
     r = run_native(["paths.c"], """
-u64 w2m_file_stat_full(const u16 *full, u64 out) { (void)full; (void)out; return 2; }
+u64 w2m_file_stat_full(const u16 *full, u64 out, u64 *attributes) { (void)full; (void)out; (void)attributes; return 2; }
 u64 w2m_host(u64 op, u64 a, u64 b, u64 c, u64 d, u64 *e) { (void)op; (void)a; (void)b; (void)c; (void)d; (void)e; return 0; }
 static void show(void) {
     u16 out[64];

@@ -30,7 +30,9 @@
    "called": "a pair w2m calls is called on Windows",
    "assigned": "a value the system assigns (thread and process ids, TLS and FLS slots, window-class atoms) maps one to one across the stream, a thread id through the thread map; a clock reading is not compared (call_compare.ASSIGNED)",
    "threads": "threads the game names (SetThreadDescription, the capture's strings and w2m's) pair by name, in order of appearance where a name repeats; the rest pair, each Windows thread in the order it first appears, with the unpaired w2m thread whose calls agree with its own most (the first to appear on a tie). Each (label, function)'s calls are then compared per pair of threads, as far as both go",
-   "labels": "a call through a traced image's import slot carries the image's name; one through the pointer GetProcAddress answers carries 'GetProcAddress', as tools/jit_capture labels its hooks"
+   "labels": "a call through a traced image's import slot carries the image's name; one through the pointer GetProcAddress answers carries 'GetProcAddress', as tools/jit_capture labels its hooks",
+   "undetermined": "a value two Windows runs of the game disagree on is not compared (`undetermined`, each with the runs that disagree)",
+   "placed": "a VirtualAlloc reservation at an address the caller chose, and the hintless retry a failed one leads to, are left out on both sides: whether the address is free depends on the address space's layout (call_compare.placed)"
   },
   "comparator": "scripts/call_compare.py",
   "signatures": "specs/signatures.json"
@@ -73,5 +75,13 @@
   "38216081440": {
    "1640": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
   }
+ },
+ "undetermined": {
+  "TryEnterCriticalSection ret": "whether another thread holds the lock at that instant, which the scheduler decides: the main thread's first FALSE is its call 39 in run 38176899195, 50 in 38203364352, 49 in 38206263976 and 58 in 38216081440 (Sprint 065)",
+  "RtlAddGrowableFunctionTable a2": "the entry count mono's JIT registers a code block's table with: 0 in run 38216081440 and 0x34 in 38206263976 at seq 3377 (Sprint 065)",
+  "RtlAddGrowableFunctionTable a3": "the maximum entry count follows the block's size, 0x201 for 64 KB and 0x401 for 128 KB; which of the main thread's blocks is the 128 KB one depends on the order the threads JIT their methods: the fourth in run 38216081440 (seq 2754), the third in 38176899195 (seq 2757) (Sprint 065)",
+  "InterlockedPushEntrySList ret": "the list's previous head, null or not as other threads have popped it: 7 calls differ between runs 38216081440 and 38206263976 (seq 3212-3232), 5 against 38203364352 (Sprint 065)",
+  "GetTempFileNameW ret": "the unique number GetTempFileNameW makes from the system time when uUnique is 0 (Microsoft Learn, GetTempFileNameW): 0x6738 and 0x698a in run 38216081440, 0x86b6 and 0x8909 in 38206263976, 0x5850 and 0x5aa2 in 38203364352 (Sprint 065)",
+  "RegSetValueExA a5": "the size of the second value UnityPlayer writes after RegCreateKeyW (seq 2739 in run 38216081440): 0x14 in runs 38216081440, 38206263976 and 38176899195, 0x13 in 38203364352 (Sprint 065)"
  }
 }

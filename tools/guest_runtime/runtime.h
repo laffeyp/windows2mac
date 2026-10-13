@@ -270,9 +270,19 @@ struct w2m_guest_call *w2m_guest_call_at(u64 rsp);   /* the frame a stub call at
  * output (the probes), 1 a GUI program with no handles (the game as Steam starts it). */
 #define W2M_START_MODE_OFF 0x68
 
+/* Monitor data word: 0, the process takes the foreground when it activates a window (the probes); 1, another
+ * process keeps it, so a window activates in the background (the game runs: game run 38275716702's hook saw a
+ * Windows Terminal window hold it throughout). src/w2m/vm_backend.py FOREGROUND_MODE; windows.c SetFocus. */
+#define W2M_FOREGROUND_MODE_OFF 0x80
+
 /* Monitor data word: 0, the counter is the guest's CNTVCT_EL0; 1, the host's clock (lockstep, where
- * model and VM must read the same count). src/w2m/vm_backend.py CLOCK_MODE. */
+ * model and VM must read the same count); 2, the instructions the process ran (monitor data word 0) at
+ * W2M_CLOCK_RATE_OFF a second, plus W2M_CLOCK_WARP_OFF ticks the host adds when no thread can run, the wall
+ * clock starting at W2M_CLOCK_EPOCH_OFF (Sprint 065 item 10; QEMU's -icount sleep=off). src/w2m/vm_backend.py. */
 #define W2M_CLOCK_MODE_OFF 0x60
+#define W2M_CLOCK_RATE_OFF 0x90
+#define W2M_CLOCK_WARP_OFF 0x98
+#define W2M_CLOCK_EPOCH_OFF 0xA0
 
 /* Host file primitives (src/w2m/file_bridge.py). */
 enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FILE_WRITE, W2M_FILE_SIZE,
