@@ -3,6 +3,9 @@
 What was done to the laptop on arrival, 2026-10-13, in order (`docs/windows-reference-machine.md` §9, §12). Commands
 after step 2 ran from the Mac over SSH as `ssh w2m-laptop`, each PowerShell block sent with `-EncodedCommand`.
 
+This file is the history. The configuration itself is `provision.ps1`, which can run again at any time and sets
+every setting below; the installs (sections 2, 6 and 7) are the parts it checks but does not perform.
+
 ## 1. The machine before
 
 HP Victus 15-fa2xxx, Windows 11 Home 25H2 build 26200.7840, signed in with a Microsoft account (local name `laffe`).
@@ -147,3 +150,31 @@ vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStu
 
 from `https://aka.ms/vs/17/release/vs_BuildTools.exe` (Visual Studio 2022); Visual Studio 2026's Build Tools
 (`https://aka.ms/vs/stable/vs_buildtools.exe`, per Microsoft Learn's command-line page) follow for 14.51.
+
+## 8. The runners' layout, the desktop session, automatic sign-in
+
+Calibration's console family showed two differences the executor made, not the machine: a child's desktop name
+(empty from SSH's session 0, `winsta0\default` on the runners) and the module path's length (58 against 38,
+`D:\a\windows2mac\windows2mac\probe.exe`). So jobs unpack at `D:\a\windows2mac\windows2mac` (D: is the second
+NVMe disk, already NTFS) and run in w2m's desktop session through a scheduled task (`run-in-desktop.ps1`).
+`Add-MpPreference -ExclusionPath D:\a`.
+
+Automatic sign-in as `w2m`: the password stored as the LSA secret `DefaultPassword` through `LsaStorePrivateData`
+(as Sysinternals Autologon stores it; no plain-text `DefaultPassword` value in the Winlogon key), Winlogon
+`AutoAdminLogon` = 1, `DefaultUserName` = w2m, `DefaultDomainName` = WINDOWSMACHINE, `PasswordLess\Device`
+`DevicePasswordLessBuildVersion` = 0, `Personalization` `NoLockScreen` = 1. After the restart at 15:09:08,
+explorer.exe ran as `windowsmachine\w2m` in session 1.
+
+## 9. The review of 2026-10-13
+
+- The firewall rule `w2m-sshd` now applies on the Private profile only.
+- `C:\w2m` and `D:\a`: administrators and SYSTEM full control, Users read and execute, set on the two folders and
+  inherited below. The first attempt ran `icacls /inheritance:r ... /T`, which left every file below with an
+  empty list (`(OI)(CI)` grants do not apply to a file); `icacls <child> /reset /T` repaired them, and a job
+  running at that moment hung and was stopped.
+- The machine Path lost `C:\Users\Administrator\AppData\Local\Microsoft\WindowsApps`.
+- Windows Update paused to 2026-11-17 (the `UX\Settings` pause values; Home allows 35 days). KB5054156, KB5128942
+  and KB5127647 had installed on 2026-10-13 before the pause.
+- Tool versions, recorded in every profile.json from now on: clang 20.1.8, link.exe 14.51.36231 (Visual Studio
+  2026 Build Tools; 2022's 14.44.35207 also present), PowerShell 7.6.7, git 2.55.0.windows.5, uv 0.13.0,
+  zstd 1.5.7, Python 3.12.15.

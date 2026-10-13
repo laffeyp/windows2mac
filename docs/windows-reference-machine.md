@@ -98,7 +98,10 @@ feature on demand ([Microsoft Learn: OpenSSH for Windows overview](https://learn
   Administrators and SYSTEM only; `PasswordAuthentication no` in `C:\ProgramData\ssh\sshd_config`
   ([Microsoft Learn: key-based authentication](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_keymanagement),
   which notes that password login across systems "becomes vulnerable to brute force intrusions").
-- The firewall rule for port 22 admits the home network's subnet only.
+- The firewall rule for port 22 admits the home network's subnet only, on the Private network profile only.
+- Accepted risk: w2m, an administrator, signs in automatically (G7), and BitLocker unlocks from the TPM at boot,
+  so whoever holds the laptop reaches an administrator desktop. Play mode and the runners' desktop session need
+  a signed-in user; the machine holds no data but the project's.
 - PowerShell 7 as the default shell; `scp` for inputs and bundles.
 - Not a self-hosted GitHub runner: the repository is public, and GitHub's guidance is that self-hosted runners
   "should almost never be used for public repositories" because any pull request can run code on them
@@ -285,3 +288,15 @@ Edge sync off by policy. Sleep on AC was 300 s and is now off.
   wait for TrustedInstaller to be idle, and the profile records it.
 - **G10. The toolchain's version is not on the record.** The runners' clang version is only in workflow logs;
   `profile.json` records `clang --version` for both machines from now on.
+- **G11. The linker.** clang links with MSVC's link.exe and libraries. The runners' binaries name their linker in
+  the PE header: 14.51 for all 141 Server 2025 binaries, 14.44 for all 132 Server 2022 ones. The laptop has
+  Visual Studio 2026's Build Tools (14.51.36231, which clang picks) and 2022's (14.44.35207); a laptop build is a
+  Server 2025 build's toolchain, and only a `binary` job runs the runners' exact bytes.
+
+### Status of the gaps, 2026-10-13 evening
+
+G1: each logical processor's efficiency class is in every profile.json (offset 18 of the CPU-set record; the
+first version read offset 20, SchedulingClass, equal here by coincidence), and `--pin performance|efficiency` pins
+a job; which rows move with the core type is not yet measured. G6: still DHCP. G7: done (automatic sign-in, jobs
+in the desktop session). G9: Windows Update paused to 2026-11-17. G10: the tools' versions are in every
+profile.json.

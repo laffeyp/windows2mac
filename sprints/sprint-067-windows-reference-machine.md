@@ -38,6 +38,16 @@ Work items, in the plan's order (§10, steps A-G):
 - **F. Play mode:** a process in the interactive session started from SSH (Q2), the GPU pinned, a frame captured at
   the main menu.
 - **G. Routing:** a Decision that new probe and game runs default to the laptop.
+- **H. One procedure.** `run-job.ps1` re-implements `windows-probe.yml`'s build and run steps, and the two have
+  drifted (the workflow hashes its outputs; the executor did not). One script that the workflow and the laptop
+  both call (review of 2026-10-13, finding 7).
+
+The review of 2026-10-13 (agent review of items A-C as built) found failed runs losing their evidence, the
+executor's own differences in 192 of the first 216 runs (session 0, the job folder's path), the core type
+unrecorded and read at the wrong offset, Windows Update unpaused, the firewall rule on every profile, tool folders
+writable by every user, and no laptop run on the record. Repaired in cd964062 and 3f57569b
+(`windows_machine.py` verdict and copies, `run-job.ps1` notes and lock limit, `cpusets.ps1`, `profile.ps1`,
+`provision.ps1`); the 234 runs from the old executor are set aside and calibration reruns on the repaired one.
 
 ## prerequisites
 
