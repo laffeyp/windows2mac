@@ -1,8 +1,7 @@
 # The Windows reference machine
 
-Status: plan, 2026-10-12. The machine arrives 2026-10-13. Decision 2026-10-11 (user) makes it the Windows reference
-for probe runs and game runs; this document is how. Its hardware is unknown until it arrives, and every value marked
-*on arrival* is recorded then.
+Status: plan, 2026-10-12; the machine arrived 2026-10-13 and §12 records it as found. Decision 2026-10-11 (user)
+makes it the Windows reference for probe runs and game runs; this document is how. Sprint 067 carries the work.
 
 ## 1. Why the reference moves
 
@@ -16,7 +15,7 @@ the evidence:
 
 | Limit | Where it shows |
 |---|---|
-| A game run stops at 180 s, in batch mode, with no GPU and no audio device | `windows-game.yml` `seconds: 180`, `-batchmode -nographics`; plan rows 069 (audio) and Phase 6 (first frame) have no reference |
+| A game run stops at 180 s, in batch mode, with no GPU and no audio device | `windows-game.yml` `seconds: 180`, `-batchmode -nographics`; plan rows 070 (audio) and Phase 6 (first frame) have no reference |
 | The CPU is assigned per job: AMD EPYC 7763, 9V45, 9V74 or Intel Xeon 8370C, 6973P-C | `scripts/probe_on_intel.py` dispatches in batches until an Intel CPU answers |
 | Each question waits on a queue, a checkout, a build and an artifact download | a probe run takes 43 s end to end (run 38304235237), a game run 15 min (run 38216081440), each before its download |
 | The profile is one line | `profile.txt`: `gha-windows-2025-x64-10.0.26100.33438-Server`; v0.2 §11.1 asks for the build, CPU features, library versions, GPU and driver, hashes, initial state and external inputs |
@@ -171,7 +170,7 @@ Ordered by what the plan needs next.
 2. **Variance as routine** (§7): ten executions of a question as cheaply as one.
 3. **Game runs past 180 s and in play mode.** The game's main menu, scene loads and frames with a real GPU: the
    reference for Phase 6 (milestone B, first frame) and Phase 7.
-4. **Audio rows** (plan row 069): an output device the runners lack.
+4. **Audio rows** (plan row 070): an output device the runners lack.
 5. **Frames as evidence.** Screenshots or GPU captures at fixed inputs, for milestone B's judge; tool choice is
    open question Q5.
 6. **Instruction-level ground truth where the call trace is too coarse.** Microsoft's Time Travel Debugging records a
@@ -229,3 +228,60 @@ Steps B and D do not depend on each other; D can start on the runners' four game
 - **Q5. Frame capture** for milestone B: a screenshot of the window, or a GPU capture tool's frame.
 - **Q6. TTD's place in the record.** A TTD trace is evidence of one execution's path; whether it enters the record as
   an execution with its own `profile_kind` or as a sidecar of a laptop run.
+
+## 12. The machine as found, 2026-10-13
+
+Read over SSH from the Mac on arrival.
+
+| | Value |
+|---|---|
+| Model | HP Victus by HP Gaming Laptop 15-fa2xxx, BIOS F.08 |
+| CPU | 13th Gen Intel Core i5-13420H: four performance cores with two threads each (efficiency class 1) and four efficiency cores (class 0), 12 logical processors |
+| Memory | 31.6 GB |
+| GPU | NVIDIA GeForce RTX 3050 6 GB Laptop GPU (driver 32.0.15.9191) beside Intel UHD Graphics (32.0.101.7084); panel 1920x1080 at 144 Hz, 120 DPI (125%) |
+| Audio | Realtek High Definition Audio, NVIDIA High Definition Audio, NVIDIA Virtual Audio, Intel Smart Sound microphones, OMEN Cam & Voice |
+| Disks | two Samsung 512 GB NVMe; C: 397 GB free of 476 GB |
+| Windows | 11 Home 25H2, build 26200.7840, en-US, code page 1252, Pacific Standard Time |
+| Hypervisor | present: hypervisorlaunchtype Auto, virtualization-based security running with memory integrity (HVCI) |
+| Scheduler | Win32PrioritySeparation 0x2 |
+| Defender | real-time and tamper protection on; `C:\w2m` excluded |
+| Account | Microsoft account, local name `laffe`, profile `C:\Users\laffe`, console session 1 |
+| Network | DHCP address 192.168.4.55; `windowsmachine.local` answers by mDNS only at times |
+| Toolchain | none shipped; installed 2026-10-13: PowerShell 7, Git, zstd, uv, LLVM 20.1.8 (the runners' clang: run 38304235237's log), Python 3.12 through uv |
+
+Removed on arrival: McAfee, HP's seven apps and six services, OneDrive (with Desktop, Documents and Pictures
+pointed back at local folders), 33 preinstalled packages including the Xbox game overlay; Windows settings sync and
+Edge sync off by policy. Sleep on AC was 300 s and is now off.
+
+### Gaps between the plan and the machine
+
+- **G1. A hybrid CPU** (answers Q1). The laptop is Intel, so Intel rows need no batching (`probe_on_intel.py`), and
+  AMD rows stay the runners'. Its cores are not alike: CPUID's cache leaf (4) and core-type leaf (0x1A) answer by
+  the core a thread runs on, and Windows moves threads between the two classes. A CPUID row or a timing therefore
+  depends on the core. The executor records each run's core class and can pin a run to one class; calibration
+  step 2 measures which rows move.
+- **G2. Not bare metal.** Windows runs above Hyper-V because memory integrity is on, so R2's "not in a VM" holds for
+  the instruction stream but not for CPUID's hypervisor leaves or for timers. Q4 needs a second boot with
+  `hypervisorlaunchtype off` and memory integrity off; until then every laptop run records the hypervisor as present.
+- **G3. A client edition.** The runners are Server 2025 (26100) and Server 2022 (20348); the laptop is Home 25H2
+  (26200). Edition is a machine-decided value the plan did not list: build-dependent behaviour, the scheduler's
+  quantum setting (0x2 here; the runners' value is unmeasured and becomes a probe row), and update control, since
+  Home pauses updates for at most five weeks. Every run records build and UBR rather than assuming them paused.
+- **G4. The account.** The plan's local administrator `w2m` does not exist; the machine signs in with a Microsoft
+  account whose profile is `C:\Users\laffe`. Q3 now has three paths (`runneradmin`, `w2m`, `laffe`). The local
+  `w2m` is created as §9 says, and play jobs run in its session (G7).
+- **G5. Two GPUs.** Without a preference, Windows may start the game on the Intel GPU. Play jobs set the game's GPU
+  preference to the NVIDIA GPU and record it.
+- **G6. Addressing.** The address comes from DHCP and the mDNS name failed within minutes of first use. A DHCP
+  reservation for the laptop's MAC on the router fixes the address; until then the controller uses 192.168.4.55.
+- **G7. Play mode's session** (Q2). SSH commands run in session 0; the desktop is session 1. A scheduled task set to
+  run interactively as the signed-in user starts a process in that user's session; it needs the user signed in and
+  the screen unlocked, so `w2m` signs in automatically. To be shown on the machine before any play run.
+- **G8. The game's delivery.** The runners fetch the game from a private GitHub release with `gh`; the laptop holds no
+  GitHub credentials. The controller copies its unpacked tree (`~/w2m-depots/hail-to-the-rainbow`, 15 GB) over SSH
+  once, and the executor checks it against `files.json` before each run.
+- **G9. Windows' own servicing.** OpenSSH's feature-on-demand download stalled and a Python installer hung while
+  TrustedInstaller was busy. Installs go through winget's own source or uv, not Windows Update; measurement series
+  wait for TrustedInstaller to be idle, and the profile records it.
+- **G10. The toolchain's version is not on the record.** The runners' clang version is only in workflow logs;
+  `profile.json` records `clang --version` for both machines from now on.
