@@ -9,6 +9,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -16,9 +18,10 @@ import store_probe_runs  # noqa: E402
 import windows_machine  # noqa: E402
 
 
-def bundle(tmp: Path, executions: int) -> Path:
+def bundle(tmp: Path, executions: int, codes: tuple[int, ...] = ()) -> Path:
     for i in range(1, executions + 1):
-        (tmp / f"exec-{i}.json").write_text('{"exit_code": 0}')
+        code = codes[i - 1] if i <= len(codes) else 0
+        (tmp / f"exec-{i}.json").write_text(f'{{"exit_code": {code}}}')
     return tmp
 
 
@@ -29,6 +32,11 @@ def test_a_full_bundle_passes(tmp_path: Path) -> None:
 def test_a_short_bundle_fails_though_run_job_exited_0(tmp_path: Path) -> None:
     assert windows_machine.verdict(0, True, bundle(tmp_path, 0), 2)[0] == 1
     assert windows_machine.verdict(0, True, bundle(tmp_path, 1), 2)[0] == 1
+
+
+def test_an_execution_that_exited_non_zero_fails_the_run(tmp_path: Path) -> None:
+    status, line = windows_machine.verdict(0, True, bundle(tmp_path, 2, (0, 3)), 2)
+    assert status == 1 and "exec-2" in line
 
 
 def test_run_jobs_failure_is_the_runs(tmp_path: Path) -> None:
@@ -44,3 +52,8 @@ def test_the_machine_is_read_from_profile_txt() -> None:
     assert store_probe_runs.image("laptop-x64-10.0.26200.7840-Client") == "laptop"
     assert store_probe_runs.image("gha-windows-2025-x64-10.0.26100.33438-Server") == "windows-2025"
     assert store_probe_runs.image("gha-windows-2022-x64-10.0.20348.4171-Server") == "windows-2022"
+
+
+def test_an_unknown_machine_is_refused() -> None:
+    with pytest.raises(ValueError):
+        store_probe_runs.image("gha-windows-2019-x64-10.0.17763.1-Server")

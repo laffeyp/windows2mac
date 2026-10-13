@@ -44,6 +44,15 @@ EXECUTOR = ("run-job.ps1", "profile.ps1", "cpusets.ps1", "run-in-desktop.ps1")
 # A dead connection ends in a minute instead of hanging (2026-10-13: one scp of a finished bundle stalled 6 minutes;
 # the same copy by hand took 0.9 s).
 LINK = ["-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
+JOB_SECONDS = 2 * 3600        # a job's ssh ends after this even if the link stays alive (audit 2026-10-13)
+
+
+def ssh_job(command: str) -> int:
+    """Run a job's command on the laptop; 124 if it outlives JOB_SECONDS."""
+    try:
+        return subprocess.run(["ssh", *LINK, HOST, command], timeout=JOB_SECONDS).returncode
+    except subprocess.TimeoutExpired:
+        return 124
 
 
 def copy(*args: str, attempts: int = 3) -> bool:
@@ -60,13 +69,20 @@ def git(*args: str) -> bytes:
 
 
 def verdict(code: int, fetched: bool, bundle: Path, repeat: int) -> tuple[int, str]:
-    """The run's exit status and its line: a missing bundle, then run-job's code, then a short count."""
+    """The run's exit status and its line: a missing bundle, then run-job's code, then a short count, then an
+    execution that exited non-zero or wrote no rows (audit 2026-10-13: a crashed second execution counted as one)."""
     if not fetched:
         return code or 1, "bundle not copied back; the laptop's job folder is kept"
-    n = len(list(bundle.glob("exec-*.json")))
+    execs = sorted(bundle.glob("exec-*.json"))
+    n = len(execs)
     if code:
         return code, f"run-job exit {code}, {n} of {repeat} executions"
-    return (0 if n == repeat else 1), f"{n} of {repeat} executions"
+    if n != repeat:
+        return 1, f"{n} of {repeat} executions"
+    failed = [e.stem for e in execs if json.loads(e.read_text()).get("exit_code") != 0]
+    if failed:
+        return 1, f"{n} of {repeat} executions; non-zero exit: {', '.join(failed)}"
+    return 0, f"{n} of {repeat} executions"
 
 
 def run_job(name: str, repeat: int, binary: str | None = None, dll: str | None = None, session: str = "desktop",
@@ -114,7 +130,7 @@ def run_job(name: str, repeat: int, binary: str | None = None, dll: str | None =
             if not copy("-r", str(job), f"{HOST}:{JOBS}/"):
                 raise RuntimeError(f"{run}: the job could not be copied to the laptop")
             runner = "run-in-desktop.ps1" if session == "desktop" else "run-job.ps1"   # desktop: as the runners
-            code = subprocess.run(["ssh", *LINK, HOST, f"{JOBS}/{run}/{runner} -Job {JOBS}/{run}"]).returncode
+            code = ssh_job(f"{JOBS}/{run}/{runner} -Job {JOBS}/{run}")
             dst.parent.mkdir(parents=True, exist_ok=True)
             fetched = copy("-r", f"{HOST}:{JOBS}/{run}/out", str(dst))
             if fetched:
@@ -178,7 +194,7 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
             (job / "job.json").write_text(json.dumps(spec, indent=1))
             if not copy("-r", str(job), f"{HOST}:{JOBS}/"):
                 raise RuntimeError(f"{run}: the job could not be copied to the laptop")
-            code = subprocess.run(["ssh", *LINK, HOST, f"{JOBS}/{run}/run-in-desktop.ps1 -Job {JOBS}/{run}"]).returncode
+            code = ssh_job(f"{JOBS}/{run}/run-in-desktop.ps1 -Job {JOBS}/{run}")
             bundle = ROOT / "build" / "batches" / run
             bundle.parent.mkdir(parents=True, exist_ok=True)
             fetched = copy("-r", f"{HOST}:{JOBS}/{run}/out", str(bundle))

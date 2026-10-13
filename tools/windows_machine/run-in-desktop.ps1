@@ -29,8 +29,13 @@ try {
     throw 'w2m is not signed in: no desktop session to run in'
   }
   Start-ScheduledTask -TaskName $name
-  do { Start-Sleep -Milliseconds 250 } while ((Get-ScheduledTask -TaskName $name).State -eq 'Running' -or
-                                              (Get-ScheduledTaskInfo -TaskName $name).LastTaskResult -eq 0x41303)  # not yet run
+  # wait while it runs or has not yet started; a task that has not started within 2 minutes is a failure
+  $started = [Diagnostics.Stopwatch]::StartNew()
+  do {
+    Start-Sleep -Milliseconds 250
+    $notYet = (Get-ScheduledTaskInfo -TaskName $name).LastTaskResult -eq 0x41303
+    if ($notYet -and $started.Elapsed.TotalMinutes -ge 2) { throw "task $name did not start within 2 minutes" }
+  } while ((Get-ScheduledTask -TaskName $name).State -eq 'Running' -or $notYet)
   $code = (Get-ScheduledTaskInfo -TaskName $name).LastTaskResult
 } finally {
   Unregister-ScheduledTask -TaskName $name -Confirm:$false

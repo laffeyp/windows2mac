@@ -19,8 +19,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-KEPT = ("body-1.jsonl", "body-2.jsonl", "cpu.txt", "exec-1.json", "exec-2.json", "probe.sha256", "profile.txt",
-        "profile.json", "job.json", "run-job.log", "batch.txt")
+KEPT = ("cpu.txt", "probe.sha256", "profile.txt", "profile.json", "job.json", "run-job.log", "batch.txt")
+EXECUTIONS = ("body-*.jsonl", "exec-*.json")    # every execution's, however many (probe_on_intel.py runs 3)
 BATCH_FILES = ("profile.json", "job.json", "run-job.log")    # a laptop batch's, kept once in store/probe-runs/<batch>/
 
 
@@ -28,7 +28,10 @@ def image(profile: str) -> str:
     """The machine a run came from, by its profile.txt."""
     if profile.startswith("laptop-"):
         return "laptop"
-    return "windows-2025" if "windows-2025" in profile else "windows-2022"
+    for name in ("windows-2025", "windows-2022"):
+        if name in profile:
+            return name
+    raise ValueError(f"profile.txt names no machine this script knows: {profile!r}")
 
 
 def main(argv: list[str]) -> int:
@@ -43,6 +46,9 @@ def main(argv: list[str]) -> int:
         for name in KEPT:
             if (src / name).is_file():
                 shutil.copyfile(src / name, dst / name)
+        for pattern in EXECUTIONS:
+            for found_file in src.glob(pattern):
+                shutil.copyfile(found_file, dst / found_file.name)
         if (src / "batch.txt").is_file():
             batch = (src / "batch.txt").read_text().strip()
             kept = ROOT / "store" / "probe-runs" / batch

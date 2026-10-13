@@ -105,7 +105,9 @@ def record(run: str, family: str) -> None:
             xid = f"probe-run-{run}-{i}"
             ended = json.loads(e.read_text())
             body = src / f"body-{i}.jsonl"
-            data = body.read_bytes() if body.is_file() else b""
+            if not body.is_file():                   # no rows is not an empty trace (audit 2026-10-13)
+                raise SystemExit(f"{run}: {e.name} has no {body.name}; not recorded")
+            data = body.read_bytes()
             evs += [
                 events.validate(events.EXECUTION_STARTED(
                     execution_id=xid, subject_kind="probe", subject_sha256="sha256:" + binary,
@@ -130,14 +132,18 @@ def store(batch: str) -> int:
     if changed:
         print("refused: store/runs/ records name the commit that ran; uncommitted: " + ", ".join(changed[:10]))
         return 2
-    runs = [(b.parent.name, item["family"]) for b, item in batch_runs(batch) if (b / "body-1.jsonl").is_file()]
+    every = batch_runs(batch)
+    runs = [(b.parent.name, item["family"]) for b, item in every if (b / "body-1.jsonl").is_file()]
+    skipped = [b.parent.name for b, _ in every if not (b / "body-1.jsonl").is_file()]
+    if skipped:
+        print(f"{batch}: {len(skipped)} runs have no rows and are not stored: {', '.join(skipped)}")
     code = store_probe_runs.main([r for r, _ in runs])
     if code:
         return code
     for run, family in runs:
         record(run, family)
     print(f"{batch}: {len(runs)} runs stored and recorded")
-    return 0
+    return 1 if skipped else 0
 
 
 def main(argv: list[str]) -> int:

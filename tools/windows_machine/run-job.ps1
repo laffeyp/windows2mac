@@ -96,6 +96,12 @@ try {
     $cpuName | Out-File -Encoding ascii -NoNewline "$to/cpu.txt"
     for ($i = 1; $i -le [int]$spec.repeat; $i++) {
       $sw = [System.Diagnostics.Stopwatch]::StartNew()
+      # each execution under a 10-minute limit (audit 2026-10-13). The probe starts exactly as the runners start it
+      # (pwsh calling cmd natively, so its standard handles are theirs); a watchdog process kills probe.exe from the
+      # workspace if it outlives the limit and leaves a marker, and the execution records exit_code -1, timed_out.
+      $marker = Join-Path $Job "timed-out-$i"
+      $watch = Start-Process pwsh -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-Command',
+        "Start-Sleep 600; Set-Content '$marker' x; Get-Process probe -ErrorAction SilentlyContinue | Where-Object Path -like '$src\*' | Stop-Process -Force"
       if ($mode -eq 'file') {
         ./probe.exe "probes/$probe/cases.bin" "$to/result-$i.bin"
         (Get-FileHash -Algorithm SHA256 "probes/$probe/cases.bin").Hash.ToLower() | Out-File -Encoding ascii -NoNewline "$to/cases.sha256"
@@ -104,10 +110,13 @@ try {
       } else {
         ./probe.exe "$execution-$i" "$to/trace-$i.jsonl" "$to/roles-$i.json"
       }
-      $code = $LASTEXITCODE
+      $exit = $LASTEXITCODE
+      Stop-Process -Id $watch.Id -Force -ErrorAction SilentlyContinue
+      $timedOut = Test-Path $marker
+      $code = if ($timedOut) { -1 } else { $exit }
       $sw.Stop()
       Note "$execution execution $i exit $code in $($sw.Elapsed.TotalSeconds) s, affinity $affinity"
-      "{`"exit_code`": $code, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"cpu_class`": `"$(if ($spec.cpu_class) { $spec.cpu_class } else { 'any' })`", `"affinity`": `"$affinity`"}" | Out-File -Encoding ascii -NoNewline "$to/exec-$i.json"
+      "{`"exit_code`": $code, `"timed_out`": $(if ($timedOut) { 'true' } else { 'false' }), `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"cpu_class`": `"$(if ($spec.cpu_class) { $spec.cpu_class } else { 'any' })`", `"affinity`": `"$affinity`"}" | Out-File -Encoding ascii -NoNewline "$to/exec-$i.json"
       if ($code -ne 0) { break }        # a failing probe's output is the evidence (Sprint 034)
     }
   }
