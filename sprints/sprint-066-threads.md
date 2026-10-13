@@ -66,6 +66,20 @@ every thread on one vCPU in 200,000-instruction slices (scheduler.py TIME_SLICE)
      slices of 200,000, 20,000 and 2,000: on Windows the worker deletes while the main thread still queues.
 4. **Plan row 066's own work:** stacks laid out as Windows lays them out (reserve, guard page, commit on demand);
    SuspendThread, GetThreadContext and ResumeThread on a running thread, as mono's collector does.
+   - *What the held rows answer (2026-10-13):* windows.thread.threads 0.2.0 rows suspend, suspend.frozen,
+     context and resume are a spinning thread suspended while it runs (RIP in the image, RSP in its stack, CS
+     0x33, SS 0x2B); the family conforms on tree f419f145, and the frontier makes mono's SuspendThread,
+     GetThreadContext and ResumeThread 40 times each (frontier 643a6283510c-1791846403001347000), none
+     of them among the 14 divergences above. windows.memory.thread_stack 0.1.0 holds the main thread's layout (reserve,
+     3 PAGE_GUARD pages below StackLimit, committed above), which w2m answers; it conforms. No held row shows a
+     created thread's stack, StackLimit moving as a stack grows, or a CONTEXT's other registers.
+   - *Probes for the rest, not yet run:* `probes/thread_stacks` (each created thread's TEB relations and
+     VirtualQuery pages; StackLimit after touching 1 to 8 pages below it; a touch 16 pages below under a vectored
+     handler) and `probes/running_thread_context` (every register planted in a spinning thread, CONTEXT_ALL
+     after SuspendThread; a thread suspended in WaitForSingleObject). A local mingw build in the VM: the planted
+     GPRs, XMM0-15 and MXCSR 0x9FC0 read back; a waiting thread's RIP lies in no module (the bridge thunk); the
+     fifth touch below a created thread's StackLimit faults (w2m keeps 4 reserved pages there and never moves
+     StackLimit). Commit on demand is built when the rows give the initial commit, the guard and the step.
 
 ## prerequisites
 

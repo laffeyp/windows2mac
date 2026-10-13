@@ -109,7 +109,9 @@ u64 k32_ResumeThread(u64 h) {
 }
 
 /* GetThreadContext(hThread, lpContext): the host fills the CONTEXT from the thread's saved state, as its
- * ContextFlags ask; the thread must be another, suspended or waiting (on one vCPU, never running). */
+ * ContextFlags ask; the thread must be another. On one vCPU a thread suspended while it runs was stopped by its
+ * time slice at an x86 instruction boundary, so the saved state is its registers there (rows threads.context:
+ * a spinner's RIP and RSP; Sprint 066 probes/running_thread_context awaits Windows' rows for every register). */
 u64 k32_GetThreadContext(u64 h, u64 context) {
     u32 tid = thread_of(W2M_API_GetThreadContext, h);
     if (tid == (u32)w2m_teb()->client_thread) w2m_unimplemented(W2M_API_GetThreadContext, h);   /* itself */
