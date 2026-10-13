@@ -195,7 +195,8 @@ def _scp_path(guest: str) -> str:
 
 
 def push(local: Path, guest: str) -> None:
-    r = subprocess.run(["scp", "-q", str(local), f"{HOST}:{_scp_path(guest)}"], capture_output=True, text=True)
+    r = subprocess.run(["scp", "-q", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", str(local),
+                        f"{HOST}:{_scp_path(guest)}"], capture_output=True, text=True, timeout=1800)
     if r.returncode:
         raise GuestError(f"push {guest}: {r.stderr.strip()}")
     if _sha256_guest(guest) != hashlib.sha256(local.read_bytes()).hexdigest():
@@ -203,7 +204,8 @@ def push(local: Path, guest: str) -> None:
 
 
 def pull(guest: str, local: Path) -> None:
-    r = subprocess.run(["scp", "-q", f"{HOST}:{_scp_path(guest)}", str(local)], capture_output=True, text=True)
+    r = subprocess.run(["scp", "-q", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15",
+                        f"{HOST}:{_scp_path(guest)}", str(local)], capture_output=True, text=True, timeout=1800)
     if r.returncode:
         raise GuestError(f"pull {guest}: {r.stderr.strip()}")
     if hashlib.sha256(local.read_bytes()).hexdigest() != _sha256_guest(guest):

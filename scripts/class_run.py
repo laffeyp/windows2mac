@@ -25,6 +25,7 @@ Usage: uv run python scripts/class_run.py <ICLASS> [--runs store/runs]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -70,6 +71,11 @@ def _built(case_set: str) -> list[sd.Case]:
     """The cases the runners ran: the committed case file, each labelled by its decoded iclass. Reading them
     takes 0.2 s for every set; building them from the generator took over 30 s on a CI runner with no cache
     (run 38083478948). The two agree case for case (code, registers, label) on all 78,608 (2026-10-10)."""
+    ran = ROOT / "store" / "probe-runs" / REFERENCES[case_set] / "cases.sha256"
+    here = hashlib.sha256(sd.case_file(case_set).read_bytes()).hexdigest()
+    if ran.is_file() and ran.read_text().strip().split()[0].lower() != here:    # results pair with cases by index
+        raise SystemExit(f"set {case_set}: the committed case file (sha256 {here}) is not the one run "
+                         f"{REFERENCES[case_set]} ran")
     cases = sd.read_cases(sd.case_file(case_set))
     for c in cases:
         c.label = decode(c.code).iclass

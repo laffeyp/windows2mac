@@ -2764,7 +2764,9 @@ def runner_rows(f: Family) -> dict[tuple[str, int], list[dict[str, Any]]]:
 def build_contract(f: Family) -> dict[str, Any]:
     by_run = runner_rows(f)
     first = next(iter(by_run.values()))
-    unequal = {k: [a["s"] for a, b in zip(first, v) if a != b] for k, v in by_run.items() if v != first}
+    keyed = {r["s"]: r for r in first}
+    unequal = {k: sorted({r["s"] for r in v if keyed.get(r["s"]) != r} | (keyed.keys() - {r["s"] for r in v}))
+               for k, v in by_run.items() if v != first}                       # by key: one extra row names one row
     if unequal:
         raise SystemExit(f"runner rows differ: {unequal}")
     return {

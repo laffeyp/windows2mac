@@ -271,7 +271,7 @@ def main(argv: list[str]) -> int:
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm", scratch=a.scratch,
-                   plant=a.plant or "")
+                   plant=a.plant or "", clock_rate=a.clock_rate, max_steps=a.max_steps)   # both change the calls
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
                         events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
@@ -332,6 +332,12 @@ def main(argv: list[str]) -> int:
     if "substrate.ProducerFailed" in kinds or "SESSION_COMPLETED" not in kinds:
         return 2
     if found or (a.plant and not hit):
+        return 1
+    # only a comparison that conforms passes: a rejected trace never reaches the comparator, and a trace that left
+    # calls out is inconclusive (audit 2026-10-13: both exited 0)
+    verdicts = [e["payload"].get("verdict") for e in read_record(result.record_root) if e["kind"] == "COMPARISON_COMPLETED"]
+    if not a.plant and verdicts != ["conforms"]:
+        print(f"no conforming comparison: {verdicts or 'none (the trace was rejected)'}")
         return 1
     return 0
 

@@ -1080,8 +1080,8 @@ def judge_run(a: argparse.Namespace) -> int:
         "probes/semantics/cases.bin is not what --cases builds now"
     sha = "sha256:" + hashlib.sha256(a.out.read_bytes()).hexdigest()
     ran = a.judge / "cases.sha256"
-    assert not ran.exists() or "sha256:" + ran.read_text().strip() == sha, \
-        f"the runner ran a case file other than this one ({sha})"
+    assert ran.exists(), f"{ran} is missing: nothing shows which case file the runner ran"
+    assert "sha256:" + ran.read_text().strip() == sha, f"the runner ran a case file other than this one ({sha})"
     profile = (a.judge / "profile.txt").read_text().strip()
     cpu = (a.judge / "cpu.txt").read_text().strip() if (a.judge / "cpu.txt").exists() else "unknown CPU"
     result_files = sorted(a.judge.glob("result-*.bin"))

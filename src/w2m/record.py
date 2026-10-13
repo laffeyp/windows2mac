@@ -34,20 +34,24 @@ def _commit(repo: Path) -> str:
     head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True)
     if head.returncode:
         return "unknown"
-    dirty = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
-                           capture_output=True, text=True).stdout.strip()
+    dirty = bool(_changes(repo))
     return head.stdout.strip() + ("-dirty" if dirty else "")
+
+
+def _changes(repo: Path) -> list[str]:
+    """Tracked files that differ from HEAD, and untracked files under src/ and tools/ (the guest runtime links
+    every tools/guest_runtime/*.c, tracked or not; audit 2026-10-13). A failing git is an error, never a clean tree."""
+    tracked = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
+                             capture_output=True, text=True, check=True).stdout
+    untracked = subprocess.run(["git", "-C", str(repo), "ls-files", "--others", "--exclude-standard", "--", "src", "tools"],
+                               capture_output=True, text=True, check=True).stdout
+    return [line[3:] for line in tracked.splitlines() if line.strip()] + [f for f in untracked.splitlines() if f]
 
 
 def uncommitted() -> list[str]:
     """Tracked files that differ from HEAD, in w2m and the substrate clone (Sprint 060: a record in store/ names
     the code that ran, so a run that writes there starts from a committed tree)."""
-    out = []
-    for prefix, repo in (("", ROOT), ("substrate/", ROOT / "substrate")):
-        status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
-                                capture_output=True, text=True).stdout
-        out += [prefix + line[3:] for line in status.splitlines() if line.strip()]
-    return out
+    return [prefix + f for prefix, repo in (("", ROOT), ("substrate/", ROOT / "substrate")) for f in _changes(repo)]
 
 
 @cache
