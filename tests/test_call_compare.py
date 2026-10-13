@@ -261,3 +261,70 @@ def test_a_call_windows_makes_and_w2m_does_not_is_missing() -> None:
     assert compared == 1
     assert [d.text() for d in found] == ["UnityPlayer.dll!GetACP call 1 missing: Windows 0x4e4, w2m none",
                                          "UnityPlayer.dll!GetOEMCP call 0 missing: Windows 0x1b5, w2m none"]
+
+
+def reference(run: str, calls: list[call_compare.Call]) -> call_compare.Reference:
+    return call_compare.Reference(run, calls, frozenset(), [])
+
+
+def test_a_call_w2m_misses_conforms_when_some_execution_lacks_it_too() -> None:
+    """Sprint 067 item D (§7): HeapReAlloc 3268. A worker grows its delete buffer four times in three Windows runs and
+    three times in one; w2m grows it three times. The fourth is a value Windows varies, not a divergence."""
+    def grows(n: int, tid: int) -> list[call_compare.Call]:
+        sizes = [0x817, 0x1017, 0x2017, 0x817][:n]
+        return [call(10 + i, "HeapReAlloc", (0x30000, 0x10, 0x40000 + i, s), 0, tid=tid) for i, s in enumerate(sizes)]
+    refs = [reference("four", grows(4, 200)), reference("three", grows(3, 300)), reference("again", grows(4, 400))]
+    found, varies, compared = call_compare.compare_set(refs, grows(3, 8), SIGNATURES)
+    assert found == [] and compared == {"four": 3, "three": 3, "again": 3}
+    assert [(v.divergence.field, v.disagree, v.agree, v.of) for v in varies] == \
+        [("missing", ("four", "again"), ("three",), 3)]
+    assert varies[0].text() == ("UnityPlayer.dll!HeapReAlloc call 3 missing: Windows 0x0, w2m none: 2 of 3 reference "
+                                "executions disagree, 1 agree (run four seq 13)")
+    found, varies, _ = call_compare.compare_set(refs[:1] + refs[2:], grows(3, 8), SIGNATURES)
+    assert [(d.divergence.field, len(d.disagree), d.of) for d in found] == [("missing", 2, 2)] and varies == []
+
+
+def test_a_value_conforms_when_some_execution_shows_it() -> None:
+    refs = [reference("a", [call(1, "GetACP", (), 1252)]), reference("b", [call(1, "GetACP", (), 65001)])]
+    found, varies, _ = call_compare.compare_set(refs, [call(1, "GetACP", (), 65001)], SIGNATURES)
+    assert found == [] and [(v.disagree, v.agree) for v in varies] == [(("a",), ("b",))]
+    found, varies, _ = call_compare.compare_set(refs, [call(1, "GetACP", (), 437)], SIGNATURES)
+    assert varies == [] and [d.text() for d in found] == [
+        "UnityPlayer.dll!GetACP call 0 ret: Windows 0x4e4, w2m 0x1b5: 2 of 2 reference executions disagree (run a seq 1)"]
+
+
+def test_a_value_only_some_executions_reach_is_judged_by_those() -> None:
+    """An execution that does not make w2m's call neither agrees nor disagrees: a value only the one execution that
+    makes the call disagrees with is a divergence (no execution shows it), and the text says the others lack the call."""
+    refs = [reference("a", [call(1, "GetACP", (), 1252), call(2, "GetACP", (), 1252)]),
+            reference("b", [call(1, "GetACP", (), 1252)])]
+    found, _, _ = call_compare.compare_set(refs, [call(1, "GetACP", (), 1252), call(2, "GetACP", (), 437)], SIGNATURES)
+    assert [d.text() for d in found] == [
+        "UnityPlayer.dll!GetACP call 1 ret: Windows 0x4e4, w2m 0x1b5: 1 of 2 reference executions disagree, "
+        "1 do not make the call (run a seq 2)"]
+
+
+def test_each_execution_pairs_its_own_threads() -> None:
+    """Thread pairing stays per execution: the runs' thread ids and orders differ, and each pairs with w2m's anew."""
+    w2m = [call(1, "GetACP", (), 1252, tid=4), call(2, "SetThreadPriority", ((1 << 64) - 2, 1), 1, tid=8)]
+    refs = [reference("a", [call(1, "GetACP", (), 1252, tid=6024),
+                            call(2, "SetThreadPriority", ((1 << 64) - 2, 1), 1, tid=7000)]),
+            reference("b", [call(5, "GetACP", (), 1252, tid=1100),
+                            call(9, "SetThreadPriority", ((1 << 64) - 2, 1), 1, tid=900)])]
+    assert call_compare.compare_set(refs, w2m, SIGNATURES)[:2] == ([], [])
+    assert call_compare.reference_ref(refs) == "game-run-a + game-run-b"
+
+
+def test_the_reference_set_is_the_runs_of_the_build_and_capture(tmp_path: Path) -> None:
+    contract = json.loads(call_compare.CONTRACT.read_text())
+    members, outside = call_compare.reference_set(contract)
+    assert [run.name for run in members] == ["38176899195", "38203364352", "38206263976", "38216081440"]
+    assert outside["38275716702"].startswith("the contract names no capture thread")      # the WH_CALLWNDPROC capture
+    assert outside["38113342549"] == "no call trace with thread names"
+    run = tmp_path / "lap-1"
+    run.mkdir()
+    (run / "jit_capture.bin.trace.tsv").write_text("")
+    (run / "jit_capture.bin.strings.tsv").write_text("")
+    assert call_compare.outside_set(run, call_compare.game_build(), contract, tmp_path) == \
+        "not on the record (game-run-lap-1)"
+    assert call_compare.game_build() == "sha256:643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974"

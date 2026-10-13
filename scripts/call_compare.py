@@ -19,7 +19,13 @@ says it failed (a BOOL of FALSE, a null handle or pointer, INVALID_HANDLE_VALUE)
 last error as it was, which belongs to the call before. A function the metadata does not describe is compared on its
 return only. A pair w2m calls and Windows never does is a divergence of its own.
 
-Usage: uv run python scripts/call_compare.py <w2m calls.tsv> <game-run-dir> [--signatures specs/signatures.json]
+Since Sprint 067 (item D) the reference is a set: every stored game run of the same game build and capture
+(`reference_set`), each compared as above with its own thread pairing, the findings joined on w2m's side
+(`compare_set`). A value conforms when some execution shows it; a value some show and some do not is a value Windows
+varies, reported apart; each divergence says how many executions disagree, of how many.
+
+Usage: uv run python scripts/call_compare.py <w2m calls.tsv> [<game-run-dir> ...] [--record]
+       (no run named: the reference set; --record writes the COMPARISON_COMPLETED to store/runs/)
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -52,6 +58,12 @@ class Divergence:
     windows: int | None
     w2m: int | None
     windows_seq: int | None     # the Windows call's sequence number: the order the divergences are reported in
+    w2m_thread: int | None = None   # the w2m thread whose call it is, or that the Windows thread is paired with
+
+    def key(self) -> tuple[str, str, int | None, int, str]:
+        """The divergence as w2m's side names it, the same against every reference execution: image, function, w2m
+        thread, the call's place among that thread's calls, field (Sprint 067 item D)."""
+        return (self.image.lower(), self.function, self.w2m_thread, self.index, self.field)
 
     def text(self) -> str:
         w = "none" if self.windows is None else f"0x{self.windows:x}"
@@ -348,8 +360,20 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             excluded_threads: frozenset[int] = frozenset(),
             strings: tuple[list[String], list[String]] = ([], []),
             undecided: frozenset[tuple[str, str]] = frozenset()) -> tuple[list[Divergence], int]:
-    """Every divergence, in the order of the Windows calls they concern, and the count of calls compared. Each
-    (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
+    """Every divergence, in the order of the Windows calls they concern, and the count of calls compared (`judged`)."""
+    found, compared = judged(windows, w2m, signatures, excluded_threads, strings, undecided)
+    return found, len(compared)
+
+
+Compared = tuple[str, str, int, int]               # image (lower case), function, w2m thread, the call's place
+
+
+def judged(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
+           excluded_threads: frozenset[int] = frozenset(),
+           strings: tuple[list[String], list[String]] = ([], []),
+           undecided: frozenset[tuple[str, str]] = frozenset()) -> tuple[list[Divergence], list[Compared]]:
+    """Every divergence, in the order of the Windows calls they concern, and the calls compared, each named from w2m's
+    side (`Compared`). Each (label, function)'s calls are compared thread by thread, a Windows thread against the w2m thread the map pairs it
     with, in order; a Windows call past the end of its partner's, or to a function w2m never calls, is missing. Across
     threads the order is the scheduler's. `excluded_threads` are reference
     threads the game does not start (the capture's own); `undecided` are (function, field) values two Windows runs of
@@ -377,13 +401,13 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
     pairs: list[tuple[int, Call, Call]] = []
     for pair, by_thread in w.items():              # a function Windows calls and w2m never does: each call missing
         if pair not in m:
-            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
-                      for calls in by_thread.values() for k, c in enumerate(calls)]
+            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0], threads.get(tid))
+                      for tid, calls in by_thread.items() for k, c in enumerate(calls)]
     for pair, ours in m.items():
         theirs = w.get(pair)
         if theirs is None:
             first = min(c for calls in ours.values() for c in calls)
-            found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None))
+            found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None, None))
             continue
         chosen = dict(threads)
         for pool in sorted(set(pool_w.values())):
@@ -399,7 +423,7 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             pairs += [(k, a, b) for k, (a, b) in enumerate(zip(calls, mine))]
             # past the paired thread's last call: Windows makes the call, w2m does not (review of 2026-10-12, B1:
             # 21 calls of frontier 643a6283510c-1791830368398119000 went unjudged here)
-            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0])
+            found += [Divergence(c[2], pair[1], k, "missing", c[6], None, c[0], chosen.get(tid))
                       for k, c in enumerate(calls[len(mine):], len(mine))]
     maps: dict[str, tuple[dict[int, int], dict[int, int]]] = {}
 
@@ -444,9 +468,9 @@ def compare(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             else:
                 ok = judge(kind, size, x, y, argument)
             if not ok:
-                found.append(Divergence(a[2], fn, k, name, x, y, a[0]))
+                found.append(Divergence(a[2], fn, k, name, x, y, a[0], b[1]))
     found.sort(key=lambda d: (d.windows_seq is None, d.windows_seq or 0, d.function))
-    return found, len(pairs)
+    return found, [(a[2].lower(), a[4], b[1], k) for k, a, b in pairs]
 
 
 def excluded(contract: dict[str, Any], run: str) -> frozenset[int]:
@@ -460,21 +484,207 @@ def undetermined(contract: dict[str, Any]) -> frozenset[tuple[str, str]]:
     return frozenset((k.split(" ")[0], k.split(" ")[1]) for k in contract.get("undetermined", {}))
 
 
+# The reference as a set (docs/windows-reference-machine.md §7; Sprint 067 item D). One Windows run judged w2m until
+# Sprint 066, and the stored runs differ from one another where the scheduler and the address space decide (HeapReAlloc
+# 3268: three in-place growths in run 38203364352, four in the others). w2m now answers to every execution of the
+# same question at once.
+GAME = "hail-to-the-rainbow"
+GAME_EXE = "Hail to the Rainbow.exe"
+GAME_RUNS = ROOT / "store" / "game-runs"
+RECORDS = ROOT / "store" / "runs"
+
+
+@dataclass(frozen=True)
+class Reference:
+    run: str                                  # the run's directory name under store/game-runs/
+    calls: list[Call]
+    excluded_threads: frozenset[int]
+    strings: list[String]
+
+    @property
+    def execution_id(self) -> str:
+        return f"game-run-{self.run}"         # record_game_run.execution_id
+
+
+def load_reference(run: Path, contract: dict[str, Any]) -> Reference:
+    return Reference(run.name, read_tsv(run / "jit_capture.bin.trace.tsv"), excluded(contract, run.name),
+                     read_strings(run / "jit_capture.bin.strings.tsv"))
+
+
+def game_build(game: str = GAME, exe: str = GAME_EXE) -> str:
+    """The game build the set is of: the executable's digest in games/<game>/files.json."""
+    listing = json.loads((ROOT / "games" / game / "files.json").read_text())["listing"]
+    return "sha256:" + str(next(f["sha256"] for f in listing if f["path"] == exe))
+
+
+def outside_set(run: Path, build: str, contract: dict[str, Any], records: Path = RECORDS) -> str | None:
+    """Why a stored game run is not in the reference set, or None when it is. A run is in the set when
+    - its capture holds the call trace and the thread names the comparison reads (jit_capture.bin.trace.tsv and
+      .strings.tsv);
+    - it is on the record as a windows_reference execution of the same game build (store/runs/game-run-<run>, written
+      by record_game_run.py: EXECUTION_STARTED.subject_sha256 is files.json's exe digest);
+    - the contract names the capture's own thread for it (`excluded_threads`): the contract's applicability states the
+      capture and its arguments (batch mode: -batchmode -nographics -logFile), and a run whose capture thread is not
+      named would have the capture's DLL_THREAD_ATTACH calls judged as the game's.
+    A laptop run (store/game-runs/lap-*) joins by the same three steps; nothing here lists runs."""
+    if not ((run / "jit_capture.bin.trace.tsv").is_file() and (run / "jit_capture.bin.strings.tsv").is_file()):
+        return "no call trace with thread names"
+    record = records / f"game-run-{run.name}"
+    if not record.is_dir():
+        return f"not on the record ({record.name})"
+    from substrate.api import read_record
+    started = [e["payload"] for e in read_record(record) if e["kind"] == "EXECUTION_STARTED"]
+    if not started or started[0]["profile_kind"] != "windows_reference":
+        return "no windows_reference EXECUTION_STARTED on the record"
+    if started[0]["subject_sha256"] != build:
+        return f"another game build ({started[0]['subject_sha256']})"
+    if run.name not in contract.get("excluded_threads", {}):
+        return "the contract names no capture thread for it (another capture or arguments)"
+    return None
+
+
+def reference_set(contract: dict[str, Any], build: str | None = None, game_runs: Path = GAME_RUNS,
+                  records: Path = RECORDS) -> tuple[list[Path], dict[str, str]]:
+    """The stored game runs in the reference set, in name order, and each run left out with its reason."""
+    build = build or game_build()
+    members: list[Path] = []
+    outside: dict[str, str] = {}
+    for run in sorted(p for p in game_runs.iterdir() if p.is_dir()):
+        reason = outside_set(run, build, contract, records)
+        if reason is None:
+            members.append(run)
+        else:
+            outside[run.name] = reason
+    return members, outside
+
+
+@dataclass(frozen=True)
+class SetDivergence:
+    """One w2m value judged against every reference execution. `agree` show w2m's value (for a call w2m misses: lack the
+    call too); `disagree` show another (or make the call); the rest of `of` do not reach the call. No execution
+    agreeing is a divergence; some agreeing and some not is a value Windows varies (v0.2 §14), recorded, not chased."""
+    divergence: Divergence                    # as the first disagreeing execution shows it
+    run: str                                  # that execution
+    disagree: tuple[str, ...]
+    agree: tuple[str, ...]
+    of: int
+
+    @property
+    def varies(self) -> bool:
+        return bool(self.agree)
+
+    def text(self) -> str:
+        silent = self.of - len(self.disagree) - len(self.agree)
+        return (f"{self.divergence.text()}: {len(self.disagree)} of {self.of} reference executions disagree"
+                + (f", {len(self.agree)} agree" if self.agree else "")
+                + (f", {silent} do not make the call" if silent else "")
+                + f" (run {self.run} seq {self.divergence.windows_seq})")
+
+
+def compare_set(references: list[Reference], w2m: list[Call], signatures: dict[str, Any],
+                strings: tuple[String, ...] = (),
+                undecided: frozenset[tuple[str, str]] = frozenset()
+                ) -> tuple[list[SetDivergence], list[SetDivergence], dict[str, int]]:
+    """w2m's calls against every reference execution (§7): the divergences, the values Windows varies, and the calls
+    compared per execution. Each execution is compared as `judged` compares one, threads paired anew for each; its
+    findings are then joined on w2m's side (`Divergence.key`). A value conforms when some execution that makes the
+    call shows it; a call w2m misses conforms when some execution lacks it too; a function w2m calls conforms when
+    some execution calls it."""
+    found: dict[str, dict[tuple[str, str, int | None, int, str], Divergence]] = {}
+    compared: dict[str, set[Compared]] = {}
+    for r in references:
+        divergences, pairs = judged(r.calls, w2m, signatures, r.excluded_threads, (r.strings, list(strings)),
+                                     undecided)
+        found[r.run] = {}
+        for d in divergences:
+            found[r.run].setdefault(d.key(), d)
+        compared[r.run] = set(pairs)
+
+    def agrees(run: str, key: tuple[str, str, int | None, int, str]) -> bool:
+        if key in found[run]:
+            return False
+        if key[4] in ("missing", "called"):
+            return True                       # the execution lacks the call too, or calls the function
+        return (key[0], key[1], key[2], key[3]) in compared[run] if key[2] is not None else False
+
+    runs = [r.run for r in references]
+    keys = list(dict.fromkeys(k for run in runs for k in found[run]))
+    judged_set = []
+    for key in keys:
+        disagree = tuple(run for run in runs if key in found[run])
+        agree = tuple(run for run in runs if agrees(run, key))
+        judged_set.append(SetDivergence(found[disagree[0]][key], disagree[0], disagree, agree, len(runs)))
+    judged_set.sort(key=lambda s: (s.divergence.windows_seq is None, runs.index(s.run), s.divergence.windows_seq or 0,
+                                   s.divergence.function))
+    return ([s for s in judged_set if not s.varies], [s for s in judged_set if s.varies],
+            {run: len(compared[run]) for run in runs})
+
+
+def reference_ref(references: list[Reference]) -> str:
+    """COMPARISON_COMPLETED.reference_ref for a set: its executions joined by ' + ' (class_run.py's form)."""
+    return " + ".join(r.execution_id for r in references)
+
+
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="w2m's calls against the reference set, or against the runs named")
     ap.add_argument("calls", type=Path)
-    ap.add_argument("run", type=Path)
+    ap.add_argument("runs", type=Path, nargs="*", help="game-run directories; none: the reference set")
     ap.add_argument("--signatures", type=Path, default=SIGNATURES)
+    ap.add_argument("--record", action="store_true",
+                    help="write the comparison to store/runs/ as a COMPARISON_COMPLETED (a committed tree only)")
     a = ap.parse_args(argv)
     signatures = json.loads(a.signatures.read_text())["functions"]
     contract = json.loads(CONTRACT.read_text())
-    found, compared = compare(read_tsv(a.run / "jit_capture.bin.trace.tsv"), read_tsv(a.calls), signatures,
-                              excluded(contract, a.run.name),
-                              (read_strings(a.run / "jit_capture.bin.strings.tsv"),
-                               read_strings(a.calls.with_suffix(".strings.tsv"))), undetermined(contract))
-    print(f"{compared} calls compared; {len(found)} divergences")
-    for d in found:
-        print(f"  seq {d.windows_seq}: {d.text()}")
+    runs = a.runs
+    if not runs:
+        runs, outside = reference_set(contract)
+        for name, reason in outside.items():
+            print(f"run {name} not in the set: {reason}")
+    references = [load_reference(run, contract) for run in runs]
+    found, varies, compared = compare_set(references, read_tsv(a.calls), signatures,
+                                          tuple(read_strings(a.calls.with_suffix(".strings.tsv"))), undetermined(contract))
+    print(f"reference set {', '.join(r.run for r in references)}; calls compared "
+          + ", ".join(f"{run} {n}" for run, n in compared.items()))
+    print(f"{len(found)} divergences")
+    for s in found:
+        print(f"  {s.text()}")
+    print(f"{len(varies)} values Windows varies (not divergences)")
+    for s in varies:
+        print(f"  {s.text()}; agree {', '.join(s.agree)}")
+    if a.record:
+        return record(a.calls, references, found, varies, compared)
+    return 0 if not found else 1
+
+
+def record(calls: Path, references: list[Reference], found: list[SetDivergence], varies: list[SetDivergence],
+           compared: dict[str, int]) -> int:
+    """The comparison on the record: one COMPARISON_COMPLETED against the set, in store/runs/comparison-<target>-<ns>,
+    the set's runs and the values Windows varies in the baseline."""
+    import time
+
+    from w2m import VOCAB_VERSION, events
+    from w2m.record import one_step_run, uncommitted
+    changed = uncommitted()
+    if changed:
+        print("refused: store/runs/ records name the commit that ran; uncommitted: " + ", ".join(changed[:10]))
+        return 2
+    target = calls.stem
+    contract = json.loads(CONTRACT.read_text())
+    verdict: Literal["conforms", "discrepancy"] = "discrepancy" if found else "conforms"
+
+    def work() -> list[Any]:
+        return [events.validate(events.COMPARISON_COMPLETED(
+            comparison_id=f"cmp-set-{target}", contract_id=contract["contract_id"], contract_version=contract["version"],
+            relation="state_relation", reference_ref=reference_ref(references), target_execution_id=target,
+            verdict=verdict, **({"first_divergence": found[0].text()[:500]} if found else {})))]
+
+    root, kinds = one_step_run(
+        RECORDS / f"comparison-{target}-{time.time_ns()}", profile="windows_reference", contract_version=VOCAB_VERSION,
+        purpose="conformance", work=work,
+        baseline={"calls": str(calls.resolve().relative_to(ROOT)), "reference_set": [r.run for r in references],
+                  "compared": compared, "divergences": [s.text() for s in found],
+                  "varies": [s.text() for s in varies]})
+    print(root, dict(kinds))
     return 0 if not found else 1
 
 

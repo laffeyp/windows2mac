@@ -11,7 +11,8 @@ One substrate run, five steps, each caused by the one before:
   ingester    TRACE_INGESTED (or TRACE_REJECTED) for the run's guest trace: the calls UnityPlayer.dll and
               mono-2.0-bdwgc.dll made (call_trace.c; Sprint 060), in the content store
   comparator  COMPARISON_COMPLETED: those calls against the game's on Windows (scripts/call_compare.py; contract
-              windows.game.calls), reference the game run's execution (scripts/record_game_run.py)
+              windows.game.calls), reference the set of game runs' executions (call_compare.reference_set; each
+              recorded by scripts/record_game_run.py; Sprint 067 item D)
   closer      SESSION_COMPLETED, triggered by the comparison or a rejected trace
 
 The stop is the frontier: the item the application needs next. Item runs that resolve it and
@@ -54,7 +55,6 @@ from w2m.vm_backend import SPLIT_TABLES, TRACED_IMAGES, USER_ENVIRONMENT, VM  # 
 from w2m.record import producer, run_with_provenance, uncommitted  # noqa: E402
 
 import call_compare  # noqa: E402
-import record_game_run  # noqa: E402
 
 SIGNATURES = json.loads(call_compare.SIGNATURES.read_text())["functions"]
 
@@ -243,21 +243,21 @@ def main(argv: list[str]) -> int:
             unobserved=f"the guest trace holds the traced images' calls only; the run stopped: {r.stop}"))
 
     async def comparator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
-        windows = call_compare.read_tsv(REFERENCE / "jit_capture.bin.trace.tsv")
+        # the reference is a set (Sprint 067 item D; docs/windows-reference-machine.md §7): every stored game run of the
+        # game's build and capture, each compared with its own thread pairing
         contract = json.loads(call_compare.CONTRACT.read_text())
-        found, compared = call_compare.compare(windows, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"),
-                                               SIGNATURES, call_compare.excluded(contract, REFERENCE.name),
-                                               (call_compare.read_strings(REFERENCE / "jit_capture.bin.strings.tsv"),
-                                                call_compare.read_strings(
-                                                    base / "frontier-calls" / f"{xid}.strings.tsv")),
-                                               call_compare.undetermined(contract))
-        state.update(divergences=found, compared=compared)
+        references = [call_compare.load_reference(run, contract) for run in reference_runs]
+        found, varies, compared = call_compare.compare_set(
+            references, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"), SIGNATURES,
+            tuple(call_compare.read_strings(base / "frontier-calls" / f"{xid}.strings.tsv")),
+            call_compare.undetermined(contract))
+        state.update(divergences=found, varies=varies, compared=compared)
         # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
         verdict: Literal["conforms", "discrepancy", "inconclusive"] = (
             "discrepancy" if found else "inconclusive" if state.get("dropped") else "conforms")
         yield events.validate(events.COMPARISON_COMPLETED(
             comparison_id=f"cmp-{xid}", contract_id=CONTRACT[0], contract_version=CONTRACT[1],
-            relation="state_relation", reference_ref=record_game_run.execution_id(REFERENCE),
+            relation="state_relation", reference_ref=call_compare.reference_ref(references),
             target_execution_id=xid, verdict=verdict,
             **({"first_divergence": found[0].text()[:500]} if found else
                {"first_divergence": f"the trace left out {state['dropped']} calls"} if state.get("dropped") else {})))
@@ -269,9 +269,12 @@ def main(argv: list[str]) -> int:
             accepted_count=0,
             elapsed_seconds=round(time.monotonic() - t0, 3)))
 
+    reference_runs, _outside = call_compare.reference_set(json.loads(call_compare.CONTRACT.read_text()))
+
     def topology(b: TopologyBuilder) -> None:
         b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm", scratch=a.scratch,
-                   plant=a.plant or "", clock_rate=a.clock_rate, max_steps=a.max_steps)   # both change the calls
+                   plant=a.plant or "", clock_rate=a.clock_rate, max_steps=a.max_steps,   # both change the calls
+                   reference_set=[run.name for run in reference_runs])
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
                         events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
@@ -318,12 +321,14 @@ def main(argv: list[str]) -> int:
           f"split tables {state.get('split_tables')}; 2 MB regions " + " ".join(hex(r) for r in state.get("code_regions", [])))
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
-    print(f"compared {state.get('compared')} calls with run {REFERENCE.name}: {len(found)} divergences")
+    varies = state.get("varies", [])
+    print(f"compared with the reference set (calls per run {state.get('compared')}): {len(found)} divergences, "
+          f"{len(varies)} values Windows varies")
     for d in found[:60]:
-        print(f"  seq {d.windows_seq}: {d.text()}")
+        print(f"  {d.text()}")
     if a.plant:
         fn, field = PLANTS[a.plant][3]
-        hit = [d for d in found if d.function == fn and d.field == field]
+        hit = [d for d in found if d.divergence.function == fn and d.divergence.field == field]
         print(f"plant {a.plant}: " + (f"caught at {hit[0].text()}" if hit else f"NOT caught ({fn} {field})"))
     print(f"record {result.record_root}")
     # the exit status is the verdict (KIT_DIARY #35; review of 2026-10-12, R4 and B5): 2 when the record holds a failed
