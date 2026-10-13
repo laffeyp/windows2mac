@@ -9,10 +9,14 @@ param([Parameter(Mandatory)] [string] $Job)
 $ErrorActionPreference = 'Stop'
 
 $name = 'w2m-job-' + (Split-Path $Job -Leaf)
+# job.json `console_window` (hidden, minimized, normal): the job's own console window. Hidden leaves no application in
+# the foreground; on the runners another application held it (family windows, msg.game.9: WM_ACTIVATEAPP's lParam).
+$window = (Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json).console_window
+if (-not $window) { $window = 'hidden' }
 $log = Join-Path $Job 'out\run-job.log'             # saved with the results
 New-Item -ItemType Directory -Force (Join-Path $Job 'out') | Out-Null
 $pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
-$arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -Command `"& '$Job\run-job.ps1' -Job '$Job' *> '$log'; exit `$LASTEXITCODE`""
+$arguments = "-NoProfile -NonInteractive -WindowStyle $window -Command `"& '$Job\run-job.ps1' -Job '$Job' *> '$log'; exit `$LASTEXITCODE`""
 $action = New-ScheduledTaskAction -Execute $pwsh -Argument $arguments -WorkingDirectory $Job
 $principal = New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\w2m" -LogonType Interactive -RunLevel Highest
 # a task left behind by a dropped SSH session is removed here, before the next job registers its own

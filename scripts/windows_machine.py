@@ -147,7 +147,7 @@ def batch_items(families: list[str]) -> list[dict[str, str]]:
     return items
 
 
-def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None) -> int:
+def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, window: str = "hidden") -> int:
     head = git("rev-parse", "HEAD").decode().strip()
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
@@ -158,7 +158,7 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None) 
         for n, item in enumerate(items, 1):
             item["execution_id"] = f"{item['family']}-{stamp}-{n:03d}"
         spec: dict[str, object] = {"kind": "batch", "execution_id": run, "repeat": repeat, "commit": head,
-                                   "session": "desktop", "items": items}
+                                   "session": "desktop", "console_window": window, "items": items}
         if pin:
             spec["cpu_class"] = pin
         with tempfile.TemporaryDirectory() as d:
@@ -215,6 +215,8 @@ def main(argv: list[str]) -> int:
     bt.add_argument("families", nargs="*")
     bt.add_argument("--repeat", type=int, default=2)
     bt.add_argument("--pin", choices=("performance", "efficiency"), help="run on one core type only (G1)")
+    bt.add_argument("--window", choices=("hidden", "minimized", "normal"), default="hidden",
+                    help="the job's console window in the desktop session")
     for kind in ("probe", "binary"):
         p = sub.add_parser(kind)
         p.add_argument("probe" if kind == "probe" else "family")
@@ -227,7 +229,7 @@ def main(argv: list[str]) -> int:
     if a.kind == "batch":
         sys.path.insert(0, str(ROOT / "scripts"))
         import family_run
-        return run_batch(batch_items(a.families or sorted(family_run.FAMILIES)), a.repeat, a.pin)
+        return run_batch(batch_items(a.families or sorted(family_run.FAMILIES)), a.repeat, a.pin, a.window)
     if a.kind == "probe":
         return run_job(a.probe, a.repeat, session=a.session, pin=a.pin)
     sys.path.insert(0, str(ROOT / "scripts"))

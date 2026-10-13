@@ -55,6 +55,14 @@ try {
     [Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity = [IntPtr][int64]$mask
     $affinity = '0x{0:x}' -f $mask
   }
+  # The error mode a probe inherits through cmd (family time_and_error_mode, error_mode.inherited_from_cmd): the
+  # runners' launcher passes 0x8003 (SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX, SEM_NOOPENFILEERRORBOX); the
+  # scheduled task passes 0x8001 (calibration 2026-10-13). SetErrorMode here is inherited by every process started.
+  if (-not ('W2mErrorMode' -as [type])) {
+    Add-Type -Name W2mErrorMode -Namespace '' -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);'
+  }
+  $previousMode = [W2mErrorMode]::SetErrorMode(0x8003)
+  Note ("error mode 0x{0:x} (was 0x{1:x})" -f 0x8003, $previousMode)
   $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
   $v = [Environment]::OSVersion.Version
   $machine = "laptop-x64-$($v.Major).$($v.Minor).$($v.Build).$($cv.UBR)-$($cv.InstallationType)"
