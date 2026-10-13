@@ -37,6 +37,21 @@ every thread on one vCPU in 200,000-instruction slices (scheduler.py TIME_SLICE)
    probe of a producer and consumers on several cores (rows from the runners).
 3. **The calls w2m never makes:** GetConsoleCP and GetConsoleOutputCP (the game looks them up and calls them on
    Windows), HeapReAlloc 3268 and the message-pump turn, each traced to its cause.
+   - *Measured 2026-10-12* (scratch frontiers on tree ef8a3ad7, run together on one host, each stopped by the
+     reach rule with the log at the reference's 168 lines):
+
+     | TIME_SLICE | divergences | instructions | M instructions a second | schedule exits (hvc 12) |
+     |---|---|---|---|---|
+     | 200,000 (065 close) | 14 | — | — | — |
+     | 20,000 | 6 | 100,399,409,889 | 30.94 over 3,245 s | 8,019,918 |
+     | 2,000 | 14 | 101,371,639,527 | 16.70 over 6,069 s | 27,886,521 |
+
+     At 20,000 the SList flushes and pop (3044-3132) and SetEvent 3144-3157 conform; the 6 left are item 3's.
+     At 2,000 those also conform, but SetThreadPriority and GetThreadPriority 1483-1506 go missing (8 new) and
+     the rate halves.
+2. *Chosen:* TIME_SLICE 20,000 (`src/w2m/scheduler.py`). The finer slice clears every interleaving divergence
+   the comparison shows; running a woken thread at once and several vCPUs stay unbuilt until a comparison or a
+   probe asks for them.
 4. **Plan row 066's own work:** stacks laid out as Windows lays them out (reserve, guard page, commit on demand);
    SuspendThread, GetThreadContext and ResumeThread on a running thread, as mono's collector does.
 

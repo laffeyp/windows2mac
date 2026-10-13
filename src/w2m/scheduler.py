@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 STILL_ACTIVE = 259
 DLL_THREAD_ATTACH, DLL_THREAD_DETACH = 2, 3
 START_LAST_ERROR = 187                   # what a new thread's start routine reads first (rows worker.start)
-TIME_SLICE = 200_000                     # x86 instructions a thread runs before another ready thread gets the vCPU
+TIME_SLICE = 20_000                      # x86 instructions a thread runs before another ready thread gets the vCPU (Sprint 066 item 2)
 # monitor data ranges each thread keeps (vm_backend.py offsets): lazy AF and DF, MXCSR, the x87 control word, the
 # YMM upper halves
 PER_THREAD_MONITOR = ((0x20, 0x40), (0x50, 0x58), (0x70, 0x72), (0x400, 0x500))
