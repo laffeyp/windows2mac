@@ -1,0 +1,10 @@
+{"s":"native_system_info","err":57005,"architecture":9,"reserved":0,"page_size":4096,"minimum_address":65536,"maximum_address":140737488289791,"processors_match_mask":true,"processors_positive":true,"processor_type":8664,"allocation_granularity":65536,"level_is_cpuid_family":true,"revision_is_cpuid_model_stepping":true}
+{"s":"system_info","err":57005,"architecture":9,"reserved":0,"page_size":4096,"minimum_address":65536,"maximum_address":140737488289791,"processors_match_mask":true,"processors_positive":true,"processor_type":8664,"allocation_granularity":65536,"level_is_cpuid_family":true,"revision_is_cpuid_model_stepping":true}
+{"s":"system_info.same_as_native","value":true}
+{"s":"version_ex","ret":1,"err":57005,"major":6,"minor":2,"build":9200,"platform":2,"service_pack_major":0,"product_type":1,"csd_empty":true}
+{"s":"version_ex.bad_size","ret":0,"err":122}
+{"s":"memory_status_ex","ret":1,"err":57005,"length":64,"load_percent":true,"avail_phys_le_total":true,"total_phys_ge_1gb":true,"avail_virtual_le_total":true,"total_virtual":140737488224256,"avail_extended_virtual":0}
+{"s":"memory_status_ex.bad_length","ret":0,"err":87}
+{"s":"tick_count","err":57005,"advances":true,"step_under_100ms":true,"system_time_under_100ms":true}
+{"s":"system_directory","length":19,"err":57005,"is_c_windows_system32":false}
+{"s":"system_directory.small","ret":20,"err":57005}

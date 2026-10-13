@@ -1,0 +1,10 @@
+{"s":"set.block","null":false,"err":57005,"length":69,"entries":["ZED=last","alpha=1","=C:=C:\\w2m","SteamAppId=480","Path=C:\\Windows\\system32"]}
+{"s":"set.second_call","same_pointer":false,"same_content":true}
+{"s":"set.copy","write_shows_in_next_call":false}
+{"s":"set.heap","heap_size":138,"length_bytes":138}
+{"s":"set.free","ret":1,"err":57005}
+{"s":"empty.block","null":false,"err":57005,"length":1,"entries":[]}
+{"s":"empty.second_call","same_pointer":false,"same_content":true}
+{"s":"empty.copy","write_shows_in_next_call":false}
+{"s":"empty.heap","heap_size":4,"length_bytes":2}
+{"s":"empty.free","ret":1,"err":57005}

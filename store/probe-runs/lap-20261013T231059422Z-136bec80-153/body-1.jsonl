@@ -1,0 +1,7 @@
+{"s":"exports","kernel32_fls2":true,"kernelbase_fls2":true,"kernel32_tls2":true,"kernelbase_tls2":true}
+{"s":"fls2.unset","value2":0,"err2":57005,"value1":0,"err1":87}
+{"s":"fls2.set","value2":42,"err2":57005,"value1":42,"err1":0}
+{"s":"fls2.freed","value2":0,"err2":57005,"value1":0,"err1":0}
+{"s":"tls2.unset","value2":0,"err2":57005,"value1":0,"err1":0}
+{"s":"tls2.set","value2":43,"err2":57005,"value1":43,"err1":0}
+{"s":"tls2.freed","value2":0,"err2":57005,"value1":0,"err1":0}

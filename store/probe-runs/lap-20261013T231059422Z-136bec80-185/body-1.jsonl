@@ -1,0 +1,8 @@
+{"s":"add.last","non_null":1,"err":57005}
+{"s":"add.first","non_null":1,"distinct":1,"err":57005}
+{"s":"add.same_handler","distinct":1}
+{"s":"remove","ret":1,"err":57005}
+{"s":"remove.again","ret":0,"err":57005}
+{"s":"remove.unknown","ret":0,"err":57005}
+{"s":"dispatch.continue","turns":2,"order":[2,1],"code_seen":1,"flags_seen":128,"err":57005}
+{"s":"dispatch.after_remove","turns":1,"order":[2]}

@@ -1,0 +1,7 @@
+{"s":"load.api_sets","winrt":true,"com":true,"winrt_string":true,"winrt_is_combase":true,"com_is_combase":true,"string_is_combase":true}
+{"s":"proc","init":true,"uninit":true,"init_in_combase":true}
+{"s":"init.single","hr":0}
+{"s":"init.single_again","hr":1}
+{"s":"init.multi_after_single","hr":2147549446}
+{"s":"init.multi","hr":0}
+{"s":"init.bad_type","hr":2147942487}

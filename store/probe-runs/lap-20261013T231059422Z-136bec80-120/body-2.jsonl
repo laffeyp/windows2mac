@@ -1,0 +1,11 @@
+{"s":"enum.full","ret":1,"err":57005,"needed_whole":true,"at_least_four":true,"fits":true,"first_is_program":true,"second_is_ntdll":true,"third_is_kernel32":true,"fourth_is_kernelbase":true,"all_nonzero":true}
+{"s":"enum.short","ret":1,"err":57005,"needed_is_full":true,"first_is_program":true}
+{"s":"enum.size_only","ret":1,"err":57005,"needed_is_full":true}
+{"s":"search.setup","copied":true}
+{"s":"search.before","loaded":false,"err":126}
+{"s":"search.set","ret":1,"err":57005}
+{"s":"search.load","loaded":true,"err":57005,"value":42,"path_in_directory":true}
+{"s":"enum.after_load","one_more":1,"listed":true,"last":true}
+{"s":"search.reset","ret":1,"err":57005}
+{"s":"search.loaded_after_reset","same":true,"err":57005}
+{"s":"search.after_reset","loaded":false,"err":126}

@@ -1,0 +1,14 @@
+{"s":"none.existing","valid":1,"err":0,"inherit":0}
+{"s":"none.missing","valid":0,"err":2}
+{"s":"inherit.existing","valid":1,"err":0,"inherit":1}
+{"s":"inherit.missing","valid":0,"err":2}
+{"s":"no_inherit.existing","valid":1,"err":0,"inherit":0}
+{"s":"no_inherit.missing","valid":0,"err":2}
+{"s":"length_0.existing","valid":1,"err":0,"inherit":1}
+{"s":"length_0.missing","valid":0,"err":2}
+{"s":"length_12.existing","valid":1,"err":0,"inherit":1}
+{"s":"length_12.missing","valid":0,"err":2}
+{"s":"length_1000.existing","valid":1,"err":0,"inherit":1}
+{"s":"length_1000.missing","valid":0,"err":2}
+{"s":"inherit_2.existing","valid":1,"err":0,"inherit":1}
+{"s":"inherit_2.missing","valid":0,"err":2}

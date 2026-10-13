@@ -1,0 +1,12 @@
+{"s":"init","err":57005,"low":0,"high":0}
+{"s":"pop.empty","null":true,"err":57005,"depth":0,"sequence":0,"low_bits":0,"first_is":true}
+{"s":"flush.empty","null":true,"err":57005,"depth":0,"sequence":0,"low_bits":0,"first_is":true}
+{"s":"push.1","returns_previous":true,"err":57005,"depth":1,"sequence":2,"low_bits":0,"first_is":true,"entry_links_previous":true}
+{"s":"push.2","returns_previous":true,"err":57005,"depth":2,"sequence":4,"low_bits":0,"first_is":true,"entry_links_previous":true}
+{"s":"push.3","returns_previous":true,"err":57005,"depth":3,"sequence":6,"low_bits":0,"first_is":true,"entry_links_previous":true}
+{"s":"pop.1","returns_first":true,"err":57005,"depth":2,"sequence":6,"low_bits":0,"first_is":true,"popped_keeps_next":true}
+{"s":"flush.full","returns_first":true,"err":57005,"depth":0,"sequence":6,"low_bits":0,"first_is":true,"chain_kept":true}
+{"s":"pop.after_flush","null":true,"err":57005,"depth":0,"sequence":6,"low_bits":0,"first_is":true}
+{"s":"push.after_flush","returns_previous":true,"err":57005,"depth":1,"sequence":8,"low_bits":0,"first_is":true}
+{"s":"init.again","low":0,"high":0}
+{"s":"threads.push","depth":1000,"sequence":2000,"popped":1000,"distinct":true,"depth_after":0,"sequence_after":2000}
