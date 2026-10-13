@@ -117,3 +117,21 @@ every thread on one vCPU in 200,000-instruction slices (scheduler.py TIME_SLICE)
 ## done criteria
 
 The frontier's comparison conforming but for FSIN and FCOS; the threads family accepted with its new rows.
+
+### Windows rows for item 4 (laptop, 2026-10-13)
+
+Probes `thread_stacks` and `running_thread_context` (5cb60b6d), built and run on the laptop, two executions each
+(runs lap-20261013T234430841Z-5cb60b6d and lap-20261013T234642777Z-5cb60b6d, 64206f06):
+
+- A created thread reserves 256 pages (64 with STACK_SIZE_PARAM_IS_A_RESERVATION at 0x40000), commits 2 (32 when
+  0x20000 is asked for), and keeps three PAGE_GUARD pages below StackLimit (protect 260). Each page touched moves
+  StackLimit down one page (`default.grow` moved_1..moved_8 = 1..8). A touch 16 pages below the limit is
+  0xC0000005, and the stack does not move.
+- `reserve.teb` committed_pages read 2 in one execution and 1 in the other: when the second page is touched is
+  timing; the family takes either.
+- A thread suspended in a wait has RIP in ntdll (`context.waiting`); w2m parks it at its bridge thunk, so this row
+  will diverge until the parked context reports an ntdll address.
+- A running thread's context returns every planted register, XMM0-15 and MXCSR 0x9FC0.
+
+Next for item 4: commit on demand (three guard pages, one-page growth) and the waiting thread's RIP, judged by
+these rows once each probe has a family entry.
