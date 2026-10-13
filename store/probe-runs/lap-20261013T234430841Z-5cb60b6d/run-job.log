@@ -1,0 +1,11 @@
+23:45:27.070 job thread_stacks-20261013T234430841Z: probe thread_stacks, repeat 2, commit 5cb60b6d79562c4809189e34ed4e1922e0d25e23
+23:45:27.132 inputs verified; workspace lock after 0 s
+23:45:55.270 error mode 0x8003 (was 0x8001)
+23:45:56.412 profile taken
+clang version 20.1.8
+Target: x86_64-pc-windows-msvc
+Thread model: posix
+InstalledDir: C:\Program Files\LLVM\bin
+23:46:17.435 thread_stacks-20261013T234430841Z execution 1 exit 0 in 1.3497992 s, affinity unpinned
+23:46:17.547 thread_stacks-20261013T234430841Z execution 2 exit 0 in 0.1052062 s, affinity unpinned
+23:46:19.248 done

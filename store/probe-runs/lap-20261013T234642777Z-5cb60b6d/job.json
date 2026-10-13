@@ -1,0 +1,11 @@
+{
+ "kind": "probe",
+ "probe": "running_thread_context",
+ "execution_id": "running_thread_context-20261013T234642777Z",
+ "repeat": 2,
+ "commit": "5cb60b6d79562c4809189e34ed4e1922e0d25e23",
+ "session": "desktop",
+ "inputs": {
+  "tree.tar": "3e6f9628900423a0efd0e008c4c522f6a4e3c8a7739e80cc48583eafdc3c8538"
+ }
+}

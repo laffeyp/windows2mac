@@ -1,0 +1,11 @@
+23:47:46.613 job running_thread_context-20261013T234642777Z: probe running_thread_context, repeat 2, commit 5cb60b6d79562c4809189e34ed4e1922e0d25e23
+23:47:46.671 inputs verified; workspace lock after 0 s
+23:47:56.403 error mode 0x8003 (was 0x8001)
+23:47:57.517 profile taken
+clang version 20.1.8
+Target: x86_64-pc-windows-msvc
+Thread model: posix
+InstalledDir: C:\Program Files\LLVM\bin
+23:48:03.034 running_thread_context-20261013T234642777Z execution 1 exit 0 in 1.3295987 s, affinity unpinned
+23:48:03.152 running_thread_context-20261013T234642777Z execution 2 exit 0 in 0.1144879 s, affinity unpinned
+23:48:03.398 done

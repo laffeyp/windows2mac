@@ -1,0 +1,4 @@
+{"s":"context.running","ret":1,"err":57005,"flags":1048607,"gpr_planted":65519,"rsp_in_stack":1,"rip_in_loop":1,"xmm_planted":65535,"mxcsr":40896,"fltsave_mxcsr":40896,"seg_cs":51,"seg_ss":43,"seg_ds":43,"seg_es":43,"seg_fs":83,"seg_gs":43,"eflags_if":1,"debug_zero":1}
+{"s":"context.running.again","ret":1,"count_moved":1,"gpr_planted":65519,"xmm_planted":65535,"rip_in_loop":1}
+{"s":"context.waiting","ret":1,"err":57005,"flags":1048579,"rip_in_image":0,"rip_in_ntdll":1,"rip_in_kernelbase":0,"rip_in_kernel32":0,"rsp_in_stack":1,"rsp_below_frame":1}
+{"s":"resume","spinner":1,"waiter":1,"err":57005}
