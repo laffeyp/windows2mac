@@ -199,7 +199,10 @@ try {
         }
         if (Test-Path C:\w2m\unity.log) { Copy-Item C:\w2m\unity.log out\unity.log }
         $exit = if ($null -eq $code) { 'null' } else { "$code" }
-        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds)}" | Out-File -Encoding ascii -NoNewline out/exec.json
+        # exec.json as the runners write it, with the game's exact arguments and mode added (a laptop run says what
+        # it ran; a runner run's arguments are only in its workflow)
+        $argsJson = ConvertTo-Json -Compress @($gameArgs)
+        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"mode`": `"$($spec.mode)`", `"seconds`": $($spec.seconds), `"arguments`": $argsJson}" | Out-File -Encoding ascii -NoNewline out/exec.json
         if (Test-Path out\jit_capture.bin) {        # the store keeps the capture's digest, not the capture
           (Get-FileHash -Algorithm SHA256 out\jit_capture.bin).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out\jit_capture.sha256
           Remove-Item out\jit_capture.bin
