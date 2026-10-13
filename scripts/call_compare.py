@@ -506,9 +506,36 @@ class Reference:
         return f"game-run-{self.run}"         # record_game_run.execution_id
 
 
+# The game's arguments in the capture the set is of: windows-game.yml's batch mode, as the contract's applicability
+# states them (-batchmode -nographics -logFile), and as a laptop run's exec.json records them.
+GAME_ARGUMENTS = ("-batchmode", "-nographics", "-logFile", "C:\\w2m\\unity.log")
+
+
+def arguments(text: str) -> tuple[str, ...]:
+    """A command line's arguments, each without its quotes (a Windows path keeps its backslashes)."""
+    import shlex
+    return tuple(a.strip('"') for a in shlex.split(text, posix=False))
+
+
+def laptop_run(run: Path) -> bool:
+    """A laptop game run: its profile.txt starts "laptop-" (the runners' start "gha-")."""
+    profile = run / "profile.txt"
+    return profile.is_file() and profile.read_text().startswith("laptop-")
+
+
+def capture_thread(calls: list[Call]) -> int:
+    """The capture's own thread: the one that makes the trace's first call. jit_capture.c (line 271) starts its
+    monitor thread after the hooks and before UnityMain, so mono's and UnityPlayer's DLL_THREAD_ATTACH work for it is
+    the trace's start; in each runner run the contract names (`excluded_threads`) it is seq 1's thread."""
+    return min(calls)[1]
+
+
 def load_reference(run: Path, contract: dict[str, Any]) -> Reference:
-    return Reference(run.name, read_tsv(run / "jit_capture.bin.trace.tsv"), excluded(contract, run.name),
-                     read_strings(run / "jit_capture.bin.strings.tsv"))
+    """A run of the set; a laptop run's capture thread is found in its trace (`capture_thread`), a runner run's is the
+    contract's."""
+    calls = read_tsv(run / "jit_capture.bin.trace.tsv")
+    threads = frozenset({capture_thread(calls)}) if laptop_run(run) and calls else excluded(contract, run.name)
+    return Reference(run.name, calls, threads, read_strings(run / "jit_capture.bin.strings.tsv"))
 
 
 def game_build(game: str = GAME, exe: str = GAME_EXE) -> str:
@@ -519,16 +546,31 @@ def game_build(game: str = GAME, exe: str = GAME_EXE) -> str:
 
 def outside_set(run: Path, build: str, contract: dict[str, Any], records: Path = RECORDS) -> str | None:
     """Why a stored game run is not in the reference set, or None when it is. A run is in the set when
-    - its capture holds the call trace and the thread names the comparison reads (jit_capture.bin.trace.tsv and
-      .strings.tsv);
+    - its capture names the game's threads: the trace's SetThreadDescription calls with their names in
+      jit_capture.bin.strings.tsv, as `thread_names` reads them (Sprint 064; run 38216081440 is the first). A run
+      without names pairs threads by agreement only, and against the frontier of 2026-10-13 that paired runs
+      38203364352 and 38206263976 with the wrong workers (HeapSize walks, BatchDeleteObjects with Background
+      Job.Worker 14);
     - it is on the record as a windows_reference execution of the same game build (store/runs/game-run-<run>, written
       by record_game_run.py: EXECUTION_STARTED.subject_sha256 is files.json's exe digest);
-    - the contract names the capture's own thread for it (`excluded_threads`): the contract's applicability states the
-      capture and its arguments (batch mode: -batchmode -nographics -logFile), and a run whose capture thread is not
-      named would have the capture's DLL_THREAD_ATTACH calls judged as the game's.
-    A laptop run (store/game-runs/lap-*) joins by the same three steps; nothing here lists runs."""
-    if not ((run / "jit_capture.bin.trace.tsv").is_file() and (run / "jit_capture.bin.strings.tsv").is_file()):
+    - its game arguments are GAME_ARGUMENTS: a laptop run (`laptop_run`) by its exec.json's "arguments"; a runner run,
+      which records none, by the contract naming its capture thread (`excluded_threads`), the contract's applicability
+      stating the arguments. A runner run without that entry would also have the capture's own calls judged.
+    Nothing here lists runs."""
+    trace, names = run / "jit_capture.bin.trace.tsv", run / "jit_capture.bin.strings.tsv"
+    if not (trace.is_file() and names.is_file()):
         return "no call trace with thread names"
+    if not thread_names(read_tsv(trace), read_strings(names)):
+        return "the capture names no threads (SetThreadDescription without names)"
+    if laptop_run(run):
+        ended = run / "exec.json"
+        recorded = json.loads(ended.read_text()).get("arguments") if ended.is_file() else None
+        if recorded is None:
+            return "a laptop run whose exec.json records no arguments"
+        if arguments(recorded) != GAME_ARGUMENTS:
+            return f"other arguments ({recorded})"
+    elif run.name not in contract.get("excluded_threads", {}):
+        return "the contract names no capture thread for it (another capture or arguments)"
     record = records / f"game-run-{run.name}"
     if not record.is_dir():
         return f"not on the record ({record.name})"
@@ -538,8 +580,6 @@ def outside_set(run: Path, build: str, contract: dict[str, Any], records: Path =
         return "no windows_reference EXECUTION_STARTED on the record"
     if started[0]["subject_sha256"] != build:
         return f"another game build ({started[0]['subject_sha256']})"
-    if run.name not in contract.get("excluded_threads", {}):
-        return "the contract names no capture thread for it (another capture or arguments)"
     return None
 
 

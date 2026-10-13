@@ -318,13 +318,34 @@ def test_each_execution_pairs_its_own_threads() -> None:
 def test_the_reference_set_is_the_runs_of_the_build_and_capture(tmp_path: Path) -> None:
     contract = json.loads(call_compare.CONTRACT.read_text())
     members, outside = call_compare.reference_set(contract)
-    assert [run.name for run in members] == ["38176899195", "38203364352", "38206263976", "38216081440"]
-    assert outside["38275716702"].startswith("the contract names no capture thread")      # the WH_CALLWNDPROC capture
+    assert [run.name for run in members] == ["38216081440"]           # the first capture that names threads
+    for unnamed in ("38176899195", "38203364352", "38206263976"):
+        assert outside[unnamed].startswith("the capture names no threads")
     assert outside["38113342549"] == "no call trace with thread names"
-    run = tmp_path / "lap-1"
-    run.mkdir()
-    (run / "jit_capture.bin.trace.tsv").write_text("")
-    (run / "jit_capture.bin.strings.tsv").write_text("")
-    assert call_compare.outside_set(run, call_compare.game_build(), contract, tmp_path) == \
-        "not on the record (game-run-lap-1)"
+    assert outside["38275716702"].startswith("the contract names no capture thread")      # the WH_CALLWNDPROC capture
     assert call_compare.game_build() == "sha256:643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974"
+
+
+def test_a_laptop_run_joins_by_its_recorded_arguments(tmp_path: Path) -> None:
+    contract = json.loads(call_compare.CONTRACT.read_text())
+    run = tmp_path / "lap-20261013T000000000Z-1-01"
+    run.mkdir()
+    trace = [call(1, "GetLastError", (), 0, tid=500, image="mono-2.0-bdwgc.dll"),
+             call(2, "SetThreadDescription", ((1 << 64) - 2, 0x50000), 0, tid=600)]
+    (run / "jit_capture.bin.trace.tsv").write_text(call_compare.write_tsv(trace))
+    (run / "jit_capture.bin.strings.tsv").write_text("2\t1\tBatchDeleteObjects\n")
+    (run / "profile.txt").write_text("laptop-hp-victus-15-fa2xxx-10.0.26200.7840-Client")
+    build = call_compare.game_build()
+    assert call_compare.outside_set(run, build, contract, tmp_path) == "a laptop run whose exec.json records no arguments"
+    (run / "exec.json").write_text(json.dumps({"arguments": "-batchmode -logFile \"C:\\w2m\\unity.log\""}))
+    assert str(call_compare.outside_set(run, build, contract, tmp_path)).startswith("other arguments")
+    (run / "exec.json").write_text(json.dumps({"arguments": "-batchmode -nographics -logFile \"C:\\w2m\\unity.log\""}))
+    assert call_compare.outside_set(run, build, contract, tmp_path) == f"not on the record (game-run-{run.name})"
+    assert call_compare.load_reference(run, contract).excluded_threads == {500}       # found in its trace
+
+
+def test_the_capture_thread_is_the_first_calls_thread_in_every_runner_run() -> None:
+    contract = json.loads(call_compare.CONTRACT.read_text())
+    for run, threads in contract["excluded_threads"].items():
+        calls = call_compare.read_tsv(call_compare.GAME_RUNS / run / "jit_capture.bin.trace.tsv")
+        assert {call_compare.capture_thread(calls)} == {int(t) for t in threads}
