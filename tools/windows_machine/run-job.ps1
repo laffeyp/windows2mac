@@ -16,7 +16,9 @@ param([Parameter(Mandatory)] [string] $Job)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+function Note([string] $what) { "$((Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff')) $what" }   # run-job.log
 $spec = Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json
+Note "job $($spec.execution_id): $($spec.kind) $($spec.probe), repeat $($spec.repeat), commit $($spec.commit)"
 foreach ($p in $spec.inputs.PSObject.Properties) {
   $h = (Get-FileHash -Algorithm SHA256 (Join-Path $Job $p.Name)).Hash.ToLower()
   if ($h -ne $p.Value) { throw "input $($p.Name): sha256 $h, job names $($p.Value)" }
@@ -38,6 +40,7 @@ while (-not $lock) {
 }
 if (Test-Path $src) { Remove-Item $src -Recurse -Force }
 New-Item -ItemType Directory -Force $src | Out-Null
+Note "inputs verified; workspace lock after $([int]$waited.Elapsed.TotalSeconds) s"
 tar -xf (Join-Path $Job 'tree.tar') -C $src
 if ($LASTEXITCODE -ne 0) { throw "tar: $LASTEXITCODE" }
 & (Join-Path $PSScriptRoot 'profile.ps1') -Out (Join-Path $out 'profile.json') -Workspace $src
@@ -111,6 +114,7 @@ try {
     }
     $code = $LASTEXITCODE
     $sw.Stop()
+    Note "execution $i exit $code in $($sw.Elapsed.TotalSeconds) s, affinity $affinity"
     "{`"exit_code`": $code, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"cpu_class`": `"$(if ($spec.cpu_class) { $spec.cpu_class } else { 'any' })`", `"affinity`": `"$affinity`"}" | Out-File -Encoding ascii -NoNewline "$out/exec-$i.json"
     if ($code -ne 0) { break }        # a failing probe's output is the evidence (Sprint 034)
   }

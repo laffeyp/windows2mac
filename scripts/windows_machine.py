@@ -35,6 +35,14 @@ ROOT = Path(__file__).resolve().parent.parent
 HOST = "w2m-laptop"
 JOBS = "C:/w2m/jobs"
 EXECUTOR = ("run-job.ps1", "profile.ps1", "cpusets.ps1", "run-in-desktop.ps1")
+# A dead connection ends in a minute instead of hanging (2026-10-13: one scp of a finished bundle stalled 6 minutes;
+# the same copy by hand took 0.9 s).
+LINK = ["-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
+
+
+def copy(*args: str, attempts: int = 3) -> bool:
+    """scp with the link's timeouts, tried up to `attempts` times."""
+    return any(subprocess.run(["scp", "-q", *LINK, *args]).returncode == 0 for _ in range(attempts))
 
 
 def sha256(path: Path) -> str:
@@ -97,14 +105,15 @@ def run_job(name: str, repeat: int, binary: str | None = None, dll: str | None =
                 inputs["substrate.tar"] = sha256(job / "substrate.tar")
             spec["inputs"] = inputs
             (job / "job.json").write_text(json.dumps(spec, indent=1))
-            subprocess.run(["scp", "-q", "-r", str(job), f"{HOST}:{JOBS}/"], check=True)
+            if not copy("-r", str(job), f"{HOST}:{JOBS}/"):
+                raise RuntimeError(f"{run}: the job could not be copied to the laptop")
             runner = "run-in-desktop.ps1" if session == "desktop" else "run-job.ps1"   # desktop: as the runners
-            code = subprocess.run(["ssh", HOST, f"{JOBS}/{run}/{runner} -Job {JOBS}/{run}"]).returncode
+            code = subprocess.run(["ssh", *LINK, HOST, f"{JOBS}/{run}/{runner} -Job {JOBS}/{run}"]).returncode
             dst.parent.mkdir(parents=True, exist_ok=True)
-            fetched = subprocess.run(["scp", "-q", "-r", f"{HOST}:{JOBS}/{run}/out", str(dst)]).returncode == 0
+            fetched = copy("-r", f"{HOST}:{JOBS}/{run}/out", str(dst))
             if fetched:
                 (dst / "job.json").write_text((job / "job.json").read_text())
-                subprocess.run(["ssh", HOST, f"Remove-Item -Recurse -Force {JOBS}/{run}"])
+                subprocess.run(["ssh", *LINK, HOST, f"Remove-Item -Recurse -Force {JOBS}/{run}"])
     status, line = verdict(code, fetched, dst, repeat)
     print(f"{run}: {line}; bundle {dst.relative_to(ROOT)}")
     return status
