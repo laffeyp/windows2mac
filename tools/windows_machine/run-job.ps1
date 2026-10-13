@@ -20,8 +20,17 @@ foreach ($p in $spec.inputs.PSObject.Properties) {
   if ($h -ne $p.Value) { throw "input $($p.Name): sha256 $h, job names $($p.Value)" }
 }
 
-$src = Join-Path $Job 'src'; $out = Join-Path $Job 'out'
-New-Item -ItemType Directory -Force $src, $out | Out-Null
+# The tree is unpacked where the runners check it out, D:\a\windows2mac\windows2mac, so the paths a probe reports
+# (its module path, its current directory) are the runners' (calibration 2026-10-13: family console's title length).
+# One workspace means one job at a time: the lock file is held open for the whole job.
+$src = 'D:\a\windows2mac\windows2mac'; $out = Join-Path $Job 'out'
+New-Item -ItemType Directory -Force 'D:\a', $out | Out-Null
+$lock = $null
+while (-not $lock) {
+  try { $lock = [IO.File]::Open('D:\a\job.lock', 'OpenOrCreate', 'ReadWrite', 'None') } catch { Start-Sleep -Milliseconds 200 }
+}
+if (Test-Path $src) { Remove-Item $src -Recurse -Force }
+New-Item -ItemType Directory -Force $src | Out-Null
 tar -xf (Join-Path $Job 'tree.tar') -C $src
 if ($LASTEXITCODE -ne 0) { throw "tar: $LASTEXITCODE" }
 & (Join-Path $PSScriptRoot 'profile.ps1') -Out (Join-Path $out 'profile.json')
@@ -94,4 +103,5 @@ try {
 } finally {
   Pop-Location
   Remove-Item $src -Recurse -Force -ErrorAction SilentlyContinue
+  $lock.Dispose()
 }
