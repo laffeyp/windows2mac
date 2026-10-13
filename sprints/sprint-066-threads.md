@@ -52,6 +52,18 @@ every thread on one vCPU in 200,000-instruction slices (scheduler.py TIME_SLICE)
 2. *Chosen:* TIME_SLICE 20,000 (`src/w2m/scheduler.py`). The finer slice clears every interleaving divergence
    the comparison shows; running a woken thread at once and several vCPUs stay unbuilt until a comparison or a
    probe asks for them.
+   - *GetConsoleCP, GetConsoleOutputCP (2146, 2238):* a trace difference, not a call w2m skips. call_trace.h's
+     log_get_proc_address answers a traced image's GetProcAddress with a traced thunk and records every call
+     through it; w2m recorded a call through an unowned thunk only from code inside UnityPlayer or mono, and
+     mono's p/invoke wrappers are JIT code. Fixed in 4f81e018: a traced image's GetProcAddress with the trace
+     open gets a thunk of its own, owned by the GetProcAddress label.
+   - *The message-pump turn (3487-3489):* message 0x60, which Windows posts to a system window after activation
+     (family windows' open question). Posted by w2m as SetFocus's activation completes, Server 2025's wParam
+     0x80000001, in d943c971.
+   - *HeapReAlloc 3268:* an interleaving divergence. Thread 7868 (BatchDeleteObjects) grows one delete buffer
+     0x817, 0x1017, 0x2017, then a second to 0x817; UnityPlayer's 8 HeapReAlloc records are under the capture's
+     32, so Windows made exactly four. w2m's worker (thread 88) makes the first three and no second buffer at
+     slices of 200,000, 20,000 and 2,000: on Windows the worker deletes while the main thread still queues.
 4. **Plan row 066's own work:** stacks laid out as Windows lays them out (reserve, guard page, commit on demand);
    SuspendThread, GetThreadContext and ResumeThread on a running thread, as mono's collector does.
 
