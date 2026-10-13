@@ -2512,8 +2512,9 @@ FAMILIES: dict[str, Family] = {
                         "documentation), is posted to a system window of the thread some time after its window is "
                         "activated: the probe met it after a posted WM_USER message on every run (wParam 0x80000001 on "
                         "Server 2025, 1 on 2022), and the game dispatched one at seq 3491-3493 to a procedure it never "
-                        "saw. Its arrival varies (one execution met two in the WM_QUIT drain); w2m posts none, and the "
-                        "derivation takes it out of each drain (windows_rows).",
+                        "saw. Its arrival varies (one execution met two in the WM_QUIT drain); w2m posts one, Server "
+                        "2025's (wParam 0x80000001), as the activation completes (Sprint 066), and the derivation takes "
+                        "it out of each drain (windows_rows).",
                         "On Windows DefWindowProcW's WM_ACTIVATE sends WM_IME_SETCONTEXT, WM_IME_NOTIFY and the first "
                         "WM_SETFOCUS from inside; w2m sends them from SetFocus in the same order. A procedure that keeps "
                         "WM_ACTIVATE from DefWindowProcW would get them in w2m and not on Windows.",

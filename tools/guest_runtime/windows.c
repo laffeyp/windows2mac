@@ -107,6 +107,14 @@ typedef unsigned short u16;
 #define WINDOWS 16
 #define EXTRA 64
 #define WINDOW_BASE 0x20010ull               /* window handles: WINDOW_BASE + 0x10*slot */
+/* Message 0x60, undocumented, which Windows posts to a system window of a thread after it activates a window
+ * (family windows' open question; game run 38216081440 dispatched it at seq 3487-3489, its second pump turn, and its
+ * procedure called nothing traced). The rows keep its window as neither NULL nor the thread's, wParam 0x80000001 on
+ * Server 2025 (the game's runner; 1 on 2022), lParam 0, and DispatchMessageA's answer 0. Windows posts it on its own
+ * schedule; w2m posts it as the activation completes. The handle is w2m's own. */
+#define SYSTEM_WINDOW 0x10040ull
+#define SYSTEM_WINDOW_MESSAGE 0x60u
+#define SYSTEM_WINDOW_WPARAM 0x80000001ull
 #define ICON_BASE 0x30000ull                 /* an icon from a module: ICON_BASE | its group id */
 
 #define CLASS_NAME 255                       /* the longest class name: 255 units register, 256 answer 87 (rows class.name_*;
@@ -533,6 +541,7 @@ u64 user32_PeekMessageA(u64 out, u64 h, u64 low, u64 high, u64 rsp) {
         *(u64 *)m = first->window; *(u32 *)(m + 8) = (u32)first->msg;
         *(u64 *)(m + 16) = first->wparam; *(u64 *)(m + 24) = first->lparam;
         if (remove & PM_REMOVE) first->order = 0;
+        if (remove & PM_REMOVE && first->msg == SYSTEM_WINDOW_MESSAGE) set_error(0);   /* Server 2025's rows: 0 */
     } else {
         *(u32 *)(m + 8) = WM_QUIT; *(u64 *)(m + 16) = t->quit_code;
         if (remove & PM_REMOVE) t->quit = 0;
@@ -561,6 +570,10 @@ W2M_VOID u64 user32_DispatchMessageA(u64 msg, u64 a1, u64 a2, u64 a3, u64 rsp) {
     const u8 *m = (const u8 *)msg;
     u64 h = *(const u64 *)m;
     u32 id = *(const u32 *)(m + 8);
+    if (h == SYSTEM_WINDOW && id == SYSTEM_WINDOW_MESSAGE) {
+        w2m_return_to(rsp, w2m_logged(W2M_API_DispatchMessageA, id, 0));
+        return 0;
+    }
     struct window *w = window_of(h);
     if (!w || w->owner != tid_now()) w2m_unimplemented(W2M_API_DispatchMessageA, h);   /* thread messages: no row */
     if (id != WM_DWMNCRENDERINGCHANGED && id < WM_USER) w2m_unimplemented(W2M_API_DispatchMessageA, id);
@@ -611,6 +624,7 @@ static void focus_step(struct w2m_guest_call *c, u64 answer) {
     if (f->step == f->steps) {
         struct thread_state *t = thread_state(tid_now());
         t->active = t->focus = f->window;
+        post(tid_now(), SYSTEM_WINDOW, SYSTEM_WINDOW_MESSAGE, SYSTEM_WINDOW_WPARAM, 0);
         set_error(0);                                                      /* row focus.set */
         w2m_return_to(f->rsp, w2m_logged(W2M_API_SetFocus, f->window, f->window));   /* the focus WM_ACTIVATE set */
         return;
