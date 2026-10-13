@@ -204,4 +204,4 @@ The table's classes accepted; the frontier past seq 3426 with a conforming compa
   GetConsoleCP and GetConsoleOutputCP are never called. FSIN and FCOS stay open. By the partial-pass rule they move
   to plan row 066 (Decision 2026-10-12).
 - **Late amendments.** Items 7 and 8, and 9 a-d and f, were written after the work they record.
-
+- **Closed partial on CI run 38327467991** (success on 91a8e77b).

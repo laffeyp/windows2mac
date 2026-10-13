@@ -286,7 +286,7 @@
 
 ## Sprint tail
 
-### Sprint 065 (2026-10-12, closed partial)
+### Sprint 065 (2026-10-12, closed partial: CI run 38327467991 success on 91a8e77b)
 - **Scope:** x87 and the MMX-register forms; past the FLD and seq 3426; the red team's findings; a clock the run controls.
 - **Rubber Duck Pass:**
   - *Sequence narration:* class runs of the x87 and MMX classes to CANDIDATE_ACCEPTED (FSIN and FCOS discrepancy, pinned); family runs of 66 families, new: display 0.2.0, wait_handoff, code_rewrite, each CANDIDATE_ACCEPTED with plants caught; frontiers each with EXECUTION_STARTED, EXECUTION_COMPLETED `killed` at the reach rule, TRACE_INGESTED, COMPARISON_COMPLETED `discrepancy` (14 over 3,443) and SESSION_COMPLETED.
@@ -294,7 +294,7 @@
   - *Observation 2 (payload anomaly, of the work):* a frontier stopped by the harness was recorded `faulted`, and run_frontier exited 0 on divergences. Disposition: resolved-here (`killed`; the exit status is the verdict).
   - *Observation 3 (order violation, of the work):* a run went two hours past its reference with no output; the clock experiment slowed 100 times stalled at 79 lines. Disposition: resolved-here (progress lines, the reach rule, the instruction clock).
   - *Observation 4 (vocabulary gap, checked):* PROBE_AUTHORED is in the card's Emits list and no 065 probe emitted it. Disposition: recorded; the probes' records carry their runs, and PROBE_AUTHORED's emission moves with 066's harness work.
-- **Closed:** partial (CI run recorded on close).
+- **Closed:** CI run 38327467991 (success on 91a8e77b), partial.
 
 ### Sprint 064 (2026-10-12, closed partial: CI run 38219168662 success on cc88048a)
 - **Scope:** speed: the exits counted, their causes removed, the hot model-step classes native.
