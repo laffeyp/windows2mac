@@ -13,7 +13,7 @@ A `binary` job runs a stored binary (store/binaries/<sha256>.exe) unchanged in p
 calibration (§6 step 2): the family's first run names the binary and any DLL it imports.
 
 Usage: uv run python scripts/windows_machine.py probe <probe> [--repeat 2]
-       uv run python scripts/windows_machine.py binary <family> [--repeat 2]
+       uv run python scripts/windows_machine.py binary <family> [--run <stored run id>] [--repeat 2]
 """
 
 from __future__ import annotations
@@ -46,7 +46,8 @@ def probe(name: str, repeat: int, binary: str | None = None, dll: str | None = N
         return 1
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
                           check=True).stdout.strip()
-    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    now = time.time()
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(now)) + f"{int(now * 1000) % 1000:03d}Z"   # ms: jobs run at once
     run = f"lap-{stamp}-{head[:8]}"
     execution = f"{name}-{stamp}"
     with tempfile.TemporaryDirectory() as d:
@@ -92,6 +93,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--repeat", type=int, default=2)
     b = sub.add_parser("binary")
     b.add_argument("family")
+    b.add_argument("--run", help="the stored run whose binary runs (default: the family's first)")
     b.add_argument("--repeat", type=int, default=2)
     a = ap.parse_args(argv)
     if a.kind == "probe":
@@ -99,8 +101,8 @@ def main(argv: list[str]) -> int:
     sys.path.insert(0, str(ROOT / "scripts"))
     import family_run
     fam = family_run.FAMILIES[a.family]
-    first = next(iter(fam.runs.values()))
-    return probe(fam.probe, a.repeat, first.binary, first.dll)
+    chosen = fam.runs[a.run] if a.run else next(iter(fam.runs.values()))
+    return probe(fam.probe, a.repeat, chosen.binary, chosen.dll)
 
 
 if __name__ == "__main__":
