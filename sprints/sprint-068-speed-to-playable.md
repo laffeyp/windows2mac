@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 068
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -228,3 +228,7 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   model step's block counted its unrun instructions again. With both fixed the batch run counts about 694 million
   instructions a second, not 246: every rate since 76111810 was short. It conforms: 0 divergences, 168 of 168 lines.
   Deferred: a fault's unrun block instructions (BLACKBOARD).
+- **Closed** on 4e98c57c (CI run 38632198138) with f99c0d06's records: each item measured on a census run, the batch
+  run conforming (0 divergences, 168 of 168 lines). Kept: A, B, C, E, L, the operand forms, the two-way dispatch table,
+  the translation cache, the wake keys, the slice stub and the instruction count. Reverted: D's budget with no time
+  slice, K's chaining. Thread switches in the VM go on as Sprint 069 (recentering step 5).
