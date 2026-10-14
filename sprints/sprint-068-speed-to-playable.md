@@ -191,3 +191,23 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   signal. wait_handoff 0.2.0 (laptop run lap-20261014T094031671Z-93f645c3) adds the row: Windows gives the waiter the
   second event and the setter's zero-timeout wait 258; w2m gave it to the setter. Fixed (a wait on several is handed
   over), and the plants change that row alone.
+- **Slice ends and timed-out waits** (recentering step 5; 76111810). Of 498,839 slice-end exits (hvc 4) over 10 billion
+  instructions, 354 found another thread ready; 496,746 had a blocked thread with a deadline. The host publishes before
+  each run how far the running thread may go (SLICE_UNTIL, RUN_END), and each block's stop calls one slice stub that
+  refills the slice in the VM. The first run kept the exits: a blocked thread whose deadline had passed ran only when no
+  thread was ready. Slice ends now make such threads ready, as Windows runs a timed-out wait. The game moved: unity.log
+  79 lines within 10 billion instructions (13 before), and the call stream at the cut 0 divergences (76 before, all
+  Windows calls on worker threads w2m had not run). Those threads brought new model classes (hvc 11 237,886, hvc 10
+  184,027 per 10 billion).
+- **C, the classes the worker threads reach** (e84731b6, 37843daf, e6a9b14c, ceda93ac): POPCNT (CNT and ADDV), CMPPS and
+  CMPPD (FCMEQ quiet, FCMGE and FCMGT signaling, as x86's predicates), the MMX MOVD and MOVQ with a general register,
+  PEXTRW and PSADBW, CVTPS2DQ (CVTPD2DQ's lanes on four singles), and RCPPS, RCPSS, RSQRTPS, RSQRTSS through the Xeon's
+  tables in the runtime's C (approximate.c, approximation_tables.h generated from specs/approximations.json). Every
+  class accepted on model and VM; two plants each, all caught (LE as LT only by CMPPD: CMPPS's 114 cases hold no equal
+  lanes there).
+- **The batch run to its end** (3a51f23d, frontier-643a6283510c-1791973061643135000, scratch): the frontier with no step
+  cut stopped on its own rule, the log holding the reference's 168 lines, after 152 s and about 32 billion instructions,
+  213.8 million a second. The call stream: 0 divergences, 0 presence divergences, 29 values Windows varies, against
+  the reference set of eleven runs. Host time by exit at the last progress line: hvc 1 36.7 s, hvc 4 17.0 s, hvc 10
+  14.9 s, hvc 8 7.8 s, hvc 12 6.9 s, hvc 11 3.9 s, in the vCPU 62.3 s. Plan row milestone A (batch mode) is met on this
+  run; the record from a committed tree comes next.
