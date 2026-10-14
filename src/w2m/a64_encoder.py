@@ -730,6 +730,13 @@ def not_16b(vd: int, vn: int) -> int:
     return 0x6E205800 | vn << 5 | vd
 
 
+def ins_s(vd: int, lane: int, rn: int) -> int:
+    """INS Vd.S[lane], Wn (MOV): one 32-bit lane from a general register, the others kept."""
+    _v(vd, rn)
+    assert 0 <= lane < 4
+    return 0x4E001C00 | (lane << 3 | 4) << 16 | rn << 5 | vd
+
+
 def uaddlv_8b(vd: int, vn: int) -> int:
     """UADDLV Hd, Vn.8B: the sum of the eight bytes as a halfword, the rest of Vd zeroed."""
     _v(vd, vn)

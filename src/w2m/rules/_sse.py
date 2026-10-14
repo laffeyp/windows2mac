@@ -441,6 +441,33 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
             a.bind(done)
             a.emit(a64.str_(4, 16, 28, vb.SPILL + 4 * lane))
         a.emit(a64.ldr(8, 16, 28, vb.SPILL), a64.fmov_to_v(8, dst[1], 16))   # FMOV Dd zeroes bits 127:64
+    elif ic == "CVTPS2DQ" and native_conversions:
+        # CVTPD2DQ's lanes on four singles (SDM CVTPS2DQ): FRINTX in MXCSR's mode and FCVTZS; NaN or a value at or past
+        # 2^31 gives 0x80000000 and IE alone; in range, PE as rounded and FPSR's IDC as it was before the lane. The
+        # results are built in V28 (no XMM register's), one INS a lane. Native from Sprint 068 item C: a 10-billion-
+        # instruction frontier with worker threads on time ran 20,509 model steps here.
+        _unmasked_to_model(a)
+        v = _sse_src(a, src, 16, reg_of)
+        if v != 30:
+            a.emit(a64.mov_v(30, v))
+        for lane in range(4):
+            ok, low, done, indefinite = a.label(), a.label(), a.label(), a.label()
+            a.emit(a64.mrs(18, a64.FPSR), a64.umov_s(17, 30, lane), a64.fmov_to_v(4, 31, 17),
+                   a64.frintx(4, 31, 31), a64.fcvtzs(32, 4, 16, 31),
+                   a64.mov_imm(17, 0x4F00_0000), a64.fmov_to_v(4, 29, 17), a64.fcmp(4, 31, 29))
+            a.branch(lambda off: a64.bcond("mi" if vb.CVT_INDEFINITE else "al", off), low)
+            a.branch(a64.b, indefinite)
+            a.bind(low)
+            a.emit(a64.mov_imm(17, 0xCF00_0000), a64.fmov_to_v(4, 29, 17), a64.fcmp(4, 31, 29))
+            a.branch(lambda off: a64.bcond("ge" if vb.CVT_INDEFINITE else "al", off), ok)
+            a.bind(indefinite)
+            a.emit(a64.mov_imm(16, 0x8000_0000), a64.movz(17, 1), a64.orr(18, 18, 17), a64.msr(a64.FPSR, 18))
+            a.branch(a64.b, done)
+            a.bind(ok)                                           # in range: IDC as it was before the lane
+            a.emit(a64.mrs(17, a64.FPSR), a64.ubfx(18, 18, 7, 1), a64.bfi(17, 18, 7, 1), a64.msr(a64.FPSR, 17))
+            a.bind(done)
+            a.emit(a64.ins_s(28, lane, 16))
+        a.emit(a64.mov_v(dst[1], 28))
     elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD", "MPSADBW") or ic in SSE_050:  # in the model (x86fp; Sprints
         a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
