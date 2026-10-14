@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Where the game's instructions retire (recentering step 3): an interrupt every 1,000,000 retired instructions records
+     the instruction pointer, and xperf names its image; Mono's run-time code lies in no image. The layout follows
+     Microsoft's sampled-counter example ("Recording Hardware Performance (PMU) Events with Complete Examples",
+     devblogs.microsoft.com/performance-diagnostics, 2022-06-20); PmcProfile enables sampling on counter overflow. -->
+<WindowsPerformanceRecorder Version="1.0">
+ <Profiles>
+  <SystemCollector Id="SC" Base="" Name="WPRSystemCollector"><BufferSize Value="1024"/><Buffers Value="256"/></SystemCollector>
+  <SystemProvider Id="SP" Base="">
+   <Keywords><Keyword Value="Loader"/><Keyword Value="ProcessThread"/><Keyword Value="PmcProfile"/></Keywords>
+  </SystemProvider>
+  <HardwareCounter Id="HC" Strict="true">
+   <SampledCounters><SampledCounter Value="InstructionRetired" Interval="1000000"/></SampledCounters>
+  </HardwareCounter>
+  <Profile Id="W2mPmcSample.Verbose.File" Base="" LoggingMode="File" Name="W2mPmcSample" DetailLevel="Verbose" Description="instructions retired, sampled by image">
+   <Collectors Operation="Add">
+    <SystemCollectorId Value="SC"><SystemProviderId Value="SP"/><HardwareCounterId Value="HC"/></SystemCollectorId>
+   </Collectors>
+  </Profile>
+ </Profiles>
+</WindowsPerformanceRecorder>

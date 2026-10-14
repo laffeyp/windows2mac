@@ -220,6 +220,11 @@ try {
           wpr -start (Join-Path $PSScriptRoot 'pmc.wprp') -filemode
           if ($LASTEXITCODE -ne 0) { throw "wpr -start: $LASTEXITCODE" }
           Note "execution $i`: wpr started"
+        } elseif ($spec.pmc_sample) {   # retired instructions sampled by image (pmc_sample.wprp, recentering step 3)
+          wpr -cancel 2>$null | Out-Null
+          wpr -start (Join-Path $PSScriptRoot 'pmc_sample.wprp') -filemode
+          if ($LASTEXITCODE -ne 0) { throw "wpr -start: $LASTEXITCODE" }
+          Note "execution $i`: wpr started (sampled)"
         }
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $gameArgs = if ($spec.mode -eq 'play') { @('-screen-fullscreen', '0', '-screen-width', '1280', '-screen-height', '720', '-logFile', '"C:\w2m\unity.log"') }
@@ -290,6 +295,15 @@ try {
           & $xperf -i "$PWD\out\pmc.etl" -o "$PWD\out\pmc-dump.txt" -a dumper | Out-Null
           New-Item -ItemType Directory -Force out\pmc | Out-Null
           & C:\w2m\tools\python.exe (Join-Path $PSScriptRoot 'pmc_summary.py') "$PWD\out\pmc-dump.txt" "$PWD\out\pmc" $exe |
+            Set-Content out\pmc\summary.txt
+          Note "execution $i`: pmc $(Get-Content out\pmc\summary.txt)"
+          Remove-Item "$PWD\out\pmc.etl", "$PWD\out\pmc-dump.txt" -Force -ErrorAction SilentlyContinue
+        } elseif ($spec.pmc_sample) {   # samples by second and image go back; the ETL and its dump stay here
+          wpr -stop "$PWD\out\pmc.etl" | Out-Null
+          $xperf = 'C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe'
+          & $xperf -i "$PWD\out\pmc.etl" -o "$PWD\out\pmc-dump.txt" -a dumper | Out-Null
+          New-Item -ItemType Directory -Force out\pmc | Out-Null
+          & C:\w2m\tools\python.exe (Join-Path $PSScriptRoot 'pmc_images.py') "$PWD\out\pmc-dump.txt" "$PWD\out\pmc" $exe |
             Set-Content out\pmc\summary.txt
           Note "execution $i`: pmc $(Get-Content out\pmc\summary.txt)"
           Remove-Item "$PWD\out\pmc.etl", "$PWD\out\pmc-dump.txt" -Force -ErrorAction SilentlyContinue
