@@ -147,6 +147,8 @@ def host_load() -> dict[str, Any]:
 def interactive_qos() -> None:
     """This thread at user-interactive QoS (0x21, sys/qos.h), as the monitor sets its vCPU thread: macOS keeps such
     threads on the performance cores when the Mac is loaded (Sprint 068 item F)."""
+    if sys.platform != "darwin":                         # CI's Linux has no QoS classes (CI run 38516030210)
+        return
     import ctypes
     ctypes.CDLL("/usr/lib/libSystem.B.dylib").pthread_set_qos_class_self_np(ctypes.c_uint(0x21), ctypes.c_int(0))
 
