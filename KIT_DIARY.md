@@ -458,3 +458,11 @@ What remained was five defects in families that every row had accepted: FLS shar
 
 **Kit change suggested:** a reference capture lists what its instrument substitutes for the program (the launcher, the hooks, the sampling cap) and, for each, how the comparison or the capture restores it.
 
+
+### 2026-10-13 — Sprint 068 item B: probes that passed with the fault in place
+
+**What happened:** a thread switch now moves XMM0-15, FPCR and FPSR through per-thread slots in shared memory instead of two text-pipe round trips. The first test ran the stored `threads` and `running_thread_context` probes and required Windows' rows. It passed. A planted fault that dropped the incoming thread's vector load also passed: neither probe holds a vector value across a switch, so a switch that loaded the wrong vectors changed no row. A second test, driving the swap inside a running VM with distinct values in two threads, failed under the plant and under a dropped save.
+
+**Finding (#52):** a fixture tests only the state it carries across the event under test. The probes exercised switches by the dozen and never carried a vector through one. This is Addendum A3 (substrate-ui, the mirror-symmetric blinker) on a second project: a fixture symmetric in the bug's dimension cannot see the bug. Two projects now support it.
+
+**Kit change suggested:** promote Addendum A3 into `TECHNIQUES.md` Section 1 under Testing: a test of a state-moving operation (a switch, a copy, a save) holds a distinct value in the moved state across the operation, and a planted fault that drops the move must fail it before the test counts.
