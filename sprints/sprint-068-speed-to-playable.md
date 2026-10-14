@@ -120,3 +120,12 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   million about 0.16 s (about 6 frames a second); with the work across vCPUs, the busiest thread's 11.9 million a
   frame bounds it near 21. The native counts include the in-process NVIDIA user-mode driver, which w2m replaces with
   DXMT and Metal, so they bound the work from above.
+- **J, the spin census** (scratch frontier to 30 billion instructions, alone: 115.3 s, 260.3 million a second). The
+  main thread ran 98.4% of the instructions, thread 12 1.3%, the rest under 0.3%; the run made 198 PAUSEs. This stretch
+  of the batch-mode start is one thread's work: a PAUSE handoff gains nothing here, nor would several vCPUs. The
+  laptop's play frames spread over six threads (item I), so the census runs again on play once the slice plays.
+- **D, tried and reverted.** A budget with no time slice while no other thread is ready left hvc 4 at 1,491,764 exits
+  (from 1,498,523): at almost every slice end another thread is ready. The cause in the counts: `wake_all` readies
+  every blocked thread on any signal, and each runs a few hundred instructions to find its wait unmet and blocks again
+  (hvc 12, 524,271). Waking only an object's waiters needs the host to know what each thread waits on, which the
+  guest runtime holds (sync_objects.c); recorded as a later item, not built.

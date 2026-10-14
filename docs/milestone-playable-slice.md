@@ -102,4 +102,9 @@ every step and stops at no number; each item is measured on census runs that hav
 7. DXMT behind the seam: the first frame. A spike runs beside the speed work: DXMT's two PE DLLs' imports sorted into
    w2m's 297 served functions, Wine's ntdll (__wine_unix_call) or missing, and the winemetal calls the game's
    Direct3D 11 calls reach.
-8. Input: exactly the calls the laptop's play runs (e61fca06) make, from the Mac's keyboard and mouse.
+8. Input: exactly the calls the laptop's play runs (e61fca06) make, from the Mac's keyboard and mouse. The three runs'
+   captures (each keeps a function's first 32 calls) show: raw input (RegisterRawInputDevices, GetRawInputData,
+   GetRawInputDeviceList, GetRawInputDeviceInfoW), XInputGetState, key state (GetAsyncKeyState, GetKeyState,
+   MapVirtualKeyExA, GetKeyboardLayout), the message loop (PeekMessageA, TranslateMessage, DispatchMessageA,
+   GetMessageExtraInfo), the cursor (GetCursorPos, SetCursor, ClipCursor, SetCursorPos, ShowCursor,
+   TrackMouseEvent) and focus (GetFocus, SetFocus).

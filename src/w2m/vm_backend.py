@@ -1205,6 +1205,7 @@ class VM:
         self._vswap: tuple[int, int] | None = None
         self._vslots_used = 0
         self._slice_start = (0, 0)                     # the counters when the running thread got the vCPU
+        self._final_census: dict[int, tuple[int, int]] | None = None   # thread_census at close
         self._pending_init = 0                         # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
@@ -1796,6 +1797,8 @@ class VM:
     def thread_census(self) -> dict[int, tuple[int, int]]:
         """Each thread's instructions and PAUSEs so far (the spin census, Sprint 068 item J): the totals at its switches,
         and the running thread's since it last got the vCPU."""
+        if self._final_census is not None:              # closed: the census as it stood at close
+            return dict(self._final_census)
         executed, pauses = self._counts()
         out = {tid: (t.instructions, t.pauses) for tid, t in self.threads.items()}
         if self.current_tid in out:
@@ -3062,6 +3065,7 @@ class VM:
         return executed, Counter(self.exits), Counter(self.exit_sites), calls, now
 
     def close(self) -> None:
+        self._final_census = self.thread_census()
         for r in self.mem.regions:
             if isinstance(r.data, memoryview):
                 r.data.release()

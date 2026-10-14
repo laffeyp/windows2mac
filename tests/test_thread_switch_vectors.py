@@ -113,3 +113,20 @@ def test_the_spin_census_counts_pauses_and_each_threads_instructions(monkeypatch
     family_run.run_in_vm(next(iter(f.runs.values())).binary, f=f)
     census, executed = seen[-1]
     assert len(census) > 1 and sum(n for n, _ in census.values()) == executed, (census, executed)
+
+
+@pytest.mark.hvf
+def test_the_census_outlives_the_vm() -> None:
+    """run_frontier reads the census after the VM closes (2026-10-14: a frontier failed on the closed memory map)."""
+    from w2m import vm_backend
+    from w2m.loader import Loaded, Memory
+    code_va, stack_va = 0x2000_0000, 0x4000_0000
+    mem = Memory()
+    code = bytes.fromhex("f390 c6042500000000 00")
+    mem.map(code_va, 0x1000, "code").data[:len(code)] = code
+    mem.map(stack_va, 0x10000, "stack")
+    vm = vm_backend.VM(Loaded(None, mem, code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
+    vm.run(max_steps=1 << 20, timeout_ms=10_000)
+    vm.close()
+    (n, pauses), = vm.thread_census().values()
+    assert pauses == 1 and n >= 2
