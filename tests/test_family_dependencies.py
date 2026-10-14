@@ -95,8 +95,8 @@ def test_a_plant_whose_child_ran_another_runtime_fails(monkeypatch: Any) -> None
     assert ok, line
     from w2m.kernel import spawner as real
 
-    def unplanted(files: Any, dlls: Any = None, runtime_sources: Any = None) -> Any:
-        return real(files, dlls, None)
+    def unplanted(files: Any, dlls: Any = None, runtime_sources: Any = None, instruction_clock: Any = None) -> Any:
+        return real(files, dlls, None, instruction_clock=instruction_clock)
 
     monkeypatch.setattr(family_run, "spawner", unplanted)
     ok, line = family_run.plant_run(f, "error_mode_not_inherited")
