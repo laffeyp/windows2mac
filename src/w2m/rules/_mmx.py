@@ -5,7 +5,9 @@
 
 MMn is bits 63:0 of physical register Rn; the state block keeps ST0-ST7 in stack order, so slot n holds Rn when TOP
 is 0. The code takes the native path only then, and only with no x87 exception pending (FSW.ES): any other state, and
-every form below that names a general or XMM register, is a model step. On the native path TOP stays 0; a write to
+every form below that names an XMM register, is a model step. Sprint 068 item C adds MOVD and MOVQ to and from a
+general register, PEXTRW into one, and PSADBW (a 10-billion-instruction frontier with worker threads on time ran them
+63,188, 59,860 and 60,800 times as model steps). On the native path TOP stays 0; a write to
 MMn sets bits 79:64 to ones, and every tag is set valid after the write (a faulting load or store changes nothing,
 as set 065b has it). x16 holds the state block, x17 is scratch, V30 and V31 hold the operands."""
 
@@ -26,6 +28,7 @@ LANES = {"PADDW": ("add", 1), "PADDD": ("add", 2), "PSUBW": ("sub", 1), "PMULLW"
          "PUNPCKHBW": ("zip2", 0), "PUNPCKHWD": ("zip2", 1), "PUNPCKHDQ": ("zip2", 2)}
 SOURCE_FORMS = set(LANES) | {"PXOR", "PMULHW", "PACKUSWB", "PSHUFW"}
 SHIFTS = {"PSRAW": 1, "PSRAD": 2}
+SOURCE_FORMS |= {"PSADBW"}
 
 
 def _slot(n: int) -> int:
@@ -38,7 +41,9 @@ def native(op: Op) -> bool:
     d: str = op[2][0]
     s: str = op[3][0]
     if ic in ("MOVQ", "MOVD"):
-        return (d == "mm" and s in ("mm", "m")) or (d == "m" and s == "mm")
+        return (d == "mm" and s in ("mm", "m", "r")) or (d in ("m", "r") and s == "mm")
+    if ic == "PEXTRW":
+        return d == "r" and s == "mm"
     if ic in SHIFTS:
         return d == "mm" and s == "i"
     if ic in SOURCE_FORMS:
@@ -62,10 +67,12 @@ def lower(a: vb.Assembler, op: Op, reg_of: Callable[[int], int]) -> None:
     def get(o: Op, v: int) -> None:
         if o[0] == "mm":
             a.emit(a64.ldr_v(8, v, 16, _slot(o[1])))
+        elif o[0] == "r":                                     # MOVD r32 (zero-extended), MOVQ r64
+            a.emit(a64.fmov_to_v(o[2] // 8, v, o[1]))
         else:
             a.emit(a64.ldr_v(o[2], v, reg_of(o[1])))       # 4 bytes (MOVD, a low unpack) zero the rest
 
-    if ic in ("MOVQ", "MOVD"):
+    if ic in ("MOVQ", "MOVD", "PEXTRW"):
         get(src, 30)
     else:
         get(dst, 30)
@@ -91,7 +98,14 @@ def lower(a: vb.Assembler, op: Op, reg_of: Callable[[int], int]) -> None:
             n = min(imm, (8 << size) - 1)
             if n:
                 a.emit(a64.shift_right(30, 30, n, size, True))
-    if dst[0] == "mm":
+        elif ic == "PSADBW":                                  # the absolute differences' sum, bits 63:16 zero
+            get(src, 31)
+            a.emit(a64.three_same_d("uabd", 30, 30, 31, 0), a64.uaddlv_8b(30, 30))
+    if ic == "PEXTRW":                                        # word imm & 3, zero-extended into the register
+        a.emit(a64.umov_h(dst[1], 30, imm & 3))
+    elif dst[0] == "r":                                       # MOVD r32 (zero-extended), MOVQ r64
+        a.emit(a64.fmov_from_v(dst[2] // 8, dst[1], 30))
+    elif dst[0] == "mm":
         a.emit(a64.str_v(8, 30, 16, _slot(dst[1])), a64.movz(17, 0xFFFF), a64.str_(2, 17, 16, _slot(dst[1]) + 8))
     else:
         a.emit(a64.str_v(dst[2], 30, reg_of(dst[1])))

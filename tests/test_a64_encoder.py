@@ -165,6 +165,7 @@ CASES: list[tuple[str, int]] = [
     ("ldp x17, x18, [x28, #16]", a64.ldp(17, 18, 28, 16)),
     ("b .+0x40", a64.b(0x40)),
     ("cnt v31.8b, v31.8b", a64.cnt_8b(31, 31)),
+    ("uaddlv h30, v30.8b", a64.uaddlv_8b(30, 30)),
     ("fcmeq v1.4s, v2.4s, v3.4s", a64.fcm("eq", False, 1, 2, 3)),
     ("fcmge v1.4s, v2.4s, v3.4s", a64.fcm("ge", False, 1, 2, 3)),
     ("fcmgt v1.4s, v2.4s, v3.4s", a64.fcm("gt", False, 1, 2, 3)),

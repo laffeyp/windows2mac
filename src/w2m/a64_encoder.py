@@ -730,6 +730,12 @@ def not_16b(vd: int, vn: int) -> int:
     return 0x6E205800 | vn << 5 | vd
 
 
+def uaddlv_8b(vd: int, vn: int) -> int:
+    """UADDLV Hd, Vn.8B: the sum of the eight bytes as a halfword, the rest of Vd zeroed."""
+    _v(vd, vn)
+    return 0x2E303800 | vn << 5 | vd
+
+
 def cnt_8b(vd: int, vn: int) -> int:
     """CNT Vd.8B, Vn.8B: the set bits of each byte."""
     _v(vd, vn)
