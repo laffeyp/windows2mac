@@ -963,6 +963,41 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
 FUSE_LOAD_STORE = True       # recentering step 5: a load whose only use is the store after it is one instruction
 FOLD_ADDRESSES = True        # recentering step 5: an address only loads and stores use goes into their own form
 AddressForm = tuple[Any, ...]  # ("imm", base, disp) | ("unscaled", base, disp) | ("reg", base, index, scaled)
+# recentering step 5, operand forms: a temporary that loads a 64-bit guest register reads the register itself when no op
+# of the instruction writes that register before the temporary's last use (copy propagation); a constant only ADD or
+# SUB reads, 0-4095, is their immediate; a constant only a branch reads goes straight into x17. Instructions with an op
+# outside OPERAND_SAFE (model steps, REP, DIV, the SSE and VEX lowerings, CPUID) keep every temporary in a register.
+OPERAND_FORMS = True
+OPERAND_SAFE = {"imm", "addr", "ld", "st", "alu", "flags", "br", "set", "cmov", "sel", "cst", "cstz", "fence", "pause"}
+ADD_SUB_IMM = {("add", 64): 0x91000000, ("sub", 64): 0xD1000000, ("add", 32): 0x11000000, ("sub", 32): 0x51000000}
+
+
+def _operand_forms(ops: tuple[Op, ...], last: dict[int, int], dead: set[int]) -> tuple[dict[int, int], dict[int, int]]:
+    """(temporaries read as the guest register they load, constants kept out of registers), per OPERAND_FORMS. The ops
+    at `dead` (flags ops no later instruction reads) emit nothing and read nothing."""
+    alias: dict[int, int] = {}
+    quiet: dict[int, int] = {}
+    readers: dict[int, list[Op]] = {}
+    for i, op in enumerate(ops):
+        if i in dead:
+            continue
+        for t in _temps_read(op):
+            readers.setdefault(t, []).append(op)
+
+    def writes(o: Op) -> Op | None:
+        return o[1] if o[0] == "st" else o[2] if o[0] in ("set", "cmov", "cst", "cstz") else None
+    for i, op in enumerate(ops):
+        if op[0] == "ld" and op[2][0] == "r" and op[2][2] == 64 and not op[2][3] and op[1] in last:
+            idx = op[2][1]
+            if not any((w := writes(o)) is not None and w[0] == "r" and w[1] == idx for o in ops[i + 1:last[op[1]]]):
+                alias[op[1]] = idx
+        elif op[0] == "imm" and op[1] in readers:
+            rs, t, v = readers[op[1]], op[1], op[2]
+            if 0 <= v < 4096 and all(o[0] == "alu" and o[2] in ("add", "sub") and o[4] == t and o[3] != t for o in rs):
+                quiet[t] = v
+            elif len(rs) == 1 and rs[0][0] == "br" and rs[0][2] == t:
+                quiet[t] = v
+    return alias, quiet
 
 
 def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, AddressForm]:
@@ -1051,10 +1086,6 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
     `live_after`: the flags a later instruction reads (flag liveness); `nzcv_out`: the next instruction's Jcc
     branches on this one's NZCV.
     Returns True when control never falls through (an unconditional branch)."""
-    last: dict[int, int] = {}
-    for i, op in enumerate(ins.ops):
-        for t in _temps_read(op):
-            last[t] = i
     flags_live: dict[int, int] = {}                      # each flags op: the flags read after it
     live = live_after
     masks = _op_flag_masks(ins, nzcv_from)
@@ -1063,6 +1094,12 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             flags_live[i] = live
         live = live & ~masks[i][1] | masks[i][0]
     last_flags = max(flags_live, default=-1)
+    dead = {i for i, v in flags_live.items() if v == 0 and not (nzcv_out and i == last_flags)}   # emit nothing
+    last: dict[int, int] = {}
+    for i, op in enumerate(ins.ops):
+        if i not in dead:
+            for t in _temps_read(op):
+                last[t] = i
     free = list(TEMP_REGS)
     reg: dict[int, int] = {}
 
@@ -1092,8 +1129,15 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
     locked = ins.iclass.endswith("_LOCK")
     folded = _folded_addresses(ins.ops) if FOLD_ADDRESSES and not locked else {}
     lock_retry: list[int] = []
+    alias, quiet = ({}, {}) if not OPERAND_FORMS or locked or any(op[0] not in OPERAND_SAFE for op in ins.ops) else \
+        _operand_forms(ins.ops, last, dead)
     for i, op in enumerate(ins.ops):
         for t in _temps_written(op):
+            if t in alias:
+                reg[t] = alias[t]
+                continue
+            if t in quiet:
+                continue
             if not free:
                 raise CompileError(f"more than {len(TEMP_REGS)} live temporaries at 0x{ins.address:x}")
             reg[t] = free.pop(0)
@@ -1102,7 +1146,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 constant.pop(t, None)
         k = op[0]
         if k == "imm":
-            a.emit(a64.mov_imm(reg_of(op[1]), op[2]))
+            if op[1] not in quiet:
+                a.emit(a64.mov_imm(reg_of(op[1]), op[2]))
             constant[op[1]] = op[2]
         elif k == "addr" and op[1] in folded:
             pass                                         # the loads and stores reach it in their own form
@@ -1130,6 +1175,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF + STATE_GS_BASE), a64.ldr(8, 16, 16, 0), a64.add(rd, rd, 16))
         elif k == "ld" and FUSE_LOAD_STORE and not locked and _fused_move(a, op, ins.ops, i, last, reg_of, folded):
             fused_store = True                           # the store that follows is done (_fused_move)
+        elif k == "ld" and op[1] in alias:
+            pass                                         # read as the guest register itself (OPERAND_FORMS)
         elif k == "ld":
             rt, loc = reg_of(op[1]), op[2]
             if loc[0] == "r":
@@ -1170,9 +1217,10 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             store(op[1], reg_of(op[2]))
         elif k == "alu":
             _, d, o, x, y, bits = op
-            rd, rx, ry = reg_of(d), reg_of(x), reg_of(y)
+            rd, rx, ry = reg_of(d), reg_of(x), reg.get(y, -1)
             # the flags op this ALU op feeds: the next op past any store of the result (a store leaves NZCV alone)
-            nxt = next((n for n in ins.ops[i + 1:] if n[0] != "st"), None)
+            at = next((j for j in range(i + 1, len(ins.ops)) if ins.ops[j][0] != "st"), None)
+            nxt = ins.ops[at] if at is not None and at not in dead else None
             if (FLAGS_FROM_NZCV and o in ("add", "sub") and bits in (32, 64) and nxt is not None and nxt[0] == "flags"
                     and nxt[1] in (("add", "inc") if o == "add" else ("sub", "dec")) and tuple(nxt[2:6]) == (x, y, d, bits)):
                 # recentering step 5: the result and NZCV from one ADDS or SUBS; the 32-bit form zero-extends as
@@ -1180,7 +1228,10 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.emit(_adds_subs(o == "add", rd, rx, ry, bits))
                 nzcv_ready = True
                 continue
-            if o in ("add", "sub", "and", "or", "xor"):
+            if y in quiet:                                     # ADD or SUB with its immediate (OPERAND_FORMS)
+                a.emit(ADD_SUB_IMM[(o, 32 if bits == 32 else 64)] | quiet[y] << 10 | rx << 5 | rd)
+                bits = 64 if bits == 32 else bits                # the 32-bit form zero-extends: no mask
+            elif o in ("add", "sub", "and", "or", "xor"):
                 f = {"add": a64.add, "sub": a64.sub, "and": a64.and_, "or": a64.orr, "xor": a64.eor}[o]
                 a.emit(f(rd, rx, ry))
             elif o == "shr":
@@ -1423,8 +1474,9 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "pause":                                      # PAUSE counted: the spin census (Sprint 068 item J)
             a.emit(a64.ldr(8, 16, 28, PAUSE_COUNT), a64.addi(16, 16, 1), a64.str_(8, 16, 28, PAUSE_COUNT))
         elif k == "br":
+            target = a64.mov_imm(17, quiet[op[2]]) if op[2] in quiet else [a64.mov(17, reg_of(op[2]))]
             if op[1] == "always":
-                a.emit(a64.mov(17, reg_of(op[2])))
+                a.emit(*target)
                 a.branch(a64.b, exit_va)
                 ends = True
             else:
@@ -1436,14 +1488,16 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 else:
                     _eval_condition(a, op[1])
                     a.branch(lambda off: a64.cbz(16, off), skip)
-                a.emit(a64.mov(17, reg_of(op[2])))
+                a.emit(*target)
                 a.branch(a64.b, exit_va)
                 a.bind(skip)
         else:
             raise CompileError(f"operation {k}")
         for t in [*_temps_read(op), *_temps_written(op)]:
             if t in reg and last.get(t, -1) <= i:
-                free.append(reg.pop(t))
+                r = reg.pop(t)
+                if t not in alias:
+                    free.append(r)
     return ends
 
 

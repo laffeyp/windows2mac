@@ -2,9 +2,9 @@
 # Copyright (C) 2026 Peter Laffey
 """Flag liveness (recentering step 5, Sprint 068 item L): a setter computes only the flags a later instruction reads.
 The class runs judge one instruction per block (lockstep), so they never see a pass across instructions; this test
-judges it. Seeded random programs of flag setters (ADD SUB CMP ADC SBB AND OR XOR TEST INC DEC NEG, shifts and rotates
+judges it. Seeded random programs of flag setters (ADD SUB CMP ADC SBB AND OR XOR TEST INC DEC NEG, with registers and immediates, shifts and rotates
 by a constant and by CL, IMUL, BT, STC CLC CMC), readers (Jcc and JMP over one instruction, SETcc, CMOVcc, ADC, SBB,
-CMC) and loads, stores and moves between them, in 64-, 32- and 8-bit forms, each program ending with its registers
+CMC) and loads, stores, moves and PUSH-POP pairs between them, in 64-, 32- and 8-bit forms, each program ending with its registers
 and PUSHFQ's RFLAGS stored. A reader reads only flags the program has defined (w2m stops on an undefined one; PUSHFQ
 pushes it as 0). The same programs run with the pass and without it, and every stored value must be equal; the pass
 must also have compiled less code."""
@@ -42,8 +42,12 @@ class Program:
     def setter(self) -> bytes:
         rng = self.rng
         a, b = rng.choice(REGS), rng.choice(REGS)
-        kind = rng.choice(["alu", "alu", "alu", "alu32", "alu8", "incdec", "neg", "shift", "shift_cl", "rotate",
-                           "imul", "bt", "stc"])
+        kind = rng.choice(["alu", "alu", "alu", "alu32", "alu8", "alu_imm", "alu_imm", "incdec", "neg", "shift",
+                           "shift_cl", "rotate", "imul", "bt", "stc"])
+        if kind == "alu_imm":                                   # ADD OR AND SUB XOR CMP r64, imm8 (83 /n ib)
+            ext = rng.choice([0, 1, 4, 5, 6, 7])
+            self.defined = set(ALL) if ext in (0, 5, 7) else ALL - {"A"}
+            return bytes([0x48, 0x83, 0xC0 | ext << 3 | a, rng.randrange(128)])
         if kind in ("alu", "alu32", "alu8"):
             names = ["add", "or", "and", "sub", "xor", "cmp", "test"] + (["adc", "sbb"] if "C" in self.defined else [])
             name = rng.choice(names)
@@ -103,7 +107,9 @@ class Program:
 
     def other(self) -> bytes:
         rng, r = self.rng, self.rng.choice(REGS)
-        kind = rng.choice(["load", "store", "mov"])
+        kind = rng.choice(["load", "store", "mov", "pushpop"])
+        if kind == "pushpop":
+            return bytes([0x50 | r, 0x58 | self.rng.choice(REGS)])
         if kind == "mov":
             return bytes([0x48, 0x89, rr(rng.choice(REGS), r)])
         op = 0x8B if kind == "load" else 0x89
