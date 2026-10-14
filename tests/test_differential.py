@@ -99,7 +99,7 @@ STORE = ROOT / "store" / "runs"
 def _differential_records() -> list[Path]:
     out = []
     for root in sorted(STORE.iterdir()):
-        if root.is_dir():
+        if root.is_dir() and not root.name.startswith(differential.NOT_DIFFERENTIAL):
             try:
                 first = read_first_envelope(root)    # one CRC-checked line per record, not its whole segment
             except Exception:  # noqa: BLE001 — not a record

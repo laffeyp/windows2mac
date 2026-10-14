@@ -96,12 +96,18 @@ def candidate_id(d: Differential, unit: str) -> str:
     return f"{d.name}:{_safe(unit)}@{d.implementation_sha256[7:19]}"
 
 
+# The record writers that never set a differential baseline (class_run.py, family_run.py, run_frontier.py, the laptop's
+# and the runners' probe runs, file-bridge runs): 24,961 of the 24,971 records under store/runs on 2026-10-14, whose
+# first line each the ledger read (CI's 30 s test limit passed). Every other record is still read.
+NOT_DIFFERENTIAL = ("class-", "family-", "frontier-", "probe-run-", "file-")
+
+
 def rebuild_ledger(runs: Path) -> dict[str, dict[str, Any]]:
     """Every discrepancy a differential record reported, with the record that resolved it (or None).
     Records are read in run-start order, so a resolution always follows its report."""
     started: list[tuple[float, Path, str]] = []
     for root in runs.iterdir():
-        if not root.is_dir():
+        if not root.is_dir() or root.name.startswith(NOT_DIFFERENTIAL):
             continue
         try:
             first = read_first_envelope(root)        # one CRC-checked line, not the whole segment (4,031 records)
