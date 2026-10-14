@@ -111,3 +111,12 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   37,061; hvc 10 4,923). At the last progress line hvc 12 fell from 21.5 s to 4.7 s and hvc 4 from 13.1 s to 9.7 s.
   A first B run took 145.7 s: Ollama's llama-server used 180-250% CPU as it started (its `load:` line names it), and
   its hvc 1 time rose from 7.4 s to 22.7 s at the same 124,201 exits. Load moves a census by tens of seconds.
+- **I, the native workload** (laptop run lap-20261014T041748433Z-73c66e6a-01: play mode, the game's own exe without
+  the capture, 90 s, WPR with InstructionRetired on context switches, reduced by `pmc_summary.py`). The counters count
+  under VBS. The game's process retired 458.7 billion instructions on 71 threads; 325.4 billion in the first 62 s (the
+  screen is black at 30 s and shows the stairwell at 60 s). From 35 s on: 4.6 billion a second and 112 frames a second
+  (9,122 Presents), about 41 million instructions a frame. Two threads carry 28.9% and 24.7%, four more about 9% each.
+  Against w2m's 255.7 million a second (one vCPU, quiet): the first scene's work takes about 1,270 s; a frame's 41
+  million about 0.16 s (about 6 frames a second); with the work across vCPUs, the busiest thread's 11.9 million a
+  frame bounds it near 21. The native counts include the in-process NVIDIA user-mode driver, which w2m replaces with
+  DXMT and Metal, so they bound the work from above.

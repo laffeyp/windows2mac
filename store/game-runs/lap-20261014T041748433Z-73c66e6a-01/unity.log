@@ -1,0 +1,176 @@
+Mono path[0] = 'C:/w2m/app/Hail to the Rainbow_Data/Managed'
+Mono config path = 'C:/w2m/app/MonoBleedingEdge/etc'
+Initialize engine version: 2019.4.40f1 (ffc62b691db5)
+[Subsystems] Discovering subsystems at path C:/w2m/app/Hail to the Rainbow_Data/UnitySubsystems
+GfxDevice: creating device client; threaded=1
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: NVIDIA GeForce RTX 3050 6GB Laptop GPU (ID=0x25ac)
+    Vendor:   
+    VRAM:     6001 MB
+    Driver:   32.0.15.9191
+Begin MonoManager ReloadAssembly
+- Completed reload, in  0.067 seconds
+WARNING: Shader Unsupported: 'Hidden/Nature/Terrain/Utilities' - All passes removed
+WARNING: Shader Did you use #pragma only_renderers and omit this platform?
+<RI> Initializing input.
+New input system (experimental) initialized
+XInput1_3.dll not found. Trying XInput9_1_0.dll instead...
+<RI> Input initialized.
+<RI> Initialized touch support.
+UnloadTime: 1.125200 ms
+IntroScene - Start !!!!!!!!!!!    INTRO    INTRO    INTRO    INTRO    INTRO  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Detected VRAM: 6001 MB, Setting Budget: 3601 MB 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Version of Game - 1.10 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Config  Loaded !!!!!!!!!!!!!!!!!!  - Intro  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+============== Config READ ============== 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+[Steamworks.NET] SteamAPI_Init() failed. Refer to Valve's documentation or the comment above this line for more information. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+OnSceneLoaded: Intro 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Сборка выполнена для 64-битной архитектуры. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Steam не инициализирован. Overlay callback не подключен. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Unloading 6 Unused Serialized files (Serialized files now loaded: 0)
+UnloadTime: 6.373000 ms
+Version of Game - 1.10   Ver. STEAM  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Config  Loaded !!!!!!!!!!!!!!!!!!  - Menu  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+============== Config READ ============== 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Minimal Res 640 480 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 800 600 2 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1024 768 4 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1152 864 6 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 600 8 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 720 10 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 768 12 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 800 14 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 960 16 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 1024 18 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1360 768 20 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1366 768 22 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1400 1050 24 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1440 900 26 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1600 900 28 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1680 1050 30 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1920 1080 32 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Max Resolution 1920 1080 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+All Resolutions - 17 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+
+Unloading 746 unused Assets to reduce memory usage. Loaded Objects now: 19662.
+Total: 10.677600 ms (FindLiveObjects: 0.919600 ms CreateObjectMapping: 0.555100 ms MarkObjects: 4.254500 ms  DeleteObjects: 4.947700 ms)
+
+DefaultSettings English 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+PORTRAIT NOT!!!!   DETECTED  !!!!!!!!!!!! 1.777778 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Resolution Set - 1920 X 1080 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Detected VRAM: 6001 MB, Setting Budget: 4501 MB 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Set_TextStreamBudget  -  FromMenu =================== 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Unloading 0 Unused Serialized files (Serialized files now loaded: 0)
+
+Unloading 3163 unused Assets to reduce memory usage. Loaded Objects now: 16793.
+Total: 16.637600 ms (FindLiveObjects: 2.414800 ms CreateObjectMapping: 0.433300 ms MarkObjects: 7.490800 ms  DeleteObjects: 6.298200 ms)
+
+New_Input - DONE !!!!!!!!!!!!!!!  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+File Read from Resources !!!! 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+LoadLevels From List 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Unloading 6 Unused Serialized files (Serialized files now loaded: 0)
+UnloadTime: 0.877600 ms
+OnSceneLoaded: Level_1_Musey 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+ SceneReady  !!!!!!!!!!!!!!!!    
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+ Save Game  : Glava - 1 Level - 1 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+
+Unloading 6815 unused Assets to reduce memory usage. Loaded Objects now: 65890.
+Total: 33.534800 ms (FindLiveObjects: 7.015100 ms CreateObjectMapping: 1.807500 ms MarkObjects: 18.902600 ms  DeleteObjects: 5.809300 ms)
+
+File Read from Resources !!!! 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+LoadGame_FromSave - Standart   %%%%%%%%%%%%%%%%%%  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Normalization Budget on Level !!!!  - 4501 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+CutScene_1_End 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+

@@ -34,7 +34,10 @@ The new method is a thin vertical slice, judged by measured numbers:
   game under CrossOver 26 on this Mac (Wine 11.0, D3DMetal 3.0, DXMT 0.72; released 2026-02-10).
 - The native workload: the instructions the game retires per frame and to the first scene on the laptop, per thread,
   against w2m's rate (139 million a second on the wall clock, 223 million inside the vCPU, frontier 1ecc22b2). It
-  bounds what each lever can give and ranks the work.
+  bounds what each lever can give and ranks the work. Measured 2026-10-14 (laptop run lap-20261014T041748433Z-73c66e6a-01): 325.4
+  billion instructions to 62 s, 41 million a frame at 112 frames a second, the busiest thread 28.9% of them; at 255.7
+  million a second on one vCPU that is about 1,270 s to the first scene and about 6 frames a second, and the busiest
+  thread bounds several vCPUs near 21 (Sprint 068 item I).
 
 ## Speed
 
