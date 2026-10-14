@@ -49,7 +49,7 @@ public sealed class W2mRecorder : Form {
 
     readonly Stopwatch clock;
     readonly double offset;
-    public readonly List<W2mInputEvent> Events = new List<W2mInputEvent>();
+    public readonly List<W2mInputEvent> Recorded = new List<W2mInputEvent>();
 
     W2mRecorder(Stopwatch clock, double offset) {
         this.clock = clock; this.offset = offset;
@@ -74,7 +74,7 @@ public sealed class W2mRecorder : Form {
                 if (GetRawInputData(m.LParam, RID_INPUT, b, ref size, 24) == size) {
                     double t = offset + clock.Elapsed.TotalSeconds;
                     int type = Marshal.ReadInt32(b, 0);
-                    lock (Events) {
+                    lock (Recorded) {
                         if (type == 0) Mouse(b, t); else if (type == 1) Keyboard(b, t);
                     }
                 }
@@ -89,18 +89,18 @@ public sealed class W2mRecorder : Form {
         short data = Marshal.ReadInt16(b, 30);
         int dx = Marshal.ReadInt32(b, 36), dy = Marshal.ReadInt32(b, 40);
         if ((flags & 1) == 0 && (dx != 0 || dy != 0))             // MOUSE_MOVE_RELATIVE is 0
-            Events.Add(new W2mInputEvent { T = t, Kind = "move", Dx = dx, Dy = dy });
+            Recorded.Add(new W2mInputEvent { T = t, Kind = "move", Dx = dx, Dy = dy });
         string[] names = { "left", "right", "middle" };
         for (int i = 0; i < 3; i++) {
-            if ((buttons & (1 << (2 * i))) != 0) Events.Add(new W2mInputEvent { T = t, Kind = "button", Button = names[i], Up = false });
-            if ((buttons & (2 << (2 * i))) != 0) Events.Add(new W2mInputEvent { T = t, Kind = "button", Button = names[i], Up = true });
+            if ((buttons & (1 << (2 * i))) != 0) Recorded.Add(new W2mInputEvent { T = t, Kind = "button", Button = names[i], Up = false });
+            if ((buttons & (2 << (2 * i))) != 0) Recorded.Add(new W2mInputEvent { T = t, Kind = "button", Button = names[i], Up = true });
         }
-        if ((buttons & 0x400) != 0) Events.Add(new W2mInputEvent { T = t, Kind = "wheel", Delta = data });
+        if ((buttons & 0x400) != 0) Recorded.Add(new W2mInputEvent { T = t, Kind = "wheel", Delta = data });
     }
 
     void Keyboard(IntPtr b, double t) {
         ushort make = (ushort)Marshal.ReadInt16(b, 24), flags = (ushort)Marshal.ReadInt16(b, 26);
-        Events.Add(new W2mInputEvent { T = t, Kind = "key", Scan = make, E0 = (flags & 2) != 0, Up = (flags & 1) != 0 });
+        Recorded.Add(new W2mInputEvent { T = t, Kind = "key", Scan = make, E0 = (flags & 2) != 0, Up = (flags & 1) != 0 });
     }
 
     // A recorder on its own thread with its own message loop; Stop closes it and returns the events as JSON lines.
@@ -115,7 +115,7 @@ public sealed class W2mRecorder : Form {
     public string Stop() {
         Invoke(new Action(Close));
         var sb = new StringBuilder();
-        lock (Events) { foreach (var e in Events) sb.Append(e.Json()).Append('\n'); }
+        lock (Recorded) { foreach (var e in Recorded) sb.Append(e.Json()).Append('\n'); }
         return sb.ToString();
     }
 }
