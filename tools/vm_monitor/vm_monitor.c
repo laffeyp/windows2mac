@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <pthread/qos.h>
+#include <os/os_sync_wait_on_address.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +71,8 @@ static void report(const char *kind, uint64_t syndrome) {
     printf("\n");
 }
 
-static void run(long ms, hv_vcpu_exit_t *ex) {
+/* Runs the vCPU until an exit the host must see; returns its kind and sets *syn_out. */
+static const char *run_vcpu(long ms, hv_vcpu_exit_t *ex, uint64_t *syn_out) {
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);
     pthread_mutex_lock(&mu);
@@ -108,7 +110,118 @@ static void run(long ms, hv_vcpu_exit_t *ex) {
     pthread_mutex_lock(&mu);
     running = 0;
     pthread_mutex_unlock(&mu);
+    *syn_out = syn;
+    return kind;
+}
+
+static void run(long ms, hv_vcpu_exit_t *ex) {
+    uint64_t syn = 0;
+    const char *kind = run_vcpu(ms, ex, &syn);
     report(kind, syn);
+}
+
+/* The shared-memory channel (Sprint 068 item E): commands and exits through a page of the memory file instead of the
+ * text pipe, which cost about 14 us an exit against 0.72 us for the exit itself (scripts/measure_exit.py, 2026-10-14).
+ * Each side bumps its sequence word with release order after writing its fields, wakes the other
+ * (os_sync_wake_by_address_any, shared), and waits by spinning briefly and then os_sync_wait_on_address. The layout
+ * is vm_backend.py's CHANNEL_* offsets. */
+enum { CH_CMD = 0, CH_EXIT = 4, CH_OP = 8, CH_MS = 16, CH_SAVE = 24, CH_LOAD = 32, CH_PC = 40, CH_CPSR = 48, CH_X = 56,
+       CH_KIND = 320, CH_SYN = 328, CH_EPC = 336, CH_ECPSR = 344, CH_ESR = 352, CH_FAR = 360, CH_ELR = 368,
+       CH_EX = 376, CH_STATUS = 640, CH_VEC = 1024 };
+enum { OP_RUN = 1, OP_VGET = 2, OP_VSET = 3, OP_LEAVE = 4, OP_SWAP = 5 };
+#define SPIN_NS 50000
+
+static uint64_t now_ns(void) { return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW); }
+
+/* Waits until *word holds old + 1: the host bumps the word by one per command. Waiting for that exact value, not for
+ * any change, keeps a store the monitor sees half done from reading as a command (2026-10-14: CPython's struct wrote
+ * the word a byte at a time, the spin saw 0x00 between 0xFF and 0x100, and a run executed twice). */
+static uint32_t wait_change(volatile uint32_t *word, uint32_t old) {
+    uint32_t want = old + 1;
+    uint64_t until = now_ns() + SPIN_NS;
+    uint32_t v;
+    while ((v = __atomic_load_n(word, __ATOMIC_ACQUIRE)) != want) {
+        if (now_ns() > until) {
+            os_sync_wait_on_address((void *)word, v, 4, OS_SYNC_WAIT_ON_ADDRESS_SHARED);
+            until = now_ns() + SPIN_NS;
+        }
+    }
+    return v;
+}
+
+static int get_vectors(unsigned char *at) {
+    int bad = 0;
+    for (int i = 0; i < 16; i++) {
+        hv_simd_fp_uchar16_t q;
+        bad |= hv_vcpu_get_simd_fp_reg(vcpu, (hv_simd_fp_reg_t)(HV_SIMD_FP_REG_Q0 + i), &q);
+        memcpy(at + 16 * i, &q, 16);
+    }
+    uint64_t fpcr = 0, fpsr = 0;
+    bad |= hv_vcpu_get_reg(vcpu, HV_REG_FPCR, &fpcr) | hv_vcpu_get_reg(vcpu, HV_REG_FPSR, &fpsr);
+    memcpy(at + 256, &fpcr, 8);
+    memcpy(at + 264, &fpsr, 8);
+    return bad;
+}
+
+static int set_vectors(unsigned char *at) {
+    int bad = 0;
+    for (int i = 0; i < 16; i++) {
+        hv_simd_fp_uchar16_t q;
+        memcpy(&q, at + 16 * i, 16);
+        bad |= hv_vcpu_set_simd_fp_reg(vcpu, (hv_simd_fp_reg_t)(HV_SIMD_FP_REG_Q0 + i), q);
+    }
+    uint64_t fpcr, fpsr;
+    memcpy(&fpcr, at + 256, 8);
+    memcpy(&fpsr, at + 264, 8);
+    bad |= hv_vcpu_set_reg(vcpu, HV_REG_FPCR, fpcr) | hv_vcpu_set_reg(vcpu, HV_REG_FPSR, fpsr);
+    return bad;
+}
+
+static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exit_t *ex) {
+    unsigned char *c = mem + off;
+    volatile uint32_t *cmd = (volatile uint32_t *)(c + CH_CMD), *done = (volatile uint32_t *)(c + CH_EXIT);
+    uint32_t seen = __atomic_load_n(cmd, __ATOMIC_ACQUIRE);
+    printf("ok\n");
+    fflush(stdout);
+    for (;;) {
+        seen = wait_change(cmd, seen);
+        uint64_t op = *(uint64_t *)(c + CH_OP), status = 0;
+        if (op == OP_RUN || op == OP_SWAP) {   /* a switch's vectors first, as the pipe's vswap went first */
+            uint64_t save = *(uint64_t *)(c + CH_SAVE), load = *(uint64_t *)(c + CH_LOAD);
+            if ((save && save + 288 > size) || (load && load + 288 > size)) status = 1;
+            else {
+                if (save) status |= get_vectors(mem + save);
+                if (load) status |= set_vectors(mem + load);
+            }
+        }
+        if (op == OP_RUN) {
+            hv_vcpu_set_reg(vcpu, HV_REG_PC, *(uint64_t *)(c + CH_PC));
+            hv_vcpu_set_reg(vcpu, HV_REG_CPSR, *(uint64_t *)(c + CH_CPSR));
+            for (int i = 0; i <= 30; i++) hv_vcpu_set_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), *(uint64_t *)(c + CH_X + 8 * i));
+            uint64_t syn = 0;
+            const char *kind = run_vcpu((long)*(uint64_t *)(c + CH_MS), ex, &syn);
+            *(uint64_t *)(c + CH_KIND) = kind[0] == 'h' ? 1 : kind[0] == 'e' ? 2 : kind[0] == 'c' ? 3 : 4;
+            *(uint64_t *)(c + CH_SYN) = syn;
+            uint64_t v;
+            hv_vcpu_get_reg(vcpu, HV_REG_PC, &v); *(uint64_t *)(c + CH_EPC) = v;
+            hv_vcpu_get_reg(vcpu, HV_REG_CPSR, &v); *(uint64_t *)(c + CH_ECPSR) = v;
+            hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_ESR_EL1, &v); *(uint64_t *)(c + CH_ESR) = v;
+            hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_FAR_EL1, &v); *(uint64_t *)(c + CH_FAR) = v;
+            hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_ELR_EL1, &v); *(uint64_t *)(c + CH_ELR) = v;
+            for (int i = 0; i <= 30; i++) {
+                hv_vcpu_get_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), &v);
+                *(uint64_t *)(c + CH_EX + 8 * i) = v;
+            }
+        } else if (op == OP_VGET) {
+            status = get_vectors(c + CH_VEC);
+        } else if (op == OP_VSET) {
+            status = set_vectors(c + CH_VEC);
+        }
+        *(uint64_t *)(c + CH_STATUS) = status;
+        __atomic_store_n(done, seen, __ATOMIC_RELEASE);
+        os_sync_wake_by_address_any((void *)done, 4, OS_SYNC_WAKE_BY_ADDRESS_SHARED);
+        if (op == OP_LEAVE) return;
+    }
 }
 
 int main(int argc, char **argv) {
@@ -233,6 +346,10 @@ int main(int argc, char **argv) {
             }
             if (bad) printf("err vswap %x\n", bad);
             else printf("ok\n");
+        } else if (!strncmp(p, "channel ", 8)) {
+            uint64_t off = strtoull(p + 8, NULL, 16);
+            if (off + 0x1000 > size) printf("err channel range\n");
+            else channel((unsigned char *)mem, size, off, ex);
         } else if (!strncmp(p, "run ", 4)) {
             run(strtol(p + 4, NULL, 10), ex);
         } else if (!strncmp(p, "spin ", 5)) {

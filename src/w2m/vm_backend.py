@@ -139,8 +139,16 @@ SPLIT_TABLES_SIZE = 0x40_0000             # 1,024 tables, sparse
 VECTOR_SLOTS = SPLIT_TABLES + SPLIT_TABLES_SIZE
 VECTOR_SLOT = 0x120                       # 16 registers of 16 bytes, FPCR and FPSR of 8 (vm_monitor.c vswap)
 VECTOR_SLOT_COUNT = 1024
+# The channel (Sprint 068 item E): one page where the host and the monitor exchange a run's registers and its exit,
+# each side waking the other on a sequence word (vm_monitor.c `channel`), in place of the text pipe's `set` and `run`
+CHANNEL = VECTOR_SLOTS + VECTOR_SLOT * VECTOR_SLOT_COUNT
+CH_CMD, CH_EXIT, CH_OP, CH_MS, CH_SAVE, CH_LOAD, CH_PC, CH_CPSR, CH_X = 0, 4, 8, 16, 24, 32, 40, 48, 56
+CH_KIND, CH_SYN, CH_EPC, CH_ECPSR, CH_ESR, CH_FAR, CH_ELR, CH_EX, CH_STATUS, CH_VEC = (
+    320, 328, 336, 344, 352, 360, 368, 376, 640, 1024)
+OP_RUN, OP_VGET, OP_VSET, OP_LEAVE, OP_SWAP = 1, 2, 3, 4, 5
+TRANSPORT = "channel"        # "pipe": every exit's registers as text over the monitor's pipe, as before Sprint 068
 MONITOR_SIZE = (SPLIT_TABLES + SPLIT_TABLES_SIZE + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
-assert VECTOR_SLOTS + VECTOR_SLOT * VECTOR_SLOT_COUNT <= MONITOR_SIZE
+assert CHANNEL + PAGE <= MONITOR_SIZE
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -1044,6 +1052,77 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
 # ---------------------------------------------------------------------------------------------
 # host driver
 
+class Channel:
+    """The host's side of the monitor's channel (vm_monitor.c `channel`; Sprint 068 item E). A call writes its fields,
+    publishes them (a barrier, then the command word), wakes the monitor, and waits for the exit word: a spin of up
+    to SPIN_NS, then os_sync_wait_on_address on the shared page (macOS 14.4)."""
+    SPIN_NS = 50_000
+    KINDS = {1: "hvc", 2: "exc", 3: "cancel", 4: "fail"}
+
+    def __init__(self, mm: mmap.mmap) -> None:
+        import ctypes
+        self.mm = mm
+        self._ref = ctypes.c_char.from_buffer(mm, CHANNEL)          # dropped at close, before the map closes
+        # the two sequence words, each written and read as one 32-bit access: struct writes an integer a byte at a time
+        self._cmd_word = ctypes.c_uint32.from_buffer(mm, CHANNEL + CH_CMD)
+        self._exit_word = ctypes.c_uint32.from_buffer(mm, CHANNEL + CH_EXIT)
+        base = ctypes.addressof(self._ref)
+        self.cmd_addr, self.exit_addr = ctypes.c_void_p(base + CH_CMD), ctypes.c_void_p(base + CH_EXIT)
+        lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+        self.wait = lib.os_sync_wait_on_address
+        self.wait.argtypes = [ctypes.c_void_p, ctypes.c_uint64, ctypes.c_size_t, ctypes.c_uint32]
+        self.wake = lib.os_sync_wake_by_address_any
+        self.wake.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint32]
+        self.barrier = lib.OSMemoryBarrier
+        self.seq = struct.unpack_from("<I", mm, CHANNEL + CH_CMD)[0]
+
+    def call(self, op: int) -> int:
+        """Run `op` with the fields already written; its status."""
+        struct.pack_into("<Q", self.mm, CHANNEL + CH_OP, op)
+        self.barrier()
+        self.seq = (self.seq + 1) & 0xFFFFFFFF
+        self._cmd_word.value = self.seq
+        self.wake(self.cmd_addr, 4, 1)
+        until = time.perf_counter_ns() + self.SPIN_NS
+        while (done := self._exit_word.value) != self.seq:
+            if time.perf_counter_ns() > until:
+                self.wait(self.exit_addr, done, 4, 1)
+        self.barrier()
+        return int(struct.unpack_from("<Q", self.mm, CHANNEL + CH_STATUS)[0])
+
+    def run(self, pc: int, cpsr: int, x: list[int], ms: int, swap: tuple[int, int] | None) -> tuple["VcpuExit", int]:
+        struct.pack_into("<QQQQ", self.mm, CHANNEL + CH_MS, ms, *(swap or (0, 0)), pc)
+        struct.pack_into("<Q31Q", self.mm, CHANNEL + CH_CPSR, cpsr, *x)
+        if self.call(OP_RUN):
+            raise RuntimeError(f"vm_monitor: vswap {swap} failed")
+        kind, syn, epc, cpsr_out, esr, far, elr = struct.unpack_from("<7Q", self.mm, CHANNEL + CH_KIND)
+        regs = list(struct.unpack_from("<31Q", self.mm, CHANNEL + CH_EX))
+        return VcpuExit(self.KINDS.get(kind, "fail"), syn, epc, esr, far, elr, regs), cpsr_out
+
+    def swap(self, swap: tuple[int, int]) -> None:
+        struct.pack_into("<QQ", self.mm, CHANNEL + CH_SAVE, *swap)
+        if self.call(OP_SWAP):
+            raise RuntimeError(f"vm_monitor: vswap {swap} failed")
+
+    def vget(self) -> tuple[list[int], int, int]:
+        if self.call(OP_VGET):
+            raise RuntimeError("vm_monitor: vget failed")
+        xmm = [int.from_bytes(self.mm[CHANNEL + CH_VEC + 16 * i:CHANNEL + CH_VEC + 16 * i + 16], "little") for i in range(16)]
+        fpcr, fpsr = struct.unpack_from("<QQ", self.mm, CHANNEL + CH_VEC + 256)
+        return xmm, int(fpcr), int(fpsr)
+
+    def vset(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
+        for i, q in enumerate(xmm):
+            self.mm[CHANNEL + CH_VEC + 16 * i:CHANNEL + CH_VEC + 16 * i + 16] = q.to_bytes(16, "little")
+        struct.pack_into("<QQ", self.mm, CHANNEL + CH_VEC + 256, fpcr, fpsr)
+        if self.call(OP_VSET):
+            raise RuntimeError("vm_monitor: vset failed")
+
+    def leave(self) -> None:
+        self.call(OP_LEAVE)
+        del self._ref, self._cmd_word, self._exit_word
+
+
 @dataclass
 class VcpuExit:
     kind: str
@@ -1204,6 +1283,7 @@ class VM:
         # (0: none yet) and the incoming one's
         self._vswap: tuple[int, int] | None = None
         self._vslots_used = 0
+        self._channel: Channel | None = None            # the monitor's channel while a run uses it (TRANSPORT)
         self._slice_start = (0, 0)                     # the counters when the running thread got the vCPU
         self._final_census: dict[int, tuple[int, int]] | None = None   # thread_census at close
         self._pending_init = 0                         # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
@@ -2401,12 +2481,28 @@ class VM:
         struct.pack_into("<Q", self.mm, self._process(EXCEPTION_OFF), 0)
         struct.pack_into("<Q", self.mm, self._process(RING_OFF), 0)
 
+    def _flush_swap(self) -> None:
+        """A switch's vector swap before any other vector command (the pipe sent vswap ahead of the next command)."""
+        if self._vswap is not None and self._channel is not None:
+            swap, self._vswap = self._vswap, None
+            self._channel.swap(swap)
+            self.monitor_commands["vswap"] += 1
+
     def vectors(self) -> tuple[list[int], int, int]:
         """XMM0-15 (as 128-bit integers), FPCR and FPSR of the stopped vCPU (during `run`)."""
+        if self._channel is not None:
+            self._flush_swap()
+            self.monitor_commands["vget"] += 1
+            return self._channel.vget()
         r = self._cmd("vget")
         return [int(q, 16) for q in r[1:17]], int(r[17], 16), int(r[18], 16)
 
     def set_vectors(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
+        if self._channel is not None:
+            self._flush_swap()
+            self.monitor_commands["vset"] += 1
+            self._channel.vset(xmm, fpcr, fpsr)
+            return
         self._cmd("vset " + " ".join(f"{q:032x}" for q in xmm) + f" {fpcr:x} {fpsr:x}")
 
     def ymm_hi(self) -> list[int]:
@@ -2865,6 +2961,9 @@ class VM:
         for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
                         ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
             cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
+        if TRANSPORT == "channel":
+            cmd(f"channel {CHANNEL:x}")
+            self._channel = Channel(self.mm)
         x = [0] * 31
         x[4] = self.ld.stack_top - 0x100 - 8                  # as runtime.Runtime: RSP % 16 == 8
         x[17] = self.ld.entry
@@ -2891,15 +2990,23 @@ class VM:
                         break
                 started = time.perf_counter_ns()
                 self.exit_ns[last_kind] += started - marked
-                cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
-                r = cmd(f"run {interrupt_every_ms if interrupt_every_ms is not None else timeout_ms}")
+                ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
+                if self._channel is not None:
+                    swap, self._vswap = self._vswap, None
+                    e, cpsr = self._channel.run(pc, cpsr, x, ms, swap)
+                    self.monitor_commands["run"] += 1
+                    if swap:
+                        self.monitor_commands["vswap"] += 1
+                else:
+                    cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
+                    r = cmd(f"run {ms}")
+                    e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
+                                 int(r[7], 16), [int(v, 16) for v in r[8:39]])
+                    cpsr = int(r[4], 16)
                 marked = time.perf_counter_ns()
                 self.run_ns += marked - started
                 last_kind = 0
-                e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
-                         int(r[7], 16), [int(v, 16) for v in r[8:39]])
                 x = e.x
-                cpsr = int(r[4], 16)
                 if e.kind == "cancel" and interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
                     # the rule specs/guest_state.json forbids: restart the interrupted instruction
                     x[17] = self.x86_address_at(e.pc)
@@ -3029,6 +3136,9 @@ class VM:
                 BridgeRequestError) as ex:              # DecodeError: record frontier-...1791800847886016000 crashed
             stop = f"{type(ex).__name__}: {ex}"
         finally:
+            if self._channel is not None:
+                self._channel.leave()                            # the monitor is back on its pipe
+                self._channel = None
             try:
                 pin.write("quit\n")
                 pin.flush()
