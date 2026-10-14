@@ -466,3 +466,26 @@ What remained was five defects in families that every row had accepted: FLS shar
 **Finding (#52):** a fixture tests only the state it carries across the event under test. The probes exercised switches by the dozen and never carried a vector through one. This is Addendum A3 (substrate-ui, the mirror-symmetric blinker) on a second project: a fixture symmetric in the bug's dimension cannot see the bug. Two projects now support it.
 
 **Kit change suggested:** promote Addendum A3 into `TECHNIQUES.md` Section 1 under Testing: a test of a state-moving operation (a switch, a copy, a save) holds a distinct value in the moved state across the operation, and a planted fault that drops the move must fail it before the test counts.
+
+### 2026-10-14 — Sprint 068 items L and D: a judge at the wrong grain, and plants no fixture reached
+
+**What happened:** flag liveness drops the flags no later instruction reads, a decision made across instructions and
+across blocks. The card asked the class runs to catch a live-flag plant. The class runs compile one instruction per
+block, so the pass never acts there, and no plant on it could fail them. A random-program differential (the same
+programs with the pass and without) judged it, and three plants failed it. Later the same day the wake keys (a signal
+wakes only the threads waiting on what it signals) were judged by the thread families, and both plants on them passed
+every family: no probe woke a wait on several objects by another thread's signal, the one case the plants broke. A row
+for that case, run on the laptop, found a defect the plants had not been aimed at: Windows hands the event to the
+waiting thread, and w2m let the setter take it back.
+
+**Finding (#53):** a judge checks only transformations that act at its own grain. A per-instruction oracle cannot see a
+pass across instructions, however many cases it holds, and a plant on that pass proves nothing there. Match the
+judge's unit (one instruction, one block, one program) to the transformation's before naming the judge in a card.
+
+**Finding (#54):** a plant that changes no row is first a question about the fixtures, and the answer can be a defect.
+Both blind plants pointed at the same missing case; the row written for them failed on unplanted code. #52 said a
+fixture tests only the state it carries; this is the same lesson found from the plant's side, and worth acting on the
+day the plant comes back blind, not recording as a blind spot.
+
+**Kit change suggested:** the sprint card's observation contract names each check's grain beside its plant
+(per-instruction, per-block, whole-program), and a plant that comes back blind opens a fixture task in the same sprint.

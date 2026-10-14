@@ -153,3 +153,41 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   bound: a block counts in full when it leaves early). Flag-setting classes and conditional branches take about 75% of
   the words: CMP 16.3% (25.9 words each), ADD 15.4% (26.4), SUB 6.9% (26.3), TEST 4.7% (19.3), JNZ 4.6% (15.0), SHL
   4.3% (41.5), AND 4.3% (21.8); MOV takes 3.5 words, LEA 3.9. Every flag is computed eagerly into its own register.
+- **L, flag liveness** (085227a7; index 82b45861, CI 38534809973). A setter computes only the flags a later instruction
+  reads: a backward pass over the block from the flags live at its end, which come from scanning each direct successor
+  (8 instructions, following direct jumps, only on pages already behind translated code, the block joining those pages
+  so a write drops it). Model steps, #UD and DIV read every flag; a load or store does not, so a fault where the flags
+  are dead shows an earlier instruction's flags in EFlags (Decision 2026-10-14, agent-resolved). Census over 10 billion
+  instructions: 6.05 arm64 words per x86 instruction in bodies to 4.02 (CMP 10.56 to 5.06, ADD 11.07 to 5.68). The
+  class runs cannot judge it: they compile one instruction per block (lockstep), so the card's "a live-flag plant the
+  class runs must catch" has no reach there. `tests/test_flag_liveness.py` judges it instead: 300 seeded random
+  programs of setters, readers, loads, stores, jumps and PUSH-POP pairs, run with the pass and without, equal registers
+  and RFLAGS required; plants (SETcc and CMOVcc reading nothing, a successor's reads dropped, INC writing CF) each fail
+  it.
+- **Operand forms** (74c13a67, 72aba3c6): guest registers read in place (64-bit, and 32-bit where every use takes the
+  low half), ADD and SUB immediates, branch targets built straight in x17, results computed into the register they are
+  stored to when nothing after can fault or read its old value, W-form 32-bit ALU ops, and a dead flags op reading
+  nothing. Bodies 4.02 to 3.31 to 2.91 words. Plants caught by class runs: an alias read after its register is written
+  (XCHG, XADD, CMPXCHG), SUB's immediate added (PUSH, CALL_NEAR), a branch target off by one (JMP, JNZ, CALL_NEAR), a
+  forward past a store that can fault (one of XCHG, XADD, CMPXCHG, POP). Two guards no class reaches (the lifter
+  stores a register before the flags op that reads its old value; every 32-bit lowering reads only low bits) are
+  judged by `tests/test_operand_forms.py`.
+- **The passes, timed** (alternating runs to 30 billion instructions, three each, 104511ce against the passes): in the
+  vCPU 14.1-15.5 s against 9.5-10.1 s; hvc 1, the Python compiler at each dispatch miss, 7.6-8.3 s against 13.6-14.6
+  s; wall 52-59 s against 58-60 s. A 3-billion-instruction profile: 89,427 blocks compiled, `_compile` 28.4 of 42.6 s.
+  The lift cache (db71015a: lifted instructions kept until their page is written; 863,265 lifts to 486,738) brought
+  hvc 1 to 11.6-12.2 s and wall to 53-56 s, level with before the passes; two of those runs shared the Mac with
+  another VM and QEMU. The rest of the compiler's time is the per-run Python compile, recentering steps 6 and 8.
+- **Recentering step 3b, the PE images' share** (0ea202fd; laptop run lap-20261014T092507362Z-0ea202fd, play mode,
+  the game's own exe, 120 s, an interrupt per 1,000,000 retired instructions): 592,230 samples. Play (35-120 s):
+  UnityPlayer.dll 76.9%, the NVIDIA user-mode driver 14.5%, ntoskrnl 3.0%, d3d11 1.5%; code in no image (Mono's
+  compiled methods) is not among the first six. Load (0-34 s): UnityPlayer.dll 78.9%. Of the work w2m translates in
+  play, UnityPlayer.dll is about 90%: the ahead-of-time cache is for the PE images.
+- **D, again: the wake path** (recentering step 5's first piece; 44a557dc, index e8c5dc1b). Every blocked wait names
+  its key (the section, the lock, the variable, the object; 0 for a wait on several or a pipe; none for Sleep), a
+  signal wakes only the threads waiting on its key, and the host publishes the waited keys so a signal nobody waits on
+  makes no exit. Frontier to 10 billion instructions: hvc 12 202,183 to 240, hvc 8 12,569 to 3,213; the call stream's
+  findings unchanged. The plants on the keys first changed no family row: no probe woke a wait on several objects by a
+  signal. wait_handoff 0.2.0 (laptop run lap-20261014T094031671Z-93f645c3) adds the row: Windows gives the waiter the
+  second event and the setter's zero-timeout wait 258; w2m gave it to the setter. Fixed (a wait on several is handed
+  over), and the plants change that row alone.
