@@ -94,6 +94,7 @@ X87_SW_OFF, X87_ST_OFF = 158, 768    # the state block's x87_status_word (x87_ta
                                      # (specs/guest_state.json; Sprint 065: the model's x87 steps keep them)
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 CODE_WRITE_SPILL = 0x88             # MONITOR_DATA + this: x17 while the exception entry asks about a write to code
+PAUSE_COUNT = 0xA8                  # MONITOR_DATA + this: PAUSE instructions run (Sprint 068 item J, the spin census)
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
@@ -1018,6 +1019,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.emit(a64.ldp(i, i + 1, 16, 8 * i))
         elif k == "df":                                         # CLD, STD
             a.emit(a64.movz(16, op[1]), a64.str_(1, 16, 28, DF_BYTE))
+        elif k == "pause":                                      # PAUSE counted: the spin census (Sprint 068 item J)
+            a.emit(a64.ldr(8, 16, 28, PAUSE_COUNT), a64.addi(16, 16, 1), a64.str_(8, 16, 28, PAUSE_COUNT))
         elif k == "br":
             if op[1] == "always":
                 a.emit(a64.mov(17, reg_of(op[2])))
@@ -1201,6 +1204,7 @@ class VM:
         # (0: none yet) and the incoming one's
         self._vswap: tuple[int, int] | None = None
         self._vslots_used = 0
+        self._slice_start = (0, 0)                     # the counters when the running thread got the vCPU
         self._pending_init = 0                         # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
@@ -1784,7 +1788,26 @@ class VM:
         fpcr, fpsr = struct.unpack_from("<QQ", self.mm, at + 256)
         return xmm, int(fpcr), int(fpsr)
 
+    def _counts(self) -> tuple[int, int]:
+        executed, = struct.unpack_from("<Q", self.mm, MONITOR_DATA)
+        pauses, = struct.unpack_from("<Q", self.mm, MONITOR_DATA + PAUSE_COUNT)
+        return int(executed), int(pauses)
+
+    def thread_census(self) -> dict[int, tuple[int, int]]:
+        """Each thread's instructions and PAUSEs so far (the spin census, Sprint 068 item J): the totals at its switches,
+        and the running thread's since it last got the vCPU."""
+        executed, pauses = self._counts()
+        out = {tid: (t.instructions, t.pauses) for tid, t in self.threads.items()}
+        if self.current_tid in out:
+            n, p = out[self.current_tid]
+            out[self.current_tid] = (n + executed - self._slice_start[0], p + pauses - self._slice_start[1])
+        return out
+
     def _save_thread(self, t: GuestThread, x: list[int]) -> None:
+        executed, pauses = self._counts()
+        t.instructions += executed - self._slice_start[0]
+        t.pauses += pauses - self._slice_start[1]
+        self._slice_start = (executed, pauses)
         t.x = list(x)
         self._vswap = (self._vslot(t), 0)                # the monitor saves its vectors at the next `set`
         t.monitor = [bytes(self.mm[MONITOR_DATA + a:MONITOR_DATA + b]) for a, b in PER_THREAD_MONITOR]
@@ -1796,6 +1819,7 @@ class VM:
             self.mm[MONITOR_DATA + a:MONITOR_DATA + b] = data
         st = self._process(STATE_OFF)
         self.mm[st:st + STATE_SIZE] = t.state
+        self._slice_start = self._counts()
         save = self._vswap[0] if self._vswap is not None else 0
         # the same thread back (another VM ran meanwhile, on its own vCPU): its vectors never left this one
         self._vswap = None if save == self._vslot(t) else (save, self._vslot(t))

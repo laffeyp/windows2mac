@@ -6,4 +6,4 @@ from w2m.rules import _int
 
 ICLASSES = ('PAUSE',)
 SHARED = ("_int",)
-rule = _int.nop
+rule = _int.pause

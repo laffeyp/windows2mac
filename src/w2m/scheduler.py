@@ -50,6 +50,8 @@ class GuestThread:
     start: int = 0                       # the start routine, or the first thread's entry
     created_suspended: bool = False      # CREATE_SUSPENDED
     vslot: int = 0                       # its vector slot's offset in the memory file (vm_backend.VECTOR_SLOTS)
+    instructions: int = 0                # x86 instructions it ran, and PAUSEs among them (Sprint 068 item J)
+    pauses: int = 0
 
 
 def _call(fn: int, rcx: int, edx: int) -> bytes:

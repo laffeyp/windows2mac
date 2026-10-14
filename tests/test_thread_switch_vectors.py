@@ -83,3 +83,33 @@ def test_a_switch_saves_the_outgoing_vectors_and_loads_the_incoming() -> None:
     assert seen["in two"] == (b, fpcr_b, 0x10)
     assert seen["one's slot"] == (a, fpcr_a, 0)
     assert seen["back in one"] == (a, fpcr_a, 0)
+
+
+@pytest.mark.hvf
+def test_the_spin_census_counts_pauses_and_each_threads_instructions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sprint 068 item J. Three PAUSEs in a tiny program leave PAUSE_COUNT at 3; in the threads probe every thread's
+    instructions, summed at its switches, add up to the VM's own count."""
+    from w2m import vm_backend
+    from w2m.loader import Loaded, Memory
+    code_va, stack_va = 0x2000_0000, 0x4000_0000
+    mem = Memory()
+    code = bytes.fromhex("f390 f390 f390 c6042500000000 00")          # pause x3; mov byte [0], 0: the end
+    mem.map(code_va, 0x1000, "code").data[:len(code)] = code
+    mem.map(stack_va, 0x10000, "stack")
+    vm = vm_backend.VM(Loaded(None, mem, code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
+    try:
+        vm.run(max_steps=1 << 20, timeout_ms=10_000)
+        assert vm._counts()[1] == 3
+    finally:
+        vm.close()
+    seen: list[tuple[dict[int, tuple[int, int]], int]] = []
+    close = vm_backend.VM.close
+
+    def counted_close(v: vm_backend.VM) -> None:
+        seen.append((v.thread_census(), v._counts()[0]))
+        close(v)
+    monkeypatch.setattr(vm_backend.VM, "close", counted_close)
+    f = family_run.FAMILIES["threads"]
+    family_run.run_in_vm(next(iter(f.runs.values())).binary, f=f)
+    census, executed = seen[-1]
+    assert len(census) > 1 and sum(n for n, _ in census.values()) == executed, (census, executed)

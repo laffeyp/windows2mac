@@ -17,6 +17,10 @@ def nop(ctx: Ctx) -> None:
     pass
 
 
+def pause(ctx: Ctx) -> None:
+    ctx.b.emit("pause")                                  # no architectural effect; the VM counts it (Sprint 068 item J)
+
+
 def df(ctx: Ctx) -> None:
     ctx.b.emit("df", int(ctx.ic == "STD"))
 

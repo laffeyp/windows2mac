@@ -260,7 +260,7 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
-        state.update(exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
+        state.update(threads=vm.thread_census(), exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
                      code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
                      split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
                      code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40])
@@ -353,6 +353,10 @@ def main(argv: list[str]) -> int:
     print(f"exits by hvc {dict(sorted(state.get('exits', {}).items(), key=lambda kv: -kv[1]))}; "
           f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s; "
           f"{state.get('thunks')} thunks")
+    census = state.get("threads", {})
+    total = sum(n for n, _ in census.values()) or 1
+    print(f"threads by instructions (PAUSEs; Sprint 068 item J): {sum(p for _, p in census.values())} PAUSEs; " + ", ".join(
+        f"{tid} {n} ({100 * n / total:.1f}%, {p})" for tid, (n, p) in sorted(census.items(), key=lambda kv: -kv[1][0])))
     for (imm, at), n in state.get("exit_sites", []):
         print(f"  hvc {imm} at 0x{at:x}: {n}")
     for (imm, ic), (n, sites) in state.get("exit_classes", [])[:40]:

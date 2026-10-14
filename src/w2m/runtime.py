@@ -1123,6 +1123,8 @@ class Runtime:
                 self._store(op[2], int(self._cond(op[1])))
             elif k == "df":
                 self.th.df = bool(op[1])
+            elif k == "pause":                                    # a spin-loop hint: nothing to do
+                pass
             elif k == "sel":                                      # ("sel", t, cond_t, x, y): cond ? x : y
                 t[op[1]] = t[op[3]] if t[op[2]] else t[op[4]]
             elif k in ("cst", "cstz"):                            # store when cond is nonzero (cst) or zero (cstz)

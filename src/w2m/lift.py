@@ -38,6 +38,7 @@ Operations (t* are temporaries, loc is ("r", index, bits, high8) or ("m", t_addr
   ("fence", kind)                 SFENCE "st": earlier stores before later ones; LFENCE "ld": earlier loads
                                   before later accesses; MFENCE "full": every access (Sprint 047)
   ("fcw", "st", loc)               FNSTCW (Sprint 049): the x87 control word to 2 bytes of memory
+  ("pause",)                      PAUSE: no architectural effect; the VM counts it (Sprint 068 item J)
   ("x87", ic, opcode, reg, st, mem) one x87 instruction, run whole by the model (src/w2m/x87.py; Sprint 065)
   ("mmx", ic, dst, src, imm)        one MMX-register instruction, run whole by the model (src/w2m/mmx.py; Sprint 065):
                                     dst and src ("mm", n), ("x", n, bits), ("r", idx, bits, hi), ("m", t, bytes),
