@@ -47,7 +47,6 @@ def test_a_switch_saves_the_outgoing_vectors_and_loads_the_incoming() -> None:
     with the incoming load dropped; this does not."""
     from w2m import vm_backend
     from w2m.loader import Loaded, Memory
-    from w2m.scheduler import GuestThread
     code_va, stack_va = 0x2000_0000, 0x4000_0000
     mem = Memory()
     mem.map(code_va, 0x1000, "code").data[:8] = bytes.fromhex("c6042500000000 00")   # mov byte [0], 0: the end
@@ -64,8 +63,8 @@ def test_a_switch_saves_the_outgoing_vectors_and_loads_the_incoming() -> None:
         one = v.threads[v.current_tid]
         v.set_vectors(a, fpcr_a, 0)
         v._save_thread(one, x)
-        two = GuestThread(99, one.teb, one.stack, x=list(x), monitor=list(one.monitor), state=one.state)
-        v.threads[99] = two
+        two = v._add_thread(99, one.teb, one.stack)
+        two.x, two.monitor, two.state = list(x), one.monitor, one.state
         v._write_vectors(two, b, fpcr_b, 0x10)
         v.current_tid = 99
         v._load_thread(two)
@@ -75,7 +74,7 @@ def test_a_switch_saves_the_outgoing_vectors_and_loads_the_incoming() -> None:
         v.current_tid = one.tid
         v._load_thread(one)
         seen["back in one"] = v.vectors()
-        del v.threads[99]
+        two.status = "ended"
     try:
         vm.run(max_steps=1 << 20, timeout_ms=10_000, on_dispatch=swap)
     finally:

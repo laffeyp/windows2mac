@@ -146,6 +146,7 @@ void w2m_block(u64 deadline, u64 key);       /* threads.c: RETRY until `key` is 
                                               * deadline; key 0 wakes on any signal, W2M_KEY_NONE on none */
 #define W2M_KEY_NONE (~0ull)               /* Sleep: only its deadline ends it */
 void w2m_signal(u64 key);                    /* threads.c: what `key` names changed; its waiters re-check */
+u64 w2m_guest_rip_at(u64 host_pc);           /* runtime.c: the x86 address translated code at host_pc stands for */
 _Static_assert(__builtin_offsetof(struct w2m_state, st) == 768, "state.st0");
 
 /* Windows x64 EXCEPTION_RECORD and CONTEXT, at the offsets probes/guest_state measured on the
@@ -318,7 +319,7 @@ enum { W2M_EXCEPTION_STUBS = 1, W2M_EXCEPTION_CAPTURE_XMM };
 
 /* W2M_HOST_THREAD's first argument (src/w2m/scheduler.py). */
 enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_SUSPEND, W2M_THREAD_RESUME,
-       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL, W2M_THREAD_STACK_GROW };
+       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL_RETIRED, W2M_THREAD_STACK_GROW };   /* 8: Sprint 069 */
 
 /* After a request that mapped or unmapped pages (a thread's stack: THREAD_CREATE, THREAD_STACK_GROW), the stage-1
  * translations cached for them go (Arm ARM D8.13: TLBI VMALLE1, then DSB and ISB). */

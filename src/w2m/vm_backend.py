@@ -63,8 +63,9 @@ from w2m.pe import parse as parse_pe
 from w2m.x86dec import DecodeError
 from w2m.runtime import Result
 from w2m import guest_stubs
-from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, WAIT_KEY_OFF, GuestThread, attach_stub,
-                            detach_stub, write_context)
+from w2m.scheduler import (E_MONITOR, E_MONITOR_AT, E_STATE, E_X, PER_THREAD_MONITOR, RT_COUNT, RT_CURRENT,
+                            RT_CURRENT_ENTRY, RT_ENTRIES, RT_IN_VM, RT_SLICE_COUNT, RT_SWITCHES, RUN_ENTRY, SCRATCH_OFF,
+                            STATE_SIZE, TIME_SLICE, GuestThread, attach_stub, detach_stub, write_context)
 
 ROOT = Path(__file__).resolve().parents[2]
 MONITOR_SOURCE = ROOT / "tools" / "vm_monitor" / "vm_monitor.c"
@@ -166,8 +167,10 @@ OP_RUN, OP_VGET, OP_VSET, OP_LEAVE, OP_SWAP = 1, 2, 3, 4, 5
 BLOCK_CENSUS = False         # recentering step 3: each block counts its own executions (arm64 words per x86 instruction)
 FLAGS_FROM_NZCV = True       # recentering step 5: ADD SUB INC DEC set CF ZF SF OF through NZCV; False: the bitwise way
 TRANSPORT = "channel"        # "pipe": every exit's registers as text over the monitor's pipe, as before Sprint 068
-MONITOR_SIZE = (SPLIT_TABLES + SPLIT_TABLES_SIZE + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
-assert CHANNEL + PAGE <= MONITOR_SIZE
+# The run table (scheduler.py RT_*, E_*; Sprint 069): a header page, then one entry per thread, in thread id order
+RUN_TABLE = CHANNEL + PAGE
+RUN_THREADS = VECTOR_SLOT_COUNT
+MONITOR_SIZE = (RUN_TABLE + RT_ENTRIES + RUN_ENTRY * RUN_THREADS + BLOCK - 1) & ~(BLOCK - 1)   # mapped in 2 MB blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -277,7 +280,7 @@ REQUEST_FILES: dict[str, tuple[str, ...]] = {
                                                    "UNLINK", "STAT", "MKDIR", "RMDIR", "FSTAT", "DUP", "LIST")},
 }
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
-    THREAD_SIGNAL, THREAD_STACK_GROW = range(1, 10)
+    THREAD_SIGNAL_RETIRED, THREAD_STACK_GROW = range(1, 10)     # 8: signals wake waiters in the VM (Sprint 069)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -316,7 +319,9 @@ FLAG_BIT = {"C": 0, "Z": 1, "S": 2, "O": 3, "P": 4, "A": 5}
 U_CF, U_ZF, U_SF, U_OF, U_PF, U_AF = (1 << FLAG_BIT[f] for f in "CZSOPA")   # bits of REG_UNDEFINED_FLAGS
 FLAG_REG = {"C": REG_CF, "Z": REG_ZF, "S": REG_SF, "O": REG_OF, "P": REG_PF}
 MAX_BLOCK_INSNS = 64
-BLOCKED_KEYS = 32                  # threads.c W2M_BLOCKED_KEYS: the waited-on keys published to the guest
+# Sprint 069 (recentering step 5): slice ends, blocking waits and yields switch threads in the VM by the host's rule
+# (threads.c w2m_switch); False: every switch leaves the VM for _schedule, as before
+SWITCH_IN_VM = True
 ASYNC_STOP_RULE = "forward"     # "backward" exists only so a test can show the forward rule is what saves the count
 
 
@@ -925,7 +930,13 @@ def runtime_defines() -> dict[str, int]:
         "W2M_INIT_STUB_SLOT": INIT_STUB_SLOT,
         "W2M_MONITOR_DATA_VA": MONITOR_VA + MONITOR_DATA, "W2M_SAVE_VA": MONITOR_VA + MONITOR_DATA + SAVE_AREA,
         "W2M_RECON_VA": MONITOR_VA + RECON_TABLE, "W2M_RECON_COUNT_VA": MONITOR_VA + MONITOR_DATA + RECON_COUNT,
-        "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE}
+        "W2M_CODE_START": MONITOR_VA + CODE_CACHE, "W2M_CODE_END": MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE,
+        "W2M_RUN_TABLE_VA": MONITOR_VA + RUN_TABLE, "W2M_RUN_ENTRIES_OFF": RT_ENTRIES, "W2M_RUN_ENTRY": RUN_ENTRY,
+        "W2M_RUN_X_OFF": E_X, "W2M_RUN_MONITOR_OFF": E_MONITOR, "W2M_RUN_STATE_OFF": E_STATE,
+        "W2M_STATE_SIZE": STATE_SIZE, "W2M_TIME_SLICE": TIME_SLICE, "W2M_SLICE_UNTIL_OFF": SLICE_UNTIL,
+        "W2M_RUN_END_OFF": RUN_END, "W2M_PAUSE_COUNT_OFF": PAUSE_COUNT, "W2M_MONITOR_VA": MONITOR_VA,
+        **{f"W2M_RUN_MONITOR_{i}": v for i, v in enumerate(x for (a, b), at in zip(PER_THREAD_MONITOR, E_MONITOR_AT)
+                                                          for x in (a, b, at))}}
 
 
 # ---- SSE (Sprint 041) ---------------------------------------------------------------------------
@@ -949,7 +960,6 @@ CODE_WRITE_ESR_MASK = (0x3F << 26) | (1 << 6) | 0x3F
 CODE_WRITE_ESR = (0x25 << 26) | (1 << 6) | 0x0F
 STATE_REDIRECT, STATE_SCHEDULE = 0xE8, 0xF0       # runtime.h w2m_state.redirect_rip, .schedule
 SCHEDULE_YIELD, SCHEDULE_RETRY, SCHEDULE_END, SCHEDULE_ANSWER = 1, 2, 4, 8
-STATE_SIZE = 896
 CVT_INDEFINITE = True        # False exists only so a test can show the CPU catches the missing fix-up
 
 
@@ -1854,9 +1864,7 @@ class VM:
         # a thread switch's vector swap, sent with the next `set` (vm_monitor.c vswap): the outgoing thread's slot
         # (0: none yet) and the incoming one's
         self._vswap: tuple[int, int] | None = None
-        self._vslots_used = 0
         self._channel: Channel | None = None            # the monitor's channel while a run uses it (TRANSPORT)
-        self._slice_start = (0, 0)                     # the counters when the running thread got the vCPU
         self._final_census: dict[int, tuple[int, int]] | None = None   # thread_census at close
         self._pending_init = 0                         # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
@@ -1922,6 +1930,8 @@ class VM:
         self.slow_sse = 0                                # SSE instructions run by x86fp (MXCSR unmasked)
         self.slow_sse_classes: Counter[tuple[str, int]] = Counter()   # (iclass, MXCSR's six mask bits) per model step
         self._write_monitor()
+        self.switch_va = self._switch_stub(from_slice=False)      # a bridge's hand-over (state.schedule)
+        self.switch_slice_va = self._switch_stub(from_slice=True)  # a slice's end
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
         self._trace_bound: set[str] = set()
@@ -1942,7 +1952,7 @@ class VM:
         self.machine: Any = None                         # the kernel.Machine running this VM among others (Sprint 055)
         self._idle: tuple[GuestThread, int, bool] | None = None   # where _switch found no thread to run
         self._max_steps = 0
-        self.current_tid = tid
+        self._first_tid = tid                            # current_tid until the first thread is in the run table
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
                                      [(i.base, i.pe) for i in loaded.images] or
                                      ([(loaded.image.image_base, loaded.image)] if loaded.image is not None else []),
@@ -1957,8 +1967,9 @@ class VM:
     def _slice_stub(self) -> int:
         """The slice stub every block's stop calls (BL, X30 the stop's HVC #4): when the count (the limit word minus
         x23) is below SLICE_UNTIL and a further TIME_SLICE stays within RUN_END, raise the limit and x23 by TIME_SLICE
-        and return past the HVC into the block; otherwise return to the HVC. Uses x16-x18 and x25, dead at a block's
-        entry. A step that leaves no exit is no change of thread: the same thread was going to run on."""
+        and return past the HVC into the block; otherwise, when the run table lets the VM switch, on to the switch stub
+        (threads.c w2m_switch decides), else return to the HVC. Uses x16-x18 and x25, dead at a block's entry. A step
+        that leaves no exit is no change of thread: the same thread was going to run on."""
         a = Assembler(MONITOR_VA + self.code_cursor)
         out = a.label()
         a.emit(a64.ldp(16, 17, 28, SLICE_UNTIL), a64.ldr(8, 18, 28, 8), a64.sub(25, 18, REG_BUDGET), a64.cmp(25, 16))
@@ -1966,7 +1977,13 @@ class VM:
         a.emit(*a64.mov_imm(25, TIME_SLICE), a64.add(18, 18, 25), a64.cmp(18, 17))
         a.branch(lambda off: a64.bcond("hi", off), out)
         a.emit(a64.str_(8, 18, 28, 8), a64.add(REG_BUDGET, REG_BUDGET, 25), a64.addi(30, 30, 4))
+        a.emit(a64.ret())
         a.bind(out)
+        hvc = a.label()
+        a.emit(*a64.mov_imm(16, MONITOR_VA + RUN_TABLE), a64.ldr(8, 16, 16, RT_IN_VM))
+        a.branch(lambda off: a64.cbz(16, off), hvc)
+        a.branch(a64.b, self.switch_slice_va)
+        a.bind(hvc)
         a.emit(a64.ret())
         words = a.finish()
         va = MONITOR_VA + self.code_cursor
@@ -1974,6 +1991,74 @@ class VM:
         self.code_cursor += 4 * len(words)
         self._recon_append([(va, 0)])                   # not the guest's code
         return va
+
+    def _switch_stub(self, from_slice: bool) -> int:
+        """The thread switch inside the VM (Sprint 069): save the guest registers in the running thread's run table
+        entry and its vectors in its slot, write the count, and call threads.c w2m_switch(schedule, stop) on the
+        runtime's stack. It answers 1 when a thread goes on (the entry now current, maybe another's, holds its
+        registers, x17 its RIP and x23 its budget): load that thread's vectors and registers and dispatch. It answers 0
+        when the host decides: the registers as they were, and the exit the stub stands for (a slice's end returns to
+        the block's HVC #4 in x30, a bridge's hand-over makes HVC #12). Entered by B, from the slice stub (x16-x18 and
+        x25 dead) or a bridge's hand-over (x16 and x30 dead, x17 the RIP)."""
+        a = Assembler(MONITOR_VA + self.code_cursor)
+
+        def entry_in_x16() -> None:
+            a.emit(*a64.mov_imm(16, MONITOR_VA + RUN_TABLE), a64.ldr(8, 16, 16, RT_CURRENT_ENTRY))
+
+        def registers(op: Any) -> None:
+            for r in (0, 2, 4, 6, 8, 10, 12, 14, 17, 19, 21, 23, 25, 27, 29):
+                a.emit(op(r, r + 1, 16, E_X + 8 * r))
+
+        def vectors_at_x17() -> None:
+            a.emit(a64.ldr(8, 17, 16, 0x28), *a64.mov_imm(18, MONITOR_VA), a64.add(17, 17, 18))   # E_VSLOT
+
+        entry_in_x16()
+        registers(a64.stp)
+        vectors_at_x17()
+        for q in range(0, 16, 2):
+            a.emit(a64.stp_q(q, q + 1, 17, 16 * q))
+        a.emit(a64.mrs(18, a64.FPCR), a64.mrs(25, a64.FPSR), a64.stp(18, 25, 17, 256))
+        a.emit(*count_from_budget())
+        a.emit(*a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0))
+        if from_slice:
+            a.emit(a64.movz(0, 0), a64.mov(1, 30))
+        else:
+            a.emit(*a64.mov_imm(16, PROCESS_VA + STATE_OFF), a64.ldr(4, 0, 16, STATE_SCHEDULE), a64.movz(1, 0))
+        a.emit(*a64.mov_imm(16, self.runtime.symbols["w2m_switch"]), a64.blr(16))
+        decline = a.label()
+        entry_in_x16()
+        a.branch(lambda off: a64.cbz(0, off), decline)
+        vectors_at_x17()
+        for q in range(0, 16, 2):
+            a.emit(a64.ldp_q(q, q + 1, 17, 16 * q))
+        a.emit(a64.ldp(18, 25, 17, 256), a64.msr(a64.FPCR, 18), a64.msr(a64.FPSR, 25))
+        registers(a64.ldp)
+        a.branch(a64.b, self.dispatch_va)
+        a.bind(decline)
+        registers(a64.ldp)
+        a.emit(a64.ret() if from_slice else a64.hvc(HVC_SCHEDULE))
+        words = a.finish()
+        va = MONITOR_VA + self.code_cursor
+        self._write_words(self.code_cursor, words)
+        self.code_cursor += 4 * len(words)
+        self._recon_append([(va, 0)])                   # not the guest's code
+        return va
+
+    def _stop_block_length(self, after_stop: int) -> int:
+        """The instructions of the block whose stop made HVC #4 (`after_stop` the word after it, the stop's B to the
+        block's body): the immediate of the block entry's SUBS x23, x23, #n, two words before the body."""
+        off = after_stop - MONITOR_VA
+        imm26 = struct.unpack_from("<I", self.mm, off)[0] & 0x3FFFFFF
+        body = off + 4 * (imm26 - (1 << 26) if imm26 >> 25 else imm26)
+        subs = struct.unpack_from("<I", self.mm, body - 8)[0]
+        assert subs & ~(0xFFF << 10) == 0xF1000000 | REG_BUDGET << 5 | REG_BUDGET, hex(subs)
+        return int(subs >> 10 & 0xFFF)
+
+    def _give_back(self, after_stop: int) -> None:
+        """A thread leaving at a block's stop goes on at the block's entry, whose SUBS counts the block again: take
+        its instructions off the count (threads.c w2m_switch does the same in the VM)."""
+        count = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+        struct.pack_into("<Q", self.mm, MONITOR_DATA, count - self._stop_block_length(after_stop))
 
     def _wake_expired(self) -> None:
         """On the instruction clock, make ready every blocked thread whose deadline has passed, as a timed-out wait on
@@ -1984,13 +2069,9 @@ class VM:
         executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
         rate, warp = struct.unpack_from("<QQ", self.mm, MONITOR_DATA + CLOCK_RATE)
         now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
-        woke = False
         for t in self.threads.values():
             if t.status == "blocked" and t.deadline != M64 and t.deadline <= now:
                 t.status = "ready"
-                woke = True
-        if woke:
-            self._publish_blocked()
 
     def _slice_until(self, forced: bool) -> int:
         """SLICE_UNTIL for the next run: 0 when a slice's end must reach the host (lockstep, a forced stop, another
@@ -2373,11 +2454,10 @@ class VM:
         struct.pack_into("<I", state, 152, 0x1F80)
         struct.pack_into("<H", state, 156, 0x27F)
         struct.pack_into("<QQ", state, 176, teb, teb)
-        t = GuestThread(tid, teb, (dealloc, limit, top), x=x, fpcr=fpcr_for(0x1F80), monitor=monitor,
-                        state=bytes(state), suspend=1 if flags & 0x4 else 0, parent=self.current_tid, start=start,
-                        created_suspended=bool(flags & 0x4))
-        self.threads[tid] = t
-        self._write_vectors(t, [0] * 16, t.fpcr, 0)       # as a Windows thread starts: XMM clear, MXCSR 0x1F80
+        t = self._add_thread(tid, teb, (dealloc, limit, top), parent=self.current_tid, start=start,
+                             created_suspended=bool(flags & 0x4))
+        t.x, t.monitor, t.state, t.suspend = x, monitor, bytes(state), 1 if flags & 0x4 else 0
+        self._write_vectors(t, [0] * 16, fpcr_for(0x1F80), 0)   # as a Windows thread starts: XMM clear, MXCSR 0x1F80
         self.virtual.stacks.append(t.stack)
         self._set_budget()                                # two threads: time slices from now on
         return tid
@@ -2432,12 +2512,6 @@ class VM:
         if sub == THREAD_END:
             cur.exit_code = a0 & 0xFFFFFFFF
             return 0
-        if sub == THREAD_SIGNAL:                         # a0: the key signaled (threads.c w2m_signal; 0 any)
-            for t in self.threads.values():
-                if t.status == "blocked" and (not a0 or not (key := self._wait_key(t)) or key == a0):
-                    t.status = "ready"
-            self._publish_blocked()
-            return 0
         found = self.threads.get(a0 & 0xFFFFFFFF)
         if found is None:
             raise Unimplemented(f"a thread request ({sub}) for thread id {a0 & 0xFFFFFFFF}, which w2m did not create")
@@ -2486,10 +2560,6 @@ class VM:
         limit = min(self._max_steps, executed + TIME_SLICE) if shared else self._max_steps
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, limit)
 
-    def _wait_key(self, t: GuestThread) -> int:
-        """What blocked thread t waits on (w2m_block's key in its TEB scratch): 0 any signal, ~0 none."""
-        return int(struct.unpack("<Q", self._read_guest(t.teb + SCRATCH_OFF + WAIT_KEY_OFF, 8))[0])
-
     def _read_guest(self, va: int, n: int) -> bytes:
         """Guest memory, the process area (the first thread's TEB, the PEB) included."""
         off = va - PROCESS_VA
@@ -2497,25 +2567,45 @@ class VM:
             return bytes(self.mm[self._process(off):self._process(off) + n])
         return bytes(self.mem.read(va, n))
 
-    def _publish_blocked(self) -> None:
-        """The number of blocked threads and the keys they wait on, where threads.c's w2m_signal reads them: a key
-        no blocked thread waits on, with none waiting on any key, costs no exit."""
-        blocked = [t for t in self.threads.values() if t.status == "blocked"]
-        keys = sorted({k for k in map(self._wait_key, blocked) if k})
-        anywait = sum(1 for t in blocked if not self._wait_key(t)) + (len(keys) > BLOCKED_KEYS)
-        struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_threads_blocked"] - MONITOR_VA, len(blocked))
-        struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_blocked_any"] - MONITOR_VA, anywait)
-        table = (keys + [0] * BLOCKED_KEYS)[:BLOCKED_KEYS]
-        struct.pack_into(f"<{BLOCKED_KEYS}Q", self.mm, self.runtime.symbols["w2m_blocked_keys"] - MONITOR_VA, *table)
+    def switches_in_vm(self) -> int:
+        """Thread switches threads.c w2m_switch made inside the VM (the run table's header)."""
+        return int(struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_SWITCHES)[0])
+
+    @property
+    def current_tid(self) -> int:
+        """The running thread's id: the run table's current entry's (threads.c w2m_switch changes it in the VM)."""
+        if not struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_COUNT)[0]:
+            return self._first_tid
+        at = struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_CURRENT_ENTRY)[0] - MONITOR_VA
+        return int(struct.unpack_from("<Q", self.mm, at)[0])
+
+    @current_tid.setter
+    def current_tid(self, tid: int) -> None:
+        t = self.threads[tid]
+        struct.pack_into("<QQ", self.mm, RUN_TABLE + RT_CURRENT, t.index, MONITOR_VA + t.at)
+
+    def _add_thread(self, tid: int, teb: int, stack: tuple[int, int, int], parent: int = 0, start: int = 0,
+                    created_suspended: bool = False) -> GuestThread:
+        """A new thread's run table entry, after the others: the table's order is thread id order, the switch's
+        rotation (threads.c w2m_switch, _switch). Ready, its vector slot given."""
+        n = struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_COUNT)[0]
+        if n == RUN_THREADS:
+            raise Unimplemented(f"more than {RUN_THREADS} threads in one process")
+        if self.threads and tid <= max(self.threads):
+            raise Unimplemented(f"thread id {tid} below an earlier thread's: the run table's order is the ids'")
+        t = GuestThread(self.mm, RUN_TABLE, n, tid, teb, stack, parent, start, created_suspended)
+        self.threads[tid] = t
+        struct.pack_into("<Q", self.mm, RUN_TABLE + RT_COUNT, n + 1)
+        self._vslot(t)
+        if n == 0:
+            self.current_tid = tid
+        return t
 
     def _vslot(self, t: GuestThread) -> int:
-        """The thread's vector slot (VECTOR_SLOTS), given out on first use."""
+        """The thread's vector slot (VECTOR_SLOTS), one per run table entry."""
         if not t.vslot:
-            if self._vslots_used == VECTOR_SLOT_COUNT:
-                raise Unimplemented(f"more than {VECTOR_SLOT_COUNT} threads in one process")
-            t.vslot = VECTOR_SLOTS + VECTOR_SLOT * self._vslots_used
-            self._vslots_used += 1
-        return t.vslot
+            t.vslot = VECTOR_SLOTS + VECTOR_SLOT * t.index
+        return int(t.vslot)
 
     def _write_vectors(self, t: GuestThread, xmm: list[int], fpcr: int, fpsr: int) -> None:
         at = self._vslot(t)
@@ -2547,14 +2637,21 @@ class VM:
         out = {tid: (t.instructions, t.pauses) for tid, t in self.threads.items()}
         if self.current_tid in out:
             n, p = out[self.current_tid]
-            out[self.current_tid] = (n + executed - self._slice_start[0], p + pauses - self._slice_start[1])
+            begun, begun_pauses = self._slice_start()
+            out[self.current_tid] = (n + executed - begun, p + pauses - begun_pauses)
         return out
+
+    def _slice_start(self) -> tuple[int, int]:
+        """The counters when the running thread got the vCPU (the run table's header)."""
+        a, b = struct.unpack_from("<QQ", self.mm, RUN_TABLE + RT_SLICE_COUNT)
+        return int(a), int(b)
 
     def _save_thread(self, t: GuestThread, x: list[int]) -> None:
         executed, pauses = self._counts()
-        t.instructions += executed - self._slice_start[0]
-        t.pauses += pauses - self._slice_start[1]
-        self._slice_start = (executed, pauses)
+        begun, begun_pauses = self._slice_start()
+        t.instructions += executed - begun
+        t.pauses += pauses - begun_pauses
+        struct.pack_into("<QQ", self.mm, RUN_TABLE + RT_SLICE_COUNT, executed, pauses)
         t.x = list(x)
         self._vswap = (self._vslot(t), 0)                # the monitor saves its vectors at the next `set`
         t.monitor = [bytes(self.mm[MONITOR_DATA + a:MONITOR_DATA + b]) for a, b in PER_THREAD_MONITOR]
@@ -2566,7 +2663,7 @@ class VM:
             self.mm[MONITOR_DATA + a:MONITOR_DATA + b] = data
         st = self._process(STATE_OFF)
         self.mm[st:st + STATE_SIZE] = t.state
-        self._slice_start = self._counts()
+        struct.pack_into("<QQ", self.mm, RUN_TABLE + RT_SLICE_COUNT, *self._counts())
         save = self._vswap[0] if self._vswap is not None else 0
         # the same thread back (another VM ran meanwhile, on its own vCPU): its vectors never left this one
         self._vswap = None if save == self._vslot(t) else (save, self._vslot(t))
@@ -2614,7 +2711,6 @@ class VM:
                 nxt.status = "ready"
         if schedule & SCHEDULE_ANSWER:
             x[0] = int(nxt is not cur)                       # SwitchToThread: nonzero when another thread runs
-        self._publish_blocked()
         if nxt is cur:
             return x
         self._save_thread(cur, x)
@@ -2688,7 +2784,6 @@ class VM:
         for t in self.threads.values():
             if t.status == "blocked":
                 t.status = "ready"
-        self._publish_blocked()
 
     def _bridge(self, import_name: str, thunk: int) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
@@ -2743,7 +2838,7 @@ class VM:
             a.branch(lambda off: a64.cbnz(16, off), to_host)
             a.branch(a64.b, self.miss_va if self.lockstep else self.dispatch_va)
             a.bind(to_host)
-            a.emit(a64.hvc(HVC_SCHEDULE))
+            a.branch(a64.b, self.switch_va)                          # threads.c w2m_switch, or HVC #12
         words = a.finish()
         va = MONITOR_VA + self.code_cursor
         self._write_words(self.code_cursor, words)
@@ -3870,8 +3965,7 @@ class VM:
         runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
         self._cmd = cmd
         if not self.threads:                              # the first thread (scheduler.py; Sprint 051)
-            self.threads[self.current_tid] = GuestThread(self.current_tid, PROCESS_VA + TEB_OFF, self._stack,
-                                                         status="ready", start=self.ld.entry)
+            self._add_thread(self.current_tid, PROCESS_VA + TEB_OFF, self._stack, start=self.ld.entry)
         if struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0] == 0:
             struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
         if struct.unpack_from("<H", self.mm, MONITOR_DATA + FCW_OFF)[0] == 0:
@@ -3913,6 +4007,8 @@ class VM:
                 ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
                 count, limit = struct.unpack_from("<QQ", self.mm, MONITOR_DATA)
                 struct.pack_into("<QQ", self.mm, MONITOR_DATA + SLICE_UNTIL, self._slice_until(forced_stop), max_steps)
+                struct.pack_into("<Q", self.mm, RUN_TABLE + RT_IN_VM, int(SWITCH_IN_VM and not self.lockstep and not forced_stop
+                                 and (self.machine is None or len(self.machine.vms) == 1)))
                 if not runtime_lo <= pc < runtime_hi:           # in the runtime's C, x23 is the C's own
                     x[REG_BUDGET] = (limit - count) & M64       # the budget left, in x23
                 if self._channel is not None:
@@ -4026,12 +4122,14 @@ class VM:
                     self._wake_expired()
                     if self.machine is not None and self.machine.others_ready(self):
                         x[17] = where
+                        self._give_back(e.pc)
                         self._save_thread(self.threads[self.current_tid], x)
                         yield "slice"                            # another VM's turn; this thread goes on after
                         x = self._load_thread(self.threads[self.current_tid])
                         pc = self.resume_va
                     elif len(self.threads) > 1:                 # the time slice ran out: another thread's turn
                         x[17] = where
+                        self._give_back(e.pc)
                         switched = self._schedule(x, 0)
                         while switched is IDLE:
                             yield "idle"
@@ -4100,7 +4198,8 @@ class VM:
         print(f"progress: {self.modules.image_name}: {executed} instructions ({(executed - before[0]) / max(now - before[4], 1e-6) / 1e6:.2f}M/s); "
               f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
               + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
-              + f"; threads {dict(threads)}; thread {self.current_tid} at 0x{x[17]:x}", file=sys.stderr, flush=True)
+              + f"; threads {dict(threads)}; switches in the VM {self.switches_in_vm()}; thread {self.current_tid}"
+              + f" at 0x{x[17]:x}", file=sys.stderr, flush=True)
         if self.slow_sse_classes:
             print("slow sse: " + ", ".join(f"{c} masks 0x{m:x} {n}" for (c, m), n in self.slow_sse_classes.most_common(8)),
                   file=sys.stderr, flush=True)

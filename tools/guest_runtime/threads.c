@@ -14,8 +14,10 @@
  *   - SetThreadPriority takes -15, -2 to 2 and 15 (ERROR_INVALID_PARAMETER otherwise); GetThreadPriority reads
  *     it back; SetThreadDescription and GetThreadDescription answer 0x10000000
  *   - SleepEx and Sleep answer 0; AppPolicyGetThreadInitializationType gives policy 0 and answers 0
- * The host's scheduler (src/w2m/scheduler.py) runs the threads on one vCPU, switching at instruction boundaries:
- * a service that must wait sets state.schedule (runtime.h) and the bridge hands the vCPU over.
+ * The threads run on one vCPU, switching at instruction boundaries: a service that must wait sets state.schedule
+ * (runtime.h) and the bridge hands the vCPU over, and a time slice ends at a block's stop. w2m_switch below makes the
+ * switch inside the VM by the host's rule (src/w2m/vm_backend.py _schedule, _switch; Sprint 069) and leaves to the
+ * host what needs it: a thread's end, a wait with no thread ready, lockstep, a machine of several processes.
  */
 #include "runtime.h"
 
@@ -31,13 +33,40 @@
 int w2m_object_thread_of(u64 h, u32 *tid);   /* sync_objects.c: the thread a handle names */
 u64 w2m_object_thread(u64 api, u32 tid);      /* sync_objects.c: a new handle on thread tid */
 
-/* The host keeps the number of blocked threads here (scheduler.py), so a signal with no waiter costs no exit; and the
- * keys they wait on, so a signal of a key no thread waits on costs none either: w2m_blocked_any counts the blocked
- * threads whose wait takes any signal (key 0, or more keys than the table holds), w2m_blocked_keys the others' keys. */
-volatile u64 w2m_threads_blocked;
-#define W2M_BLOCKED_KEYS 32
-volatile u64 w2m_blocked_any;
-volatile u64 w2m_blocked_keys[W2M_BLOCKED_KEYS];
+/* The run table (src/w2m/scheduler.py RT_*, E_*; Sprint 069): each thread's saved state, status, suspend count,
+ * deadline and census counters, in thread id order, which the host reads and writes as this file does. */
+struct w2m_run_entry {
+    u64 tid, status, suspend, deadline, teb, vslot, instructions, pauses;   /* vslot: its vectors' offset in the file */
+    u64 x[31];                       /* x0-x30 at an x86 instruction boundary; x17 the RIP, x23 the budget */
+    u64 reserved0;
+    u8 monitor[0x130];               /* the per-thread monitor words (scheduler.py PER_THREAD_MONITOR, E_MONITOR_AT) */
+    u8 reserved1[0x10];
+    u8 state[W2M_STATE_SIZE];        /* the state block (struct w2m_state) */
+};
+_Static_assert(__builtin_offsetof(struct w2m_run_entry, x) == W2M_RUN_X_OFF, "run entry x");
+_Static_assert(__builtin_offsetof(struct w2m_run_entry, monitor) == W2M_RUN_MONITOR_OFF, "run entry monitor");
+_Static_assert(__builtin_offsetof(struct w2m_run_entry, state) == W2M_RUN_STATE_OFF, "run entry state");
+_Static_assert(sizeof(struct w2m_run_entry) == W2M_RUN_ENTRY, "run entry size");
+struct w2m_run_table {
+    u64 count, current, current_entry, in_vm, blocked, slice_count, slice_pauses, switches;
+};
+#define RUN ((struct w2m_run_table *)W2M_RUN_TABLE_VA)
+enum { READY, BLOCKED, ENDED };
+
+static struct w2m_run_entry *run_entry(u64 i) {
+    return (struct w2m_run_entry *)(W2M_RUN_TABLE_VA + W2M_RUN_ENTRIES_OFF + i * W2M_RUN_ENTRY);
+}
+
+static u64 *monitor_word(u64 off) { return (u64 *)(W2M_MONITOR_DATA_VA + off); }
+
+static struct w2m_thread_scratch *scratch_of(const struct w2m_run_entry *e) {
+    return (struct w2m_thread_scratch *)(e->teb + W2M_THREAD_SCRATCH_OFF);
+}
+
+static void set_status(struct w2m_run_entry *e, u64 status) {
+    if ((e->status == BLOCKED) != (status == BLOCKED)) RUN->blocked += status == BLOCKED ? 1 : (u64)-1;
+    e->status = status;
+}
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -53,14 +82,133 @@ void w2m_block(u64 deadline, u64 key) {
     w2m_state()->schedule |= W2M_SCHEDULE_RETRY;
 }
 
+/* The waiters on `key` ready: those whose wait takes it, any signal (their key 0), or every key (`key` 0). A thread
+ * ready besides the running one ends the running one's slice at its next stop (SLICE_UNTIL). */
 void w2m_signal(u64 key) {
-    if (!w2m_threads_blocked) return;
-    if (key && !w2m_blocked_any) {
-        int i = 0;
-        while (i < W2M_BLOCKED_KEYS && w2m_blocked_keys[i] != key) i++;
-        if (i == W2M_BLOCKED_KEYS) return;                   /* no thread waits on it */
+    if (!RUN->blocked) return;
+    int woke = 0;
+    for (u64 i = 0; i < RUN->count; i++) {
+        struct w2m_run_entry *e = run_entry(i);
+        if (e->status != BLOCKED) continue;
+        u64 waits_on = scratch_of(e)->wait_key;
+        if (!key || !waits_on || waits_on == key) {
+            set_status(e, READY);
+            woke = 1;
+        }
     }
-    host(W2M_THREAD_SIGNAL, key, 0, 0);
+    if (woke) *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
+}
+
+/* vm_backend.py _wake_expired: on the instruction clock, a blocked thread whose deadline has passed is ready. */
+static void wake_expired(void) {
+    if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return;
+    u64 now = w2m_counter_now();
+    for (u64 i = 0; i < RUN->count; i++) {
+        struct w2m_run_entry *e = run_entry(i);
+        if (e->status == BLOCKED && e->deadline != ~0ull && e->deadline <= now) set_status(e, READY);
+    }
+}
+
+/* vm_backend.py _slice_until, for a run the VM may switch in: 0 when another unsuspended thread is ready; the count
+ * at which the earliest deadline of another blocked thread falls on the instruction clock (0 on another clock); ~0
+ * when no other thread waits with one. */
+static u64 slice_until(u64 cur) {
+    u64 nearest = ~0ull;
+    int timed = 0;
+    for (u64 i = 0; i < RUN->count; i++) {
+        const struct w2m_run_entry *e = run_entry(i);
+        if (i == cur || e->suspend) continue;
+        if (e->status == READY) return 0;
+        if (e->status == BLOCKED && e->deadline != ~0ull) {
+            timed = 1;
+            if (e->deadline < nearest) nearest = e->deadline;
+        }
+    }
+    if (!timed) return ~0ull;
+    if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return 0;
+    u64 rate = *monitor_word(W2M_CLOCK_RATE_OFF), warp = *monitor_word(W2M_CLOCK_WARP_OFF);
+    if (nearest <= warp) return 0;
+    u64 ticks = nearest - warp;
+    return ticks / 10000000 * rate + ticks % 10000000 * rate / 10000000;
+}
+
+/* The instructions of the block whose stop called the slice stub (`stop` its HVC #4): the immediate of its entry's
+ * SUBS x23, x23, #n, two words before the body the stop's next word branches to (vm_backend.py _stop_block_length). */
+static u64 stop_block_length(u64 stop) {
+    u32 b = *(const u32 *)(stop + 4);
+    long imm26 = (long)(b & 0x3FFFFFF);
+    if (imm26 >> 25) imm26 -= 1l << 26;
+    u32 subs = *(const u32 *)(stop + 4 + 4 * imm26 - 8);
+    return subs >> 10 & 0xFFF;
+}
+
+static void monitor_words(u8 *entry, int to_entry) {
+    static const u64 ranges[4][3] = {
+        {W2M_RUN_MONITOR_0, W2M_RUN_MONITOR_1, W2M_RUN_MONITOR_2}, {W2M_RUN_MONITOR_3, W2M_RUN_MONITOR_4, W2M_RUN_MONITOR_5},
+        {W2M_RUN_MONITOR_6, W2M_RUN_MONITOR_7, W2M_RUN_MONITOR_8}, {W2M_RUN_MONITOR_9, W2M_RUN_MONITOR_10, W2M_RUN_MONITOR_11}};
+    for (int r = 0; r < 4; r++) {
+        u8 *monitor = (u8 *)(W2M_MONITOR_DATA_VA + ranges[r][0]);
+        u64 n = ranges[r][1] - ranges[r][0];
+        if (to_entry) __builtin_memcpy(entry + ranges[r][2], monitor, n);
+        else __builtin_memcpy(monitor, entry + ranges[r][2], n);
+    }
+}
+
+/* The switch stub's decision (vm_backend.py _switch_stub), with the running thread's registers in its run table entry
+ * and the count written: `schedule` 0 at a slice's end (`stop` its block's HVC #4), else state.schedule's bits. The
+ * host's rule (_schedule, _switch): at a slice's end the budget refilled and timed-out waits made ready first, the
+ * thread's RIP its block's entry and the block's instructions given back; RETRY blocks the thread with its wait's
+ * deadline; the next thread is the first ready, unsuspended one after it in thread id order, itself last unless it
+ * blocks. 1: the current entry (another's after a switch) holds the registers to go on with, x23 its budget. 0: the
+ * host decides, nothing changed: switching is off for this run, a thread's end, the run's limit, one thread, no thread
+ * ready. */
+u64 w2m_switch(u64 schedule, u64 stop) {
+    struct w2m_run_table *rt = RUN;
+    u64 n = rt->count, cur = rt->current;
+    u64 *count = monitor_word(0), *limit = monitor_word(8);
+    if (!rt->in_vm || (schedule & W2M_SCHEDULE_END) || n < 2) return 0;
+    struct w2m_run_entry *c = run_entry(cur);
+    int retry = (schedule & W2M_SCHEDULE_RETRY) != 0;
+    u64 next = n;
+    if (!schedule) {
+        u64 end = *monitor_word(W2M_RUN_END_OFF);
+        if (*count >= end) return 0;
+        *limit = *count + W2M_TIME_SLICE < end ? *count + W2M_TIME_SLICE : end;
+        wake_expired();
+        c->x[17] = w2m_guest_rip_at(stop);
+        *count -= stop_block_length(stop);
+    }
+    for (u64 k = 1; k <= n && next == n; k++) {
+        u64 i = (cur + k) % n;
+        const struct w2m_run_entry *e = run_entry(i);
+        if (!(i == cur && retry) && e->status == READY && !e->suspend) next = i;
+    }
+    if (next == n) return 0;
+    if (retry) {
+        set_status(c, BLOCKED);
+        c->deadline = scratch_of(c)->wait_deadline;
+    }
+    if (schedule & W2M_SCHEDULE_ANSWER) c->x[0] = next != cur;
+    w2m_state()->schedule = 0;
+    if (next != cur) {
+        struct w2m_run_entry *e = run_entry(next);
+        u64 pauses = *monitor_word(W2M_PAUSE_COUNT_OFF);
+        c->instructions += *count - rt->slice_count;
+        c->pauses += pauses - rt->slice_pauses;
+        rt->slice_count = *count;
+        rt->slice_pauses = pauses;
+        monitor_words(c->monitor, 1);
+        __builtin_memcpy(c->state, (const void *)W2M_STATE_VA, W2M_STATE_SIZE);
+        monitor_words(e->monitor, 0);
+        __builtin_memcpy((void *)W2M_STATE_VA, e->state, W2M_STATE_SIZE);
+        rt->current = next;
+        rt->current_entry = (u64)e;
+        rt->switches++;
+        c = e;
+    }
+    c->x[23] = *limit - *count;
+    *monitor_word(W2M_SLICE_UNTIL_OFF) = slice_until(next);
+    return 1;
 }
 
 static u32 thread_of(u64 api, u64 h) {

@@ -255,10 +255,11 @@ def main(argv: list[str]) -> int:
             totals = vm.calls_total()
             state["faults"] = vm.faults()
             state["exit_classes"] = exit_classes(vm)
-            state["main_threads"] = {t.tid: (t.status, where(vm, t.x[17]) if t.x else "running") for t in vm.threads.values()}
+            state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid else where(vm, t.x[17]))
+                                     for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
                                           dict(sorted(p.vm.calls_total().items())),
-                                          {t.tid: (t.status, p.vm.ld.thunks.get(t.x[17], hex(t.x[17])) if t.x else "running")
+                                          {t.tid: (t.status, "running" if t.tid == p.vm.current_tid else p.vm.ld.thunks.get(t.x[17], hex(t.x[17])))
                                            for t in p.vm.threads.values()})
                                   for p in machine.processes.values() if p.vm is not vm}
         finally:

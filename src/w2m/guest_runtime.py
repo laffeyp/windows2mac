@@ -120,7 +120,7 @@ def _parse(data: bytes) -> tuple[list[tuple[int, bytes]], dict[str, int]]:
 @dataclass(frozen=True)
 class ObjectFile:
     """One runtime file's object: the external symbols it defines and those it uses, the headers it includes, and its
-    file-local symbols (the host reaches some by name in the linked image: w2m_threads_blocked)."""
+    file-local symbols (the host reaches some by name in the linked image: w2m_enumerator_vtable)."""
     defined: frozenset[str]
     used: frozenset[str]
     headers: frozenset[str]

@@ -40,7 +40,7 @@ def test_the_runtime_reads_a_files_symbols_from_its_object() -> None:
     assert {"k32_FindFirstFileExW", "k32_FindNextFileW", "k32_FindClose"} <= o["file_search.c"].defined
     assert {"w2m_heap_take", "w2m_heap_release"} <= o["file_search.c"].used
     assert "w2m_heap_take" in o["heap.c"].defined
-    assert "w2m_threads_blocked" in o["threads.c"].defined           # a common symbol defines it
+    assert "w2m_enumerator_vtable" in o["com.c"].defined             # a common symbol defines it
     assert "runtime.h" in o["file_search.c"].headers
 
 
@@ -82,7 +82,7 @@ def test_the_host_names_symbols_the_runtime_defines() -> None:
     known = {s for o in objects.values() for s in (*o.defined, *o.local)}
     text = (ROOT / "src" / "w2m" / "vm_backend.py").read_text()
     named = set(re.findall(r'(?:symbols\[|runtime_symbol\()"(\w+)"', text))
-    assert {"w2m_cpuid", "w2m_exception", "w2m_threads_blocked"} <= named
+    assert {"w2m_cpuid", "w2m_exception", "w2m_switch"} <= named
     assert named <= set(family_run.host_named_symbols()) and set(family_run.host_named_symbols()) <= known
 
 

@@ -923,12 +923,13 @@ FAMILIES: dict[str, Family] = {
                 "mutex_not_handed_over": Plant("        o->max = 0;\n        grant(o);", "        o->max = 0;",
                                                ("mutex.one_waiter",)),
                 # recentering step 5: a wait on several objects takes any signal (key 0); waking only the threads
-                # whose key equals the signal's, or skipping the host when the key is not in the published table,
-                # leaves that waiter blocked
-                "only_exact_key_wakes": Plant("(not a0 or not (key := self._wait_key(t)) or key == a0)",
-                                              "self._wait_key(t) == a0", ("event_auto.multiple_waiter",),
-                                              host="w2m.vm_backend"),
-                "any_key_waiters_ignored": Plant("    if (key && !w2m_blocked_any) {", "    if (key) {",
+                # whose key equals the signal's, or none of those whose wait takes any key, leaves that waiter blocked
+                # (Sprint 069: threads.c's w2m_signal wakes them in the VM)
+                "only_exact_key_wakes": Plant("        if (!key || !waits_on || waits_on == key) {",
+                                              "        if (waits_on == key) {", ("event_auto.multiple_waiter",),
+                                              file="threads.c"),
+                "any_key_waiters_ignored": Plant("        if (!key || !waits_on || waits_on == key) {",
+                                                 "        if (!key || waits_on == key) {",
                                                  ("event_auto.multiple_waiter",), file="threads.c")}),
     "code_pages": Family(
         name="code_pages",

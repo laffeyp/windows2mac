@@ -161,6 +161,8 @@ static u64 guest_rip_at(u64 host_pc) {
     return lo ? t[lo - 1].guest : 0;
 }
 
+u64 w2m_guest_rip_at(u64 host_pc) { return guest_rip_at(host_pc); }
+
 /* RFLAGS from the flag registers (x19 CF, x20 ZF, x21 SF, x22 OF as 0/1), lazy PF and AF, and DF
  * (SDM Vol 1 3.4.3: CF bit 0, PF 2, AF 4, ZF 6, SF 7, IF 9, DF 10, OF 11; bit 1 reads 1). PF is set when the stored
  * result's low byte has an even number of ones (specs/guest_state.json 0.3.0). An undefined flag reads 0 here; its bit
