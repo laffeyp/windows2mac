@@ -70,5 +70,20 @@ void start(void) {
     unsigned tenth = f();
     row("protect"); field("to_rx", p1); field("old", old); field("value", ninth); field("back", p2); field("old_back", old2);
     field("after_rewrite", tenth); end();
+
+    /* a direct call from the second page into the first, then the first page rewritten (Sprint 068 item K): code
+     * that reaches rewritten code by a direct branch, as a translator that chains blocks must unchain */
+    volatile unsigned char *tramp = page + 0x1100;
+    long rel = (long)((const unsigned char *)page - (const unsigned char *)(tramp + 5));
+    tramp[0] = 0xE8;                               /* call rel32 */
+    tramp[1] = (unsigned char)rel; tramp[2] = (unsigned char)(rel >> 8);
+    tramp[3] = (unsigned char)(rel >> 16); tramp[4] = (unsigned char)(rel >> 24);
+    tramp[5] = 0xC3;                               /* ret */
+    emit_return(page, 11);
+    unsigned eleventh = ((fn)(void *)tramp)();
+    unsigned again = ((fn)(void *)tramp)();
+    page[1] = 12;
+    unsigned twelfth = ((fn)(void *)tramp)();
+    row("chained"); field("first", eleventh); field("again", again); field("after_rewrite", twelfth); end();
     ExitProcess(0);
 }
