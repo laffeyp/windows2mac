@@ -1913,6 +1913,10 @@ class VM:
         self.code_cursor = CODE_CACHE
         self.blocks: dict[int, int] = {}                 # x86 address -> code VA
         self.addrs: set[int] = set()                     # x86 instructions compiled into blocks
+        # each compiled instruction's host address and how many instructions follow it in its block, in code-cache
+        # order: a model step that leaves a block mid-way did not run those, though the block's entry counted them
+        self.tail_hosts: list[int] = []
+        self.tail_left: list[int] = []
         self.pc_map: list[tuple[int, int]] = []           # (code VA, x86 address), sorted
         self.translations: list[tuple[int, int, Discovery]] = []   # (guest start, guest end, discovery)
         self.slow_sse = 0                                # SSE instructions run by x86fp (MXCSR unmasked)
@@ -2016,6 +2020,8 @@ class VM:
         self.code_cursor, recon = self._flush_point
         struct.pack_into("<Q", self.mm, MONITOR_DATA + RECON_COUNT, recon)
         self.blocks.clear()
+        self.tail_hosts.clear()
+        self.tail_left.clear()
         self.lift_cache.clear()
         self.flags_cache.clear()
         self.lift_pages.clear()
@@ -3545,6 +3551,7 @@ class VM:
         # it after every block took 98 of a frontier run's 154 s)
         self.pc_map.extend(pc_marks)
         self._recon_append(pc_marks)
+        self._note_tails([m for m, _ in pc_marks[1:1 + len(insns)]])
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
         if BLOCK_CENSUS:                    # (counter's offset, [(iclass, arm64 words)], prologue and exit words)
@@ -3557,6 +3564,19 @@ class VM:
             self._to_tcache(start, addr, insns, a, words, pc_marks, self._scan_log)
         self._scan_log = None
         return va
+
+    def _note_tails(self, marks: list[int]) -> None:
+        """Each instruction mark of a new block with the count of instructions after it (tail_hosts' note)."""
+        self.tail_hosts.extend(marks)
+        self.tail_left.extend(range(len(marks) - 1, -1, -1))
+
+    def _unrun_after(self, pc: int) -> int:
+        """The instructions after the one whose code holds host address `pc` in its block: counted at the block's entry,
+        not run when a model step there resumes at the next instruction's own block."""
+        if not MONITOR_VA + CODE_CACHE <= pc < MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE:
+            return 0
+        i = bisect_right(self.tail_hosts, pc) - 1
+        return self.tail_left[i] if i >= 0 else 0
 
     def _tcache_key(self) -> str:
         """The translation cache's identity: the compiler's sources, the runtime image, the compiler's switches, the
@@ -3642,6 +3662,7 @@ class VM:
             pc_marks = [(base + off, g) for off, g in marks]
             self.pc_map.extend(pc_marks)
             self._recon_append(pc_marks)
+            self._note_tails([m for m, _ in pc_marks[1:1 + len(addresses)]])
             self.addrs.update(addresses)
             self.blocks[start] = base
             self.translations.append((start, end, "static" if start == self.ld.entry else "runtime_transfer"))
@@ -3911,7 +3932,13 @@ class VM:
                 last_kind = 0
                 x = e.x
                 if not runtime_lo <= e.pc < runtime_hi:
+                    # the limit as the slice stub left it: it raises the limit and x23 together (before, the limit
+                    # read before the run made the count short by each refill, and the guest's clock went back)
+                    limit = struct.unpack_from("<Q", self.mm, MONITOR_DATA + 8)[0]
                     left = x[REG_BUDGET] - (1 << 64) if x[REG_BUDGET] >> 63 else x[REG_BUDGET]
+                    if e.kind == "hvc" and e.syndrome & 0xFFFF in (HVC_SLOW_SSE, HVC_SLOW_STEP):
+                        left += self._unrun_after(e.pc - 4)           # the block's instructions after the step
+                    x[REG_BUDGET] = left & M64
                     struct.pack_into("<Q", self.mm, MONITOR_DATA, (limit - left) & M64)   # the count, from x23
                 if e.kind == "cancel" and interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
                     # the rule specs/guest_state.json forbids: restart the interrupted instruction
