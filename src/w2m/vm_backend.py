@@ -391,6 +391,12 @@ def _nzcv(a: Assembler, add: bool, ra: int, rb: int, bits: int) -> None:
                base | rb << 16 | s << 10 | 16 << 5 | 31)                               # with Wb, LSL #s
 
 
+def _adds_subs(add: bool, rd: int, rn: int, rm: int, bits: int) -> int:
+    """ADDS or SUBS Rd, Rn, Rm in 32 or 64 bits (the 32-bit form clears Rd's top half)."""
+    w = (a64.adds if add else a64.subs)(rd, rn, rm)
+    return w if bits == 64 else w & ~(1 << 31)
+
+
 def _set_pf(a: Assembler, r: int) -> None:
     """PF, lazily: the result's parity is read from PF_RESULT when PF is; one store where the parity took seven."""
     a.emit(a64.str_(8, r, 28, PF_RESULT))
@@ -417,7 +423,7 @@ def _set_zf_sf_pf(a: Assembler, r: int, bits: int) -> None:
     _set_pf(a, r)
 
 
-def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) -> None:
+def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, nzcv_ready: bool = False) -> None:
     """runtime.Runtime._set_flags, compiled. AF is lazy (specs/guest_state.json 0.2.0): ADD, SUB,
     INC and DEC store a, b and r at MONITOR_DATA + AF_OPERANDS, and AF is bit 4 of a ^ b ^ r when
     the state is read; the instructions that leave AF undefined set its bit in x24."""
@@ -477,15 +483,15 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         return
     if FLAGS_FROM_NZCV and kind in ("add", "inc", "sub", "dec"):
         # recentering step 5: NZCV from one ADDS or SUBS gives CF ZF SF OF; INC and DEC keep CF (SDM INC, DEC)
-        _nzcv(a, kind in ("add", "inc"), ra, rb, bits)
+        if not nzcv_ready:                                     # the ALU op's ADDS or SUBS set it already
+            _nzcv(a, kind in ("add", "inc"), ra, rb, bits)
         a.emit(a64.cset(REG_ZF, "eq"), a64.cset(REG_SF, "mi"), a64.cset(REG_OF, "vs"))
         if kind == "add":
             a.emit(a64.cset(REG_CF, "cs"))
         elif kind == "sub":
             a.emit(a64.cset(REG_CF, "lo"))
         a.emit(X24_CLEAR if kind in ("add", "sub") else X24_KEEP_CF)
-        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, AF_OPERANDS + 16))
-        _set_pf(a, rr)
+        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, PF_RESULT))   # AF's operands, PF's result
         return
     if kind == "logic" and FLAGS_FROM_NZCV:                    # SDM AND/OR/XOR/TEST: CF OF 0, AF undefined
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR), a64.movz(REG_UNDEFINED_FLAGS, U_AF))
@@ -577,6 +583,48 @@ def _shift_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) 
     _mark_undefined(a, U_AF)
     _set_zf_sf_pf(a, rr, bits)
     a.bind(done)
+
+
+def _shift_flags_const(a: Assembler, kind: str, ra: int, count: int, rr: int, bits: int) -> None:
+    """_shift_flags for a count known when compiling (recentering step 5): the same rules (SDM SAL/SAR/SHL/SHR,
+    RCL/RCR/ROL/ROR), decided here instead of tested at run time, and the undefined-flag mask set in one instruction
+    where every flag's state is known."""
+    m = count & (63 if bits == 64 else 31)
+    if m == 0:                                                 # a zero masked count changes nothing
+        return
+    if kind in ("rol", "ror"):                                 # rotates touch only CF and OF
+        a.emit(a64.ubfx(REG_CF, rr, 0, 1) if kind == "rol" else a64.ubfx(REG_CF, rr, bits - 1, 1))
+        if m == 1:
+            a.emit(a64.ubfx(16, rr, bits - 1, 1))
+            a.emit(a64.eor(REG_OF, 16, REG_CF) if kind == "rol" else a64.ubfx(17, rr, bits - 2, 1))
+            if kind == "ror":
+                a.emit(a64.eor(REG_OF, 16, 17))
+            _mark_defined(a, U_CF | U_OF)
+        else:
+            _mark_defined(a, U_CF)
+            _mark_undefined(a, U_OF)
+        return
+    undefined = U_AF | (0 if m == 1 else U_OF)
+    if kind == "sar":                                          # CF from the sign-extended value, any count
+        if bits < 64:
+            a.emit(a64.sbfx(17, ra, 0, bits), a64.ubfx(REG_CF, 17, min(m - 1, 63), 1))
+        else:
+            a.emit(a64.ubfx(REG_CF, ra, m - 1, 1))
+    elif m >= bits:                                            # SHL, SHR: count >= size, CF undefined
+        undefined |= U_CF
+    elif kind == "shr":
+        a.emit(a64.ubfx(REG_CF, ra, m - 1, 1))
+    else:                                                      # SHL: bit (size - count) of the operand
+        a.emit(a64.ubfx(REG_CF, ra, bits - m, 1))
+    if m == 1:
+        if kind == "shr":
+            a.emit(a64.ubfx(REG_OF, ra, bits - 1, 1))
+        elif kind == "shl":
+            a.emit(a64.ubfx(16, rr, bits - 1, 1), a64.eor(REG_OF, 16, REG_CF))
+        else:                                                  # SAR: OF cleared for a 1-bit shift
+            a.emit(a64.mov(REG_OF, a64.ZR))
+    a.emit(a64.movz(REG_UNDEFINED_FLAGS, undefined))
+    _set_zf_sf_pf(a, rr, bits)
 
 
 def _exit_if_undefined(a: Assembler, f: str) -> None:
@@ -796,6 +844,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             a.emit(a64.str_(loc[2], rt, reg_of(loc[1])))
 
     ends = False
+    nzcv_ready = False                                   # an ALU op fused with the flags op that follows
+    constant: dict[int, int] = {}                        # temporaries an `imm` of this instruction set
     locked = ins.iclass.endswith("_LOCK")
     lock_retry: list[int] = []
     for i, op in enumerate(ins.ops):
@@ -803,9 +853,13 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             if not free:
                 raise CompileError(f"more than {len(TEMP_REGS)} live temporaries at 0x{ins.address:x}")
             reg[t] = free.pop(0)
+        for t in _temps_written(op):
+            if op[0] != "imm":
+                constant.pop(t, None)
         k = op[0]
         if k == "imm":
             a.emit(a64.mov_imm(reg_of(op[1]), op[2]))
+            constant[op[1]] = op[2]
         elif k == "addr":
             _, d, base, index, scale, disp, abits, seg = op
             rd = reg_of(d)
@@ -854,6 +908,15 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "alu":
             _, d, o, x, y, bits = op
             rd, rx, ry = reg_of(d), reg_of(x), reg_of(y)
+            # the flags op this ALU op feeds: the next op past any store of the result (a store leaves NZCV alone)
+            nxt = next((n for n in ins.ops[i + 1:] if n[0] != "st"), None)
+            if (FLAGS_FROM_NZCV and o in ("add", "sub") and bits in (32, 64) and nxt is not None and nxt[0] == "flags"
+                    and nxt[1] in (("add", "inc") if o == "add" else ("sub", "dec")) and tuple(nxt[2:6]) == (x, y, d, bits)):
+                # recentering step 5: the result and NZCV from one ADDS or SUBS; the 32-bit form zero-extends as
+                # x86 does, so no mask follows, and the flags op that comes next skips its own
+                a.emit(_adds_subs(o == "add", rd, rx, ry, bits))
+                nzcv_ready = True
+                continue
             if o in ("add", "sub", "and", "or", "xor"):
                 f = {"add": a64.add, "sub": a64.sub, "and": a64.and_, "or": a64.orr, "xor": a64.eor}[o]
                 a.emit(f(rd, rx, ry))
@@ -916,7 +979,11 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             _mask(a, rd, bits)
         elif k == "flags":
             _, kind, x, y, r, bits = op
-            _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits)
+            if kind in ("shr", "shl", "sar", "rol", "ror") and y in constant and FLAGS_FROM_NZCV:
+                _shift_flags_const(a, kind, reg_of(x), constant[y], reg_of(r), bits)
+            else:
+                _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits, nzcv_ready)
+            nzcv_ready = False
         elif k == "mxcsr":
             _lower_mxcsr(a, op[1], op[2], reg_of)
         elif k == "mmx":                                         # Sprint 065: src/w2m/rules/_mmx.py
