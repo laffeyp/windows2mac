@@ -600,6 +600,13 @@ def sqxtn(vd: int, vn: int, upper: bool) -> int:
     return (0x4E214800 if upper else 0x0E214800) | vn << 5 | vd
 
 
+def adr(rd: int, offset: int) -> int:
+    """ADR Xd, pc + offset (within 1 MB; checked against Apple clang's assembler: 0x10000070 for x16 at +12)."""
+    _r(rd)
+    assert -(1 << 20) <= offset < (1 << 20)
+    return 0x10000000 | (offset & 3) << 29 | ((offset >> 2) & 0x7FFFF) << 5 | rd
+
+
 def sqxtn_h(vd: int, vn: int, upper: bool) -> int:
     """SQXTN Vd.4H, Vn.4S (upper: SQXTN2 Vd.8H): words to signed halfwords, saturated (Sprint 068; encodings checked
     against Apple clang's assembler, as are the four below)."""

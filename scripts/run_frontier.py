@@ -270,7 +270,8 @@ def main(argv: list[str]) -> int:
                 (base / "frontier-logs" / xid / "unity.log").write_bytes(log.read_bytes())
                 state["log_lines"] = len(log.read_bytes().splitlines())
             files.close_all()
-        state.update(threads=vm.thread_census(), exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
+        state.update(code=getattr(vm, "_final_code_census", None) or (vm.code_census() if vm.block_census else None),
+                     threads=vm.thread_census(), exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
                      code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
                      split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
                      code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40])
@@ -363,6 +364,12 @@ def main(argv: list[str]) -> int:
     print(f"exits by hvc {dict(sorted(state.get('exits', {}).items(), key=lambda kv: -kv[1]))}; "
           f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s; "
           f"{state.get('thunks')} thunks")
+    if state.get("code"):
+        x86, body, pro, by = state["code"]
+        print(f"code census (recentering step 3): {x86} x86 instructions ran {body} arm64 words in bodies "
+              f"({body / max(x86, 1):.2f} each) and {pro} in block prologues and exits ({pro / max(x86, 1):.2f} each)")
+        for ic, (n, w) in sorted(by.items(), key=lambda kv: -kv[1][1])[:40]:
+            print(f"  {ic:16s} {n:>14d} x86 {w:>15d} arm64 {w / n:6.2f} each {100 * w / max(body, 1):5.1f}% of bodies")
     census = state.get("threads", {})
     total = sum(n for n, _ in census.values()) or 1
     print(f"threads by instructions (PAUSEs; Sprint 068 item J): {sum(p for _, p in census.values())} PAUSEs; " + ", ".join(

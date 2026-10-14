@@ -146,6 +146,8 @@ CH_CMD, CH_EXIT, CH_OP, CH_MS, CH_SAVE, CH_LOAD, CH_PC, CH_CPSR, CH_X = 0, 4, 8,
 CH_KIND, CH_SYN, CH_EPC, CH_ECPSR, CH_ESR, CH_FAR, CH_ELR, CH_EX, CH_STATUS, CH_VEC = (
     320, 328, 336, 344, 352, 360, 368, 376, 640, 1024)
 OP_RUN, OP_VGET, OP_VSET, OP_LEAVE, OP_SWAP = 1, 2, 3, 4, 5
+BLOCK_CENSUS = False         # recentering step 3: each block counts its own executions (arm64 words per x86 instruction)
+FLAGS_FROM_NZCV = True       # recentering step 5: ADD SUB INC DEC set CF ZF SF OF through NZCV; False: the bitwise way
 TRANSPORT = "channel"        # "pipe": every exit's registers as text over the monitor's pipe, as before Sprint 068
 MONITOR_SIZE = (SPLIT_TABLES + SPLIT_TABLES_SIZE + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
 assert CHANNEL + PAGE <= MONITOR_SIZE
@@ -369,6 +371,31 @@ def _mark_undefined(a: Assembler, bits: int) -> None:
     a.emit(a64.movz(16, bits), a64.orr(REG_UNDEFINED_FLAGS, REG_UNDEFINED_FLAGS, 16))
 
 
+def _nzcv(a: Assembler, add: bool, ra: int, rb: int, bits: int) -> None:
+    """NZCV as the add or subtract of `bits`-wide ra and rb sets it: Z and N as x86's ZF and SF, V as OF, C as ADD's CF
+    and as SUB's borrow inverted (recentering step 5: one instruction where OF, CF, ZF and SF took ten). An 8- or
+    16-bit operation runs in the top of a 32-bit one so the carry and the sign land where x86 has them. Uses x16 for
+    the narrow forms. Encodings checked against Apple clang's assembler."""
+    base = 0x2B000000 if add else 0x6B000000                 # ADDS / SUBS, 32-bit, Wd = WZR
+    if bits == 64:
+        a.emit((a64.adds if add else a64.subs)(a64.ZR, ra, rb))
+    elif bits == 32:
+        a.emit(base | rb << 16 | ra << 5 | 31)
+    else:
+        s = 32 - bits
+        a.emit(0x53000000 | ((32 - s) % 32) << 16 | (31 - s) << 10 | ra << 5 | 16,      # LSL W16, Wa, #s
+               base | rb << 16 | s << 10 | 16 << 5 | 31)                               # with Wb, LSL #s
+
+
+def _set_pf(a: Assembler, r: int) -> None:
+    a.emit(a64.ubfx(16, r, 0, 8), a64.eor(16, 16, 16, a64.LSR, 4), a64.eor(16, 16, 16, a64.LSR, 2),
+           a64.eor(16, 16, 16, a64.LSR, 1), a64.ubfx(16, 16, 0, 1), a64.cmpi(16, 0), a64.cset(REG_PF, "eq"))
+
+
+X24_CLEAR = 0xAA1F03F8                    # MOV X24, XZR: every flag defined
+X24_KEEP_CF = 0x92400318                  # AND X24, X24, #1: every flag defined but CF, which keeps its state
+
+
 def _set_zf_sf_pf(a: Assembler, r: int, bits: int) -> None:
     a.emit(a64.cmpi(r, 0), a64.cset(REG_ZF, "eq"), a64.ubfx(REG_SF, r, bits - 1, 1),
            a64.ubfx(16, r, 0, 8), a64.eor(16, 16, 16, a64.LSR, 4), a64.eor(16, 16, 16, a64.LSR, 2),
@@ -433,6 +460,22 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) ->
         _set_zf_sf_pf(a, rr, bits)
         _mark_defined(a, U_CF | U_ZF | U_SF | U_OF)
         _mark_undefined(a, U_AF | U_PF)
+        return
+    if FLAGS_FROM_NZCV and kind in ("add", "inc", "sub", "dec"):
+        # recentering step 5: NZCV from one ADDS or SUBS gives CF ZF SF OF; INC and DEC keep CF (SDM INC, DEC)
+        _nzcv(a, kind in ("add", "inc"), ra, rb, bits)
+        a.emit(a64.cset(REG_ZF, "eq"), a64.cset(REG_SF, "mi"), a64.cset(REG_OF, "vs"))
+        if kind == "add":
+            a.emit(a64.cset(REG_CF, "cs"))
+        elif kind == "sub":
+            a.emit(a64.cset(REG_CF, "lo"))
+        a.emit(X24_CLEAR if kind in ("add", "sub") else X24_KEEP_CF)
+        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, AF_OPERANDS + 16))
+        _set_pf(a, rr)
+        return
+    if kind == "logic" and FLAGS_FROM_NZCV:                    # SDM AND/OR/XOR/TEST: CF OF 0, AF undefined
+        a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR), a64.movz(REG_UNDEFINED_FLAGS, U_AF))
+        _set_zf_sf_pf(a, rr, bits)
         return
     if kind == "logic":
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
@@ -1351,6 +1394,7 @@ class VM:
             struct.pack_into("<Q", self.mm, self._process(TRACE_OFF), 0)
         self._com_vtables()
         self.threads: dict[int, GuestThread] = {}       # guest threads by id (scheduler.py; Sprint 051)
+        self.block_census: list[tuple[int, list[tuple[str, int]], int]] = []   # BLOCK_CENSUS's blocks
         self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
         self.machine: Any = None                         # the kernel.Machine running this VM among others (Sprint 055)
         self._idle: tuple[GuestThread, int, bool] | None = None   # where _switch found no thread to run
@@ -2811,15 +2855,26 @@ class VM:
                 break
         exit_va = self.miss_va if self.lockstep else self.dispatch_va
         pc_marks: list[tuple[int, int]] = [(a.here(), start)]    # the block entry: a guest boundary
+        counter = a.label()
+        if BLOCK_CENSUS:                                 # x16, x17 dead at a block's entry (the prologue loads x17)
+            a.branch(lambda off: a64.adr(16, off), counter)
+            a.emit(a64.ldr(8, 17, 16, 0), a64.addi(17, 17, 1), a64.str_(8, 17, 16, 0))
         a.emit(a64.ldp(17, 18, 28, 0), a64.addi(17, 17, len(insns)), a64.str_(8, 17, 28, 0),
                a64.cmp(17, 18), a64.bcond("ls", 8), a64.hvc(4))
         ended = False
         for ins in insns:
             pc_marks.append((a.here(), ins.address))
             ended = compile_insn(a, ins, exit_va, self.runtime.symbols)
+        body_end = a.here()                              # the census counts the fall-through exit as block overhead
         if not ended:
             a.emit(a64.mov_imm(17, addr))
             a.branch(a64.b, exit_va)
+        if BLOCK_CENSUS:
+            overhead = (a.here() - body_end) // 4
+            if a.here() % 8:
+                a.emit(0xD503201F)                       # NOP: the counter 8-byte aligned
+            a.bind(counter)
+            a.emit(0, 0)
         words = a.finish()
         if self.code_cursor + 4 * len(words) > CODE_CACHE + CODE_CACHE_SIZE:
             raise CompileError("code cache full")
@@ -2832,6 +2887,11 @@ class VM:
         self._recon_append(pc_marks)
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
+        if BLOCK_CENSUS:                    # (counter's offset, [(iclass, arm64 words)], prologue and exit words)
+            marks = [m for m, _ in pc_marks[1:]] + [body_end]
+            self.block_census.append((a.labels[counter] - MONITOR_VA,
+                                      [(i.iclass, (marks[k + 1] - marks[k]) // 4) for k, i in enumerate(insns)],
+                                      ((pc_marks[1][0] - pc_marks[0][0]) // 4 if insns else 0) + overhead))
         if not self.lockstep:
             self._protect_code(start, addr)
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
@@ -3174,8 +3234,29 @@ class VM:
               + ", ".join(f"hvc {k} {v / 1e9:.1f} s" for k, v in self.exit_ns.most_common(6)), file=sys.stderr, flush=True)
         return executed, Counter(self.exits), Counter(self.exit_sites), calls, now
 
+    def code_census(self) -> tuple[int, int, int, dict[str, tuple[int, int]]]:
+        """BLOCK_CENSUS's totals: (x86 instructions run, arm64 words run in instruction bodies, in block prologues and
+        fall-through exits, and by class
+        (x86 instructions, arm64 words)). Each block's words count once per execution, as if every word ran: an upper
+        bound where a block branches out early."""
+        x86 = body = prologue = 0
+        by: dict[str, list[int]] = {}
+        for off, insns, pro in self.block_census:
+            n = struct.unpack_from("<Q", self.mm, off)[0]
+            if not n:
+                continue
+            prologue += n * pro
+            for ic, w in insns:
+                x86 += n
+                body += n * w
+                row = by.setdefault(ic, [0, 0])
+                row[0] += n
+                row[1] += n * w
+        return x86, body, prologue, {k: (v[0], v[1]) for k, v in by.items()}
+
     def close(self) -> None:
         self._final_census = self.thread_census()
+        self._final_code_census = self.code_census() if self.block_census else None
         for r in self.mem.regions:
             if isinstance(r.data, memoryview):
                 r.data.release()
