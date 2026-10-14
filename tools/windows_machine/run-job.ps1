@@ -29,6 +29,9 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 function Note([string] $what) { "$((Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff')) $what" }   # run-job.log
+# a script error is written to run-job.log and fails the job (2026-10-13: a play-mode job stopped after copy_resources
+# with nothing logged and exit 0, the last native command's code)
+trap { Note "ERROR at $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $_"; exit 1 }
 $spec = Get-Content (Join-Path $Job 'job.json') -Raw | ConvertFrom-Json
 if ($spec.kind -notin 'probe', 'binary', 'batch', 'game') { throw "job kind $($spec.kind): probe, binary, batch and game jobs only" }
 Note "job $($spec.execution_id): $($spec.kind) $($spec.probe), repeat $($spec.repeat), commit $($spec.commit)"
