@@ -114,8 +114,8 @@ def test_planted_lazy_af_operand_is_caught(monkeypatch: pytest.MonkeyPatch) -> N
     """ADD/SUB storing a in place of r for lazy AF: AF then reads bit 4 of b alone."""
     original = vm_backend._set_flags
 
-    def wrong_af(a: vm_backend.Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) -> None:
-        original(a, kind, ra, rb, rr, bits)
+    def wrong_af(a: vm_backend.Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, *rest: bool) -> None:
+        original(a, kind, ra, rb, rr, bits, *rest)
         if kind in ("add", "sub", "inc", "dec"):
             a.emit(a64.str_(8, ra, 28, vm_backend.AF_OPERANDS + 16))
     monkeypatch.setattr(vm_backend, "_set_flags", wrong_af)
