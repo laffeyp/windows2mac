@@ -346,6 +346,9 @@ def test_a_laptop_run_joins_by_its_recorded_arguments(tmp_path: Path) -> None:
     (run / "exec.json").write_text(json.dumps({"arguments": "-batchmode -logFile \"C:\\w2m\\unity.log\""}))
     assert str(call_compare.outside_set(run, build, contract, tmp_path)).startswith("other arguments")
     (run / "exec.json").write_text(json.dumps({"arguments": "-batchmode -nographics -logFile \"C:\\w2m\\unity.log\""}))
+    (run / "profile.json").write_text(json.dumps({"cpu": {"logical": 12}}))
+    assert call_compare.outside_set(run, build, contract, tmp_path) == "a machine of 12 processors, w2m reports 4"
+    (run / "profile.json").write_text(json.dumps({"cpu": {"logical": 4}}))
     assert call_compare.outside_set(run, build, contract, tmp_path) == f"not on the record (game-run-{run.name})"
     assert call_compare.load_reference(run, contract).excluded_threads == {500}       # found in its trace
 
