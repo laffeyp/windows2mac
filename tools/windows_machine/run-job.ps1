@@ -299,7 +299,7 @@ try {
         # exec.json as the runners write it, with the game's exact arguments and mode added (a laptop run says what
         # it ran; a runner run's arguments are only in its workflow)
         $argsJson = ConvertTo-Json -Compress @($gameArgs)
-        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"mode`": `"$($spec.mode)`", `"audio`": `"$(if ($spec.audio) { $spec.audio } else { 'on' })`", `"seconds`": $($spec.seconds), `"arguments`": $argsJson}" | Out-File -Encoding ascii -NoNewline out/exec.json
+        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"mode`": `"$($spec.mode)`", `"audio`": `"$(if ($spec.audio) { $spec.audio } else { 'on' })`", `"seconds`": $($spec.seconds), `"capture`": `"$(if ($spec.capture) { $spec.capture } else { 'on' })`", `"pmc`": $(([bool]$spec.pmc).ToString().ToLower()), `"arguments`": $argsJson}" | Out-File -Encoding ascii -NoNewline out/exec.json
         if (Test-Path out\jit_capture.bin) {        # the store keeps the capture's digest, not the capture
           (Get-FileHash -Algorithm SHA256 out\jit_capture.bin).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out\jit_capture.sha256
           Remove-Item out\jit_capture.bin
