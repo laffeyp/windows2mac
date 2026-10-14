@@ -132,3 +132,18 @@ positional row naming). Open, each needing a Windows game run to test:
   the crash handler untraced with nothing recorded.
 - `scripts/family_run.py:2828`: `max_steps` 2^40 with a per-command `timeout_ms`, so a spinning probe in the VM
   has no wall-clock limit.
+
+### Play mode and input (2026-10-13)
+
+- Play mode runs on the laptop's RTX 3050 (UserGpuPreferences GpuPreference=2) in w2m's desktop session, the screen
+  saved every 10 s: at 62 s the first scene (a stairwell, the prompt "Tab - RUN IIS"), the first reference frame
+  for Phase 6 (batch lap-20261014T002654472Z-793c09a5). The trace reached 4,244 calls and unity.log 176 lines in
+  60 s.
+- Gameplay input (R5): `tools/windows_machine/input.cs` plays an input script (games/<game>/inputs/<name>.jsonl:
+  seconds since the game started, key scan codes, relative mouse moves, buttons, wheel) with SendInput and records
+  the raw keyboard and mouse (RIDEV_INPUTSINK). The round trip (batch lap-20261014T010547560Z-bbf0041b): the
+  11-event script `round-trip`, played and recorded in one run, came back equal in every value, each event within
+  112 ms of its time; this checks input.cs's structure offsets. A person's play is recorded only when a run needs
+  the most realistic input or a defect needs shaking out (user, 2026-10-13).
+- Two defects found on the way: a script error ended run-job with nothing logged and exit 0 (now trapped, logged,
+  exit 1), and .NET resolved the screenshot path from its own directory.

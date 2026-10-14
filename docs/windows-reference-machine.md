@@ -181,7 +181,14 @@ Ordered by what the plan needs next.
    5x-20x ([Microsoft Learn: TTD.exe](https://learn.microsoft.com/en-us/windows-hardware/drivers/debuggercmds/time-travel-debugging-ttd-exe-command-line-util)).
    It answers questions such as which code path chose the second delete buffer, with the instruction stream, not an
    inference from calls. It perturbs timing, so a TTD run is a separate profile and never a reference for timing.
-7. **Longer and repeated captures** for the decoder and semantics differentials (`game_code_differential.py`).
+8. **An automatic player for coverage** (user, 2026-10-13). Not a person's play: inputs generated to make the game
+   run code the traces have not yet shown. Coverage-guided generation, as a fuzzer does it: a run's coverage is the
+   set of (image, function, argument class) its call trace holds; a candidate input script is a mutation of one kept
+   before (insert, drop, shift or repeat an event, from a bounded alphabet of keys, moves and clicks); a candidate that
+   adds coverage is kept. Substrate's session topology carries the loop (generate, run on the laptop, measure, keep),
+   bounded by a budget of runs and the alphabet, with every candidate and its coverage on the record. The scripts it
+   keeps then drive the same game under w2m.
+9. **Longer and repeated captures** for the decoder and semantics differentials (`game_code_differential.py`).
 
 ## 9. Machine setup
 
