@@ -162,7 +162,12 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--max-steps", type=int, default=1_000_000_000)    # a run goes to its stop (Sprint 050: 20.6 M)
     # the guest's clock counts instructions at this rate (Sprint 065 item 10); 0: the host's clock
     ap.add_argument("--clock-rate", type=int, default=CLOCK_RATE)
+    ap.add_argument("--no-translation-cache", action="store_true",
+                    help="compile every block afresh (build/translation-cache keeps blocks between runs; recentering step 8)")
     a = ap.parse_args(argv)
+    if not a.no_translation_cache:
+        from w2m import vm_backend
+        vm_backend.TRANSLATION_CACHE_DIR = ROOT / "build" / "translation-cache"
     sources = None
     if a.plant:
         name, old, new, _ = PLANTS[a.plant]
@@ -273,6 +278,7 @@ def main(argv: list[str]) -> int:
         state.update(code=getattr(vm, "_final_code_census", None) or (vm.code_census() if vm.block_census else None),
                      threads=vm.thread_census(), exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
                      code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
+                     tcache=(vm.tcache_hits, len(vm.translations) - vm.tcache_hits),
                      split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
                      code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40])
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
@@ -378,6 +384,8 @@ def main(argv: list[str]) -> int:
         print(f"  hvc {imm} at 0x{at:x}: {n}")
     for (imm, ic), (n, sites) in state.get("exit_classes", [])[:40]:
         print(f"  hvc {imm} {ic}: {n} at {sites} sites")
+    hits, compiled = state.get("tcache", (0, 0))
+    print(f"blocks: {compiled} compiled, {hits} from the translation cache")
     writes, dropped_blocks, pages = state.get("code_writes", (0, 0, 0))
     print(f"writes to translated code {writes}, blocks dropped {dropped_blocks}, pages behind blocks at the stop {pages}; "
           f"split tables {state.get('split_tables')}; 2 MB regions " + " ".join(hex(r) for r in state.get("code_regions", [])))

@@ -28,8 +28,10 @@ mirrors a stop of runtime.py.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mmap
+import pickle
 import os
 import random
 import struct
@@ -37,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from array import array
 from bisect import bisect_right
 from collections import Counter
 from collections.abc import Callable, Generator
@@ -341,6 +344,31 @@ def build_monitor() -> Path:
 
 # ---------------------------------------------------------------------------------------------
 # assembler with labels
+
+# Recentering step 8, the translation cache: a block is kept with the guest bytes it read (its own and those its flag
+# liveness scan read), their hash, its words, its marks and the branches whose target is a fixed address; a block whose
+# bytes hash the same again is placed at the end of the code cache with those branches re-encoded instead of compiled.
+# In a run it serves the blocks a code write dropped though their own bytes did not change (41,878 of the full batch
+# run's 257,593 compiles); with TRANSLATION_CACHE_DIR set (run_frontier.py) it is kept between runs, under a key of
+# the compiler's sources, the runtime image, the compiler's switches and the thunks.
+TRANSLATION_CACHE_DIR: Path | None = None
+TRANSLATION_CACHE_SOURCES = ("vm_backend.py", "lift.py", "a64_encoder.py", "x86dec.py", "x86dec_tables.py", "x86ops.py",
+                             "x86fp.py", "approximate.py")
+TCACHE_PER_START = 4                         # entries kept for one address (code rewritten in place)
+
+
+def rebranch(word: int, offset: int) -> int | None:
+    """`word`, a B, BL, B.cond, CBZ or CBNZ, with its target `offset` bytes away; None for any other word."""
+    if word & 0x7C000000 == 0x14000000:                                       # B, BL
+        return word & 0xFC000000 | (offset >> 2) & 0x3FFFFFF
+    if word & 0xFF000010 == 0x54000000 or word & 0x7E000000 == 0x34000000:      # B.cond; CBZ, CBNZ
+        return word & 0xFF00001F | ((offset >> 2) & 0x7FFFF) << 5
+    return None
+
+
+def _ranges_pages(ranges: list[tuple[int, int]]) -> set[int]:
+    return {p for at, n in ranges for p in range(at & ~(PAGE - 1), at + n, PAGE)}
+
 
 class Assembler:
     def __init__(self, base_va: int) -> None:
@@ -1869,6 +1897,11 @@ class VM:
         # Translated code is invalidated when its guest bytes change (Sprint 065 item 9e): the pages behind blocks are
         # read-only, a write to one faults (HVC_CODE_WRITE), and the blocks over it are dropped
         self.code_pages: dict[int, set[int]] = {}       # page VA -> the starts of the blocks over it
+        self.tcache: dict[int, list[tuple[Any, ...]]] = {}   # the translation cache (TRANSLATION_CACHE_DIR's note)
+        self.tcache_file: Path | None = None
+        self.tcache_loaded = False
+        self.tcache_hits = self.tcache_new = 0
+        self._scan_log: list[tuple[int, int]] | None = None   # the bytes a compile's liveness scan read
         # lifted instructions on pages behind translated code, and their flags (insn_flags by the NZCV kind before),
         # dropped with the page's blocks: a block's successor scan lifts what the successor's block lifts again
         self.lift_cache: dict[int, Lifted] = {}
@@ -3384,9 +3417,11 @@ class VM:
             off = int((desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE)
         return off + 8 * ((va >> 12) & 0x1FF)
 
-    def _protect_code(self, start: int, end: int) -> None:
-        """Make the pages under guest bytes [start, end) read-only and note the block over them. The thunks and the
-        process area are the host's and never written by the guest; they stay as they are."""
+    def _protect_code(self, start: int, end: int, owner: int | None = None) -> None:
+        """Make the pages under guest bytes [start, end) read-only and note the block over them (`owner`, the block's
+        start, when the bytes are not its own). The thunks and the process area are the host's and never written by
+        the guest; they stay as they are."""
+        owner = start if owner is None else owner
         if start >= PROCESS_VA:
             return
         for page in range(start & ~(PAGE - 1), end, PAGE):
@@ -3398,7 +3433,7 @@ class VM:
                 desc = struct.unpack_from("<Q", self.mm, at)[0]
                 struct.pack_into("<Q", self.mm, at, desc | AP_READ_ONLY)
                 blocks = self.code_pages[page] = set()
-            blocks.add(start)
+            blocks.add(owner)
 
     def _code_written(self, address: int) -> bool:
         """A write faulted at `address`: when its page is behind translated code, drop the blocks over the page and
@@ -3436,6 +3471,12 @@ class VM:
     def _compile(self, start: int) -> int:
         if start == self._trace_from and self._trace_from:
             struct.pack_into("<Q", self.mm, self._process(TRACE_OFF), 1)     # the trace opens (call_trace_from)
+        caching = not self.lockstep and not BLOCK_CENSUS
+        if caching:
+            cached = self._from_tcache(start)
+            if cached:
+                return cached
+            self._scan_log = []
         a = Assembler(MONITOR_VA + self.code_cursor)
         insns: list[Lifted] = []
         addr = start
@@ -3512,7 +3553,101 @@ class VM:
                                       [(i.iclass, (marks[k + 1] - marks[k]) // 4) for k, i in enumerate(insns)],
                                       ((pc_marks[1][0] - pc_marks[0][0]) // 4 if insns else 0) + overhead))
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
+        if caching and self._scan_log is not None:
+            self._to_tcache(start, addr, insns, a, words, pc_marks, self._scan_log)
+        self._scan_log = None
         return va
+
+    def _tcache_key(self) -> str:
+        """The translation cache's identity: the compiler's sources, the runtime image, the compiler's switches, the
+        image and its thunks."""
+        h = hashlib.sha256()
+        here = Path(__file__).parent
+        for name in (*TRANSLATION_CACHE_SOURCES, *sorted(p.name for p in (here / "rules").glob("*.py"))):
+            path = here / name if (here / name).exists() else here / "rules" / name
+            h.update(name.encode() + b"\0" + path.read_bytes())
+        h.update(repr((self.runtime.sha256, FLAG_LIVENESS, OPERAND_FORMS, FUSE_LOAD_STORE, FOLD_ADDRESSES,
+                       FLAGS_FROM_NZCV, CVT_INDEFINITE, MAX_BLOCK_INSNS, LIVENESS_SCAN, self.modules.image_name,
+                       sorted(self.ld.thunks))).encode())
+        return h.hexdigest()
+
+    def _tcache_open(self) -> None:
+        """At the first compile, with TRANSLATION_CACHE_DIR set: the kept cache for this compiler and image."""
+        self.tcache_loaded = True
+        if TRANSLATION_CACHE_DIR is None:
+            return
+        self.tcache_file = TRANSLATION_CACHE_DIR / f"{self._tcache_key()}.pickle"
+        if self.tcache_file.exists():
+            with self.tcache_file.open("rb") as f:
+                self.tcache = pickle.load(f)
+
+    def tcache_save(self) -> None:
+        """Keep the cache for the next run (a new file renamed into place)."""
+        if self.tcache_file is None or not self.tcache_new:
+            return
+        self.tcache_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.tcache_file.with_suffix(f".{os.getpid()}.tmp")
+        with tmp.open("wb") as f:
+            pickle.dump(self.tcache, f, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(self.tcache_file)
+
+    def _tcache_bytes(self, ranges: list[tuple[int, int]]) -> bytes | None:
+        try:
+            return b"".join(bytes(self.mem.read(at, n)) for at, n in ranges)
+        except GuestFault:
+            return None
+
+    def _to_tcache(self, start: int, end: int, insns: list[Lifted], a: Assembler, words: list[int],
+                   pc_marks: list[tuple[int, int]], scanned: list[tuple[int, int]]) -> None:
+        relocs = []
+        for i, _make, target in a.fix:
+            if isinstance(target, int) and target >= 0:
+                if rebranch(words[i], 0) is None:
+                    return                                   # a branch this cache cannot move: compile it each time
+                relocs.append((i, target))
+        ranges = [(start, end - start), *scanned]
+        data = self._tcache_bytes(ranges)
+        if data is None:
+            return
+        entry = (ranges, hashlib.sha1(data).digest(), array("I", words).tobytes(),
+                 [(m - a.base, g) for m, g in pc_marks], relocs, end, [i.address for i in insns],
+                 sorted(_ranges_pages(scanned) - _ranges_pages([(start, end - start)])))
+        entries = self.tcache.setdefault(start, [])
+        entries.insert(0, entry)
+        del entries[TCACHE_PER_START:]
+        self.tcache_new += 1
+
+    def _from_tcache(self, start: int) -> int:
+        """The block at `start` from the translation cache when the bytes it read hash the same; 0 otherwise."""
+        if not self.tcache_loaded:
+            self._tcache_open()
+        for ranges, digest, packed, marks, relocs, end, addresses, pages in self.tcache.get(start, ()):
+            data = self._tcache_bytes(ranges)
+            if data is None or hashlib.sha1(data).digest() != digest:
+                continue
+            self._protect_code(start, end)
+            for page in pages:                               # the scan's pages: a write there drops this block too
+                self._protect_code(page, page + PAGE, owner=start)
+                if page not in self.code_pages:
+                    return 0                                 # not protectable: compile, whose scan stops there
+            words = array("I")
+            words.frombytes(packed)
+            base = MONITOR_VA + self.code_cursor
+            for i, target in relocs:
+                words[i] = rebranch(words[i], target - (base + 4 * i)) or 0
+            if self.code_cursor + 4 * len(words) > CODE_CACHE + CODE_CACHE_SIZE:
+                raise CompileError("code cache full")
+            self._write_words(self.code_cursor, list(words))
+            self.code_cursor += 4 * len(words)
+            pc_marks = [(base + off, g) for off, g in marks]
+            self.pc_map.extend(pc_marks)
+            self._recon_append(pc_marks)
+            self.addrs.update(addresses)
+            self.blocks[start] = base
+            self.translations.append((start, end, "static" if start == self.ld.entry else "runtime_transfer"))
+            self.tcache_hits += 1
+            return base
+        return 0
 
     def _lift(self, addr: int) -> Lifted:
         """The instruction at `addr`, from lift_cache when a block or a scan has lifted it since its page was written."""
@@ -3570,6 +3705,8 @@ class VM:
                 break
             for page in pages:
                 self.code_pages[page].add(owner)
+            if self._scan_log is not None:
+                self._scan_log.append((addr, ins.length))
             self._remember(ins)
             read, written = self._insn_flags(ins, nzcv_setter(previous) if previous else None)
             live |= read & undecided
@@ -3965,6 +4102,7 @@ class VM:
         return x86, body, prologue, {k: (v[0], v[1]) for k, v in by.items()}
 
     def close(self) -> None:
+        self.tcache_save()
         self._final_census = self.thread_census()
         self._final_code_census = self.code_census() if self.block_census else None
         for r in self.mem.regions:
