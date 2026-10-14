@@ -65,6 +65,23 @@ Open: whether guest memory can be mapped in the host at the guest's own addresse
 cost of each crossing against the frame's call count, and DXMT's coverage of the calls the game's play run makes
 (game run 38113343972).
 
+## The DXMT spike (2026-10-14, Sprint 068's milestone item 7)
+
+DXMT v0.80 (3Shain/dxmt release, 2026-04-23; CrossOver 26 ships 0.72) holds d3d11.dll, dxgi.dll, d3d10core.dll and
+winemetal.dll as x86-64 PE files and winemetal.so for x86_64-unix. Read with w2m's PE parser and sorted against
+w2m's 297 served functions (`vm_backend.service_for`), d3d11.dll, dxgi.dll and winemetal.dll import 200 distinct
+functions outside DXMT's own DLLs: 69 served, 131 missing. Of the 131, 89 are the C runtime through the
+api-ms-win-crt sets (stdio 28, string 19, runtime 12, private 7, heap 6, convert 5, others 12), 17 are GDI32's
+D3DKMT* kernel thunks (shared resources and adapters), 14 USER32, 6 KERNEL32 (CreateSemaphoreA, SetThreadContext,
+SetProcessAffinityMask among them), 3 ADVAPI32 and 2 ntdll (NtQueryVirtualMemory, strncpy).
+
+No import names __wine_unix_call. winemetal.dll is a Wine builtin that reaches its unix half the Wine 9 way: its
+`__wine_init_unix_call` asks NtQueryVirtualMemory for the library's handle (`__wine_unixlib_handle`), and each call
+goes through `__wine_unix_call_dispatcher`, a pointer ntdll exports. The seam is then three pieces: NtQueryVirtualMemory
+answering that query, a dispatcher in w2m's synthetic ntdll, and each call a host request that winemetal built for
+arm64 answers. winemetal.dll exports 131 functions (CreateMetalViewFromHWND, MTLBinaryArchive_serialize, ...). Still
+to list: the winemetal calls the game's Direct3D 11 calls reach, which needs the game running through DXMT.
+
 ## Order
 
 Amended 2026-10-14 (Decision, user): the review "Phase P: actionable review, 2026-10-14". Speed work runs alongside
