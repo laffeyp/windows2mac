@@ -349,3 +349,42 @@ def test_the_capture_thread_is_the_first_calls_thread_in_every_runner_run() -> N
     for run, threads in contract["excluded_threads"].items():
         calls = call_compare.read_tsv(call_compare.GAME_RUNS / run / "jit_capture.bin.trace.tsv")
         assert {call_compare.capture_thread(calls)} == {int(t) for t in threads}
+
+
+def test_a_worker_call_missing_after_conforming_calls_is_scheduling() -> None:
+    """Decision 2026-10-13 (user): whether a worker makes a call follows the game's own interleaving. HeapReAlloc 3268:
+    Windows grows the delete buffer a fourth time, w2m's paired worker stops at three, every earlier call agreeing."""
+    def grows(n: int, tid: int) -> list[call_compare.Call]:
+        sizes = [0x817, 0x1017, 0x2017, 0x817][:n]
+        return [call(10 + i, "HeapReAlloc", (0x30000, 0x10, 0x40000 + i, s), 0, tid=tid) for i, s in enumerate(sizes)]
+    found, _, _ = call_compare.compare_set([reference("four", grows(4, 200))], grows(3, 8), SIGNATURES)
+    defects, scheduling = call_compare.by_cause(found)
+    assert defects == [] and [(s.divergence.field, s.cause) for s in scheduling] == [("missing", "scheduling")]
+
+
+def test_a_call_missing_after_a_value_divergence_on_its_thread_is_a_defect() -> None:
+    windows = [call(1, "GetACP", (), 1252, tid=5), call(2, "GetOEMCP", (), 437, tid=5), call(3, "GetOEMCP", (), 437, tid=5)]
+    w2m = [call(1, "GetACP", (), 65001, tid=8), call(2, "GetOEMCP", (), 437, tid=8)]
+    found, _, _ = call_compare.compare_set([reference("a", windows)], w2m, SIGNATURES)
+    defects, scheduling = call_compare.by_cause(found)
+    assert scheduling == []
+    assert [(d.divergence.function, d.divergence.field, d.cause) for d in defects] == [
+        ("GetACP", "ret", ""), ("GetOEMCP", "missing", "after value divergence 1")]
+
+
+def test_a_value_divergence_stays_a_defect_whatever_other_executions_lack() -> None:
+    """A planted wrong return value is caught though another reference execution never makes the call."""
+    refs = [reference("a", [call(1, "GetACP", (), 1252), call(2, "GetACP", (), 1252)]), reference("b", [call(1, "GetACP", (), 1252)])]
+    found, _, _ = call_compare.compare_set(refs, [call(1, "GetACP", (), 1252), call(2, "GetACP", (), 437)], SIGNATURES)
+    defects, scheduling = call_compare.by_cause(found)
+    assert scheduling == [] and [(d.divergence.field, d.divergence.w2m) for d in defects] == [("ret", 437)]
+
+
+def test_a_function_windows_never_calls_is_scheduling_unless_its_thread_diverged_first() -> None:
+    windows = [call(1, "GetACP", (), 1252, tid=5)]
+    clean = [call(1, "GetACP", (), 1252, tid=8), call(2, "GetOEMCP", (), 437, tid=8)]
+    assert [s.cause for s in call_compare.by_cause(call_compare.compare_set([reference("a", windows)], clean, SIGNATURES)[0])[1]] \
+        == ["scheduling"]
+    wrong = [call(1, "GetACP", (), 65001, tid=8), call(2, "GetOEMCP", (), 437, tid=8)]
+    defects, scheduling = call_compare.by_cause(call_compare.compare_set([reference("a", windows)], wrong, SIGNATURES)[0])
+    assert scheduling == [] and [d.cause for d in defects] == ["", "after value divergence 1"]

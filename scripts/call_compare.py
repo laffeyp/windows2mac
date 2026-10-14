@@ -35,7 +35,7 @@ import hashlib
 import json
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -407,7 +407,7 @@ def judged(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
         theirs = w.get(pair)
         if theirs is None:
             first = min(c for calls in ours.values() for c in calls)
-            found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None, None))
+            found.append(Divergence(first[2], pair[1], 0, "called", None, first[6], None, first[1]))
             continue
         chosen = dict(threads)
         for pool in sorted(set(pool_w.values())):
@@ -608,6 +608,7 @@ class SetDivergence:
     disagree: tuple[str, ...]
     agree: tuple[str, ...]
     of: int
+    cause: str = ""                           # `by_cause`: "", "scheduling" or "after value divergence <seq>"
 
     @property
     def varies(self) -> bool:
@@ -618,7 +619,8 @@ class SetDivergence:
         return (f"{self.divergence.text()}: {len(self.disagree)} of {self.of} reference executions disagree"
                 + (f", {len(self.agree)} agree" if self.agree else "")
                 + (f", {silent} do not make the call" if silent else "")
-                + f" (run {self.run} seq {self.divergence.windows_seq})")
+                + f" (run {self.run} seq {self.divergence.windows_seq})"
+                + (f" [{self.cause}]" if self.cause else ""))
 
 
 def compare_set(references: list[Reference], w2m: list[Call], signatures: dict[str, Any],
@@ -660,6 +662,38 @@ def compare_set(references: list[Reference], w2m: list[Call], signatures: dict[s
             {run: len(compared[run]) for run in runs})
 
 
+PRESENCE = ("missing", "called")             # a call one side makes and the other does not
+
+
+def by_cause(found: list[SetDivergence]) -> tuple[list[SetDivergence], list[SetDivergence]]:
+    """The divergences that are defects, and those that are the game's own scheduling (Decision 2026-10-13, user).
+
+    A value divergence (an argument, return or error of a paired call that no reference execution shows) is a defect.
+    A presence divergence (a call Windows makes that w2m's paired thread does not, or a function w2m calls that
+    Windows never does) is the game's own interleaving when every earlier call on that w2m thread conforms: whether a
+    worker makes a call, and how often, follows how the game's threads ran (HeapReAlloc 3268: three growths in one
+    Windows run, four in the others). It is a defect when a value divergence on the same w2m thread comes first (in
+    the same reference execution, by its sequence; for a function Windows never calls, anywhere on the thread), and
+    when Windows' thread has no w2m partner at all."""
+    values = [s for s in found if s.divergence.field not in PRESENCE]
+    defects: list[tuple[int, SetDivergence]] = []
+    scheduling: list[SetDivergence] = []
+    for i, s in enumerate(found):
+        d = s.divergence
+        if d.field not in PRESENCE:
+            defects.append((i, s))
+        elif d.w2m_thread is None:
+            defects.append((i, replace(s, cause="a Windows thread with no w2m partner")))
+        else:
+            before = [v for v in values if v.divergence.w2m_thread == d.w2m_thread and
+                      (d.field == "called" or (v.run == s.run and (v.divergence.windows_seq or 0) < (d.windows_seq or 0)))]
+            if before:
+                defects.append((i, replace(s, cause=f"after value divergence {before[0].divergence.windows_seq}")))
+            else:
+                scheduling.append(replace(s, cause="scheduling"))
+    return [s for _, s in defects], scheduling
+
+
 def reference_ref(references: list[Reference]) -> str:
     """COMPARISON_COMPLETED.reference_ref for a set: its executions joined by ' + ' (class_run.py's form)."""
     return " + ".join(r.execution_id for r in references)
@@ -683,21 +717,25 @@ def main(argv: list[str]) -> int:
     references = [load_reference(run, contract) for run in runs]
     found, varies, compared = compare_set(references, read_tsv(a.calls), signatures,
                                           tuple(read_strings(a.calls.with_suffix(".strings.tsv"))), undetermined(contract))
+    found, scheduling = by_cause(found)
     print(f"reference set {', '.join(r.run for r in references)}; calls compared "
           + ", ".join(f"{run} {n}" for run, n in compared.items()))
     print(f"{len(found)} divergences")
     for s in found:
         print(f"  {s.text()}")
+    print(f"{len(scheduling)} presence divergences of the game's own scheduling (not defects)")
+    for s in scheduling:
+        print(f"  {s.text()}")
     print(f"{len(varies)} values Windows varies (not divergences)")
     for s in varies:
         print(f"  {s.text()}; agree {', '.join(s.agree)}")
     if a.record:
-        return record(a.calls, references, found, varies, compared)
+        return record(a.calls, references, found, varies, compared, scheduling)
     return 0 if not found else 1
 
 
 def record(calls: Path, references: list[Reference], found: list[SetDivergence], varies: list[SetDivergence],
-           compared: dict[str, int]) -> int:
+           compared: dict[str, int], scheduling: list[SetDivergence] | None = None) -> int:
     """The comparison on the record: one COMPARISON_COMPLETED against the set, in store/runs/comparison-<target>-<ns>,
     the set's runs and the values Windows varies in the baseline."""
     import time
@@ -723,7 +761,7 @@ def record(calls: Path, references: list[Reference], found: list[SetDivergence],
         purpose="conformance", work=work,
         baseline={"calls": str(calls.resolve().relative_to(ROOT)), "reference_set": [r.run for r in references],
                   "compared": compared, "divergences": [s.text() for s in found],
-                  "varies": [s.text() for s in varies]})
+                  "varies": [s.text() for s in varies], "scheduling": [s.text() for s in scheduling or []]})
     print(root, dict(kinds))
     return 0 if not found else 1
 

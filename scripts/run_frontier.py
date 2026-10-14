@@ -251,7 +251,8 @@ def main(argv: list[str]) -> int:
             references, call_compare.read_tsv(base / "frontier-calls" / f"{xid}.tsv"), SIGNATURES,
             tuple(call_compare.read_strings(base / "frontier-calls" / f"{xid}.strings.tsv")),
             call_compare.undetermined(contract))
-        state.update(divergences=found, varies=varies, compared=compared)
+        found, scheduling = call_compare.by_cause(found)      # Decision 2026-10-13 (user): scheduling is not a defect
+        state.update(divergences=found, varies=varies, compared=compared, scheduling=scheduling)
         # a trace that left calls out cannot show that w2m's calls conform (Sprint 064: 744,597 left out unseen)
         verdict: Literal["conforms", "discrepancy", "inconclusive"] = (
             "discrepancy" if found else "inconclusive" if state.get("dropped") else "conforms")
@@ -300,6 +301,8 @@ def main(argv: list[str]) -> int:
         if not e["kind"].startswith("substrate.") or e["kind"] in ("substrate.ProducerFailed",):
             print(e["kind"], {k: v for k, v in e["payload"].items() if k not in ("vocab_version", "harness_version")})
     print(f"stop: {state.get('stop')}; {state.get('instructions')} instructions; calls {state.get('calls')}")
+    print(f"{len(state.get('divergences', []))} divergences; {len(state.get('scheduling', []))} presence divergences of "
+          f"the game's own scheduling; {len(state.get('varies', []))} values Windows varies")
     print(f"host requests by op {state.get('host_requests')}; calls by service {state.get('calls_total')}")
     count, first = state.get("faults", (0, []))
     print(f"faults dispatched {count}: " + "; ".join(f"0x{c:x} at 0x{rip:x} ({i0}, 0x{i1:x})" for c, rip, i0, i1 in first))
