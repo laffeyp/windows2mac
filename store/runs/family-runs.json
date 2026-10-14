@@ -27,7 +27,7 @@
    "SESSION_INIT": 1
   },
   "family": "code_pages",
-  "record": "store/runs/family-code_pages-1791952581500164000",
+  "record": "store/runs/family-code_pages-1791955043095921000",
   "verdicts": {
    "38044061149": "conforms",
    "38044062619": "conforms",
@@ -50,21 +50,19 @@
  "code_rewrite": {
   "candidate_sha256": "sha256:548b8a4ec29d14aad33c3405f3c469e8ad10d2454a279c57e535cbcacac4b498",
   "divergence": {
-   "38311776331": null,
-   "38311779649": null
+   "lap-20261014T044509652Z-627bbd99": null
   },
   "events": {
    "CANDIDATE_ACCEPTED": 1,
    "CANDIDATE_GENERATED": 1,
-   "COMPARISON_COMPLETED": 2,
+   "COMPARISON_COMPLETED": 1,
    "SESSION_COMPLETED": 1,
    "SESSION_INIT": 1
   },
   "family": "code_rewrite",
-  "record": "store/runs/family-code_rewrite-1791952581531954000",
+  "record": "store/runs/family-code_rewrite-1791955043106884000",
   "verdicts": {
-   "38311776331": "conforms",
-   "38311779649": "conforms"
+   "lap-20261014T044509652Z-627bbd99": "conforms"
   }
  },
  "com": {
@@ -81,7 +79,7 @@
    "SESSION_INIT": 1
   },
   "family": "com",
-  "record": "store/runs/family-com-1791952581512144000",
+  "record": "store/runs/family-com-1791955043115411000",
   "verdicts": {
    "38126872187": "conforms",
    "38126873913": "conforms"
@@ -101,7 +99,7 @@
    "SESSION_INIT": 1
   },
   "family": "command_line_args",
-  "record": "store/runs/family-command_line_args-1791952581505369000",
+  "record": "store/runs/family-command_line_args-1791955043099598000",
   "verdicts": {
    "38084317468": "conforms",
    "38084319695": "conforms"
@@ -121,7 +119,7 @@
    "SESSION_INIT": 1
   },
   "family": "console",
-  "record": "store/runs/family-console-1791952581514703000",
+  "record": "store/runs/family-console-1791955043092153000",
   "verdicts": {
    "38210455282": "conforms",
    "38210458372": "conforms"
@@ -141,7 +139,7 @@
    "SESSION_INIT": 1
   },
   "family": "critical_section_flags",
-  "record": "store/runs/family-critical_section_flags-1791952581525410000",
+  "record": "store/runs/family-critical_section_flags-1791955043121815000",
   "verdicts": {
    "38113796820": "conforms",
    "38113797868": "conforms"
@@ -165,7 +163,7 @@
    "SESSION_INIT": 1
   },
   "family": "critical_sections",
-  "record": "store/runs/family-critical_sections-1791952582305257000",
+  "record": "store/runs/family-critical_sections-1791955043755218000",
   "verdicts": {
    "38039748482": "conforms",
    "38039751056": "conforms",
@@ -191,7 +189,7 @@
    "SESSION_INIT": 1
   },
   "family": "current_directory_ansi",
-  "record": "store/runs/family-current_directory_ansi-1791952582312895000",
+  "record": "store/runs/family-current_directory_ansi-1791955043928968000",
   "verdicts": {
    "38231721988": "conforms",
    "38231725219": "conforms",
@@ -213,7 +211,7 @@
    "SESSION_INIT": 1
   },
   "family": "display",
-  "record": "store/runs/family-display-1791952582327978000",
+  "record": "store/runs/family-display-1791955043937292000",
   "verdicts": {
    "38273510163": "conforms",
    "38273513428": "conforms"
@@ -233,7 +231,7 @@
    "SESSION_INIT": 1
   },
   "family": "dxgi",
-  "record": "store/runs/family-dxgi-1791952582488135000",
+  "record": "store/runs/family-dxgi-1791955044037540000",
   "verdicts": {
    "38254500336": "conforms",
    "38254503636": "conforms"
@@ -263,7 +261,7 @@
    "SESSION_INIT": 1
   },
   "family": "environment_empty",
-  "record": "store/runs/family-environment_empty-1791952582587888000",
+  "record": "store/runs/family-environment_empty-1791955044172396000",
   "verdicts": {
    "38044699077": "conforms",
    "38044700976": "conforms",
@@ -303,7 +301,7 @@
    "SESSION_INIT": 1
   },
   "family": "environment_set",
-  "record": "store/runs/family-environment_set-1791952583415142000",
+  "record": "store/runs/family-environment_set-1791955044848604000",
   "verdicts": {
    "38044699077": "conforms",
    "38044700976": "conforms",
@@ -347,7 +345,7 @@
    "SESSION_INIT": 1
   },
   "family": "exception_filter",
-  "record": "store/runs/family-exception_filter-1791952583417255000",
+  "record": "store/runs/family-exception_filter-1791955044884215000",
   "verdicts": {
    "38045461436": "conforms",
    "38045463327": "conforms",
@@ -381,7 +379,7 @@
    "SESSION_INIT": 1
   },
   "family": "exceptions",
-  "record": "store/runs/family-exceptions-1791952583437210000",
+  "record": "store/runs/family-exceptions-1791955044914552000",
   "verdicts": {
    "38165931122": "conforms",
    "38165933249": "conforms"
@@ -401,7 +399,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_access",
-  "record": "store/runs/family-file_access-1791952583910091000",
+  "record": "store/runs/family-file_access-1791955045162566000",
   "verdicts": {
    "38093116676": "conforms",
    "38093118511": "conforms"
@@ -421,7 +419,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_attributes",
-  "record": "store/runs/family-file_attributes-1791952584583682000",
+  "record": "store/runs/family-file_attributes-1791955045897577000",
   "verdicts": {
    "38087355443": "conforms",
    "38087357359": "conforms"
@@ -441,7 +439,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_mapping",
-  "record": "store/runs/family-file_mapping-1791952584761039000",
+  "record": "store/runs/family-file_mapping-1791955045931216000",
   "verdicts": {
    "38120624307": "conforms",
    "38120626017": "conforms"
@@ -461,7 +459,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_search",
-  "record": "store/runs/family-file_search-1791952585056043000",
+  "record": "store/runs/family-file_search-1791955046377094000",
   "verdicts": {
    "38182330015": "conforms",
    "38182331619": "conforms"
@@ -481,7 +479,7 @@
    "SESSION_INIT": 1
   },
   "family": "file_security",
-  "record": "store/runs/family-file_security-1791952585356131000",
+  "record": "store/runs/family-file_security-1791955046611625000",
   "verdicts": {
    "38090863707": "conforms",
    "38090865352": "conforms"
@@ -501,7 +499,7 @@
    "SESSION_INIT": 1
   },
   "family": "files_more",
-  "record": "store/runs/family-files_more-1791952585518787000",
+  "record": "store/runs/family-files_more-1791955046658721000",
   "verdicts": {
    "38119625685": "conforms",
    "38119627458": "conforms"
@@ -521,7 +519,7 @@
    "SESSION_INIT": 1
   },
   "family": "format_message",
-  "record": "store/runs/family-format_message-1791952585847795000",
+  "record": "store/runs/family-format_message-1791955047143091000",
   "verdicts": {
    "38120951889": "conforms",
    "38120953179": "conforms"
@@ -541,7 +539,7 @@
    "SESSION_INIT": 1
   },
   "family": "function_tables",
-  "record": "store/runs/family-function_tables-1791952585983900000",
+  "record": "store/runs/family-function_tables-1791955047146697000",
   "verdicts": {
    "38114067866": "conforms",
    "38114069629": "conforms"
@@ -561,7 +559,7 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791952586002626000",
+  "record": "store/runs/family-generate_random-1791955047288927000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
@@ -587,7 +585,7 @@
    "SESSION_INIT": 1
   },
   "family": "heap",
-  "record": "store/runs/family-heap-1791952586113993000",
+  "record": "store/runs/family-heap-1791955047312930000",
   "verdicts": {
    "38041103334": "conforms",
    "38041105720": "conforms",
@@ -613,7 +611,7 @@
    "SESSION_INIT": 1
   },
   "family": "heap_in_place",
-  "record": "store/runs/family-heap_in_place-1791952586529964000",
+  "record": "store/runs/family-heap_in_place-1791955047579078000",
   "verdicts": {
    "38254640218": "conforms",
    "38254643501": "conforms"
@@ -633,7 +631,7 @@
    "SESSION_INIT": 1
   },
   "family": "heap_query",
-  "record": "store/runs/family-heap_query-1791952586711146000",
+  "record": "store/runs/family-heap_query-1791955047880363000",
   "verdicts": {
    "38115120174": "conforms",
    "38115121838": "conforms"
@@ -653,7 +651,7 @@
    "SESSION_INIT": 1
   },
   "family": "integrity_level",
-  "record": "store/runs/family-integrity_level-1791952586754449000",
+  "record": "store/runs/family-integrity_level-1791955047974281000",
   "verdicts": {
    "38099150504": "conforms",
    "38099152338": "conforms"
@@ -673,7 +671,7 @@
    "SESSION_INIT": 1
   },
   "family": "interlocked_lists",
-  "record": "store/runs/family-interlocked_lists-1791952587135633000",
+  "record": "store/runs/family-interlocked_lists-1791955048246298000",
   "verdicts": {
    "38210349431": "conforms",
    "38210351696": "conforms"
@@ -693,7 +691,7 @@
    "SESSION_INIT": 1
   },
   "family": "known_folders",
-  "record": "store/runs/family-known_folders-1791952587301265000",
+  "record": "store/runs/family-known_folders-1791955048421325000",
   "verdicts": {
    "38098265812": "conforms",
    "38098267402": "conforms"
@@ -715,7 +713,7 @@
    "SESSION_INIT": 1
   },
   "family": "late_tls",
-  "record": "store/runs/family-late_tls-1791952587426389000",
+  "record": "store/runs/family-late_tls-1791955048589790000",
   "verdicts": {
    "38229484497": "conforms",
    "38229488362": "conforms",
@@ -751,7 +749,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791952587612979000",
+  "record": "store/runs/family-loader-1791955048717300000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -785,7 +783,7 @@
    "SESSION_INIT": 1
   },
   "family": "local_free",
-  "record": "store/runs/family-local_free-1791952588035151000",
+  "record": "store/runs/family-local_free-1791955048900537000",
   "verdicts": {
    "38092775612": "conforms",
    "38092777429": "conforms"
@@ -805,7 +803,7 @@
    "SESSION_INIT": 1
   },
   "family": "locale",
-  "record": "store/runs/family-locale-1791952588041848000",
+  "record": "store/runs/family-locale-1791955049073427000",
   "verdicts": {
    "38120346754": "conforms",
    "38120348019": "conforms"
@@ -825,7 +823,7 @@
    "SESSION_INIT": 1
   },
   "family": "module_names_ansi",
-  "record": "store/runs/family-module_names_ansi-1791952588096837000",
+  "record": "store/runs/family-module_names_ansi-1791955049151304000",
   "verdicts": {
    "38113666467": "conforms",
    "38113667870": "conforms"
@@ -845,7 +843,7 @@
    "SESSION_INIT": 1
   },
   "family": "module_search",
-  "record": "store/runs/family-module_search-1791952588578718000",
+  "record": "store/runs/family-module_search-1791955049555656000",
   "verdicts": {
    "38210455471": "conforms",
    "38210458062": "conforms"
@@ -869,7 +867,7 @@
    "SESSION_INIT": 1
   },
   "family": "modules",
-  "record": "store/runs/family-modules-1791952588779791000",
+  "record": "store/runs/family-modules-1791955049578855000",
   "verdicts": {
    "38039204088": "conforms",
    "38039205782": "conforms",
@@ -893,7 +891,7 @@
    "SESSION_INIT": 1
   },
   "family": "network",
-  "record": "store/runs/family-network-1791952588841631000",
+  "record": "store/runs/family-network-1791955049789114000",
   "verdicts": {
    "38127406287": "conforms",
    "38127407661": "conforms"
@@ -915,7 +913,7 @@
    "SESSION_INIT": 1
   },
   "family": "output_debug_string",
-  "record": "store/runs/family-output_debug_string-1791952588878523000",
+  "record": "store/runs/family-output_debug_string-1791955049847286000",
   "verdicts": {
    "38230799629": "conforms",
    "38230802984": "conforms",
@@ -937,7 +935,7 @@
    "SESSION_INIT": 1
   },
   "family": "paths",
-  "record": "store/runs/family-paths-1791952589189919000",
+  "record": "store/runs/family-paths-1791955050262264000",
   "verdicts": {
    "38090281974": "conforms",
    "38090284442": "conforms"
@@ -971,7 +969,7 @@
    "SESSION_INIT": 1
   },
   "family": "pointer_encoding",
-  "record": "store/runs/family-pointer_encoding-1791952589565214000",
+  "record": "store/runs/family-pointer_encoding-1791955050430382000",
   "verdicts": {
    "38048676507": "conforms",
    "38048678695": "conforms",
@@ -1005,7 +1003,7 @@
    "SESSION_INIT": 1
   },
   "family": "process_parameters",
-  "record": "store/runs/family-process_parameters-1791952589584696000",
+  "record": "store/runs/family-process_parameters-1791955050437377000",
   "verdicts": {
    "38194049597": "conforms",
    "38194051809": "conforms"
@@ -1028,7 +1026,7 @@
    "SESSION_INIT": 1
   },
   "family": "process_queries",
-  "record": "store/runs/family-process_queries-1791952590026330000",
+  "record": "store/runs/family-process_queries-1791955050826022000",
   "verdicts": {
    "38041796227": "conforms",
    "38041797992": "conforms",
@@ -1051,7 +1049,7 @@
    "SESSION_INIT": 1
   },
   "family": "processes",
-  "record": "store/runs/family-processes-1791952590108109000",
+  "record": "store/runs/family-processes-1791955051094166000",
   "verdicts": {
    "38189162864": "conforms",
    "38189164581": "conforms"
@@ -1071,7 +1069,7 @@
    "SESSION_INIT": 1
   },
   "family": "processor_topology",
-  "record": "store/runs/family-processor_topology-1791952590905037000",
+  "record": "store/runs/family-processor_topology-1791955051449995000",
   "verdicts": {
    "38206551545": "conforms",
    "38206553365": "conforms"
@@ -1091,7 +1089,7 @@
    "SESSION_INIT": 1
   },
   "family": "registry",
-  "record": "store/runs/family-registry-1791952591338784000",
+  "record": "store/runs/family-registry-1791955051948016000",
   "verdicts": {
    "38210383833": "conforms",
    "38210386046": "conforms"
@@ -1110,7 +1108,7 @@
    "SESSION_INIT": 1
   },
   "family": "running_thread_context",
-  "record": "store/runs/family-running_thread_context-1791952591397101000",
+  "record": "store/runs/family-running_thread_context-1791955051953094000",
   "verdicts": {
    "lap-20261013T234642777Z-5cb60b6d": "conforms"
   }
@@ -1131,7 +1129,7 @@
    "SESSION_INIT": 1
   },
   "family": "slim_locks",
-  "record": "store/runs/family-slim_locks-1791952591947076000",
+  "record": "store/runs/family-slim_locks-1791955052386237000",
   "verdicts": {
    "38048676516": "conforms",
    "38048679185": "conforms",
@@ -1167,7 +1165,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791952592019583000",
+  "record": "store/runs/family-static_tls-1791955052514131000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -1207,7 +1205,7 @@
    "SESSION_INIT": 1
   },
   "family": "storage_get2",
-  "record": "store/runs/family-storage_get2-1791952592226417000",
+  "record": "store/runs/family-storage_get2-1791955052735343000",
   "verdicts": {
    "38051903385": "conforms",
    "38051906733": "conforms",
@@ -1235,7 +1233,7 @@
    "SESSION_INIT": 1
   },
   "family": "sync_objects",
-  "record": "store/runs/family-sync_objects-1791952592290516000",
+  "record": "store/runs/family-sync_objects-1791955052825906000",
   "verdicts": {
    "38051398628": "conforms",
    "38051400336": "conforms",
@@ -1267,7 +1265,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_info",
-  "record": "store/runs/family-system_info-1791952592596489000",
+  "record": "store/runs/family-system_info-1791955052983854000",
   "verdicts": {
    "38049865817": "conforms",
    "38049867401": "conforms",
@@ -1297,7 +1295,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_modules",
-  "record": "store/runs/family-system_modules-1791952593286998000",
+  "record": "store/runs/family-system_modules-1791955053512869000",
   "verdicts": {
    "38094160385": "conforms",
    "38094162181": "conforms"
@@ -1317,7 +1315,7 @@
    "SESSION_INIT": 1
   },
   "family": "temp_path",
-  "record": "store/runs/family-temp_path-1791952593392238000",
+  "record": "store/runs/family-temp_path-1791955053790010000",
   "verdicts": {
    "38098847298": "conforms",
    "38098848806": "conforms"
@@ -1337,7 +1335,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_handles",
-  "record": "store/runs/family-thread_handles-1791952593906396000",
+  "record": "store/runs/family-thread_handles-1791955054131223000",
   "verdicts": {
    "38114820680": "conforms",
    "38114822014": "conforms"
@@ -1359,7 +1357,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_queries",
-  "record": "store/runs/family-thread_queries-1791952594033551000",
+  "record": "store/runs/family-thread_queries-1791955054142172000",
   "verdicts": {
    "38048923955": "conforms",
    "38048925932": "conforms",
@@ -1381,7 +1379,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_stack",
-  "record": "store/runs/family-thread_stack-1791952594185122000",
+  "record": "store/runs/family-thread_stack-1791955054511825000",
   "verdicts": {
    "38114444717": "conforms",
    "38114446614": "conforms"
@@ -1400,7 +1398,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_stacks",
-  "record": "store/runs/family-thread_stacks-1791952594751595000",
+  "record": "store/runs/family-thread_stacks-1791955054907810000",
   "verdicts": {
    "lap-20261013T234430841Z-5cb60b6d": "conforms"
   }
@@ -1425,7 +1423,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_storage",
-  "record": "store/runs/family-thread_storage-1791952594882726000",
+  "record": "store/runs/family-thread_storage-1791955055047275000",
   "verdicts": {
    "38040526466": "conforms",
    "38040528813": "conforms",
@@ -1451,7 +1449,7 @@
    "SESSION_INIT": 1
   },
   "family": "threads",
-  "record": "store/runs/family-threads-1791952595026337000",
+  "record": "store/runs/family-threads-1791955055139870000",
   "verdicts": {
    "38207005406": "conforms",
    "38207007264": "conforms"
@@ -1471,7 +1469,7 @@
    "SESSION_INIT": 1
   },
   "family": "time",
-  "record": "store/runs/family-time-1791952595291550000",
+  "record": "store/runs/family-time-1791955055444727000",
   "verdicts": {
    "38173127764": "conforms",
    "38173129974": "conforms"
@@ -1491,7 +1489,7 @@
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode",
-  "record": "store/runs/family-time_and_error_mode-1791952595930089000",
+  "record": "store/runs/family-time_and_error_mode-1791955055910111000",
   "verdicts": {
    "38206225386": "conforms",
    "38206227300": "conforms"
@@ -1511,7 +1509,7 @@
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode_child",
-  "record": "store/runs/family-time_and_error_mode_child-1791952596187238000",
+  "record": "store/runs/family-time_and_error_mode_child-1791955056278239000",
   "verdicts": {
    "38206225386": "conforms",
    "38206227300": "conforms"
@@ -1531,7 +1529,7 @@
    "SESSION_INIT": 1
   },
   "family": "vectored_handlers",
-  "record": "store/runs/family-vectored_handlers-1791952596292805000",
+  "record": "store/runs/family-vectored_handlers-1791955056288897000",
   "verdicts": {
    "38114204685": "conforms",
    "38114206477": "conforms"
@@ -1551,7 +1549,7 @@
    "SESSION_INIT": 1
   },
   "family": "version",
-  "record": "store/runs/family-version-1791952596809186000",
+  "record": "store/runs/family-version-1791955056858848000",
   "verdicts": {
    "38173733146": "conforms",
    "38173735116": "conforms"
@@ -1571,7 +1569,7 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791952596888189000",
+  "record": "store/runs/family-virtual_memory-1791955056868901000",
   "verdicts": {
    "38172734444": "conforms",
    "38172736319": "conforms"
@@ -1591,7 +1589,7 @@
    "SESSION_INIT": 1
   },
   "family": "wait_handoff",
-  "record": "store/runs/family-wait_handoff-1791952596974107000",
+  "record": "store/runs/family-wait_handoff-1791955056877262000",
   "verdicts": {
    "38304235237": "conforms",
    "38304238413": "conforms"
@@ -1611,7 +1609,7 @@
    "SESSION_INIT": 1
   },
   "family": "windows",
-  "record": "store/runs/family-windows-1791952596989879000",
+  "record": "store/runs/family-windows-1791955057008706000",
   "verdicts": {
    "38210803867": "conforms",
    "38210806334": "conforms"
@@ -1631,7 +1629,7 @@
    "SESSION_INIT": 1
   },
   "family": "winrt",
-  "record": "store/runs/family-winrt-1791952597086883000",
+  "record": "store/runs/family-winrt-1791955057041223000",
   "verdicts": {
    "38178400798": "conforms",
    "38178402576": "conforms"
