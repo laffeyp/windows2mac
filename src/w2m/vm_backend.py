@@ -137,7 +137,12 @@ def dispatch_slot(target: int) -> int:
     """The dispatcher's index for an x86 address: its low DISPATCH_BITS bits folded with the next two DISPATCH_BITS.
     Sprint 064: the game's modules sit at 1 MB-aligned bases (0x140000000, 0x180000000, 0x1180000000, the thunks at
     0x7FFE00000000), so code at one offset in two modules shared a slot when only the low bits indexed it."""
-    return (target ^ target >> DISPATCH_BITS ^ target >> 2 * DISPATCH_BITS) & (DISPATCH_ENTRIES - 1)
+    return (target ^ target >> DISPATCH_BITS ^ target >> 2 * DISPATCH_BITS) & (DISPATCH_ENTRIES - 2)
+
+
+# Recentering step 5: the table is two-way. A pair of slots (dispatch_slot, even) holds two targets with one index; the
+# dispatcher checks both, and the host's insert keeps the newest first (_dispatch_insert). The full batch run made
+# 871,681 dispatch misses to blocks already compiled whose one slot another target held, against 257,593 compiles.
 # The tables that split a block descriptor where translated code makes 4 KB pages read-only (Sprint 065 item 9e):
 # frontier 643a6283510c-1791841443768764000 filled the 64 of TRANSLATION_TABLES at 50.5 billion instructions
 SPLIT_TABLES = DISPATCH_TABLE + 16 * DISPATCH_ENTRIES
@@ -3196,12 +3201,17 @@ class VM:
         d = Assembler(MONITOR_VA + DISPATCHER)
         top, miss = d.label(), d.label()
         d.bind(top)
+        second = d.label()
         d.emit(a64.ldr(8, 16, 28, 16), a64.eor(18, 17, 17, a64.LSR, DISPATCH_BITS),
-               a64.eor(18, 18, 17, a64.LSR, 2 * DISPATCH_BITS), a64.ubfx(18, 18, 0, DISPATCH_BITS),
-               a64.add(16, 16, 18, a64.LSL, 4),
-               a64.ldp(18, 16, 16), a64.cmp(18, 17))
+               a64.eor(18, 18, 17, a64.LSR, 2 * DISPATCH_BITS), a64.ubfx(18, 18, 1, DISPATCH_BITS - 1),
+               a64.add(16, 16, 18, a64.LSL, 5),                     # the pair: 32 bytes
+               a64.ldp(18, 25, 16), a64.cmp(18, 17))                 # x25: a temporary, dead at a dispatch
+        d.branch(lambda off: a64.bcond("ne", off), second)
+        d.emit(a64.br(25))
+        d.bind(second)
+        d.emit(a64.ldp(18, 25, 16, 16), a64.cmp(18, 17))
         d.branch(lambda off: a64.bcond("ne", off), miss)
-        d.emit(a64.br(16))
+        d.emit(a64.br(25))
         d.bind(miss)
         self.miss_va = d.here()
         # the host may have compiled a block and made its pages read-only (_protect_code): drop stale TLB entries too
@@ -3405,9 +3415,9 @@ class VM:
         for start in blocks:
             if self.blocks.pop(start, None) is None:
                 continue
-            slot = DISPATCH_TABLE + 16 * dispatch_slot(start)
-            if struct.unpack_from("<Q", self.mm, slot)[0] == start:
-                struct.pack_into("<QQ", self.mm, slot, M64, self.miss_va)
+            for slot in (DISPATCH_TABLE + 16 * dispatch_slot(start), DISPATCH_TABLE + 16 * dispatch_slot(start) + 16):
+                if struct.unpack_from("<Q", self.mm, slot)[0] == start:
+                    struct.pack_into("<QQ", self.mm, slot, M64, self.miss_va)
             self.blocks_dropped += 1
         at = self._page_descriptor(page)
         struct.pack_into("<Q", self.mm, at, struct.unpack_from("<Q", self.mm, at)[0] & ~AP_READ_ONLY)
@@ -3575,6 +3585,18 @@ class VM:
                 break
             addr, previous = constant[br[2]] & M64, None
         return live | undecided
+
+    def _dispatch_insert(self, target: int, va: int) -> None:
+        """Put (target, va) in its pair of the dispatch table: in a slot that is empty or holds it, else first, the first
+        slot's entry moved to the second (the newest checked first)."""
+        at = DISPATCH_TABLE + 16 * dispatch_slot(target)
+        t0, v0, t1, _ = struct.unpack_from("<QQQQ", self.mm, at)
+        if t0 in (M64, target):
+            struct.pack_into("<QQ", self.mm, at, target, va)
+        elif t1 in (M64, target):
+            struct.pack_into("<QQ", self.mm, at + 16, target, va)
+        else:
+            struct.pack_into("<QQQQ", self.mm, at, target, va, t0, v0)
 
     def _recon_append(self, marks: list[tuple[int, int]]) -> None:
         """Append (host code VA, x86 address) pairs to the reconstruction table in guest memory.
@@ -3791,7 +3813,7 @@ class VM:
                         va = self.bridges[target]
                     else:
                         va = self.blocks.get(target) or self._compile(target)
-                    struct.pack_into("<QQ", self.mm, DISPATCH_TABLE + 16 * dispatch_slot(target), target, va)
+                    self._dispatch_insert(target, va)
                     pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
                 elif imm == 8:
                     if not self._host_request(x):
