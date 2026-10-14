@@ -220,7 +220,8 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
         for f in "CZSOP":
             x[FLAG_REG[f]] = c.rflags >> sd.FLAG_BITS[f] & 1
         x[24] = 0
-        v.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1))
+        v.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1),
+                    bool(c.rflags >> sd.FLAG_BITS["P"] & 1))
         v.set_mxcsr(c.mxcsr, list(c.xmm))
         v.set_ymm_hi(list(c.ymm_hi))
         if c.x87 is not None:

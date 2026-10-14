@@ -1,6 +1,6 @@
 {
  "spec_id": "w2m.guest_state",
- "version": "0.2.0",
+ "version": "0.3.0",
  "sources": {
   "winnt.h": "Windows SDK on the windows-2025 runner, read by probes/guest_state (offsetof/sizeof)",
   "winternl.h": "same; Microsoft Learn TEB page (MicrosoftDocs/sdk-api docs 7659b39b6294): 'This structure may be altered in future versions of Windows'",
@@ -382,7 +382,7 @@
  },
  "host_registers": {
   "gpr": "x86 GPR i in x_i (i = 0..15)",
-  "flags": "CF ZF SF OF PF in x19..x23 as 0/1; x24 one bit per undefined flag; AF lazy (state block af_operands); DF in the state block",
+  "flags": "CF ZF SF OF in x19..x22 as 0/1; x24 one bit per undefined flag; AF and PF lazy (state block af_operands: AF is bit 4 of a ^ b ^ r, PF is set when r's low byte has an even number of ones; 0.3.0, 2026-10-14); DF in the state block",
   "xmm": "XMM i in v_i (i = 0..15)",
   "ymm_high": "upper 128 bits of YMM i in v(16+i)",
   "mxcsr": "rounding control mirrored into FPCR.RMode; FTZ and DAZ into FPCR.FZ and FPCR.FIZ where present; exception flags kept in the state block",

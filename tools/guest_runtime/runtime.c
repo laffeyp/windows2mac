@@ -161,14 +161,19 @@ static u64 guest_rip_at(u64 host_pc) {
     return lo ? t[lo - 1].guest : 0;
 }
 
-/* RFLAGS from the flag registers (x19 CF, x20 ZF, x21 SF, x22 OF, x23 PF as 0/1), lazy AF and DF
- * (SDM Vol 1 3.4.3: CF bit 0, PF 2, AF 4, ZF 6, SF 7, IF 9, DF 10, OF 11; bit 1 reads 1). An
- * undefined flag reads 0 here; its bit in flags_undefined says so. */
-static u64 materialize_rflags(const struct w2m_save_area *s, u64 af, u64 df) {
+/* RFLAGS from the flag registers (x19 CF, x20 ZF, x21 SF, x22 OF as 0/1), lazy PF and AF, and DF
+ * (SDM Vol 1 3.4.3: CF bit 0, PF 2, AF 4, ZF 6, SF 7, IF 9, DF 10, OF 11; bit 1 reads 1). PF is set when the stored
+ * result's low byte has an even number of ones (specs/guest_state.json 0.3.0). An undefined flag reads 0 here; its bit
+ * in flags_undefined says so. */
+static u64 materialize_rflags(const struct w2m_save_area *s, u64 af, u64 pf_result, u64 df) {
     u64 undef = s->x[24];
     u64 f = 0x202;
+    u64 p = pf_result & 0xFF;
+    p ^= p >> 4;
+    p ^= p >> 2;
+    p ^= p >> 1;
     if (!(undef & 1)) f |= (s->x[19] & 1) << 0;
-    if (!(undef & 16)) f |= (s->x[23] & 1) << 2;
+    if (!(undef & 16)) f |= ((p & 1) ^ 1) << 2;
     if (!(undef & 32)) f |= af << 4;
     if (!(undef & 2)) f |= (s->x[20] & 1) << 6;
     if (!(undef & 4)) f |= (s->x[21] & 1) << 7;
@@ -238,7 +243,7 @@ void w2m_exception(void) {
     for (int i = 0; i < 16; i++) st->gpr[i] = s->x[i];
     st->rip = rip;
     st->flags_undefined = s->x[24];
-    st->rflags = materialize_rflags(s, af_bit, df);
+    st->rflags = materialize_rflags(s, af_bit, af[2], df);
     st->af_operands[0] = af[0];
     st->af_operands[1] = af[1];
     st->af_operands[2] = af[2];

@@ -42,13 +42,9 @@ def test_lockstep_finds_no_difference() -> None:
 
 
 def test_planted_parity_fault_is_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    """PF compiled with the opposite sense: lockstep names the first instruction that sets it."""
-    orig = a64.cset
-
-    def wrong(rd: int, cond: str) -> int:
-        return orig(rd, "ne" if rd == vm_backend.REG_PF and cond == "eq" else cond)
-
-    monkeypatch.setattr(a64, "cset", wrong)
+    """PF's result stored to the wrong slot (lazy PF, guest_state 0.3.0): lockstep names the first instruction that
+    sets it."""
+    monkeypatch.setattr(vm_backend, "_set_pf", lambda a, r: a.emit(a64.str_(8, r, 28, vm_backend.AF_OPERANDS + 8)))
     result = lockstep(_skeleton(), limit=0)
     assert result.differences and "PF vm" in result.differences[0]
     assert "x86 0x14000" in result.differences[0]

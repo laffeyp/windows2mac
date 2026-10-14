@@ -78,6 +78,10 @@ HEAP_SIZE = 0x1000_0000             # 256 MB, sparse in the VM's memory file
 # monitor layout (offsets into the shared file and from MONITOR_VA)
 MONITOR_DATA = 0x00000              # [0] instructions executed, [8] limit, [16] dispatch table VA
 AF_OPERANDS = 0x20                  # MONITOR_DATA + this: the last ADD/SUB/INC/DEC's a, b, r (lazy AF)
+# PF is lazy too (specs/guest_state.json 0.3.0, recentering step 5): every instruction that defines PF stores its result
+# at AF_OPERANDS + 16, and PF is set when that value's low byte has an even number of ones. A value restored from flags
+# stores 0 there for PF set and 1 for PF clear, with AF<<4 and 0 as the operands.
+PF_RESULT = AF_OPERANDS + 16
 DF_BYTE = 0x38                      # MONITOR_DATA + this: DF (0 or 1)
 RECON_COUNT = 0x40                  # MONITOR_DATA + this: entries in the reconstruction table
 MXCSR_OFF = 0x50                    # MONITOR_DATA + this: MXCSR's control bits and the flags not yet in FPSR
@@ -388,8 +392,20 @@ def _nzcv(a: Assembler, add: bool, ra: int, rb: int, bits: int) -> None:
 
 
 def _set_pf(a: Assembler, r: int) -> None:
-    a.emit(a64.ubfx(16, r, 0, 8), a64.eor(16, 16, 16, a64.LSR, 4), a64.eor(16, 16, 16, a64.LSR, 2),
-           a64.eor(16, 16, 16, a64.LSR, 1), a64.ubfx(16, 16, 0, 1), a64.cmpi(16, 0), a64.cset(REG_PF, "eq"))
+    """PF, lazily: the result's parity is read from PF_RESULT when PF is; one store where the parity took seven."""
+    a.emit(a64.str_(8, r, 28, PF_RESULT))
+
+
+def parity_even(v: int) -> bool:
+    """PF of a result: its low byte holds an even number of ones (SDM Vol 1 3.4.3.1)."""
+    return bin(v & 0xFF).count("1") % 2 == 0
+
+
+def _pf_into_x16(a: Assembler) -> None:
+    """x16 = PF from PF_RESULT: 1 when the low byte holds an even number of ones."""
+    a.emit(a64.ldr(8, 16, 28, PF_RESULT), a64.ubfx(16, 16, 0, 8), a64.eor(16, 16, 16, a64.LSR, 4),
+           a64.eor(16, 16, 16, a64.LSR, 2), a64.eor(16, 16, 16, a64.LSR, 1), a64.ubfx(16, 16, 0, 1),
+           a64.cmpi(16, 0), a64.cset(16, "eq"))
 
 
 X24_CLEAR = 0xAA1F03F8                    # MOV X24, XZR: every flag defined
@@ -397,10 +413,8 @@ X24_KEEP_CF = 0x92400318                  # AND X24, X24, #1: every flag defined
 
 
 def _set_zf_sf_pf(a: Assembler, r: int, bits: int) -> None:
-    a.emit(a64.cmpi(r, 0), a64.cset(REG_ZF, "eq"), a64.ubfx(REG_SF, r, bits - 1, 1),
-           a64.ubfx(16, r, 0, 8), a64.eor(16, 16, 16, a64.LSR, 4), a64.eor(16, 16, 16, a64.LSR, 2),
-           a64.eor(16, 16, 16, a64.LSR, 1), a64.ubfx(16, 16, 0, 1), a64.cmpi(16, 0),
-           a64.cset(REG_PF, "eq"))
+    a.emit(a64.cmpi(r, 0), a64.cset(REG_ZF, "eq"), a64.ubfx(REG_SF, r, bits - 1, 1))
+    _set_pf(a, r)
 
 
 def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int) -> None:
@@ -575,7 +589,10 @@ def _eval_condition(a: Assembler, cc: str) -> None:
     neg = cc.startswith("n")
     key = cc[1:] if neg else cc
     single = {"o": "O", "b": "C", "z": "Z", "s": "S", "p": "P"}
-    if key in single:
+    if key == "p":
+        _exit_if_undefined(a, "P")
+        _pf_into_x16(a)
+    elif key in single:
         _exit_if_undefined(a, single[key])
         a.emit(a64.mov(16, FLAG_REG[single[key]]))
     elif key in ("be", "le"):
@@ -1050,8 +1067,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.emit(a64.ldp(i, i + 1, 16, 8 * i))
             a.emit(a64.ubfx(1, 17, 0, 5),                                       # ECX, RCX's upper half cleared
                    a64.ubfx(REG_CF, 17, 8, 1), a64.ubfx(REG_ZF, 17, 9, 1), a64.ubfx(REG_SF, 17, 10, 1),
-                   a64.ubfx(REG_OF, 17, 11, 1), a64.mov(REG_PF, a64.ZR),
-                   a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, a64.ZR, 28, AF_OPERANDS + 16))
+                   a64.ubfx(REG_OF, 17, 11, 1), a64.movz(16, 1),          # PF and AF clear (PF_RESULT 1)
+                   a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, 16, 28, PF_RESULT))
             _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)
             from w2m.rules import registry
@@ -1853,9 +1870,11 @@ class VM:
             af_a, af_b, af_r = struct.unpack_from("<QQQ", mon[0x20], 0)
             undefined = t.x[REG_UNDEFINED_FLAGS]
             eflags = 0x202 | (mon[0x20][DF_BYTE - 0x20] & 1) << 10
-            for f, bit in (("C", 0), ("P", 2), ("Z", 6), ("S", 7), ("O", 11)):
+            for f, bit in (("C", 0), ("Z", 6), ("S", 7), ("O", 11)):
                 if not undefined >> FLAG_BIT[f] & 1 and t.x[FLAG_REG[f]]:
                     eflags |= 1 << bit
+            if not undefined >> FLAG_BIT["P"] & 1 and parity_even(af_r):          # PF lazy (PF_RESULT)
+                eflags |= 1 << 2
             if not undefined >> FLAG_BIT["A"] & 1 and (af_a ^ af_b ^ af_r) & 0x10:
                 eflags |= 1 << 4
             # a thread suspended in a wait answers RIP in ntdll, where Windows' NtWait* stub returns from its syscall
@@ -2592,9 +2611,13 @@ class VM:
     def df(self) -> bool:
         return bool(self.mm[MONITOR_DATA + DF_BYTE])
 
-    def set_af_df(self, af: bool, df: bool) -> None:
-        """Lazy-AF operands that read back as `af`, and DF."""
-        struct.pack_into("<QQQ", self.mm, MONITOR_DATA + AF_OPERANDS, 0x10 if af else 0, 0, 0)
+    def pf(self) -> bool:
+        """PF from PF_RESULT."""
+        return parity_even(struct.unpack_from("<Q", self.mm, MONITOR_DATA + PF_RESULT)[0])
+
+    def set_af_df(self, af: bool, df: bool, pf: bool = True) -> None:
+        """Lazy operands that read back as `af` and `pf`, and DF."""
+        struct.pack_into("<QQQ", self.mm, MONITOR_DATA + AF_OPERANDS, 0x10 if af else 0, 0, 0 if pf else 1)
         self.mm[MONITOR_DATA + DF_BYTE] = int(df)
 
     def teb_u32(self, offset: int) -> int:
@@ -2678,7 +2701,7 @@ class VM:
             if th.flags[f] is not None:
                 x[FLAG_REG[f]] = int(bool(th.flags[f]))
         x[REG_UNDEFINED_FLAGS] = sum(1 << FLAG_BIT[f] for f in "CZSOPA" if th.flags[f] is None)
-        self.set_af_df(bool(th.flags["A"]), th.df)
+        self.set_af_df(bool(th.flags["A"]), th.df, bool(th.flags["P"]))
         struct.pack_into("<I", self.mm, MONITOR_DATA + MXCSR_OFF, th.mxcsr)
         struct.pack_into("<H", self.mm, MONITOR_DATA + FCW_OFF, th.fcw)
         self._store_x87(st, th)
@@ -3267,9 +3290,10 @@ class VM:
 
 
 def x86_flags(x: list[int], vm: VM | None = None) -> dict[str, bool | None]:
-    """The x86 flags held in a register snapshot, None where undefined; with `vm`, AF too (lazy,
-    from the monitor data page)."""
-    out = {f: None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT[f] & 1 else bool(x[FLAG_REG[f]]) for f in "CZSOP"}
+    """The x86 flags held in a register snapshot, None where undefined; with `vm`, AF and PF too (lazy, from the
+    monitor data page; without it PF reads None)."""
+    out = {f: None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT[f] & 1 else bool(x[FLAG_REG[f]]) for f in "CZSO"}
+    out["P"] = None if vm is None or x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["P"] & 1 else vm.pf()
     if vm is not None:
         out["A"] = None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["A"] & 1 else vm.af()
     return out
@@ -3458,7 +3482,7 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
         for f in "CZSOP":
             x[FLAG_REG[f]] = int(flags[f])
         x[REG_UNDEFINED_FLAGS] = 0
-        v.set_af_df(flags["A"], df)
+        v.set_af_df(flags["A"], df, flags["P"])
         pending.append((addr, k))
 
     try:
