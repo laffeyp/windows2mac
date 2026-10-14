@@ -235,6 +235,7 @@
 - **2026-10-11** — Sprint 062 (the frontier's reruns) closed. `_compile` appends to `pc_map` instead of sorting it after every block: the frontier from 138.8 s to 33.1 s, the same stop and calls. The snapshot and the translation cache declined on the measurement (Decision above).
 - **2026-10-11** — Sprint 063 (the next stops) closed partial. kernel.appcore; five groups in parallel worktrees: module_search, console 0.3.0 (A); interlocked_lists, `slist.c` (B); registry 0.3.0, writes (C); windows 0.3.0, the message loop, focus and images (D); dxgi 0.1.0, `dxgi.c`, `COM_VTABLES` by DLL (E); PEB.Ldr kept current by `_load_dll`; the frontier keeps the game's unity.log and prints where its threads stand.
 - **2026-10-12** — Sprint 064 (speed) closed partial. The exit census (`vm.exits`, `vm.exit_sites`); the dispatch table at 2^20 entries with a folded index (`dispatch_slot`); native CVTDQ2PS, CVTPS2PD, CVTPD2DQ, CVTPD2PS and their VEX.128 forms, and 32-bit IDIV; the trace's slot reuse, 16,384 thunks, string arguments (thread names); the comparator's BOOL failure rule and pairing by name; reference game run 38216081440 with thread names. 4.0 to 442 M instructions a second.
+- **2026-10-13** — Sprint 066 (thread stacks, the collector path, threads that run at once) closed. TIME_SLICE 20,000; GetProcAddress from a traced image answers a traced thunk; message 0x60 posted at activation; a created thread's stack laid out and committed on demand through three unmapped guard pages (THREAD_STACK_GROW), an access violation below them; a waiting thread's context in ntdll; families thread_stacks and running_thread_context from the laptop's rows; divergences sorted into value and scheduling (`call_compare.by_cause`, Decision 2026-10-13 user). Frontier 1791942295792627000: to the reach rule at 80.9 billion instructions, 0 defects against run 38216081440, HeapReAlloc 3268 the game's scheduling. The time census: 2,366 s in the vCPU, 2,129 s of host time in the SSE model path.
 
 ## Deferred
 
@@ -288,6 +289,11 @@
 ---
 
 ## Sprint tail
+
+### Sprint 066 (2026-10-13, closed: CI on the closing commit)
+- **Scope:** thread stacks as Windows lays them out, a running thread's context, and the divergences threads sharing one vCPU left.
+- **Observed:** the frontier conforms against its reference (0 defects; HeapReAlloc 3268 scheduling); thread_stacks (44 rows) and running_thread_context (4 rows) conform; all 68 families accepted (index 431bffa5).
+- **Carried:** the main thread's stack still committed whole; InterlockedPopEntrySList against the laptop's runs is a timing-dependent value the classifier counts as a value (Sprint 067).
 
 ### Sprint 065 (2026-10-12, closed partial: CI run 38327467991 success on 91a8e77b)
 - **Scope:** x87 and the MMX-register forms; past the FLD and seq 3426; the red team's findings; a clock the run controls.

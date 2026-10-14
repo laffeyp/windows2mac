@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 066
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
