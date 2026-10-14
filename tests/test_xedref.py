@@ -31,6 +31,7 @@ def test_xed_decoding_depends_on_chip(chip: str, expected: list[str]) -> None:
     assert [x.iclass for x in got] == expected
 
 
+@pytest.mark.timeout(120)    # every stored probe binary through both decoders: 28.3 s alone, past 30 s under load
 def test_own_decoder_matches_xed_iclass_on_probes() -> None:
     from w2m.x86ref import walk
     for path in BINARIES:
