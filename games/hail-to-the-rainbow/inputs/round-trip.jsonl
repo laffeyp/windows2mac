@@ -1,0 +1,11 @@
+{"t":70.0,"kind":"key","scan":17,"e0":false,"up":false}
+{"t":71.0,"kind":"key","scan":17,"e0":false,"up":true}
+{"t":71.5,"kind":"move","dx":200,"dy":0}
+{"t":72.0,"kind":"move","dx":-200,"dy":40}
+{"t":73.0,"kind":"button","button":"left","up":false}
+{"t":73.2,"kind":"button","button":"left","up":true}
+{"t":74.0,"kind":"key","scan":30,"e0":false,"up":false}
+{"t":74.5,"kind":"key","scan":30,"e0":false,"up":true}
+{"t":75.0,"kind":"wheel","delta":120}
+{"t":76.0,"kind":"key","scan":72,"e0":true,"up":false}
+{"t":76.3,"kind":"key","scan":72,"e0":true,"up":true}

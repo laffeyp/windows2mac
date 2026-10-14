@@ -165,6 +165,9 @@ try {
         if (-not (Test-Path $pref)) { New-Item $pref -Force | Out-Null }
         Set-ItemProperty $pref "$app\$exe.exe" 'GpuPreference=2;'
         Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+        if (-not ('W2mPlayer' -as [type])) {
+          Add-Type -Path (Join-Path $PSScriptRoot 'input.cs') -ReferencedAssemblies System.Windows.Forms, System.Drawing, System.Windows.Forms.Primitives, System.ComponentModel.Primitives
+        }
       }
       $info = Get-Content (Join-Path $pristine "$($exe)_Data\app.info")
       $company = $info[0].Trim(); $product = $info[1].Trim()
@@ -212,26 +215,56 @@ try {
         $shell = New-Object -ComObject WScript.Shell
         $done = $false
         $frameEvery = if ($spec.frame_seconds) { [int]$spec.frame_seconds } else { 10 }; $nextFrame = 0
-        # the curve: how the trace and the log grow, every 3 s (does a run need all its seconds?)
+        # the input (R5): job.json `input_script` names a script in games/<game>/inputs/ (JSON lines: t, kind, values; t in
+        # seconds since the game started), played with SendInput (input.cs); without one, play mode sends Enter and
+        # Space every 3 s as windows-game.yml does. job.json `record` keeps the raw keyboard and mouse as
+        # out\<i>\inputs.jsonl (a person playing, or the round trip that checks the player).
+        $script = @()
+        if ($spec.input_script) {
+          $script = @(Get-Content "games/$($spec.game)/inputs/$($spec.input_script).jsonl" | Where-Object { $_.Trim() } |
+                      ForEach-Object { $_ | ConvertFrom-Json } | Sort-Object { [double]$_.t })
+          Note "execution $i`: input script $($spec.input_script), $($script.Count) events"
+        }
+        $recorder = $null
+        if ($spec.record) { $recorder = [W2mRecorder]::Start($sw, 0.0) }
+        $next = 0; $nextCurve = 0
         "seconds`ttrace_lines`tlog_lines" | Set-Content out\curve.tsv
         while ((Get-Date) -lt $deadline -and -not $done) {
-          $done = $p.WaitForExit(3000)
-          $tl = if (Test-Path out\jit_capture.bin.trace.tsv) { @(Get-Content out\jit_capture.bin.trace.tsv -ErrorAction SilentlyContinue).Count } else { 0 }
-          $ll = if (Test-Path C:\w2m\unity.log) { @(Get-Content C:\w2m\unity.log -ErrorAction SilentlyContinue).Count } else { 0 }
-          "{0:N1}`t{1}`t{2}" -f $sw.Elapsed.TotalSeconds, $tl, $ll | Add-Content out\curve.tsv
-          if (-not $done -and $spec.mode -eq 'play') {
-            [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ')
-            if ($sw.Elapsed.TotalSeconds -ge $nextFrame) {     # the frame record (Q5): the whole screen
-              $frames = Join-Path (Get-Location).Path 'out\frames'    # .NET resolves a relative path from its own directory
-              New-Item -ItemType Directory -Force $frames | Out-Null
-              $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-              $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
-              $bmp.Save((Join-Path $frames ("{0:D4}.png" -f [int]$sw.Elapsed.TotalSeconds)), [System.Drawing.Imaging.ImageFormat]::Png)
-              $g.Dispose(); $bmp.Dispose(); $nextFrame += $frameEvery
+          $now = $sw.Elapsed.TotalSeconds
+          $wake = @($nextCurve, $(if ($spec.mode -eq 'play') { $nextFrame } else { $nextCurve }),
+                    $(if ($next -lt $script.Count) { [double]$script[$next].t } else { $nextCurve })) | Measure-Object -Minimum
+          $done = $p.WaitForExit([int][Math]::Max(5, [Math]::Min(3000, ($wake.Minimum - $now) * 1000)))
+          if ($done) { break }
+          $now = $sw.Elapsed.TotalSeconds
+          if ($now -ge $nextCurve) {         # the curve: how the trace and the log grow (does a run need all its seconds?)
+            $tl = if (Test-Path out\jit_capture.bin.trace.tsv) { @(Get-Content out\jit_capture.bin.trace.tsv -ErrorAction SilentlyContinue).Count } else { 0 }
+            $ll = if (Test-Path C:\w2m\unity.log) { @(Get-Content C:\w2m\unity.log -ErrorAction SilentlyContinue).Count } else { 0 }
+            "{0:N1}`t{1}`t{2}" -f $now, $tl, $ll | Add-Content out\curve.tsv
+            if ($spec.mode -eq 'play' -and -not $spec.input_script) {
+              [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ')
+            }
+            $nextCurve += 3
+          }
+          if ($next -lt $script.Count -and $now -ge [double]$script[$next].t) {
+            [void]$shell.AppActivate($p.Id)
+            while ($next -lt $script.Count -and $sw.Elapsed.TotalSeconds -ge [double]$script[$next].t) {
+              $e = $script[$next]
+              [W2mPlayer]::Send($e.kind, [int]$e.scan, [bool]$e.e0, [bool]$e.up, [int]$e.dx, [int]$e.dy, [string]$e.button, [int]$e.delta)
+              $next++
             }
           }
+          if ($spec.mode -eq 'play' -and $now -ge $nextFrame) {     # the frame record (Q5): the whole screen
+            $frames = Join-Path (Get-Location).Path 'out\frames'    # .NET resolves a relative path from its own directory
+            New-Item -ItemType Directory -Force $frames | Out-Null
+            $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+            $bmp.Save((Join-Path $frames ("{0:D4}.png" -f [int]$now)), [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose(); $nextFrame += $frameEvery
+          }
         }
+        if ($recorder) { [IO.File]::WriteAllText((Join-Path (Get-Location).Path 'out\inputs.jsonl'), $recorder.Stop()) }
+        if ($script.Count) { Note "execution $i`: $next of $($script.Count) input events sent" }
         $sw.Stop()
         if (-not $done) { Stop-Process -Id $p.Id -Force; [void]$p.WaitForExit(30000); $code = $null } else { $code = $p.ExitCode }
         Get-Process | Where-Object { $_.Path -and ($_.Path.StartsWith($gameDir) -or $_.Path.StartsWith($app)) } | ForEach-Object {
