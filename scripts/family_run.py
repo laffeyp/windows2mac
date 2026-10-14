@@ -109,6 +109,9 @@ class Family:
     dll_name: str | None = None           # the probe's own DLL, loaded from its directory (Sprint 046)
     dll_on_disk: bool = False             # the DLL is also a file beside the probe, which the probe reads (Sprint 063)
     host_files: tuple[str, ...] = ()      # Python no runtime request reaches that implements it (the loader's)
+    # the guest's clock counts instructions, and a sleep passes when no thread can run (QEMU's -icount sleep=off): for
+    # rows that time a thread's progress against a sleep, which the wall clock makes depend on the host's load (Sprint 068)
+    instruction_clock: bool = False
 
     def rows(self, printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The contract's rows from a probe's printed rows: derived, then the excluded rows dropped."""
@@ -2642,6 +2645,10 @@ FAMILIES: dict[str, Family] = {
                  "child gets the parent's environment and directory as they are when it starts; a writer's process "
                  "ending breaks its pipe; a pipe of size 0 holds 4096 bytes, and a writer waits for room."),
         probe="processes", guest_file="processes.c",
+        # pipe.capacity counts a writer's one-byte writes during the main thread's Sleep(500): on the wall clock 1,816
+        # and 3,634 of Windows' 4,096 when the host was loaded (2026-10-13 sweep); on this clock the sleep ends only
+        # once the full pipe blocks the writer
+        instruction_clock=True,
         runs={
               "38189162864": Run("windows-2025", "6a37ef1f1ea85d0e2fbc5bb09c1b1daae97c78729d65796f3ffea7d2de96fce9", "processes-1791765864-0", "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"),
               "38189164581": Run("windows-2022", "232d481b305e92488da79d45bd0bb1b13409d74b268fb7ee0c536bb5e665a0d3", "processes-1791765864-1", "AMD EPYC 7763 64-Core Processor"),
@@ -2847,6 +2854,10 @@ def contract(f: Family) -> Contract:
     return load_contract(f.contract_path)
 
 
+# a family's instruction clock: scripts/run_frontier.py's rate, from game run 38216081440's start as a FILETIME
+INSTRUCTION_CLOCK = (1_400_000_000, 134362624920000000)
+
+
 def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | None = None,
               dll: str | None = None) -> tuple[bytes, str, float]:
     """A runner's probe binary in the managed VM with a fresh file-system root, started as `f` says;
@@ -2868,12 +2879,13 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
             return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None
 
         environment = () if f is None else f.environment
+        clock = INSTRUCTION_CLOCK if f is not None and f.instruction_clock else None
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes(), dlls, "probe.exe"), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
                 gui=f is not None and f.gui, command_line=line, environment=environment,
-                foreground_held=f is not None and f.foreground_held)
+                foreground_held=f is not None and f.foreground_held, instruction_clock=clock)
         # every probe runs on a kernel.Machine: a probe that starts a process gets it (Sprint 055)
-        machine = Machine(spawner(files, dlls, sources), max_steps=1 << 40, timeout_ms=60_000)
+        machine = Machine(spawner(files, dlls, sources, instruction_clock=clock), max_steps=1 << 40, timeout_ms=60_000)
         try:
             r = machine.run(vm)                                  # the clock probes spin until time advances
             foreign = foreign_processes(machine, sources)
