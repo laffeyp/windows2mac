@@ -1161,6 +1161,10 @@ class VM:
         self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
         self.exits: Counter[int] = Counter()            # hvc exits by number (Sprint 064's census)
         self.exit_sites: Counter[tuple[int, int]] = Counter()   # (hvc number, x86 address at the exit)
+        # the time census (2026-10-13, the speed work): ns inside each `run` (the vCPU and the text pipe's round
+        # trip), and ns the host spends on each exit kind from the run's return to the next `set`
+        self.run_ns = 0
+        self.exit_ns: Counter[int] = Counter()
         self._pending_init = 0                          # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
@@ -2767,6 +2771,7 @@ class VM:
         stop = "timeout"
         report_at = time.monotonic() + PROGRESS_SECONDS
         reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()), time.monotonic())
+        marked, last_kind = time.perf_counter_ns(), -1
         try:
             while True:
                 machine = self.machine if self.machine is not None and self.machine.main is self else None
@@ -2780,8 +2785,13 @@ class VM:
                     if why:
                         stop = why
                         break
+                started = time.perf_counter_ns()
+                self.exit_ns[last_kind] += started - marked
                 cmd(f"set {pc:x} {cpsr:x} " + " ".join(f"{v:x}" for v in x))
                 r = cmd(f"run {interrupt_every_ms if interrupt_every_ms is not None else timeout_ms}")
+                marked = time.perf_counter_ns()
+                self.run_ns += marked - started
+                last_kind = 0
                 e = VcpuExit(r[1], int(r[2], 16), int(r[3], 16), int(r[5], 16), int(r[6], 16),
                          int(r[7], 16), [int(v, 16) for v in r[8:39]])
                 x = e.x
@@ -2810,6 +2820,7 @@ class VM:
                     stop = f"VmExit: {e.kind} syndrome 0x{e.syndrome:x} at pc 0x{e.pc:x}"
                     break
                 imm = e.syndrome & 0xFFFF
+                last_kind = imm
                 # a dispatch miss exits from the dispatcher, outside every block: its site is the target it missed
                 where = x[17] if imm == 1 else self.x86_address_at(e.pc - 4)
                 self.exits[imm] += 1                          # the exit census (Sprint 064): kind, then the site
@@ -2942,6 +2953,8 @@ class VM:
               f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
               + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
               + f"; threads {dict(threads)}; thread {self.current_tid} at 0x{x[17]:x}", file=sys.stderr, flush=True)
+        print(f"time: {self.modules.image_name}: in run {self.run_ns / 1e9:.1f} s; host by exit "
+              + ", ".join(f"hvc {k} {v / 1e9:.1f} s" for k, v in self.exit_ns.most_common(6)), file=sys.stderr, flush=True)
         return executed, Counter(self.exits), Counter(self.exit_sites), calls, now
 
     def close(self) -> None:
