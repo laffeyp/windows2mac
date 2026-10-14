@@ -442,10 +442,14 @@ def _set_zf_sf_pf(a: Assembler, r: int, bits: int) -> None:
     _set_pf(a, r)
 
 
-def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, nzcv_ready: bool = False) -> None:
+def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, nzcv_ready: bool = False,
+               live: int = 0x3F, nzcv_out: bool = False) -> None:
     """runtime.Runtime._set_flags, compiled. AF is lazy (specs/guest_state.json 0.2.0): ADD, SUB,
     INC and DEC store a, b and r at MONITOR_DATA + AF_OPERANDS, and AF is bit 4 of a ^ b ^ r when
-    the state is read; the instructions that leave AF undefined set its bit in x24."""
+    the state is read; the instructions that leave AF undefined set its bit in x24.
+    `live` holds the flags (U_* bits) a later instruction reads (flag liveness, recentering step 5): ADD, SUB, INC,
+    DEC and the logic ops compute only those, and NZCV as well when `nzcv_out` (the next instruction's Jcc branches
+    on it, NZCV_CONDITIONS)."""
     if kind == "mul":                                          # SDM MUL: SF ZF AF PF undefined
         a.emit(a64.cmpi(rr, 0), a64.cset(REG_CF, "ne"), a64.mov(REG_OF, REG_CF))
         _mark_defined(a, U_CF | U_OF)
@@ -502,19 +506,35 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, nz
         return
     if FLAGS_FROM_NZCV and kind in ("add", "inc", "sub", "dec"):
         # recentering step 5: NZCV from one ADDS or SUBS gives CF ZF SF OF; INC and DEC keep CF (SDM INC, DEC)
-        if not nzcv_ready:                                     # the ALU op's ADDS or SUBS set it already
+        if not nzcv_ready and (live & (U_CF | U_ZF | U_SF | U_OF) or nzcv_out):   # ADDS or SUBS may have set it
             _nzcv(a, kind in ("add", "inc"), ra, rb, bits)
-        a.emit(a64.cset(REG_ZF, "eq"), a64.cset(REG_SF, "mi"), a64.cset(REG_OF, "vs"))
-        if kind == "add":
-            a.emit(a64.cset(REG_CF, "cs"))
-        elif kind == "sub":
-            a.emit(a64.cset(REG_CF, "lo"))
-        a.emit(X24_CLEAR if kind in ("add", "sub") else X24_KEEP_CF)
-        a.emit(a64.stp(ra, rb, 28, AF_OPERANDS), a64.str_(8, rr, 28, PF_RESULT))   # AF's operands, PF's result
+        for flag, reg, cond in ((U_ZF, REG_ZF, "eq"), (U_SF, REG_SF, "mi"), (U_OF, REG_OF, "vs")):
+            if live & flag:
+                a.emit(a64.cset(reg, cond))
+        if kind in ("add", "sub") and live & U_CF:
+            a.emit(a64.cset(REG_CF, "cs" if kind == "add" else "lo"))
+        if live:                                               # a dead flag marked defined is never read
+            a.emit(X24_CLEAR if kind in ("add", "sub") else X24_KEEP_CF)
+        if live & U_AF:
+            a.emit(a64.stp(ra, rb, 28, AF_OPERANDS))           # AF's operands; AF reads the result too
+        if live & (U_AF | U_PF):
+            a.emit(a64.str_(8, rr, 28, PF_RESULT))             # PF's result
         return
     if kind == "logic" and FLAGS_FROM_NZCV:                    # SDM AND/OR/XOR/TEST: CF OF 0, AF undefined
-        a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR), a64.movz(REG_UNDEFINED_FLAGS, U_AF))
-        _set_zf_sf_pf(a, rr, bits)
+        if live & U_CF:
+            a.emit(a64.mov(REG_CF, a64.ZR))
+        if live & U_OF:
+            a.emit(a64.mov(REG_OF, a64.ZR))
+        if live:
+            a.emit(a64.movz(REG_UNDEFINED_FLAGS, U_AF))
+        if live & U_ZF or nzcv_out:
+            a.emit(a64.cmpi(rr, 0))
+        if live & U_ZF:
+            a.emit(a64.cset(REG_ZF, "eq"))
+        if live & U_SF:
+            a.emit(a64.ubfx(REG_SF, rr, bits - 1, 1))
+        if live & U_PF:
+            _set_pf(a, rr)
         return
     if kind == "logic":
         a.emit(a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR))
@@ -671,6 +691,86 @@ def nzcv_setter(ins: Lifted) -> str | None:
         return None
     kind = ins.ops[-1][1]
     return kind if kind in NZCV_CONDITIONS else None
+
+
+# Flag liveness (recentering step 5, Sprint 068 item L): a flag no later instruction reads is not computed. A block's
+# instructions are walked backward from the flags live at its end, which come from its direct successors, each scanned
+# forward until every flag is written or read (_flags_live_out). The masks are REG_UNDEFINED_FLAGS's bits. A flag
+# written as undefined counts as written: the undefined mask is what a reader then finds.
+# An instruction that may stop with an exception (a model step, #UD, DIV's #DE) reads every flag, since the CONTEXT
+# shows them. A load or store does not: where a fault interrupts a stretch whose flags are dead, the CONTEXT's EFlags
+# hold the flags an earlier instruction left, which only a handler that reads EFlags sees; a handler that resumes there
+# runs into the instruction that writes them.
+FLAG_LIVENESS = True
+ALL_FLAGS = U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF
+COND_FLAGS = {"o": U_OF, "b": U_CF, "z": U_ZF, "s": U_SF, "p": U_PF, "be": U_CF | U_ZF, "l": U_SF | U_OF,
+              "le": U_ZF | U_SF | U_OF}
+FLAGS_WRITTEN = {kind: ALL_FLAGS for kind in ("add", "sub", "adc", "sbb", "logic", "andn", "mul", "imul", "bsf")}
+FLAGS_WRITTEN.update(inc=ALL_FLAGS & ~U_CF, dec=ALL_FLAGS & ~U_CF, bt=ALL_FLAGS & ~U_ZF)   # SDM INC, DEC, BT
+FLAGS_SSE = {"COMISS", "UCOMISS", "COMISD", "UCOMISD", "PCMPISTRI", "PCMPISTRI64"}       # each writes all six
+FLAGS_NONE = {"imm", "addr", "ld", "st", "sel", "cst", "cstz", "mxcsr", "mmx", "fence", "rep", "cpuid", "df", "pause",
+              "vex", "vexs", "fma", "vzeroupper"}
+FLAGS_ALL_READ = {"x86", "ud", "fcw", "xgetbv", "x87"}        # the model's steps read the whole state
+SHIFT_KINDS = ("shr", "shl", "sar", "rol", "ror")
+LIVENESS_SCAN = 16                                             # instructions a successor is scanned for, at most
+
+
+def _op_flags(op: Op, constant: dict[int, int]) -> tuple[int, int]:
+    """(flags read, flags written) by one lifted op. A shift or rotate by a count unknown when compiling writes none
+    (a zero count changes nothing); an op this table does not know reads every flag."""
+    k = op[0]
+    if k == "flags":
+        kind, count, bits = op[1], op[3], op[5]
+        if kind in SHIFT_KINDS:
+            if count not in constant or constant[count] & (63 if bits == 64 else 31) == 0:
+                return 0, 0
+            return 0, U_CF | U_OF if kind in ("rol", "ror") else ALL_FLAGS
+        return 0, FLAGS_WRITTEN.get(kind, 0)
+    if k == "alu":
+        return (U_CF if op[2] in ("adc", "sbb") else 0), 0
+    if k == "br":
+        return (0 if op[1] == "always" else COND_FLAGS[op[1].removeprefix("n")]), 0
+    if k in ("set", "cmov"):
+        return COND_FLAGS[op[1].removeprefix("n")], 0
+    if k == "cx16":
+        return 0, U_ZF
+    if k == "div":                                             # #DE before any write; every flag undefined after
+        return ALL_FLAGS, ALL_FLAGS
+    if k == "sse":
+        return 0, ALL_FLAGS if op[1] in FLAGS_SSE else 0
+    if k in FLAGS_NONE:
+        return 0, 0
+    return ALL_FLAGS, 0                                        # FLAGS_ALL_READ, and anything not listed
+
+
+def _op_flag_masks(ins: Lifted, nzcv_kind: str | None) -> list[tuple[int, int]]:
+    """_op_flags of each op of `ins`. A Jcc that branches on the previous instruction's NZCV (`nzcv_kind`,
+    NZCV_CONDITIONS) reads no flag register."""
+    constant: dict[int, int] = {}
+    out = []
+    for op in ins.ops:
+        if op[0] == "imm":
+            constant[op[1]] = op[2]
+        r, w = _op_flags(op, constant)
+        if op[0] == "br" and op[1] in NZCV_CONDITIONS.get(nzcv_kind or "", {}):
+            r = 0
+        out.append((r, w))
+    return out
+
+
+def insn_flags(ins: Lifted, nzcv_kind: str | None = None) -> tuple[int, int]:
+    """(flags `ins` reads before writing them, flags it writes)."""
+    read = written = 0
+    for r, w in _op_flag_masks(ins, nzcv_kind):
+        read |= r & ~written
+        written |= w
+    return read, written
+
+
+def nzcv_branch(setter: Lifted, nxt: Lifted) -> bool:
+    """`nxt` is a Jcc that branches on `setter`'s NZCV (compile_insn's `nzcv_from`)."""
+    kind = nzcv_setter(setter)
+    return kind is not None and any(op[0] == "br" and op[1] in NZCV_CONDITIONS[kind] for op in nxt.ops)
 
 
 def _exit_if_undefined(a: Assembler, f: str) -> None:
@@ -944,15 +1044,25 @@ def _fused_move(a: Assembler, op: Op, ops: tuple[Op, ...], i: int, last: dict[in
 
 
 def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None,
-                 nzcv_from: str | None = None) -> bool:
+                 nzcv_from: str | None = None, live_after: int = ALL_FLAGS, nzcv_out: bool = False) -> bool:
     """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`. `symbols` are the
     compiling VM's runtime image's (CPUID calls its w2m_cpuid; Sprint 058: one table for every VM in the host gave a
     parent the child's addresses); without them, as in an assembler check, the address is 0.
+    `live_after`: the flags a later instruction reads (flag liveness); `nzcv_out`: the next instruction's Jcc
+    branches on this one's NZCV.
     Returns True when control never falls through (an unconditional branch)."""
     last: dict[int, int] = {}
     for i, op in enumerate(ins.ops):
         for t in _temps_read(op):
             last[t] = i
+    flags_live: dict[int, int] = {}                      # each flags op: the flags read after it
+    live = live_after
+    masks = _op_flag_masks(ins, nzcv_from)
+    for i in range(len(ins.ops) - 1, -1, -1):
+        if ins.ops[i][0] == "flags":
+            flags_live[i] = live
+        live = live & ~masks[i][1] | masks[i][0]
+    last_flags = max(flags_live, default=-1)
     free = list(TEMP_REGS)
     reg: dict[int, int] = {}
 
@@ -1132,10 +1242,13 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             _mask(a, rd, bits)
         elif k == "flags":
             _, kind, x, y, r, bits = op
-            if kind in ("shr", "shl", "sar", "rol", "ror") and y in constant and FLAGS_FROM_NZCV:
+            live, nzcv = flags_live[i], nzcv_out and i == last_flags
+            if live == 0 and not nzcv:
+                pass                                     # no later instruction reads them (flag liveness)
+            elif kind in ("shr", "shl", "sar", "rol", "ror") and y in constant and FLAGS_FROM_NZCV:
                 _shift_flags_const(a, kind, reg_of(x), constant[y], reg_of(r), bits)
             else:
-                _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits, nzcv_ready)
+                _set_flags(a, kind, reg_of(x), reg_of(y), reg_of(r), bits, nzcv_ready, live, nzcv)
             nzcv_ready = False
         elif k == "mxcsr":
             _lower_mxcsr(a, op[1], op[2], reg_of)
@@ -3116,10 +3229,19 @@ class VM:
         a.branch(lambda off: a64.bcond("mi", off), budget_stop)
         a.bind(body)
         ended = False
+        if not self.lockstep:
+            self._protect_code(start, addr)              # before the successor scan, which reads the pages it covers
+        live = self._flags_live_out(start, insns[-1], addr) if FLAG_LIVENESS and not self.lockstep else ALL_FLAGS
+        lives = [ALL_FLAGS] * len(insns)                 # the flags read after each instruction
+        for k in range(len(insns) - 1, -1, -1):
+            lives[k] = live
+            read, written = insn_flags(insns[k], nzcv_setter(insns[k - 1]) if k else None)
+            live = live & ~written | read
         previous: Lifted | None = None
-        for ins in insns:
+        for k, ins in enumerate(insns):
             pc_marks.append((a.here(), ins.address))
-            ended = compile_insn(a, ins, exit_va, self.runtime.symbols, nzcv_setter(previous) if previous else None)
+            ended = compile_insn(a, ins, exit_va, self.runtime.symbols, nzcv_setter(previous) if previous else None,
+                                 lives[k], k + 1 < len(insns) and nzcv_branch(ins, insns[k + 1]))
             previous = ins
         body_end = a.here()                              # the census counts the fall-through exit as block overhead
         if not ended:
@@ -3152,10 +3274,54 @@ class VM:
             self.block_census.append((a.labels[counter] - MONITOR_VA,
                                       [(i.iclass, (marks[k + 1] - marks[k]) // 4) for k, i in enumerate(insns)],
                                       ((pc_marks[1][0] - pc_marks[0][0]) // 4 if insns else 0) + overhead))
-        if not self.lockstep:
-            self._protect_code(start, addr)
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
         return va
+
+    def _flags_live_out(self, start: int, last: Lifted, end: int) -> int:
+        """The flags a block read after it ends (flag liveness): those its direct successors read before writing,
+        each scanned by _flags_live_in. A successor not known when compiling (a return, an indirect branch) reads all."""
+        constant = {op[1]: op[2] for op in last.ops if op[0] == "imm"}
+        br = next((op for op in last.ops if op[0] == "br"), None)
+        if br is None:
+            return self._flags_live_in(start, end)
+        if br[2] not in constant:
+            return ALL_FLAGS
+        target = constant[br[2]] & M64
+        return self._flags_live_in(start, target) | (0 if br[1] == "always" else self._flags_live_in(start, end))
+
+    def _flags_live_in(self, owner: int, addr: int) -> int:
+        """The flags code at `addr` reads before writing them, from at most LIVENESS_SCAN instructions on its straight
+        path (following direct jumps). Only bytes on pages already behind translated code are read, and the block at
+        `owner` joins each page's blocks, so a write there drops it as it drops the code it covers (_code_written).
+        A thunk, the host's process area, a page not yet translated, or the end of the scan: every undecided flag is
+        read."""
+        live, undecided, previous = 0, ALL_FLAGS, None
+        for _ in range(LIVENESS_SCAN):
+            if addr in self.ld.thunks or addr >= PROCESS_VA or addr & ~(PAGE - 1) not in self.code_pages:
+                break
+            try:
+                ins = lift(self.mem.code_at(addr), addr)
+            except (LiftError, GuestFault):
+                break
+            pages = {addr & ~(PAGE - 1), (addr + ins.length - 1) & ~(PAGE - 1)}
+            if not pages <= self.code_pages.keys():
+                break
+            for page in pages:
+                self.code_pages[page].add(owner)
+            read, written = insn_flags(ins, nzcv_setter(previous) if previous else None)
+            live |= read & undecided
+            undecided &= ~(read | written)
+            if not undecided:
+                return live
+            br = next((op for op in ins.ops if op[0] == "br"), None)
+            if br is None:
+                addr, previous = addr + ins.length, ins
+                continue
+            constant = {op[1]: op[2] for op in ins.ops if op[0] == "imm"}
+            if br[1] != "always" or br[2] not in constant:
+                break
+            addr, previous = constant[br[2]] & M64, None
+        return live | undecided
 
     def _recon_append(self, marks: list[tuple[int, int]]) -> None:
         """Append (host code VA, x86 address) pairs to the reconstruction table in guest memory.

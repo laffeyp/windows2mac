@@ -15,6 +15,7 @@ def test_the_census_counts_each_block_execution(monkeypatch: pytest.MonkeyPatch)
     from w2m.lift import lift
     from w2m.loader import Loaded, Memory
     monkeypatch.setattr(vm_backend, "BLOCK_CENSUS", True)
+    monkeypatch.setattr(vm_backend, "FLAG_LIVENESS", False)      # every flag computed, as `words` compiles them
     code_va, stack_va = 0x2000_0000, 0x4000_0000
     mem = Memory()
     code = bytes.fromhex("b9e8030000" "ffc9" "75fc" "c6042500000000 00")   # mov ecx, 1000; l: dec ecx; jnz l; the end
