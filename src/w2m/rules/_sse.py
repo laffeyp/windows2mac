@@ -12,7 +12,7 @@ from typing import Any, cast
 from w2m import vm_backend as vb
 from w2m.lift import SSE_050, SSE_ALIGNED, Op, _operand
 from w2m.rules import Ctx
-from w2m.vm_backend import (AF_OPERANDS, FP_CLASSES, HVC_SLOW_SSE, MXCSR_OFF, REG_CF, REG_OF, REG_PF, REG_SF,
+from w2m.vm_backend import (AF_OPERANDS, FP_CLASSES, HVC_SLOW_SSE, MXCSR_OFF, REG_CF, REG_OF, REG_SF,
                             REG_ZF, U_AF, U_CF, U_OF, U_PF, U_SF, U_ZF, Assembler, CompileError, _mark_defined)
 from w2m import a64_encoder as a64
 
