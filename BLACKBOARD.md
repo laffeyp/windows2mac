@@ -300,6 +300,16 @@
 
 ## Sprint tail
 
+### Sprint 068 (2026-10-14, closed: CI run 38632198138 success on 4e98c57c)
+- **Scope:** speed toward the playable slice: the time census's exits removed one cause at a time, each measured, the frontier conforming.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* family sweeps of 68 families, each CANDIDATE_ACCEPTED, on every runtime change (last index a350c9f4: 456 of 458 classes, 68 families); the batch run to its own stop, frontier-643a6283510c-1791973386975499000 on d33b5bd7: EXECUTION_STARTED, its stop, TRACE_INGESTED, COMPARISON_COMPLETED `conforms` (unity.log 168 of 168 lines, 0 divergences), SESSION_COMPLETED.
+  - *Observation 1 (payload anomaly, of the judge):* the instruction count dropped every slice the stub refilled in the VM and counted a model step's unrun block instructions again, so every rate since 76111810 was short (246 against 694 million a second). Disposition: resolved-here (3d052448; tests/test_instruction_count.py).
+  - *Observation 2 (missing pair, of the judge):* the plants on the wake keys changed no family row; no probe woke a wait on several objects by a signal. Disposition: resolved-here (wait_handoff 0.2.0, row event_auto.multiple_waiter, which found a hand-over defect, fixed).
+  - *Observation 3 (order violation, of the work):* mypy run through a pipe exited 0 on a type error that reached a push (2e9f6f5d), and background chains ran untracked. Disposition: resolved-here (scripts/gates.sh; tracked jobs only).
+  - *Observation 4 (payload anomaly, of the work):* a thread switch at a slice's end resumes at the block's entry, whose SUBS counts the block a second time; found designing Sprint 069. Disposition: carried (Sprint 069 item D).
+- **Closed:** CI run 38632198138 (success on 4e98c57c).
+
 ### Sprint 066 (2026-10-13, closed: CI run 38506623160 success on 7114da6e)
 - **Scope:** thread stacks as Windows lays them out, a running thread's context, and the divergences threads sharing one vCPU left.
 - **Observed:** the frontier conforms against its reference (0 defects; HeapReAlloc 3268 scheduling); thread_stacks (44 rows) and running_thread_context (4 rows) conform; all 68 families accepted (index 431bffa5).
