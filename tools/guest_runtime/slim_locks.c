@@ -34,11 +34,11 @@ u64 k32_InitializeConditionVariable(u64 cv) {
 
 /* Sprint 051: with threads, an acquire of a held lock blocks the thread until a release (runtime.h
  * W2M_SCHEDULE_RETRY), and a release wakes the blocked threads to try again. */
-static void must_wait(void) { w2m_block(~0ull); }
+static void must_wait(u64 lock) { w2m_block(~0ull, lock); }
 
 u64 k32_AcquireSRWLockExclusive(u64 lock) {
     if (*(u64 *)lock) {
-        must_wait();
+        must_wait(lock);
         return 0;                                   /* retried: the bridge does not return */
     }
     w2m_thread_scratch()->wait_deadline = 0;
@@ -55,14 +55,14 @@ u64 k32_TryAcquireSRWLockExclusive(u64 lock) {
 u64 k32_ReleaseSRWLockExclusive(u64 lock) {
     if (*(u64 *)lock != EXCLUSIVE) w2m_unimplemented(W2M_API_ReleaseSRWLockExclusive, *(u64 *)lock);
     *(u64 *)lock = 0;
-    w2m_signal();
+    w2m_signal(lock);
     return w2m_logged(W2M_API_ReleaseSRWLockExclusive, lock, 0);
 }
 
 u64 k32_AcquireSRWLockShared(u64 lock) {
     u64 w = *(u64 *)lock;
     if (w == EXCLUSIVE) {
-        must_wait();
+        must_wait(lock);
         return 0;
     }
     w2m_thread_scratch()->wait_deadline = 0;
@@ -79,7 +79,7 @@ u64 k32_ReleaseSRWLockShared(u64 lock) {
     u64 w = *(u64 *)lock;
     if (w == 0 || w == EXCLUSIVE) w2m_unimplemented(W2M_API_ReleaseSRWLockShared, w);
     *(u64 *)lock = w == (SHARED_ONE | EXCLUSIVE) ? 0 : w - SHARED_ONE;
-    if (!*(u64 *)lock) w2m_signal();
+    if (!*(u64 *)lock) w2m_signal(lock);
     return w2m_logged(W2M_API_ReleaseSRWLockShared, lock, 0);
 }
 
@@ -120,7 +120,7 @@ u64 k32_SleepConditionVariableSRW(u64 cv, u64 lock, u64 ms, u64 flags) {
     if (sc->phase == 0) {
         if (!lock_held(lock, shared)) w2m_unimplemented(W2M_API_SleepConditionVariableSRW, *(u64 *)lock);
         *(u64 *)lock = shared ? (*(u64 *)lock == (SHARED_ONE | EXCLUSIVE) ? 0 : *(u64 *)lock - SHARED_ONE) : 0;
-        w2m_signal();
+        w2m_signal(lock);
         int v = variable_of(cv, 1);
         variables[v].waiters++;
         sc->wait_cv = cv;
@@ -139,19 +139,19 @@ u64 k32_SleepConditionVariableSRW(u64 cv, u64 lock, u64 ms, u64 flags) {
             sc->wait_deadline = 0;
             sc->phase = 2;
         } else if (!sc->wait_deadline) {
-            w2m_block((u32)ms == INFINITE ? ~0ull : w2m_counter_now() + (u64)(u32)ms * 10000);
+            w2m_block((u32)ms == INFINITE ? ~0ull : w2m_counter_now() + (u64)(u32)ms * 10000, cv);
             return 0;
         } else if (sc->wait_deadline != ~0ull && w2m_counter_now() >= sc->wait_deadline) {
             variables[v].waiters--;
             sc->wait_deadline = 0;
             sc->phase = 3;
         } else {
-            w2m_block(sc->wait_deadline);
+            w2m_block(sc->wait_deadline, cv);
             return 0;
         }
     }
     if (!lock_free(lock, shared)) {                       /* phases 2 and 3: the lock again */
-        must_wait();
+        must_wait(lock);
         return 0;
     }
     sc->wait_deadline = 0;
@@ -167,7 +167,7 @@ static u64 wake(u64 api, u64 cv) {
     int v = variable_of(cv, 0);
     if (v >= 0 && variables[v].waiters) {
         variables[v].generation++;
-        w2m_signal();
+        w2m_signal(cv);
     }
     return w2m_logged(api, cv, 0);
 }

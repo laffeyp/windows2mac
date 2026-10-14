@@ -173,10 +173,13 @@ u64 k32_CreateMutexA(u64 attributes, u64 owned, u64 name) {
  * two of three waiters (semaphore.three_waiters_two_released) and of two waiters the first wakes (semaphore.order).
  * A granted waiter's retried wait returns WAIT_OBJECT_0 without taking the object again. Before this, the running
  * thread took each unit ahead of the waiters it woke: the game's Background Job.Worker 1-15 never returned from
- * their wait (frontier 643a6283510c-1791830368398119000; game run 38216081440 seq 1402-1508). WaitForMultipleObjects
- * re-checks as before (no row). */
+ * their wait (frontier 643a6283510c-1791830368398119000; game run 38216081440 seq 1402-1508). A thread waiting on any
+ * of several objects is a waiter on each that hands over, `slot` its index in the wait's array (-1 for a wait on one):
+ * a release grants it the object unless another of its entries was granted first, and its retried wait returns that
+ * slot (laptop run lap-20261014T094031671Z-93f645c3, row event_auto.multiple_waiter: the waiter gets the second event,
+ * the setter's zero-timeout wait finds it taken). A wait for all of several re-checks as before (no row). */
 #define WAITERS 256
-static struct waiter { u32 tid; int object; int granted; } waiters[WAITERS];
+static struct waiter { u32 tid; int object; int granted; int slot; } waiters[WAITERS];
 static int nwaiters;
 
 static int waiter_of(u32 tid) {
@@ -190,6 +193,19 @@ static void waiter_drop(int i) {
     nwaiters--;
 }
 
+static void waiters_drop(u32 tid) {
+    int k = 0;
+    for (int i = 0; i < nwaiters; i++)
+        if (waiters[i].tid != tid) waiters[k++] = waiters[i];
+    nwaiters = k;
+}
+
+static int has_grant(u32 tid) {
+    for (int i = 0; i < nwaiters; i++)
+        if (waiters[i].tid == tid && waiters[i].granted) return 1;
+    return 0;
+}
+
 static int handed_over(struct object *o) {
     return o->kind == SEMAPHORE || o->kind == EVENT_AUTO || o->kind == MUTEX;
 }
@@ -198,6 +214,7 @@ static void grant(struct object *o) {
     int index = (int)(o - objects);
     for (int i = 0; i < nwaiters; i++) {
         if (waiters[i].object != index || waiters[i].granted) continue;
+        if (waiters[i].slot >= 0 && has_grant(waiters[i].tid)) continue;   /* a wait on several took one already */
         if (o->kind == MUTEX) {
             if (o->count) return;
             o->count = 1;
@@ -224,7 +241,7 @@ u64 k32_SetEvent(u64 h) {
         o->count = 1;
         grant(o);
     }
-    w2m_signal();
+    w2m_signal(o && o->kind != SHARED_EVENT ? (u64)o : 0);
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
 u64 k32_ResetEvent(u64 h) {
@@ -244,7 +261,7 @@ u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     if (previous) *(s32 *)previous = (s32)o->count;
     o->count += (s32)count;
     grant(o);
-    w2m_signal();
+    w2m_signal((u64)o);
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
 
@@ -257,7 +274,7 @@ u64 k32_ReleaseMutex(u64 h) {
     if (--o->count == 0) {
         o->max = 0;
         grant(o);
-        w2m_signal();
+        w2m_signal((u64)o);
     }
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }
@@ -290,18 +307,18 @@ static void take(struct object *o) {
 
 /* Not signaled: 1 when the wait is over (WAIT_TIMEOUT now); 0 when the thread blocks and retries the call (runtime.h
  * W2M_SCHEDULE_RETRY), other threads running meanwhile. ms is from the first try, the deadline kept in the TEB. */
-static int timed_out(u32 ms) {
+static int timed_out(u32 ms, u64 key) {
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     if (ms == 0) return 1;
     if (!sc->wait_deadline) {
-        w2m_block(ms == INFINITE ? ~0ull : w2m_counter_now() + (u64)ms * 10000);
+        w2m_block(ms == INFINITE ? ~0ull : w2m_counter_now() + (u64)ms * 10000, key);
         return 0;
     }
     if (sc->wait_deadline != ~0ull && w2m_counter_now() >= sc->wait_deadline) {
         sc->wait_deadline = 0;
         return 1;
     }
-    w2m_block(sc->wait_deadline);
+    w2m_block(sc->wait_deadline, key);
     return 0;
 }
 
@@ -319,10 +336,10 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
         return w2m_logged(api, h, WAIT_OBJECT_0);
     }
     if (!signaled(o)) {
-        if (!timed_out(ms)) {                                  /* retried: the bridge does not return */
+        if (!timed_out(ms, (u64)o)) {                                  /* retried: the bridge does not return */
             if (w < 0 && handed_over(o)) {
                 if (nwaiters == WAITERS) w2m_unimplemented(api, WAITERS);
-                waiters[nwaiters++] = (struct waiter){current_tid(), (int)(o - objects), 0};
+                waiters[nwaiters++] = (struct waiter){current_tid(), (int)(o - objects), 0, -1};
             }
             return 0;
         }
@@ -354,20 +371,38 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
     if ((u32)all) {
         for (u32 i = 0; i < n; i++)
             if (!signaled(os[i])) {
-                if (!timed_out((u32)ms)) return 0;
+                if (!timed_out((u32)ms, 0)) return 0;
                 return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_TIMEOUT);
             }
         w2m_thread_scratch()->wait_deadline = 0;
         for (u32 i = 0; i < n; i++) take(os[i]);
         return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0);
     }
+    u32 me = current_tid();
+    for (int w = 0; w < nwaiters; w++)
+        if (waiters[w].tid == me && waiters[w].granted) {        /* a release handed one over while this thread waited */
+            u32 slot = (u32)waiters[w].slot;
+            waiters_drop(me);
+            w2m_thread_scratch()->wait_deadline = 0;
+            return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0 + slot);
+        }
     for (u32 i = 0; i < n; i++)
         if (signaled(os[i])) {
+            waiters_drop(me);
             w2m_thread_scratch()->wait_deadline = 0;
             take(os[i]);
             return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0 + i);
         }
-    if (!timed_out((u32)ms)) return 0;
+    if (!timed_out((u32)ms, 0)) {                                /* retried: the bridge does not return */
+        if (waiter_of(me) < 0)
+            for (u32 i = 0; i < n; i++)
+                if (handed_over(os[i])) {
+                    if (nwaiters == WAITERS) w2m_unimplemented(W2M_API_WaitForMultipleObjects, WAITERS);
+                    waiters[nwaiters++] = (struct waiter){me, (int)(os[i] - objects), 0, (int)i};
+                }
+        return 0;
+    }
+    waiters_drop(me);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_TIMEOUT);
 }
 

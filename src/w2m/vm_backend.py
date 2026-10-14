@@ -60,7 +60,7 @@ from w2m.pe import parse as parse_pe
 from w2m.x86dec import DecodeError
 from w2m.runtime import Result
 from w2m import guest_stubs
-from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, GuestThread, attach_stub,
+from w2m.scheduler import (PER_THREAD_MONITOR, SCRATCH_OFF, TIME_SLICE, WAIT_KEY_OFF, GuestThread, attach_stub,
                             detach_stub, write_context)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -303,6 +303,7 @@ FLAG_BIT = {"C": 0, "Z": 1, "S": 2, "O": 3, "P": 4, "A": 5}
 U_CF, U_ZF, U_SF, U_OF, U_PF, U_AF = (1 << FLAG_BIT[f] for f in "CZSOPA")   # bits of REG_UNDEFINED_FLAGS
 FLAG_REG = {"C": REG_CF, "Z": REG_ZF, "S": REG_SF, "O": REG_OF, "P": REG_PF}
 MAX_BLOCK_INSNS = 64
+BLOCKED_KEYS = 32                  # threads.c W2M_BLOCKED_KEYS: the waited-on keys published to the guest
 ASYNC_STOP_RULE = "forward"     # "backward" exists only so a test can show the forward rule is what saves the count
 
 
@@ -2292,9 +2293,9 @@ class VM:
         if sub == THREAD_END:
             cur.exit_code = a0 & 0xFFFFFFFF
             return 0
-        if sub == THREAD_SIGNAL:
+        if sub == THREAD_SIGNAL:                         # a0: the key signaled (threads.c w2m_signal; 0 any)
             for t in self.threads.values():
-                if t.status == "blocked":
+                if t.status == "blocked" and (not a0 or not (key := self._wait_key(t)) or key == a0):
                     t.status = "ready"
             self._publish_blocked()
             return 0
@@ -2346,6 +2347,10 @@ class VM:
         limit = min(self._max_steps, executed + TIME_SLICE) if shared else self._max_steps
         struct.pack_into("<Q", self.mm, MONITOR_DATA + 8, limit)
 
+    def _wait_key(self, t: GuestThread) -> int:
+        """What blocked thread t waits on (w2m_block's key in its TEB scratch): 0 any signal, ~0 none."""
+        return int(struct.unpack("<Q", self._read_guest(t.teb + SCRATCH_OFF + WAIT_KEY_OFF, 8))[0])
+
     def _read_guest(self, va: int, n: int) -> bytes:
         """Guest memory, the process area (the first thread's TEB, the PEB) included."""
         off = va - PROCESS_VA
@@ -2354,9 +2359,15 @@ class VM:
         return bytes(self.mem.read(va, n))
 
     def _publish_blocked(self) -> None:
-        """The number of blocked threads, where threads.c's w2m_signal reads it."""
-        n = sum(1 for t in self.threads.values() if t.status == "blocked")
-        struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_threads_blocked"] - MONITOR_VA, n)
+        """The number of blocked threads and the keys they wait on, where threads.c's w2m_signal reads them: a key
+        no blocked thread waits on, with none waiting on any key, costs no exit."""
+        blocked = [t for t in self.threads.values() if t.status == "blocked"]
+        keys = sorted({k for k in map(self._wait_key, blocked) if k})
+        anywait = sum(1 for t in blocked if not self._wait_key(t)) + (len(keys) > BLOCKED_KEYS)
+        struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_threads_blocked"] - MONITOR_VA, len(blocked))
+        struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_blocked_any"] - MONITOR_VA, anywait)
+        table = (keys + [0] * BLOCKED_KEYS)[:BLOCKED_KEYS]
+        struct.pack_into(f"<{BLOCKED_KEYS}Q", self.mm, self.runtime.symbols["w2m_blocked_keys"] - MONITOR_VA, *table)
 
     def _vslot(self, t: GuestThread) -> int:
         """The thread's vector slot (VECTOR_SLOTS), given out on first use."""

@@ -87,7 +87,7 @@ static int acquire(struct critical_section *cs) {
  * fields stay as the owner set them while threads wait, where Windows also counts the waiters in LockCount). */
 W2M_VOID u64 k32_EnterCriticalSection(u64 cs) {
     if (!acquire((struct critical_section *)cs)) {
-        w2m_block(~0ull);
+        w2m_block(~0ull, cs);
         return 0;                                   /* retried: the bridge does not return */
     }
     w2m_thread_scratch()->wait_deadline = 0;
@@ -106,7 +106,7 @@ W2M_VOID u64 k32_LeaveCriticalSection(u64 cs) {
     if (--c->recursion_count == 0) {
         c->owning_thread = 0;
         c->lock_count = -1;
-        w2m_signal();
+        w2m_signal(cs);
     }
     return w2m_logged(W2M_API_LeaveCriticalSection, cs, 0);
 }

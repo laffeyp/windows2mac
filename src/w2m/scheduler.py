@@ -27,6 +27,7 @@ TIME_SLICE = 20_000                      # x86 instructions a thread runs before
 # YMM upper halves
 PER_THREAD_MONITOR = ((0x20, 0x40), (0x50, 0x58), (0x70, 0x72), (0x400, 0x500))
 SCRATCH_OFF = 0x1900                     # runtime.h W2M_THREAD_SCRATCH_OFF
+WAIT_KEY_OFF = 0x30                      # w2m_thread_scratch.wait_key: what a blocked thread waits on (recentering step 5)
 CONTEXT_CONTROL, CONTEXT_INTEGER, CONTEXT_SEGMENTS, CONTEXT_FLOATING_POINT = 0x1, 0x2, 0x4, 0x8
 CS, DS, ES, FS, GS, SS = 0x33, 0x2B, 0x2B, 0x53, 0x2B, 0x2B    # x64 user mode (rows context: CS 0x33, SS 0x2B)
 

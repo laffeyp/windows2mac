@@ -52,6 +52,7 @@ struct w2m_thread_scratch {
     u32 com_inits;                   /* CoInitialize(Ex) calls not yet balanced by CoUninitialize (com.c; Sprint 052) */
     u32 com_model;                   /* their apartment: 1 multithreaded, 2 single-threaded */
     u64 progress;                    /* a retried WriteFile to a pipe: the bytes the pipe took so far (Sprint 058) */
+    u64 wait_key;                    /* what a blocked thread waits on (w2m_block); a signal with its key wakes it */
 };
 #define W2M_BLOCKED (~0ull)          /* a service's helper blocked the thread: the call is retried, not returned */
 #define W2M_THREAD_SCRATCH_OFF 0x1900
@@ -141,8 +142,10 @@ static inline struct w2m_state *w2m_state(void) { return (struct w2m_state *)W2M
 #define W2M_SCHEDULE_RETRY 2u
 #define W2M_SCHEDULE_END 4u
 #define W2M_SCHEDULE_ANSWER 8u               /* with YIELD: RAX = nonzero when another thread ran (SwitchToThread) */
-void w2m_block(u64 deadline);                /* threads.c: RETRY until signaled or the counter passes deadline */
-void w2m_signal(void);                       /* threads.c: a waitable thing changed; blocked threads re-check */
+void w2m_block(u64 deadline, u64 key);       /* threads.c: RETRY until `key` is signaled or the counter passes
+                                              * deadline; key 0 wakes on any signal, W2M_KEY_NONE on none */
+#define W2M_KEY_NONE (~0ull)               /* Sleep: only its deadline ends it */
+void w2m_signal(u64 key);                    /* threads.c: what `key` names changed; its waiters re-check */
 _Static_assert(__builtin_offsetof(struct w2m_state, st) == 768, "state.st0");
 
 /* Windows x64 EXCEPTION_RECORD and CONTEXT, at the offsets probes/guest_state measured on the

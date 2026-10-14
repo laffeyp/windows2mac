@@ -31,21 +31,36 @@
 int w2m_object_thread_of(u64 h, u32 *tid);   /* sync_objects.c: the thread a handle names */
 u64 w2m_object_thread(u64 api, u32 tid);      /* sync_objects.c: a new handle on thread tid */
 
-/* The host keeps the number of blocked threads here (scheduler.py), so a signal with no waiter costs no exit. */
+/* The host keeps the number of blocked threads here (scheduler.py), so a signal with no waiter costs no exit; and the
+ * keys they wait on, so a signal of a key no thread waits on costs none either: w2m_blocked_any counts the blocked
+ * threads whose wait takes any signal (key 0, or more keys than the table holds), w2m_blocked_keys the others' keys. */
 volatile u64 w2m_threads_blocked;
+#define W2M_BLOCKED_KEYS 32
+volatile u64 w2m_blocked_any;
+volatile u64 w2m_blocked_keys[W2M_BLOCKED_KEYS];
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
 static u64 host(u64 sub, u64 a, u64 b, u64 c) { return w2m_host(W2M_HOST_THREAD, sub, a, b, c, 0); }
 
-void w2m_block(u64 deadline) {
+/* Recentering step 5: a blocked thread names what it waits on, and a signal names what it signals, so the host wakes
+ * only the threads that wait on it (before, every blocked thread woke on any signal, ran to find its wait unmet and
+ * blocked again). Key 0 on either side wakes every blocked thread: a wait on several objects, a pipe. */
+void w2m_block(u64 deadline, u64 key) {
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     if (!sc->wait_deadline) sc->wait_deadline = deadline;
+    sc->wait_key = key;
     w2m_state()->schedule |= W2M_SCHEDULE_RETRY;
 }
 
-void w2m_signal(void) {
-    if (w2m_threads_blocked) host(W2M_THREAD_SIGNAL, 0, 0, 0);
+void w2m_signal(u64 key) {
+    if (!w2m_threads_blocked) return;
+    if (key && !w2m_blocked_any) {
+        int i = 0;
+        while (i < W2M_BLOCKED_KEYS && w2m_blocked_keys[i] != key) i++;
+        if (i == W2M_BLOCKED_KEYS) return;                   /* no thread waits on it */
+    }
+    host(W2M_THREAD_SIGNAL, key, 0, 0);
 }
 
 static u32 thread_of(u64 api, u64 h) {
@@ -190,11 +205,11 @@ static int slept(u32 ms) {
     }
     if (ms == INFINITE) w2m_unimplemented(W2M_API_SleepEx, ms);             /* no APC ever ends it: not in the rows */
     if (!sc->wait_deadline) {
-        w2m_block(w2m_counter_now() + (u64)ms * 10000);
+        w2m_block(w2m_counter_now() + (u64)ms * 10000, W2M_KEY_NONE);
         return 0;
     }
     if (w2m_counter_now() < sc->wait_deadline) {
-        w2m_block(sc->wait_deadline);
+        w2m_block(sc->wait_deadline, W2M_KEY_NONE);
         return 0;
     }
     sc->wait_deadline = 0;

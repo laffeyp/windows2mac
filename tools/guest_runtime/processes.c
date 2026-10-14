@@ -74,7 +74,7 @@ int w2m_pipe_read(u64 handle, u64 buffer, u64 count, u64 read) {
     u64 status = 0;
     u64 n = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_PIPE_READ, (u64)id, buffer, count & 0xFFFFFFFFull, &status);
     if (status == 1) {                                     /* nothing yet and a writer left: wait for it */
-        w2m_block(~0ull);
+        w2m_block(~0ull, 0);
         return -1;
     }
     w2m_thread_scratch()->wait_deadline = 0;
@@ -94,10 +94,10 @@ int w2m_pipe_write(u64 handle, u64 buffer, u64 count, u64 written) {
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     u64 done = sc->progress;
     done += w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_PIPE_WRITE, (u64)id, buffer + done, (count & 0xFFFFFFFFull) - done, 0);
-    w2m_signal();
+    w2m_signal(0);
     if (done < (count & 0xFFFFFFFFull)) {
         sc->progress = done;
-        w2m_block(~0ull);
+        w2m_block(~0ull, 0);
         return -1;
     }
     sc->progress = 0;

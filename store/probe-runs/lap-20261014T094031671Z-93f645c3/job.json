@@ -1,0 +1,11 @@
+{
+ "kind": "probe",
+ "probe": "wait_handoff",
+ "execution_id": "wait_handoff-20261014T094031671Z",
+ "repeat": 2,
+ "commit": "93f645c3ebc17e24f4f01e50f365e026380f55cc",
+ "session": "desktop",
+ "inputs": {
+  "tree.tar": "562bee8875fd560074c065d91e26bc41bb9da7ee02616b53630eb68469aedbb4"
+ }
+}

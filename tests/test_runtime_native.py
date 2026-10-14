@@ -275,12 +275,12 @@ u64 w2m_host(u64 op, u64 a, u64 b, u64 c, u64 d, u64 *second) {
     (void)b; return 0;
 }
 static int blocked;
-void w2m_block(u64 deadline) { (void)deadline; blocked++; }
+void w2m_block(u64 deadline, u64 key) { (void)deadline; (void)key; blocked++; }
 u64 w2m_counter_now(void) { return 0; }
 u32 w2m_error_mode(void) { return 0; }
 int w2m_is_file_handle(u64 h) { (void)h; return 0; }
 int w2m_is_std_handle(u64 h) { (void)h; return 0; }
-void w2m_signal(void) {}
+void w2m_signal(u64 key) { (void)key; }
 int w2m_thread_ended(u32 tid) { (void)tid; return 0; }
 static const u16 here[] = {'C', ':', '\\\\', 'w', '2', 'm', 0};
 const u16 *w2m_working_directory(void) { return here; }

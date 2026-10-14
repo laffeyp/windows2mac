@@ -1,0 +1,11 @@
+09:41:00.699 job wait_handoff-20261014T094031671Z: probe wait_handoff, repeat 2, commit 93f645c3ebc17e24f4f01e50f365e026380f55cc
+09:41:00.808 inputs verified; workspace lock after 0 s
+09:41:09.393 error mode 0x8003 (was 0x8001)
+09:41:10.471 profile taken
+clang version 20.1.8
+Target: x86_64-pc-windows-msvc
+Thread model: posix
+InstalledDir: C:\Program Files\LLVM\bin
+09:41:15.859 wait_handoff-20261014T094031671Z execution 1 exit 0 in 4.000496 s, affinity unpinned
+09:41:19.023 wait_handoff-20261014T094031671Z execution 2 exit 0 in 3.1619339 s, affinity unpinned
+09:41:19.327 done
