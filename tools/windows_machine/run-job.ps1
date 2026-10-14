@@ -17,6 +17,10 @@
 #           game mirrored from C:\w2m\games\<game> to D:\w2m\game (the runners' GAME_DIR) and checked against
 #           files.json, C:\w2m\app a junction to it, and before each execution the game's saved state removed
 #           (HKCU\Software\<company>\<product>, LocalLow\<company>\<product>; §5) so each starts as a runner's does.
+#           job.json `audio` "off" disables the audio endpoints for the job (the runners have none: their unity.log
+#           says "FMOD initialized on nosound output") and enables them again after. In play mode the game is
+#           pinned to the high-performance GPU (UserGpuPreferences GpuPreference=2) and the screen is saved every
+#           `frame_seconds` (default 10) as out\<i>\frames\<seconds>.png.
 # Every input's sha256 is in job.json `inputs`; a mismatch stops the job before anything runs. job.json `cpu_class`
 # ("performance" or "efficiency") pins the job to that core type (G1); the processes it starts inherit the affinity,
 # and each exec-<i>.json records it.
@@ -147,6 +151,18 @@ try {
       Note "launcher built"
       $pristine = "C:\w2m\games\$($spec.game)"; $gameDir = 'D:\w2m\game'; $app = 'C:\w2m\app'; $exe = $spec.exe
       $listing = (Get-Content "games/$($spec.game)/files.json" -Raw | ConvertFrom-Json).listing
+      $disabledAudio = @()
+      if ($spec.audio -eq 'off') {
+        $disabledAudio = @(Get-PnpDevice -Class AudioEndpoint -Status OK -ErrorAction SilentlyContinue)
+        $disabledAudio | ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false }
+        Note "audio endpoints disabled: $($disabledAudio.Count)"
+      }
+      if ($spec.mode -eq 'play') {
+        $pref = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
+        if (-not (Test-Path $pref)) { New-Item $pref -Force | Out-Null }
+        Set-ItemProperty $pref "$app\$exe.exe" 'GpuPreference=2;'
+        Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+      }
       $info = Get-Content (Join-Path $pristine "$($exe)_Data\app.info")
       $company = $info[0].Trim(); $product = $info[1].Trim()
       for ($i = 1; $i -le [int]$spec.executions; $i++) {
@@ -188,9 +204,20 @@ try {
         $deadline = (Get-Date).AddSeconds([int]$spec.seconds)
         $shell = New-Object -ComObject WScript.Shell
         $done = $false
+        $frameEvery = if ($spec.frame_seconds) { [int]$spec.frame_seconds } else { 10 }; $nextFrame = 0
         while ((Get-Date) -lt $deadline -and -not $done) {
           $done = $p.WaitForExit(3000)
-          if (-not $done -and $spec.mode -eq 'play') { [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ') }
+          if (-not $done -and $spec.mode -eq 'play') {
+            [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ')
+            if ($sw.Elapsed.TotalSeconds -ge $nextFrame) {     # the frame record (Q5): the whole screen
+              New-Item -ItemType Directory -Force out\frames | Out-Null
+              $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+              $bmp.Save("out\frames\{0:D4}.png" -f [int]$sw.Elapsed.TotalSeconds, [System.Drawing.Imaging.ImageFormat]::Png)
+              $g.Dispose(); $bmp.Dispose(); $nextFrame += $frameEvery
+            }
+          }
         }
         $sw.Stop()
         if (-not $done) { Stop-Process -Id $p.Id -Force; [void]$p.WaitForExit(30000); $code = $null } else { $code = $p.ExitCode }
@@ -202,7 +229,7 @@ try {
         # exec.json as the runners write it, with the game's exact arguments and mode added (a laptop run says what
         # it ran; a runner run's arguments are only in its workflow)
         $argsJson = ConvertTo-Json -Compress @($gameArgs)
-        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"mode`": `"$($spec.mode)`", `"seconds`": $($spec.seconds), `"arguments`": $argsJson}" | Out-File -Encoding ascii -NoNewline out/exec.json
+        "{`"exited_by_itself`": $($done.ToString().ToLower()), `"exit_code`": $exit, `"elapsed_seconds`": $($sw.Elapsed.TotalSeconds), `"mode`": `"$($spec.mode)`", `"audio`": `"$(if ($spec.audio) { $spec.audio } else { 'on' })`", `"seconds`": $($spec.seconds), `"arguments`": $argsJson}" | Out-File -Encoding ascii -NoNewline out/exec.json
         if (Test-Path out\jit_capture.bin) {        # the store keeps the capture's digest, not the capture
           (Get-FileHash -Algorithm SHA256 out\jit_capture.bin).Hash.ToLower() | Out-File -Encoding ascii -NoNewline out\jit_capture.sha256
           Remove-Item out\jit_capture.bin
@@ -210,7 +237,11 @@ try {
         Move-Item out (Join-Path $out "$i")
         Note "execution $i`: exited_by_itself $done after $([int]$sw.Elapsed.TotalSeconds) s"
       }
-    } finally { Pop-Location; if (Test-Path C:\w2m\app) { cmd /c rmdir C:\w2m\app } }
+    } finally {
+      Pop-Location
+      if (Test-Path C:\w2m\app) { cmd /c rmdir C:\w2m\app }
+      $disabledAudio | ForEach-Object { Enable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false }
+    }
   } elseif ($spec.kind -eq 'batch') {
     foreach ($item in $spec.items) {
       Reset-Workspace $item.probe $false

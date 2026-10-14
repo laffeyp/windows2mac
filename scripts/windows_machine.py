@@ -22,7 +22,7 @@ a batch.txt naming the batch; the batch's profile.json, run-job.log and job.json
 Usage: uv run python scripts/windows_machine.py probe <probe> [--repeat 2] [--pin performance|efficiency]
        uv run python scripts/windows_machine.py binary <family> [--run <stored run id>] [--repeat 2] [--pin ...]
        uv run python scripts/windows_machine.py batch [<family> ...] [--repeat 2] [--pin ...]   (no family: all)
-       uv run python scripts/windows_machine.py game [--executions 10] [--seconds 180] [--mode batch|play]
+       uv run python scripts/windows_machine.py game [--executions 10] [--seconds 180] [--mode batch|play] [--audio on|off]
 
 A `game` job runs the game as windows-game.yml does, `executions` times in one job (the game tree is the laptop's
 copy at C:\w2m\games\<game>, sent once); each execution comes back as build/game-runs/<run>-<i>/, the layout
@@ -227,7 +227,7 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
     return code or (1 if short else 0)
 
 
-def run_game(game: str, exe: str, executions: int, seconds: int, mode: str) -> int:
+def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audio: str = "on") -> int:
     head = git("rev-parse", "HEAD").decode().strip()
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
@@ -238,7 +238,7 @@ def run_game(game: str, exe: str, executions: int, seconds: int, mode: str) -> i
         # each execution: the tree's mirror and check (about 1 minute), the game's seconds, and its stop
         limit = executions * (seconds + 180) // 60 + 10
         spec: dict[str, object] = {"kind": "game", "execution_id": run, "game": game, "exe": exe, "seconds": seconds,
-                                   "mode": mode, "executions": executions, "repeat": 0, "commit": head,
+                                   "mode": mode, "audio": audio, "executions": executions, "repeat": 0, "commit": head,
                                    "session": "desktop", "limit_minutes": limit}
         with tempfile.TemporaryDirectory() as d:
             job = Path(d) / run
@@ -288,6 +288,8 @@ def main(argv: list[str]) -> int:
     gm.add_argument("--executions", type=int, default=10)
     gm.add_argument("--seconds", type=int, default=180)
     gm.add_argument("--mode", choices=("batch", "play"), default="batch")
+    gm.add_argument("--audio", choices=("on", "off"), default="on",
+                    help="off: the audio endpoints disabled for the job, as the runners have none")
     bt = sub.add_parser("batch")
     bt.add_argument("families", nargs="*")
     bt.add_argument("--repeat", type=int, default=2)
@@ -304,7 +306,7 @@ def main(argv: list[str]) -> int:
         p.add_argument("--pin", choices=("performance", "efficiency"), help="run on one core type only (G1)")
     a = ap.parse_args(argv)
     if a.kind == "game":
-        return run_game(a.game, a.exe, a.executions, a.seconds, a.mode)
+        return run_game(a.game, a.exe, a.executions, a.seconds, a.mode, a.audio)
     if a.kind == "batch":
         sys.path.insert(0, str(ROOT / "scripts"))
         import family_run
