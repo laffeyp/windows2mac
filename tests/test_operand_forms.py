@@ -7,12 +7,13 @@ hold. These op lists put the reader first and give a 32-bit load a 64-bit reader
 
 from __future__ import annotations
 
+from w2m.lift import Op
 from w2m.vm_backend import _operand_forms
 
 RAX, RBX = 0, 3
 
 
-def last_reads(ops: tuple) -> dict[int, int]:
+def last_reads(ops: tuple[Op, ...]) -> dict[int, int]:
     from w2m.vm_backend import _temps_read
     last: dict[int, int] = {}
     for i, op in enumerate(ops):
