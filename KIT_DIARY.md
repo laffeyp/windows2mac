@@ -489,3 +489,22 @@ day the plant comes back blind, not recording as a blind spot.
 
 **Kit change suggested:** the sprint card's observation contract names each check's grain beside its plant
 (per-instruction, per-block, whole-program), and a plant that comes back blind opens a fixture task in the same sprint.
+
+### 2026-10-14 — Sprint 068: a clock that counted wrong, found by a comparison that changed
+
+**What happened:** a commit of native lowerings (each judged against the Xeon's cases, each planted fault caught)
+turned a conforming batch run into two divergences. The lowerings computed nothing wrong: a differential of 6,018
+blocks agreed. They changed when the game's threads interleaved, because the model steps they replaced had been
+counting part of their block twice and moving the instruction clock. Looking at how the count is kept turned up a
+worse defect in code from the same day: the host computed the count from a limit the slice stub had since raised, so
+refills vanished from it and the guest's clock could go back. The rates the day had reported since the stub were short
+by about three times.
+
+**Finding (#55):** when a change that is right by every per-instruction judge moves a whole-program comparison, the
+change has moved a shared quantity the program reads (here time), and that quantity's bookkeeping is the next thing to
+audit, before the comparison is tuned or the value excluded. A clock run at three nearby rates told value from timing
+in three runs; the audit it prompted found two counting defects no judge of values could see.
+
+**Kit change suggested:** an observation contract that compares whole-program behavior states the shared quantities
+the run's values depend on (clock, schedule, address layout) and how a run varies each, so a moved comparison has a
+named first question.

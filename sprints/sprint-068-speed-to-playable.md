@@ -211,3 +211,20 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   the reference set of eleven runs. Host time by exit at the last progress line: hvc 1 36.7 s, hvc 4 17.0 s, hvc 10
   14.9 s, hvc 8 7.8 s, hvc 12 6.9 s, hvc 11 3.9 s, in the vCPU 62.3 s. Plan row milestone A (batch mode) is met on this
   run; the record from a committed tree comes next.
+- **The dispatch table two-way** (d4fee181): the full batch run's 997,681 dispatch misses were 257,593 compiles and
+  871,681 blocks already compiled whose one slot another target held; a pair of slots per index, the newest first:
+  275,397 misses.
+- **The translation cache** (1821c223, recentering step 8): blocks kept with the bytes they read, reused when they hash
+  the same; warm, the batch run compiles nothing (255,797 blocks from the cache), hvc 1's host time 37.5 s to 5.1 s,
+  154 s to 123 s.
+- **C, the last slow classes** (78d5b7d5): VCVTTPD2DQ, VPCMPEQQ, VANDNPD, VPMOVSXDQ, MMX PMADDUBSW, CVTTPS2DQ,
+  MOVNTDQ, EMMS: hvc 10 334,637 to 16,356, hvc 11 82,186 to 23,372 in the batch run. Its run showed 2 divergences,
+  mono-2.0-bdwgc.dll's VirtualAlloc sizes on thread 108: a native-against-model differential of the conversions on
+  6,018 blocks agreed, a bisect in three worktrees named the CVTT* group, and the batch run conforms at clock rate
+  1.386 GHz and diverges at 1.400 and 1.414: the size follows the interleaving on one vCPU. The lowerings had ended
+  model steps that counted the rest of their block twice. Undetermined, scoped to that image (91f6e329; Decision).
+- **The instruction count** (3d052448): the host computed the count from the limit read before a run while the slice
+  stub raised it in the VM (a 400,003-instruction loop with refills counted 3; the guest's clock could go back), and a
+  model step's block counted its unrun instructions again. With both fixed the batch run counts about 694 million
+  instructions a second, not 246: every rate since 76111810 was short. It conforms: 0 divergences, 168 of 168 lines.
+  Deferred: a fault's unrun block instructions (BLACKBOARD).
