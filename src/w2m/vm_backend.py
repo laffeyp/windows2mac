@@ -2073,14 +2073,19 @@ class VM:
             if t.status == "blocked" and t.deadline != M64 and t.deadline <= now:
                 t.status = "ready"
 
+    def _other_process_due(self) -> bool:
+        """Whether another VM of this machine is ready or waits with a deadline (the game's UnityCrashHandler64.exe
+        waits with none)."""
+        return self.machine is not None and any(o is not self and (o.ready() or o.waits_with_deadline())
+                                                for o in self.machine.vms)
+
     def _slice_until(self, forced: bool) -> int:
         """SLICE_UNTIL for the next run: 0 when a slice's end must reach the host (lockstep, a forced stop, another
         thread or process ready, a deadline the instruction clock cannot place, another process with a deadline);
         the count at which the earliest deadline of a blocked thread falls, on the instruction clock; else ~0."""
         if self.lockstep or forced:
             return 0
-        if self.machine is not None and any(o is not self and (o.ready() or o.waits_with_deadline())
-                                            for o in self.machine.vms):
+        if self._other_process_due():
             return 0
         others = [t for t in self.threads.values() if t.tid != self.current_tid and t.suspend == 0]
         if any(t.status == "ready" for t in others):
@@ -4007,8 +4012,10 @@ class VM:
                 ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
                 count, limit = struct.unpack_from("<QQ", self.mm, MONITOR_DATA)
                 struct.pack_into("<QQ", self.mm, MONITOR_DATA + SLICE_UNTIL, self._slice_until(forced_stop), max_steps)
-                struct.pack_into("<Q", self.mm, RUN_TABLE + RT_IN_VM, int(SWITCH_IN_VM and not self.lockstep and not forced_stop
-                                 and (self.machine is None or len(self.machine.vms) == 1)))
+                # another process ready or waiting with a deadline needs the host at each slice's end (_slice_until); one
+                # becomes ready only by a host request, after which this is computed again
+                struct.pack_into("<Q", self.mm, RUN_TABLE + RT_IN_VM, int(
+                    SWITCH_IN_VM and not self.lockstep and not forced_stop and not self._other_process_due()))
                 if not runtime_lo <= pc < runtime_hi:           # in the runtime's C, x23 is the C's own
                     x[REG_BUDGET] = (limit - count) & M64       # the budget left, in x23
                 if self._channel is not None:

@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import family_run  # noqa: E402
 
-FAMILIES = ["threads", "running_thread_context", "wait_handoff", "thread_stacks", "late_tls"]   # probes with threads
+FAMILIES = ["threads", "running_thread_context", "wait_handoff", "thread_stacks", "late_tls", "processes"]   # probes with threads
 
 
 def run(name: str, in_vm: bool, monkeypatch: pytest.MonkeyPatch,
