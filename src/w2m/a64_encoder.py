@@ -318,6 +318,15 @@ def b(offset: int) -> int:
     return 0x14000000 | (offset >> 2) & 0x3FFFFFF
 
 
+def bl(offset: int) -> int:
+    assert offset % 4 == 0 and -(1 << 27) <= offset < 1 << 27
+    return 0x94000000 | (offset >> 2) & 0x3FFFFFF
+
+
+def ret() -> int:
+    return 0xD65F03C0                                  # RET (X30)
+
+
 def bcond(cond: str, offset: int) -> int:
     assert offset % 4 == 0 and -(1 << 20) <= offset < 1 << 20
     return 0x54000000 | ((offset >> 2) & 0x7FFFF) << 5 | COND[cond]

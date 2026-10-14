@@ -99,6 +99,11 @@ X87_SW_OFF, X87_ST_OFF = 158, 768    # the state block's x87_status_word (x87_ta
 SPILL = 0x78                        # MONITOR_DATA + this: one register a lowering borrows (CMPXCHG16B's status)
 CODE_WRITE_SPILL = 0x88             # MONITOR_DATA + this: x17 while the exception entry asks about a write to code
 PAUSE_COUNT = 0xA8                  # MONITOR_DATA + this: PAUSE instructions run (Sprint 068 item J, the spin census)
+# Recentering step 5: a time slice's end leaves the VM only when another thread could take the vCPU. Before each run the
+# host publishes SLICE_UNTIL, the instruction count up to which the running thread may go on (0: exit at every slice
+# end; ~0: no other thread can become ready but by a signal, which exits anyway), and RUN_END, the run's own limit; the
+# block's stop calls the slice stub (VM._slice_stub), which refills the slice in the VM while the count is below both.
+SLICE_UNTIL, RUN_END = 0xC0, 0xC8   # MONITOR_DATA + these
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
@@ -1904,7 +1909,67 @@ class VM:
         self.virtual.heap = (HEAP_VA, HEAP_SIZE)
         self.virtual.mapped = [(va, size) for va, _, size in maps] + [(THUNK_BASE, 1 << 32)]
         self.virtual.snapshot()
+        self.slice_va = self._slice_stub()
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
+
+    def _slice_stub(self) -> int:
+        """The slice stub every block's stop calls (BL, X30 the stop's HVC #4): when the count (the limit word minus
+        x23) is below SLICE_UNTIL and a further TIME_SLICE stays within RUN_END, raise the limit and x23 by TIME_SLICE
+        and return past the HVC into the block; otherwise return to the HVC. Uses x16-x18 and x25, dead at a block's
+        entry. A step that leaves no exit is no change of thread: the same thread was going to run on."""
+        a = Assembler(MONITOR_VA + self.code_cursor)
+        out = a.label()
+        a.emit(a64.ldp(16, 17, 28, SLICE_UNTIL), a64.ldr(8, 18, 28, 8), a64.sub(25, 18, REG_BUDGET), a64.cmp(25, 16))
+        a.branch(lambda off: a64.bcond("hs", off), out)
+        a.emit(*a64.mov_imm(25, TIME_SLICE), a64.add(18, 18, 25), a64.cmp(18, 17))
+        a.branch(lambda off: a64.bcond("hi", off), out)
+        a.emit(a64.str_(8, 18, 28, 8), a64.add(REG_BUDGET, REG_BUDGET, 25), a64.addi(30, 30, 4))
+        a.bind(out)
+        a.emit(a64.ret())
+        words = a.finish()
+        va = MONITOR_VA + self.code_cursor
+        self._write_words(self.code_cursor, words)
+        self.code_cursor += 4 * len(words)
+        self._recon_append([(va, 0)])                   # not the guest's code
+        return va
+
+    def _wake_expired(self) -> None:
+        """On the instruction clock, make ready every blocked thread whose deadline has passed, as a timed-out wait on
+        Windows runs again whether or not another thread is busy (before, it ran only when no thread was ready, and each
+        slice's end left the VM for it)."""
+        if struct.unpack_from("<Q", self.mm, MONITOR_DATA + CLOCK_MODE)[0] != 2:
+            return
+        executed = struct.unpack_from("<Q", self.mm, MONITOR_DATA)[0]
+        rate, warp = struct.unpack_from("<QQ", self.mm, MONITOR_DATA + CLOCK_RATE)
+        now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
+        woke = False
+        for t in self.threads.values():
+            if t.status == "blocked" and t.deadline != M64 and t.deadline <= now:
+                t.status = "ready"
+                woke = True
+        if woke:
+            self._publish_blocked()
+
+    def _slice_until(self, forced: bool) -> int:
+        """SLICE_UNTIL for the next run: 0 when a slice's end must reach the host (lockstep, a forced stop, another
+        thread or process ready, a deadline the instruction clock cannot place, another process with a deadline);
+        the count at which the earliest deadline of a blocked thread falls, on the instruction clock; else ~0."""
+        if self.lockstep or forced:
+            return 0
+        if self.machine is not None and any(o is not self and (o.ready() or o.waits_with_deadline())
+                                            for o in self.machine.vms):
+            return 0
+        others = [t for t in self.threads.values() if t.tid != self.current_tid and t.suspend == 0]
+        if any(t.status == "ready" for t in others):
+            return 0
+        deadlines = [t.deadline for t in others if t.status == "blocked" and t.deadline != M64]
+        if not deadlines:
+            return M64
+        if struct.unpack_from("<Q", self.mm, MONITOR_DATA + CLOCK_MODE)[0] != 2:
+            return 0
+        rate, warp = struct.unpack_from("<QQ", self.mm, MONITOR_DATA + CLOCK_RATE)
+        ticks = min(deadlines) - warp                # the count whose clock reaches the deadline, rounded down
+        return 0 if ticks <= 0 else ticks // 10_000_000 * rate + ticks % 10_000_000 * rate // 10_000_000
 
     def flush_translations(self) -> None:
         """Drop every translated block (bridges stay): the code cache, the dispatch table, the
@@ -3410,6 +3475,7 @@ class VM:
             a.branch(a64.b, exit_va)
         a.bind(budget_stop)                              # the budget's stop, out of the block's path: an exit whose
         pc_marks.append((a.here(), start))               # address maps to the block's first instruction, then on in
+        a.branch(a64.bl, self.slice_va)                  # the slice stub returns past the HVC when no exit is due
         a.emit(a64.hvc(4))
         a.branch(a64.b, body)
         if BLOCK_CENSUS:
@@ -3666,6 +3732,7 @@ class VM:
                 self.exit_ns[last_kind] += started - marked
                 ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
                 count, limit = struct.unpack_from("<QQ", self.mm, MONITOR_DATA)
+                struct.pack_into("<QQ", self.mm, MONITOR_DATA + SLICE_UNTIL, self._slice_until(forced_stop), max_steps)
                 if not runtime_lo <= pc < runtime_hi:           # in the runtime's C, x23 is the C's own
                     x[REG_BUDGET] = (limit - count) & M64       # the budget left, in x23
                 if self._channel is not None:
@@ -3770,6 +3837,7 @@ class VM:
                         stop = "max_steps"
                         break
                     self._set_budget()
+                    self._wake_expired()
                     if self.machine is not None and self.machine.others_ready(self):
                         x[17] = where
                         self._save_thread(self.threads[self.current_tid], x)
