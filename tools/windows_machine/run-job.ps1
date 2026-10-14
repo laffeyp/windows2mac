@@ -222,11 +222,12 @@ try {
           if (-not $done -and $spec.mode -eq 'play') {
             [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ')
             if ($sw.Elapsed.TotalSeconds -ge $nextFrame) {     # the frame record (Q5): the whole screen
-              New-Item -ItemType Directory -Force out\frames | Out-Null
+              $frames = Join-Path (Get-Location).Path 'out\frames'    # .NET resolves a relative path from its own directory
+              New-Item -ItemType Directory -Force $frames | Out-Null
               $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
               $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
               $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
-              $bmp.Save("out\frames\{0:D4}.png" -f [int]$sw.Elapsed.TotalSeconds, [System.Drawing.Imaging.ImageFormat]::Png)
+              $bmp.Save((Join-Path $frames ("{0:D4}.png" -f [int]$sw.Elapsed.TotalSeconds)), [System.Drawing.Imaging.ImageFormat]::Png)
               $g.Dispose(); $bmp.Dispose(); $nextFrame += $frameEvery
             }
           }
