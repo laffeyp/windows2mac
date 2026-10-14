@@ -39,7 +39,11 @@ Added 2026-10-14 (Decision, user: the review "Phase P: actionable review, 2026-1
   (the Mac's load average and the other w2m processes at each line). Frontier 1ecc22b2's numbers above shared the
   Mac with a class sweep, six parallel families and test runs.
 - **G. The snapshot.** The run saved at the end of the conforming batch prefix and resumed from it, so an item's
-  measurement does not wait on a 300 s rerun (supersedes Decision 2026-10-11's decline).
+  measurement does not wait on a 300 s rerun (supersedes Decision 2026-10-11's decline). The snapshot holds the guest's
+  state, not w2m's: the memory file (an APFS clone, `cp -c`, copies it in constant time), each thread's registers,
+  vectors and per-thread monitor data, the handles and kernel objects (src/w2m/kernel.py), the file bridge's open
+  files, and every process of the Machine. It holds no translated code: the speed items change the translator, so a
+  resumed run translates afresh, and a fork of the running process would keep the old translator's blocks and modules.
 - **H. The clock, chosen per run.** A run option for the wall clock (play) and the instruction clock (the conforming
   comparison), recorded in the run's baseline; the instruction-clock comparison stays conforming.
 - **I. The native workload.** On the laptop, the instructions the game retires per frame and to the first scene,
@@ -101,3 +105,9 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   command. `tests/test_thread_switch_vectors.py`: the threads and running_thread_context probes keep Windows' rows
   with `vget`/`vset` only for model steps; a direct swap inside a running VM; a dropped load and a dropped save are
   each caught. The two probes alone did not catch the dropped load: neither holds a vector across a switch.
+- **B and C, measured (item F's way).** Two scratch frontiers to 30 billion instructions, one at a time, each
+  recording the Mac's load: A on 1ecc22b2 (before B and C) 145.3 s, 206.4 million instructions a second; B on
+  69ceeee8 117.3 s, 255.7 million. Both made the same exits (hvc 4 1,498,523; hvc 12 608,164; hvc 1 124,201; hvc 8
+  37,061; hvc 10 4,923). At the last progress line hvc 12 fell from 21.5 s to 4.7 s and hvc 4 from 13.1 s to 9.7 s.
+  A first B run took 145.7 s: Ollama's llama-server used 180-250% CPU as it started (its `load:` line names it), and
+  its hvc 1 time rose from 7.4 s to 22.7 s at the same 124,201 exits. Load moves a census by tens of seconds.

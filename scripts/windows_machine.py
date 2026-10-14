@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""windows_machine.py — run a probe on the Windows reference machine, the laptop (Sprint 067 item B).
+r"""windows_machine.py — run a probe on the Windows reference machine, the laptop (Sprint 067 item B).
 
 The controller's half of docs/windows-reference-machine.md §3. A probe job carries the committed tree
 (`git archive HEAD`, store/ left out) and, for a probe with a `generate` step, substrate at substrate.commit; a
