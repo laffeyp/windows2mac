@@ -712,7 +712,7 @@ FLAGS_NONE = {"imm", "addr", "ld", "st", "sel", "cst", "cstz", "mxcsr", "mmx", "
               "vex", "vexs", "fma", "vzeroupper"}
 FLAGS_ALL_READ = {"x86", "ud", "fcw", "xgetbv", "x87"}        # the model's steps read the whole state
 SHIFT_KINDS = ("shr", "shl", "sar", "rol", "ror")
-LIVENESS_SCAN = 16                                             # instructions a successor is scanned for, at most
+LIVENESS_SCAN = 8                                              # instructions a successor is scanned for, at most
 
 
 def _op_flags(op: Op, constant: dict[int, int]) -> tuple[int, int]:
@@ -1130,11 +1130,12 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
     Returns True when control never falls through (an unconditional branch)."""
     flags_live: dict[int, int] = {}                      # each flags op: the flags read after it
     live = live_after
-    masks = _op_flag_masks(ins, nzcv_from)
-    for i in range(len(ins.ops) - 1, -1, -1):
-        if ins.ops[i][0] == "flags":
-            flags_live[i] = live
-        live = live & ~masks[i][1] | masks[i][0]
+    if any(op[0] == "flags" for op in ins.ops):           # (most instructions set none)
+        masks = _op_flag_masks(ins, nzcv_from)
+        for i in range(len(ins.ops) - 1, -1, -1):
+            if ins.ops[i][0] == "flags":
+                flags_live[i] = live
+            live = live & ~masks[i][1] | masks[i][0]
     last_flags = max(flags_live, default=-1)
     dead = {i for i, v in flags_live.items() if v == 0 and not (nzcv_out and i == last_flags)}   # emit nothing
     last: dict[int, int] = {}
@@ -1827,6 +1828,11 @@ class VM:
         # Translated code is invalidated when its guest bytes change (Sprint 065 item 9e): the pages behind blocks are
         # read-only, a write to one faults (HVC_CODE_WRITE), and the blocks over it are dropped
         self.code_pages: dict[int, set[int]] = {}       # page VA -> the starts of the blocks over it
+        # lifted instructions on pages behind translated code, and their flags (insn_flags by the NZCV kind before),
+        # dropped with the page's blocks: a block's successor scan lifts what the successor's block lifts again
+        self.lift_cache: dict[int, Lifted] = {}
+        self.flags_cache: dict[tuple[int, str | None], tuple[int, int]] = {}
+        self.lift_pages: dict[int, set[int]] = {}       # page VA -> the cached addresses whose bytes it holds
         self.code_writes = 0                            # writes that dropped blocks
         self.blocks_dropped = 0
         self.mem.on_write = self._host_wrote            # the host's own writes into guest memory fault on nothing
@@ -1876,6 +1882,9 @@ class VM:
         self.code_cursor, recon = self._flush_point
         struct.pack_into("<Q", self.mm, MONITOR_DATA + RECON_COUNT, recon)
         self.blocks.clear()
+        self.lift_cache.clear()
+        self.flags_cache.clear()
+        self.lift_pages.clear()
         self.pc_map = [m for m in self.pc_map if m[0] < MONITOR_VA + self.code_cursor]
         empty = struct.pack("<QQ", M64, self.miss_va)
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
@@ -3279,6 +3288,11 @@ class VM:
         """A write faulted at `address`: when its page is behind translated code, drop the blocks over the page and
         their dispatch slots and make the page writable again; the next execution translates afresh."""
         page = address & ~(PAGE - 1)
+        for at in self.lift_pages.pop(page, ()):
+            self.lift_cache.pop(at, None)
+            self.flags_cache.pop((at, None), None)
+            for kind in NZCV_CONDITIONS:
+                self.flags_cache.pop((at, kind), None)
         blocks = self.code_pages.pop(page, None)
         if blocks is None:
             return False
@@ -3313,7 +3327,7 @@ class VM:
             if insns and addr in self.ld.thunks:
                 break
             try:
-                ins = lift(self.mem.code_at(addr), addr)
+                ins = self._lift(addr)
             except (LiftError, GuestFault):
                 if not insns:
                     raise
@@ -3335,11 +3349,13 @@ class VM:
         ended = False
         if not self.lockstep:
             self._protect_code(start, addr)              # before the successor scan, which reads the pages it covers
+            for ins in insns:
+                self._remember(ins)
         live = self._flags_live_out(start, insns[-1], addr) if FLAG_LIVENESS and not self.lockstep else ALL_FLAGS
         lives = [ALL_FLAGS] * len(insns)                 # the flags read after each instruction
         for k in range(len(insns) - 1, -1, -1):
             lives[k] = live
-            read, written = insn_flags(insns[k], nzcv_setter(insns[k - 1]) if k else None)
+            read, written = self._insn_flags(insns[k], nzcv_setter(insns[k - 1]) if k else None)
             live = live & ~written | read
         previous: Lifted | None = None
         for k, ins in enumerate(insns):
@@ -3381,6 +3397,31 @@ class VM:
         self.translations.append((start, addr, "static" if start == self.ld.entry else "runtime_transfer"))
         return va
 
+    def _lift(self, addr: int) -> Lifted:
+        """The instruction at `addr`, from lift_cache when a block or a scan has lifted it since its page was written."""
+        ins = self.lift_cache.get(addr)
+        return ins if ins is not None else lift(self.mem.code_at(addr), addr)
+
+    def _remember(self, ins: Lifted) -> None:
+        """Keep `ins` in lift_cache when every page its bytes are on is behind translated code (so a write drops it)."""
+        if ins.address in self.lift_cache:
+            return
+        pages = {ins.address & ~(PAGE - 1), (ins.address + ins.length - 1) & ~(PAGE - 1)}
+        if pages <= self.code_pages.keys():
+            self.lift_cache[ins.address] = ins
+            for page in pages:
+                self.lift_pages.setdefault(page, set()).add(ins.address)
+
+    def _insn_flags(self, ins: Lifted, nzcv_kind: str | None) -> tuple[int, int]:
+        """insn_flags, kept with the cached lift."""
+        key = (ins.address, nzcv_kind)
+        got = self.flags_cache.get(key)
+        if got is None:
+            got = insn_flags(ins, nzcv_kind)
+            if self.lift_cache.get(ins.address) is ins:
+                self.flags_cache[key] = got
+        return got
+
     def _flags_live_out(self, start: int, last: Lifted, end: int) -> int:
         """The flags a block read after it ends (flag liveness): those its direct successors read before writing,
         each scanned by _flags_live_in. A successor not known when compiling (a return, an indirect branch) reads all."""
@@ -3404,7 +3445,7 @@ class VM:
             if addr in self.ld.thunks or addr >= PROCESS_VA or addr & ~(PAGE - 1) not in self.code_pages:
                 break
             try:
-                ins = lift(self.mem.code_at(addr), addr)
+                ins = self._lift(addr)
             except (LiftError, GuestFault):
                 break
             pages = {addr & ~(PAGE - 1), (addr + ins.length - 1) & ~(PAGE - 1)}
@@ -3412,7 +3453,8 @@ class VM:
                 break
             for page in pages:
                 self.code_pages[page].add(owner)
-            read, written = insn_flags(ins, nzcv_setter(previous) if previous else None)
+            self._remember(ins)
+            read, written = self._insn_flags(ins, nzcv_setter(previous) if previous else None)
             live |= read & undecided
             undecided &= ~(read | written)
             if not undecided:
