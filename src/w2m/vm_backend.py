@@ -1213,6 +1213,7 @@ class VM:
         self.pc_map: list[tuple[int, int]] = []           # (code VA, x86 address), sorted
         self.translations: list[tuple[int, int, Discovery]] = []   # (guest start, guest end, discovery)
         self.slow_sse = 0                                # SSE instructions run by x86fp (MXCSR unmasked)
+        self.slow_sse_classes: Counter[tuple[str, int]] = Counter()   # (iclass, MXCSR's six mask bits) per model step
         self._write_monitor()
         self.bridges = {thunk: self._bridge(name, thunk) for thunk, name in loaded.thunks.items()}
         self.modules = self._modules(image_name)
@@ -2412,6 +2413,12 @@ class VM:
         from w2m.runtime import Runtime
 
         self.slow_sse += 1
+        try:                                           # the census: which instruction, under which masks
+            from w2m.x86dec import decode
+            self.slow_sse_classes[(decode(bytes(self.mem.read(rip, 15))).iclass,
+                                   int(struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]) >> 7 & 0x3F)] += 1
+        except Exception:                              # noqa: BLE001 - the census never stops a run
+            self.slow_sse_classes[("?", 0)] += 1
         xmm, fpcr, fpsr = self.vectors()
         mx = int(struct.unpack_from("<I", self.mm, MONITOR_DATA + MXCSR_OFF)[0]) | mxcsr_flags_from_fpsr(fpsr)
         rt = Runtime(Loaded(None, self.mem, rip, {}, 0))       # type: ignore[arg-type]
@@ -2953,6 +2960,9 @@ class VM:
               f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
               + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
               + f"; threads {dict(threads)}; thread {self.current_tid} at 0x{x[17]:x}", file=sys.stderr, flush=True)
+        if self.slow_sse_classes:
+            print("slow sse: " + ", ".join(f"{c} masks 0x{m:x} {n}" for (c, m), n in self.slow_sse_classes.most_common(8)),
+                  file=sys.stderr, flush=True)
         print(f"time: {self.modules.image_name}: in run {self.run_ns / 1e9:.1f} s; host by exit "
               + ", ".join(f"hvc {k} {v / 1e9:.1f} s" for k, v in self.exit_ns.most_common(6)), file=sys.stderr, flush=True)
         return executed, Counter(self.exits), Counter(self.exit_sites), calls, now
