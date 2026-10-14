@@ -45,7 +45,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOST = "w2m-laptop"
 JOBS = "C:/w2m/jobs"
-EXECUTOR = ("run-job.ps1", "profile.ps1", "cpusets.ps1", "run-in-desktop.ps1", "input.cs")
+EXECUTOR = ("run-job.ps1", "profile.ps1", "cpusets.ps1", "run-in-desktop.ps1", "input.cs", "pmc.wprp", "pmc_summary.py")
 # A dead connection ends in a minute instead of hanging (2026-10-13: one scp of a finished bundle stalled 6 minutes;
 # the same copy by hand took 0.9 s).
 LINK = ["-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
@@ -228,7 +228,7 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
 
 
 def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audio: str = "on",
-             inputs: str | None = None, record: bool = False) -> int:
+             inputs: str | None = None, record: bool = False, pmc: bool = False, capture: str = "on") -> int:
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -240,6 +240,7 @@ def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audi
         limit = executions * (seconds + 180) // 60 + 10
         spec: dict[str, object] = {"kind": "game", "execution_id": run, "game": game, "exe": exe, "seconds": seconds,
                                    "mode": mode, "audio": audio, "input_script": inputs, "record": record,
+                                   "pmc": pmc, "capture": capture,
                                    "executions": executions, "repeat": 0, "commit": head,
                                    "session": "desktop", "limit_minutes": limit}
         with tempfile.TemporaryDirectory() as d:
@@ -294,6 +295,10 @@ def main(argv: list[str]) -> int:
     gm.add_argument("--mode", choices=("batch", "play"), default="batch")
     gm.add_argument("--input", help="an input script in games/<game>/inputs/<name>.jsonl, played with SendInput")
     gm.add_argument("--record", action="store_true", help="keep the raw keyboard and mouse as inputs.jsonl")
+    gm.add_argument("--pmc", action="store_true",
+                    help="instructions per thread and DXGI Presents, per second (pmc.wprp; Sprint 068 item I)")
+    gm.add_argument("--capture", choices=("on", "off"), default="on",
+                    help="off: the game's own exe without the capture's launcher and hooks")
     gm.add_argument("--audio", choices=("on", "off"), default="on",
                     help="off: the audio endpoints disabled for the job, as the runners have none")
     bt = sub.add_parser("batch")
@@ -312,7 +317,7 @@ def main(argv: list[str]) -> int:
         p.add_argument("--pin", choices=("performance", "efficiency"), help="run on one core type only (G1)")
     a = ap.parse_args(argv)
     if a.kind == "game":
-        return run_game(a.game, a.exe, a.executions, a.seconds, a.mode, a.audio, a.input, a.record)
+        return run_game(a.game, a.exe, a.executions, a.seconds, a.mode, a.audio, a.input, a.record, a.pmc, a.capture)
     if a.kind == "batch":
         sys.path.insert(0, str(ROOT / "scripts"))
         import family_run

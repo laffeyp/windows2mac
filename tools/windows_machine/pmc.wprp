@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The native workload (Sprint 068 item I): instructions retired, read at every context switch (the counter is per CPU,
+     so a switched-out thread ran the difference since its CPU's last switch), and DXGI's Present events, one a frame.
+     The layout follows Microsoft's example (devblogs.microsoft.com/performance-diagnostics, "Recording Hardware
+     Performance (PMU) Events with Complete Examples", 2022-06-20); the laptop lists InstructionRetired as source 26
+     (wpr -pmcsources) and counts it under virtualization-based security (2026-10-14, a 3 s trace). -->
+<WindowsPerformanceRecorder Version="1.0">
+ <Profiles>
+  <SystemCollector Id="SC" Base="" Name="WPRSystemCollector"><BufferSize Value="1024"/><Buffers Value="512"/></SystemCollector>
+  <EventCollector Id="EC" Name="W2mEvents"><BufferSize Value="1024"/><Buffers Value="64"/></EventCollector>
+  <SystemProvider Id="SP">
+   <Keywords><Keyword Value="Loader"/><Keyword Value="ProcessThread"/><Keyword Value="CSwitch"/></Keywords>
+  </SystemProvider>
+  <HardwareCounter Id="HC" Strict="true">
+   <Counters><Counter Value="InstructionRetired"/></Counters>
+   <Events><Event Value="CSwitch"/></Events>
+  </HardwareCounter>
+  <EventProvider Id="DXGI" Name="CA11C036-0102-4A2D-A6AD-F03CFED5D3C9" Level="5"/>
+  <Profile Id="W2mPmc.Verbose.File" LoggingMode="File" Name="W2mPmc" DetailLevel="Verbose" Description="instructions per thread and Presents">
+   <Collectors Operation="Add">
+    <SystemCollectorId Value="SC"><SystemProviderId Value="SP"/><HardwareCounterId Value="HC"/></SystemCollectorId>
+    <EventCollectorId Value="EC"><EventProviders><EventProviderId Value="DXGI"/></EventProviders></EventCollectorId>
+   </Collectors>
+  </Profile>
+ </Profiles>
+</WindowsPerformanceRecorder>

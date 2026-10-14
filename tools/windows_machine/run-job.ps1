@@ -192,12 +192,15 @@ try {
         $present = (Get-ChildItem $gameDir -Recurse -File).Count
         if ($bad.Count -or $present -ne $listing.Count) { throw "game tree: $($bad.Count) files differ from files.json, $present present of $($listing.Count)" }
         Note "execution $i`: game tree verified, $present files ($($check.Count) hashed)"
-        # install launcher (windows-game.yml)
-        Move-Item "$gameDir\$exe.exe" "$gameDir\$exe.original.exe"
-        Copy-Item jit_capture.exe "$gameDir\$exe.exe"
-        .\copy_resources.exe "$gameDir\$exe.original.exe" "$gameDir\$exe.exe"
-        if ($LASTEXITCODE -ne 0) { throw "copy_resources: $LASTEXITCODE" }
-        Copy-Item handler_trace.dll "$gameDir\handler_trace.dll"
+        # install launcher (windows-game.yml); capture off (Sprint 068 item I): the game's own exe, no hooks, so a count
+        # of its instructions holds none of the capture's
+        if ($spec.capture -ne 'off') {
+          Move-Item "$gameDir\$exe.exe" "$gameDir\$exe.original.exe"
+          Copy-Item jit_capture.exe "$gameDir\$exe.exe"
+          .\copy_resources.exe "$gameDir\$exe.original.exe" "$gameDir\$exe.exe"
+          if ($LASTEXITCODE -ne 0) { throw "copy_resources: $LASTEXITCODE" }
+          Copy-Item handler_trace.dll "$gameDir\handler_trace.dll"
+        }
         if (Test-Path $app) { cmd /c rmdir $app }
         New-Item -ItemType Junction -Path $app -Target $gameDir | Out-Null
         New-Item -ItemType Directory -Force C:\Users\w2m\AppData\Local\Temp | Out-Null
@@ -212,6 +215,12 @@ try {
         $cpuName | Out-File -Encoding ascii -NoNewline out/cpu.txt
         $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
         $env:TMP = 'C:\Users\w2m\AppData\Local\Temp'; $env:TEMP = 'C:\Users\w2m\AppData\Local\Temp'
+        if ($spec.pmc) {           # instructions per thread and Presents (pmc.wprp, Sprint 068 item I)
+          wpr -cancel 2>$null | Out-Null
+          wpr -start (Join-Path $PSScriptRoot 'pmc.wprp') -filemode
+          if ($LASTEXITCODE -ne 0) { throw "wpr -start: $LASTEXITCODE" }
+          Note "execution $i`: wpr started"
+        }
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $gameArgs = if ($spec.mode -eq 'play') { @('-screen-fullscreen', '0', '-screen-width', '1280', '-screen-height', '720', '-logFile', '"C:\w2m\unity.log"') }
                     else { @('-batchmode', '-nographics', '-logFile', '"C:\w2m\unity.log"') }
@@ -274,6 +283,16 @@ try {
         if (-not $done) { Stop-Process -Id $p.Id -Force; [void]$p.WaitForExit(30000); $code = $null } else { $code = $p.ExitCode }
         Get-Process | Where-Object { $_.Path -and ($_.Path.StartsWith($gameDir) -or $_.Path.StartsWith($app)) } | ForEach-Object {
           Stop-Process -Id $_.Id -Force; [void]$_.WaitForExit(30000)
+        }
+        if ($spec.pmc) {           # the trace reduced on the laptop: the ETL and its dump stay here, two tables go back
+          wpr -stop "$PWD\out\pmc.etl" | Out-Null
+          $xperf = 'C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe'
+          & $xperf -i "$PWD\out\pmc.etl" -o "$PWD\out\pmc-dump.txt" -a dumper | Out-Null
+          New-Item -ItemType Directory -Force out\pmc | Out-Null
+          & C:\w2m\tools\python.exe (Join-Path $PSScriptRoot 'pmc_summary.py') "$PWD\out\pmc-dump.txt" "$PWD\out\pmc" $exe |
+            Set-Content out\pmc\summary.txt
+          Note "execution $i`: pmc $(Get-Content out\pmc\summary.txt)"
+          Remove-Item "$PWD\out\pmc.etl", "$PWD\out\pmc-dump.txt" -Force -ErrorAction SilentlyContinue
         }
         if (Test-Path C:\w2m\unity.log) { Copy-Item C:\w2m\unity.log out\unity.log }
         $exit = if ($null -eq $code) { 'null' } else { "$code" }
