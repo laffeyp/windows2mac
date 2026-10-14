@@ -10,11 +10,11 @@
  * first zero element. The result: ECX in bits 4:0, then CF bit 8, ZF bit 9, SF bit 10, OF bit 11 (AF and PF 0).
  * The runtime is built with -mgeneral-regs-only, so this touches no vector register the translator holds XMM in.
  */
-#include <stdint.h>                                  /* alone: the test builds it for the Mac too */
-
-typedef uint8_t u8;
-typedef uint32_t u32;
-typedef uint64_t u64;
+/* No include: the test builds this file alone for the Mac too, and a family's candidate hash follows every include
+ * as a runtime header. */
+typedef unsigned char u8;
+typedef unsigned int u32;
+typedef unsigned long long u64;
 
 u64 w2m_pcmpistri(const u8 *a, const u8 *b, u64 imm);
 
