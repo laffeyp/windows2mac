@@ -135,3 +135,12 @@ Probes `thread_stacks` and `running_thread_context` (5cb60b6d), built and run on
 
 Next for item 4: commit on demand (three guard pages, one-page growth) and the waiting thread's RIP, judged by
 these rows once each probe has a family entry.
+
+### The frontier conforms (2026-10-13)
+
+Under Decision 2026-10-13 (user), divergences are sorted by cause (`call_compare.by_cause`). The comparison of
+frontier-643a6283510c-1791861489792916000 against the reference set (run 38216081440, the one stored capture that
+names its threads) finds 0 defects over 3,451 calls; HeapReAlloc 3268 is recorded as the game's scheduling (record
+`store/runs/comparison-frontier-643a6283510c-1791861489792916000-1791937394595356000`). The observation "the
+frontier's comparison conforms but for FSIN and FCOS" is met; item 4 (commit on demand and a waiting thread's RIP,
+now with Windows rows) remains.
