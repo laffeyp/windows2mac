@@ -972,11 +972,36 @@ OPERAND_SAFE = {"imm", "addr", "ld", "st", "alu", "flags", "br", "set", "cmov", 
 ADD_SUB_IMM = {("add", 64): 0x91000000, ("sub", 64): 0xD1000000, ("add", 32): 0x11000000, ("sub", 32): 0x51000000}
 
 
-def _operand_forms(ops: tuple[Op, ...], last: dict[int, int], dead: set[int]) -> tuple[dict[int, int], dict[int, int]]:
-    """(temporaries read as the guest register they load, constants kept out of registers), per OPERAND_FORMS. The ops
-    at `dead` (flags ops no later instruction reads) emit nothing and read nothing."""
+LOW32_ALU = ("add", "sub", "and", "or", "xor")
+LOW32_FLAGS = ("add", "sub", "inc", "dec", "logic")
+FORWARD_AFTER = {"alu", "flags", "imm", "br", "sel", "st", "set", "cmov", "cst", "cstz"}
+
+
+def _reads_low32(o: Op, t: int) -> bool:
+    """`o` uses only the low 32 bits of temporary `t`: a 32-bit ADD, SUB, AND, OR or XOR (masked or in its W form), the
+    flags of one (NZCV from the W form; AF and PF from the low bits), or a 32-bit store of it."""
+    if o[0] == "alu":
+        return bool(o[5] == 32 and o[2] in LOW32_ALU)
+    if o[0] == "flags":
+        return bool(o[5] == 32 and o[1] in LOW32_FLAGS)
+    if o[0] == "st" and o[2] == t:
+        loc = o[1]
+        return bool(loc[0] == "m" and loc[2] == 4 and loc[1] != t or loc[0] == "r" and loc[2] == 32 and not loc[3])
+    return False
+
+
+def _operand_forms(ops: tuple[Op, ...], last: dict[int, int],
+                   dead: set[int]) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
+    """(temporaries read as the guest register they load, constants kept out of registers, results computed straight
+    into the guest register they are stored to), per OPERAND_FORMS. The ops at `dead` (flags ops no later instruction
+    reads) emit nothing and read nothing.
+    A 32-bit register is read in place when every use takes only its low 32 bits (_reads_low32). A result is forwarded
+    to register R when its one store is to R at its own width (zero-extended for 32 bits), its other readers are flags
+    ops, and every op after it is one that cannot fault (FORWARD_AFTER, stores only to registers), reads no temporary
+    that is R itself, and writes R only by that store."""
     alias: dict[int, int] = {}
     quiet: dict[int, int] = {}
+    forward: dict[int, int] = {}
     readers: dict[int, list[Op]] = {}
     for i, op in enumerate(ops):
         if i in dead:
@@ -987,8 +1012,10 @@ def _operand_forms(ops: tuple[Op, ...], last: dict[int, int], dead: set[int]) ->
     def writes(o: Op) -> Op | None:
         return o[1] if o[0] == "st" else o[2] if o[0] in ("set", "cmov", "cst", "cstz") else None
     for i, op in enumerate(ops):
-        if op[0] == "ld" and op[2][0] == "r" and op[2][2] == 64 and not op[2][3] and op[1] in last:
+        if op[0] == "ld" and op[2][0] == "r" and op[2][2] in (32, 64) and not op[2][3] and op[1] in last:
             idx = op[2][1]
+            if op[2][2] == 32 and not all(_reads_low32(o, op[1]) for o in readers.get(op[1], [])):
+                continue
             if not any((w := writes(o)) is not None and w[0] == "r" and w[1] == idx for o in ops[i + 1:last[op[1]]]):
                 alias[op[1]] = idx
         elif op[0] == "imm" and op[1] in readers:
@@ -997,7 +1024,22 @@ def _operand_forms(ops: tuple[Op, ...], last: dict[int, int], dead: set[int]) ->
                 quiet[t] = v
             elif len(rs) == 1 and rs[0][0] == "br" and rs[0][2] == t:
                 quiet[t] = v
-    return alias, quiet
+    for i, op in enumerate(ops):
+        if op[0] == "alu" or op[0] == "ld" and op[2][0] == "m" and op[1] not in alias:
+            t = op[1]
+            width = op[5] if op[0] == "alu" else 8 * op[2][2]
+            stores = [o for o in readers.get(t, []) if o[0] != "flags"]
+            if len(stores) != 1 or stores[0][0] != "st" or stores[0][2] != t:
+                continue
+            loc = stores[0][1]
+            if loc[0] != "r" or loc[3] or loc[2] != width or width not in (32, 64):
+                continue
+            idx = loc[1]
+            later = [o for j, o in enumerate(ops) if j > i and j not in dead]
+            if all(o[0] in FORWARD_AFTER and ((w := writes(o)) is None or w[0] == "r" and (w[1] != idx or o is stores[0]))
+                   and not any(alias.get(r) == idx for r in _temps_read(o)) for o in later):
+                forward[t] = idx
+    return alias, quiet, forward
 
 
 def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, AddressForm]:
@@ -1129,12 +1171,14 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
     locked = ins.iclass.endswith("_LOCK")
     folded = _folded_addresses(ins.ops) if FOLD_ADDRESSES and not locked else {}
     lock_retry: list[int] = []
-    alias, quiet = ({}, {}) if not OPERAND_FORMS or locked or any(op[0] not in OPERAND_SAFE for op in ins.ops) else \
+    alias, quiet, forward = ({}, {}, {}) if (not OPERAND_FORMS or locked
+                                             or any(op[0] not in OPERAND_SAFE for op in ins.ops)) else \
         _operand_forms(ins.ops, last, dead)
+    pinned = {**alias, **forward}                         # temporaries that are guest registers, never freed
     for i, op in enumerate(ins.ops):
         for t in _temps_written(op):
-            if t in alias:
-                reg[t] = alias[t]
+            if t in pinned:
+                reg[t] = pinned[t]
                 continue
             if t in quiet:
                 continue
@@ -1213,6 +1257,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             a.branch(lambda off: a64.cbnz(16, off), lock_retry[-1])
         elif k == "st" and fused_store:
             fused_store = False
+        elif k == "st" and op[2] in forward and op[1][0] == "r" and op[1][1] == forward[op[2]]:
+            pass                                         # computed in place (OPERAND_FORMS)
         elif k == "st":
             store(op[1], reg_of(op[2]))
         elif k == "alu":
@@ -1233,7 +1279,11 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 bits = 64 if bits == 32 else bits                # the 32-bit form zero-extends: no mask
             elif o in ("add", "sub", "and", "or", "xor"):
                 f = {"add": a64.add, "sub": a64.sub, "and": a64.and_, "or": a64.orr, "xor": a64.eor}[o]
-                a.emit(f(rd, rx, ry))
+                if bits == 32 and OPERAND_FORMS:                 # the W form zero-extends as x86 does: no mask
+                    a.emit(f(rd, rx, ry) & ~(1 << 31))
+                    bits = 64
+                else:
+                    a.emit(f(rd, rx, ry))
             elif o == "shr":
                 a.emit(a64.ubfx(16, ry, 0, 6 if bits == 64 else 5))
                 if bits < 64:
@@ -1496,7 +1546,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         for t in [*_temps_read(op), *_temps_written(op)]:
             if t in reg and last.get(t, -1) <= i:
                 r = reg.pop(t)
-                if t not in alias:
+                if t not in pinned:
                     free.append(r)
     return ends
 
