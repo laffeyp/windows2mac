@@ -290,7 +290,7 @@
 
 ## Sprint tail
 
-### Sprint 066 (2026-10-13, closed: CI on the closing commit)
+### Sprint 066 (2026-10-13, closed: CI run 38506623160 success on 7114da6e)
 - **Scope:** thread stacks as Windows lays them out, a running thread's context, and the divergences threads sharing one vCPU left.
 - **Observed:** the frontier conforms against its reference (0 defects; HeapReAlloc 3268 scheduling); thread_stacks (44 rows) and running_thread_context (4 rows) conform; all 68 families accepted (index 431bffa5).
 - **Carried:** the main thread's stack still committed whole; InterlockedPopEntrySList against the laptop's runs is a timing-dependent value the classifier counts as a value (Sprint 067).
