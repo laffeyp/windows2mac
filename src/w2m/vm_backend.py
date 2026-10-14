@@ -290,6 +290,15 @@ CPSR_EL1H = 0x3C5
 TEMP_REGS = (18, 25, 26, 27, 29, 30)
 REG_CF, REG_ZF, REG_SF, REG_OF, REG_PF = 19, 20, 21, 22, 23
 REG_UNDEFINED_FLAGS = 24
+# x23 (PF's until PF went lazy) holds the step budget left (recentering step 5, review item M): each block entry is
+# SUBS x23, x23, #n and B.MI to its stop, where it loaded, added, stored and compared the count in memory. The host
+# keeps the count and the limit in the monitor data page and sets x23 = limit - count before each run, and the count
+# from x23 after each exit; a bridge writes the count back before a service runs (the runtime's clock reads it).
+# The runtime's C keeps x23 as a callee-saved register of its own, so the meaning holds only outside the runtime image:
+# the host reads and sets x23 only when the vCPU stopped outside it, and a bridge or the exception entry writes the
+# count before its call into C and sets x23 from memory after it (the C restores the value it found, which a host
+# request inside the call may have made stale: 2026-10-14, a thread's slice never fired).
+REG_BUDGET = 23
 FLAG_BIT = {"C": 0, "Z": 1, "S": 2, "O": 3, "P": 4, "A": 5}
 U_CF, U_ZF, U_SF, U_OF, U_PF, U_AF = (1 << FLAG_BIT[f] for f in "CZSOPA")   # bits of REG_UNDEFINED_FLAGS
 FLAG_REG = {"C": REG_CF, "Z": REG_ZF, "S": REG_SF, "O": REG_OF, "P": REG_PF}
@@ -395,6 +404,16 @@ def _adds_subs(add: bool, rd: int, rn: int, rm: int, bits: int) -> int:
     """ADDS or SUBS Rd, Rn, Rm in 32 or 64 bits (the 32-bit form clears Rd's top half)."""
     w = (a64.adds if add else a64.subs)(rd, rn, rm)
     return w if bits == 64 else w & ~(1 << 31)
+
+
+def count_from_budget() -> list[int]:
+    """Monitor data word 0 (the count) = word 8 (the limit) - x23, before a call into the runtime's C (uses x17)."""
+    return [a64.ldr(8, 17, 28, 8), a64.sub(17, 17, REG_BUDGET), a64.str_(8, 17, 28, 0)]
+
+
+def budget_from_count() -> list[int]:
+    """x23 = the limit - the count, after a call into the runtime's C (uses x16 and x17)."""
+    return [a64.ldp(16, 17, 28, 0), a64.sub(REG_BUDGET, 17, 16)]
 
 
 def _set_pf(a: Assembler, r: int) -> None:
@@ -2184,7 +2203,9 @@ class VM:
                 if fn in TRACE_WIDE_ARGS and (thunk - THUNK_BASE) // 16 < TRACE_THUNKS:
                     self.mm[self._process(TRACE_OFF) + TRACE_WIDE_OFF + (thunk - THUNK_BASE) // 16] = TRACE_WIDE_ARGS[fn]
                 symbol = "w2m_traced"
+            a.emit(*count_from_budget())
             a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
+            a.emit(*budget_from_count())
             a.emit(a64.mov_imm(16, state))
             if sets_rax:
                 a.emit(a64.str_(8, 0, 16, 0))
@@ -2836,8 +2857,10 @@ class VM:
                a64.msr(a64.ELR_EL1, 17), a64.movz(17, CPSR_EL1H), a64.msr(a64.SPSR_EL1, 17), a64.ERET)
         assert e.here() == cont
         self.exception_call_va = cont
+        e.emit(*count_from_budget())
         e.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
                a64.mov_imm(16, self.runtime.symbols["w2m_exception"]), a64.blr(16))
+        e.emit(*budget_from_count())
         e.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF))
         for i in range(0, 16, 2):
             e.emit(a64.ldp(i, i + 1, 16, 8 * i))
@@ -2949,8 +2972,10 @@ class VM:
         if BLOCK_CENSUS:                                 # x16, x17 dead at a block's entry (the prologue loads x17)
             a.branch(lambda off: a64.adr(16, off), counter)
             a.emit(a64.ldr(8, 17, 16, 0), a64.addi(17, 17, 1), a64.str_(8, 17, 16, 0))
-        a.emit(a64.ldp(17, 18, 28, 0), a64.addi(17, 17, len(insns)), a64.str_(8, 17, 28, 0),
-               a64.cmp(17, 18), a64.bcond("ls", 8), a64.hvc(4))
+        budget_stop, body = a.label(), a.label()
+        a.emit(0xF1000000 | len(insns) << 10 | REG_BUDGET << 5 | REG_BUDGET)       # SUBS x23, x23, #n
+        a.branch(lambda off: a64.bcond("mi", off), budget_stop)
+        a.bind(body)
         ended = False
         for ins in insns:
             pc_marks.append((a.here(), ins.address))
@@ -2959,6 +2984,10 @@ class VM:
         if not ended:
             a.emit(a64.mov_imm(17, addr))
             a.branch(a64.b, exit_va)
+        a.bind(budget_stop)                              # the budget's stop, out of the block's path: an exit whose
+        pc_marks.append((a.here(), start))               # address maps to the block's first instruction, then on in
+        a.emit(a64.hvc(4))
+        a.branch(a64.b, body)
         if BLOCK_CENSUS:
             overhead = (a.here() - body_end) // 4
             if a.here() % 8:
@@ -2978,7 +3007,7 @@ class VM:
         self.addrs.update(i.address for i in insns)
         self.blocks[start] = va
         if BLOCK_CENSUS:                    # (counter's offset, [(iclass, arm64 words)], prologue and exit words)
-            marks = [m for m, _ in pc_marks[1:]] + [body_end]
+            marks = [m for m, _ in pc_marks[1:1 + len(insns)]] + [body_end]
             self.block_census.append((a.labels[counter] - MONITOR_VA,
                                       [(i.iclass, (marks[k + 1] - marks[k]) // 4) for k, i in enumerate(insns)],
                                       ((pc_marks[1][0] - pc_marks[0][0]) // 4 if insns else 0) + overhead))
@@ -3098,6 +3127,7 @@ class VM:
         self._max_steps = max_steps
         self._set_budget()
         forced_stop = False
+        runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
         self._cmd = cmd
         if not self.threads:                              # the first thread (scheduler.py; Sprint 051)
             self.threads[self.current_tid] = GuestThread(self.current_tid, PROCESS_VA + TEB_OFF, self._stack,
@@ -3141,6 +3171,9 @@ class VM:
                 started = time.perf_counter_ns()
                 self.exit_ns[last_kind] += started - marked
                 ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
+                count, limit = struct.unpack_from("<QQ", self.mm, MONITOR_DATA)
+                if not runtime_lo <= pc < runtime_hi:           # in the runtime's C, x23 is the C's own
+                    x[REG_BUDGET] = (limit - count) & M64       # the budget left, in x23
                 if self._channel is not None:
                     swap, self._vswap = self._vswap, None
                     e, cpsr = self._channel.run(pc, cpsr, x, ms, swap)
@@ -3157,6 +3190,9 @@ class VM:
                 self.run_ns += marked - started
                 last_kind = 0
                 x = e.x
+                if not runtime_lo <= e.pc < runtime_hi:
+                    left = x[REG_BUDGET] - (1 << 64) if x[REG_BUDGET] >> 63 else x[REG_BUDGET]
+                    struct.pack_into("<Q", self.mm, MONITOR_DATA, (limit - left) & M64)   # the count, from x23
                 if e.kind == "cancel" and interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
                     # the rule specs/guest_state.json forbids: restart the interrupted instruction
                     x[17] = self.x86_address_at(e.pc)

@@ -90,8 +90,9 @@ def _set_flags_from_fcmp(a: Assembler) -> None:
     """(U)COMIS[SD]: FCMP gives NZCV 0011 unordered, 1000 less, 0110 equal, 0010 greater; x86 wants
     ZF PF CF 111, 001, 100, 000 and OF SF AF cleared (SDM COMISS)."""
     # PF is unordered, kept lazily (vm_backend.PF_RESULT: 0 for PF set, 1 for clear, so V clear stores 1)
-    a.emit(a64.cset(REG_PF, "vs"), a64.cset(REG_CF, "lt"), a64.cset(REG_ZF, "eq"),
-           a64.orr(REG_ZF, REG_ZF, REG_PF), a64.mov(REG_OF, a64.ZR), a64.mov(REG_SF, a64.ZR),
+    # (x17 is scratch: x23 holds the step budget, vm_backend.REG_BUDGET)
+    a.emit(a64.cset(17, "vs"), a64.cset(REG_CF, "lt"), a64.cset(REG_ZF, "eq"),
+           a64.orr(REG_ZF, REG_ZF, 17), a64.mov(REG_OF, a64.ZR), a64.mov(REG_SF, a64.ZR),
            a64.cset(16, "vc"), a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, 16, 28, AF_OPERANDS + 16))
     _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
 
