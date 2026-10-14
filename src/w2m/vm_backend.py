@@ -646,6 +646,33 @@ def _shift_flags_const(a: Assembler, kind: str, ra: int, count: int, rr: int, bi
     _set_zf_sf_pf(a, rr, bits)
 
 
+# A conditional branch right after the instruction that set the flags through NZCV (recentering step 5) branches on
+# NZCV itself: the setter defined every flag the condition reads, so neither the undefined check nor the read of the flag
+# registers is needed. After SUBS (SUB, CMP) every x86 condition is one Arm condition (CF is the borrow, C clear); after
+# ADDS, CF is C, and the carry-or-zero pair has no Arm form; INC and DEC keep CF, so no condition that reads it; after
+# the logic ops' CMP r, #0 only Z holds x86's meaning.
+NZCV_CONDITIONS = {
+    "sub": {"z": "eq", "nz": "ne", "b": "lo", "nb": "hs", "be": "ls", "nbe": "hi", "l": "lt", "nl": "ge", "le": "le",
+            "nle": "gt", "s": "mi", "ns": "pl", "o": "vs", "no": "vc"},
+    "add": {"z": "eq", "nz": "ne", "b": "cs", "nb": "cc", "l": "lt", "nl": "ge", "le": "le", "nle": "gt", "s": "mi",
+            "ns": "pl", "o": "vs", "no": "vc"},
+    "inc": {"z": "eq", "nz": "ne", "l": "lt", "nl": "ge", "le": "le", "nle": "gt", "s": "mi", "ns": "pl", "o": "vs",
+            "no": "vc"},
+    "logic": {"z": "eq", "nz": "ne"},
+}
+NZCV_CONDITIONS["dec"] = NZCV_CONDITIONS["inc"]
+INVERSE = {name: next(n for n, c in a64.COND.items() if c == code ^ 1 and n not in ("cs", "cc"))
+           for name, code in a64.COND.items() if name != "al"}
+
+
+def nzcv_setter(ins: Lifted) -> str | None:
+    """The flags kind whose NZCV a conditional branch right after `ins` may branch on, or None."""
+    if not FLAGS_FROM_NZCV or not ins.ops or ins.ops[-1][0] != "flags":
+        return None
+    kind = ins.ops[-1][1]
+    return kind if kind in NZCV_CONDITIONS else None
+
+
 def _exit_if_undefined(a: Assembler, f: str) -> None:
     """Exit with HVC 0x40|bit when flag f is undefined (runtime.Runtime._flag)."""
     a.emit(a64.tbz(REG_UNDEFINED_FLAGS, FLAG_BIT[f], 8), a64.hvc(0x40 | FLAG_BIT[f]))
@@ -833,7 +860,8 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
     return image
 
 
-def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None) -> bool:
+def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None,
+                 nzcv_from: str | None = None) -> bool:
     """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`. `symbols` are the
     compiling VM's runtime image's (CPUID calls its w2m_cpuid; Sprint 058: one table for every VM in the host gave a
     parent the child's addresses); without them, as in an assembler check, the address is 0.
@@ -1182,8 +1210,12 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 ends = True
             else:
                 skip = a.label()
-                _eval_condition(a, op[1])
-                a.branch(lambda off: a64.cbz(16, off), skip)
+                arm = NZCV_CONDITIONS.get(nzcv_from or "", {}).get(op[1])
+                if arm is not None:                              # the previous instruction's NZCV (NZCV_CONDITIONS)
+                    a.branch(lambda off, c=INVERSE[arm]: a64.bcond(c, off), skip)
+                else:
+                    _eval_condition(a, op[1])
+                    a.branch(lambda off: a64.cbz(16, off), skip)
                 a.emit(a64.mov(17, reg_of(op[2])))
                 a.branch(a64.b, exit_va)
                 a.bind(skip)
@@ -2977,9 +3009,11 @@ class VM:
         a.branch(lambda off: a64.bcond("mi", off), budget_stop)
         a.bind(body)
         ended = False
+        previous: Lifted | None = None
         for ins in insns:
             pc_marks.append((a.here(), ins.address))
-            ended = compile_insn(a, ins, exit_va, self.runtime.symbols)
+            ended = compile_insn(a, ins, exit_va, self.runtime.symbols, nzcv_setter(previous) if previous else None)
+            previous = ins
         body_end = a.here()                              # the census counts the fall-through exit as block overhead
         if not ended:
             a.emit(a64.mov_imm(17, addr))

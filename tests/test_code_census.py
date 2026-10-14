@@ -27,9 +27,12 @@ def test_the_census_counts_each_block_execution(monkeypatch: pytest.MonkeyPatch)
     finally:
         vm.close()
 
-    def words(hexcode: str) -> int:
+    def words(hexcode: str, after: str | None = None) -> int:
+        """The words `hexcode` compiles to, after the instruction `after` in its block (a jump after a setter
+        branches on its NZCV)."""
+        setter = vm_backend.nzcv_setter(lift(bytes.fromhex(after), code_va)) if after else None
         a = vm_backend.Assembler(0)
-        vm_backend.compile_insn(a, lift(bytes.fromhex(hexcode), code_va), 0x8000, None)
+        vm_backend.compile_insn(a, lift(bytes.fromhex(hexcode), code_va), 0x8000, None, setter)
         return len(a.finish())
     assert by["DEC"] == (1000, 1000 * words("ffc9"))
-    assert by["JNZ"] == (1000, 1000 * words("75fc"))
+    assert by["JNZ"] == (1000, 1000 * words("75fc", after="ffc9"))
