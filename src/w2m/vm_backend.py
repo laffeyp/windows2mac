@@ -1620,10 +1620,12 @@ class VM:
         successive touches would. 0 when the address is not reached this way: an access violation (row skip)."""
         cur = self.threads[self.current_tid]
         dealloc, _, top = cur.stack
-        limit = int.from_bytes(self.mem.read(cur.teb + 0x10, 8), "little")
-        page = address & ~(PAGE - 1)
         r = self.virtual.reservations.get(dealloc)
-        if r is None or not dealloc <= page < limit:
+        if r is None:              # the main thread's stack (the process area's TEB), committed whole: not grown here
+            return 0
+        limit = int.from_bytes(self._read_guest(cur.teb + 0x10, 8), "little")
+        page = address & ~(PAGE - 1)
+        if not dealloc <= page < limit:
             return 0
         if not probe and page < limit - STACK_GUARD_PAGES * PAGE:
             return 0

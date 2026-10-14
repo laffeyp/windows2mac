@@ -144,3 +144,14 @@ names its threads) finds 0 defects over 3,451 calls; HeapReAlloc 3268 is recorde
 `store/runs/comparison-frontier-643a6283510c-1791861489792916000-1791937394595356000`). The observation "the
 frontier's comparison conforms but for FSIN and FCOS" is met; item 4 (commit on demand and a waiting thread's RIP,
 now with Windows rows) remains.
+
+### Item 4 built (2026-10-13)
+
+Commit cb542225: a created thread's stack
+is laid out as the laptop's rows show and grows on demand through three guard pages, unmapped in the stage-1 tables
+and committed by the fault (THREAD_STACK_GROW); a touch below the guard is an access violation; the runtime grows
+the stack before it places a frame below StackLimit. GetThreadContext of a thread suspended in a wait answers RIP in
+ntdll. The families thread_stacks (44 rows) and running_thread_context (4 rows), from the laptop's runs, conform,
+and threads, thread_stack, thread_queries, virtual_memory and the module families still do. The main thread's stack
+stays committed whole (its contract, thread_stack, describes the layout, not growth); the frontier decides whether
+it changes.
