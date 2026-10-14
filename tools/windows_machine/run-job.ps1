@@ -168,15 +168,19 @@ try {
       for ($i = 1; $i -le [int]$spec.executions; $i++) {
         # the game as the release unpacks it: mirrored from the pristine copy (the launcher's install and the
         # game's own writes undone), every file checked against files.json, nothing else present
+        # every file hashed before the first execution; before each later one, robocopy's mirror restores any file
+        # whose size or time changed, and the files the launcher's install replaced are hashed again (hashing all
+        # 15.6 GB took about 3 minutes an execution)
         robocopy $pristine $gameDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "robocopy: $LASTEXITCODE" }
-        $bad = @(foreach ($f in $listing) {
+        $check = if ($i -eq 1) { $listing } else { @($listing | Where-Object { $_.path -in @("$exe.exe", 'handler_trace.dll') }) }
+        $bad = @(foreach ($f in $check) {
           $q = Join-Path $gameDir $f.path
           if (-not (Test-Path -LiteralPath $q) -or (Get-FileHash -LiteralPath $q -Algorithm SHA256).Hash.ToLower() -ne $f.sha256) { $f.path }
         })
         $present = (Get-ChildItem $gameDir -Recurse -File).Count
         if ($bad.Count -or $present -ne $listing.Count) { throw "game tree: $($bad.Count) files differ from files.json, $present present of $($listing.Count)" }
-        Note "execution $i`: game tree verified, $present files"
+        Note "execution $i`: game tree verified, $present files ($($check.Count) hashed)"
         # install launcher (windows-game.yml)
         Move-Item "$gameDir\$exe.exe" "$gameDir\$exe.original.exe"
         Copy-Item jit_capture.exe "$gameDir\$exe.exe"
@@ -205,8 +209,13 @@ try {
         $shell = New-Object -ComObject WScript.Shell
         $done = $false
         $frameEvery = if ($spec.frame_seconds) { [int]$spec.frame_seconds } else { 10 }; $nextFrame = 0
+        # the curve: how the trace and the log grow, every 3 s (does a run need all its seconds?)
+        "seconds`ttrace_lines`tlog_lines" | Set-Content out\curve.tsv
         while ((Get-Date) -lt $deadline -and -not $done) {
           $done = $p.WaitForExit(3000)
+          $tl = if (Test-Path out\jit_capture.bin.trace.tsv) { @(Get-Content out\jit_capture.bin.trace.tsv -ErrorAction SilentlyContinue).Count } else { 0 }
+          $ll = if (Test-Path C:\w2m\unity.log) { @(Get-Content C:\w2m\unity.log -ErrorAction SilentlyContinue).Count } else { 0 }
+          "{0:N1}`t{1}`t{2}" -f $sw.Elapsed.TotalSeconds, $tl, $ll | Add-Content out\curve.tsv
           if (-not $done -and $spec.mode -eq 'play') {
             [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ')
             if ($sw.Elapsed.TotalSeconds -ge $nextFrame) {     # the frame record (Q5): the whole screen
