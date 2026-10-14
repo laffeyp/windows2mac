@@ -109,6 +109,41 @@ def exit_classes(vm: Any) -> list[tuple[tuple[int, str], tuple[int, int]]]:
     return sorted(((k, (v[0], v[1])) for k, v in by.items()), key=lambda kv: -kv[1][0])
 
 
+def host_load() -> dict[str, Any]:
+    """The Mac's load beside this run (Sprint 068 item F): the 1, 5 and 15 minute load averages, the other w2m
+    processes (a monitor, a script, a test run), and any process using more than half a core. This run's own
+    processes, its ancestors and descendants, are left out. A census's seconds move with the load, so a run records it."""
+    import os
+    import subprocess
+    out = subprocess.run(["ps", "-axo", "pid=,ppid=,pcpu=,command="], capture_output=True, text=True, check=True).stdout
+    rows = [(int(p), int(q), float(c), cmd) for p, q, c, cmd in (line.split(None, 3) for line in out.splitlines()
+                                                                 if len(line.split(None, 3)) == 4)]
+    parent = {p: q for p, q, _, _ in rows}
+    mine, at = set(), os.getpid()
+    while at > 1 and at not in mine:                     # this run and its ancestors (the shell that started it)
+        mine.add(at)
+        at = parent.get(at, 1)
+    grew = True
+    while grew:                                          # its descendants: its monitors
+        grew = False
+        for p, q, _, _ in rows:
+            if q in mine and p not in mine and q != 1:
+                mine.add(p)
+                grew = True
+    def is_w2m(cmd: str) -> bool:                       # by the executable, not by text a shell's command holds
+        words = cmd.split()
+        if words[0].endswith("vm_monitor"):
+            return True
+        return "python" in words[0].rsplit("/", 1)[-1] and any(
+            w.endswith(("family_run.py", "class_run.py", "run_frontier.py", "pytest")) for w in words[1:4])
+    w2m = sorted(" ".join(w.rsplit("/", 1)[-1] for w in cmd.split()[:3]) for p, _, _, cmd in rows
+                 if p not in mine and is_w2m(cmd))
+    busy = sorted(((round(c), cmd.split()[0].rsplit("/", 1)[-1]) for p, _, c, cmd in rows if p not in mine and c > 50),
+                  reverse=True)
+    return {"load_average": [round(v, 2) for v in os.getloadavg()], "other_w2m": w2m,
+            "busy": [f"{name} {c}%" for c, name in busy]}
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -272,11 +307,13 @@ def main(argv: list[str]) -> int:
             elapsed_seconds=round(time.monotonic() - t0, 3)))
 
     reference_runs, _outside = call_compare.reference_set(json.loads(call_compare.CONTRACT.read_text()))
+    load_at_start = host_load()
+    print(f"load: at start {load_at_start}", file=sys.stderr, flush=True)
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm", scratch=a.scratch,
                    plant=a.plant or "", clock_rate=a.clock_rate, max_steps=a.max_steps,   # both change the calls
-                   reference_set=[run.name for run in reference_runs])
+                   reference_set=[run.name for run in reference_runs], load_at_start=load_at_start)
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
                         events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
@@ -335,6 +372,7 @@ def main(argv: list[str]) -> int:
         hit = [d for d in found if d.divergence.function == fn and d.divergence.field == field]
         print(f"plant {a.plant}: " + (f"caught at {hit[0].text()}" if hit else f"NOT caught ({fn} {field})"))
     print(f"record {result.record_root}")
+    print(f"load: at end {host_load()}")
     # the exit status is the verdict (KIT_DIARY #35; review of 2026-10-12, R4 and B5): 2 when the record holds a failed
     # producer or no closing event, 1 for a divergence or a plant not caught, 0 when the calls conform
     kinds = [e["kind"] for e in read_record(result.record_root)]
