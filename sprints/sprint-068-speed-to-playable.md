@@ -141,3 +141,15 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   user-interactive QoS (0x21), which macOS keeps on the performance cores; its gain is not yet shown (one run still
   took 197 s with llama-server at 98% and WindowServer at 53%). Census runs keep alternating settings and take the
   lower times.
+- **E, the channel** (e3a3f4e7; indexes a7fe4090: 456 of 458 classes, 68 of 68 families, 2,246 tests). Commands and
+  exits through a shared page, each side waking the other with os_sync_wait_on_address and
+  os_sync_wake_by_address_any after a spin of up to 50 µs. Alternating runs to 10 billion instructions on a quiet Mac,
+  three each: the pipe 45.1, 45.9 and 47.9 s; the channel 22.4, 23.1 and 22.7 s. User time is the same (34.2-34.6 s
+  against 35.9 s), the spin taking what the pipe's wake-ups did. A race found on the way: CPython's struct wrote the
+  host's sequence word a byte at a time, a spinning monitor read 0x00 between 0xFF and 0x100, and a run executed
+  twice; the word is now one 32-bit store and the monitor waits for exactly the next value.
+- **Recentering step 3, the code census** (worktree, BLOCK_CENSUS: each block counts its executions). Over the first 10
+  billion instructions each x86 instruction ran 12.26 arm64 words in its body and 1.73 in block prologues (an upper
+  bound: a block counts in full when it leaves early). Flag-setting classes and conditional branches take about 75% of
+  the words: CMP 16.3% (25.9 words each), ADD 15.4% (26.4), SUB 6.9% (26.3), TEST 4.7% (19.3), JNZ 4.6% (15.0), SHL
+  4.3% (41.5), AND 4.3% (21.8); MOV takes 3.5 words, LEA 3.9. Every flag is computed eagerly into its own register.
