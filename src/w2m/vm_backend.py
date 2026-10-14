@@ -861,10 +861,54 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
 
 
 FUSE_LOAD_STORE = True       # recentering step 5: a load whose only use is the store after it is one instruction
+FOLD_ADDRESSES = True        # recentering step 5: an address only loads and stores use goes into their own form
+
+
+def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, tuple]:
+    """The `addr` temporaries whose every use in this instruction is a plain load or store, each with the Arm form that
+    reaches it (recentering step 5): ("imm", base, disp) for LDR/STR's own scaled offset, ("unscaled", base, disp) for
+    LDUR/STUR's -256..255, ("reg", base, index, scaled) for the register-offset form. 64-bit addresses with no segment
+    only; anything else keeps the computed address."""
+    users: dict[int, list[tuple[str, int]]] = {}
+    other: set[int] = set()
+    for op in ops:
+        if op[0] == "ld" and op[2][0] == "m":
+            users.setdefault(op[2][1], []).append(("ld", op[2][2]))
+            continue
+        if op[0] == "st" and op[1][0] == "m":
+            users.setdefault(op[1][1], []).append(("st", op[1][2]))
+            other.update(t for t in _temps_read(op) if t != op[1][1])
+            continue
+        other.update(_temps_read(op))
+    folded: dict[int, tuple] = {}
+    for op in ops:
+        if op[0] != "addr":
+            continue
+        _, d, base, index, scale, disp, abits, seg = op
+        if d in other or d not in users or seg is not None or abits != 64 or not isinstance(base, int):
+            continue
+        sizes = {size for _, size in users[d]}
+        if index is None:
+            if all(disp % s == 0 and 0 <= disp // s < 4096 for s in sizes):
+                folded[d] = ("imm", base, disp)
+            elif -256 <= disp <= 255:
+                folded[d] = ("unscaled", base, disp)
+        elif isinstance(index, int) and disp == 0 and (scale == 1 or sizes == {scale}):
+            folded[d] = ("reg", base, index, scale != 1)
+    return folded
+
+
+def _mem(load: bool, size: int, rt: int, form: tuple) -> int:
+    """The load or store of `size` bytes between rt and a folded address (_folded_addresses)."""
+    if form[0] == "imm":
+        return (a64.ldr if load else a64.str_)(size, rt, form[1], form[2])
+    if form[0] == "unscaled":
+        return (a64.ldur if load else a64.stur)(size, rt, form[1], form[2])
+    return (a64.ldr_reg if load else a64.str_reg)(size, rt, form[1], form[2], form[3])
 
 
 def _fused_move(a: Assembler, op: Op, ops: tuple[Op, ...], i: int, last: dict[int, int],
-                reg_of: Callable[[int], int]) -> bool:
+                reg_of: Callable[[int], int], folded: dict[int, tuple] | None = None) -> bool:
     """A load (op, at i) whose temporary only the next op stores, as one instruction straight between the guest's
     register and memory or register (MOV and MOVZX: 34.7% of the first 10 billion instructions ran 3.49 arm64 words
     each). A register to a register of 32 or 64 bits is one MOV; memory to a register of 32 or 64 bits is one LDR into
@@ -887,13 +931,13 @@ def _fused_move(a: Assembler, op: Op, ops: tuple[Op, ...], i: int, last: dict[in
         _, d, dbits, dhi = dst
         if dhi or dbits not in (32, 64) or src[2] * 8 > dbits:
             return False
-        a.emit(a64.ldr(src[2], d, reg_of(src[1])))
+        a.emit(_mem(True, src[2], d, folded[src[1]]) if folded and src[1] in folded else a64.ldr(src[2], d, reg_of(src[1])))
         return True
     if src[0] == "r" and dst[0] == "m":
         _, s, sbits, shi = src
         if shi or sbits != dst[2] * 8:
             return False
-        a.emit(a64.str_(dst[2], s, reg_of(dst[1])))
+        a.emit(_mem(False, dst[2], s, folded[dst[1]]) if folded and dst[1] in folded else a64.str_(dst[2], s, reg_of(dst[1])))
         return True
     return False
 
@@ -925,6 +969,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.emit(a64.mov32(idx, rt))
             else:
                 a.emit(a64.bfi(idx, rt, 0, bits))
+        elif loc[1] in folded:
+            a.emit(_mem(False, loc[2], rt, folded[loc[1]]))
         else:
             a.emit(a64.str_(loc[2], rt, reg_of(loc[1])))
 
@@ -933,6 +979,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
     fused_store = False                                  # a load fused with the store that follows (_fused_move)
     constant: dict[int, int] = {}                        # temporaries an `imm` of this instruction set
     locked = ins.iclass.endswith("_LOCK")
+    folded = _folded_addresses(ins.ops) if FOLD_ADDRESSES and not locked else {}
     lock_retry: list[int] = []
     for i, op in enumerate(ins.ops):
         for t in _temps_written(op):
@@ -946,18 +993,31 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         if k == "imm":
             a.emit(a64.mov_imm(reg_of(op[1]), op[2]))
             constant[op[1]] = op[2]
+        elif k == "addr" and op[1] in folded:
+            pass                                         # the loads and stores reach it in their own form
         elif k == "addr":
             _, d, base, index, scale, disp, abits, seg = op
             rd = reg_of(d)
-            a.emit(a64.mov_imm(rd, disp & M64))
-            if base is not None:
-                a.emit(a64.add(rd, rd, base))
-            if index is not None:
-                a.emit(a64.add(rd, rd, index, a64.LSL, scale.bit_length() - 1))
+            if isinstance(base, int) and FOLD_ADDRESSES and -4096 < disp < 4096:
+                # recentering step 5: base (+ index) and a small displacement as ADD/SUB immediates, not a MOV of it
+                if index is not None:
+                    a.emit(a64.add(rd, base, index, a64.LSL, scale.bit_length() - 1))
+                else:
+                    a.emit(a64.mov(rd, base))
+                if disp > 0:
+                    a.emit(0x91000000 | disp << 10 | rd << 5 | rd)          # ADD Xd, Xd, #disp
+                elif disp < 0:
+                    a.emit(0xD1000000 | -disp << 10 | rd << 5 | rd)         # SUB Xd, Xd, #-disp
+            else:
+                a.emit(a64.mov_imm(rd, disp & M64))
+                if base is not None:
+                    a.emit(a64.add(rd, rd, base))
+                if index is not None:
+                    a.emit(a64.add(rd, rd, index, a64.LSL, scale.bit_length() - 1))
             _mask(a, rd, abits)
             if seg == "GS":                    # + the thread's GS base: state block gs_base (the TEB)
                 a.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF + STATE_GS_BASE), a64.ldr(8, 16, 16, 0), a64.add(rd, rd, 16))
-        elif k == "ld" and FUSE_LOAD_STORE and not locked and _fused_move(a, op, ins.ops, i, last, reg_of):
+        elif k == "ld" and FUSE_LOAD_STORE and not locked and _fused_move(a, op, ins.ops, i, last, reg_of, folded):
             fused_store = True                           # the store that follows is done (_fused_move)
         elif k == "ld":
             rt, loc = reg_of(op[1]), op[2]
@@ -986,6 +1046,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.bind(retry)
                 lock_retry.append(retry)
                 a.emit(a64.ldaxr(size, rt, addr_reg))
+            elif loc[1] in folded:
+                a.emit(_mem(True, loc[2], rt, folded[loc[1]]))
             else:
                 a.emit(a64.ldr(loc[2], rt, reg_of(loc[1])))
         elif k == "st" and locked and op[1][0] == "m":

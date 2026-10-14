@@ -254,6 +254,39 @@ _LD = {1: 0x39400000, 2: 0x79400000, 4: 0xB9400000, 8: 0xF9400000}
 _ST = {1: 0x39000000, 2: 0x79000000, 4: 0xB9000000, 8: 0xF9000000}
 
 
+_LD_REG = {1: 0x38606800, 2: 0x78606800, 4: 0xB8606800, 8: 0xF8606800}   # LDR (register), option LSL
+_ST_REG = {1: 0x38206800, 2: 0x78206800, 4: 0xB8206800, 8: 0xF8206800}
+_LDUR = {1: 0x38400000, 2: 0x78400000, 4: 0xB8400000, 8: 0xF8400000}
+_STUR = {1: 0x38000000, 2: 0x78000000, 4: 0xB8000000, 8: 0xF8000000}
+
+
+def ldr_reg(size: int, rt: int, rn: int, rm: int, scaled: bool) -> int:
+    """LDRB/LDRH/LDR Wt/LDR Xt [Xn, Xm{, LSL #log2(size)}] (checked against Apple clang's assembler: 0xF8627820 for
+    LDR X0, [X1, X2, LSL #3]; recentering step 5)."""
+    _r(rt, rn, rm)
+    return _LD_REG[size] | rm << 16 | (1 << 12 if scaled and size > 1 else 0) | rn << 5 | rt
+
+
+def str_reg(size: int, rt: int, rn: int, rm: int, scaled: bool) -> int:
+    """STRB/STRH/STR Wt/STR Xt [Xn, Xm{, LSL #log2(size)}] (0xF8227820 for STR X0, [X1, X2, LSL #3])."""
+    _r(rt, rn, rm)
+    return _ST_REG[size] | rm << 16 | (1 << 12 if scaled and size > 1 else 0) | rn << 5 | rt
+
+
+def ldur(size: int, rt: int, rn: int, offset: int) -> int:
+    """LDURB/LDURH/LDUR [Xn, #offset], offset -256..255 unscaled (0xF85F8020 for LDUR X0, [X1, #-8])."""
+    _r(rt, rn)
+    assert -256 <= offset <= 255
+    return _LDUR[size] | (offset & 0x1FF) << 12 | rn << 5 | rt
+
+
+def stur(size: int, rt: int, rn: int, offset: int) -> int:
+    """STURB/STURH/STUR [Xn, #offset], offset -256..255 unscaled (0xF81F8020 for STUR X0, [X1, #-8])."""
+    _r(rt, rn)
+    assert -256 <= offset <= 255
+    return _STUR[size] | (offset & 0x1FF) << 12 | rn << 5 | rt
+
+
 def ldr(size: int, rt: int, rn: int, offset: int = 0) -> int:
     """LDRB/LDRH/LDR Wt/LDR Xt [Xn, #offset]; zero-extends; offset scaled by size."""
     _r(rt, rn)
