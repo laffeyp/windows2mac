@@ -860,6 +860,44 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
     return image
 
 
+FUSE_LOAD_STORE = True       # recentering step 5: a load whose only use is the store after it is one instruction
+
+
+def _fused_move(a: Assembler, op: Op, ops: tuple[Op, ...], i: int, last: dict[int, int],
+                reg_of: Callable[[int], int]) -> bool:
+    """A load (op, at i) whose temporary only the next op stores, as one instruction straight between the guest's
+    register and memory or register (MOV and MOVZX: 34.7% of the first 10 billion instructions ran 3.49 arm64 words
+    each). A register to a register of 32 or 64 bits is one MOV; memory to a register of 32 or 64 bits is one LDR into
+    it, which zero-extends as x86's 32-bit destinations do; a register to memory of its own width is one STR. A load
+    that faults has written nothing, as before. Returns False when the pair is none of these."""
+    if i + 1 >= len(ops):
+        return False
+    nxt, t, src = ops[i + 1], op[1], op[2]
+    if nxt[0] != "st" or nxt[2] != t or last.get(t) != i + 1:
+        return False
+    dst = nxt[1]
+    if src[0] == "r" and dst[0] == "r":
+        _, s, sbits, shi = src
+        _, d, dbits, dhi = dst
+        if shi or dhi or sbits != dbits or sbits not in (32, 64):
+            return False
+        a.emit(a64.mov(d, s) if sbits == 64 else a64.mov32(d, s))
+        return True
+    if src[0] == "m" and dst[0] == "r":
+        _, d, dbits, dhi = dst
+        if dhi or dbits not in (32, 64) or src[2] * 8 > dbits:
+            return False
+        a.emit(a64.ldr(src[2], d, reg_of(src[1])))
+        return True
+    if src[0] == "r" and dst[0] == "m":
+        _, s, sbits, shi = src
+        if shi or sbits != dst[2] * 8:
+            return False
+        a.emit(a64.str_(dst[2], s, reg_of(dst[1])))
+        return True
+    return False
+
+
 def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None,
                  nzcv_from: str | None = None) -> bool:
     """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`. `symbols` are the
@@ -892,6 +930,7 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
 
     ends = False
     nzcv_ready = False                                   # an ALU op fused with the flags op that follows
+    fused_store = False                                  # a load fused with the store that follows (_fused_move)
     constant: dict[int, int] = {}                        # temporaries an `imm` of this instruction set
     locked = ins.iclass.endswith("_LOCK")
     lock_retry: list[int] = []
@@ -918,6 +957,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             _mask(a, rd, abits)
             if seg == "GS":                    # + the thread's GS base: state block gs_base (the TEB)
                 a.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF + STATE_GS_BASE), a64.ldr(8, 16, 16, 0), a64.add(rd, rd, 16))
+        elif k == "ld" and FUSE_LOAD_STORE and not locked and _fused_move(a, op, ins.ops, i, last, reg_of):
+            fused_store = True                           # the store that follows is done (_fused_move)
         elif k == "ld":
             rt, loc = reg_of(op[1]), op[2]
             if loc[0] == "r":
@@ -950,6 +991,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "st" and locked and op[1][0] == "m":
             a.emit(a64.stlxr(op[1][2], 16, reg_of(op[2]), reg_of(op[1][1])))
             a.branch(lambda off: a64.cbnz(16, off), lock_retry[-1])
+        elif k == "st" and fused_store:
+            fused_store = False
         elif k == "st":
             store(op[1], reg_of(op[2]))
         elif k == "alu":
@@ -1212,7 +1255,8 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 skip = a.label()
                 arm = NZCV_CONDITIONS.get(nzcv_from or "", {}).get(op[1])
                 if arm is not None:                              # the previous instruction's NZCV (NZCV_CONDITIONS)
-                    a.branch(lambda off, c=INVERSE[arm]: a64.bcond(c, off), skip)
+                    inverse = INVERSE[arm]
+                    a.branch(lambda off: a64.bcond(inverse, off), skip)
                 else:
                     _eval_condition(a, op[1])
                     a.branch(lambda off: a64.cbz(16, off), skip)
