@@ -300,6 +300,15 @@
 
 ## Sprint tail
 
+### Sprint 069 (2026-10-14, closed: CI run 38654917874 success on 773579d1)
+- **Scope:** thread switches inside the VM (recentering step 5): the run table, the switch and the signal in the guest runtime by the host's rule.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* family sweeps of 68 families, each CANDIDATE_ACCEPTED (indexes de414a3b, 773579d1: 456 of 458 classes); frontier-643a6283510c-1792020875595657000: EXECUTION_STARTED, its stop, TRACE_INGESTED, COMPARISON_COMPLETED `conforms` (168 of 168 lines, 0 divergences), SESSION_COMPLETED.
+  - *Observation 1 (missing pair, of the judge):* the on-against-off equivalence passed while the new path never ran on the batch run (0 switches in the VM: a second process turned it off). Disposition: resolved-here (d33e4fb8; the progress line's switch counter; KIT_DIARY #56).
+  - *Observation 2 (payload anomaly, of the work):* each slice switch had counted its block twice. Disposition: resolved-here (item D).
+  - *Observation 3 (blind plant, of the judge):* SwitchToThread's answer inverted changes no row; no threaded probe reads it. Disposition: recorded in the card; a probe row for SwitchToThread's answer is open.
+- **Closed:** CI run 38654917874 (success on 773579d1).
+
 ### Sprint 068 (2026-10-14, closed: CI run 38632198138 success on 4e98c57c)
 - **Scope:** speed toward the playable slice: the time census's exits removed one cause at a time, each measured, the frontier conforming.
 - **Rubber Duck Pass:**

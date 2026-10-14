@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 069
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -105,4 +105,7 @@ census run that had the Mac to itself; CI `success`.
   | comparison | 0 divergences, 168 lines | 0 divergences, 168 lines |
 
   hvc 10 rose from 117 to 13,415 and hvc 11 from 2,561 to 20,514: another interleaving reaches other code.
+- **Closed** on 773579d1 (CI run 38654917874) with frontier-643a6283510c-1792020875595657000 conforming. Left for
+  later items: hvc 12's 57,782 exits are waits with no thread ready (the host warps the instruction clock to the
+  nearest deadline), which the VM can do too; hvc 1 (59,417 dispatch misses) is step 6's.
 
