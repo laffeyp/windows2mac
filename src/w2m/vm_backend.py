@@ -862,9 +862,10 @@ def build_runtime(last_error_source: str | None = None, file_source: str | None 
 
 FUSE_LOAD_STORE = True       # recentering step 5: a load whose only use is the store after it is one instruction
 FOLD_ADDRESSES = True        # recentering step 5: an address only loads and stores use goes into their own form
+AddressForm = tuple[Any, ...]  # ("imm", base, disp) | ("unscaled", base, disp) | ("reg", base, index, scaled)
 
 
-def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, tuple]:
+def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, AddressForm]:
     """The `addr` temporaries whose every use in this instruction is a plain load or store, each with the Arm form that
     reaches it (recentering step 5): ("imm", base, disp) for LDR/STR's own scaled offset, ("unscaled", base, disp) for
     LDUR/STUR's -256..255, ("reg", base, index, scaled) for the register-offset form. 64-bit addresses with no segment
@@ -880,7 +881,7 @@ def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, tuple]:
             other.update(t for t in _temps_read(op) if t != op[1][1])
             continue
         other.update(_temps_read(op))
-    folded: dict[int, tuple] = {}
+    folded: dict[int, AddressForm] = {}
     for op in ops:
         if op[0] != "addr":
             continue
@@ -898,7 +899,7 @@ def _folded_addresses(ops: tuple[Op, ...]) -> dict[int, tuple]:
     return folded
 
 
-def _mem(load: bool, size: int, rt: int, form: tuple) -> int:
+def _mem(load: bool, size: int, rt: int, form: AddressForm) -> int:
     """The load or store of `size` bytes between rt and a folded address (_folded_addresses)."""
     if form[0] == "imm":
         return (a64.ldr if load else a64.str_)(size, rt, form[1], form[2])
@@ -908,7 +909,7 @@ def _mem(load: bool, size: int, rt: int, form: tuple) -> int:
 
 
 def _fused_move(a: Assembler, op: Op, ops: tuple[Op, ...], i: int, last: dict[int, int],
-                reg_of: Callable[[int], int], folded: dict[int, tuple] | None = None) -> bool:
+                reg_of: Callable[[int], int], folded: dict[int, AddressForm] | None = None) -> bool:
     """A load (op, at i) whose temporary only the next op stores, as one instruction straight between the guest's
     register and memory or register (MOV and MOVZX: 34.7% of the first 10 billion instructions ran 3.49 arm64 words
     each). A register to a register of 32 or 64 bits is one MOV; memory to a register of 32 or 64 bits is one LDR into
