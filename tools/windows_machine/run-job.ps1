@@ -17,8 +17,8 @@
 #           game mirrored from C:\w2m\games\<game> to D:\w2m\game (the runners' GAME_DIR) and checked against
 #           files.json, C:\w2m\app a junction to it, and before each execution the game's saved state removed
 #           (HKCU\Software\<company>\<product>, LocalLow\<company>\<product>; §5) so each starts as a runner's does.
-#           job.json `audio` "off" disables the audio endpoints for the job (the runners have none: their unity.log
-#           says "FMOD initialized on nosound output") and enables them again after. In play mode the game is
+#           job.json `audio` "off" stops the Windows Audio service for the job (the runners have no output: their
+#           unity.log says "FMOD initialized on nosound output") and starts it again after. In play mode the game is
 #           pinned to the high-performance GPU (UserGpuPreferences GpuPreference=2) and the screen is saved every
 #           `frame_seconds` (default 10) as out\<i>\frames\<seconds>.png.
 # Every input's sha256 is in job.json `inputs`; a mismatch stops the job before anything runs. job.json `cpu_class`
@@ -154,11 +154,14 @@ try {
       Note "launcher built"
       $pristine = "C:\w2m\games\$($spec.game)"; $gameDir = 'D:\w2m\game'; $app = 'C:\w2m\app'; $exe = $spec.exe
       $listing = (Get-Content "games/$($spec.game)/files.json" -Raw | ConvertFrom-Json).listing
-      $disabledAudio = @()
+      # audio off: the Windows Audio service stopped for the job, so the game's FMOD finds no output and says
+      # "FMOD initialized on nosound output" as on the runners (disabling the two endpoint devices left FMOD an output:
+      # 2026-10-13, ten runs with no such line)
+      $stoppedAudio = $false
       if ($spec.audio -eq 'off') {
-        $disabledAudio = @(Get-PnpDevice -Class AudioEndpoint -Status OK -ErrorAction SilentlyContinue)
-        $disabledAudio | ForEach-Object { Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false }
-        Note "audio endpoints disabled: $($disabledAudio.Count)"
+        Stop-Service Audiosrv -Force
+        $stoppedAudio = $true
+        Note "Windows Audio service: $((Get-Service Audiosrv).Status)"
       }
       if ($spec.mode -eq 'play') {
         $pref = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
@@ -288,7 +291,7 @@ try {
     } finally {
       Pop-Location
       if (Test-Path C:\w2m\app) { cmd /c rmdir C:\w2m\app }
-      $disabledAudio | ForEach-Object { Enable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false }
+      if ($stoppedAudio) { Start-Service Audiosrv }
     }
   } elseif ($spec.kind -eq 'batch') {
     foreach ($item in $spec.items) {
