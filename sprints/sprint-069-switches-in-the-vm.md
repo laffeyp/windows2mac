@@ -81,3 +81,28 @@ A to D built with the test failing before each; the batch run conforms with swit
 census run that had the Mac to itself; CI `success`.
 
 ## observed
+- **A to D** (d220b420; index de414a3b). The run table holds each thread's saved state, status, suspend count,
+  deadline and census in the monitor's memory, and `GuestThread` is a view of its entry. threads.c `w2m_switch` makes
+  slice ends, blocking waits and yields switch without an exit; `w2m_signal` readies waiters itself (the published key
+  table and THREAD_SIGNAL are gone). Each slice switch had counted its block's instructions twice; both paths now give
+  them back. `tests/test_switch_in_vm.py`: threads, running_thread_context, wait_handoff, thread_stacks, late_tls and
+  processes, on the instruction clock with `SWITCH_IN_VM` on and off, give equal rows and equal per-thread instruction
+  and PAUSE counts, with fewer hvc 12 exits. Plants: a suspended thread switched to and a slice's count not given back
+  each change the census. A third, the rotation started one thread late, hangs the probe (two threads never switch).
+  A fourth, SwitchToThread's answer inverted, changes nothing: no threaded probe reads it.
+- **The switch beside a second process** (d33e4fb8; index 773579d1). The first batch run with A to D conformed and
+  made 0 switches in the VM: the game starts UnityCrashHandler64.exe, and the switch stayed off for any machine of two
+  VMs. It now stays on unless another process is ready or waits with a deadline, `_slice_until`'s own rule.
+- **E, the census** (warm translation cache, the Mac to itself, the same tree with the switch off and on):
+
+  | | switch in the host | switch in the VM |
+  |---|---|---|
+  | wall seconds | 92.4 | 63.1 |
+  | rate at the last progress line | 1,297 M/s | 2,355 M/s |
+  | hvc 4 | 290,780 | 0 |
+  | hvc 12 | 206,756 | 57,782 |
+  | switches in the VM | 0 | 1,255,821 |
+  | comparison | 0 divergences, 168 lines | 0 divergences, 168 lines |
+
+  hvc 10 rose from 117 to 13,415 and hvc 11 from 2,561 to 20,514: another interleaving reaches other code.
+

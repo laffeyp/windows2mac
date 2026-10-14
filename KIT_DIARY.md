@@ -508,3 +508,19 @@ in three runs; the audit it prompted found two counting defects no judge of valu
 **Kit change suggested:** an observation contract that compares whole-program behavior states the shared quantities
 the run's values depend on (clock, schedule, address layout) and how a run varies each, so a moved comparison has a
 named first question.
+
+### 2026-10-14 — Sprint 069: a switch that never ran, shown by its own counter
+
+**What happened:** thread switches moved into the VM, judged by running five threaded families with the switch on and
+off and requiring equal rows and equal per-thread instruction counts. Every check passed, and the batch run conformed.
+The batch run's progress line also printed a new counter, the switches the VM had made, and it read 0. The game
+starts a second process (its crash handler), and the switch had been turned off for any run with two processes, a
+guard copied from a rule that needed only the other process to be idle. Nothing failed: the host made every switch as
+before, so the comparison had nothing to catch.
+
+**Finding (#56):** a judge that requires the new path to equal the old one passes as well when the new path never
+runs. An equivalence check needs a reach count beside it: how often the new path ran on the workload that matters. The
+counter cost one line and was the only thing that showed the batch run had not changed.
+
+**Kit change suggested:** a card that moves work from one path to another names, in its observation contract, the
+counter that shows the new path taken on the target workload, and the census reports it.
