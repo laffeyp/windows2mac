@@ -1920,6 +1920,52 @@ FAMILIES: dict[str, Family] = {
                                     ("query.below_guard", "query.dealloc"), host="w2m.virtual_memory"),
             "limits_swapped": Plant("    *(u64 *)low = *(const u64 *)((u8 *)w2m_teb() + 0x1478);",
                                     "    *(u64 *)low = *(const u64 *)((u8 *)w2m_teb() + 0x10);", ("limits",))}),
+    "thread_stacks": Family(
+        name="thread_stacks",
+        contract_id="windows.memory.created_thread_stack",
+        version="0.1.0",
+        summary=("A created thread's stack (Sprint 066 item 4): a reservation of SizeOfStackReserve pages (256; 64 for "
+                 "STACK_SIZE_PARAM_IS_A_RESERVATION 0x40000), the initial commit (2 pages; 32 for 0x20000), three "
+                 "PAGE_GUARD pages below StackLimit, StackLimit moving down one page for each page touched, and a "
+                 "touch beyond the guard pages an access violation that does not move the stack."),
+        probe="thread_stacks", guest_file="threads.c",
+        derive=described("Coarsens `committed_pages` of default.teb and reserve.teb to 1 or 2: how many pages a new thread "
+                         "has touched when its TEB is read is timing (2 and 1 in the laptop's two executions).",
+                         lambda printed: [{**r, "committed_pages": "1-2"} if r.get("s") in ("default.teb", "reserve.teb")
+                                          and r.get("committed_pages") in (1, 2) else r for r in printed],
+                         "thread_stacks_rows"),
+        runs={
+              "lap-20261013T234430841Z-5cb60b6d": Run("laptop", "d34bcc7a94ddb6aee2801fb82c460489037b2a6f3dd1a5b4e8f16cc1fd4d4715", "thread_stacks-20261013T234430841Z", "13th Gen Intel(R) Core(TM) i5-13420H"),
+        },
+        documented=(
+            documented("ms-thread-stack-size", "procthread/thread-stack-size", "2025-07-14",
+                       "The system commits additional pages from the reserved stack memory as they are needed, until "
+                       "either the stack reaches the reserved size minus one page (which is used as a guard page to "
+                       "prevent stack overflow) or the system is so low on memory that the operation fails."),),
+        open_questions=(
+            "The rows come from one machine, the laptop (Windows 11 Home 26200); the runners have not run this probe.",
+            "w2m keeps 4 reserved pages below a created thread's committed stack and never moves StackLimit; Windows "
+            "commits on demand through three guard pages (default.grow, default.grown.*, skip).")),
+    "running_thread_context": Family(
+        name="running_thread_context",
+        contract_id="windows.thread.running_context",
+        version="0.1.0",
+        summary=("GetThreadContext on a suspended thread (Sprint 066 item 4), as mono's collector calls it: a thread "
+                 "suspended while it spins answers every planted general register but RSP, XMM0-15 and MXCSR 0x9FC0, "
+                 "RIP in its loop and RSP in its stack; a thread suspended in a wait answers RIP in ntdll and RSP in "
+                 "its stack below the frame."),
+        probe="running_thread_context", guest_file="threads.c",
+        runs={
+              "lap-20261013T234642777Z-5cb60b6d": Run("laptop", "926fe1ad5ba0fcc1fcb235f1e3a107d52191993581edad53c53e388bacde59c3", "running_thread_context-20261013T234642777Z", "13th Gen Intel(R) Core(TM) i5-13420H"),
+        },
+        documented=(
+            documented("ms-getthreadcontext", "api/processthreadsapi/nf-processthreadsapi-getthreadcontext", "2025-07-01",
+                       "You cannot get a valid context for a running thread. Use the SuspendThread function to suspend "
+                       "the thread before calling GetThreadContext."),),
+        open_questions=(
+            "The rows come from one machine, the laptop; the runners have not run this probe.",
+            "w2m parks a waiting thread at its bridge thunk, so a context read in a wait shows RIP outside every "
+            "module; Windows shows ntdll (context.waiting).")),
     "thread_handles": Family(
         name="thread_handles",
         contract_id="windows.handle.thread_handles",

@@ -29,6 +29,7 @@ u64 w2m_guest_stubs(void) {
 
 void *w2m_guest_frame(u64 rsp, u64 size, void (*resume)(struct w2m_guest_call *, u64)) {
     struct w2m_guest_call *c = (struct w2m_guest_call *)((rsp - FRAME_GAP - size) & ~15ull);
+    if ((u64)c < w2m_teb()->stack_limit) w2m_stack_grow((u64)c, 1);     /* below StackLimit: committed first */
     u8 *b = (u8 *)c;
     for (u64 i = 0; i < size; i++) b[i] = 0;
     c->magic = W2M_GUEST_CALL_MAGIC;

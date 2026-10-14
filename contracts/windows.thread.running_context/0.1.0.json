@@ -1,0 +1,102 @@
+{
+ "contract_id": "windows.thread.running_context",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "GetThreadContext on a suspended thread (Sprint 066 item 4), as mono's collector calls it: a thread suspended while it spins answers every planted general register but RSP, XMM0-15 and MXCSR 0x9FC0, RIP in its loop and RSP in its stack; a thread suspended in a wait answers RIP in ntdll and RSP in its stack below the frame.",
+ "applicability": "laptop (13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/running_thread_context/running_thread_context.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "context.running",
+    "ret": 1,
+    "err": 57005,
+    "flags": 1048607,
+    "gpr_planted": 65519,
+    "rsp_in_stack": 1,
+    "rip_in_loop": 1,
+    "xmm_planted": 65535,
+    "mxcsr": 40896,
+    "fltsave_mxcsr": 40896,
+    "seg_cs": 51,
+    "seg_ss": 43,
+    "seg_ds": 43,
+    "seg_es": 43,
+    "seg_fs": 83,
+    "seg_gs": 43,
+    "eflags_if": 1,
+    "debug_zero": 1
+   },
+   {
+    "s": "context.running.again",
+    "ret": 1,
+    "count_moved": 1,
+    "gpr_planted": 65519,
+    "xmm_planted": 65535,
+    "rip_in_loop": 1
+   },
+   {
+    "s": "context.waiting",
+    "ret": 1,
+    "err": 57005,
+    "flags": 1048579,
+    "rip_in_image": 0,
+    "rip_in_ntdll": 1,
+    "rip_in_kernelbase": 0,
+    "rip_in_kernel32": 0,
+    "rsp_in_stack": 1,
+    "rsp_below_frame": 1
+   },
+   {
+    "s": "resume",
+    "spinner": 1,
+    "waiter": 1,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run lap-20261013T234642777Z-5cb60b6d: laptop, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:926fe1ad5ba0fcc1fcb235f1e3a107d52191993581edad53c53e388bacde59c3",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "running_thread_context-20261013T234642777Z-1",
+    "running_thread_context-20261013T234642777Z-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getthreadcontext",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadcontext (page updated 2025-07-01; retrieved 2026-10-10)",
+   "quote": "You cannot get a valid context for a running thread. Use the SuspendThread function to suspend the thread before calling GetThreadContext."
+  }
+ ],
+ "open_questions": [
+  "The rows come from one machine, the laptop; the runners have not run this probe.",
+  "w2m parks a waiting thread at its bridge thunk, so a context read in a wait shows RIP outside every module; Windows shows ntdll (context.waiting)."
+ ],
+ "sections": {
+  "probe": "probes/running_thread_context (Sprint 044)",
+  "implementation": "tools/guest_runtime/threads.c",
+  "rows": "scripts/family_run.py running_thread_context",
+  "excluded": "none"
+ }
+}

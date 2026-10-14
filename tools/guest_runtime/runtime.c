@@ -248,6 +248,13 @@ void w2m_exception(void) {
         for (int j = 0; j < 16; j++) st->xmm[i][j] = s->q[i][j];
 
     struct w2m_exception_area *e = (struct w2m_exception_area *)W2M_EXCEPTION_VA;
+    /* a touch of the stack's guard pages commits on demand and the instruction runs again; Windows delivers no
+     * exception for it (Sprint 066: contracts/windows.memory.created_thread_stack, default.grow) */
+    if (!s->sw_code && w2m_stack_grow(s->far, 0)) {
+        context_from_state(&e->context, st);
+        w2m_resume_context(&e->context);
+        return;
+    }
     struct w2m_exception_record *r = &e->record;
     u8 *rb = (u8 *)r;
     for (u64 i = 0; i < sizeof *r; i++) rb[i] = 0;

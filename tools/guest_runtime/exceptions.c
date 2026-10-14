@@ -270,6 +270,8 @@ static void resume_context(struct w2m_context *c) {
     st->redirect_rip = stubs() + STUB_RESTORE;
 }
 
+void w2m_resume_context(struct w2m_context *c) { resume_context(c); }
+
 static void end_process(u32 code) {
     w2m_host(W2M_HOST_EXIT, code, 0, 0, 0, 0);
     for (;;) {}

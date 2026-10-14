@@ -1,0 +1,549 @@
+{
+ "contract_id": "windows.memory.created_thread_stack",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "A created thread's stack (Sprint 066 item 4): a reservation of SizeOfStackReserve pages (256; 64 for STACK_SIZE_PARAM_IS_A_RESERVATION 0x40000), the initial commit (2 pages; 32 for 0x20000), three PAGE_GUARD pages below StackLimit, StackLimit moving down one page for each page touched, and a touch beyond the guard pages an access violation that does not move the stack.",
+ "applicability": "laptop (13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/thread_stacks/thread_stacks.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "default.teb",
+    "reserve_pages": 256,
+    "header_reserve_pages": 256,
+    "header_commit_pages": 1,
+    "committed_pages": "1-2",
+    "sp_inside": 1,
+    "aligned": 1,
+    "limit_above_dealloc": 1
+   },
+   {
+    "s": "default.limits",
+    "low": "dealloc",
+    "high": "base",
+    "err": 57005
+   },
+   {
+    "s": "default.query.sp",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "default.query.base-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "default.query.limit",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit",
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "default.query.limit-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-1p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "default.query.limit-2p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-2p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "default.query.limit-3p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-3p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "default.query.limit-4p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-4p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "default.query.limit-5p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-5p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "default.query.dealloc",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "dealloc",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "default.grow",
+    "limit_unchanged": 1,
+    "moved_1": 1,
+    "moved_2": 2,
+    "moved_3": 3,
+    "moved_4": 4,
+    "moved_5": 5,
+    "moved_6": 6,
+    "moved_7": 7,
+    "moved_8": 8
+   },
+   {
+    "s": "default.grown.sp",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.base-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.limit",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit",
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.limit-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-1p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.limit-2p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-2p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.limit-3p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-3p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.limit-4p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-4p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.limit-5p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-5p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "default.grown.dealloc",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "dealloc",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "reserve.teb",
+    "reserve_pages": 64,
+    "header_reserve_pages": 256,
+    "header_commit_pages": 1,
+    "committed_pages": "1-2",
+    "sp_inside": 1,
+    "aligned": 1,
+    "limit_above_dealloc": 1
+   },
+   {
+    "s": "reserve.limits",
+    "low": "dealloc",
+    "high": "base",
+    "err": 57005
+   },
+   {
+    "s": "reserve.query.sp",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.base-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.limit",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit",
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.limit-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-1p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.limit-2p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-2p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.limit-3p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-3p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.limit-4p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-4p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.limit-5p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-5p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "reserve.query.dealloc",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "dealloc",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "commit.teb",
+    "reserve_pages": 256,
+    "header_reserve_pages": 256,
+    "header_commit_pages": 1,
+    "committed_pages": 32,
+    "sp_inside": 1,
+    "aligned": 1,
+    "limit_above_dealloc": 1
+   },
+   {
+    "s": "commit.limits",
+    "low": "dealloc",
+    "high": "base",
+    "err": 57005
+   },
+   {
+    "s": "commit.query.sp",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.base-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.limit",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit",
+    "allocation_base": "dealloc",
+    "end": "base",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 4,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.limit-1",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-1p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.limit-2p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-2p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.limit-3p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-3p",
+    "allocation_base": "dealloc",
+    "end": "limit",
+    "allocation_protect": 4,
+    "state": 4096,
+    "protect": 260,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.limit-4p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-4p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.limit-5p",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "limit-5p",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "commit.query.dealloc",
+    "ret_is_size": 1,
+    "err": 57005,
+    "base_address": "dealloc",
+    "allocation_base": "dealloc",
+    "end": "limit-3p",
+    "allocation_protect": 4,
+    "state": 8192,
+    "protect": 0,
+    "type": 131072
+   },
+   {
+    "s": "skip",
+    "code": 3221225477,
+    "write": 1,
+    "at_touched": 1,
+    "moved": 0,
+    "exit_code": 9
+   }
+  ],
+  "derivation": "scripts/family_run.py thread_stacks_rows: Coarsens `committed_pages` of default.teb and reserve.teb to 1 or 2: how many pages a new thread has touched when its TEB is read is timing (2 and 1 in the laptop's two executions)."
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run lap-20261013T234430841Z-5cb60b6d: laptop, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:d34bcc7a94ddb6aee2801fb82c460489037b2a6f3dd1a5b4e8f16cc1fd4d4715",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "thread_stacks-20261013T234430841Z-1",
+    "thread_stacks-20261013T234430841Z-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-thread-stack-size",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/procthread/thread-stack-size (page updated 2025-07-14; retrieved 2026-10-10)",
+   "quote": "The system commits additional pages from the reserved stack memory as they are needed, until either the stack reaches the reserved size minus one page (which is used as a guard page to prevent stack overflow) or the system is so low on memory that the operation fails."
+  }
+ ],
+ "open_questions": [
+  "The rows come from one machine, the laptop (Windows 11 Home 26200); the runners have not run this probe.",
+  "w2m keeps 4 reserved pages below a created thread's committed stack and never moves StackLimit; Windows commits on demand through three guard pages (default.grow, default.grown.*, skip)."
+ ],
+ "sections": {
+  "probe": "probes/thread_stacks (Sprint 044)",
+  "implementation": "tools/guest_runtime/threads.c",
+  "rows": "scripts/family_run.py thread_stacks",
+  "excluded": "none"
+ }
+}

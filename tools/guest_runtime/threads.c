@@ -63,6 +63,7 @@ u64 k32_CreateThread(u64 attributes, u64 stack_size, u64 start, u64 parameter, u
         w2m_unimplemented(W2M_API_CreateThread, attributes ? attributes : flags);       /* not in the rows */
     u32 tid = (u32)w2m_host(W2M_HOST_THREAD, W2M_THREAD_CREATE, start, parameter,
                             (u64)flags | stack_size << 32, 0);
+    w2m_tlb_flush();                              /* the new stack's guard and reserved pages are unmapped */
     u64 h = w2m_object_thread(W2M_API_CreateThread, tid);
     if (tid_out) *(u32 *)tid_out = tid;
     return w2m_logged(W2M_API_CreateThread, start, h);

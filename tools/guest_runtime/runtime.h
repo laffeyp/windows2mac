@@ -315,7 +315,25 @@ enum { W2M_EXCEPTION_STUBS = 1, W2M_EXCEPTION_CAPTURE_XMM };
 
 /* W2M_HOST_THREAD's first argument (src/w2m/scheduler.py). */
 enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_SUSPEND, W2M_THREAD_RESUME,
-       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL };
+       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL, W2M_THREAD_STACK_GROW };
+
+/* After a request that mapped or unmapped pages (a thread's stack: THREAD_CREATE, THREAD_STACK_GROW), the stage-1
+ * translations cached for them go (Arm ARM D8.13: TLBI VMALLE1, then DSB and ISB). */
+static inline void w2m_tlb_flush(void) {
+    __asm__ volatile("dsb ishst\n\ttlbi vmalle1\n\tdsb ish\n\tisb" ::: "memory");
+}
+
+/* Commit the current thread's stack down to address's page, as Windows does on a touch of the stack's guard pages
+ * (vm_backend._stack_grow): 1 when it did, 0 when the address is not reachable so (an access violation). probe: the
+ * runtime is placing a frame below StackLimit, which grows the stack page by page. */
+static inline int w2m_stack_grow(u64 address, int probe) {
+    int grown = (int)w2m_host(W2M_HOST_THREAD, W2M_THREAD_STACK_GROW, address, (u64)probe, 0, 0);
+    if (grown) w2m_tlb_flush();
+    return grown;
+}
+
+/* Resume the faulting thread at a CONTEXT (exceptions.c's restore stub): a fault the runtime resolved itself. */
+void w2m_resume_context(struct w2m_context *c);   /* exceptions.c */
 
 /* The contract surface a candidate may implement (contracts/windows.thread.last_error.set_get).
  * The default is tools/guest_runtime/last_error.c. */

@@ -17,6 +17,7 @@ observed) stops the run by name.
 from __future__ import annotations
 
 from collections.abc import Callable
+from array import array
 from dataclasses import dataclass, field
 
 from w2m.kernel32 import Unimplemented
@@ -49,13 +50,14 @@ class Reservation:
     size: int                        # page-rounded
     allocation_protect: int
     state: bytearray = field(default_factory=bytearray)      # per page: RESERVED or COMMITTED
-    protect: bytearray = field(default_factory=bytearray)    # per page: the protection while committed
+    protect: array[int] = field(default_factory=lambda: array("H"))   # per page: the protection while committed (16
+                                                              # bits: PAGE_GUARD 0x100 with the rest, a stack's guard)
     type: int = MEM_PRIVATE                                   # MEM_MAPPED for a file view (Sprint 049)
 
     def __post_init__(self) -> None:
         pages = self.size // PAGE
         self.state = bytearray([RESERVED]) * pages
-        self.protect = bytearray(pages)
+        self.protect = array("H", bytes(2 * pages))
 
 
 @dataclass

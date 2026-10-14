@@ -51,7 +51,7 @@ from w2m.kernel import KIND_ERROR_MODE, KIND_STANDARD
 from w2m.file_bridge import (FILE_DUP, FILE_FSTAT, FILE_LIST, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK, BridgeRequestError,
                              FileBridge)
 from w2m.modules import APP_DIRECTORY as APP_PATH, EXPORTS as EXPORTS_SPEC, Modules
-from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, STACK_GUARD_PAGES, VirtualMemory
+from w2m.virtual_memory import MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_GUARD, STACK_GUARD_PAGES, VirtualMemory
 from w2m.kernel32 import M64, HandlerFailed, Thread, Unimplemented, monotonic_count
 from w2m.lift import RAX, RCX, RDI, RDX, RSI, Lifted, LiftError, Op, lift
 from w2m.loader import (DLL_INIT_FAILED, THUNK_BASE, TLS_SLOTS, GuestFault, Image, LoadError, Loaded, Memory, Region,
@@ -241,7 +241,7 @@ REQUEST_FILES: dict[str, tuple[str, ...]] = {
                                                    "UNLINK", "STAT", "MKDIR", "RMDIR", "FSTAT", "DUP", "LIST")},
 }
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
-    THREAD_SIGNAL = range(1, 9)
+    THREAD_SIGNAL, THREAD_STACK_GROW = range(1, 10)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -1105,6 +1105,16 @@ def service_for(dll: str, fn: str) -> tuple[str, bool] | None:
     return service
 
 
+def synthetic_optional_header(mm: Any, page: int) -> None:
+    """A synthetic module's PE32+ optional header (PE Format: Magic 0x20B at +0x18, SizeOfImage at +0x50 of the
+    PE signature): the one page w2m keeps for it, so a program that sizes a module from its header (the
+    running_thread_context probe: is RIP in ntdll) finds the page, as w2m's own module lookup does.
+    SizeOfOptionalHeader (+0x14) says 0xF0, the PE32+ size."""
+    struct.pack_into("<H", mm, page + 0x80 + 0x14, 0xF0)
+    struct.pack_into("<H", mm, page + 0x80 + 0x18, 0x20B)
+    struct.pack_into("<I", mm, page + 0x80 + 0x18 + 0x38, 0x1000)
+
+
 class VM:
     """One guest thread of `loaded` in a fresh Hypervisor.framework VM.
 
@@ -1356,6 +1366,7 @@ class VM:
             struct.pack_into("<I", self.mm, page + 0x3C, 0x80)                 # e_lfanew
             self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
             struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)             # x64, no sections
+            synthetic_optional_header(self.mm, page)
         img = self.ld.image
         base = img.image_base if img is not None else 0
         imports = {f"{n.split('!', 1)[0].lower()}!{n.split('!', 1)[1].lower()}": t for t, n in self.ld.thunks.items()}
@@ -1391,6 +1402,7 @@ class VM:
             struct.pack_into("<I", self.mm, page + 0x3C, 0x80)
             self.mm[page + 0x80:page + 0x84] = b"PE\0\0"
             struct.pack_into("<HH", self.mm, page + 0x84, 0x8664, 0)
+            synthetic_optional_header(self.mm, page)
             system[c] = (PROCESS_VA + off, spelling)
             return PROCESS_VA + off
 
@@ -1537,15 +1549,26 @@ class VM:
         """CreateThread's host half: a thread id, a TEB, a stack, static TLS, the attach stub and the first state."""
         tid = max(self.threads) + 4
         program = self.ld.images[0].pe if self.ld.images else None
-        reserve = max(stack_size if flags & 0x10000 and stack_size else 0,
-                      program.stack_reserve if program is not None else 0x100000, 0x10000)
+        # STACK_SIZE_PARAM_IS_A_RESERVATION: the size asked for, smaller than the image's or not (row reserve.teb:
+        # 64 pages for 0x40000); otherwise the image's SizeOfStackReserve
+        reserve = max(stack_size if flags & 0x10000 and stack_size else
+                      (program.stack_reserve if program is not None else 0x100000), 0x10000)
         reserve = (reserve + 0xFFFF) & ~0xFFFF
         dealloc, err = self.virtual.alloc(0, reserve, MEM_RESERVE, 0x04)
         if err:
             raise Unimplemented(f"a thread's stack of 0x{reserve:x} bytes: VirtualAlloc error {err}")
-        limit = dealloc + (1 + STACK_GUARD_PAGES) * 0x1000            # as the first thread's (_init_process)
-        self.virtual.alloc(limit, dealloc + reserve - limit, MEM_COMMIT, 0x04)
+        # a created thread's stack as Windows lays it out (contracts/windows.memory.created_thread_stack, Sprint 066):
+        # the initial commit at the top (the requested size, else the image's SizeOfStackCommit), three PAGE_GUARD
+        # pages below StackLimit, the rest reserved; the guard and reserved pages are unmapped, and a fault in the
+        # guard commits on demand (_stack_grow), one below it is an access violation
         top = dealloc + reserve
+        commit = stack_size if stack_size and not flags & 0x10000 else (program.stack_commit if program else 0x1000)
+        commit = min(max((commit + 0xFFF) & ~0xFFF, 0x1000), reserve - (2 + STACK_GUARD_PAGES) * 0x1000)
+        limit = top - commit
+        self.virtual.alloc(limit, commit, MEM_COMMIT, 0x04)
+        r = self.virtual.reservations[dealloc]
+        self.virtual._commit(r, limit - STACK_GUARD_PAGES * 0x1000, STACK_GUARD_PAGES * 0x1000, 0x04 | PAGE_GUARD)
+        self._map_pages(dealloc, limit, False)
         teb, err = self.virtual.alloc(0, 0x4000, MEM_COMMIT | MEM_RESERVE, 0x04)     # TEB, then TlsExpansionSlots
         if err:
             raise Unimplemented(f"a thread's TEB: VirtualAlloc error {err}")
@@ -1580,10 +1603,48 @@ class VM:
         self._set_budget()                                # two threads: time slices from now on
         return tid
 
+    def _map_pages(self, start: int, end: int, valid: bool) -> None:
+        """Map or unmap the pages [start, end) in the stage-1 tables (the descriptor's valid bit). The guest runtime
+        flushes the TLB after the request that changed them."""
+        for page in range(start, end, PAGE):
+            at = self._page_descriptor(page)
+            if at:
+                desc = struct.unpack_from("<Q", self.mm, at)[0]
+                struct.pack_into("<Q", self.mm, at, desc | 1 if valid else desc & ~1)
+
+    def _stack_grow(self, address: int, probe: bool) -> int:
+        """Commit the current thread's stack down to `address`'s page, as Windows does on a touch of its guard: the
+        touched guard page and those above it committed read-write, StackLimit moved to it, three guard pages below
+        it (contracts/windows.memory.created_thread_stack rows default.grow, default.grown.*). Only a page in the
+        guard grows the stack; `probe` (the runtime placing a frame below StackLimit) grows it page by page as
+        successive touches would. 0 when the address is not reached this way: an access violation (row skip)."""
+        cur = self.threads[self.current_tid]
+        dealloc, _, top = cur.stack
+        limit = int.from_bytes(self.mem.read(cur.teb + 0x10, 8), "little")
+        page = address & ~(PAGE - 1)
+        r = self.virtual.reservations.get(dealloc)
+        if r is None or not dealloc <= page < limit:
+            return 0
+        if not probe and page < limit - STACK_GUARD_PAGES * PAGE:
+            return 0
+        while limit > page:
+            new = limit - PAGE if probe else page
+            if new - STACK_GUARD_PAGES * PAGE < dealloc + PAGE:      # the guard would reach the reservation's last page
+                return 0
+            self.virtual._commit(r, new, limit - new, 0x04)
+            self._map_pages(new, limit, True)
+            self.virtual._commit(r, new - STACK_GUARD_PAGES * PAGE, STACK_GUARD_PAGES * PAGE, 0x04 | PAGE_GUARD)
+            limit = new
+        self.mem.write(cur.teb + 0x10, limit.to_bytes(8, "little"))
+        cur.stack = (dealloc, limit, top)
+        return 1
+
     def _thread_request(self, sub: int, a0: int, a1: int, a2: int) -> int:
         """threads.c's W2M_THREAD_* requests."""
         if sub == THREAD_CREATE:
             return self._create_thread(a0, a1, a2 & 0xFFFFFFFF, a2 >> 32)
+        if sub == THREAD_STACK_GROW:
+            return self._stack_grow(a0, bool(a1))
         cur = self.threads[self.current_tid]
         if sub == THREAD_EXIT_STUB:
             return self._code_page(detach_stub(self._thread_callbacks(), self._import_thunk("KERNEL32.dll!W2mThreadEnd")))
@@ -1624,7 +1685,12 @@ class VM:
                     eflags |= 1 << bit
             if not undefined >> FLAG_BIT["A"] & 1 and (af_a ^ af_b ^ af_r) & 0x10:
                 eflags |= 1 << 4
-            write_context(buf, flags, t.x[:16], t.x[17], eflags, struct.unpack_from("<I", mon[MXCSR_OFF], 0)[0],
+            # a thread suspended in a wait answers RIP in ntdll, where Windows' NtWait* stub returns from its syscall
+            # (contracts/windows.thread.running_context, context.waiting); w2m parks it at the bridge thunk, in no
+            # module. The address is inside ntdll's synthetic page, which holds no code: nothing resumes there, as w2m
+            # has no SetThreadContext and a thread resumes from its own saved state.
+            rip = self.modules.ntdll + 0x800 if t.status == "blocked" and self.modules.ntdll else t.x[17]
+            write_context(buf, flags, t.x[:16], rip, eflags, struct.unpack_from("<I", mon[MXCSR_OFF], 0)[0],
                           struct.unpack_from("<H", mon[FCW_OFF], 0)[0], t.xmm)
             self.mem.write(a1, bytes(buf))
             return 1
