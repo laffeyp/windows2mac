@@ -43,7 +43,7 @@ BASE = {"VMULSD": "MULSD", "VADDSD": "ADDSD", "VSUBSD": "SUBSD", "VDIVSD": "DIVS
         "VPUNPCKHQDQ": "PUNPCKHQDQ", "VPCMPEQQ": "PCMPEQQ",
         # and on the set-049b forms (the model's _sse_049b)
         "VPSHUFB": "PSHUFB", "VPALIGNR": "PALIGNR", "VPINSRD": "PINSRD", "VPINSRQ": "PINSRQ", "VPEXTRQ": "PEXTRQ",
-        "VANDNPD": "ANDNPD", "VCVTDQ2PS": "CVTDQ2PS", "VCVTTPS2DQ": "CVTTPS2DQ", "VCMPPS": "CMPPS_VEX",
+        "VANDNPD": "ANDNPS", "VCVTDQ2PS": "CVTDQ2PS", "VCVTTPS2DQ": "CVTTPS2DQ", "VCMPPS": "CMPPS_VEX",
         "VROUNDSD": "ROUNDSD", "VPBLENDD": "PBLENDD", "VCVTPS2PD": "CVTPS2PD", "VPMOVSXDQ": "PMOVSXDQ"}
 # whole-register VEX instructions: data moves between the 128-bit halves (the model's _vex_cross)
 CROSS = {"VPERMQ", "VPERMD", "VPBROADCASTD", "VPBROADCASTQ", "VBROADCASTSS", "VBROADCASTF128", "VINSERTF128",
@@ -54,9 +54,9 @@ FMA = {f"V{k}{o}{t}" for k in ("FMADD", "FMSUB", "FNMADD", "FNMSUB") for o in ("
 L0_ONLY = {"VCVTDQ2PD", "VCVTTPD2DQ", "VCVTPD2DQ"}                 # their 256-bit forms change operand widths
 ALIGNED = {"VMOVAPD", "VMOVDQA", "VMOVAPS"}                                     # the only VEX forms that fault on alignment
 NO_WRITE = {"COMISD", "UCOMISD", "COMISS", "UCOMISS"}                                     # flags only: the destination is a source
-SLOW = {"CVTTPD2DQ", "CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
-        "ANDNPD", "CVTTPS2DQ", "CMPPS_VEX", "ROUNDSD", "PBLENDD", "PMOVSXDQ", "PERMILPS_VAR",
-        "PADDB", "PMULUDQ", "PUNPCKHQDQ", "PCMPEQQ", "CVTSS2SI", "CVTSI2SS", "CVTTSD2SI", "RCPPS", "RSQRTPS"}              # in the model (x86fp) for now
+SLOW = {"CMPSD_XMM_VEX", "HADDPD", "PSHUFB", "PALIGNR", "PINSRD", "PINSRQ", "PEXTRQ",
+        "CMPPS_VEX", "ROUNDSD", "PBLENDD", "PERMILPS_VAR",
+        "PADDB", "PMULUDQ", "PUNPCKHQDQ", "CVTSS2SI", "CVTSI2SS", "CVTTSD2SI", "RCPPS", "RSQRTPS"}              # in the model (x86fp) for now
 NATIVE_256 = {"PXOR", "XORPS", "XORPD", "PAND", "POR", "ORPD", "ANDPD", "ANDPS", "PCMPEQB", "PCMPEQW", "PSUBQ",
               "PSUBD", "PADDQ", "MOVDQU", "MOVDQA", "MOVAPD", "PMOVMSKB", "MOVUPS", "MOVAPS", "PADDD", "PSRLD", "PSLLD",
               "PSRAD", "PSLLDQ", "PANDN", "PUNPCKLDQ", "PSHUFD", "UNPCKHPS", "UNPCKLPS", "PCMPEQD", "PCMPGTD",

@@ -7,7 +7,7 @@ MMn is bits 63:0 of physical register Rn; the state block keeps ST0-ST7 in stack
 is 0. The code takes the native path only then, and only with no x87 exception pending (FSW.ES): any other state, and
 every form below that names an XMM register, is a model step. Sprint 068 item C adds MOVD and MOVQ to and from a
 general register, PEXTRW into one, and PSADBW (a 10-billion-instruction frontier with worker threads on time ran them
-63,188, 59,860 and 60,800 times as model steps). On the native path TOP stays 0; a write to
+63,188, 59,860 and 60,800 times as model steps), then PMADDUBSW and EMMS (63,480 and 10,128 in the full batch run). On the native path TOP stays 0; a write to
 MMn sets bits 79:64 to ones, and every tag is set valid after the write (a faulting load or store changes nothing,
 as set 065b has it). x16 holds the state block, x17 is scratch, V30 and V31 hold the operands."""
 
@@ -28,7 +28,7 @@ LANES = {"PADDW": ("add", 1), "PADDD": ("add", 2), "PSUBW": ("sub", 1), "PMULLW"
          "PUNPCKHBW": ("zip2", 0), "PUNPCKHWD": ("zip2", 1), "PUNPCKHDQ": ("zip2", 2)}
 SOURCE_FORMS = set(LANES) | {"PXOR", "PMULHW", "PACKUSWB", "PSHUFW"}
 SHIFTS = {"PSRAW": 1, "PSRAD": 2}
-SOURCE_FORMS |= {"PSADBW"}
+SOURCE_FORMS |= {"PSADBW", "PMADDUBSW"}
 
 
 def _slot(n: int) -> int:
@@ -44,6 +44,8 @@ def native(op: Op) -> bool:
         return (d == "mm" and s in ("mm", "m", "r")) or (d in ("m", "r") and s == "mm")
     if ic == "PEXTRW":
         return d == "r" and s == "mm"
+    if ic == "EMMS":
+        return True
     if ic in SHIFTS:
         return d == "mm" and s == "i"
     if ic in SOURCE_FORMS:
@@ -63,6 +65,9 @@ def lower(a: vb.Assembler, op: Op, reg_of: Callable[[int], int]) -> None:
     a.branch(lambda off: a64.cbz(17, off), fast)
     a.emit(a64.hvc(vb.HVC_SLOW_STEP))
     a.bind(fast)
+    if ic == "EMMS":                                          # every tag empty; TOP as it is (SDM EMMS)
+        a.emit(a64.str_(1, a64.ZR, 16, TAGS))
+        return
 
     def get(o: Op, v: int) -> None:
         if o[0] == "mm":
@@ -98,6 +103,10 @@ def lower(a: vb.Assembler, op: Op, reg_of: Callable[[int], int]) -> None:
             n = min(imm, (8 << size) - 1)
             if n:
                 a.emit(a64.shift_right(30, 30, n, size, True))
+        elif ic == "PMADDUBSW":                               # as the XMM form on eight bytes: four saturated words
+            get(src, 31)
+            a.emit(a64.extend_bytes(29, 31, False, True), a64.extend_bytes(28, 30, False, False),
+                   a64.three_same("mul", 28, 28, 29, 1), a64.add_pairwise_long(28, 28, 1, True), a64.sqxtn_h(30, 28, False))
         elif ic == "PSADBW":                                  # the absolute differences' sum, bits 63:16 zero
             get(src, 31)
             a.emit(a64.three_same_d("uabd", 30, 30, 31, 0), a64.uaddlv_8b(30, 30))

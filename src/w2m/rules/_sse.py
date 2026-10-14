@@ -106,7 +106,8 @@ LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "UNPCKHPD": 
                 "PMULLW": ("mul", 1), "PUNPCKHBW": ("zip2", 0), "PUNPCKHDQ": ("zip2", 2), "PUNPCKHWD": ("zip2", 1),
                 "PUNPCKLWD": ("zip1", 1), "PCMPEQW": ("cmeq", 1),
                 "PUNPCKHQDQ": ("zip2", 3),      # Sprint 065: 1.4M model steps at UnityPlayer.dll+0x3cf4 and its neighbours
-                "PADDUSB": ("uqadd", 0), "PCMPGTB": ("cmgt", 0), "PADDB": ("add", 0)}     # Sprint 065
+                "PADDUSB": ("uqadd", 0), "PCMPGTB": ("cmgt", 0), "PADDB": ("add", 0),     # Sprint 065
+                "PCMPEQQ": ("cmeq", 3)}                          # Sprint 068 item C: 68,124 model steps (VEX)
 SSE2_INT_LOWERED_APPROXIMATE = {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
 CMP_LOWERED = {"CMPPS", "CMPPD"}                               # Sprint 068 item C
 SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
@@ -119,12 +120,13 @@ SSE2_INT_LOWERED |= {"PUNPCKHQDQ"}                                              
 # Sprint 065: the frontier's hottest slow-SSE classes (frontier 643a6283510c-1791810726153034000: 39.5M exits)
 SSE2_INT_LOWERED |= {"PADDUSB", "PCMPGTB", "PADDB", "PACKSSWB", "PMULHW", "PSHUFB", "MOVLPS"}
 SSE2_INT_LOWERED |= {"PSADBW", "PMADDUBSW"}                                     # Sprint 068
+SSE2_INT_LOWERED |= {"PCMPEQQ", "MOVNTDQ"}                                       # Sprint 068 item C
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
 def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of: Callable[[int], int]) -> None:
     """The SSE2 integer block in NEON (Sprint 044). V31 and V30 are scratch; x16 and x17 too."""
-    if ic in ("MOVDQA", "MOVDQU", "MOVNTPS"):
+    if ic in ("MOVDQA", "MOVDQU", "MOVNTPS", "MOVNTDQ"):
         if dst[0] == "x" and src[0] == "x":
             a.emit(a64.mov_v(dst[1], src[1]))
         elif dst[0] == "x":
@@ -327,6 +329,10 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         a.branch(lambda off: a64.bcond("eq", off), fast)
         a.emit(a64.hvc(HVC_SLOW_SSE))
         a.bind(fast)
+    if ic == "PMOVSXDQ":                                         # two dwords sign-extended (SSHLL #0; Sprint 068 item C:
+        v = _sse_src(a, src, 8 if src[0] == "m" else 16, reg_of)   # 68,112 model steps in the full batch run)
+        a.emit(a64.sxtl_2d(int(dst[1]), v))
+        return
     if ic in SSE2_INT_LOWERED:
         _lower_int(a, ic, dst, src, imm, reg_of)
         return
@@ -409,66 +415,10 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         _unmasked_to_model(a)
         v = _sse_src(a, src, 16, reg_of)
         a.emit(a64.fcvtn_2s(dst[1], v))
-    elif ic == "CVTPD2DQ" and native_conversions:
-        # Each double as CVTSD2SI converts it, the results in the low two lanes and the rest zeroed (SDM CVTPD2DQ):
-        # FRINTX rounds in MXCSR's mode and FCVTZS converts; NaN or a value at or past 2^31 gives the integer
-        # indefinite 0x80000000 and IE (FCVTZS saturates, and gives 0 for NaN), with this lane's other flags dropped;
-        # in range, the lane keeps PE and FPSR's IDC as it was. x18 holds FPSR before the lane. The source goes to
-        # V30, V29 holds the bound, and the two results pass through the spill slot. Native from Sprint 064: the
-        # frontier ran 47,825 of its model steps at VCVTPD2DQ and CVTPD2DQ.
+    elif ic in ("CVTPD2DQ", "CVTPS2DQ", "CVTTPD2DQ", "CVTTPS2DQ") and native_conversions:
         _unmasked_to_model(a)
-        v = _sse_src(a, src, 16, reg_of)
-        if v != 30:
-            a.emit(a64.mov_v(30, v))
-        for lane in (0, 1):
-            ok, low, done, indefinite = a.label(), a.label(), a.label(), a.label()
-            a.emit(a64.mrs(18, a64.FPSR), a64.umov_d(17, 30, lane), a64.fmov_to_v(8, 31, 17),
-                   a64.frintx(8, 31, 31), a64.fcvtzs(32, 8, 16, 31),
-                   a64.mov_imm(17, 0x41E0_0000_0000_0000), a64.fmov_to_v(8, 29, 17), a64.fcmp(8, 31, 29))
-            # in range when -2^31 <= the rounded value < 2^31 (x86fp.to_int); NaN is unordered, so not below 2^31.
-            # The lower bound matters for the flags only: below it FCVTZS gives 0x80000000 too, but FRINTX's IXC
-            # would survive as PE where the Xeon reports IE alone (set 050 case 227, MXCSR 0x9f80 -> 0x9f81)
-            a.branch(lambda off: a64.bcond("mi" if vb.CVT_INDEFINITE else "al", off), low)
-            a.branch(a64.b, indefinite)
-            a.bind(low)
-            a.emit(a64.mov_imm(17, 0xC1E0_0000_0000_0000), a64.fmov_to_v(8, 29, 17), a64.fcmp(8, 31, 29))
-            a.branch(lambda off: a64.bcond("ge" if vb.CVT_INDEFINITE else "al", off), ok)
-            a.bind(indefinite)
-            a.emit(a64.mov_imm(16, 0x8000_0000), a64.movz(17, 1), a64.orr(18, 18, 17), a64.msr(a64.FPSR, 18))
-            a.branch(a64.b, done)
-            a.bind(ok)                                           # in range: IDC as it was before the lane
-            a.emit(a64.mrs(17, a64.FPSR), a64.ubfx(18, 18, 7, 1), a64.bfi(17, 18, 7, 1), a64.msr(a64.FPSR, 17))
-            a.bind(done)
-            a.emit(a64.str_(4, 16, 28, vb.SPILL + 4 * lane))
-        a.emit(a64.ldr(8, 16, 28, vb.SPILL), a64.fmov_to_v(8, dst[1], 16))   # FMOV Dd zeroes bits 127:64
-    elif ic == "CVTPS2DQ" and native_conversions:
-        # CVTPD2DQ's lanes on four singles (SDM CVTPS2DQ): FRINTX in MXCSR's mode and FCVTZS; NaN or a value at or past
-        # 2^31 gives 0x80000000 and IE alone; in range, PE as rounded and FPSR's IDC as it was before the lane. The
-        # results are built in V28 (no XMM register's), one INS a lane. Native from Sprint 068 item C: a 10-billion-
-        # instruction frontier with worker threads on time ran 20,509 model steps here.
-        _unmasked_to_model(a)
-        v = _sse_src(a, src, 16, reg_of)
-        if v != 30:
-            a.emit(a64.mov_v(30, v))
-        for lane in range(4):
-            ok, low, done, indefinite = a.label(), a.label(), a.label(), a.label()
-            a.emit(a64.mrs(18, a64.FPSR), a64.umov_s(17, 30, lane), a64.fmov_to_v(4, 31, 17),
-                   a64.frintx(4, 31, 31), a64.fcvtzs(32, 4, 16, 31),
-                   a64.mov_imm(17, 0x4F00_0000), a64.fmov_to_v(4, 29, 17), a64.fcmp(4, 31, 29))
-            a.branch(lambda off: a64.bcond("mi" if vb.CVT_INDEFINITE else "al", off), low)
-            a.branch(a64.b, indefinite)
-            a.bind(low)
-            a.emit(a64.mov_imm(17, 0xCF00_0000), a64.fmov_to_v(4, 29, 17), a64.fcmp(4, 31, 29))
-            a.branch(lambda off: a64.bcond("ge" if vb.CVT_INDEFINITE else "al", off), ok)
-            a.bind(indefinite)
-            a.emit(a64.mov_imm(16, 0x8000_0000), a64.movz(17, 1), a64.orr(18, 18, 17), a64.msr(a64.FPSR, 18))
-            a.branch(a64.b, done)
-            a.bind(ok)                                           # in range: IDC as it was before the lane
-            a.emit(a64.mrs(17, a64.FPSR), a64.ubfx(18, 18, 7, 1), a64.bfi(17, 18, 7, 1), a64.msr(a64.FPSR, 17))
-            a.bind(done)
-            a.emit(a64.ins_s(28, lane, 16))
-        a.emit(a64.mov_v(dst[1], 28))
-    elif ic in ("CVTTPD2DQ", "CVTPD2DQ", "CMPSD_XMM", "HADDPD", "MPSADBW") or ic in SSE_050:  # in the model (x86fp; Sprints
+        _to_dwords(a, int(dst[1]), _sse_src(a, src, 16, reg_of), ic.endswith("PD2DQ"), ic.startswith("CVTT"))
+    elif ic in ("CMPSD_XMM", "HADDPD", "MPSADBW") or ic in SSE_050:  # in the model (x86fp; Sprints
         a.emit(a64.hvc(HVC_SLOW_SSE))                                                # 049, 050), whole
     elif ic[:-2] in ("ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"):
         kind, form = ic[:-2].lower(), ic[-2:]
@@ -532,3 +482,43 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         _set_flags_from_fcmp(a)
     else:
         raise CompileError(f"sse {ic}")
+
+
+def _to_dwords(a: Assembler, d: int, v: int, double: bool, truncate: bool) -> None:
+    """CVTPD2DQ, CVTPS2DQ, CVTTPD2DQ, CVTTPS2DQ (SDM): each lane as CVTSD2SI or CVTSS2SI (CVTT*: CVTTSD2SI) converts it,
+    into dwords, a double form's upper half zeroed. FRINTX rounds in MXCSR's mode (none when truncating: FCVTZS goes
+    toward zero and reports an inexact result itself); NaN or a value outside the int32 range gives the integer
+    indefinite 0x80000000 and IE with this lane's other flags dropped; in range, the lane keeps PE and FPSR's IDC as it
+    was. The range: -2^31 <= the rounded value < 2^31, or for truncation -2^31 - 1 < the value < 2^31 (no single lies
+    between -2^31 - 1 and -2^31). x18 holds FPSR before the lane; the source goes to V30, V29 holds a bound, the
+    results gather in V28 by INS. Native from Sprint 064 (CVTPD2DQ) and 068 item C (the rest: VCVTTPD2DQ 78,376 and
+    CVTTPS2DQ 23,324 model steps in the full batch run)."""
+    if v != 30:
+        a.emit(a64.mov_v(30, v))
+    n, lanes = (8, 2) if double else (4, 4)
+    upper = 0x41E0_0000_0000_0000 if double else 0x4F00_0000
+    lower, holds = ((0xC1E0_0000_0020_0000, "gt") if truncate else (0xC1E0_0000_0000_0000, "ge")) if double \
+        else (0xCF00_0000, "ge")
+    if double:
+        a.emit(a64.movi_zero(28))
+    for lane in range(lanes):
+        ok, low, done, indefinite = a.label(), a.label(), a.label(), a.label()
+        a.emit(a64.mrs(18, a64.FPSR), (a64.umov_d if double else a64.umov_s)(17, 30, lane), a64.fmov_to_v(n, 31, 17))
+        if not truncate:
+            a.emit(a64.frintx(n, 31, 31))
+        a.emit(a64.fcvtzs(32, n, 16, 31), a64.mov_imm(17, upper), a64.fmov_to_v(n, 29, 17), a64.fcmp(n, 31, 29))
+        # NaN is unordered, so not below the upper bound; below the lower one FCVTZS gives 0x80000000 too, but the
+        # flags differ (set 050 case 227: the Xeon reports IE alone)
+        a.branch(lambda off: a64.bcond("mi" if vb.CVT_INDEFINITE else "al", off), low)
+        a.branch(a64.b, indefinite)
+        a.bind(low)
+        a.emit(a64.mov_imm(17, lower), a64.fmov_to_v(n, 29, 17), a64.fcmp(n, 31, 29))
+        a.branch(lambda off: a64.bcond(holds if vb.CVT_INDEFINITE else "al", off), ok)
+        a.bind(indefinite)
+        a.emit(a64.mov_imm(16, 0x8000_0000), a64.movz(17, 1), a64.orr(18, 18, 17), a64.msr(a64.FPSR, 18))
+        a.branch(a64.b, done)
+        a.bind(ok)                                           # in range: IDC as it was before the lane
+        a.emit(a64.mrs(17, a64.FPSR), a64.ubfx(18, 18, 7, 1), a64.bfi(17, 18, 7, 1), a64.msr(a64.FPSR, 17))
+        a.bind(done)
+        a.emit(a64.ins_s(28, lane, 16))
+    a.emit(a64.mov_v(d, 28))
