@@ -1,6 +1,6 @@
 {
  "code_pages": {
-  "candidate_sha256": "sha256:84c9081ed5def5a3d5cb743bcb73b90bfff86cd5c9c5632263b297421989c7c4",
+  "candidate_sha256": "sha256:f9107704f7b1592864513c2164bc60306e80bc1112ab358691155da0df890bd1",
   "divergence": {
    "38044061149": null,
    "38044062619": null,
@@ -27,7 +27,7 @@
    "SESSION_INIT": 1
   },
   "family": "code_pages",
-  "record": "store/runs/family-code_pages-1791964048370997000",
+  "record": "store/runs/family-code_pages-1791964757826230000",
   "verdicts": {
    "38044061149": "conforms",
    "38044062619": "conforms",
@@ -48,7 +48,7 @@
   }
  },
  "code_rewrite": {
-  "candidate_sha256": "sha256:0913b95d3f2dc2ceebebc68516e51e6e9c2f14c7c2bb395db2047e3493f60a05",
+  "candidate_sha256": "sha256:1bab6b1bdd4f982b89e5edb366174665d78d9cae0d1d9d1ae1c106f89a8588e4",
   "divergence": {
    "lap-20261014T044509652Z-627bbd99": null
   },
@@ -60,13 +60,13 @@
    "SESSION_INIT": 1
   },
   "family": "code_rewrite",
-  "record": "store/runs/family-code_rewrite-1791964048375853000",
+  "record": "store/runs/family-code_rewrite-1791964757824135000",
   "verdicts": {
    "lap-20261014T044509652Z-627bbd99": "conforms"
   }
  },
  "com": {
-  "candidate_sha256": "sha256:926d43078860d0b341e079f411c2939c89192ba72aa3de6ac8fd27304880db37",
+  "candidate_sha256": "sha256:83a908f6f6ca576eb69ecfa018a28dd31e7d48ecf146afde5a04405495486e6d",
   "divergence": {
    "38126872187": null,
    "38126873913": null
@@ -79,14 +79,14 @@
    "SESSION_INIT": 1
   },
   "family": "com",
-  "record": "store/runs/family-com-1791964048353758000",
+  "record": "store/runs/family-com-1791964757842265000",
   "verdicts": {
    "38126872187": "conforms",
    "38126873913": "conforms"
   }
  },
  "command_line_args": {
-  "candidate_sha256": "sha256:4c049d9a7cca20fa62e6cfd40a97396d63fb9562bf60fe3bda0b8905c778dcf1",
+  "candidate_sha256": "sha256:1ab06e6d4f8f6fe2eefcfa8bfafad9dbd33944f3588ff72be9757a6f2c563206",
   "divergence": {
    "38084317468": null,
    "38084319695": null
@@ -99,14 +99,14 @@
    "SESSION_INIT": 1
   },
   "family": "command_line_args",
-  "record": "store/runs/family-command_line_args-1791964048362892000",
+  "record": "store/runs/family-command_line_args-1791964757833353000",
   "verdicts": {
    "38084317468": "conforms",
    "38084319695": "conforms"
   }
  },
  "console": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "38210455282": null,
    "38210458372": null
@@ -119,14 +119,14 @@
    "SESSION_INIT": 1
   },
   "family": "console",
-  "record": "store/runs/family-console-1791964048355228000",
+  "record": "store/runs/family-console-1791964757824168000",
   "verdicts": {
    "38210455282": "conforms",
    "38210458372": "conforms"
   }
  },
  "critical_section_flags": {
-  "candidate_sha256": "sha256:66062c91b31e32256a091016b7f1b25205742d2d778169e8c989963834936ff3",
+  "candidate_sha256": "sha256:909eb7bcd5ef078218fea0dc3a749a5b6c9c96ed1d38f6747182b3137aa30245",
   "divergence": {
    "38113796820": null,
    "38113797868": null
@@ -139,14 +139,14 @@
    "SESSION_INIT": 1
   },
   "family": "critical_section_flags",
-  "record": "store/runs/family-critical_section_flags-1791964048382187000",
+  "record": "store/runs/family-critical_section_flags-1791964757829432000",
   "verdicts": {
    "38113796820": "conforms",
    "38113797868": "conforms"
   }
  },
  "critical_sections": {
-  "candidate_sha256": "sha256:66062c91b31e32256a091016b7f1b25205742d2d778169e8c989963834936ff3",
+  "candidate_sha256": "sha256:909eb7bcd5ef078218fea0dc3a749a5b6c9c96ed1d38f6747182b3137aa30245",
   "divergence": {
    "38039748482": null,
    "38039751056": null,
@@ -163,7 +163,7 @@
    "SESSION_INIT": 1
   },
   "family": "critical_sections",
-  "record": "store/runs/family-critical_sections-1791964049050827000",
+  "record": "store/runs/family-critical_sections-1791964758572326000",
   "verdicts": {
    "38039748482": "conforms",
    "38039751056": "conforms",
@@ -174,7 +174,7 @@
   }
  },
  "current_directory_ansi": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38231721988": null,
    "38231725219": null,
@@ -189,7 +189,7 @@
    "SESSION_INIT": 1
   },
   "family": "current_directory_ansi",
-  "record": "store/runs/family-current_directory_ansi-1791964049181964000",
+  "record": "store/runs/family-current_directory_ansi-1791964758715871000",
   "verdicts": {
    "38231721988": "conforms",
    "38231725219": "conforms",
@@ -198,7 +198,7 @@
   }
  },
  "display": {
-  "candidate_sha256": "sha256:3e449b466e9a6fe5e4b71edf5f388e65621aed729bf9b5265f4c34c0092781fa",
+  "candidate_sha256": "sha256:081b0bd9afc17f31f96a325a38389ffb28518505af29a217ebd02b250205a243",
   "divergence": {
    "38273510163": null,
    "38273513428": null
@@ -211,14 +211,14 @@
    "SESSION_INIT": 1
   },
   "family": "display",
-  "record": "store/runs/family-display-1791964049194075000",
+  "record": "store/runs/family-display-1791964758755320000",
   "verdicts": {
    "38273510163": "conforms",
    "38273513428": "conforms"
   }
  },
  "dxgi": {
-  "candidate_sha256": "sha256:f28db81b16a81677866aa9901b40877f06dd99fe7e9137d21259aef1e45f58d5",
+  "candidate_sha256": "sha256:2e810f039a117cf31d01efba09cd4f83b51c494adf77ca30d9e0f8b45ff84aa6",
   "divergence": {
    "38254500336": null,
    "38254503636": null
@@ -231,14 +231,14 @@
    "SESSION_INIT": 1
   },
   "family": "dxgi",
-  "record": "store/runs/family-dxgi-1791964049275411000",
+  "record": "store/runs/family-dxgi-1791964758850508000",
   "verdicts": {
    "38254500336": "conforms",
    "38254503636": "conforms"
   }
  },
  "environment_empty": {
-  "candidate_sha256": "sha256:c76128cb397502325b097c655a4089c0a84439bc37017a5df5e1110ad181f3ca",
+  "candidate_sha256": "sha256:3f6d981d69ec18b38bd37ad011715ac298d005151588cc9c32efd2709bd226fd",
   "divergence": {
    "38044699077": null,
    "38044700976": null,
@@ -261,7 +261,7 @@
    "SESSION_INIT": 1
   },
   "family": "environment_empty",
-  "record": "store/runs/family-environment_empty-1791964049354181000",
+  "record": "store/runs/family-environment_empty-1791964758951106000",
   "verdicts": {
    "38044699077": "conforms",
    "38044700976": "conforms",
@@ -278,7 +278,7 @@
   }
  },
  "environment_set": {
-  "candidate_sha256": "sha256:c76128cb397502325b097c655a4089c0a84439bc37017a5df5e1110ad181f3ca",
+  "candidate_sha256": "sha256:3f6d981d69ec18b38bd37ad011715ac298d005151588cc9c32efd2709bd226fd",
   "divergence": {
    "38044699077": null,
    "38044700976": null,
@@ -301,7 +301,7 @@
    "SESSION_INIT": 1
   },
   "family": "environment_set",
-  "record": "store/runs/family-environment_set-1791964050013217000",
+  "record": "store/runs/family-environment_set-1791964759745276000",
   "verdicts": {
    "38044699077": "conforms",
    "38044700976": "conforms",
@@ -318,7 +318,7 @@
   }
  },
  "exception_filter": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38045461436": null,
    "38045463327": null,
@@ -345,7 +345,7 @@
    "SESSION_INIT": 1
   },
   "family": "exception_filter",
-  "record": "store/runs/family-exception_filter-1791964050056918000",
+  "record": "store/runs/family-exception_filter-1791964759834758000",
   "verdicts": {
    "38045461436": "conforms",
    "38045463327": "conforms",
@@ -366,7 +366,7 @@
   }
  },
  "exceptions": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "38165931122": null,
    "38165933249": null
@@ -379,14 +379,14 @@
    "SESSION_INIT": 1
   },
   "family": "exceptions",
-  "record": "store/runs/family-exceptions-1791964050107806000",
+  "record": "store/runs/family-exceptions-1791964759835528000",
   "verdicts": {
    "38165931122": "conforms",
    "38165933249": "conforms"
   }
  },
  "file_access": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38093116676": null,
    "38093118511": null
@@ -399,14 +399,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_access",
-  "record": "store/runs/family-file_access-1791964050311928000",
+  "record": "store/runs/family-file_access-1791964760061830000",
   "verdicts": {
    "38093116676": "conforms",
    "38093118511": "conforms"
   }
  },
  "file_attributes": {
-  "candidate_sha256": "sha256:6294af6e2e33b3d07d433943b82d04dd25e59f5ac5555b6879382b918a7bc2f5",
+  "candidate_sha256": "sha256:530d43a122116c2b95c8dda9803d8b27490e5319c2e1690326c5c5c68a054d4f",
   "divergence": {
    "38087355443": null,
    "38087357359": null
@@ -419,14 +419,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_attributes",
-  "record": "store/runs/family-file_attributes-1791964050945875000",
+  "record": "store/runs/family-file_attributes-1791964760823148000",
   "verdicts": {
    "38087355443": "conforms",
    "38087357359": "conforms"
   }
  },
  "file_mapping": {
-  "candidate_sha256": "sha256:0913b95d3f2dc2ceebebc68516e51e6e9c2f14c7c2bb395db2047e3493f60a05",
+  "candidate_sha256": "sha256:1bab6b1bdd4f982b89e5edb366174665d78d9cae0d1d9d1ae1c106f89a8588e4",
   "divergence": {
    "38120624307": null,
    "38120626017": null
@@ -439,14 +439,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_mapping",
-  "record": "store/runs/family-file_mapping-1791964050962759000",
+  "record": "store/runs/family-file_mapping-1791964760882765000",
   "verdicts": {
    "38120624307": "conforms",
    "38120626017": "conforms"
   }
  },
  "file_search": {
-  "candidate_sha256": "sha256:057ac3fc7bd767469dd7e0734fd0d2502073e6b62e6f9413718a2a68637e5355",
+  "candidate_sha256": "sha256:0e06f958fd60cf7427236689d9ecf8f84cec11988fb009029a91233f96664a04",
   "divergence": {
    "38182330015": null,
    "38182331619": null
@@ -459,14 +459,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_search",
-  "record": "store/runs/family-file_search-1791964051369487000",
+  "record": "store/runs/family-file_search-1791964761374991000",
   "verdicts": {
    "38182330015": "conforms",
    "38182331619": "conforms"
   }
  },
  "file_security": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38090863707": null,
    "38090865352": null
@@ -479,14 +479,14 @@
    "SESSION_INIT": 1
   },
   "family": "file_security",
-  "record": "store/runs/family-file_security-1791964051638978000",
+  "record": "store/runs/family-file_security-1791964761574577000",
   "verdicts": {
    "38090863707": "conforms",
    "38090865352": "conforms"
   }
  },
  "files_more": {
-  "candidate_sha256": "sha256:237c0708ad53e613b68c1ede7b60cbe9c49b915e84d66a18a6011291b9778b15",
+  "candidate_sha256": "sha256:31ebcad4728c306fcc3da36ec950134926e54b4aa7ac40b603fd6368bfaaa16b",
   "divergence": {
    "38119625685": null,
    "38119627458": null
@@ -499,14 +499,14 @@
    "SESSION_INIT": 1
   },
   "family": "files_more",
-  "record": "store/runs/family-files_more-1791964051638960000",
+  "record": "store/runs/family-files_more-1791964761583441000",
   "verdicts": {
    "38119625685": "conforms",
    "38119627458": "conforms"
   }
  },
  "format_message": {
-  "candidate_sha256": "sha256:e904713272118610c4cb0b68db045478dbf9f88e2d91ec4df330f32031f75959",
+  "candidate_sha256": "sha256:4b597ad220e61f3461d23eba32ac463cd9e788a1756f82a86a9cb1b8a8d39c2a",
   "divergence": {
    "38120951889": null,
    "38120953179": null
@@ -519,14 +519,14 @@
    "SESSION_INIT": 1
   },
   "family": "format_message",
-  "record": "store/runs/family-format_message-1791964052030445000",
+  "record": "store/runs/family-format_message-1791964762132690000",
   "verdicts": {
    "38120951889": "conforms",
    "38120953179": "conforms"
   }
  },
  "function_tables": {
-  "candidate_sha256": "sha256:cfe29bab2a3b4d559d561831ca3cd2149a184a8cc79e2668c202faa3e3ab1cb0",
+  "candidate_sha256": "sha256:b409ea42001546079046b34d473d86cf97bd1847a1f0d0efdb74a45592836996",
   "divergence": {
    "38114067866": null,
    "38114069629": null
@@ -539,14 +539,14 @@
    "SESSION_INIT": 1
   },
   "family": "function_tables",
-  "record": "store/runs/family-function_tables-1791964052103551000",
+  "record": "store/runs/family-function_tables-1791964762228693000",
   "verdicts": {
    "38114067866": "conforms",
    "38114069629": "conforms"
   }
  },
  "generate_random": {
-  "candidate_sha256": "sha256:36a454729f0617493765521a1b6a2715e304f0a8173a326daae0c02211dab308",
+  "candidate_sha256": "sha256:17184fb85830174d06fd78fb8371f5c952257862633a2280736841845e0584f8",
   "divergence": {
    "38085850021": null,
    "38085852392": null
@@ -559,14 +559,14 @@
    "SESSION_INIT": 1
   },
   "family": "generate_random",
-  "record": "store/runs/family-generate_random-1791964052258146000",
+  "record": "store/runs/family-generate_random-1791964762308511000",
   "verdicts": {
    "38085850021": "conforms",
    "38085852392": "conforms"
   }
  },
  "heap": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38041103334": null,
    "38041105720": null,
@@ -585,7 +585,7 @@
    "SESSION_INIT": 1
   },
   "family": "heap",
-  "record": "store/runs/family-heap-1791964052330293000",
+  "record": "store/runs/family-heap-1791964762392577000",
   "verdicts": {
    "38041103334": "conforms",
    "38041105720": "conforms",
@@ -598,7 +598,7 @@
   }
  },
  "heap_in_place": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38254640218": null,
    "38254643501": null
@@ -611,14 +611,14 @@
    "SESSION_INIT": 1
   },
   "family": "heap_in_place",
-  "record": "store/runs/family-heap_in_place-1791964052538766000",
+  "record": "store/runs/family-heap_in_place-1791964762527969000",
   "verdicts": {
    "38254640218": "conforms",
    "38254643501": "conforms"
   }
  },
  "heap_query": {
-  "candidate_sha256": "sha256:0913b95d3f2dc2ceebebc68516e51e6e9c2f14c7c2bb395db2047e3493f60a05",
+  "candidate_sha256": "sha256:1bab6b1bdd4f982b89e5edb366174665d78d9cae0d1d9d1ae1c106f89a8588e4",
   "divergence": {
    "38115120174": null,
    "38115121838": null
@@ -631,14 +631,14 @@
    "SESSION_INIT": 1
   },
   "family": "heap_query",
-  "record": "store/runs/family-heap_query-1791964052798513000",
+  "record": "store/runs/family-heap_query-1791964762967410000",
   "verdicts": {
    "38115120174": "conforms",
    "38115121838": "conforms"
   }
  },
  "integrity_level": {
-  "candidate_sha256": "sha256:8d587500e461969e93a2d37788b52a6ef7a353e0c8c266d2e26724a9b062582f",
+  "candidate_sha256": "sha256:12012663e217c8a033b212b35f72aa90933cc6002b902df041a22df010a34c8c",
   "divergence": {
    "38099150504": null,
    "38099152338": null
@@ -651,14 +651,14 @@
    "SESSION_INIT": 1
   },
   "family": "integrity_level",
-  "record": "store/runs/family-integrity_level-1791964052851292000",
+  "record": "store/runs/family-integrity_level-1791964762972271000",
   "verdicts": {
    "38099150504": "conforms",
    "38099152338": "conforms"
   }
  },
  "interlocked_lists": {
-  "candidate_sha256": "sha256:69bc65bd0c12361a9d974a8ab2712ded56d1ae9bfb09defcacbdb9bf07b72ef7",
+  "candidate_sha256": "sha256:4900a274ebe0835bbf631abd61049660bb9dd290f0f6cfefa6890e3cfb9033b9",
   "divergence": {
    "38210349431": null,
    "38210351696": null
@@ -671,14 +671,14 @@
    "SESSION_INIT": 1
   },
   "family": "interlocked_lists",
-  "record": "store/runs/family-interlocked_lists-1791964052919667000",
+  "record": "store/runs/family-interlocked_lists-1791964763025395000",
   "verdicts": {
    "38210349431": "conforms",
    "38210351696": "conforms"
   }
  },
  "known_folders": {
-  "candidate_sha256": "sha256:108c4b24ece2ee14c52c60bf78cf55035ef29bfda42f5289e217498d1d8f6e9d",
+  "candidate_sha256": "sha256:5878bb386549fbf2b58a8c4adbc094d886c06652c7e835beef5bf5c60b8194ab",
   "divergence": {
    "38098265812": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1",
    "38098267402": "Unimplemented: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1"
@@ -691,14 +691,14 @@
    "SESSION_INIT": 1
   },
   "family": "known_folders",
-  "record": "store/runs/family-known_folders-1791964052965162000",
+  "record": "store/runs/family-known_folders-1791964763035521000",
   "verdicts": {
    "38098265812": "conforms",
    "38098267402": "conforms"
   }
  },
  "late_tls": {
-  "candidate_sha256": "sha256:c9e43d3c01a30ae5b8104b2c5deaa79b4ac1bd49c339ad3a4c29bdfd8d6211a5",
+  "candidate_sha256": "sha256:f2d13e47c93b4bfe5d6de3e4fce9d3ec92434b42cdde937a406fb84bf34f9d7a",
   "divergence": {
    "38229484497": null,
    "38229488362": null,
@@ -713,7 +713,7 @@
    "SESSION_INIT": 1
   },
   "family": "late_tls",
-  "record": "store/runs/family-late_tls-1791964053216790000",
+  "record": "store/runs/family-late_tls-1791964763298471000",
   "verdicts": {
    "38229484497": "conforms",
    "38229488362": "conforms",
@@ -722,7 +722,7 @@
   }
  },
  "loader": {
-  "candidate_sha256": "sha256:21872e3e9e527acfa28261e19f97292edbddfc1ac19b1bb15e4366df0879d90b",
+  "candidate_sha256": "sha256:f364eb84e24e8e507af8b466b70dc70d31189fea25d725c9a09561a49b7b5b8a",
   "divergence": {
    "38047927781": null,
    "38047929442": null,
@@ -749,7 +749,7 @@
    "SESSION_INIT": 1
   },
   "family": "loader",
-  "record": "store/runs/family-loader-1791964053484588000",
+  "record": "store/runs/family-loader-1791964763770565000",
   "verdicts": {
    "38047927781": "conforms",
    "38047929442": "conforms",
@@ -770,7 +770,7 @@
   }
  },
  "local_free": {
-  "candidate_sha256": "sha256:4c049d9a7cca20fa62e6cfd40a97396d63fb9562bf60fe3bda0b8905c778dcf1",
+  "candidate_sha256": "sha256:1ab06e6d4f8f6fe2eefcfa8bfafad9dbd33944f3588ff72be9757a6f2c563206",
   "divergence": {
    "38092775612": null,
    "38092777429": null
@@ -783,14 +783,14 @@
    "SESSION_INIT": 1
   },
   "family": "local_free",
-  "record": "store/runs/family-local_free-1791964053613192000",
+  "record": "store/runs/family-local_free-1791964763801456000",
   "verdicts": {
    "38092775612": "conforms",
    "38092777429": "conforms"
   }
  },
  "locale": {
-  "candidate_sha256": "sha256:1b7592f48cff07027eeae5e09ed42f43058b2f5e64c71b0d0c33fe54960bf8bc",
+  "candidate_sha256": "sha256:f960f8e01d6a296d3ec9b6f30ce769991dbd4dcac1defd6e5c0c95b6256133e3",
   "divergence": {
    "38120346754": null,
    "38120348019": null
@@ -803,14 +803,14 @@
    "SESSION_INIT": 1
   },
   "family": "locale",
-  "record": "store/runs/family-locale-1791964053615889000",
+  "record": "store/runs/family-locale-1791964763866044000",
   "verdicts": {
    "38120346754": "conforms",
    "38120348019": "conforms"
   }
  },
  "module_names_ansi": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "38113666467": null,
    "38113667870": null
@@ -823,14 +823,14 @@
    "SESSION_INIT": 1
   },
   "family": "module_names_ansi",
-  "record": "store/runs/family-module_names_ansi-1791964053716817000",
+  "record": "store/runs/family-module_names_ansi-1791964763956418000",
   "verdicts": {
    "38113666467": "conforms",
    "38113667870": "conforms"
   }
  },
  "module_search": {
-  "candidate_sha256": "sha256:f5ca100300f3f77f93d72cde8a40bd60036720b1270cdcafebb78921acf78dec",
+  "candidate_sha256": "sha256:ebe5985736b1be5bcd435b79373680e9c6c31562a5bdb0cf167fd74d2b436e15",
   "divergence": {
    "38210455471": null,
    "38210458062": null
@@ -843,14 +843,14 @@
    "SESSION_INIT": 1
   },
   "family": "module_search",
-  "record": "store/runs/family-module_search-1791964054253054000",
+  "record": "store/runs/family-module_search-1791964764476307000",
   "verdicts": {
    "38210455471": "conforms",
    "38210458062": "conforms"
   }
  },
  "modules": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "38039204088": null,
    "38039205782": null,
@@ -867,7 +867,7 @@
    "SESSION_INIT": 1
   },
   "family": "modules",
-  "record": "store/runs/family-modules-1791964054294564000",
+  "record": "store/runs/family-modules-1791964764586703000",
   "verdicts": {
    "38039204088": "conforms",
    "38039205782": "conforms",
@@ -878,7 +878,7 @@
   }
  },
  "network": {
-  "candidate_sha256": "sha256:62f45fec049c7cde22f83d555796eb788a908e689484bd2cc4aa24ba34519db4",
+  "candidate_sha256": "sha256:4b71fcfd809dbd5252153f165d15695966a96db08c35e74c902f365f412a5bfa",
   "divergence": {
    "38127406287": null,
    "38127407661": null
@@ -891,14 +891,14 @@
    "SESSION_INIT": 1
   },
   "family": "network",
-  "record": "store/runs/family-network-1791964054331639000",
+  "record": "store/runs/family-network-1791964764624668000",
   "verdicts": {
    "38127406287": "conforms",
    "38127407661": "conforms"
   }
  },
  "output_debug_string": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38230799629": "Unimplemented: OutputDebugStringW argument form 0x140002070",
    "38230802984": "Unimplemented: OutputDebugStringW argument form 0x140002070",
@@ -913,7 +913,7 @@
    "SESSION_INIT": 1
   },
   "family": "output_debug_string",
-  "record": "store/runs/family-output_debug_string-1791964054460379000",
+  "record": "store/runs/family-output_debug_string-1791964764740408000",
   "verdicts": {
    "38230799629": "conforms",
    "38230802984": "conforms",
@@ -922,7 +922,7 @@
   }
  },
  "paths": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38090281974": null,
    "38090284442": null
@@ -935,14 +935,14 @@
    "SESSION_INIT": 1
   },
   "family": "paths",
-  "record": "store/runs/family-paths-1791964054692391000",
+  "record": "store/runs/family-paths-1791964764857724000",
   "verdicts": {
    "38090281974": "conforms",
    "38090284442": "conforms"
   }
  },
  "pointer_encoding": {
-  "candidate_sha256": "sha256:b77c8e4c1ff2b413bcb920d92fe9bcce7580f81370d805709bb746510bfecc12",
+  "candidate_sha256": "sha256:b8a5d0779528e9f924396cd92c7e4e747be96d3fb33551d40a6e16ab571868d9",
   "divergence": {
    "38048676507": null,
    "38048678695": null,
@@ -969,7 +969,7 @@
    "SESSION_INIT": 1
   },
   "family": "pointer_encoding",
-  "record": "store/runs/family-pointer_encoding-1791964055018548000",
+  "record": "store/runs/family-pointer_encoding-1791964765319642000",
   "verdicts": {
    "38048676507": "conforms",
    "38048678695": "conforms",
@@ -990,7 +990,7 @@
   }
  },
  "process_parameters": {
-  "candidate_sha256": "sha256:e75dc27af7dab2b28a6c23e01057fb0334bf9b8ed07daac3541c9aec0a4d4f50",
+  "candidate_sha256": "sha256:4d99855ce2daf482ff35fa91b07b8e471f1c082424a43a54df53723540f5b6e9",
   "divergence": {
    "38194049597": null,
    "38194051809": null
@@ -1003,14 +1003,14 @@
    "SESSION_INIT": 1
   },
   "family": "process_parameters",
-  "record": "store/runs/family-process_parameters-1791964055075151000",
+  "record": "store/runs/family-process_parameters-1791964765334327000",
   "verdicts": {
    "38194049597": "conforms",
    "38194051809": "conforms"
   }
  },
  "process_queries": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38041796227": null,
    "38041797992": null,
@@ -1026,7 +1026,7 @@
    "SESSION_INIT": 1
   },
   "family": "process_queries",
-  "record": "store/runs/family-process_queries-1791964055400496000",
+  "record": "store/runs/family-process_queries-1791964765687922000",
   "verdicts": {
    "38041796227": "conforms",
    "38041797992": "conforms",
@@ -1036,7 +1036,7 @@
   }
  },
  "processes": {
-  "candidate_sha256": "sha256:c76128cb397502325b097c655a4089c0a84439bc37017a5df5e1110ad181f3ca",
+  "candidate_sha256": "sha256:3f6d981d69ec18b38bd37ad011715ac298d005151588cc9c32efd2709bd226fd",
   "divergence": {
    "38189162864": null,
    "38189164581": null
@@ -1049,14 +1049,14 @@
    "SESSION_INIT": 1
   },
   "family": "processes",
-  "record": "store/runs/family-processes-1791964055417726000",
+  "record": "store/runs/family-processes-1791964765749954000",
   "verdicts": {
    "38189162864": "conforms",
    "38189164581": "conforms"
   }
  },
  "processor_topology": {
-  "candidate_sha256": "sha256:fc8a3eff4b3a411941e71a206530ca122185dc92d11e441996016102196615fd",
+  "candidate_sha256": "sha256:0b2a6ad1933793a064f232a08d87940ec899b6b1557ac8caf447b6f48baf5e69",
   "divergence": {
    "38206551545": null,
    "38206553365": null
@@ -1069,14 +1069,14 @@
    "SESSION_INIT": 1
   },
   "family": "processor_topology",
-  "record": "store/runs/family-processor_topology-1791964055947910000",
+  "record": "store/runs/family-processor_topology-1791964766379822000",
   "verdicts": {
    "38206551545": "conforms",
    "38206553365": "conforms"
   }
  },
  "registry": {
-  "candidate_sha256": "sha256:a1c7aa8f530b1d14ba7310ff3a839e64274d7f42e2b799297041951581ef3587",
+  "candidate_sha256": "sha256:fbb64125e4cbedb6069cf9ecbe5fe7893fca1e9992e091f234a94ad58aa4a0ab",
   "divergence": {
    "38210383833": null,
    "38210386046": null
@@ -1089,14 +1089,14 @@
    "SESSION_INIT": 1
   },
   "family": "registry",
-  "record": "store/runs/family-registry-1791964056346765000",
+  "record": "store/runs/family-registry-1791964766761725000",
   "verdicts": {
    "38210383833": "conforms",
    "38210386046": "conforms"
   }
  },
  "running_thread_context": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "lap-20261013T234642777Z-5cb60b6d": null
   },
@@ -1108,13 +1108,13 @@
    "SESSION_INIT": 1
   },
   "family": "running_thread_context",
-  "record": "store/runs/family-running_thread_context-1791964056579151000",
+  "record": "store/runs/family-running_thread_context-1791964766929358000",
   "verdicts": {
    "lap-20261013T234642777Z-5cb60b6d": "conforms"
   }
  },
  "slim_locks": {
-  "candidate_sha256": "sha256:bcef5d7fd04fa42ec4f0d5b049162e7fc251a34b3c72c91f92f9e70fb6c896fe",
+  "candidate_sha256": "sha256:3476a4ffc6c8a69d8bb5550d095df1d7b1c9bf8ca304f45851410052f8a21217",
   "divergence": {
    "38048676516": null,
    "38048679185": null,
@@ -1129,7 +1129,7 @@
    "SESSION_INIT": 1
   },
   "family": "slim_locks",
-  "record": "store/runs/family-slim_locks-1791964056819341000",
+  "record": "store/runs/family-slim_locks-1791964767329266000",
   "verdicts": {
    "38048676516": "conforms",
    "38048679185": "conforms",
@@ -1138,7 +1138,7 @@
   }
  },
  "static_tls": {
-  "candidate_sha256": "sha256:c9e43d3c01a30ae5b8104b2c5deaa79b4ac1bd49c339ad3a4c29bdfd8d6211a5",
+  "candidate_sha256": "sha256:f2d13e47c93b4bfe5d6de3e4fce9d3ec92434b42cdde937a406fb84bf34f9d7a",
   "divergence": {
    "38052225205": null,
    "38052227164": null,
@@ -1165,7 +1165,7 @@
    "SESSION_INIT": 1
   },
   "family": "static_tls",
-  "record": "store/runs/family-static_tls-1791964057080998000",
+  "record": "store/runs/family-static_tls-1791964767492025000",
   "verdicts": {
    "38052225205": "conforms",
    "38052227164": "conforms",
@@ -1186,7 +1186,7 @@
   }
  },
  "storage_get2": {
-  "candidate_sha256": "sha256:cc6afc398eee1a77029a24bf2ca1748b7c3e283cb3e5937040aa091e0fce63eb",
+  "candidate_sha256": "sha256:5d556d0bb99d8dbae43b821d2a8d0672189de5c868d2d1265dd57b13f4e90afa",
   "divergence": {
    "38051903385": null,
    "38051906733": null,
@@ -1205,7 +1205,7 @@
    "SESSION_INIT": 1
   },
   "family": "storage_get2",
-  "record": "store/runs/family-storage_get2-1791964057139115000",
+  "record": "store/runs/family-storage_get2-1791964767527907000",
   "verdicts": {
    "38051903385": "conforms",
    "38051906733": "conforms",
@@ -1218,7 +1218,7 @@
   }
  },
  "sync_objects": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38051398628": null,
    "38051400336": null,
@@ -1233,7 +1233,7 @@
    "SESSION_INIT": 1
   },
   "family": "sync_objects",
-  "record": "store/runs/family-sync_objects-1791964057337586000",
+  "record": "store/runs/family-sync_objects-1791964767763459000",
   "verdicts": {
    "38051398628": "conforms",
    "38051400336": "conforms",
@@ -1242,7 +1242,7 @@
   }
  },
  "system_info": {
-  "candidate_sha256": "sha256:16376d8133f0266d30c75bcf7199522fd3d3b5b52bbf548230b478e59170e81c",
+  "candidate_sha256": "sha256:0f24bbe13db75a4ee71db79b94755d7657067006a0f4880c22e96b625f0ba552",
   "divergence": {
    "38049865817": null,
    "38049867401": null,
@@ -1265,7 +1265,7 @@
    "SESSION_INIT": 1
   },
   "family": "system_info",
-  "record": "store/runs/family-system_info-1791964057476786000",
+  "record": "store/runs/family-system_info-1791964767925652000",
   "verdicts": {
    "38049865817": "conforms",
    "38049867401": "conforms",
@@ -1282,7 +1282,7 @@
   }
  },
  "system_modules": {
-  "candidate_sha256": "sha256:4c049d9a7cca20fa62e6cfd40a97396d63fb9562bf60fe3bda0b8905c778dcf1",
+  "candidate_sha256": "sha256:1ab06e6d4f8f6fe2eefcfa8bfafad9dbd33944f3588ff72be9757a6f2c563206",
   "divergence": {
    "38094160385": null,
    "38094162181": null
@@ -1295,14 +1295,14 @@
    "SESSION_INIT": 1
   },
   "family": "system_modules",
-  "record": "store/runs/family-system_modules-1791964057904452000",
+  "record": "store/runs/family-system_modules-1791964768532296000",
   "verdicts": {
    "38094160385": "conforms",
    "38094162181": "conforms"
   }
  },
  "temp_path": {
-  "candidate_sha256": "sha256:8d3cd13dfaff3b990c5c883ec43c5bbde8f8fca0c961349e7e0dc364fdb0ce2b",
+  "candidate_sha256": "sha256:154d41a10063bcd8cd052f7eeb4988d363869732f078ecd1794ec1fc70e6c88b",
   "divergence": {
    "38098847298": null,
    "38098848806": null
@@ -1315,14 +1315,14 @@
    "SESSION_INIT": 1
   },
   "family": "temp_path",
-  "record": "store/runs/family-temp_path-1791964058026141000",
+  "record": "store/runs/family-temp_path-1791964768553721000",
   "verdicts": {
    "38098847298": "conforms",
    "38098848806": "conforms"
   }
  },
  "thread_handles": {
-  "candidate_sha256": "sha256:fc8a3eff4b3a411941e71a206530ca122185dc92d11e441996016102196615fd",
+  "candidate_sha256": "sha256:0b2a6ad1933793a064f232a08d87940ec899b6b1557ac8caf447b6f48baf5e69",
   "divergence": {
    "38114820680": null,
    "38114822014": null
@@ -1335,14 +1335,14 @@
    "SESSION_INIT": 1
   },
   "family": "thread_handles",
-  "record": "store/runs/family-thread_handles-1791964058337177000",
+  "record": "store/runs/family-thread_handles-1791964768804231000",
   "verdicts": {
    "38114820680": "conforms",
    "38114822014": "conforms"
   }
  },
  "thread_queries": {
-  "candidate_sha256": "sha256:4f0745e8f74db6599bd914927dd22a4c7c004dae5b0e279a52d28810e44c7a15",
+  "candidate_sha256": "sha256:ac1defb822719761c939a58c4d43306aa7e229cc9709412d3063bae250e7c6a9",
   "divergence": {
    "38048923955": null,
    "38048925932": null,
@@ -1357,7 +1357,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_queries",
-  "record": "store/runs/family-thread_queries-1791964058568457000",
+  "record": "store/runs/family-thread_queries-1791964769077906000",
   "verdicts": {
    "38048923955": "conforms",
    "38048925932": "conforms",
@@ -1366,7 +1366,7 @@
   }
  },
  "thread_stack": {
-  "candidate_sha256": "sha256:7ed557c25af37bd4ae48411f555cafa3ff64cb45021a5e31fd677b4f4689af17",
+  "candidate_sha256": "sha256:c8d5115857d29c0ed3a9ec4d153c3b84d1f6fbd7b8952fde706be0dd3d031f7b",
   "divergence": {
    "38114444717": null,
    "38114446614": null
@@ -1379,14 +1379,14 @@
    "SESSION_INIT": 1
   },
   "family": "thread_stack",
-  "record": "store/runs/family-thread_stack-1791964058628827000",
+  "record": "store/runs/family-thread_stack-1791964769210395000",
   "verdicts": {
    "38114444717": "conforms",
    "38114446614": "conforms"
   }
  },
  "thread_stacks": {
-  "candidate_sha256": "sha256:7ed557c25af37bd4ae48411f555cafa3ff64cb45021a5e31fd677b4f4689af17",
+  "candidate_sha256": "sha256:c8d5115857d29c0ed3a9ec4d153c3b84d1f6fbd7b8952fde706be0dd3d031f7b",
   "divergence": {
    "lap-20261013T234430841Z-5cb60b6d": null
   },
@@ -1398,13 +1398,13 @@
    "SESSION_INIT": 1
   },
   "family": "thread_stacks",
-  "record": "store/runs/family-thread_stacks-1791964058727834000",
+  "record": "store/runs/family-thread_stacks-1791964769339451000",
   "verdicts": {
    "lap-20261013T234430841Z-5cb60b6d": "conforms"
   }
  },
  "thread_storage": {
-  "candidate_sha256": "sha256:0176b78e20646b40e4407d14a4cf8f50faf9322c2e5e1de4cba48cc60e0d875a",
+  "candidate_sha256": "sha256:14290c1ba1b4c6e533a96b881fe44ec689ba44f2109312e5ae49dd44e3cda32f",
   "divergence": {
    "38040526466": "Unimplemented: FlsFree argument form 0x1",
    "38040528813": "Unimplemented: FlsFree argument form 0x1",
@@ -1423,7 +1423,7 @@
    "SESSION_INIT": 1
   },
   "family": "thread_storage",
-  "record": "store/runs/family-thread_storage-1791964059160476000",
+  "record": "store/runs/family-thread_storage-1791964769640157000",
   "verdicts": {
    "38040526466": "conforms",
    "38040528813": "conforms",
@@ -1436,7 +1436,7 @@
   }
  },
  "threads": {
-  "candidate_sha256": "sha256:45085ea90dfb569ce276931176583d0b070ea1da0a17b43b850673a2bc8271a3",
+  "candidate_sha256": "sha256:2bceceda8d8f7709bdc1e107d13edd4539424b0927e858b244a70f4defcd5802",
   "divergence": {
    "38207005406": null,
    "38207007264": null
@@ -1449,14 +1449,14 @@
    "SESSION_INIT": 1
   },
   "family": "threads",
-  "record": "store/runs/family-threads-1791964059250668000",
+  "record": "store/runs/family-threads-1791964769895253000",
   "verdicts": {
    "38207005406": "conforms",
    "38207007264": "conforms"
   }
  },
  "time": {
-  "candidate_sha256": "sha256:c3448f5eea433b417a213d6e7ed8de095dc3cc437e68ef3e5ae827ff2d612e8a",
+  "candidate_sha256": "sha256:570acbdc631754b8d6d86512b01a06cfec9cf52f95d98a63b221640da4374039",
   "divergence": {
    "38173127764": null,
    "38173129974": null
@@ -1469,14 +1469,14 @@
    "SESSION_INIT": 1
   },
   "family": "time",
-  "record": "store/runs/family-time-1791964059299707000",
+  "record": "store/runs/family-time-1791964769896368000",
   "verdicts": {
    "38173127764": "conforms",
    "38173129974": "conforms"
   }
  },
  "time_and_error_mode": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "38206225386": null,
    "38206227300": null
@@ -1489,14 +1489,14 @@
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode",
-  "record": "store/runs/family-time_and_error_mode-1791964059549401000",
+  "record": "store/runs/family-time_and_error_mode-1791964770075907000",
   "verdicts": {
    "38206225386": "conforms",
    "38206227300": "conforms"
   }
  },
  "time_and_error_mode_child": {
-  "candidate_sha256": "sha256:c6a6e6bd23a56d65a9b0c0495a7cb4b0ae388bb37945f2da43d44e396b17a2b1",
+  "candidate_sha256": "sha256:ec7a0cca9d353861e3ba27ed753b1b80dd12c3e9c35760a643382278add977b2",
   "divergence": {
    "38206225386": null,
    "38206227300": null
@@ -1509,14 +1509,14 @@
    "SESSION_INIT": 1
   },
   "family": "time_and_error_mode_child",
-  "record": "store/runs/family-time_and_error_mode_child-1791964060171514000",
+  "record": "store/runs/family-time_and_error_mode_child-1791964770842063000",
   "verdicts": {
    "38206225386": "conforms",
    "38206227300": "conforms"
   }
  },
  "vectored_handlers": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38114204685": null,
    "38114206477": null
@@ -1529,14 +1529,14 @@
    "SESSION_INIT": 1
   },
   "family": "vectored_handlers",
-  "record": "store/runs/family-vectored_handlers-1791964060295997000",
+  "record": "store/runs/family-vectored_handlers-1791964771007143000",
   "verdicts": {
    "38114204685": "conforms",
    "38114206477": "conforms"
   }
  },
  "version": {
-  "candidate_sha256": "sha256:b9971446ff7b4ed8168178a258aab45cabaa98c1f8a37e166deeba95aeac5bc6",
+  "candidate_sha256": "sha256:c6eeabfc4325a5fec32da93ac8953bf94bcb39414b8450ea443d60419e7b56c3",
   "divergence": {
    "38173733146": null,
    "38173735116": null
@@ -1549,14 +1549,14 @@
    "SESSION_INIT": 1
   },
   "family": "version",
-  "record": "store/runs/family-version-1791964060321736000",
+  "record": "store/runs/family-version-1791964771038474000",
   "verdicts": {
    "38173733146": "conforms",
    "38173735116": "conforms"
   }
  },
  "virtual_memory": {
-  "candidate_sha256": "sha256:cfe29bab2a3b4d559d561831ca3cd2149a184a8cc79e2668c202faa3e3ab1cb0",
+  "candidate_sha256": "sha256:b409ea42001546079046b34d473d86cf97bd1847a1f0d0efdb74a45592836996",
   "divergence": {
    "38172734444": null,
    "38172736319": null
@@ -1569,14 +1569,14 @@
    "SESSION_INIT": 1
   },
   "family": "virtual_memory",
-  "record": "store/runs/family-virtual_memory-1791964060461720000",
+  "record": "store/runs/family-virtual_memory-1791964771049156000",
   "verdicts": {
    "38172734444": "conforms",
    "38172736319": "conforms"
   }
  },
  "wait_handoff": {
-  "candidate_sha256": "sha256:6f62bd26719b4562badafea60b80dfbb4753da4236343694d752b331fc87f63e",
+  "candidate_sha256": "sha256:c94f0871af9f46853cc71300d6aede3cc66016aa3ee0d1f86a9182f89007abb9",
   "divergence": {
    "38304235237": null,
    "38304238413": null
@@ -1589,14 +1589,14 @@
    "SESSION_INIT": 1
   },
   "family": "wait_handoff",
-  "record": "store/runs/family-wait_handoff-1791964060811913000",
+  "record": "store/runs/family-wait_handoff-1791964771582871000",
   "verdicts": {
    "38304235237": "conforms",
    "38304238413": "conforms"
   }
  },
  "windows": {
-  "candidate_sha256": "sha256:68d29f64eb23ff266fb139107d6e198b8de63367890c7d916971dad8120ea7f1",
+  "candidate_sha256": "sha256:f45fd30fa03001dc608591251cc8eae7661bd6d2f982cb2db237f91ea1dba8b4",
   "divergence": {
    "38210803867": null,
    "38210806334": null
@@ -1609,14 +1609,14 @@
    "SESSION_INIT": 1
   },
   "family": "windows",
-  "record": "store/runs/family-windows-1791964060961039000",
+  "record": "store/runs/family-windows-1791964771718101000",
   "verdicts": {
    "38210803867": "conforms",
    "38210806334": "conforms"
   }
  },
  "winrt": {
-  "candidate_sha256": "sha256:80b69340a81a0252db524f96f6d3610aa0d84a2637371e651e4e59f07960c7de",
+  "candidate_sha256": "sha256:e01965892cb5dbcd6ba1fd734371f9702d86df211c9d49eddba7287833a24dea",
   "divergence": {
    "38178400798": null,
    "38178402576": null
@@ -1629,7 +1629,7 @@
    "SESSION_INIT": 1
   },
   "family": "winrt",
-  "record": "store/runs/family-winrt-1791964060988901000",
+  "record": "store/runs/family-winrt-1791964771841828000",
   "verdicts": {
    "38178400798": "conforms",
    "38178402576": "conforms"
