@@ -511,10 +511,12 @@ class Reference:
 GAME_ARGUMENTS = ("-batchmode", "-nographics", "-logFile", "C:\\w2m\\unity.log")
 
 
-def arguments(text: str) -> tuple[str, ...]:
-    """A command line's arguments, each without its quotes (a Windows path keeps its backslashes)."""
+def arguments(given: str | list[str]) -> tuple[str, ...]:
+    """A command line's arguments, each without its quotes (a Windows path keeps its backslashes); the laptop's
+    exec.json records them as a list (run-job.ps1), a command line as one string."""
     import shlex
-    return tuple(a.strip('"') for a in shlex.split(text, posix=False))
+    parts = given if isinstance(given, list) else shlex.split(given, posix=False)
+    return tuple(a.strip('"') for a in parts)
 
 
 def laptop_run(run: Path) -> bool:

@@ -318,7 +318,12 @@ def test_each_execution_pairs_its_own_threads() -> None:
 def test_the_reference_set_is_the_runs_of_the_build_and_capture(tmp_path: Path) -> None:
     contract = json.loads(call_compare.CONTRACT.read_text())
     members, outside = call_compare.reference_set(contract)
-    assert [run.name for run in members] == ["38216081440"]           # the first capture that names threads
+    runners = [run.name for run in members if not run.name.startswith("lap-")]
+    assert runners == ["38216081440"]                                   # the first capture that names threads
+    laptop = [run.name for run in members if run.name.startswith("lap-")]
+    assert all(call_compare.arguments(json.loads((run / "exec.json").read_text())["arguments"])
+               == call_compare.GAME_ARGUMENTS for run in members if run.name in laptop)     # batch mode only
+    assert all(v.startswith("other arguments") for k, v in outside.items() if k.startswith("lap-"))   # play mode
     for unnamed in ("38176899195", "38203364352", "38206263976"):
         assert outside[unnamed].startswith("the capture names no threads")
     assert outside["38113342549"] == "no call trace with thread names"
