@@ -97,6 +97,7 @@ CODE_WRITE_SPILL = 0x88             # MONITOR_DATA + this: x17 while the excepti
 SAVE_AREA = 0x100                   # MONITOR_DATA + this: x0-x30, then ESR, FAR, ELR at +0x100 (exception entry),
                                     # a software exception's code and RIP at +0x118, +0x120, and Q0-Q15 at +0x200
 SAVE_VECTORS = 0x200
+NATIVE_OPERANDS = 0x300             # MONITOR_DATA + this: two 16-byte operands for a native helper call (PCMPISTRI)
 VECTORS = 0x01000               # vector table, 16 slots of 0x80
 DISPATCHER = 0x01800
 EXCEPTION_ENTRY = 0x01C00           # EL1 synchronous-exception path into the guest runtime
@@ -970,6 +971,29 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k in ("vex", "vexs", "fma", "vzeroupper"):          # VEX (src/w2m/rules/_vex.py; Sprint 049)
             from w2m.rules import _vex
             _vex.lower(a, op, reg_of, store)
+        elif k == "sse" and op[1] in ("PCMPISTRI", "PCMPISTRI64") and symbols and "w2m_pcmpistri" in symbols:
+            # natively, as CPUID's call is made (2026-10-13, the speed work): the model ran each one at about 1.3 ms
+            # (hvc #10; 2,129 s of the frontier's host time, UnityPlayer's strstr). The operands go to the monitor
+            # data page at NATIVE_OPERANDS, the GPRs to the state block, and tools/guest_runtime/string_compare.c
+            # answers ECX and CF ZF SF OF (AF and PF 0) in x0
+            from w2m.rules._sse import _sse_src
+            _, _, dst, src, _, imm = op
+            v = _sse_src(a, src, 16, reg_of)
+            state = PROCESS_VA + STATE_OFF
+            a.emit(a64.str_v(16, int(dst[1]), 28, NATIVE_OPERANDS), a64.str_v(16, v, 28, NATIVE_OPERANDS + 16),
+                   a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.stp(i, i + 1, 16, 8 * i))
+            a.emit(a64.addi(0, 28, NATIVE_OPERANDS), a64.addi(1, 28, NATIVE_OPERANDS + 16), a64.mov_imm(2, imm & 0xFF),
+                   a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
+                   a64.mov_imm(16, symbols["w2m_pcmpistri"]), a64.blr(16), a64.mov(17, 0), a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.ldp(i, i + 1, 16, 8 * i))
+            a.emit(a64.ubfx(1, 17, 0, 5),                                       # ECX, RCX's upper half cleared
+                   a64.ubfx(REG_CF, 17, 8, 1), a64.ubfx(REG_ZF, 17, 9, 1), a64.ubfx(REG_SF, 17, 10, 1),
+                   a64.ubfx(REG_OF, 17, 11, 1), a64.mov(REG_PF, a64.ZR),
+                   a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, a64.ZR, 28, AF_OPERANDS + 16))
+            _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)
             from w2m.rules import registry
             lower = registry()[op[1]].lower
