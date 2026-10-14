@@ -260,6 +260,9 @@ class Runtime:
         if kind == "bsf":                                         # SDM BSF/BSR: ZF the source was 0
             f.update(Z=(a & m) == 0, C=None, O=None, S=None, A=None, P=None)
             return
+        if kind == "popcnt":                                      # SDM POPCNT: ZF the source was 0, the rest cleared
+            f.update(Z=(a & m) == 0, C=False, O=False, S=False, A=False, P=False)
+            return
         if kind == "adc":                                         # SDM ADC: a + b + CF, with carry
             f.update(Z=res == 0, S=bool(res & sign), P=_parity(res), A=bool((a ^ b ^ res) & 0x10),
                      O=bool(~(a ^ b) & (a ^ res) & sign), C=bool(((a & b) | ((a | b) & ~res)) & sign))
@@ -1091,6 +1094,8 @@ class Runtime:
                     v = xw - (1 << w) if xw >> (w - 1) else xw
                 elif o == "bswap":
                     v = int.from_bytes((x & m).to_bytes(bits // 8, "little"), "big")
+                elif o == "popcnt":                               # SDM POPCNT: the set bits of the source
+                    v = bin(x & m).count("1")
                 elif o == "sbb":
                     v = x - y - int(self._flag("C"))
                 elif o == "adc":

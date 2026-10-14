@@ -718,6 +718,30 @@ def fmov_to_v(size: int, vd: int, rn: int) -> int:
     return {4: 0x1E270000, 8: 0x9E670000}[size] | rn << 5 | vd
 
 
+def fcm(cond: str, double: bool, vd: int, vn: int, vm: int) -> int:
+    """FCMEQ / FCMGE / FCMGT Vd, Vn, Vm on four singles or two doubles: all ones in each lane where it holds."""
+    _v(vd, vn, vm)
+    return {"eq": 0x4E20E400, "ge": 0x6E20E400, "gt": 0x6EA0E400}[cond] | int(double) << 22 | vm << 16 | vn << 5 | vd
+
+
+def not_16b(vd: int, vn: int) -> int:
+    """NOT Vd.16B, Vn.16B."""
+    _v(vd, vn)
+    return 0x6E205800 | vn << 5 | vd
+
+
+def cnt_8b(vd: int, vn: int) -> int:
+    """CNT Vd.8B, Vn.8B: the set bits of each byte."""
+    _v(vd, vn)
+    return 0x0E205800 | vn << 5 | vd
+
+
+def addv_8b(vd: int, vn: int) -> int:
+    """ADDV Bd, Vn.8B: the sum of the eight bytes."""
+    _v(vd, vn)
+    return 0x0E31B800 | vn << 5 | vd
+
+
 def fmov_from_v(size: int, rd: int, vn: int) -> int:
     """FMOV Wd, Sn / Xd, Dn."""
     _v(rd, vn)

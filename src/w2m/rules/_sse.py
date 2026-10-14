@@ -108,6 +108,7 @@ LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "UNPCKHPD": 
                 "PUNPCKHQDQ": ("zip2", 3),      # Sprint 065: 1.4M model steps at UnityPlayer.dll+0x3cf4 and its neighbours
                 "PADDUSB": ("uqadd", 0), "PCMPGTB": ("cmgt", 0), "PADDB": ("add", 0)}     # Sprint 065
 SSE2_INT_LOWERED_APPROXIMATE = {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
+CMP_LOWERED = {"CMPPS", "CMPPD"}                               # Sprint 068 item C
 SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
           "PSRAW": (1, "arith"), "PSLLQ": (3, "left")}
 SSE2_INT_LOWERED |= {'PADDSB', 'PACKUSWB', 'PUNPCKHDQ', 'PMAXUB', 'PSUBSB', 'PSRAW', 'PADDQ', 'PCMPEQD', 'PSHUFLW', 'PSUBUSB', 'PSRLW', 'MOVHPS', 'PUNPCKHBW', 'PUNPCKHWD', 'PUNPCKLWD', 'PANDN', 'PADDW', 'PADDSW', 'PSUBW', 'PUNPCKLQDQ', 'PSHUFHW', 'PMULLW', 'PINSRW', 'UNPCKLPD', 'PCMPGTD', 'PSLLQ'}
@@ -320,7 +321,7 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
     for loc in (dst, src):
         if loc[0] == "m" and align:
             _check_alignment(a, reg_of(loc[1]))
-    if ic in FP_CLASSES:                                         # fast path only when MXCSR masks all six
+    if ic in FP_CLASSES or ic in CMP_LOWERED:                    # fast path only when MXCSR masks all six
         fast = a.label()
         a.emit(a64.ldr(4, 16, 28, MXCSR_OFF), a64.ubfx(16, 16, 7, 6), a64.cmpi(16, 0x3F))
         a.branch(lambda off: a64.bcond("eq", off), fast)
@@ -328,6 +329,24 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         a.bind(fast)
     if ic in SSE2_INT_LOWERED:
         _lower_int(a, ic, dst, src, imm, reg_of)
+        return
+    if ic in CMP_LOWERED:
+        # CMPPS / CMPPD imm8[2:0] (SDM CMPPS): EQ_OQ LT_OS LE_OS UNORD_Q NEQ_UQ NLT_US NLE_US ORD_Q. FCMEQ is a quiet
+        # compare and FCMGE / FCMGT signal on any NaN, as the x86 predicates 0 3 4 7 and 1 2 5 6 do, so MXCSR's invalid
+        # flag follows (FPSR_TO_MXCSR). Native from Sprint 068 item C: CMPPS 35,055 model steps in a 10-billion-
+        # instruction frontier once worker threads ran on time.
+        assert imm is not None
+        d, s, dbl, p = int(dst[1]), _sse_src(a, src, 16, reg_of), ic == "CMPPD", imm & 7
+        if p in (0, 4):
+            a.emit(a64.fcm("eq", dbl, d, d, s))
+        elif p in (1, 5):
+            a.emit(a64.fcm("gt", dbl, d, s, d))                  # a < b: b > a
+        elif p in (2, 6):
+            a.emit(a64.fcm("ge", dbl, d, s, d))
+        else:                                                    # ordered: neither lane a NaN
+            a.emit(a64.fcm("eq", dbl, 30, d, d), a64.fcm("eq", dbl, 31, s, s), a64.and_v(d, 30, 31))
+        if p in (3, 4, 5, 6):
+            a.emit(a64.not_16b(d, d))
         return
     if ic == "PEXTRW":
         # word imm & 7 of the XMM source, zero-extended into the register (SDM PEXTRW; a memory operand is #UD in

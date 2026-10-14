@@ -630,11 +630,16 @@ def implicit(ctx: Ctx) -> None:
 
 
 def popcnt(ctx: Ctx) -> None:
-    """POPCNT r, r/m (SDM POPCNT; reported by the guest profile)."""
+    """POPCNT r, r/m (SDM POPCNT; reported by the guest profile): the set bits of the source; ZF when it is 0, CF OF SF
+    AF PF cleared. Lowered from Sprint 068 (item C: 50,197 model steps in a 10-billion-instruction frontier once worker
+    threads ran on time)."""
     b, ops, nxt = ctx.b, ctx.ops, ctx.nxt
     _, dst, bits = _operand(b, ops[0], nxt)
     sk, src, _ = _operand(b, ops[1], nxt, bits)
-    _model(ctx, dst, (_val(b, sk, src),), bits)
+    a, r = _val(b, sk, src), b.t()
+    b.emit("alu", r, "popcnt", a, a, bits)
+    b.emit("st", dst, r)
+    b.emit("flags", "popcnt", a, a, r, bits)
 
 
 def loop(ctx: Ctx) -> None:

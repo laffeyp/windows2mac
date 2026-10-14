@@ -464,6 +464,12 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, nz
         _mark_defined(a, U_CF)
         _mark_undefined(a, U_OF | U_SF | U_AF | U_PF)
         return
+    if kind == "popcnt":                                       # SDM POPCNT: ZF the source was 0; CF OF SF AF PF 0
+        a.emit(a64.ubfx(16, ra, 0, bits) if bits < 64 else a64.mov(16, ra), a64.cmpi(16, 0), a64.cset(REG_ZF, "eq"),
+               a64.mov(REG_CF, a64.ZR), a64.mov(REG_OF, a64.ZR), a64.mov(REG_SF, a64.ZR), a64.movz(16, 1),
+               a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, 16, 28, PF_RESULT),   # PF_RESULT 1: PF clear
+               a64.movz(REG_UNDEFINED_FLAGS, 0))
+        return
     if kind == "bsf":                                          # SDM BSF/BSR: ZF the source was 0; the rest undefined
         a.emit(a64.ubfx(16, ra, 0, bits) if bits < 64 else a64.mov(16, ra), a64.cmpi(16, 0), a64.cset(REG_ZF, "eq"))
         _mark_defined(a, U_ZF)
@@ -706,7 +712,7 @@ FLAG_LIVENESS = True
 ALL_FLAGS = U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF
 COND_FLAGS = {"o": U_OF, "b": U_CF, "z": U_ZF, "s": U_SF, "p": U_PF, "be": U_CF | U_ZF, "l": U_SF | U_OF,
               "le": U_ZF | U_SF | U_OF}
-FLAGS_WRITTEN = {kind: ALL_FLAGS for kind in ("add", "sub", "adc", "sbb", "logic", "andn", "mul", "imul", "bsf")}
+FLAGS_WRITTEN = {kind: ALL_FLAGS for kind in ("add", "sub", "adc", "sbb", "logic", "andn", "mul", "imul", "bsf", "popcnt")}
 FLAGS_WRITTEN.update(inc=ALL_FLAGS & ~U_CF, dec=ALL_FLAGS & ~U_CF, bt=ALL_FLAGS & ~U_ZF)   # SDM INC, DEC, BT
 FLAGS_SSE = {"COMISS", "UCOMISS", "COMISD", "UCOMISD", "PCMPISTRI", "PCMPISTRI64"}       # each writes all six
 FLAGS_NONE = {"imm", "addr", "ld", "st", "sel", "cst", "cstz", "mxcsr", "mmx", "fence", "rep", "cpuid", "df", "pause",
@@ -1303,6 +1309,9 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 a.emit(a64.sbfx(rd, rx, 0, 8 if o == "sext8" else 16))
             elif o == "bswap":
                 a.emit(a64.rev(rd, rx, bits))
+            elif o == "popcnt":                                 # V31 is scratch (the SSE lowerings' too)
+                a.emit(a64.ubfx(16, rx, 0, bits) if bits < 64 else a64.mov(16, rx), a64.fmov_to_v(8, 31, 16),
+                       a64.cnt_8b(31, 31), a64.addv_8b(31, 31), a64.fmov_from_v(4, rd, 31))
             elif o == "adc":                                    # a + b + CF; CF must be defined
                 _exit_if_undefined(a, "C")
                 a.emit(a64.add(rd, rx, ry), a64.add(rd, rd, REG_CF))
