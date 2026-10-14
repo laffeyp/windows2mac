@@ -95,10 +95,10 @@ def run_job(name: str, repeat: int, binary: str | None = None, dll: str | None =
     if not (ROOT / "probes" / name).is_dir():
         print(f"no probes/{name}", file=sys.stderr)
         return 1
-    head = git("rev-parse", "HEAD").decode().strip()
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)              # one job at a time on the laptop's one workspace
+        head = git("rev-parse", "HEAD").decode().strip()   # read under the lock: a queued job names what it ships
         now = time.time()
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(now)) + f"{int(now * 1000) % 1000:03d}Z"
         run = f"lap-{stamp}-{head[:8]}"
@@ -114,9 +114,9 @@ def run_job(name: str, repeat: int, binary: str | None = None, dll: str | None =
             job = Path(d) / run
             job.mkdir()
             paths = [f"probes/{name}"] if binary else [".", ":!store"]
-            (job / "tree.tar").write_bytes(git("archive", "--format=tar", "HEAD", "--", *paths))
+            (job / "tree.tar").write_bytes(git("archive", "--format=tar", head, "--", *paths))
             for script in EXECUTOR:                   # the executor itself comes from the committed tree
-                (job / script).write_bytes(git("show", f"HEAD:tools/windows_machine/{script}"))
+                (job / script).write_bytes(git("show", f"{head}:tools/windows_machine/{script}"))
             inputs = {"tree.tar": sha256(job / "tree.tar")}
             if binary:
                 (job / "probe.exe").write_bytes((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes())
@@ -169,10 +169,10 @@ def batch_items(families: list[str]) -> list[dict[str, str]]:
 
 
 def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, window: str = "hidden") -> int:
-    head = git("rev-parse", "HEAD").decode().strip()
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        head = git("rev-parse", "HEAD").decode().strip()   # read under the lock: a queued job names what it ships
         now = time.time()
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(now)) + f"{int(now * 1000) % 1000:03d}Z"
         run = f"lap-{stamp}-{head[:8]}"
@@ -185,9 +185,9 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
         with tempfile.TemporaryDirectory() as d:
             job = Path(d) / run
             (job / "bin").mkdir(parents=True)
-            (job / "tree.tar").write_bytes(git("archive", "--format=tar", "HEAD", "--", "probes"))
+            (job / "tree.tar").write_bytes(git("archive", "--format=tar", head, "--", "probes"))
             for script in EXECUTOR:
-                (job / script).write_bytes(git("show", f"HEAD:tools/windows_machine/{script}"))
+                (job / script).write_bytes(git("show", f"{head}:tools/windows_machine/{script}"))
             inputs = {"tree.tar": sha256(job / "tree.tar")}
             for item in items:
                 for kind in ("exe", "dll"):
@@ -228,10 +228,10 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
 
 
 def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audio: str = "on") -> int:
-    head = git("rev-parse", "HEAD").decode().strip()
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        head = git("rev-parse", "HEAD").decode().strip()   # read under the lock: a queued job names what it ships
         now = time.time()
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(now)) + f"{int(now * 1000) % 1000:03d}Z"
         run = f"lap-{stamp}-{head[:8]}"
@@ -243,10 +243,10 @@ def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audi
         with tempfile.TemporaryDirectory() as d:
             job = Path(d) / run
             job.mkdir()
-            (job / "tree.tar").write_bytes(git("archive", "--format=tar", "HEAD", "--", "tools/jit_capture",
+            (job / "tree.tar").write_bytes(git("archive", "--format=tar", head, "--", "tools/jit_capture",
                                                f"games/{game}"))
             for script in EXECUTOR:
-                (job / script).write_bytes(git("show", f"HEAD:tools/windows_machine/{script}"))
+                (job / script).write_bytes(git("show", f"{head}:tools/windows_machine/{script}"))
             spec["inputs"] = {"tree.tar": sha256(job / "tree.tar")}
             (job / "job.json").write_text(json.dumps(spec, indent=1))
             if not copy("-r", str(job), f"{HOST}:{JOBS}/"):
