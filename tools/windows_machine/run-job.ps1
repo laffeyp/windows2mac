@@ -166,7 +166,9 @@ try {
         Set-ItemProperty $pref "$app\$exe.exe" 'GpuPreference=2;'
         Add-Type -AssemblyName System.Drawing, System.Windows.Forms
         if (-not ('W2mPlayer' -as [type])) {
-          Add-Type -Path (Join-Path $PSScriptRoot 'input.cs') -ReferencedAssemblies System.Windows.Forms, System.Drawing, System.Windows.Forms.Primitives, System.ComponentModel.Primitives
+          Add-Type -Path (Join-Path $PSScriptRoot 'input.cs') -ReferencedAssemblies System.Windows.Forms, System.Drawing, System.Drawing.Primitives, System.Windows.Forms.Primitives, `
+            System.ComponentModel.Primitives, Microsoft.Win32.Primitives, System.Collections, System.Runtime, System.Threading, `
+            System.Threading.Thread, System.Diagnostics.Process, System.Runtime.InteropServices, System.Console, System.Private.CoreLib
         }
       }
       $info = Get-Content (Join-Path $pristine "$($exe)_Data\app.info")
