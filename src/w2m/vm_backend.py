@@ -1515,6 +1515,27 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                    a64.ubfx(REG_OF, 17, 11, 1), a64.movz(16, 1),          # PF and AF clear (PF_RESULT 1)
                    a64.stp(a64.ZR, a64.ZR, 28, AF_OPERANDS), a64.str_(8, 16, 28, PF_RESULT))
             _mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF)
+        elif k == "sse" and op[1] in ("RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS") and symbols and "w2m_approximate" in symbols:
+            # the reference CPU's tables in the runtime's C (tools/guest_runtime/approximate.c; Sprint 068 item C), as
+            # PCMPISTRI's call: the destination and the source to NATIVE_OPERANDS, the GPRs to the state block (the
+            # C uses no vector register: -mgeneral-regs-only), and the destination back with its new lanes
+            from w2m.rules._sse import _check_alignment, _sse_src
+            _, ic, dst, src, align, *_ = op
+            n = 4 if ic.endswith("PS") else 1
+            if src[0] == "m" and align:
+                _check_alignment(a, reg_of(src[1]))
+            v = _sse_src(a, src, 16 if n == 4 else 4, reg_of)
+            state = PROCESS_VA + STATE_OFF
+            a.emit(a64.str_v(16, int(dst[1]), 28, NATIVE_OPERANDS), a64.str_v(16, v, 28, NATIVE_OPERANDS + 16),
+                   a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.stp(i, i + 1, 16, 8 * i))
+            a.emit(a64.addi(0, 28, NATIVE_OPERANDS), a64.addi(1, 28, NATIVE_OPERANDS + 16), a64.movz(2, int("RSQRT" in ic)),
+                   a64.movz(3, n), a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
+                   a64.mov_imm(16, symbols["w2m_approximate"]), a64.blr(16), a64.mov_imm(16, state))
+            for i in range(0, 16, 2):
+                a.emit(a64.ldp(i, i + 1, 16, 8 * i))
+            a.emit(a64.ldr_v(16, int(dst[1]), 28, NATIVE_OPERANDS))
         elif k == "sse":                                         # the class's own lowering (src/w2m/rules)
             from w2m.rules import registry
             lower = registry()[op[1]].lower

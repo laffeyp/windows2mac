@@ -143,11 +143,12 @@ def _texts_for(last_error_source: str | None, file_source: str | None,
 
 def generated_headers() -> dict[str, str]:
     """The headers the build writes from Python's tables (api_ids.h aside: it is written from the sources)."""
+    from w2m.approximate import c_header as approximation_header
     from w2m.code_pages import c_header as code_page_header
     from w2m.cpuid import c_header
     from w2m.system_messages import c_header as message_header
     return {"cpuid_table.h": c_header(), "code_page_tables.h": code_page_header(),
-            "system_messages.h": message_header()}
+            "system_messages.h": message_header(), "approximation_tables.h": approximation_header()}
 
 
 def _compile(base_va: int, defines: dict[str, int], texts: dict[str, str]) -> tuple[Path, Path]:
@@ -158,7 +159,8 @@ def _compile(base_va: int, defines: dict[str, int], texts: dict[str, str]) -> tu
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
     key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header,
                                     generated["cpuid_table.h"], generated["code_page_tables.h"],
-                                    generated["system_messages.h"], " ".join(CFLAGS), " ".join(dflags),
+                                    generated["system_messages.h"], generated["approximation_tables.h"],
+                                    " ".join(CFLAGS), " ".join(dflags),
                                     f"{base_va:x}"]).encode()).hexdigest()
     out = CACHE / f"{key}.bin"
     work = CACHE / key
