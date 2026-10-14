@@ -115,6 +115,7 @@ SSE2_INT_LOWERED |= {"PCMPEQW"}                                                 
 SSE2_INT_LOWERED |= {"PUNPCKHQDQ"}                                               # Sprint 065
 # Sprint 065: the frontier's hottest slow-SSE classes (frontier 643a6283510c-1791810726153034000: 39.5M exits)
 SSE2_INT_LOWERED |= {"PADDUSB", "PCMPGTB", "PADDB", "PACKSSWB", "PMULHW", "PSHUFB", "MOVLPS"}
+SSE2_INT_LOWERED |= {"PSADBW", "PMADDUBSW"}                                     # Sprint 068
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
@@ -289,6 +290,24 @@ def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of:
         a.emit(a64.smull(30, d, v, False), a64.smull(31, d, v, True), a64.three_same("uzp2", d, 30, 31, 1))
     elif ic == "PSHUFB":                                         # a byte's index with bit 7 set gives 0; TBL gives 0
         a.emit(a64.movi_bytes(30, 0x8F), a64.and_v(30, v, 30), a64.tbl(d, d, 30))     # for any index past 15
+    elif ic == "PSADBW":
+        # each quadword's eight absolute byte differences summed into its low word, the rest zeroed (SDM PSADBW):
+        # UABD, then three pairwise widening adds leave each sum (at most 2,040) alone in its 64-bit lane. Native
+        # from Sprint 068: frontier 1ecc22b2 ran 152,246 model steps here past 41.7 billion instructions
+        a.emit(a64.three_same("uabd", 30, d, v, 0), a64.add_pairwise_long(30, 30, 0, False),
+               a64.add_pairwise_long(30, 30, 1, False), a64.add_pairwise_long(30, 30, 2, False), a64.mov_v(d, 30))
+    elif ic == "PMADDUBSW":
+        # the destination's unsigned bytes times the source's signed bytes, each adjacent pair's products added with
+        # signed saturation to a word (SDM PMADDUBSW). A product fits a halfword (255 x -128 = -32,640), SADDLP adds
+        # the pairs into words without overflow, SQXTN saturates. The source is read whole before any scratch it
+        # may be (V31 from memory, V29 under VEX) is written. Native from Sprint 068: 344,613 model steps
+        t1, t2 = [t for t in (30, 31, 29) if t != v][:2]
+        t3 = v if v in (29, 30, 31) else 29
+        a.emit(a64.extend_bytes(t1, v, True, True), a64.extend_bytes(t2, d, True, False),
+               a64.three_same("mul", t2, t2, t1, 1), a64.add_pairwise_long(t2, t2, 1, True),      # high sums in t2
+               a64.extend_bytes(t1, v, False, True), a64.extend_bytes(t3, d, False, False),
+               a64.three_same("mul", t3, t3, t1, 1), a64.add_pairwise_long(t3, t3, 1, True),      # low sums in t3
+               a64.sqxtn_h(t1, t3, False), a64.sqxtn_h(t1, t2, True), a64.mov_v(d, t1))
     else:
         raise CompileError(f"sse {ic}")
 
@@ -307,6 +326,13 @@ def lower(a: Assembler, op: Op, reg_of: Callable[[int], int], store: Callable[[O
         a.bind(fast)
     if ic in SSE2_INT_LOWERED:
         _lower_int(a, ic, dst, src, imm, reg_of)
+        return
+    if ic == "PEXTRW":
+        # word imm & 7 of the XMM source, zero-extended into the register (SDM PEXTRW; a memory operand is #UD in
+        # register_only_rule). Native from Sprint 068: 150,337 model steps at frontier 1ecc22b2
+        assert imm is not None
+        a.emit(a64.umov_h(16, int(src[1]), imm & 7))
+        store(dst, 16)
         return
     if ic in ("MOVAPS", "MOVAPD", "MOVUPS", "MOVUPD", "LDDQU"):     # LDDQU: a 16-byte load, memory only (Sprint 065)
         if dst[0] == "x" and src[0] == "x":

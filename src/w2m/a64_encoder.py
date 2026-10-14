@@ -550,7 +550,8 @@ def umov_s(rd: int, vn: int, lane: int) -> int:
 THREE_SAME = {"add": 0x4E208400, "sub": 0x6E208400, "cmeq": 0x6E208C00, "cmgt": 0x4E203400, "uqsub": 0x6E202C00,
               "sqsub": 0x4E202C00, "sqadd": 0x4E200C00, "umax": 0x6E206400, "mul": 0x4E209C00,
               "zip1": 0x4E003800, "zip2": 0x4E007800, "ushl": 0x6E204400, "sshl": 0x4E204400,
-              "uqadd": 0x6E200C00, "uzp2": 0x4E005800}                      # Sprint 065
+              "uqadd": 0x6E200C00, "uzp2": 0x4E005800,                      # Sprint 065
+              "uabd": 0x6E207400}                                           # Sprint 068 (PSADBW)
 
 
 def three_same(name: str, vd: int, vn: int, vm: int, size: int) -> int:
@@ -597,6 +598,33 @@ def sqxtn(vd: int, vn: int, upper: bool) -> int:
     """SQXTN Vd.8B, Vn.8H (upper: SQXTN2 Vd.16B): halfwords to signed bytes, saturated (Sprint 065)."""
     _v(vd, vn)
     return (0x4E214800 if upper else 0x0E214800) | vn << 5 | vd
+
+
+def sqxtn_h(vd: int, vn: int, upper: bool) -> int:
+    """SQXTN Vd.4H, Vn.4S (upper: SQXTN2 Vd.8H): words to signed halfwords, saturated (Sprint 068; encodings checked
+    against Apple clang's assembler, as are the four below)."""
+    _v(vd, vn)
+    return (0x4E614800 if upper else 0x0E614800) | vn << 5 | vd
+
+
+def add_pairwise_long(vd: int, vn: int, size: int, signed: bool) -> int:
+    """SADDLP or UADDLP Vd, Vn.<T>: adjacent lanes of size 0-2 (16B, 8H, 4S) added into lanes twice as wide."""
+    _v(vd, vn)
+    assert size < 3
+    return (0x4E202800 if signed else 0x6E202800) | size << 22 | vn << 5 | vd
+
+
+def extend_bytes(vd: int, vn: int, upper: bool, signed: bool) -> int:
+    """SXTL or UXTL Vd.8H, Vn.8B (SSHLL/USHLL #0; upper: the high eight bytes, SSHLL2/USHLL2)."""
+    _v(vd, vn)
+    return (0x0F08A400 if signed else 0x2F08A400) | (1 << 30 if upper else 0) | vn << 5 | vd
+
+
+def umov_h(rd: int, vn: int, lane: int) -> int:
+    """UMOV Wd, Vn.H[lane]: the halfword zero-extended."""
+    _v(rd, vn)
+    assert 0 <= lane < 8
+    return 0x0E003C00 | ((lane << 2) | 0b10) << 16 | vn << 5 | rd
 
 
 def smull(vd: int, vn: int, vm: int, upper: bool) -> int:

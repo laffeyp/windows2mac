@@ -192,6 +192,43 @@ int main(int argc, char **argv) {
             hv_return_t r1 = hv_vcpu_set_reg(vcpu, HV_REG_FPCR, fpcr), r2 = hv_vcpu_set_reg(vcpu, HV_REG_FPSR, fpsr);
             if (bad || r1 || r2) printf("err vset %d %x %x\n", bad, r1, r2);
             else printf("ok\n");
+        } else if (!strncmp(p, "vswap ", 6)) {
+            /* a thread switch's vectors (Sprint 068 item B): Q0-Q15, FPCR and FPSR to the outgoing thread's slot at
+             * file offset `save`, then from the incoming thread's slot at `load`; 0 skips either. A slot is 16
+             * 16-byte registers, then FPCR and FPSR as 8 bytes each (vm_backend.py VECTOR_SLOT). The host sends this
+             * in the same write as the next `set`, so a switch adds no round trip and no hex. */
+            uint64_t save = strtoull(p + 6, &p, 16), load = strtoull(p, &p, 16);
+            if ((save && save + 288 > size) || (load && load + 288 > size)) {
+                printf("err vswap range\n");
+                continue;
+            }
+            hv_return_t bad = 0;
+            if (save) {
+                unsigned char *s = (unsigned char *)mem + save;
+                for (int i = 0; i < 16; i++) {
+                    hv_simd_fp_uchar16_t q;
+                    bad |= hv_vcpu_get_simd_fp_reg(vcpu, (hv_simd_fp_reg_t)(HV_SIMD_FP_REG_Q0 + i), &q);
+                    memcpy(s + 16 * i, &q, 16);
+                }
+                uint64_t fpcr = 0, fpsr = 0;
+                bad |= hv_vcpu_get_reg(vcpu, HV_REG_FPCR, &fpcr) | hv_vcpu_get_reg(vcpu, HV_REG_FPSR, &fpsr);
+                memcpy(s + 256, &fpcr, 8);
+                memcpy(s + 264, &fpsr, 8);
+            }
+            if (load) {
+                unsigned char *s = (unsigned char *)mem + load;
+                for (int i = 0; i < 16; i++) {
+                    hv_simd_fp_uchar16_t q;
+                    memcpy(&q, s + 16 * i, 16);
+                    bad |= hv_vcpu_set_simd_fp_reg(vcpu, (hv_simd_fp_reg_t)(HV_SIMD_FP_REG_Q0 + i), q);
+                }
+                uint64_t fpcr, fpsr;
+                memcpy(&fpcr, s + 256, 8);
+                memcpy(&fpsr, s + 264, 8);
+                bad |= hv_vcpu_set_reg(vcpu, HV_REG_FPCR, fpcr) | hv_vcpu_set_reg(vcpu, HV_REG_FPSR, fpsr);
+            }
+            if (bad) printf("err vswap %x\n", bad);
+            else printf("ok\n");
         } else if (!strncmp(p, "run ", 4)) {
             run(strtol(p + 4, NULL, 10), ex);
         } else if (!strncmp(p, "spin ", 5)) {

@@ -132,7 +132,14 @@ def dispatch_slot(target: int) -> int:
 # frontier 643a6283510c-1791841443768764000 filled the 64 of TRANSLATION_TABLES at 50.5 billion instructions
 SPLIT_TABLES = DISPATCH_TABLE + 16 * DISPATCH_ENTRIES
 SPLIT_TABLES_SIZE = 0x40_0000             # 1,024 tables, sparse
+# Each thread's Q0-Q15, FPCR and FPSR while another runs (Sprint 068 item B): the monitor's `vswap` writes and reads
+# them, so a switch makes no `vget` or `vset` (21 µs each over the pipe; 205,614 switches in a 400-million-instruction
+# frontier). In the padding below MONITOR_SIZE's 2 MB rounding.
+VECTOR_SLOTS = SPLIT_TABLES + SPLIT_TABLES_SIZE
+VECTOR_SLOT = 0x120                       # 16 registers of 16 bytes, FPCR and FPSR of 8 (vm_monitor.c vswap)
+VECTOR_SLOT_COUNT = 1024
 MONITOR_SIZE = (SPLIT_TABLES + SPLIT_TABLES_SIZE + BLOCK - 1) & ~(BLOCK - 1)   # 2 MB multiple: mapped in blocks
+assert VECTOR_SLOTS + VECTOR_SLOT * VECTOR_SLOT_COUNT <= MONITOR_SIZE
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -1189,7 +1196,12 @@ class VM:
         # trip), and ns the host spends on each exit kind from the run's return to the next `set`
         self.run_ns = 0
         self.exit_ns: Counter[int] = Counter()
-        self._pending_init = 0                          # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
+        self.monitor_commands: Counter[str] = Counter()   # commands sent to the monitor, by name (Sprint 068)
+        # a thread switch's vector swap, sent with the next `set` (vm_monitor.c vswap): the outgoing thread's slot
+        # (0: none yet) and the incoming one's
+        self._vswap: tuple[int, int] | None = None
+        self._vslots_used = 0
+        self._pending_init = 0                         # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
         size = MONITOR_SIZE + PROCESS_SIZE
         placed: list[tuple[Region, int]] = []
@@ -1628,6 +1640,7 @@ class VM:
                         state=bytes(state), suspend=1 if flags & 0x4 else 0, parent=self.current_tid, start=start,
                         created_suspended=bool(flags & 0x4))
         self.threads[tid] = t
+        self._write_vectors(t, [0] * 16, t.fpcr, 0)       # as a Windows thread starts: XMM clear, MXCSR 0x1F80
         self.virtual.stacks.append(t.stack)
         self._set_budget()                                # two threads: time slices from now on
         return tid
@@ -1722,7 +1735,7 @@ class VM:
             # has no SetThreadContext and a thread resumes from its own saved state.
             rip = self.modules.ntdll + 0x800 if t.status == "blocked" and self.modules.ntdll else t.x[17]
             write_context(buf, flags, t.x[:16], rip, eflags, struct.unpack_from("<I", mon[MXCSR_OFF], 0)[0],
-                          struct.unpack_from("<H", mon[FCW_OFF], 0)[0], t.xmm)
+                          struct.unpack_from("<H", mon[FCW_OFF], 0)[0], self.thread_vectors(t)[0])
             self.mem.write(a1, bytes(buf))
             return 1
         raise Unimplemented(f"thread request {sub}")
@@ -1746,9 +1759,34 @@ class VM:
         n = sum(1 for t in self.threads.values() if t.status == "blocked")
         struct.pack_into("<Q", self.mm, self.runtime.symbols["w2m_threads_blocked"] - MONITOR_VA, n)
 
+    def _vslot(self, t: GuestThread) -> int:
+        """The thread's vector slot (VECTOR_SLOTS), given out on first use."""
+        if not t.vslot:
+            if self._vslots_used == VECTOR_SLOT_COUNT:
+                raise Unimplemented(f"more than {VECTOR_SLOT_COUNT} threads in one process")
+            t.vslot = VECTOR_SLOTS + VECTOR_SLOT * self._vslots_used
+            self._vslots_used += 1
+        return t.vslot
+
+    def _write_vectors(self, t: GuestThread, xmm: list[int], fpcr: int, fpsr: int) -> None:
+        at = self._vslot(t)
+        for i, q in enumerate(xmm):
+            self.mm[at + 16 * i:at + 16 * i + 16] = q.to_bytes(16, "little")
+        struct.pack_into("<QQ", self.mm, at + 256, fpcr, fpsr)
+
+    def thread_vectors(self, t: GuestThread) -> tuple[list[int], int, int]:
+        """A thread's XMM0-15, FPCR and FPSR: the vCPU's for the running thread, else its slot (vm_monitor.c vswap
+        wrote it at the switch's `set`)."""
+        if t.tid == self.current_tid:
+            return self.vectors()
+        at = self._vslot(t)
+        xmm = [int.from_bytes(self.mm[at + 16 * i:at + 16 * i + 16], "little") for i in range(16)]
+        fpcr, fpsr = struct.unpack_from("<QQ", self.mm, at + 256)
+        return xmm, int(fpcr), int(fpsr)
+
     def _save_thread(self, t: GuestThread, x: list[int]) -> None:
         t.x = list(x)
-        t.xmm, t.fpcr, t.fpsr = self.vectors()
+        self._vswap = (self._vslot(t), 0)                # the monitor saves its vectors at the next `set`
         t.monitor = [bytes(self.mm[MONITOR_DATA + a:MONITOR_DATA + b]) for a, b in PER_THREAD_MONITOR]
         st = self._process(STATE_OFF)
         t.state = bytes(self.mm[st:st + STATE_SIZE])
@@ -1758,7 +1796,9 @@ class VM:
             self.mm[MONITOR_DATA + a:MONITOR_DATA + b] = data
         st = self._process(STATE_OFF)
         self.mm[st:st + STATE_SIZE] = t.state
-        self.set_vectors(t.xmm, t.fpcr, t.fpsr)
+        save = self._vswap[0] if self._vswap is not None else 0
+        # the same thread back (another VM ran meanwhile, on its own vCPU): its vectors never left this one
+        self._vswap = None if save == self._vslot(t) else (save, self._vslot(t))
         return list(t.x)
 
     def _schedule(self, x: list[int], schedule: int) -> list[int] | None:
@@ -2766,14 +2806,20 @@ class VM:
         pin, pout = proc.stdin, proc.stdout
 
         def cmd(c: str) -> list[str]:
-            pin.write(c + "\n")
+            commands = [c]
+            if self._vswap is not None:                     # a switch's vectors, in the same write as what follows
+                commands.insert(0, "vswap {:x} {:x}".format(*self._vswap))
+                self._vswap = None
+            pin.write("".join(k + "\n" for k in commands))
             pin.flush()
-            reply = pout.readline().split()
-            if not reply or reply[0] == "err":
-                # an empty reply is the monitor gone: name its exit status (a signal is negative), which
-                # the one such failure seen (class ADD_LOCK, 2026-10-10, once in about 1,600 runs) lacked
-                gone = "" if reply else f" (monitor exit status {proc.wait(timeout=5)})"
-                raise RuntimeError(f"vm_monitor: {c.split()[0]} -> {reply}{gone}")
+            for k in commands:
+                self.monitor_commands[k[:k.find(" ")] if " " in k else k] += 1
+                reply = pout.readline().split()
+                if not reply or reply[0] == "err":
+                    # an empty reply is the monitor gone: name its exit status (a signal is negative), which
+                    # the one such failure seen (class ADD_LOCK, 2026-10-10, once in about 1,600 runs) lacked
+                    gone = "" if reply else f" (monitor exit status {proc.wait(timeout=5)})"
+                    raise RuntimeError(f"vm_monitor: {k.split()[0]} -> {reply}{gone}")
             return reply
 
         self._max_steps = max_steps

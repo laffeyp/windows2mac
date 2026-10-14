@@ -49,6 +49,7 @@ class GuestThread:
     parent: int = 0                      # the creating thread's id; 0 for the first (GUEST_THREAD_STARTED; Sprint 060)
     start: int = 0                       # the start routine, or the first thread's entry
     created_suspended: bool = False      # CREATE_SUSPENDED
+    vslot: int = 0                       # its vector slot's offset in the memory file (vm_backend.VECTOR_SLOTS)
 
 
 def _call(fn: int, rcx: int, edx: int) -> bytes:
