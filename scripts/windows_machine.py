@@ -276,6 +276,8 @@ def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audi
         dst = ROOT / "build" / "game-runs" / f"{run}-{i:02d}"
         shutil.copytree(src, dst, dirs_exist_ok=True)
         (dst / "batch.txt").write_text(run)
+        if (bundle / "profile.json").is_file():          # the machine the game asked (its processor count): per run
+            shutil.copyfile(bundle / "profile.json", dst / "profile.json")
         done += 1
     print(f"{run}: {done} of {executions} executions back; run-job exit {code}; bundle {bundle.relative_to(ROOT)}")
     return code or (0 if done == executions else 1)

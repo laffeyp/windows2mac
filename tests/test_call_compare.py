@@ -323,7 +323,8 @@ def test_the_reference_set_is_the_runs_of_the_build_and_capture(tmp_path: Path) 
     laptop = [run.name for run in members if run.name.startswith("lap-")]
     assert all(call_compare.arguments(json.loads((run / "exec.json").read_text())["arguments"])
                == call_compare.GAME_ARGUMENTS for run in members if run.name in laptop)     # batch mode only
-    assert all(v.startswith("other arguments") for k, v in outside.items() if k.startswith("lap-"))   # play mode
+    assert all(v.startswith(("other arguments", "a machine of 12 processors")) for k, v in outside.items()
+               if k.startswith("lap-"))                    # play mode; the laptop before numproc 4
     for unnamed in ("38176899195", "38203364352", "38206263976"):
         assert outside[unnamed].startswith("the capture names no threads")
     assert outside["38113342549"] == "no call trace with thread names"

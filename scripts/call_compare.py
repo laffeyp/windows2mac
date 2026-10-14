@@ -558,6 +558,7 @@ def outside_set(run: Path, build: str, contract: dict[str, Any], records: Path =
     - its game arguments are GAME_ARGUMENTS: a laptop run (`laptop_run`) by its exec.json's "arguments"; a runner run,
       which records none, by the contract naming its capture thread (`excluded_threads`), the contract's applicability
       stating the arguments. A runner run without that entry would also have the capture's own calls judged.
+    - a laptop run's machine reported w2m's processor count (profile.json; the laptop runs with numproc 4 for it).
     Nothing here lists runs."""
     trace, names = run / "jit_capture.bin.trace.tsv", run / "jit_capture.bin.strings.tsv"
     if not (trace.is_file() and names.is_file()):
@@ -571,6 +572,13 @@ def outside_set(run: Path, build: str, contract: dict[str, Any], records: Path =
             return "a laptop run whose exec.json records no arguments"
         if arguments(recorded) != GAME_ARGUMENTS:
             return f"other arguments ({recorded})"
+        # the machine answered the game as w2m does: as many processors (the game sizes its job workers by them; the
+        # laptop's 12 started up to Job.Worker 8 and Background Job.Worker 15, w2m's 4 fewer, and pairing failed)
+        profile = run / "profile.json"
+        logical = json.loads(profile.read_text())["cpu"]["logical"] if profile.is_file() else None
+        from w2m.vm_backend import PROCESSORS
+        if logical != PROCESSORS:
+            return f"a machine of {logical} processors, w2m reports {PROCESSORS}"
     elif run.name not in contract.get("excluded_threads", {}):
         return "the contract names no capture thread for it (another capture or arguments)"
     record = records / f"game-run-{run.name}"
