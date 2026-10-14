@@ -8,6 +8,7 @@
  * The rows ask Windows: with a thread blocked on a semaphore, an auto-reset event or a mutex, does the releasing
  * thread's own zero-timeout wait right after the release find the object signaled? And with two waiters, which
  * one the release wakes. Waiters block in a known order: each sets `ready` and the main thread sleeps 200 ms.
+ * And (recentering step 5, the wake keys) a thread waiting on either of two auto-reset events when the second is set.
  * No C runtime. Rows: each wait's return, the released count, which waiters have finished.
  */
 #include <windows.h>
@@ -63,6 +64,22 @@ static HANDLE spawn_as(waiter_t *w, HANDLE object, HANDLE finish, int mutex) {
 }
 
 static HANDLE spawn(waiter_t *w, HANDLE object, HANDLE finish) { return spawn_as(w, object, finish, 0); }
+
+/* Waits on either of `objects` (two); then until `finish` is set. */
+typedef struct {
+    HANDLE *objects, ready, finish;
+    volatile DWORD ret;
+    volatile LONG done;
+} multi_t;
+
+static DWORD WINAPI multi_waiter(LPVOID p) {
+    multi_t *w = (multi_t *)p;
+    SetEvent(w->ready);
+    w->ret = WaitForMultipleObjects(2, w->objects, FALSE, INFINITE);
+    InterlockedExchange(&w->done, 1);
+    WaitForSingleObject(w->finish, INFINITE);
+    return 0;
+}
 
 static void finish(HANDLE ev, HANDLE *threads, int count) {
     SetEvent(ev);
@@ -130,6 +147,28 @@ void start(void) {
     row("mutex.one_waiter"); field("owned", own); field("release", rm); field("releaser_wait", mine);
     field("waiter_done", a.done); field("waiter_ret", a.ret); end();
     if (mine == WAIT_OBJECT_0) ReleaseMutex(mx);
+    finish(fin, t, 1);
+
+    /* two auto-reset events, one waiter on either: set the second, then wait on it at once */
+    ResetEvent(fin);
+    HANDLE pair[2];
+    pair[0] = CreateEventW(NULL, FALSE, FALSE, NULL);
+    pair[1] = CreateEventW(NULL, FALSE, FALSE, NULL);
+    multi_t m;
+    m.objects = pair;
+    m.ready = CreateEventW(NULL, FALSE, FALSE, NULL);
+    m.finish = fin;
+    m.ret = 0xFFFF;
+    m.done = 0;
+    t[0] = CreateThread(NULL, 0, multi_waiter, &m, 0, NULL);
+    WaitForSingleObject(m.ready, INFINITE);
+    Sleep(200);                                     /* the waiter is in its wait */
+    s = SetEvent(pair[1]);
+    mine = WaitForSingleObject(pair[1], 0);
+    Sleep(200);
+    row("event_auto.multiple_waiter"); field("set", s); field("releaser_wait", mine); field("waiter_done", m.done);
+    field("waiter_ret", m.ret); end();
+    if (mine == WAIT_OBJECT_0) SetEvent(pair[1]);   /* a w2m that kept it: the waiter still finishes */
     finish(fin, t, 1);
     ExitProcess(0);
 }
