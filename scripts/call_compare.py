@@ -456,7 +456,7 @@ def judged(windows: list[Call], w2m: list[Call], signatures: dict[str, Any],
             if sig["sets_last_error"] and failed(ret["kind"], ret["type"], a[6]):
                 fields.append(("error", "value", 4, a[7], b[7], False))
         for name, kind, size, x, y, argument in fields:
-            if (fn, name) in undecided:
+            if (fn, name) in undecided or (f"{a[2]}!{fn}", name) in undecided:   # "Function field" or one image's
                 continue
             space = ASSIGNED.get((fn, name))
             if fn in MESSAGE_FUNCTIONS and (name == "a0" or name == "a2" and a[5][1] & 0xFFFFFFFF in WINDOW_WPARAM):
@@ -480,7 +480,8 @@ def excluded(contract: dict[str, Any], run: str) -> frozenset[int]:
 
 def undetermined(contract: dict[str, Any]) -> frozenset[tuple[str, str]]:
     """The (function, field) values a contract does not compare: those two Windows runs of the game disagree on (its
-    `undetermined`, keyed "Function field", each with its evidence)."""
+    `undetermined`, keyed "Function field" or, for one calling image's calls only, "Image!Function field", each with
+    its evidence)."""
     return frozenset((k.split(" ")[0], k.split(" ")[1]) for k in contract.get("undetermined", {}))
 
 
