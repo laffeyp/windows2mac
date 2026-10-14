@@ -156,7 +156,8 @@ def main(argv: list[str]) -> int:
                 call_trace_from="UnityPlayer.dll!UnityMain", runtime_sources=sources,       # where jit_capture.c opens the Windows trace
                 instruction_clock=(a.clock_rate, REFERENCE_START) if a.clock_rate else None)
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
-        machine = Machine(spawner(files), max_steps=a.max_steps, timeout_ms=60_000)
+        machine = Machine(spawner(files, instruction_clock=(a.clock_rate, REFERENCE_START) if a.clock_rate else None),
+                          max_steps=a.max_steps, timeout_ms=60_000)
         # the run ends where its reference does: all eight batch-mode game runs (37982448071 to 38275716702) end at
         # the same 168 lines, run 180.3 to 190.0 s and are stopped, so the lines are the game's plateau in batch mode
         # and past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond

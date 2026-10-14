@@ -340,12 +340,15 @@ class Machine:
         return result
 
 
-def spawner(files: Any, dlls: Callable[[str], bytes | None] | None = None, runtime_sources: dict[str, str] | None = None
+def spawner(files: Any, dlls: Callable[[str], bytes | None] | None = None, runtime_sources: dict[str, str] | None = None,
+            instruction_clock: tuple[int, int] | None = None
             ) -> Callable[[str, int, int, list[tuple[int, int, int]], tuple[str, ...], str, int], Any]:
     """The Machine's spawn for a run: a child's VM from its command line, its exe found by the first token (quoted or
     not) on the same drive and mount as the parent's files, its own file descriptors, the parent's environment and
     current directory as they are at the start (Sprint 058), the parent's guest runtime (a family's planted one too),
-    and a GUI start when its subsystem is Windows GUI (2)."""
+    and a GUI start when its subsystem is Windows GUI (2). A child runs on the parent's instruction clock when the
+    parent does (2026-10-13, the time census: a child on the wall clock made the driver sleep a millisecond each time
+    it was the only process waiting, 62.6 s of host time in the frontier's first billion instructions)."""
     from pathlib import Path
 
     from w2m.file_bridge import FileBridge
@@ -366,7 +369,8 @@ def spawner(files: Any, dlls: Callable[[str], bytes | None] | None = None, runti
         name = Path(host).name
         vm = VM(load(data, resolve, name), tid=tid, files=child_files, image_name=name,
                 gui=parse_pe(data).subsystem == 2, command_line=line, environment=environment, process_id=pid,
-                inherited=inherited, runtime_sources=runtime_sources, directory=directory, process_group=group)
+                inherited=inherited, runtime_sources=runtime_sources, directory=directory, process_group=group,
+                instruction_clock=instruction_clock)
         return vm
 
     return spawn
