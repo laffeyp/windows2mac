@@ -1,0 +1,18 @@
+1	0	api-ms-win-core-synch-l1-2-0
+3	0	api-ms-win-core-fibers-l1-1-1
+6	0	api-ms-win-core-synch-l1-2-0
+22	0	api-ms-win-core-fibers-l1-1-1
+76	0	api-ms-win-core-localization-l1-2-1
+129	0	api-ms-win-core-synch-l1-2-0.dll
+133	0	kernel32.dll
+192	3	UnityCrashHandler_9164
+193	3	UnityCrashHandlerResp_9164
+194	3	UnityCrashHandlerTerm_9164
+363	0	Kernel32.dll
+371	0	Kernel32.dll
+390	0	kernel32
+391	0	api-ms-win-core-string-l1-1-0
+392	0	api-ms-win-core-datetime-l1-1-1
+393	0	api-ms-win-core-localization-obsolete-l1-2-0
+396	1	"C:\w2m\app\UnityCrashHandler64.exe" "9164" "2362539839488" 
+415	0	api-ms-win-appmodel-runtime-l1-1-2

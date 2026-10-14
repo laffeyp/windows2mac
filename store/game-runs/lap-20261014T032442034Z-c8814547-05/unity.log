@@ -1,0 +1,180 @@
+Mono path[0] = 'C:/w2m/app/Hail to the Rainbow_Data/Managed'
+Mono config path = 'C:/w2m/app/MonoBleedingEdge/etc'
+Initialize engine version: 2019.4.40f1 (ffc62b691db5)
+[Subsystems] Discovering subsystems at path C:/w2m/app/Hail to the Rainbow_Data/UnitySubsystems
+Forcing GfxDevice: Null
+GfxDevice: creating device client; threaded=0
+NullGfxDevice:
+    Version:  NULL 1.0 [1.0]
+    Renderer: Null Device
+    Vendor:   Unity Technologies
+FMOD initialized on nosound output
+Begin MonoManager ReloadAssembly
+- Completed reload, in  0.119 seconds
+Shader 'Nature/Terrain/Diffuse Legacy' uses 17 texture parameters, more than the 16 supported by the current graphics device. 
+(Filename:  Line: 0)
+
+Shader 'Nature/Terrain/Diffuse Legacy' uses 18 texture parameters, more than the 16 supported by the current graphics device. 
+(Filename:  Line: 0)
+
+WARNING: Shader Unsupported: 'Hidden/Nature/Terrain/Utilities' - All passes removed
+WARNING: Shader Did you use #pragma only_renderers and omit this platform?
+Shader 'Nature/Terrain/Standard' uses 17 texture parameters, more than the 16 supported by the current graphics device. 
+(Filename:  Line: 0)
+
+Shader 'Nature/Terrain/TerrainShaderDetail' uses 17 texture parameters, more than the 16 supported by the current graphics device. 
+(Filename:  Line: 0)
+
+WARNING: Shader Unsupported: 'Decal/Normal Injection Decal' - All passes removed
+WARNING: Shader Did you use #pragma only_renderers and omit this platform?
+ERROR: Shader Decal/Normal Injection Decal shader is not supported on this GPU (none of subshaders/fallbacks are suitable)
+Microsoft Media Foundation video decoding to texture disabled: graphics device is Null, only Direct3D 11 and Direct3D 12 (only on desktop) are supported for hardware-accelerated video decoding.
+UnloadTime: 2.641100 ms
+IntroScene - Start !!!!!!!!!!!    INTRO    INTRO    INTRO    INTRO    INTRO  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+'R16G16B16A16_SFloat' is not supported. RenderTexture::GetTemporary fallbacks to None format on this platform. Use 'SystemInfo.IsFormatSupported' C# API to check format support. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Texture creation failed. 'None' is not supported for Render usage on this platform. Use 'SystemInfo.IsFormatSupported' C# API to check format support. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+NullReferenceException
+  at (wrapper managed-to-native) UnityEngine.Object.SetName(UnityEngine.Object,string)
+  at UnityEngine.Object.set_name (System.String value) [0x00001] in <85d1d3e7744a4a47b5f51883bf40bba2>:0 
+  at VolumetricLightRenderer.ChangeResolution () [0x00040] in <57811ed547cc41528c73573a0f96e405>:0 
+  at VolumetricLightRenderer.Awake () [0x000a3] in <57811ed547cc41528c73573a0f96e405>:0 
+ 
+(Filename: <85d1d3e7744a4a47b5f51883bf40bba2> Line: 0)
+
+Detected VRAM: 128 MB, Setting Budget: 400 MB 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Version of Game - 1.10 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Config  Loaded !!!!!!!!!!!!!!!!!!  - Intro  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+============== Config READ ============== 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+[Steamworks.NET] SteamAPI_Init() failed. Refer to Valve's documentation or the comment above this line for more information. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+OnSceneLoaded: Intro 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Сборка выполнена для 64-битной архитектуры. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Failed to create RenderTexture with RGBA16 SNorm (28) format. The platform doesn't support that format, and it doesn't have a compatible format. 
+(Filename:  Line: 892)
+
+RenderTexture.Create failed: format unsupported - None (28). 
+(Filename:  Line: 503)
+
+Steam не инициализирован. Overlay callback не подключен. 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Particle _ GO _ Stop 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Unloading 6 Unused Serialized files (Serialized files now loaded: 0)
+UnloadTime: 9.071400 ms
+Version of Game - 1.10   Ver. STEAM  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Config  Loaded !!!!!!!!!!!!!!!!!!  - Menu  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+============== Config READ ============== 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Minimal Res 640 480 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 800 600 2 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1024 768 4 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1152 864 6 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 600 8 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 720 10 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 768 12 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 800 14 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 960 16 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1280 1024 18 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1360 768 20 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1366 768 22 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1400 1050 24 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1440 900 26 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1600 900 28 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1680 1050 30 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Res 1920 1080 32 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Max Resolution 1920 1080 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+All Resolutions - 17 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+
+Unloading 741 unused Assets to reduce memory usage. Loaded Objects now: 19635.
+Total: 21.751700 ms (FindLiveObjects: 0.936400 ms CreateObjectMapping: 0.367700 ms MarkObjects: 4.952800 ms  DeleteObjects: 15.494300 ms)
+
+DefaultSettings English 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+PORTRAIT NOT!!!!   DETECTED  !!!!!!!!!!!! 1.777778 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Resolution Set - 1920 X 1080 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Detected VRAM: 128 MB, Setting Budget: 400 MB 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Set_TextStreamBudget  -  FromMenu =================== 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Unloading 0 Unused Serialized files (Serialized files now loaded: 0)
+New_Input - DONE !!!!!!!!!!!!!!!  
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+
+Unloading 3162 unused Assets to reduce memory usage. Loaded Objects now: 16734.
+Total: 9.852300 ms (FindLiveObjects: 0.921700 ms CreateObjectMapping: 0.346600 ms MarkObjects: 3.500600 ms  DeleteObjects: 5.083000 ms)
+
+File Read from Resources !!!! 
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+

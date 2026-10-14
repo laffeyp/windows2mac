@@ -1,0 +1,4 @@
+peak 34
+distinct 36
+hooked_imports 843
+traced_calls 3499
