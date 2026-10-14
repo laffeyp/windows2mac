@@ -27,8 +27,14 @@ The new method is a thin vertical slice, judged by measured numbers:
   in that window; a person judges it the same scene as the laptop's frame.
 - W, A, S, D and the mouse move the camera; the laptop's input script `round-trip` replayed on the Mac moves it
   as on Windows.
-- At least 20 frames a second at 1280x720 once the scene is up (a number to confirm with the user).
-- Time to the first scene under 5 minutes (the laptop: about 60 s).
+- Frames a second at 1280x720 once the scene is up, and seconds to the first scene, reported on every run. No
+  threshold closes the speed work: the bar is the highest frame rate w2m can reach, and each change is judged by what
+  it gains (Decision 2026-10-14, user; it replaces this list's "at least 20 frames a second" and "under 5 minutes").
+- The numbers beside them: the laptop's play-mode frame rate (RTX 3050, 1280x720; first scene at about 62 s) and the
+  game under CrossOver 26 on this Mac (Wine 11.0, D3DMetal 3.0, DXMT 0.72; released 2026-02-10).
+- The native workload: the instructions the game retires per frame and to the first scene on the laptop, per thread,
+  against w2m's rate (139 million a second on the wall clock, 223 million inside the vCPU, frontier 1ecc22b2). It
+  bounds what each lever can give and ranks the work.
 
 ## Speed
 
@@ -58,8 +64,22 @@ cost of each crossing against the frame's call count, and DXMT's coverage of the
 
 ## Order
 
-1. The census, then the largest speed cost (this sprint).
-2. A window and a message loop on the Mac that the game drives (plan Phase 6's first step).
-3. DXMT behind the seam: the first frame.
-4. Input from the Mac's keyboard and mouse.
-5. Speed until P's frame rate holds.
+Amended 2026-10-14 (Decision, user): the review "Phase P: actionable review, 2026-10-14". Speed work runs alongside
+every step and stops at no number; each item is measured on census runs that have the Mac to themselves.
+
+1. Measures in place: frames a second and seconds to the first scene on every run; the laptop's instructions per
+   frame; census runs alone; a run option for each clock (wall clock for play, the instruction clock for the
+   conforming comparison), recorded per run; the snapshot at the end of the conforming batch prefix, so a measured
+   item does not wait on a 300 s rerun.
+2. Speed inside one vCPU (Sprint 068): the census's largest costs, a spin count (PAUSE and instructions per thread),
+   block chaining, flag liveness within a block, the instruction counter off block entries.
+3. Several vCPUs: M:N scheduling of the guest's threads across vCPUs, guest TSO set on each (ACTLR_EL1.TSOEN), the
+   x86 litmus tests (MP, SB, LB, 2+2W, IRIW) through the translator as the gate, frames a second at 1, 2, 4 and 8.
+4. The shared-memory transport, finished before DXMT, measured by a stub host call's crossing against the Direct3D
+   calls per frame in play run 38113343972.
+5. The drive loop off the process's main thread, which AppKit needs for windows and events.
+6. A window and a message loop on the Mac that the game drives (plan Phase 6's first step).
+7. DXMT behind the seam: the first frame. A spike runs beside the speed work: DXMT's two PE DLLs' imports sorted into
+   w2m's 297 served functions, Wine's ntdll (__wine_unix_call) or missing, and the winemetal calls the game's
+   Direct3D 11 calls reach.
+8. Input: exactly the calls the laptop's play runs (e61fca06) make, from the Mac's keyboard and mouse.

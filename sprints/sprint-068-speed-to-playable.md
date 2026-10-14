@@ -29,8 +29,27 @@ measured by the census before and after and each leaving the frontier's comparis
   (150,337), CMPPS (112,370), MOVD (67,206), POPCNT (50,260), CVTPS2DQ (21,393), RSQRTPS (18,965), all with every MXCSR
   exception masked. Each lowering is judged on the Xeon's cases with a plant caught, as Sprint 064's were.
 - **D. hvc 4** (budget exits) by the census after B and C.
-- **E. The transport** (Sprint 064 item 3, not done there): the text pipe replaced by shared memory if exits still
-  hold a large share after B and C.
+- **E. The transport** (Sprint 064 item 3, not done there): the text pipe replaced by shared memory, unconditional
+  since 2026-10-14 and finished before DXMT (Decision 2026-10-14, user). Measured first: a stub host call's crossing
+  in the VM, times the Direct3D calls per frame in play run 38113343972.
+
+Added 2026-10-14 (Decision, user: the review "Phase P: actionable review, 2026-10-14"):
+
+- **F. Census runs alone.** A census frontier runs with the Mac to itself, or its `time:` lines record the load
+  (the Mac's load average and the other w2m processes at each line). Frontier 1ecc22b2's numbers above shared the
+  Mac with a class sweep, six parallel families and test runs.
+- **G. The snapshot.** The run saved at the end of the conforming batch prefix and resumed from it, so an item's
+  measurement does not wait on a 300 s rerun (supersedes Decision 2026-10-11's decline).
+- **H. The clock, chosen per run.** A run option for the wall clock (play) and the instruction clock (the conforming
+  comparison), recorded in the run's baseline; the instruction-clock comparison stays conforming.
+- **I. The native workload.** On the laptop, the instructions the game retires per frame and to the first scene,
+  per thread (the laptop runs under Hyper-V with VBS on; whether its PMU counters are readable is checked first).
+- **J. Spinning.** PAUSE instructions and instructions per thread counted; if spinning on a switched-out thread's
+  lock is a large share, PAUSE hands the vCPU on. Counted again after several vCPUs.
+- **K. Block chaining** for direct branches, undone when aabe522e drops a block; a stale-chain plant code_rewrite
+  must catch.
+- **L. Flag liveness within a block**; a live-flag plant the class runs must catch.
+- **M. The instruction counter off every block entry.**
 
 ## prerequisites
 
@@ -67,7 +86,8 @@ measured by the census before and after and each leaving the frontier's comparis
 
 ## done criteria
 
-Host time outside the vCPU below the vCPU's own time on the frontier, each item measured, the comparison conforming.
+Each item's gain measured on a census run that had the Mac to itself, the comparison conforming. No threshold closes
+the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU below the vCPU's own time").
 
 ## observed
 
