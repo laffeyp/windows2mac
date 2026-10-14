@@ -1,0 +1,11 @@
+04:45:36.792 job code_rewrite-20261014T044509652Z: probe code_rewrite, repeat 2, commit 627bbd991d01e4c53841d7015ddc1c2579af4c91
+04:45:36.901 inputs verified; workspace lock after 0 s
+04:45:45.668 error mode 0x8003 (was 0x8001)
+04:45:46.745 profile taken
+clang version 20.1.8
+Target: x86_64-pc-windows-msvc
+Thread model: posix
+InstalledDir: C:\Program Files\LLVM\bin
+04:45:49.687 code_rewrite-20261014T044509652Z execution 1 exit 0 in 1.5642599 s, affinity unpinned
+04:45:49.745 code_rewrite-20261014T044509652Z execution 2 exit 0 in 0.0544983 s, affinity unpinned
+04:45:50.062 done

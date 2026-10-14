@@ -144,7 +144,15 @@ def host_load() -> dict[str, Any]:
             "busy": [f"{name} {c}%" for c, name in busy]}
 
 
+def interactive_qos() -> None:
+    """This thread at user-interactive QoS (0x21, sys/qos.h), as the monitor sets its vCPU thread: macOS keeps such
+    threads on the performance cores when the Mac is loaded (Sprint 068 item F)."""
+    import ctypes
+    ctypes.CDLL("/usr/lib/libSystem.B.dylib").pthread_set_qos_class_self_np(ctypes.c_uint(0x21), ctypes.c_int(0))
+
+
 def main(argv: list[str]) -> int:
+    interactive_qos()
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
     ap.add_argument("--scratch", action="store_true", help="write to runs/, not store/runs/; a dirty tree allowed")

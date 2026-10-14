@@ -1,0 +1,79 @@
+{
+ "contract_id": "windows.memory.code_rewrite",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "Code written into PAGE_EXECUTE_READWRITE memory, run, rewritten and run again (Sprint 065 item 9e). mono writes and patches its methods with plain stores and no FlushInstructionCache; a scratch frontier found 11,365 translated blocks whose guest bytes had changed by the stop. Each rewrite takes effect at the next call; a write to data on the code's page leaves the code as it is. Since 0.2.0 (Sprint 068 item K): code on another page that reaches the rewritten routine by a direct call sees the rewrite too (row chained; the laptop's run, the first with the row).",
+ "applicability": "laptop (13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/code_rewrite/code_rewrite.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "immediate",
+    "first": 1,
+    "second": 2
+   },
+   {
+    "s": "rewrite",
+    "third": 3,
+    "after_data_write": 3
+   },
+   {
+    "s": "second_page",
+    "before": 7,
+    "after": 8
+   },
+   {
+    "s": "protect",
+    "to_rx": 1,
+    "old": 64,
+    "value": 3,
+    "back": 1,
+    "old_back": 32,
+    "after_rewrite": 10
+   },
+   {
+    "s": "chained",
+    "first": 11,
+    "again": 11,
+    "after_rewrite": 12
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run lap-20261014T044509652Z-627bbd99: laptop, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:0a7dee14806cbd16d021e138fbd6f13186f9386af6d0aa051062e146f6c7646c",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "code_rewrite-20261014T044509652Z-1",
+    "code_rewrite-20261014T044509652Z-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "A store that rewrites the block it is in takes effect at the next execution of that block in w2m (the running translation completes); no row shows code that rewrites itself ahead of its own execution.",
+  "The host's own writes into guest memory (a file read, a context) drop translations through Memory.on_write; no row reads a file into code."
+ ],
+ "sections": {
+  "probe": "probes/code_rewrite (Sprint 044)",
+  "implementation": "tools/guest_runtime/virtual_memory.c",
+  "rows": "scripts/family_run.py code_rewrite",
+  "excluded": "none"
+ }
+}

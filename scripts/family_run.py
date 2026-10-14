@@ -866,15 +866,17 @@ FAMILIES: dict[str, Family] = {
     "code_rewrite": Family(
         name="code_rewrite",
         contract_id="windows.memory.code_rewrite",
-        version="0.1.0",
+        version="0.2.0",
         summary=("Code written into PAGE_EXECUTE_READWRITE memory, run, rewritten and run again (Sprint 065 item 9e). "
                  "mono writes and patches its methods with plain stores and no FlushInstructionCache; a scratch "
                  "frontier found 11,365 translated blocks whose guest bytes had changed by the stop. Each rewrite "
-                 "takes effect at the next call; a write to data on the code's page leaves the code as it is."),
+                 "takes effect at the next call; a write to data on the code's page leaves the code as it is. Since "
+                 "0.2.0 (Sprint 068 item K): code on another page that reaches the rewritten routine by a direct "
+                 "call sees the rewrite too (row chained; the laptop's run, the first with the row): a translator that "
+                 "chains blocks must unchain."),
         probe="code_rewrite", guest_file="virtual_memory.c",
         runs={
-              "38311776331": Run("windows-2025", "f8ec2085c159f9663eb52f25b2df9eef541af13bc3c8a1008d1865d5fd13b3c6", "code-rewrite-windows-2025", "AMD EPYC 9V74 80-Core Processor"),
-              "38311779649": Run("windows-2022", "0e380e63488ae0166d4ba694b9ce3e7a9e3821c693bc8dad5fbdbdf81f362dba", "code-rewrite-windows-2022", "AMD EPYC 7763 64-Core Processor"),
+              "lap-20261014T044509652Z-627bbd99": Run("laptop", "0a7dee14806cbd16d021e138fbd6f13186f9386af6d0aa051062e146f6c7646c", "code_rewrite-20261014T044509652Z", "13th Gen Intel(R) Core(TM) i5-13420H"),
         },
         documented=(),
         open_questions=(
@@ -884,7 +886,8 @@ FAMILIES: dict[str, Family] = {
             "Memory.on_write; no row reads a file into code."),
         plants={"pages_not_protected": Plant("        if not self.lockstep:\n            self._protect_code(start, addr)",
                                              "        if not self.lockstep:\n            pass",
-                                             ("immediate", "rewrite", "second_page", "protect"), host="w2m.vm_backend")}),
+                                             ("immediate", "rewrite", "second_page", "protect", "chained"),
+                                             host="w2m.vm_backend")}),
     "wait_handoff": Family(
         name="wait_handoff",
         contract_id="windows.sync.wait_handoff",

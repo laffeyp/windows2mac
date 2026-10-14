@@ -1,0 +1,11 @@
+{
+ "kind": "probe",
+ "probe": "code_rewrite",
+ "execution_id": "code_rewrite-20261014T044509652Z",
+ "repeat": 2,
+ "commit": "627bbd991d01e4c53841d7015ddc1c2579af4c91",
+ "session": "desktop",
+ "inputs": {
+  "tree.tar": "fb622f077d07af41077c03f81d0fe5f4e2f182a5285636d8aa60101664755553"
+ }
+}

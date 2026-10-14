@@ -1,0 +1,129 @@
+{
+  "machine": "laptop",
+  "computer": "WINDOWSMACHINE",
+  "model": "HP Victus by HP Gaming Laptop 15-fa2xxx",
+  "bios": "F.08",
+  "windows": {
+    "edition": "Microsoft Windows 11 Home",
+    "display_version": "25H2",
+    "build": 26200,
+    "ubr": 7840,
+    "architecture": "64-bit"
+  },
+  "cpu": {
+    "name": "13th Gen Intel(R) Core(TM) i5-13420H",
+    "identifier": "Intel64 Family 6 Model 186 Stepping 2",
+    "processor_id": "BFEBFBFF000B06A2",
+    "microcode": "34610000",
+    "cores": 2,
+    "logical": 4,
+    "sets": [
+      {
+        "logical": 0,
+        "core": 0,
+        "efficiency_class": 0,
+        "scheduling_class": 0
+      },
+      {
+        "logical": 1,
+        "core": 0,
+        "efficiency_class": 0,
+        "scheduling_class": 0
+      },
+      {
+        "logical": 2,
+        "core": 2,
+        "efficiency_class": 0,
+        "scheduling_class": 0
+      },
+      {
+        "logical": 3,
+        "core": 2,
+        "efficiency_class": 0,
+        "scheduling_class": 0
+      }
+    ]
+  },
+  "memory_bytes": 33970921472,
+  "gpus": [
+    {
+      "name": "Intel(R) UHD Graphics",
+      "driver": "32.0.101.7088"
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+      "driver": "32.0.15.9191"
+    }
+  ],
+  "display": {
+    "width": 1920,
+    "height": 1080,
+    "dpi": 120
+  },
+  "audio": [
+    "Realtek High Definition Audio",
+    "NVIDIA High Definition Audio",
+    "Intel® Smart Sound Technology for Digital Microphones",
+    "NVIDIA Virtual Audio Device (Wave Extensible) (WDM)",
+    "Intel® Smart Sound Technology for USB Audio",
+    "OMEN Cam & Voice"
+  ],
+  "hypervisor": {
+    "present": true,
+    "vbs_status": 2,
+    "security_services_running": [
+      2
+    ]
+  },
+  "scheduler": {
+    "win32_priority_separation": 2
+  },
+  "user": {
+    "name": "w2m",
+    "profile": "C:\\Users\\w2m",
+    "temp": "C:\\Users\\w2m\\AppData\\Local\\Temp"
+  },
+  "locale": {
+    "culture": "en-US",
+    "ui": "en-US",
+    "acp": "1252",
+    "time_zone": "Pacific Standard Time"
+  },
+  "defender": {
+    "real_time": true,
+    "exclusions": [
+      "C:\\w2m",
+      "D:\\a"
+    ],
+    "product": "4.18.26090.9",
+    "engine": "1.1.26090.9",
+    "signatures": "1.461.17.0"
+  },
+  "updates": {
+    "paused_until": "2026-11-17T23:44:09Z",
+    "hotfixes": [
+      "KB5054156",
+      "KB5077181",
+      "KB5077869",
+      "KB5127647",
+      "KB5127690",
+      "KB5128942"
+    ]
+  },
+  "session": {
+    "id": 5,
+    "workspace": "D:\\a\\windows2mac\\windows2mac"
+  },
+  "servicing_busy": true,
+  "power_scheme": "Balanced",
+  "tools": {
+    "clang": "clang version 20.1.8",
+    "linker": "C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.51.36231\\\\bin\\\\Hostx64\\\\x64\\\\link.exe",
+    "pwsh": "7.6.7",
+    "git": "git version 2.55.0.windows.5",
+    "uv": "uv 0.13.0 (4ecd0eff2 2026-10-09 x86_64-pc-windows-msvc)",
+    "zstd": "*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***",
+    "python": "Python 3.12.15"
+  },
+  "taken": "2026-10-14T04:45:45.6113442Z"
+}

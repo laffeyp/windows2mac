@@ -129,3 +129,15 @@ the sprint (Decision 2026-10-14, user; it replaces "host time outside the vCPU b
   every blocked thread on any signal, and each runs a few hundred instructions to find its wait unmet and blocks again
   (hvc 12, 524,271). Waking only an object's waiters needs the host to know what each thread waits on, which the
   guest runtime holds (sync_objects.c); recorded as a later item, not built.
+- **K, tried and reverted.** Direct branches chained through a per-site literal (`ldr x16, literal; br x16`, the host
+  rewriting only the literal, so no instruction cache needs cleaning; unchained when aabe522e drops a block). The
+  code_rewrite probe gained row `chained` (a direct call from a second page into a rewritten routine; laptop run
+  lap-20261014T044509652Z-627bbd99: 11, 11, 12; family 0.2.0), and a stale-chain plant broke exactly that row.
+  Measured by alternating runs to 10 billion instructions, three each: inside the vCPU 16.9, 17.0 and 17.3 s chained
+  against 17.1 s twice unchained (one run void under Ollama's load); wall 41.9-47.9 s against 43.6-44.7 s. The
+  dispatcher's lookup is not what bounds the vCPU here, so chaining came out; the probe row stays.
+- **F, the Mac's cores.** A loaded Mac doubled a census's CPU time for the same work (user 81 s against 146 s), the
+  sign of threads moved to the efficiency cores. The monitor's vCPU thread and run_frontier's driver now run at
+  user-interactive QoS (0x21), which macOS keeps on the performance cores; its gain is not yet shown (one run still
+  took 197 s with llama-server at 98% and WindowServer at 53%). Census runs keep alternating settings and take the
+  lower times.

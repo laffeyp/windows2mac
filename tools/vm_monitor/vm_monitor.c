@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <pthread/qos.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -126,6 +127,9 @@ int main(int argc, char **argv) {
         perror("mmap");
         return 1;
     }
+    /* the vCPU runs on this thread: user-interactive QoS keeps it on the performance cores when the Mac is loaded
+     * (Sprint 068 item F: at the default QoS a loaded Mac doubled a census's CPU time, 81 s to 146 s, the same work) */
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     hv_vm_config_t cfg = hv_vm_config_create();
     hv_return_t r;
     /* 40-bit IPA (1 TB; TCR.IPS 2 in vm_backend.py): the VirtualAlloc arena is 512 GB of sparse file */
