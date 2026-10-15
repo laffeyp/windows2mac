@@ -154,14 +154,31 @@ static void monitor_words(u8 *entry, int to_entry) {
     }
 }
 
+/* vm_backend.py warp_to_deadline, for a wait no ready thread follows: the unsuspended blocked thread with the earliest
+ * finite deadline, the lower thread id first on a tie, counting the current thread (`cur`) as blocked until `deadline`;
+ * the run table's count when none waits with one. */
+static u64 nearest_deadline(u64 cur, u64 deadline) {
+    u64 first = RUN->count, nearest = ~0ull;
+    for (u64 i = 0; i < RUN->count; i++) {
+        const struct w2m_run_entry *e = run_entry(i);
+        u64 d = i == cur ? deadline : e->deadline;
+        if ((i == cur || e->status == BLOCKED) && !e->suspend && d != ~0ull && d < nearest) {
+            nearest = d;
+            first = i;
+        }
+    }
+    return first;
+}
+
 /* The switch stub's decision (vm_backend.py _switch_stub), with the running thread's registers in its run table entry
  * and the count written: `schedule` 0 at a slice's end (`stop` its block's HVC #4), else state.schedule's bits. The
  * host's rule (_schedule, _switch): at a slice's end the budget refilled and timed-out waits made ready first, the
  * thread's RIP its block's entry and the block's instructions given back; RETRY blocks the thread with its wait's
  * deadline; the next thread is the first ready, unsuspended one after it in thread id order, itself last unless it
- * blocks. 1: the current entry (another's after a switch) holds the registers to go on with, x23 its budget. 0: the
- * host decides, nothing changed: switching is off for this run, a thread's end, the run's limit, one thread, no thread
- * ready. */
+ * blocks; when a wait leaves no thread ready, on the instruction clock the clock moves to the earliest deadline and
+ * that thread runs (warp_to_deadline). 1: the current entry (another's after a switch) holds the registers to go on
+ * with, x23 its budget. 0: the host decides, nothing changed: switching is off for this run, a thread's end, the run's
+ * limit, one thread, no thread ready and none to warp to. */
 u64 w2m_switch(u64 schedule, u64 stop) {
     struct w2m_run_table *rt = RUN;
     u64 n = rt->count, cur = rt->current;
@@ -183,10 +200,21 @@ u64 w2m_switch(u64 schedule, u64 stop) {
         const struct w2m_run_entry *e = run_entry(i);
         if (!(i == cur && retry) && e->status == READY && !e->suspend) next = i;
     }
-    if (next == n) return 0;
+    u64 warped = n;
+    if (next == n) {
+        if (!retry || *monitor_word(W2M_CLOCK_MODE_OFF) != 2) return 0;
+        warped = next = nearest_deadline(cur, scratch_of(c)->wait_deadline);
+        if (next == n) return 0;
+    }
     if (retry) {
         set_status(c, BLOCKED);
         c->deadline = scratch_of(c)->wait_deadline;
+    }
+    if (warped != n) {
+        struct w2m_run_entry *w = run_entry(warped);
+        u64 now = w2m_counter_now();
+        if (w->deadline > now) *monitor_word(W2M_CLOCK_WARP_OFF) += w->deadline - now;
+        set_status(w, READY);
     }
     if (schedule & W2M_SCHEDULE_ANSWER) c->x[0] = next != cur;
     w2m_state()->schedule = 0;

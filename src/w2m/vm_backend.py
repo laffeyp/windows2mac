@@ -1855,6 +1855,7 @@ class VM:
         self.unimplemented: tuple[str, int] | None = None     # (import, return address) at a stop
         self.host_requests: dict[int, int] = {}       # transport requests by op (HOST_*, W2M_FILE_*): host exits
         self.exits: Counter[int] = Counter()            # hvc exits by number (Sprint 064's census)
+        self.handovers: Counter[str] = Counter()        # hand-overs the host made (hvc 12) by cause (Sprint 070)
         self.exit_sites: Counter[tuple[int, int]] = Counter()   # (hvc number, x86 address at the exit)
         # the time census (2026-10-13, the speed work): ns inside each `run` (the vCPU and the text pipe's round
         # trip), and ns the host spends on each exit kind from the run's return to the next `set`
@@ -2688,6 +2689,10 @@ class VM:
         elif schedule & SCHEDULE_RETRY:
             cur.status = "blocked"
             cur.deadline = struct.unpack_from("<Q", self._read_guest(cur.teb + SCRATCH_OFF, 8))[0]
+        if schedule:                                          # the hand-over census (Sprint 070)
+            self.handovers["a thread's end" if schedule & SCHEDULE_END else "a thread ready"
+                           if any(t.status == "ready" and t.suspend == 0 for t in self.threads.values())
+                           else "no thread ready"] += 1
         if all(t.status == "ended" for t in self.threads.values()):
             return None                                       # the last thread ended: the process ends with it
         return self._switch(x, cur, schedule)
@@ -4205,7 +4210,7 @@ class VM:
         print(f"progress: {self.modules.image_name}: {executed} instructions ({(executed - before[0]) / max(now - before[4], 1e-6) / 1e6:.2f}M/s); "
               f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
               + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
-              + f"; threads {dict(threads)}; switches in the VM {self.switches_in_vm()}; thread {self.current_tid}"
+              + f"; threads {dict(threads)}; switches in the VM {self.switches_in_vm()}; hand-overs in the host {dict(self.handovers)}; thread {self.current_tid}"
               + f" at 0x{x[17]:x}", file=sys.stderr, flush=True)
         if self.slow_sse_classes:
             print("slow sse: " + ", ".join(f"{c} masks 0x{m:x} {n}" for (c, m), n in self.slow_sse_classes.most_common(8)),
