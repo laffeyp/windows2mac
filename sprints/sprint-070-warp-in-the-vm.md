@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 070
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -64,3 +64,32 @@ A built with a plant that the test catches; the batch run conforms; B measured o
 itself; CI `success`.
 
 ## observed
+- **A** (3de2ed89; indexes bc6c956c: 456 of 458 classes, 68 families). `w2m_switch` warps the instruction clock to
+  the earliest deadline (threads.c `nearest_deadline`) when a blocking wait leaves no thread ready, and switches to
+  that thread. The host counts its own hand-overs by cause on the progress line. `tests/test_switch_in_vm.py`
+  `test_the_vm_warps_as_the_host_does`: threads, running_thread_context, wait_handoff and processes give equal rows and
+  census with the VM's warp and with the warp taken out of the VM (the host warps), and the host makes fewer hand-overs
+  with no thread ready (wait_handoff 15 to 0, threads 3 to 0, running_thread_context 1 to 0, processes 7 to 3; the 3
+  left run beside its child process, which the host keeps). The first plant, the warp leaving the clock where it was,
+  hung the probe instead of changing a census: the woken thread finds its deadline unpassed, blocks again, and the warp
+  repeats. The reach check replaced it.
+- **B, the census** (the same tree, threads.c's warp in the VM and taken out; warm translation cache, the Mac to
+  itself; exits summed over the progress lines):
+
+  | | warp in the host | warp in the VM |
+  |---|---|---|
+  | wall seconds | 63.17 | 62.42 |
+  | rate at the last progress line | 2,288 M/s | 2,839 M/s |
+  | hvc 12 | 57,352 | 2 |
+  | hand-overs with no thread ready | 57,350 | 0 |
+  | switches in the VM | 1,192,117 | 1,602,079 |
+  | comparison | 0 divergences, 168 lines | 0 divergences, 168 lines |
+
+  The wall time moved 0.75 s: 57,350 exits that each ran a short Python path. hvc 1 (275,799 dispatch misses over
+  the run) is now the largest exit by count and by host time (33.2 s of the recorded run's host time, cold).
+- **The interleaving differs between a cold and a warm cache.** The host-warp tree made 39,117 hand-overs with no
+  thread ready cold and 57,350 warm, and switched 954,378 and 1,192,117 times in the VM; hvc 8, 10 and 11 differ too.
+  Both runs conform. A slice ends at a block's stop, and which blocks exist depends on what was translated before, so
+  the same instruction count can fall in a different place. Not yet checked; it bears on step 10 (the snapshot).
+- **Closed** on bc6c956c (CI run 38662524546) with frontier-643a6283510c-1792025575233476000 conforming (168 of 168
+  lines, 0 divergences).
