@@ -109,3 +109,8 @@ census run that had the Mac to itself; CI `success`.
   later items: hvc 12's 57,782 exits are waits with no thread ready (the host warps the instruction clock to the
   nearest deadline), which the VM can do too; hvc 1 (59,417 dispatch misses) is step 6's.
 
+- **Correction (Sprint 070).** E's table compared runs of unequal length: the frontier checks its stop on a
+  30-second wall-clock tick, so the faster run went further. Measured again at equal work (100,000,000,020
+  instructions, two warm runs each, the same tree, d6edf5ca): switches in the host 79.4 and 86.3 s, hvc 4 647,278,
+  hvc 12 352,097; switches in the VM (and the warp, Sprint 070, in the host) 58.6 and 56.7 s, hvc 4 9, hvc 12 39,484.
+  The thread census is the same in both. Sprint 070's card holds the table.

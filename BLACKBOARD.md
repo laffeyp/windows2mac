@@ -305,8 +305,7 @@
 - **Rubber Duck Pass:**
   - *Sequence narration:* family sweeps of 68 families, each CANDIDATE_ACCEPTED (index bc6c956c: 456 of 458 classes); frontier-643a6283510c-1792025575233476000: EXECUTION_STARTED, its stop, TRACE_INGESTED, COMPARISON_COMPLETED `conforms` (168 of 168 lines, 0 divergences), SESSION_COMPLETED.
   - *Observation 1 (blind plant, of the judge):* the plant that left the clock unwarped hung the probe rather than changing a census. Disposition: resolved-here (a reach check against the host's warp, per KIT_DIARY #56).
-  - *Observation 2 (payload anomaly, of the work):* hvc 12 fell from 57,352 to 2 and the warm wall time from 63.17 s to 62.42 s; the exits were cheap. Disposition: recorded in the card; hvc 1 is step 6's.
-  - *Observation 3 (payload anomaly, of the work):* the same tree interleaves differently on a cold and a warm translation cache (39,117 and 57,350 host warps), both conforming. Disposition: open; bears on step 10.
+  - *Observation 2 (payload anomaly, of the judge):* the first census compared runs of unequal length (the frontier's stop is checked on a 30-second wall-clock tick, so a faster run goes further), and read as a cold-against-warm difference in interleaving. Disposition: resolved-here (d6edf5ca; the census at 100 billion instructions: identical thread censuses in all six runs; session 56.7-58.6 s with the warp in the host, 50.5-51.6 s in the VM; Sprint 069's table corrected in its card; KIT_DIARY #57).
 - **Closed:** CI run 38662524546 (success on bc6c956c).
 
 ### Sprint 069 (2026-10-14, closed: CI run 38654917874 success on 773579d1)

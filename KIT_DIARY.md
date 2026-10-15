@@ -524,3 +524,22 @@ counter cost one line and was the only thing that showed the batch run had not c
 
 **Kit change suggested:** a card that moves work from one path to another names, in its observation contract, the
 counter that shows the new path taken on the target workload, and the census reports it.
+
+### 2026-10-14 — Sprint 070: a speed census that compared unequal work
+
+**What happened:** Sprints 069 and 070 each measured a change by the batch run's wall time before and after. The run
+stops when its log holds the reference's 168 lines and its main thread its calls, and the frontier checks that only
+when the progress line's 30-second wall-clock timer fires. A faster run therefore executes more instructions before
+it stops: thread 4 ran 72.8 billion instructions in one run and 85.4 billion in the other. The exit counts and the
+time by exit came from the progress line, which stops at its last tick. The two runs also differed in hand-overs and
+switches, which the first write-up offered as a cold-against-warm difference in interleaving, unchecked. At a fixed
+instruction count the interleaving was identical in every run and every configuration, and the exit counts matched
+to the last exit.
+
+**Finding (#57):** a speed comparison holds only at equal work. A stop that a wall-clock timer samples makes the work
+depend on the speed being measured, and the figures read off that timer cover part of the run. Fix the work (a fixed
+instruction count), read whole-run figures, run each side twice, and show the spread: here two identical runs
+differed by up to 6.9 s.
+
+**Kit change suggested:** an observation contract that measures speed names the fixed amount of work, the stop that
+ends it, and the repeat count; a census that does not show its stop reason is not a census.
