@@ -301,6 +301,13 @@
 
 ## Sprint tail
 
+### Sprint 072 (2026-10-14, closed: CI run 38670636259 success on b7b20617)
+- **Scope:** every compiled word from an encoder call (Decision 2026-10-14's first build step): six inline sites of `vm_backend.py` call new encoder forms, the words unchanged.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* family sweeps of 68 families, each CANDIDATE_ACCEPTED (index b7b20617: 456 of 458 classes); no frontier record (the compiled words are unchanged, shown over the 1,186,511 recorded calls).
+  - *Observation 1 (payload anomaly, of the judge):* the CI watch took the branch's latest run, the previous push's. Disposition: resolved-here (the run found by commit; 069's and 070's cited runs checked on their commits).
+- **Closed:** CI run 38670636259 (success on b7b20617).
+
 ### Sprint 071 (2026-10-14, closed: a measurement; no records change)
 - **Scope:** the stencil census for recentering step 6: does the compiler's output factor into copy-and-patch stencils?
 - **Rubber Duck Pass:**

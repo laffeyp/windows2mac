@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 072
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -67,3 +67,14 @@ caller put them on seven lines of `vm_backend.py`:
 A to C; the words equal; the sweeps and CI pass.
 
 ## observed
+- **A to C** (6e5d4d64; indexes b7b20617: 456 of 458 classes, 68 families). Six new encoder forms
+  (`addi32`, `subi32`, `adds32`, `subs32`, `lsl32`, `and_low`) with twelve rows checked against clang; the six sites
+  call them; the census places a call encoded ahead of its emission.
+- **The words:** the record's 1,186,511 calls compiled before and after the change: 0 differ.
+- **The census:** raw words 0 (394,155 before). Every refined form still gives one encoder sequence (18,218 forms);
+  the sequences number 1,372 (1,287 before: raw words were one item kind, now each is a named encoder), the
+  commonest 100 covering 92.2% of compiled instructions. Holes equal to a value's negation rose from 3 to 344: SUB's
+  immediate is the displacement negated.
+- **Closed** on b7b20617 (CI run 38670636259). The first CI watch read the branch's latest run, which was the previous
+  push's (38669912709 on 20822ab3); the watch now finds the run by commit. Sprints 069 and 070's cited runs were
+  checked and are on their commits.
