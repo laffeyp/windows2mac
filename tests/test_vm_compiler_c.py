@@ -17,6 +17,7 @@ import random
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -364,3 +365,58 @@ def test_without_its_guards_the_c_compiles_wrong_code(tmp_path: Path) -> None:
                     str(tmp_path / "harness.c"), str(SOURCE / "x86_decode.c"), str(SOURCE / "a64_encoder.c")],
                    check=True, capture_output=True)
     assert _spec_row_judge(Compiler(out))["differ"] > 0
+
+
+def _scan_judges(compiler: Compiler) -> tuple[Counter[str], Counter[str], list[str]]:
+    """Sprint 082: the successor scan in C against VM._flags_live_in and _flags_live_out (successor_scan_judge), over
+    the record's memory (tests/data/scan_samples.txt.gz) and over spec-row encodings laid out with jumps."""
+    import successor_scan_judge as sj
+    c = sj.CScan(compiler.lib)
+    record, spec, examples = Counter[str](), Counter[str](), list[str]()
+    with gzip.open(ROOT / "tests" / "data" / "scan_samples.txt.gz", "rt") as f:
+        for line in f:
+            model, scan = sj.sample_model(line)
+            sj.judge(c, model, [scan], record, examples)
+    rng = random.Random(8202)
+    encodings = sj.spec_encodings(rng, 2)
+    with_form = [e for e in encodings if c.decode(_one(e), 0x1_4000_0000) is not None]
+    for _ in range(400):
+        model, scans = sj.spec_layout(rng, with_form if rng.random() < 0.8 else encodings)
+        sj.judge(c, model, scans, spec, examples)
+    return record, spec, examples
+
+
+def _one(code: bytes) -> Any:
+    import successor_scan_judge as sj
+    model = sj.Model()
+    model.place(0x1_4000_0000, code)
+    return model
+
+
+def test_the_successor_scan_equals_the_hosts(compiler: Compiler) -> None:
+    """Where the C finds a form for every instruction the host's scan reads, its flags and pages equal the host's;
+    elsewhere its flags hold all the host's (it stops with the undecided ones live). Never short."""
+    record, spec, examples = _scan_judges(compiler)
+    for counts in (record, spec):
+        assert counts["short"] == 0 and counts["differ"] == 0, (counts, examples[:5])
+    assert record["equal"] > 3000 and spec["equal"] > 3000, (record, spec)
+
+
+SCAN_PLANT = ("        addr = ins.values[f->target];\n", "        addr += (u64)ins.length;\n")
+
+
+def test_a_scan_that_does_not_follow_a_jump_is_caught(tmp_path: Path) -> None:
+    """A plant: the scan goes on past a jump instead of to its target. (Sprint 082's first plant, the NZCV kind taken
+    from the instruction itself, changed no scan: a Jcc's flags differ by kind only when it branches on its setter's
+    NZCV, and every setter writes the flags its Jcc tests, so they are decided before the scan reaches the Jcc.)"""
+    assert CLANG is not None
+    text = (SOURCE / "vm_compiler.c").read_text()
+    assert text.count(SCAN_PLANT[0]) == 1
+    (tmp_path / "vm_compiler.c").write_text(text.replace(*SCAN_PLANT))
+    (tmp_path / "harness.c").write_text(HARNESS)
+    out = tmp_path / "planted.so"
+    subprocess.run([CLANG, "-shared", "-fPIC", "-O2", "-std=c11", "-w", f"-I{tmp_path}", f"-I{SOURCE}", "-o", str(out),
+                    str(tmp_path / "harness.c"), str(SOURCE / "x86_decode.c"), str(SOURCE / "a64_encoder.c")],
+                   check=True, capture_output=True)
+    record, spec, _ = _scan_judges(Compiler(out))
+    assert record["short"] + record["differ"] > 0 and spec["short"] + spec["differ"] > 0, (record, spec)

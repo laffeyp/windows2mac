@@ -21,6 +21,7 @@ struct vmc_form {
     u32 key;
     u16 length;
     u8 ends, falls, setter, nzcv_ok, has_flags;
+    u8 branch, target;                                   /* VMC_BRANCH_*; the constant target's value, or VMC_TARGET_* */
     u8 read[6], written[6];
     u32 first;
     u16 count;
@@ -29,6 +30,9 @@ struct vmc_form {
 enum { T_SMALL, T_POOL, T_HOLE, T_SYMBOL, T_EXIT, T_CHECKED };
 struct vmc_checked { u8 expression, position; u16 first, count; };
 enum { K_ENC, K_ENC32, K_BRANCH };
+/* scripts/gen_stencil_table.py branch_facts */
+enum { VMC_BRANCH_NONE, VMC_BRANCH_ALWAYS, VMC_BRANCH_OTHER };
+enum { VMC_TARGET_NOT_A_VALUE = 254, VMC_TARGET_NONE = 255 };
 
 #include "stencil_table.h"
 
@@ -339,17 +343,72 @@ int vmc_compile(const u8 *code, int n, u64 address, u64 base, u64 exit_va, const
     return vmc_emit(&ins, flags, base, exit_va, symbols, out, max_words);
 }
 
-/* the block: Monitor._compile's extent and vm_backend.assemble_block's code */
-static int is_thunk(const struct vmc_block_in *in, u64 address) {
-    int lo = 0, hi = in->nthunks;
+/* `address` among the sorted thunks */
+static int in_thunks(const u64 *thunks, int nthunks, u64 address) {
+    int lo = 0, hi = nthunks;
     while (lo < hi) {
         int mid = lo + (hi - lo) / 2;
-        if (in->thunks[mid] < address)
+        if (thunks[mid] < address)
             lo = mid + 1;
         else
             hi = mid;
     }
-    return lo < in->nthunks && in->thunks[lo] == address;
+    return lo < nthunks && thunks[lo] == address;
+}
+
+/* the successor scan (Sprint 082): VM._flags_live_in, line for line */
+int vmc_live_in(const struct vmc_memory *m, u64 addr) {
+    int live = 0, undecided = VMC_ALL_FLAGS;
+    const struct vmc_form *previous = 0;
+    for (int i = 0; i < VMC_LIVENESS_SCAN; i++) {
+        if (in_thunks(m->thunks, m->nthunks, addr) || addr >= VMC_PROCESS_VA)
+            break;
+        const u8 *bytes = 0;
+        int n = m->code(m->ctx, addr, &bytes);
+        if (n <= 0)
+            break;
+        struct vmc_insn ins;
+        /* n stops where the code pages do: an instruction past them does not decode (the Python's pages check);
+           one with no form ends the scan with its flags undecided, more live than the Python finds, never fewer */
+        if (vmc_decode(bytes, n > 15 ? 15 : n, addr, &ins) < 0)
+            break;
+        u64 first = addr & ~(VMC_PAGE - 1), last = (addr + (u64)ins.length - 1) & ~(VMC_PAGE - 1);
+        m->scanned(m->ctx, first);
+        if (last != first)
+            m->scanned(m->ctx, last);
+        const struct vmc_form *f = ins.form;
+        int kind = previous ? previous->setter : 0;
+        live |= f->read[kind] & undecided;
+        undecided &= ~(f->read[kind] | f->written[kind]);
+        if (!undecided)
+            return live;
+        if (f->branch == VMC_BRANCH_NONE) {
+            addr += (u64)ins.length;
+            previous = f;
+            continue;
+        }
+        if (f->branch != VMC_BRANCH_ALWAYS || f->target >= ins.nvalues)
+            break;
+        addr = ins.values[f->target];
+        previous = 0;
+    }
+    return live | undecided;
+}
+
+/* VM._flags_live_out: the flags read after a block whose last instruction is `last`, ending at `end` */
+int vmc_live_out(const struct vmc_memory *m, const struct vmc_insn *last, u64 end) {
+    const struct vmc_form *f = last->form;
+    if (f->branch == VMC_BRANCH_NONE)
+        return vmc_live_in(m, end);
+    if (f->target >= last->nvalues)                      /* not a constant, or one the C cannot follow: all */
+        return VMC_ALL_FLAGS;
+    int live = vmc_live_in(m, last->values[f->target]);
+    return f->branch == VMC_BRANCH_ALWAYS ? live : live | vmc_live_in(m, end);
+}
+
+/* the block: Monitor._compile's extent and vm_backend.assemble_block's code */
+static int is_thunk(const struct vmc_block_in *in, u64 address) {
+    return in_thunks(in->thunks, in->nthunks, address);
 }
 
 static u32 subs_budget(int n) {                         /* SUBS x23, x23, #n */

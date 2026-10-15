@@ -61,6 +61,25 @@ int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base
 int vmc_compile(const u8 *code, int n, u64 address, u64 base, u64 exit_va, const struct vmc_flags *flags,
                 const u64 *symbols, u32 *out, int max_words);
 
+/* The memory the successor scan reads (Sprint 082; VM._flags_live_in): `code` gives the bytes at an address whose
+ * page is behind translated code and how many may be read there (to the end of such pages), else 0; `scanned` is told
+ * each page an instruction the scan read lies on, which the scanned block joins the owners of (a write there drops
+ * it). */
+struct vmc_memory {
+    int (*code)(void *ctx, u64 address, const u8 **bytes);
+    void (*scanned)(void *ctx, u64 page);
+    void *ctx;
+    const u64 *thunks;      /* sorted */
+    int nthunks;
+};
+
+/* The flags code at `address` reads before writing them (VM._flags_live_in). Where an instruction the scan reaches
+ * has no form, its undecided flags are live: more than the Python finds there, never fewer. */
+int vmc_live_in(const struct vmc_memory *m, u64 address);
+
+/* The flags read after a block whose last instruction is `last`, ending at `end` (VM._flags_live_out) */
+int vmc_live_out(const struct vmc_memory *m, const struct vmc_insn *last, u64 end);
+
 /* A block (Monitor._compile's extent, vm_backend.assemble_block's code; Sprint 078): its instructions read from
  * mem[0..mem_size), which holds the guest's bytes from mem_base; it stops after a branch, before a thunk (sorted),
  * before bytes that do not decode or have no form, and at VMC_MAX_BLOCK_INSNS (stencil_table.h). `live_out`: the

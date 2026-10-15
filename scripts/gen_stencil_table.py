@@ -48,6 +48,7 @@ from w2m.lift import lift  # noqa: E402
 OUT = ROOT / "tools" / "vm_compiler" / "stencil_table.h"
 SAMPLES = ROOT / "tests" / "data" / "stencil_samples.txt.gz"
 BLOCK_SAMPLES = ROOT / "tests" / "data" / "block_samples.txt.gz"
+SCAN_SAMPLES = ROOT / "tests" / "data" / "scan_samples.txt.gz"     # successor_scan_judge.scan_samples (Sprint 082)
 BLOCKS = 3000
 DECODER_TABLES = ROOT / "tools" / "vm_compiler" / "x86_decode_tables.h"
 ENCODER_HEADER = ROOT / "tools" / "vm_compiler" / "a64_encoder.h"
@@ -317,18 +318,39 @@ def form_bytes(key: tuple[Any, ...]) -> bytes:
     return key_bytes(key)[:-FLAGS_BYTES]
 
 
-def facts_of(ins: Any) -> tuple[int, ...]:
+BRANCH_NONE, BRANCH_ALWAYS, BRANCH_OTHER = 0, 1, 2     # the first br op's kind (vm_compiler.c VMC_BRANCH_*)
+TARGET_NONE, TARGET_NOT_A_VALUE = 255, 254              # no constant target; a constant no decoded value holds
+
+
+def branch_facts(ins: Any, values: list[int]) -> tuple[int, int]:
+    """What the successor scan reads of an instruction's branch (VM._flags_live_out, _flags_live_in; Sprint 082): the
+    first br op's kind, and the position among the decoded values (the last that holds it) of its target when the
+    target is a constant, as both read it (`constant[br[2]]`)."""
+    br = next((op for op in ins.ops if op[0] == "br"), None)
+    if br is None:
+        return BRANCH_NONE, TARGET_NONE
+    kind = BRANCH_ALWAYS if br[1] == "always" else BRANCH_OTHER
+    constant = {op[1]: op[2] for op in ins.ops if op[0] == "imm"}
+    if br[2] not in constant:
+        return kind, TARGET_NONE
+    target = constant[br[2]] & (1 << 64) - 1
+    held = [i for i, v in enumerate(values) if v & (1 << 64) - 1 == target]
+    return kind, held[-1] if held else TARGET_NOT_A_VALUE
+
+
+def facts_of(ins: Any, values: list[int]) -> tuple[int, ...]:
     """What the block compiler reads of an instruction before its flags are known (Monitor._compile, assemble_block):
     ends the block (a branch), falls through (no unconditional branch), the kind of NZCV it leaves (nzcv_setter, as
     NZCV_FROM's index), the kinds its Jcc branches on (nzcv_branch: bit i for NZCV_FROM[i]), whether it has a flags op
-    (stencil_census.canonical_flags), then the flags read and written for each nzcv_from kind (insn_flags)."""
+    (stencil_census.canonical_flags), its branch for the successor scan (branch_facts), then the flags read and
+    written for each nzcv_from kind (insn_flags)."""
     brs = [op for op in ins.ops if op[0] == "br"]
     ok = sum(1 << i for i, kind in enumerate(NZCV_FROM)
              if kind is not None and any(op[1] in vm_backend.NZCV_CONDITIONS[kind] for op in brs))
     flags = [vm_backend.insn_flags(ins, kind) for kind in NZCV_FROM]
     return (int(bool(brs)), int(not any(op[1] == "always" for op in brs)),
             NZCV_FROM.index(vm_backend.nzcv_setter(ins)), ok, int(any(op[0] == "flags" for op in ins.ops)),
-            *(r for r, _ in flags), *(w for _, w in flags))
+            *branch_facts(ins, values), *(r for r, _ in flags), *(w for _, w in flags))
 
 
 def record_facts(record: dict[str, Any], implicit: dict[str, frozenset[int]]) -> tuple[dict[bytes, tuple[int, ...]],
@@ -340,9 +362,9 @@ def record_facts(record: dict[str, Any], implicit: dict[str, frozenset[int]]) ->
         for code in codes:
             if lift(code, ins.address) != ins:
                 continue                                 # Sprint 074's relift check: the bytes give another Lifted
-            key = sc.decoded_form((ins, 0, None, 0, False), code,
-                                  implicit.get(x86dec.decode(code).row or "", frozenset()))[0]
-            fb, f = form_bytes(key), facts_of(ins)
+            key, values, _ = sc.decoded_form((ins, 0, None, 0, False), code,
+                                             implicit.get(x86dec.decode(code).row or "", frozenset()))
+            fb, f = form_bytes(key), facts_of(ins, values)
             if facts.setdefault(fb, f) != f:
                 disagree.append((key[1], code.hex(), facts[fb], f))
     return facts, disagree
@@ -373,8 +395,9 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
     variant_rows: list[str] = []
     form_rows = []
     for h, fb, vs in forms:
-        ends, falls, setter, ok, has_flags, *rw = facts[fb]
+        ends, falls, setter, ok, has_flags, branch, target, *rw = facts[fb]
         form_rows.append(f"    {{0x{h:016x}u, {len(keys_blob)}, {len(fb)}, {ends}, {falls}, {setter}, {ok}, {has_flags}, "
+                         f"{branch}, {target}, "
                          f"{{{', '.join(map(str, rw[:len(NZCV_FROM)]))}}}, {{{', '.join(map(str, rw[len(NZCV_FROM):]))}}}, "
                          f"{len(variant_rows)}, {len(vs)}}},")
         keys_blob.extend(fb)
@@ -433,6 +456,9 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
         f"#define VMC_ROWS {len(_ROWS)}",
         f"#define VMC_NZCV_FROM {len(NZCV_FROM)}",
         f"#define VMC_MAX_BLOCK_INSNS {vm_backend.MAX_BLOCK_INSNS}",
+        f"#define VMC_LIVENESS_SCAN {vm_backend.LIVENESS_SCAN}",
+        f"#define VMC_PROCESS_VA 0x{vm_backend.PROCESS_VA:x}ull",
+        f"#define VMC_PAGE 0x{vm_backend.PAGE:x}ull",
         f"#define VMC_ALL_FLAGS {vm_backend.ALL_FLAGS}",
         f"#define VMC_REG_BUDGET {vm_backend.REG_BUDGET}",
         "",
@@ -526,8 +552,8 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
         "};",
         "",
         "/* the forms by hash: hash, the form's bytes' start and length; its facts (ends the block, falls through, the",
-        " * NZCV kind it leaves, the kinds its Jcc branches on, has a flags op, the flags read and written per nzcv_from",
-        " * kind); its first",
+        " * NZCV kind it leaves, the kinds its Jcc branches on, has a flags op, its first branch's kind and the position",
+        " * of its constant target among the values, the flags read and written per nzcv_from kind); its first",
         " * variant and their count */",
         "static const struct vmc_form VMC_FORM[VMC_FORMS] = {",
         *form_rows,
@@ -537,7 +563,10 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
     stats = {"keys": len(table), "forms": len(forms), "variants": len(variant_rows), "choices": len(choice_rows),
              "guards": len(guard_rows), "checked holes": len(r.checked), "choices with guards": sum(1 for c in choice_rows if not c.endswith(", 0},")), "stencils": len(r.stencil_rows), "items": len(r.item_rows),
              "arguments": len(r.args), "pool": len(pool), "key bytes": len(keys_blob), "encoders": len(r.encoders),
-             "symbols": symbols, "argument kinds": r.kinds}
+             "symbols": symbols, "argument kinds": r.kinds,
+             "branch forms": sum(1 for _, fb, _ in forms if facts[fb][5] != BRANCH_NONE),
+             "constant targets": sum(1 for _, fb, _ in forms if facts[fb][6] < TARGET_NOT_A_VALUE),
+             "constant targets no value holds": sum(1 for _, fb, _ in forms if facts[fb][6] == TARGET_NOT_A_VALUE)}
     return "\n".join(out), stats
 
 
@@ -642,7 +671,9 @@ def outputs(table_path: Path, record_path: Path) -> dict[Path, bytes]:
               f"record sha256:{hashlib.sha256(record_path.read_bytes()).hexdigest()}")
     text, stats = render(data, digest, facts)
     print(f"{OUT.name}: {stats}")
-    return {OUT: text.encode(), SAMPLES: gzip_bytes(samples(record, data)), BLOCK_SAMPLES: gzip_bytes(block_samples(record))}
+    import successor_scan_judge
+    return {OUT: text.encode(), SAMPLES: gzip_bytes(samples(record, data)), BLOCK_SAMPLES: gzip_bytes(block_samples(record)),
+            SCAN_SAMPLES: gzip_bytes(successor_scan_judge.scan_samples(record, 4000, 8201))}
 
 
 def main(argv: list[str]) -> int:

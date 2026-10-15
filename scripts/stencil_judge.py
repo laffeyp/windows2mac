@@ -14,11 +14,16 @@ Four judges, each a COMPARISON_COMPLETED of a session whose candidate is the gen
 - `cases`: the class case sets (Intel-checked, random operands, none from the record), at two flag contexts.
 - `spec`: random encodings of every decoder spec row (tests/test_x86_decode_c.row_samples; the reviewer's E1), at
   unaligned addresses, under the record's commonest flag contexts.
+- `scan` (Sprint 082): the successor scan (vmc_live_in, vmc_live_out) against VM._flags_live_in and _flags_live_out
+  over the record's memory, after every recorded branch and at every address one instruction follows
+  (successor_scan_judge).
+- `scan-spec` (Sprint 082): the same over spec-row encodings laid out with direct jumps between them.
 
 The record and the table are the only sources of the table; the cases and the spec rows are neither. A judge passes
-with 0 differing; an instruction with no stencil, or refused by a guard, is counted, not judged.
+with 0 differing (and, for a scan, 0 short of the host's flags); an instruction with no stencil, or refused by a
+guard, is counted, not judged.
 
-Usage: uv run python scripts/stencil_judge.py [--judges instructions,blocks,cases,spec] [--runs store/runs]
+Usage: uv run python scripts/stencil_judge.py [--judges instructions,blocks,cases,spec,scan,scan-spec] [--runs store/runs]
 """
 
 from __future__ import annotations
@@ -51,7 +56,7 @@ from w2m.record import one_step_run  # noqa: E402
 
 SOURCE = ROOT / "tools" / "vm_compiler"
 NO_STENCIL, GUARDED = -2, -7
-CONTRACT, VERSION = "w2m.vm_compiler.stencil_table", "0.80.0"
+CONTRACT, VERSION = "w2m.vm_compiler.stencil_table", "0.82.0"
 U64, U32, INT = ctypes.c_uint64, ctypes.c_uint32, ctypes.c_int
 
 
@@ -86,8 +91,9 @@ _ST: dict[str, Any] = {}
 
 
 def _init(lib_path: str, symbols: dict[str, int], implicit: dict[str, frozenset[int]],
-          by_addr: dict[int, tuple[Any, bytes]], lives: dict[int, set[int]]) -> None:
+          by_addr: dict[int, tuple[Any, bytes]], lives: dict[int, set[int]], extra: dict[str, Any]) -> None:
     lib = ctypes.CDLL(lib_path)
+    _ST.update(extra)
     n = ctypes.c_int.in_dll(lib, "vmc_symbols").value
     names = [(s or b"").decode() for s in (ctypes.c_char_p * n).in_dll(lib, "vmc_symbol_name")]
     _ST.update(lib=lib, symbols=symbols, implicit=implicit, by_addr=by_addr, lives=lives,
@@ -222,6 +228,27 @@ def _judge_codes(job: tuple[list[bytes], int, list[tuple[int, int, int]], bool])
     return c, ex
 
 
+def _judge_scans(job: tuple[list[tuple[int | None, int]], int]) -> tuple[Counter[str], list[str]]:
+    import successor_scan_judge as sj
+    c, ex = Counter[str](), list[str]()
+    sj.judge(sj.CScan(_ST["lib"]), _ST["model"], job[0], c, ex)
+    return c, ex
+
+
+def _judge_scan_layouts(job: tuple[int, int]) -> tuple[Counter[str], list[str]]:
+    import successor_scan_judge as sj
+    layouts, seed = job
+    rng, c, ex = random.Random(seed), Counter[str](), list[str]()
+    scan = sj.CScan(_ST["lib"])
+    for _ in range(layouts):
+        model, scans = sj.spec_layout(rng, _ST["with_form"] if rng.random() < 0.8 else _ST["encodings"])
+        sj.judge(scan, model, scans, c, ex)
+    return c, ex
+
+
+DIFFERENCES = ("differ", "short")                       # a count of either fails the judge
+
+
 def _pool(fn: Any, jobs: list[Any], init: tuple[Any, ...], workers: int) -> tuple[Counter[str], list[str]]:
     total, examples = Counter[str](), []
     with multiprocessing.get_context("fork").Pool(workers, _init, init) as pool:
@@ -244,7 +271,16 @@ def judges(names: list[str], workers: int) -> Iterator[tuple[str, Counter[str], 
         lives: dict[int, set[int]] = defaultdict(set)
         for call in record["calls"]:
             lives[call[0].address].add(call[3])
-        init = (lib, record["symbols"], table["implicit"], by_addr, dict(lives))
+        extra: dict[str, Any] = {}
+        if "scan" in names:
+            import successor_scan_judge as sj
+            extra["model"] = sj.record_model(record)
+        if "scan-spec" in names:
+            import successor_scan_judge as sj
+            extra["encodings"] = sj.spec_encodings(random.Random(8203), 10)
+            scan = sj.CScan(ctypes.CDLL(lib))
+            extra["with_form"] = [e for e in extra["encodings"] if scan.decode(_alone(e), 0x1_4000_0000) is not None]
+        init = (lib, record["symbols"], table["implicit"], by_addr, dict(lives), extra)
         if "instructions" in names:
             calls = [(call, next(iter(record["bytes"][call[0]]))) for call in record["calls"]]
             jobs: list[Any] = [(calls[i:i + 2000], 77_000 + i) for i in range(0, len(calls), 2000)]
@@ -269,11 +305,27 @@ def judges(names: list[str], workers: int) -> Iterator[tuple[str, Counter[str], 
                                           + [(0, vm_backend.ALL_FLAGS, 0), (0, 0, 0)]))
             jobs = [(codes[i:i + 2000], 80_000 + i, contexts, True) for i in range(0, len(codes), 2000)]
             yield ("spec", *_pool(_judge_codes, jobs, init, workers), "decoder spec rows (test_x86_decode_c.row_samples)")
+        if "scan" in names:
+            import successor_scan_judge as sj
+            scans = sj.record_scans(record)
+            jobs = [(scans[i:i + 5000], i) for i in range(0, len(scans), 5000)]
+            yield ("scan", *_pool(_judge_scans, jobs, init, workers), str(g.RECORD))
+        if "scan-spec" in names:
+            jobs = [(250, 82_000 + i) for i in range(40)]
+            yield ("scan-spec", *_pool(_judge_scan_layouts, jobs, init, workers),
+                   "decoder spec rows laid out with jumps (successor_scan_judge.spec_layout)")
+
+
+def _alone(code: bytes) -> Any:
+    import successor_scan_judge as sj
+    model = sj.Model()
+    model.place(0x1_4000_0000, code)
+    return model
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--judges", default="instructions,blocks,cases,spec")
+    ap.add_argument("--judges", default="instructions,blocks,cases,spec,scan,scan-spec")
     ap.add_argument("--runs", type=Path, default=ROOT / "store" / "runs")
     ap.add_argument("--workers", type=int, default=max(1, (multiprocessing.cpu_count() or 2) - 1))
     a = ap.parse_args(argv)
@@ -289,14 +341,16 @@ def main(argv: list[str]) -> int:
         for name, counts, examples, source in judges(a.judges.split(","), a.workers):
             results.append((name, counts, examples, source))
             print(f"{name}: {dict(sorted(counts.items()))}" + (f"; e.g. {examples[:5]}" if examples else ""))
-            differ = sum(n for k, n in counts.items() if k.startswith("differ"))
+            differ = sum(n for k, n in counts.items() if k.startswith(DIFFERENCES))
             yield events.COMPARISON_COMPLETED(
                 comparison_id=f"cmp-{cand_id}-{name}", contract_id=CONTRACT, contract_version=VERSION,
-                relation="exact", reference_ref=f"vm_backend.compile_insn / assemble_block over {source}",
+                relation="exact", reference_ref=(f"vm_backend.VM._flags_live_in / _flags_live_out over {source}"
+                                                 if name.startswith("scan") else
+                                                 f"vm_backend.compile_insn / assemble_block over {source}"),
                 target_execution_id=f"vm_compiler-{name}", verdict="discrepancy" if differ else "conforms",
                 rule_ref="; ".join(f"{k} {n}" for k, n in sorted(counts.items()))[:500],
                 first_divergence=examples[0][:500] if examples else None)
-        if all(not any(k.startswith("differ") for k in c) for _, c, _, _ in results):
+        if all(not any(k.startswith(DIFFERENCES) for k in c) for _, c, _, _ in results):
             yield events.CANDIDATE_ACCEPTED(candidate_id=cand_id, contract_id=CONTRACT, contract_version=VERSION,
                                             comparison_ids=tuple(f"cmp-{cand_id}-{n}" for n, _, _, _ in results))
 
