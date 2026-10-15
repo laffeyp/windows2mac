@@ -304,14 +304,15 @@ def form_bytes(key: tuple[Any, ...]) -> bytes:
 def facts_of(ins: Any) -> tuple[int, ...]:
     """What the block compiler reads of an instruction before its flags are known (Monitor._compile, assemble_block):
     ends the block (a branch), falls through (no unconditional branch), the kind of NZCV it leaves (nzcv_setter, as
-    NZCV_FROM's index), the kinds its Jcc branches on (nzcv_branch: bit i for NZCV_FROM[i]), then the flags read and
-    written for each nzcv_from kind (insn_flags)."""
+    NZCV_FROM's index), the kinds its Jcc branches on (nzcv_branch: bit i for NZCV_FROM[i]), whether it has a flags op
+    (stencil_census.canonical_flags), then the flags read and written for each nzcv_from kind (insn_flags)."""
     brs = [op for op in ins.ops if op[0] == "br"]
     ok = sum(1 << i for i, kind in enumerate(NZCV_FROM)
              if kind is not None and any(op[1] in vm_backend.NZCV_CONDITIONS[kind] for op in brs))
     flags = [vm_backend.insn_flags(ins, kind) for kind in NZCV_FROM]
     return (int(bool(brs)), int(not any(op[1] == "always" for op in brs)),
-            NZCV_FROM.index(vm_backend.nzcv_setter(ins)), ok, *(r for r, _ in flags), *(w for _, w in flags))
+            NZCV_FROM.index(vm_backend.nzcv_setter(ins)), ok, int(any(op[0] == "flags" for op in ins.ops)),
+            *(r for r, _ in flags), *(w for _, w in flags))
 
 
 def record_facts(record: dict[str, Any], implicit: dict[str, frozenset[int]]) -> tuple[dict[bytes, tuple[int, ...]],
@@ -337,31 +338,34 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
     variants: dict[bytes, list[tuple[Any, ...]]] = {}    # form: (nzcv_from, live_after, nzcv_out, feature, position,
     for key, entry in table.items():                     # choices)
         if entry[0] == "one":
-            choices = [(0, r.stencil(entry[1]))]
+            choices = [(0, r.stencil(entry[1]), entry[2])]
             feature, pos = FEATURE_NONE, 0
         else:
             _, pos, fname, by = entry
             feature = FEATURE_ID[fname]
-            choices = sorted((int(fv), r.stencil(s)) for fv, s in by.items())
+            choices = sorted((int(fv), r.stencil(st_), gs) for fv, (st_, gs) in by.items())
         flags = key_bytes(key)[-FLAGS_BYTES:]
         variants.setdefault(form_bytes(key), []).append((*flags, feature, pos, choices))
     forms = sorted(((fnv1a(fb), fb, sorted(v)) for fb, v in variants.items()), key=lambda e: e[0])
     hashes = [e[0] for e in forms]
     assert len(set(hashes)) == len(hashes), "two forms with one hash"
     keys_blob: list[int] = []
-    choice_rows: list[tuple[int, int]] = []
+    choice_rows: list[str] = []
+    guard_rows: list[str] = []
     variant_rows: list[str] = []
     form_rows = []
     for h, fb, vs in forms:
-        ends, falls, setter, ok, *rw = facts[fb]
-        form_rows.append(f"    {{0x{h:016x}u, {len(keys_blob)}, {len(fb)}, {ends}, {falls}, {setter}, {ok}, "
+        ends, falls, setter, ok, has_flags, *rw = facts[fb]
+        form_rows.append(f"    {{0x{h:016x}u, {len(keys_blob)}, {len(fb)}, {ends}, {falls}, {setter}, {ok}, {has_flags}, "
                          f"{{{', '.join(map(str, rw[:len(NZCV_FROM)]))}}}, {{{', '.join(map(str, rw[len(NZCV_FROM):]))}}}, "
                          f"{len(variant_rows)}, {len(vs)}}},")
         keys_blob.extend(fb)
         for nzcv_from, live_after, nzcv_out, feature, pos, choices in vs:
             variant_rows.append(f"    {{{nzcv_from}, {live_after}, {nzcv_out}, {feature}, {pos}, {len(choice_rows)}, "
                                 f"{len(choices)}}},")
-            choice_rows.extend(choices)
+            for fv, stencil_id, gs in choices:
+                choice_rows.append(f"    {{{fv}, {stencil_id}, {len(guard_rows)}, {len(gs)}}},")
+                guard_rows.extend(f"    {{{p}, 0x{v & (1 << 64) - 1:x}u}}," for p, v in gs)
     protos = c_prototypes()
     dispatch = []
     for name, e in sorted(r.encoders.items(), key=lambda x: x[1]):
@@ -477,9 +481,15 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
         *(f"    {{{f}, {n}}}," for f, n in r.stencil_rows),
         "};",
         "",
-        "/* a key's choices: the feature's value, the stencil */",
+        "/* a key's choices: the feature's value, the stencil, its first guard and their count */",
         f"static const struct vmc_choice VMC_CHOICE[{len(choice_rows)}] = {{",
-        *(f"    {{{fv}, {s}}}," for fv, s in choice_rows),
+        *choice_rows,
+        "};",
+        "",
+        "/* a guard: the value at this position must be this one (stencil_table._guards: a value the derivation never",
+        " * varied that a constant argument may stand for) */",
+        f"static const struct vmc_guard VMC_GUARD[{max(len(guard_rows), 1)}] = {{",
+        *(guard_rows or ["    {0, 0},"]),
         "};",
         "",
         *_array("u8", "VMC_FORM_BYTES", keys_blob, 32),
@@ -491,22 +501,24 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
         "};",
         "",
         "/* the forms by hash: hash, the form's bytes' start and length; its facts (ends the block, falls through, the",
-        " * NZCV kind it leaves, the kinds its Jcc branches on, the flags read and written per nzcv_from kind); its first",
+        " * NZCV kind it leaves, the kinds its Jcc branches on, has a flags op, the flags read and written per nzcv_from",
+        " * kind); its first",
         " * variant and their count */",
         "static const struct vmc_form VMC_FORM[VMC_FORMS] = {",
         *form_rows,
         "};",
         "",
     ]
-    stats = {"keys": len(table), "forms": len(forms), "variants": len(variant_rows), "stencils": len(r.stencil_rows), "items": len(r.item_rows),
+    stats = {"keys": len(table), "forms": len(forms), "variants": len(variant_rows), "choices": len(choice_rows),
+             "guards": len(guard_rows), "choices with guards": sum(1 for c in choice_rows if not c.endswith(", 0},")), "stencils": len(r.stencil_rows), "items": len(r.item_rows),
              "arguments": len(r.args), "pool": len(pool), "key bytes": len(keys_blob), "encoders": len(r.encoders),
              "symbols": symbols, "argument kinds": r.kinds}
     return "\n".join(out), stats
 
 
 def samples(record: dict[str, Any], data: dict[str, Any]) -> list[str]:
-    """For each key and each of its stencils, the first recorded call that reaches it, else an instance of the key
-    that does: "bytes address nzcv_from live_after nzcv_out" (nzcv_from as NZCV_FROM's index)."""
+    """For each key and each of its stencils, the first recorded call that reaches it and passes its guards, else an
+    instance of the key that does: "bytes address nzcv_from live_after nzcv_out" (nzcv_from as NZCV_FROM's index)."""
     table, implicit = data["table"], data["implicit"]
     seen: set[tuple[Any, Any]] = set()
     first: dict[Any, tuple[Any, bytes]] = {}
@@ -518,11 +530,11 @@ def samples(record: dict[str, Any], data: dict[str, Any]) -> list[str]:
         if entry is None:
             continue
         choice = None if entry[0] == "one" else st.FEATURE[entry[2]](values[entry[1]])
-        if (key, choice) in seen:
-            continue
+        if (key, choice) in seen or st.stencil_for(entry, values) is None:
+            continue                                     # (a guard the values fail: the host compiles it)
         seen.add((key, choice))
-        first[key] = (call, code)
-        lines.append(_sample(call, code))
+        first.setdefault(key, (call, code))
+        lines.append(_sample(key, call, code))
     # a refined key's stencils the record never reached: from instances of its first recorded call
     for key, (call, code) in first.items():
         entry = table[key]
@@ -534,10 +546,10 @@ def samples(record: dict[str, Any], data: dict[str, Any]) -> list[str]:
             for c, b, values in st.instances(call, code, key, implicit.get(row, frozenset()), random.Random(seed),
                                              8 * st.TRIES, 8 * st.KEEP)[1:]:
                 choice = st.FEATURE[entry[2]](values[entry[1]])
-                if choice in missing:
+                if choice in missing and st.stencil_for(entry, values) is not None:
                     missing.discard(choice)
                     seen.add((key, choice))
-                    lines.append(_sample(c, b))
+                    lines.append(_sample(key, c, b))
             if not missing:
                 break
     return lines
@@ -575,9 +587,9 @@ def block_samples(record: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _sample(call: Any, code: bytes) -> str:
-    ins, _, nzcv_from, live_after, nzcv_out = call
-    return f"{code.hex()} {ins.address:x} {NZCV_FROM.index(nzcv_from)} {live_after} {int(nzcv_out)}"
+def _sample(key: Any, call: Any, code: bytes) -> str:
+    nzcv_from, live_after, nzcv_out = key[9:12]          # the key's flag arguments: canonical (canonical_flags)
+    return f"{code.hex()} {call[0].address:x} {NZCV_FROM.index(nzcv_from)} {live_after} {int(nzcv_out)}"
 
 
 def write_gzip(path: Path, lines: list[str]) -> None:

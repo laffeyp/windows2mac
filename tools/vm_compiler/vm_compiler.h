@@ -19,6 +19,7 @@ enum vmc_status {
     VMC_ENCODER = -4,       /* an encoder refused its arguments */
     VMC_FULL = -5,          /* more words than the output holds */
     VMC_KEY_SIZE = -6,      /* more operands, registers or values than the key holds */
+    VMC_GUARDED = -7,       /* a value the table's derivation never varied differs here (stencil_table._guards) */
 };
 
 /* compile_insn's flag arguments: nzcv_from as an index of [none, vm_backend.NZCV_CONDITIONS...] */

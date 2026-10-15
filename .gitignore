@@ -37,3 +37,6 @@ store/runs/family-runs.lock
 runs/family-runs.lock
 probes/semantics_065b/cases.bin
 probes/semantics_065c/cases.bin
+
+# the stencil table's inputs (Sprint 079): the 140 MB record and the table pickle, kept local; sha256 in the sprint cards
+store/stencil-inputs/

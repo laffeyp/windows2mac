@@ -232,15 +232,27 @@ def implicit_registers(record: dict[str, Any]) -> dict[str, frozenset[int]]:
     return {row: frozenset(r) for row, r in out.items()}
 
 
+def canonical_flags(ins: Any, nzcv_from: str | None, live_after: int, nzcv_out: bool) -> tuple[str | None, int, bool]:
+    """The flag arguments as compile_insn reads them (Sprint 079): `live_after` and `nzcv_out` only through a flags
+    op (its flag masks, the dead ops, the last flags op's NZCV); `nzcv_from` only through a Jcc whose condition its
+    kind's NZCV_CONDITIONS holds. An argument the instruction cannot read is written as its default, so keys that
+    differ only there are one key."""
+    has_flags = any(op[0] == "flags" for op in ins.ops)
+    reads = nzcv_from is not None and any(op[0] == "br" and op[1] in vm_backend.NZCV_CONDITIONS[nzcv_from]
+                                          for op in ins.ops)
+    return (nzcv_from if reads else None, live_after if has_flags else 0, nzcv_out if has_flags else False)
+
+
 def decoded_form(call: Call, code: bytes, implicit: frozenset[int] = frozenset()) -> tuple[tuple[Any, ...], list[int], int]:
     """The instruction's key as the decoder gives it (Sprint 074): the spec row, the iclass, the operand and address
     sizes, VEX.L, and the operands (x86ops) with register numbers and values taken out, which registers are equal,
-    each value's class, and the flag arguments. The values, in order: guest registers (XMM and YMM as 1000 + n), then
+    each value's class, and the flag arguments (canonical_flags). The values, in order: guest registers (XMM and YMM as 1000 + n), then
     immediates (raw and sign-extended), displacements, the next instruction's address and any address the
     instruction names (a branch target, a RIP-relative address). `implicit`: the row's implicit registers
     (implicit_registers); an explicit register equal to one is named in the key. Returns (key, values, the count of
     registers)."""
     ins, exit_va, nzcv_from, live_after, nzcv_out = call
+    nzcv_from, live_after, nzcv_out = canonical_flags(ins, nzcv_from, live_after, nzcv_out)
     d = x86dec.decode(code)
     f = d.fields
     nxt = ins.address + d.length

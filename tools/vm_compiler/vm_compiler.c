@@ -13,13 +13,14 @@
 
 struct vmc_item { u8 encoder, kind, count; u32 first; };
 struct vmc_stencil { u32 first; u16 count; };
-struct vmc_choice { u64 value; u32 stencil; };
+struct vmc_choice { u64 value; u32 stencil, first_guard; u16 nguards; };
+struct vmc_guard { u8 position; u64 value; };
 struct vmc_variant { u8 nzcv_from, live_after, nzcv_out, feature, position; u32 first; u16 count; };
 struct vmc_form {
     u64 hash;
     u32 key;
     u16 length;
-    u8 ends, falls, setter, nzcv_ok;
+    u8 ends, falls, setter, nzcv_ok, has_flags;
     u8 read[6], written[6];
     u32 first;
     u16 count;
@@ -242,31 +243,38 @@ int vmc_decode(const u8 *code, int n, u64 address, struct vmc_insn *out) {
 int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base, u64 exit_va,
              const u64 *symbols, u32 *out, int max_words) {
     const struct vmc_form *f = ins->form;
+    /* the flag arguments as the instruction reads them (stencil_census.canonical_flags) */
+    int nzcv_from = f->nzcv_ok >> flags->nzcv_from & 1 ? flags->nzcv_from : 0;
+    int live_after = f->has_flags ? flags->live_after : 0;
+    int nzcv_out = f->has_flags ? flags->nzcv_out : 0;
     const struct vmc_variant *v = 0;
     for (int i = 0; i < f->count; i++) {
         const struct vmc_variant *c = &VMC_VARIANT[f->first + i];
-        if (c->nzcv_from == flags->nzcv_from && c->live_after == flags->live_after && c->nzcv_out == flags->nzcv_out)
+        if (c->nzcv_from == nzcv_from && c->live_after == live_after && c->nzcv_out == nzcv_out)
             v = c;
     }
     if (!v)
         return VMC_NO_STENCIL;
     const u64 *values = ins->values;
     int nvalues = ins->nvalues;
-    u32 stencil = VMC_CHOICE[v->first].stencil;
+    const struct vmc_choice *choice = &VMC_CHOICE[v->first];
     if (v->feature != VMC_FEATURE_NONE) {
         if (v->position >= nvalues)
             return VMC_NO_CHOICE;
         u64 fv = vmc_feature(v->feature, values[v->position]);
-        int found = 0;
+        choice = 0;
         for (int i = 0; i < v->count; i++)
-            if (VMC_CHOICE[v->first + i].value == fv) {
-                stencil = VMC_CHOICE[v->first + i].stencil;
-                found = 1;
-            }
-        if (!found)
+            if (VMC_CHOICE[v->first + i].value == fv)
+                choice = &VMC_CHOICE[v->first + i];
+        if (!choice)
             return VMC_NO_CHOICE;
     }
-    const struct vmc_stencil *s = &VMC_STENCIL[stencil];
+    for (int i = 0; i < choice->nguards; i++) {           /* a value the derivation never varied */
+        const struct vmc_guard *g = &VMC_GUARD[choice->first_guard + i];
+        if (g->position >= nvalues || values[g->position] != g->value)
+            return VMC_GUARDED;
+    }
+    const struct vmc_stencil *s = &VMC_STENCIL[choice->stencil];
     int w = 0;
     for (int i = 0; i < s->count; i++) {
         const struct vmc_item *it = &VMC_ITEM[VMC_STENCIL_ITEM[s->first + i]];

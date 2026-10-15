@@ -259,8 +259,31 @@ def _arg_spec(values: list[Any], valueses: list[list[int]], symbol_of: dict[int,
     return ("h", found[1], found[2]) if found else ("other",)
 
 
+def _guards(stencil: Any, samples: list[tuple[list[Any], list[int]]]) -> tuple[tuple[int, int], ...]:
+    """The values the samples never varied that a constant argument may stand for (Sprint 079): each such value's
+    position and its one value. A constant equal to an expression of a value that never varied may be a hole the
+    instances could not show (a refined group's register, a target, a return address); an instruction whose value
+    there differs has no stencil from this table."""
+    first = samples[0][1]
+    fixed = [p for p in range(len(first)) if all(v[p] == first[p] for _, v in samples)]
+    constants = {s[1] for _, _, specs in stencil for s in specs
+                 if s[0] == "c" and isinstance(s[1], int) and not isinstance(s[1], bool)}
+    constants |= {s[2][1] for _, _, specs in stencil for s in specs
+                  if s[0] == "kw" and s[2][0] == "c" and isinstance(s[2][1], int) and not isinstance(s[2][1], bool)}
+    out = []
+    for p in fixed:
+        try:
+            images = {fn(first[p]) for _, _, fn in sc.EXPRESSIONS}
+        except (ValueError, OverflowError):
+            images = set()
+        if images & constants:
+            out.append((p, first[p]))
+    return tuple(out)
+
+
 def derive(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str]) -> Any:
-    """The stencil of a key from its instances' items and values, or ("split", signatures)."""
+    """The stencil of a key from its instances' items and values, with its guards (_guards), or ("split",
+    signatures)."""
     sigs = {_signature(items) for items, _ in samples}
     if len(sigs) > 1:
         return ("split", sigs)
@@ -270,7 +293,7 @@ def derive(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str]
         specs = [_arg_spec([items[pos][2][ai] for items, _ in samples], [v for _, v in samples], symbol_of)
                  for ai in range(len(args))]
         stencil.append((kind, name, tuple(specs)))
-    return ("stencil", tuple(stencil))
+    return ("stencil", tuple(stencil), _guards(stencil, samples))
 
 
 # A key whose instances give more than one encoder sequence is refined by one feature of one decoded value: an SSE
@@ -291,16 +314,21 @@ def refine(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str]
                 groups[fn(values[p])].append((items, values))
             if len(groups) < 2 or any(len({_signature(i) for i, _ in g}) > 1 for g in groups.values()):
                 continue
-            return ("by", p, fname, {fv: derive(g, symbol_of)[1] for fv, g in groups.items()})
+            return ("by", p, fname, {fv: derive(g, symbol_of)[1:] for fv, g in groups.items()})
     return None
 
 
 def stencil_for(entry: Any, values: list[int]) -> Any:
-    """The stencil a table entry gives for an instruction's decoded values, or None (a feature value with none)."""
+    """The stencil a table entry gives for an instruction's decoded values, or None (a feature value with none, or a
+    guard the values fail)."""
     if entry[0] == "one":
-        return entry[1]
-    _, p, fname, by = entry
-    return by.get(FEATURE[fname](values[p]))
+        chosen = entry[1:]
+    else:
+        _, p, fname, by = entry
+        chosen = by.get(FEATURE[fname](values[p]))
+    if chosen is None or any(values[q] != v for q, v in chosen[1]):
+        return None
+    return chosen[0]
 
 
 def _value(spec: Any, values: list[int], symbols: dict[str, int]) -> Any:
@@ -392,7 +420,7 @@ def build_one(job: tuple[Any, list[tuple[Any, bytes]], frozenset[int], int]) -> 
     if not samples:
         return key, None, dict(counts)
     derived = derive(samples, _STATE["symbol_of"])
-    entry: Any = ("one", derived[1]) if derived[0] == "stencil" else None
+    entry: Any = ("one", derived[1], derived[2]) if derived[0] == "stencil" else None
     if entry is None:                                    # more instances, then a feature that separates them
         for inst in instances(call, code, key, implicit, random.Random(seed + 2_000_003), 8 * TRIES, 8 * KEEP)[1:]:
             c = _compiled(inst)
@@ -401,7 +429,7 @@ def build_one(job: tuple[Any, list[tuple[Any, bytes]], frozenset[int], int]) -> 
         entry = refine(samples, _STATE["symbol_of"])
         counts["refined" if entry else "split"] += 1
     if entry is not None:
-        stencils = [entry[1]] if entry[0] == "one" else list(entry[3].values())
+        stencils = [entry[1]] if entry[0] == "one" else [st for st, _ in entry[3].values()]
         counts["other arguments"] += sum(1 for st in stencils for _, _, specs in st for s in specs if s[0] == "other")
         judged = instances(call, code, key, implicit, random.Random(seed + 1_000_003))[1:]
         judged += [(c, b, sc.decoded_form(c, b, implicit)[1]) for c, b in recorded[1:2 * KEEP:2]]
@@ -412,7 +440,7 @@ def build_one(job: tuple[Any, list[tuple[Any, bytes]], frozenset[int], int]) -> 
             counts["judged"] += 1
             chosen = stencil_for(entry, inst[2])
             if chosen is None:
-                counts["judged with no stencil"] += 1
+                counts["judged with no stencil (a feature value or a guard)"] += 1
                 continue
             try:
                 ok = rebuild(chosen, inst[2], _STATE["symbols"], _STATE["words_of"]) == c[0]
@@ -463,14 +491,17 @@ def main(argv: list[str]) -> int:
     print(f"keys {len(by_key)}; stencils {len(table)}; keys split by their instances {len(splits)}; "
           f"instances kept per key (with the recorded one) {dict(sorted(kept.items()))}; totals {dict(totals)}")
     every = [e[1] for e in table.values() if e[0] == "one"] + [st for e in table.values() if e[0] == "by"
-                                                              for st in e[3].values()]
+                                                              for st, _ in e[3].values()]
+    guards = [e[2] for e in table.values() if e[0] == "one"] + [gs for e in table.values() if e[0] == "by"
+                                                               for _, gs in e[3].values()]
+    print(f"stencils with guards {sum(1 for gs in guards if gs)} of {len(guards)}; guards {sum(map(len, guards))}")
     args = Counter(s[0] if s[0] != "h" else "h " + s[1].split()[0] for st in every for _, _, specs in st
                    for s in specs)
     print(f"keys refined by a feature: {sum(1 for e in table.values() if e[0] == 'by')} "
           f"{dict(Counter(e[2] for e in table.values() if e[0] == 'by'))}")
     print(f"arguments by kind: {dict(args)}")
     _init(record["symbols"])                             # the record's own instructions, rebuilt from the table
-    equal = differ = missing = 0
+    equal = differ = missing = guarded = 0
     for key, calls in by_key.items():
         if key not in table:
             missing += len(calls)
@@ -480,6 +511,9 @@ def main(argv: list[str]) -> int:
             values = sc.decoded_form(call, code, implicit.get(key[0] or "", frozenset()))[1]
             c = _compiled((call, code, values))
             chosen = stencil_for(table[key], values)
+            if chosen is None:
+                guarded += 1                             # a feature value with no stencil, or a guard failed
+                continue
             try:
                 ok = c is not None and chosen is not None and rebuild(chosen, values, record["symbols"],
                                                                        _STATE["words_of"]) == c[0]
@@ -487,7 +521,8 @@ def main(argv: list[str]) -> int:
                 ok = False
             equal += ok
             differ += not ok
-    print(f"record calls rebuilt from the table: {equal} equal, {differ} differ, {missing} with no stencil")
+    print(f"record calls rebuilt from the table: {equal} equal, {differ} differ, {missing} with no stencil, "
+          f"{guarded} with no stencil for their values (a guard or a feature value)")
     if a.out:
         with open(a.out, "wb") as f:
             pickle.dump({"table": table, "implicit": implicit, "splits": splits}, f)

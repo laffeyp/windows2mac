@@ -44,12 +44,14 @@ def test_instances_keep_the_key_and_the_stencil_rebuilds_fresh_ones() -> None:
         for inst in made:
             assert sc.decoded_form(inst[0], inst[1], implicit.get(row, frozenset()))[0] == key
         samples = st.gather([(call, code)], key, implicit.get(row, frozenset()), 1, Counter())
-        kind, stencil = st.derive(samples, {})
+        kind, stencil, guards = st.derive(samples, {})
         assert kind == "stencil", code.hex()
         assert not any(s[0] == "other" for _, _, specs in stencil for s in specs), code.hex()
         fresh = st.instances(call, code, key, implicit.get(row, frozenset()), random.Random(2))[1:]
         assert fresh, code.hex()
         for inst in fresh:
+            if any(inst[2][p] != v for p, v in guards):
+                continue                                 # a value the derivation never varied: no stencil for it
             compiled = st._compiled(inst)
             assert compiled is not None
             assert st.rebuild(stencil, inst[2], {}, st._STATE["words_of"]) == compiled[0], (code.hex(), inst[1].hex())

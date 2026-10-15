@@ -560,3 +560,21 @@ here the key's recorded calls, half kept out of the derivation.
 
 **Kit change suggested:** a card whose output is learned or derived from generated samples names a judge drawn from
 outside the generator (recorded data, a different generator), and reports the two judges' results side by side.
+
+### 2026-10-15 — Sprint 079: a held-out judge held out only in name, twice
+
+Sprint 076's lesson (#58) moved the judge from the instance generator to the record. Sprints 077 and 078 then judged
+the C over that same record, which the table had been derived from in part, and reported 0 differing over 1,186,511
+calls and 1,163,021 blocks. Both numbers were true and neither tested what mattered. A red-team pass measured
+something else (how many flag variants collapse) and found seven groups disagreeing where they could not: refined
+SSE-shift branches zeroing a fixed register, a CALL's return address and a JNZ's target written as constants. The
+class case sets, which no step of the table's making had touched, then showed 144 wrong compiles in seven classes on
+the committed table, and 0 once every value the samples never varied guarded the constants it could stand for.
+
+**Finding (#59):** half the record kept out of the derivation is held out from the derivation, not from the record's
+blind spots: a value the run never varied is unvaried in both halves. A judge is independent only if its data came
+from a different source than everything that made the work: here, cases written to sweep operands, run on Intel.
+
+**Kit change suggested:** a derived artifact's card names each judge's data source and the work's sources, and
+requires one judge whose source is none of them; where a value never varied in the work's sources, the artifact
+refuses inputs that vary it (a guard) rather than generalizing.

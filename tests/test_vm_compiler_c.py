@@ -35,7 +35,7 @@ import stencil_table as st  # noqa: E402
 SOURCE = ROOT / "tools" / "vm_compiler"
 CLANG = shutil.which("clang")
 pytestmark = pytest.mark.skipif(CLANG is None, reason="clang not available")
-NO_STENCIL, DECODE = -2, -1
+NO_STENCIL, DECODE, GUARDED = -2, -1, -7
 
 
 class Flags(ctypes.Structure):
@@ -176,7 +176,7 @@ def test_every_key_of_the_table_compiles_as_compile_insn(compiler: Compiler) -> 
         vm_backend.compile_insn(a, ins, exit_va, compiler.symbols, nzcv_from, flags.live_after, bool(flags.nzcv_out))
         assert compiler.compile(code, address, base, exit_va, flags) == a.finish(), code.hex()
         rows += 1
-    assert rows > 38_000
+    assert rows > 21_000
 
 
 def test_a_form_outside_the_table_goes_to_the_host(compiler: Compiler) -> None:
@@ -230,12 +230,53 @@ def test_blocks_compile_as_assemble_block(compiler: Compiler) -> None:
 
 
 def test_a_thunk_ends_the_block(compiler: Compiler) -> None:
-    start, _, mem = next((s, lv, m) for s, lv, m in block_samples() if len(lifted(s, m)) >= 3
-                         and compiler.block(s, m, vm_backend.ALL_FLAGS, 0x10_0000, 0x20_0000, 0x30_0000)[0] > 0)
-    insns = lifted(start, mem)
-    thunk = insns[2].address
-    n, bo, words, marks = compiler.block(start, mem, vm_backend.ALL_FLAGS, 0x10_0000, 0x20_0000, 0x30_0000, [thunk])
-    assert n > 0 and bo.count == 2 and bo.end == thunk
-    a, py_marks, _, _, _ = vm_backend.assemble_block(insns[:2], 0x10_0000, 0x20_0000, 0x30_0000, compiler.symbols,
-                                                     vm_backend.ALL_FLAGS)
-    assert words == a.finish() and marks == py_marks
+    """A thunk at a block's third instruction ends it after two (the flags live there all of them, as the successor
+    scan gives at a thunk), or sooner where an instruction has no stencil for its new flags; either way the words and
+    marks are assemble_block's over the instructions taken."""
+    ended_at_thunk = 0
+    for start, _, mem in block_samples():
+        insns = lifted(start, mem)
+        if len(insns) < 3:
+            continue
+        thunk = insns[2].address
+        n, bo, words, marks = compiler.block(start, mem, vm_backend.ALL_FLAGS, 0x10_0000, 0x20_0000, 0x30_0000,
+                                             [thunk])
+        if n < 0:
+            continue
+        assert bo.count <= 2 and (bo.count == 2 or bo.cut < 0)
+        ended_at_thunk += bo.count == 2 and bo.end == thunk
+        a, py_marks, _, _, _ = vm_backend.assemble_block(insns[:bo.count], 0x10_0000, 0x20_0000, 0x30_0000,
+                                                         compiler.symbols, vm_backend.ALL_FLAGS)
+        assert words == a.finish() and marks == py_marks, hex(start)
+    assert ended_at_thunk > 1000
+
+
+def test_the_case_sets_compile_as_compile_insn(compiler: Compiler) -> None:
+    """Sprint 079, a judge held out from the table: the class case sets' instructions (Intel-checked, random operands,
+    none drawn from the game record), each at two flag contexts. Where the C compiles one, its words equal
+    compile_insn's; elsewhere it has no stencil, or a guard sends it to the host. On Sprint 078's table this found 144
+    wrong compiles in seven SSE shift classes (a register taken for a constant)."""
+    import class_run
+    import semantics_differential
+    rng = random.Random(7901)
+    counts = {"equal": 0, "no stencil": 0, "guarded": 0}
+    for k in [k for k in semantics_differential.CASE_SETS if k in class_run.REFERENCES]:
+        for case in class_run._built(k):
+            code = case.code[:x86dec.decode(case.code).length]
+            address = 0x1_4000_0000 + rng.randrange(1 << 20) * 16
+            ins = lift(code, address)
+            for live in (vm_backend.ALL_FLAGS, 0):
+                base = rng.randrange(1 << 30, 1 << 40) * 4
+                exit_va = base + rng.randrange(-(1 << 24), 1 << 24) * 4
+                got = compiler.compile(code, address, base, exit_va, Flags(0, live, 0))
+                if got == NO_STENCIL:
+                    counts["no stencil"] += 1
+                    continue
+                if got == GUARDED:
+                    counts["guarded"] += 1
+                    continue
+                a = vm_backend.Assembler(base)
+                vm_backend.compile_insn(a, ins, exit_va, compiler.symbols, None, live, False)
+                assert got == a.finish(), (ins.iclass, code.hex())
+                counts["equal"] += 1
+    assert counts["equal"] > 30_000, counts
