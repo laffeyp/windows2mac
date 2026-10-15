@@ -59,3 +59,34 @@ def test_a_value_class_splits_a_form_where_the_code_does() -> None:
     assert sc.form(near)[0] == sc.form(far)[0]          # one form before value classes
     assert sigs[0] == sigs[1] and keys[0] == keys[1]    # [rsp+8] and [rsp+0x18]: one stencil
     assert sigs[0] != sigs[2] and keys[0] != keys[2]    # [rsp+0xfff8]: another, and another refined form
+
+
+def test_the_decoder_key_splits_where_the_code_does() -> None:
+    """Sprint 074: add rax, rbx and add rdx, rcx share a decoder key and its stencil; [rsp+8] and [rsp+0xfff8] do
+    not; the call's next address is a value the key carries."""
+    cs = calls()
+    key = {i: sc.decoded_form(cs[i], CODES[i]) for i in range(len(CODES))}
+    assert key[0][0] == key[1][0]
+    assert key[0][1][:3] == [0, 3, 0x1_4000_1003]       # RAX, RBX, then the next address
+    assert key[2][0] != key[4][0]
+    assert key[2][0][5] == (("R", "q"), ("M", "INVALID", "RSP", None, 1, ("8",)))
+    assert 0x1_4000_1105 in key[6][1]                    # call +0x100: the target
+
+
+def test_a_hole_is_named_by_one_expression_over_all_its_instructions() -> None:
+    """Sprint 074: 4294967295 from an immediate of -1 masked to 32 bits; a shuffle selector from bits 2-3; no name
+    where no one expression gives every instruction's argument."""
+    assert sc.hole_expression([(0xFFFFFFFF, [3, -1]), (0xFFFFFFFE, [5, -2])]) == ("piece", "masked to 32 bits", 1)
+    assert sc.hole_expression([(2, [0xAA]), (1, [0x14])])[:2] == ("field", "bits 2+2")
+    assert sc.hole_expression([(5, [5, 9]), (7, [8, 6])]) is None
+
+
+def test_an_explicit_register_equal_to_an_implicit_one_has_its_own_key() -> None:
+    """Sprint 074: MUL RDX writes its own operand's register (RDX takes the high half); MUL RCX does not."""
+    rcx, rdx = bytes.fromhex("48f7e1"), bytes.fromhex("48f7e2")
+    record = {"bytes": {lift(c, 0x1_4000_1000): {c} for c in (rcx, rdx)}}
+    implicit = sc.implicit_registers(record)
+    assert set(implicit.values()) == {frozenset({0, 2})}
+    keys = [sc.decoded_form((lift(c, 0x1_4000_1000), EXIT, None, vm_backend.ALL_FLAGS, False), c,
+                            next(iter(implicit.values())))[0] for c in (rcx, rdx)]
+    assert keys[0] != keys[1]

@@ -12,7 +12,11 @@ sequences it produced (one is a stencil; several mean values choose the structur
 across its instructions (the holes), each named by what it equals in the instruction (a guest register, a value or a
 piece of one) or `other`.
 
-Usage: uv run python scripts/stencil_census.py <record.pickle> [--top N]
+Usage: uv run python scripts/stencil_census.py <record.pickle> [--top N] [--refine | --decoder-key]
+
+`--decoder-key` (Sprint 074) keys each instruction by what the decoder gives (decoded_form) rather than by the lifted
+ops: the key the compiler inside the VM can compute. Its record holds each Lifted's bytes (scratch driver
+record_insn_bytes.py).
 """
 
 from __future__ import annotations
@@ -28,7 +32,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from w2m import a64_encoder, vm_backend  # noqa: E402
+from w2m import a64_encoder, vm_backend, x86dec, x86ops  # noqa: E402
+from w2m.lift import lift  # noqa: E402
 
 NEAR = 0x40_0000                                         # each instruction is compiled again this far below its exit
 
@@ -188,21 +193,132 @@ def refined(key: tuple[Any, ...], values: list[int], registers: int) -> tuple[An
     return (*key, same, tuple(value_class(v) for v in values[registers:]))
 
 
-def name_of(arg: Any, values: list[int]) -> str:
-    """What a varying argument equals in its instruction."""
-    if not isinstance(arg, int):
-        return "other"
-    for v in values:
-        if v >= 1000 and arg == v - 1000:
-            return "value"
-        m = v & (1 << 64) - 1
-        if arg == v or arg == m:
-            return "value"
-        if any(arg == (m >> s) & 0xFFFF for s in (0, 16, 32, 48)) or arg == m & 0xFFF or arg == (m >> 12) & 0xFFF:
-            return "piece"
-        if arg == -v or arg == (-v) & (1 << 64) - 1:
-            return "negated"
-    return "other"
+REGISTER_NUMBERS: dict[str, tuple[str, int]] = {}   # an operand's register name: (its class, its number)
+for _cls, _names in (("q", x86ops.GPR64), ("d", x86ops.GPR32), ("w", x86ops.GPR16), ("b", x86ops.GPR8_REX),
+                     ("x", x86ops.XMM), ("y", x86ops.YMM)):
+    for _n, _name in enumerate(_names):
+        REGISTER_NUMBERS[_name] = (_cls, 1000 + _n if _cls in "xy" else _n)
+for _n, _name in enumerate(("AH", "CH", "DH", "BH")):
+    REGISTER_NUMBERS[_name] = ("h", _n)                 # bits 8-15 of RAX, RCX, RDX, RBX
+SPECIAL = {"RSP", "ESP", "SP", "SPL", "RIP"}            # kept by name: the stack pointer and RIP have their own forms
+
+
+def lifted_registers(ins: Any) -> set[int]:
+    """Every guest register the lifted ops name (XMM as 1000 + n)."""
+    out: set[int] = set()
+
+    def walk(x: Any) -> None:
+        if isinstance(x, tuple):
+            if len(x) == 4 and x[0] == "r" and isinstance(x[1], int):
+                out.add(x[1])
+            elif len(x) == 2 and x[0] == "x" and isinstance(x[1], int):
+                out.add(1000 + x[1])
+            else:
+                for y in x:
+                    walk(y)
+    walk(ins.ops)
+    return out
+
+
+def implicit_registers(record: dict[str, Any]) -> dict[str, frozenset[int]]:
+    """Per spec row, the registers its instructions use beyond their explicit operands (MUL's RAX and RDX, a shift's
+    CL): the union over the record of the lifted registers less the decoded ones."""
+    out: dict[str, set[int]] = defaultdict(set)
+    for ins, encodings in record["bytes"].items():
+        for code in encodings:
+            d = x86dec.decode(code)
+            _, values, nreg = decoded_form((ins, 0, None, 0, False), code)
+            out[d.row or ""] |= lifted_registers(ins) - set(values[:nreg])
+    return {row: frozenset(r) for row, r in out.items()}
+
+
+def decoded_form(call: Call, code: bytes, implicit: frozenset[int] = frozenset()) -> tuple[tuple[Any, ...], list[int], int]:
+    """The instruction's key as the decoder gives it (Sprint 074): the spec row, the iclass, the operand and address
+    sizes, VEX.L, and the operands (x86ops) with register numbers and values taken out, which registers are equal,
+    each value's class, and the flag arguments. The values, in order: guest registers (XMM and YMM as 1000 + n), then
+    immediates (raw and sign-extended), displacements, the next instruction's address and any address the
+    instruction names (a branch target, a RIP-relative address). `implicit`: the row's implicit registers
+    (implicit_registers); an explicit register equal to one is named in the key. Returns (key, values, the count of
+    registers)."""
+    ins, exit_va, nzcv_from, live_after, nzcv_out = call
+    d = x86dec.decode(code)
+    f = d.fields
+    nxt = ins.address + d.length
+    regs: list[int] = []
+    values: list[int] = [nxt]
+    shape: list[Any] = []
+
+    def register(name: str) -> Any:
+        if name in SPECIAL or name not in REGISTER_NUMBERS:
+            return name
+        cls, n = REGISTER_NUMBERS[name]
+        regs.append(n)
+        return cls
+
+    ops = x86ops.operands(f) if f is not None and f.ops else ()
+    for o in ops:
+        p = o.split(":")
+        if p[0] == "R":
+            shape.append(("R", register(p[1])))
+        elif p[0] in ("M", "A"):
+            seg, rest = (p[1], p[2:]) if p[0] == "M" else (None, p[1:])
+            base, index, scale, disp = rest[0], rest[1], int(rest[2]), int(rest[3])
+            values.append(disp)
+            if base == "RIP":
+                values.append(nxt + disp)
+            shape.append((p[0], seg, register(base) if base != "INVALID" else None,
+                          register(index) if index != "INVALID" else None, scale, tuple(rest[4:])))
+        elif p[0] == "I":
+            width, raw = int(p[1]), int(p[2], 16)
+            values += [raw, raw - (1 << 8 * width) if raw >> (8 * width - 1) else raw]
+            shape.append(("I", width))
+        elif p[0] == "J":
+            values += [int(p[1]), nxt + int(p[1])]
+            shape.append(("J",))
+        else:
+            shape.append(o)                              # MM:n, ST:n: kept whole
+    same = tuple(regs.index(r) for r in regs)
+    named = tuple(r if r in implicit else None for r in regs)   # an explicit register that is also an implicit one
+    key = (d.row, d.iclass, f.opsize if f else None, f.asize if f else None, f.vl if f else None, tuple(shape), same, named,
+           tuple(value_class(v) for v in values), nzcv_from, live_after, nzcv_out, exit_va)
+    return key, regs + values, len(regs)
+
+
+M64 = (1 << 64) - 1
+
+
+def _expressions() -> list[tuple[str, str, Any]]:
+    """What a hole may equal, as (kind, name, function of one value), tried in this order (Sprint 074): the value; a
+    piece of it (a halfword, a 12-bit part, the value masked to 8, 16 or 32 bits); its negation; an affine function
+    (an XMM number times 16, a width less a shift count, a shift count less 1); a bit field of up to 4 bits in its low
+    byte (a shuffle immediate's selectors)."""
+    out: list[tuple[str, str, Any]] = [("value", "v", lambda v: v), ("value", "v mod 2^64", lambda v: v & M64),
+                                       ("value", "xmm", lambda v: v - 1000)]
+    out += [("piece", f"halfword {h}", lambda v, h=h: v >> 16 * h & 0xFFFF) for h in range(4)]
+    out += [("piece", "low 12 bits", lambda v: v & 0xFFF), ("piece", "bits 12-23", lambda v: v >> 12 & 0xFFF)]
+    out += [("piece", f"masked to {k} bits", lambda v, k=k: v & (1 << k) - 1) for k in (8, 16, 32)]
+    out += [("negated", "-v", lambda v: -v), ("negated", "-v mod 2^64", lambda v: -v & M64),
+            ("negated", "-v mod 2^32", lambda v: -v & 0xFFFFFFFF)]
+    out += [("affine", "16 x xmm", lambda v: 16 * (v - 1000)), ("affine", "v - 1", lambda v: v - 1)]
+    out += [("affine", f"{w} - v", lambda v, w=w: w - v) for w in (8, 16, 32, 64)]
+    out += [("field", f"bits {s}+{w}", lambda v, s=s, w=w: v >> s & (1 << w) - 1)
+            for w in (1, 2, 3, 4) for s in range(0, 8)]
+    return out
+
+
+EXPRESSIONS = _expressions()
+
+
+def hole_expression(pairs: list[tuple[Any, list[int]]]) -> tuple[str, str, int] | None:
+    """The first expression of one value that gives the hole's argument in every instruction of a form, as (kind,
+    expression, the value's position), or None. `pairs`: each instruction's argument and values."""
+    if not all(isinstance(a, int) for a, _ in pairs) or len({len(v) for _, v in pairs}) != 1:
+        return None
+    for kind, name, fn in EXPRESSIONS:
+        for p in range(len(pairs[0][1])):
+            if all(fn(values[p]) == arg for arg, values in pairs):
+                return kind, name, p
+    return None
 
 
 def _values_only(call: Call) -> list[int]:
@@ -216,7 +332,7 @@ def _values_only(call: Call) -> list[int]:
     return out
 
 
-def census(record: dict[str, Any], top: int, refine: bool) -> int:
+def census(record: dict[str, Any], top: int, refine: bool, decoder_key: bool = False) -> int:
     calls: dict[Call, int] = record["calls"]
     symbols = record["symbols"]
     log = EncoderLog()
@@ -226,6 +342,8 @@ def census(record: dict[str, Any], top: int, refine: bool) -> int:
     failures = Counter[str]()
     raw_words = 0
     kinds = Counter[str]()                               # compiled instructions with an item of each kind
+    relifted: dict[Any, bool] = {}                       # each Lifted: its bytes lift to it again (decoder_key)
+    implicit = implicit_registers(record) if decoder_key else {}
     for call, n in calls.items():
         try:
             words, items = compile_logged(log, call, symbols)
@@ -238,8 +356,19 @@ def census(record: dict[str, Any], top: int, refine: bool) -> int:
             continue
         raw_words += sum(1 for it in items if it[0] == "raw") * n
         kinds.update({it[0]: n for it in items})
-        key, values = form(call)
-        if refine:
+        if decoder_key:                                  # the key from the decoder's fields (Sprint 074)
+            encodings = record["bytes"].get(call[0], ())
+            if len(encodings) != 1:
+                failures[f"encodings {min(len(encodings), 2)}"] += n
+                continue
+            code = next(iter(encodings))
+            if relifted.setdefault(call[0], lift(code, call[0].address) == call[0]) is False:
+                failures["relift"] += n                  # the bytes do not lift to the recorded instruction
+                continue
+            key, values, _ = decoded_form(call, code, implicit.get(x86dec.decode(code).row or "", frozenset()))
+        else:
+            key, values = form(call)
+        if refine and not decoder_key:
             registers = len(values) - len(_values_only(call))
             key = refined(key, values, registers)
         sig = tuple((it[0], it[1], len(it[2])) if it[0] != "raw" else ("raw",) for it in items)
@@ -248,6 +377,9 @@ def census(record: dict[str, Any], top: int, refine: bool) -> int:
     compiled = sum(n for group in by_form.values() for n, _, _ in group)
     print(f"{len(calls)} distinct compile calls, {total} in all; {compiled} compiled again and rebuilt exactly; "
           f"failures {dict(failures)}")
+    if decoder_key:
+        print(f"instructions lifted again from their bytes: {sum(relifted.values())} of {len(relifted)} equal the "
+              f"recorded Lifted")
     print(f"{len(by_form)} forms; raw words (no encoder) {raw_words}; instructions with an item of each kind "
           f"{dict(kinds)}")
     one = [k for k, g in by_form.items() if len({s for _, _, (s, _) in g}) == 1]
@@ -274,12 +406,15 @@ def census(record: dict[str, Any], top: int, refine: bool) -> int:
                 continue
             for ai, arg in enumerate(it[2]):
                 if any(items[pos][2][ai] != arg for _, _, (_, items) in g):
-                    named = Counter(name_of(items[pos][2][ai], values) for _, values, (_, items) in g)
-                    top_name = max(named, key=lambda x: named[x])
+                    found = hole_expression([(items[pos][2][ai], values) for _, values, (_, items) in g])
+                    top_name = found[0] if found else "other"
                     holes[f"{it[0]} {top_name}"] += 1
                     if top_name == "other" and len(others) < top:
                         others.append((k[0], it[1], ai, [(items[pos][2][ai], values) for _, values, (_, items) in g[:3]]))
-    print(f"holes in one-sequence forms, by what they equal: {dict(holes)}")
+    single = [k for k, g in by_form.items() if len(g) == 1]
+    print(f"forms of one distinct instruction (their holes not shown by variation): {len(single)}, "
+          f"{sum(by_form[k][0][0] for k in single)} compiled instructions")
+    print(f"holes in one-sequence forms of two or more instructions, by the expression of one value that gives them in all: {dict(holes)}")
     for ic, enc, ai, samples in others:
         print(f"  other: {ic} {enc} argument {ai}: " + "; ".join(f"{arg} in {vals}" for arg, vals in samples))
     structures = Counter[Any]()                          # each distinct encoder sequence, by compiled instructions
@@ -297,10 +432,10 @@ def census(record: dict[str, Any], top: int, refine: bool) -> int:
     print(f"forms whose values choose the structure: {len(many)}, {sum(n for n, _, _ in many)} compiled instructions")
     by_iclass = Counter[str]()
     for n, k, _ in many:
-        by_iclass[k[0]] += n
+        by_iclass[k[1] if decoder_key else k[0]] += n
     print("  by iclass: " + ", ".join(f"{ic} {n}" for ic, n in by_iclass.most_common(top)))
     for n, k, s in many[:top]:
-        print(f"  {n:>8} {s:>3} sequences: {k[0]} {k[1]} nzcv_from={k[2]} live=0x{k[3]:x} out={k[4]}")
+        print(f"  {n:>8} {s:>3} sequences: {k[:2] if decoder_key else k[:5]}")
     return 0
 
 
@@ -335,10 +470,12 @@ def main(argv: list[str]) -> int:
     ap.add_argument("record", type=Path)
     ap.add_argument("--top", type=int, default=30)
     ap.add_argument("--refine", action="store_true", help="split each form by its values' classes (value_class)")
+    ap.add_argument("--decoder-key", action="store_true",
+                    help="key each instruction by its decoded fields (decoded_form; needs a record with bytes)")
     a = ap.parse_args(argv)
     with open(a.record, "rb") as f:
         record = pickle.load(f)
-    return census(record, a.top, a.refine)
+    return census(record, a.top, a.refine, a.decoder_key)
 
 
 if __name__ == "__main__":
