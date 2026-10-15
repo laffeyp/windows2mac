@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 076
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -96,3 +96,4 @@ A to C; C with 0 differing, or each difference's cause named and recorded; CI pa
   (the zero class holds no other value), 144 are 1 or -1, and 362 are other values, most in TEST (102), CMP (52), ADD
   (50) and OR (48) immediates and Jcc displacements. For those 506 values a constant in the table may be a hole the
   instances could not show; the record and the judge find none.
+- **Closed** on 1bb36655 (CI run 38683458204, success). `uv run pytest`: 2,428 passed.

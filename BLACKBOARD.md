@@ -303,6 +303,15 @@
 
 ## Sprint tail
 
+### Sprint 076 (2026-10-14, closed: CI run 38683458204 success on 1bb36655)
+- **Scope:** the stencil table from instances made per key (Decision 2026-10-14, the stencil key): each key's encoder sequence, each argument a constant or one expression of a decoded value.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `scripts/stencil_table.py` over Sprint 074's scratch record; no run, compiler or runtime change, so no frontier record and no sweep. Final: 38,154 keys, a stencil each (71 refined by a value feature); 988,840 fresh instances and the record's 1,186,511 compile calls rebuilt from the table, 0 differing.
+  - *Observation 1 (blind judge, of the judge):* the first judge drew its instances from the same generator as the derivation and passed 98.2% while the record differed on 133,748 calls. Disposition: resolved-here (the key's recorded calls split between derivation and judge; eleven causes fixed in the instance maker); KIT_DIARY #58.
+  - *Observation 2 (revisit condition, of the work):* 58 keys gave two sequences over their instances (an SSE count at or past the lane width; CMPPS's predicate, a string argument the first signature left out). Disposition: resolved-here (a key is refined by one value feature, from a per-key entry); the Decision's form stands.
+  - *Observation 3 (residual, of the work):* 506 values never varied in their keys' instances other than 0, 1 and -1 (TEST, CMP, ADD and OR immediates, Jcc displacements), where a constant may be an unshown hole. Disposition: open; the C compiler's differential over the record and the class runs is the next judge.
+- **Closed:** CI run 38683458204 (success on 1bb36655).
+
 ### Sprint 075 (2026-10-14, closed: CI run 38679290552 success on 982bb22e)
 - **Scope:** the decoder in C for the compiler inside the VM: `x86dec._decode` and `x86ops.operands` step for step over tables `gen_decoder.py` writes from the spec.
 - **Rubber Duck Pass:**
