@@ -79,7 +79,7 @@ def test_a_hole_is_named_by_one_expression_over_all_its_instructions() -> None:
     assert sc.hole_expression([(0xFFFFFFFF, [3, -1]), (0xFFFFFFFE, [5, -2])]) == ("piece", "masked to 32 bits", 1)
     field = sc.hole_expression([(2, [0xAA]), (1, [0x14])])
     assert field is not None and field[:2] == ("field", "bits 2+2")
-    assert sc.hole_expression([(5, [5, 9]), (7, [8, 6])]) is None
+    assert sc.hole_expression([(37, [100, 9]), (91, [200, 6])]) is None
 
 
 def test_an_explicit_register_equal_to_an_implicit_one_has_its_own_key() -> None:

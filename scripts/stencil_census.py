@@ -291,7 +291,7 @@ def _expressions() -> list[tuple[str, str, Any]]:
     """What a hole may equal, as (kind, name, function of one value), tried in this order (Sprint 074): the value; a
     piece of it (a halfword, a 12-bit part, the value masked to 8, 16 or 32 bits); its negation; an affine function
     (an XMM number times 16, a width less a shift count, a shift count less 1); a bit field of up to 4 bits in its low
-    byte (a shuffle immediate's selectors)."""
+    byte (a shuffle immediate's selectors); a shift count masked to 5 or 6 bits, less 1, or taken from the width."""
     out: list[tuple[str, str, Any]] = [("value", "v", lambda v: v), ("value", "v mod 2^64", lambda v: v & M64),
                                        ("value", "xmm", lambda v: v - 1000)]
     out += [("piece", f"halfword {h}", lambda v, h=h: v >> 16 * h & 0xFFFF) for h in range(4)]
@@ -299,10 +299,21 @@ def _expressions() -> list[tuple[str, str, Any]]:
     out += [("piece", f"masked to {k} bits", lambda v, k=k: v & (1 << k) - 1) for k in (8, 16, 32)]
     out += [("negated", "-v", lambda v: -v), ("negated", "-v mod 2^64", lambda v: -v & M64),
             ("negated", "-v mod 2^32", lambda v: -v & 0xFFFFFFFF)]
-    out += [("affine", "16 x xmm", lambda v: 16 * (v - 1000)), ("affine", "v - 1", lambda v: v - 1)]
+    out += [("affine", "16 x xmm", lambda v: 16 * (v - 1000))]
+    for k in (5, 6):                                     # a shift count, masked as x86 masks it (Sprint 076); before
+        m = (1 << k) - 1                                 # the unmasked forms, which agree with it below 32 or 64
+        out += [("piece", f"low {k} bits", lambda v, m=m: v & m),
+                ("affine", f"low {k} bits - 1", lambda v, m=m: (v & m) - 1),
+                ("affine", f"{m + 1} - low {k} bits", lambda v, m=m: m + 1 - (v & m))]
+    out += [("affine", "v - 1", lambda v: v - 1)]
     out += [("affine", f"{w} - v", lambda v, w=w: w - v) for w in (8, 16, 32, 64)]
+    # 2-bit fields at even positions first (a shuffle's selectors): where a 1-bit field fits, the 2-bit field holding
+    # it fits too whenever the other bit never varied (Sprint 076)
+    out += [("field", f"bits {s}+2", lambda v, s=s: v >> s & 3) for s in (0, 2, 4, 6)]
     out += [("field", f"bits {s}+{w}", lambda v, s=s, w=w: v >> s & (1 << w) - 1)
-            for w in (1, 2, 3, 4) for s in range(0, 8)]
+            for w in (1, 2, 3, 4) for s in range(0, 8) if not (w == 2 and s % 2 == 0)]
+    out += [("affine", f"min(v, {w})", lambda v, w=w: min(v, w))                   # PSRAD's and PSRAW's counts
+            for w in (8, 16, 32, 64, 7, 15, 31, 63)]                                # (Sprint 076)
     return out
 
 
