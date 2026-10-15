@@ -433,15 +433,14 @@ def _nzcv(a: Assembler, add: bool, ra: int, rb: int, bits: int) -> None:
     and as SUB's borrow inverted (recentering step 5: one instruction where OF, CF, ZF and SF took ten). An 8- or
     16-bit operation runs in the top of a 32-bit one so the carry and the sign land where x86 has them. Uses x16 for
     the narrow forms. Encodings checked against Apple clang's assembler."""
-    base = 0x2B000000 if add else 0x6B000000                 # ADDS / SUBS, 32-bit, Wd = WZR
     if bits == 64:
         a.emit((a64.adds if add else a64.subs)(a64.ZR, ra, rb))
     elif bits == 32:
-        a.emit(base | rb << 16 | ra << 5 | 31)
+        a.emit((a64.adds32 if add else a64.subs32)(a64.ZR, ra, rb))
     else:
         s = 32 - bits
-        a.emit(0x53000000 | ((32 - s) % 32) << 16 | (31 - s) << 10 | ra << 5 | 16,      # LSL W16, Wa, #s
-               base | rb << 16 | s << 10 | 16 << 5 | 31)                               # with Wb, LSL #s
+        a.emit(a64.lsl32(16, ra, s),                                                    # LSL W16, Wa, #s
+               (a64.adds32 if add else a64.subs32)(a64.ZR, 16, rb, s))                 # with Wb, LSL #s
 
 
 def _adds_subs(add: bool, rd: int, rn: int, rm: int, bits: int) -> int:
@@ -477,8 +476,6 @@ def _pf_into_x16(a: Assembler) -> None:
            a64.cmpi(16, 0), a64.cset(16, "eq"))
 
 
-X24_CLEAR = 0xAA1F03F8                    # MOV X24, XZR: every flag defined
-X24_KEEP_CF = 0x92400318                  # AND X24, X24, #1: every flag defined but CF, which keeps its state
 
 
 def _set_zf_sf_pf(a: Assembler, r: int, bits: int) -> None:
@@ -564,7 +561,9 @@ def _set_flags(a: Assembler, kind: str, ra: int, rb: int, rr: int, bits: int, nz
         if kind in ("add", "sub") and live & U_CF:
             a.emit(a64.cset(REG_CF, "cs" if kind == "add" else "lo"))
         if live:                                               # a dead flag marked defined is never read
-            a.emit(X24_CLEAR if kind in ("add", "sub") else X24_KEEP_CF)
+            # MOV X24, XZR: every flag defined; AND X24, X24, #1: every flag defined but CF, which keeps its state
+            a.emit(a64.mov(REG_UNDEFINED_FLAGS, a64.ZR) if kind in ("add", "sub")
+                   else a64.and_low(REG_UNDEFINED_FLAGS, REG_UNDEFINED_FLAGS, 1))
         if live & U_AF:
             a.emit(a64.stp(ra, rb, 28, AF_OPERANDS))           # AF's operands; AF reads the result too
         if live & (U_AF | U_PF):
@@ -1024,7 +1023,6 @@ AddressForm = tuple[Any, ...]  # ("imm", base, disp) | ("unscaled", base, disp) 
 # outside OPERAND_SAFE (model steps, REP, DIV, the SSE and VEX lowerings, CPUID) keep every temporary in a register.
 OPERAND_FORMS = True
 OPERAND_SAFE = {"imm", "addr", "ld", "st", "alu", "flags", "br", "set", "cmov", "sel", "cst", "cstz", "fence", "pause"}
-ADD_SUB_IMM = {("add", 64): 0x91000000, ("sub", 64): 0xD1000000, ("add", 32): 0x11000000, ("sub", 32): 0x51000000}
 
 
 LOW32_ALU = ("add", "sub", "and", "or", "xor")
@@ -1261,9 +1259,9 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 else:
                     a.emit(a64.mov(rd, base))
                 if disp > 0:
-                    a.emit(0x91000000 | disp << 10 | rd << 5 | rd)          # ADD Xd, Xd, #disp
+                    a.emit(a64.addi(rd, rd, disp))
                 elif disp < 0:
-                    a.emit(0xD1000000 | -disp << 10 | rd << 5 | rd)         # SUB Xd, Xd, #-disp
+                    a.emit(a64.subi(rd, rd, -disp))
             else:
                 a.emit(a64.mov_imm(rd, disp & M64))
                 if base is not None:
@@ -1331,7 +1329,10 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
                 nzcv_ready = True
                 continue
             if y in quiet:                                     # ADD or SUB with its immediate (OPERAND_FORMS)
-                a.emit(ADD_SUB_IMM[(o, 32 if bits == 32 else 64)] | quiet[y] << 10 | rx << 5 | rd)
+                if bits == 32:
+                    a.emit((a64.addi32 if o == "add" else a64.subi32)(rd, rx, quiet[y]))
+                else:
+                    a.emit((a64.addi if o == "add" else a64.subi)(rd, rx, quiet[y]))
                 bits = 64 if bits == 32 else bits                # the 32-bit form zero-extends: no mask
             elif o in ("add", "sub", "and", "or", "xor"):
                 f = {"add": a64.add, "sub": a64.sub, "and": a64.and_, "or": a64.orr, "xor": a64.eor}[o]

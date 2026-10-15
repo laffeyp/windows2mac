@@ -104,6 +104,48 @@ def subi(rd: int, rn: int, imm12: int) -> int:
     return 0xD1000000 | imm12 << 10 | rn << 5 | rd
 
 
+def addi32(rd: int, rn: int, imm12: int) -> int:
+    """ADD Wd, Wn, #imm12: the 32-bit sum, the upper 32 bits zeroed."""
+    _r(rd, rn)
+    assert 0 <= imm12 < 4096
+    return 0x11000000 | imm12 << 10 | rn << 5 | rd
+
+
+def subi32(rd: int, rn: int, imm12: int) -> int:
+    """SUB Wd, Wn, #imm12."""
+    _r(rd, rn)
+    assert 0 <= imm12 < 4096
+    return 0x51000000 | imm12 << 10 | rn << 5 | rd
+
+
+def adds32(rd: int, rn: int, rm: int, amount: int = 0) -> int:
+    """ADDS Wd, Wn, Wm, LSL #amount."""
+    _r(rd, rn, rm)
+    assert 0 <= amount < 32
+    return 0x2B000000 | rm << 16 | amount << 10 | rn << 5 | rd
+
+
+def subs32(rd: int, rn: int, rm: int, amount: int = 0) -> int:
+    """SUBS Wd, Wn, Wm, LSL #amount."""
+    _r(rd, rn, rm)
+    assert 0 <= amount < 32
+    return 0x6B000000 | rm << 16 | amount << 10 | rn << 5 | rd
+
+
+def lsl32(rd: int, rn: int, amount: int) -> int:
+    """LSL Wd, Wn, #amount (UBFM Wd, Wn, #(32 - amount) % 32, #31 - amount)."""
+    _r(rd, rn)
+    assert 0 <= amount < 32
+    return 0x53000000 | (32 - amount) % 32 << 16 | (31 - amount) << 10 | rn << 5 | rd
+
+
+def and_low(rd: int, rn: int, bits: int) -> int:
+    """AND Xd, Xn, #(1 << bits) - 1: the logical immediate of `bits` low ones (N 1, immr 0, imms bits - 1)."""
+    _r(rd, rn)
+    assert 1 <= bits < 64
+    return 0x92400000 | (bits - 1) << 10 | rn << 5 | rd
+
+
 def cmpi(rn: int, imm12: int) -> int:
     _r(rn)
     assert 0 <= imm12 < 4096

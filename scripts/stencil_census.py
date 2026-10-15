@@ -82,28 +82,35 @@ def compile_logged(log: EncoderLog, call: Call, symbols: dict[str, int]) -> tupl
     items: list[Any] = []
     j = 0                                                # the next body call
     i = 0
+    used: set[int] = set()
     branches = iter(branch_calls)
+
+    def match(k: int) -> str | None:
+        ws = body_calls[k][2]
+        if ws and words[i:i + len(ws)] == ws and not fixes & set(range(i, i + len(ws))):
+            return "enc"
+        if len(ws) == 1 and words[i] == ws[0] & ~(1 << 31) != ws[0] and i not in fixes:
+            return "enc32"
+        return None
+
     while i < len(words):
         if i in fixes:
             name, args, _ = next(branches)
             items.append(("branch", name, args))
             i += 1
             continue
-        k = j
-        while k < len(body_calls):                       # the next logged call whose words come next
-            ws = body_calls[k][2]
-            if ws and words[i:i + len(ws)] == ws and not fixes & set(range(i, i + len(ws))):
-                kind = "enc"
-                break
-            if len(ws) == 1 and words[i] == ws[0] & ~(1 << 31) != ws[0] and i not in fixes:
-                kind = "enc32"
-                break
-            k += 1
-        if k < len(body_calls):
+        # the next logged call whose words come next; else an earlier one not yet placed (a call made before the
+        # words before it were emitted: compile_insn's Jcc encodes its target's MOVZ/MOVK before its branch)
+        k = next((k for k in range(j, len(body_calls)) if k not in used and match(k)), None)
+        if k is None:
+            k = next((k for k in range(j) if k not in used and match(k)), None)
+        if k is not None:
+            kind = match(k)
             name, args, ws = body_calls[k]
             items.append((kind, name, args))
-            i += len(ws)
-            j = k + 1
+            used.add(k)
+            i += len(ws) if kind == "enc" else 1
+            j = max(j, k + 1)
         else:
             items.append(("raw", words[i]))
             i += 1
