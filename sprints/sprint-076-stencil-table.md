@@ -92,6 +92,7 @@ A to C; C with 0 differing, or each difference's cause named and recorded; CI pa
   string argument (`eq`, `gt`, `ge`), which the first signature left out. A key whose instances split is now refined by
   the first feature of one decoded value that separates them: at least 8, 16, 32 or 64 (52 keys), the low 3 bits
   (19). The C side computes the feature from a per-key entry.
-- **Residual:** 4,910 keys keep a value that never varied after the longer round; most are classes of one value (a
-  zero displacement). For those keys a constant in the table may be a hole the instances could not show; the record
-  and the judge find none.
+- **Residual:** 4,910 keys keep a value that never varied after the longer round: 7,233 values, of which 6,727 are 0
+  (the zero class holds no other value), 144 are 1 or -1, and 362 are other values, most in TEST (102), CMP (52), ADD
+  (50) and OR (48) immediates and Jcc displacements. For those 506 values a constant in the table may be a hole the
+  instances could not show; the record and the judge find none.
