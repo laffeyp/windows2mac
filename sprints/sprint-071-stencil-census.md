@@ -89,8 +89,10 @@ A recorded; B run over A with its rebuild check exact; C recorded as a Decision.
   - 1,287 distinct encoder sequences; the commonest 100 cover 93.2% of compiled instructions, the commonest 1,000
     all but a rounding of 100%.
   - Holes in one-sequence forms: 20,709 + 1,112 equal a register or value, 1,243 + 93 a 16-bit or 12-bit piece, 3 a
-    negation, 70 other, each an affine function in the samples (16 times an XMM number for the YMM upper halves' STP;
-    64 or 32 less a shift count, or one more, for UBFX). 1,833 hole positions sit in raw words.
+    negation, 70 other. All 70 were checked, up to three instructions each (200 values): 165 are 16 times an XMM
+    number (the YMM upper halves' STP), 17 are 64 or 32 less a shift count and 18 a shift count less 1 (UBFX for SHL,
+    SHR and SAR's CF); none is unexplained. The Decision's grounds name the first two rules only. 1,833 hole
+    positions sit in raw words.
   - Raw words: 394,155 in 364,521 instructions, built inline in `vm_backend.py` (ADD/SUB immediates at
     `compile_insn`'s computed addresses and `ADD_SUB_IMM`, the flag sequences of `_nzcv`).
 - **C.** BLACKBOARD Decision 2026-10-14, the form of the compiler inside the VM: copy-and-patch at the encoder level,

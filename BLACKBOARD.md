@@ -301,6 +301,15 @@
 
 ## Sprint tail
 
+### Sprint 071 (2026-10-14, closed: a measurement; no records change)
+- **Scope:** the stencil census for recentering step 6: does the compiler's output factor into copy-and-patch stencils?
+- **Rubber Duck Pass:**
+  - *Sequence narration:* a scratch batch run to 100 billion instructions, cold, its compile calls recorded; `scripts/stencil_census.py` over them; no frontier record, no sweep (no runtime or compiler change).
+  - *Observation 1 (payload anomaly, of the judge):* the census's first two passes were wrong by its own instrument (a compile base out of branch range; 32-bit encoder words read as raw), shown by its rebuild check. Disposition: resolved-here (the rebuild exact for 1,313,377 of 1,313,377).
+  - *Observation 2 (missing pair, of the work):* the Decision's grounds name two of the three rules the 70 `other` holes follow; all 70 checked afterwards (165 of 200 values 16 times an XMM number, 17 a width less a shift count, 18 a shift count less 1). Disposition: recorded in the card.
+  - *Observation 3 (scope, of the work):* 394,155 words are built inline in `vm_backend.py`, outside the encoder. Disposition: open; the next sprint moves them into encoder functions with the words unchanged.
+- **Closed:** census and Decision committed (7acafc15).
+
 ### Sprint 070 (2026-10-14, closed: CI run 38662524546 success on bc6c956c)
 - **Scope:** the deadline warp inside the VM (recentering step 5): a wait that leaves no thread ready warps the instruction clock in the guest runtime by the host's rule.
 - **Rubber Duck Pass:**
