@@ -280,3 +280,87 @@ def test_the_case_sets_compile_as_compile_insn(compiler: Compiler) -> None:
                 assert got == a.finish(), (ins.iclass, code.hex())
                 counts["equal"] += 1
     assert counts["equal"] > 30_000, counts
+
+
+def test_canonical_flags_compile_as_the_raw_arguments() -> None:
+    """Sprint 080 (the review's E2, pinned): an instruction compiled with flag arguments it cannot read
+    (stencil_census.canonical_flags) gives the words of their canonical form."""
+    import test_x86_decode_c
+    rng = random.Random(8001)
+    kinds = [None, *vm_backend.NZCV_CONDITIONS]
+    codes = [c for c, _, _, _ in samples()[::8]] + test_x86_decode_c.row_samples(rng, 3)
+    changed = 0
+    for raw in codes:
+        try:
+            code = raw[:x86dec.decode(raw).length]
+            ins = lift(code, 0x1_4000_1230)
+        except Exception:
+            continue
+        for _ in range(3):
+            args = (rng.choice(kinds), rng.randrange(64), rng.random() < 0.5)
+            canonical = sc.canonical_flags(ins, *args)
+            if canonical == args:
+                continue
+            changed += 1
+            words = []
+            for flags in (args, canonical):
+                a = vm_backend.Assembler(0x10_0000_0000)
+                vm_backend.compile_insn(a, ins, 0x10_0001_0000, {}, *flags)
+                words.append(a.finish())
+            assert words[0] == words[1], (ins.iclass, code.hex(), args)
+    assert changed > 5_000
+
+
+def _spec_row_judge(compiler: Compiler) -> dict[str, int]:
+    """The review's E1, seeded: random encodings of every decoder spec row at unaligned addresses, under the samples'
+    commonest flag contexts and the two defaults."""
+    import collections
+    import test_x86_decode_c
+    rng = random.Random(424242)
+    common = collections.Counter((f.nzcv_from, f.live_after, f.nzcv_out) for _, _, f, _ in samples())
+    contexts = list(dict.fromkeys([c for c, _ in common.most_common(6)] + [(0, vm_backend.ALL_FLAGS, 0), (0, 0, 0)]))
+    counts = {"equal": 0, "differ": 0, "no stencil": 0, "guarded": 0}
+    for raw in test_x86_decode_c.row_samples(rng, 10):
+        try:
+            code = raw[:x86dec.decode(raw).length]
+            address = 0x1_4000_0000 + rng.randrange(1 << 24)
+            ins = lift(code, address)
+        except Exception:
+            continue
+        for nf, live, no in contexts:
+            base = rng.randrange(1 << 30, 1 << 40) * 4
+            exit_va = base + rng.randrange(-(1 << 22), 1 << 22) * 4
+            got = compiler.compile(code, address, base, exit_va, Flags(nf, live, no))
+            if got in (NO_STENCIL, GUARDED):
+                counts["no stencil" if got == NO_STENCIL else "guarded"] += 1
+                continue
+            a = vm_backend.Assembler(base)
+            vm_backend.compile_insn(a, ins, exit_va, compiler.symbols, g.NZCV_FROM[nf], live, bool(no))
+            counts["equal" if got == a.finish() else "differ"] += 1
+    return counts
+
+
+def test_spec_row_encodings_compile_as_compile_insn(compiler: Compiler) -> None:
+    counts = _spec_row_judge(compiler)
+    assert counts["differ"] == 0 and counts["equal"] > 5_000, counts
+
+
+GUARD_PLANT = [("            return VMC_GUARDED;\n    }\n    const struct vmc_stencil", "            ;\n    }\n    const struct vmc_stencil"),
+               ("                        return VMC_GUARDED;\n", "                        ;\n")]
+
+
+def test_without_its_guards_the_c_compiles_wrong_code(tmp_path: Path) -> None:
+    """A plant: vm_compiler.c with its guards and its checked holes' agreement taken out. The judges outside the
+    table's sources then find wrong words (the guards are what keep them at 0)."""
+    assert CLANG is not None
+    text = (SOURCE / "vm_compiler.c").read_text()
+    for old, new in GUARD_PLANT:
+        assert text.count(old) == 1, old
+        text = text.replace(old, new)
+    (tmp_path / "vm_compiler.c").write_text(text)
+    (tmp_path / "harness.c").write_text(HARNESS)
+    out = tmp_path / "planted.so"
+    subprocess.run([CLANG, "-shared", "-fPIC", "-O2", "-std=c11", "-w", f"-I{tmp_path}", f"-I{SOURCE}", "-o", str(out),
+                    str(tmp_path / "harness.c"), str(SOURCE / "x86_decode.c"), str(SOURCE / "a64_encoder.c")],
+                   check=True, capture_output=True)
+    assert _spec_row_judge(Compiler(out))["differ"] > 0

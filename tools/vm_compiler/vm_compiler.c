@@ -26,7 +26,8 @@ struct vmc_form {
     u16 count;
 };
 
-enum { T_SMALL, T_POOL, T_HOLE, T_SYMBOL, T_EXIT };
+enum { T_SMALL, T_POOL, T_HOLE, T_SYMBOL, T_EXIT, T_CHECKED };
+struct vmc_checked { u8 expression, position; u16 first, count; };
 enum { K_ENC, K_ENC32, K_BRANCH };
 
 #include "stencil_table.h"
@@ -250,8 +251,10 @@ int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base
     const struct vmc_variant *v = 0;
     for (int i = 0; i < f->count; i++) {
         const struct vmc_variant *c = &VMC_VARIANT[f->first + i];
-        if (c->nzcv_from == nzcv_from && c->live_after == live_after && c->nzcv_out == nzcv_out)
-            v = c;
+        if (c->nzcv_from == nzcv_from && c->live_after == live_after && c->nzcv_out == nzcv_out) {
+            v = c;                                       /* unique: the generator asserts it */
+            break;
+        }
     }
     if (!v)
         return VMC_NO_STENCIL;
@@ -297,6 +300,17 @@ int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base
             case T_SYMBOL:
                 a[j] = symbols ? symbols[payload] : 0;
                 break;
+            case T_CHECKED: {                            /* every expression the samples allow must agree */
+                const struct vmc_checked *h = &VMC_CHECKED[payload];
+                if (h->position >= nvalues)
+                    return VMC_ENCODER;
+                u64 x = values[h->position];
+                a[j] = vmc_expression(h->expression, x);
+                for (int k = 0; k < h->count; k++)
+                    if (vmc_expression(VMC_ALT[h->first + k], x) != a[j])
+                        return VMC_GUARDED;
+                break;
+            }
             default:                                     /* T_EXIT: the exit's offset from this branch */
                 a[j] = exit_va - (base + 4 * (u64)w);
                 break;

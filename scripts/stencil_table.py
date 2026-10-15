@@ -14,7 +14,7 @@ The judge: a second set of instances per key, from another seed, and the record'
 the table (each argument from its constant or expression over the instruction's decoded values) and compared word
 for word with the compiler's output.
 
-Usage: uv run python scripts/stencil_table.py <record.pickle> [--out table.pickle] [--workers N]
+Usage: uv run python scripts/stencil_table.py <record.txt.gz | record.pickle> [--out table.txt.gz] [--workers N]
 """
 
 from __future__ import annotations
@@ -243,57 +243,76 @@ def _signature(items: list[Any]) -> tuple[Any, ...]:
     return tuple((it[0], it[1], len(it[2]), tuple(a for a in it[2] if isinstance(a, str))) for it in items)
 
 
-def _arg_spec(values: list[Any], valueses: list[list[int]], symbol_of: dict[int, str]) -> Any:
-    """One argument's spec over the instances: ("c", value), ("sym", name), ("h", expression, position),
-    ("kw", name, spec) for a keyword argument, or ("other",)."""
+REGISTER_MAP = ("v", "v mod 2^64", "xmm", "16 x xmm")     # guest register n is host register n (vm_backend's map)
+
+
+def _hole(values: list[Any], valueses: list[list[int]], nregs: int) -> Any:
+    """The hole's expression: the first of stencil_census.EXPRESSIONS that gives the argument in every sample, a
+    register position only through the register map (Sprint 080: a register's other fits, min(v, 8) or bits 0+3,
+    fit only where no sample reached a higher register); and every other expression that also fits a value position
+    and differs from it somewhere (review 2026-10-15 M1(d): the samples cannot tell them apart, so an instruction on
+    which they disagree has no stencil)."""
+    if not all(isinstance(a, int) and not isinstance(a, bool) for a in values):
+        return None
+    m = (1 << 64) - 1
+    for _, name, fn in sc.EXPRESSIONS:
+        for p in range(len(valueses[0])):
+            if p < nregs and name not in REGISTER_MAP:
+                continue
+            if all(fn(v[p]) == a for a, v in zip(values, valueses)):
+                if p < nregs:
+                    return ("h", name, p)
+                alts = tuple(n2 for _, n2, f2 in sc.EXPRESSIONS if n2 != name
+                             and all(f2(v[p]) == a for a, v in zip(values, valueses))
+                             and any(f2(w) & m != fn(w) & m for w in _PROBE_VALUES))
+                return ("h", name, p, alts) if alts else ("h", name, p)
+    return None
+
+
+_PROBE_VALUES = sorted({b + d for b in (0, 1 << 7, 1 << 8, 1 << 15, 1 << 16, 1 << 31, 1 << 32, 1 << 63)
+                        for d in (-65, -33, -1, 0, 1, 7, 8, 15, 16, 31, 32, 33, 63, 64, 65, 1000, 1008)} - {-65, -33, -1})
+
+
+def _arg_spec(values: list[Any], valueses: list[list[int]], symbol_of: dict[int, str], nregs: int = 0) -> Any:
+    """One argument's spec over the instances: ("c", value), ("sym", name), ("h", expression, position[,
+    alternatives]), ("kw", name, spec) for a keyword argument, or ("other",)."""
     first = values[0]
     if isinstance(first, tuple) and len(first) == 2 and isinstance(first[0], str):
         if all(isinstance(v, tuple) and v[0] == first[0] for v in values):
-            return ("kw", first[0], _arg_spec([v[1] for v in values], valueses, symbol_of))
+            return ("kw", first[0], _arg_spec([v[1] for v in values], valueses, symbol_of, nregs))
         return ("other",)
     if all(v == first for v in values):
         if isinstance(first, int) and not isinstance(first, bool) and first in symbol_of and first > 0xFFFF:
             return ("sym", symbol_of[first])
         return ("c", first)
-    found = sc.hole_expression(list(zip(values, valueses)))
-    return ("h", found[1], found[2]) if found else ("other",)
+    found = _hole(values, valueses, nregs)
+    return found if found else ("other",)
 
 
-def _guards(stencil: Any, samples: list[tuple[list[Any], list[int]]]) -> tuple[tuple[int, int], ...]:
-    """The values the samples never varied that a constant argument may stand for (Sprint 079): each such value's
-    position and its one value. A constant equal to an expression of a value that never varied may be a hole the
-    instances could not show (a refined group's register, a target, a return address); an instruction whose value
-    there differs has no stencil from this table."""
+def _guards(samples: list[tuple[list[Any], list[int]]]) -> tuple[tuple[int, int], ...]:
+    """Every value the samples never varied, with its one value (Sprint 080, review 2026-10-15 M1): a constant
+    argument may stand for such a value through any function of it, or of it and another value, so an instruction
+    whose value there differs has no stencil from this table. A value its key's class fixes (zero) always passes."""
     first = samples[0][1]
-    fixed = [p for p in range(len(first)) if all(v[p] == first[p] for _, v in samples)]
-    constants = {s[1] for _, _, specs in stencil for s in specs
-                 if s[0] == "c" and isinstance(s[1], int) and not isinstance(s[1], bool)}
-    constants |= {s[2][1] for _, _, specs in stencil for s in specs
-                  if s[0] == "kw" and s[2][0] == "c" and isinstance(s[2][1], int) and not isinstance(s[2][1], bool)}
-    out = []
-    for p in fixed:
-        try:
-            images = {fn(first[p]) for _, _, fn in sc.EXPRESSIONS}
-        except (ValueError, OverflowError):
-            images = set()
-        if images & constants:
-            out.append((p, first[p]))
-    return tuple(out)
+    return tuple((p, first[p]) for p in range(len(first)) if all(v[p] == first[p] for _, v in samples))
 
 
-def derive(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str]) -> Any:
+def derive(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str], nregs: int = 0,
+           notes: Counter[str] | None = None) -> Any:
     """The stencil of a key from its instances' items and values, with its guards (_guards), or ("split",
-    signatures)."""
+    signatures). `nregs`: the key's register count (the values' first positions)."""
     sigs = {_signature(items) for items, _ in samples}
     if len(sigs) > 1:
         return ("split", sigs)
     first = samples[0][0]
     stencil = []
     for pos, (kind, name, args) in enumerate(first):
-        specs = [_arg_spec([items[pos][2][ai] for items, _ in samples], [v for _, v in samples], symbol_of)
+        specs = [_arg_spec([items[pos][2][ai] for items, _ in samples], [v for _, v in samples], symbol_of, nregs)
                  for ai in range(len(args))]
+        if notes is not None:
+            notes["holes with alternatives"] += sum(1 for sp in specs if sp[0] == "h" and len(sp) == 4)
         stencil.append((kind, name, tuple(specs)))
-    return ("stencil", tuple(stencil), _guards(stencil, samples))
+    return ("stencil", tuple(stencil), _guards(samples))
 
 
 # A key whose instances give more than one encoder sequence is refined by one feature of one decoded value: an SSE
@@ -304,7 +323,7 @@ FEATURES: list[tuple[str, Any]] = (
 FEATURE = dict(FEATURES)
 
 
-def refine(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str]) -> Any:
+def refine(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str], nregs: int = 0) -> Any:
     """("by", value position, feature, {feature value: stencil}) for the first feature and position under which every
     group of instances gives one sequence, or None."""
     for fname, fn in FEATURES:
@@ -314,7 +333,7 @@ def refine(samples: list[tuple[list[Any], list[int]]], symbol_of: dict[int, str]
                 groups[fn(values[p])].append((items, values))
             if len(groups) < 2 or any(len({_signature(i) for i, _ in g}) > 1 for g in groups.values()):
                 continue
-            return ("by", p, fname, {fv: derive(g, symbol_of)[1:] for fv, g in groups.items()})
+            return ("by", p, fname, {fv: derive(g, symbol_of, nregs)[1:] for fv, g in groups.items()})
     return None
 
 
@@ -331,6 +350,10 @@ def stencil_for(entry: Any, values: list[int]) -> Any:
     return chosen[0]
 
 
+class Refused(Exception):
+    """A hole's alternatives disagree on this instruction: the table has no stencil for it."""
+
+
 def _value(spec: Any, values: list[int], symbols: dict[str, int]) -> Any:
     tag = spec[0]
     if tag == "c":
@@ -338,7 +361,11 @@ def _value(spec: Any, values: list[int], symbols: dict[str, int]) -> Any:
     if tag == "sym":
         return symbols[spec[1]]
     if tag == "h":
-        return EXPRESSION[spec[1]](values[spec[2]])
+        v = EXPRESSION[spec[1]](values[spec[2]])
+        if len(spec) == 4 and any(EXPRESSION[a](values[spec[2]]) & (1 << 64) - 1 != v & (1 << 64) - 1
+                                  for a in spec[3]):
+            raise Refused(spec)
+        return v
     if tag == "kw":
         return (spec[1], _value(spec[2], values, symbols))
     raise ValueError("an argument named other has no value")
@@ -419,14 +446,14 @@ def build_one(job: tuple[Any, list[tuple[Any, bytes]], frozenset[int], int]) -> 
     samples = gather(recorded, key, implicit, seed, counts)
     if not samples:
         return key, None, dict(counts)
-    derived = derive(samples, _STATE["symbol_of"])
+    derived = derive(samples, _STATE["symbol_of"], len(key[6]), counts)
     entry: Any = ("one", derived[1], derived[2]) if derived[0] == "stencil" else None
     if entry is None:                                    # more instances, then a feature that separates them
         for inst in instances(call, code, key, implicit, random.Random(seed + 2_000_003), 8 * TRIES, 8 * KEEP)[1:]:
             c = _compiled(inst)
             if c is not None:
                 samples.append((c[1], inst[2]))
-        entry = refine(samples, _STATE["symbol_of"])
+        entry = refine(samples, _STATE["symbol_of"], len(key[6]))
         counts["refined" if entry else "split"] += 1
     if entry is not None:
         stencils = [entry[1]] if entry[0] == "one" else [st for st, _ in entry[3].values()]
@@ -444,6 +471,9 @@ def build_one(job: tuple[Any, list[tuple[Any, bytes]], frozenset[int], int]) -> 
                 continue
             try:
                 ok = rebuild(chosen, inst[2], _STATE["symbols"], _STATE["words_of"]) == c[0]
+            except Refused:
+                counts["judged with no stencil (alternatives disagree)"] += 1
+                continue
             except Exception:
                 ok = False
             counts["judged equal" if ok else "judged differ"] += 1
@@ -467,8 +497,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", type=Path)
     ap.add_argument("--workers", type=int, default=max(1, (multiprocessing.cpu_count() or 2) - 1))
     a = ap.parse_args(argv)
-    with open(a.record, "rb") as f:
-        record = pickle.load(f)
+    record = sc.read_record(a.record)
     by_key, implicit = keys_of(record)
     jobs = []
     for n, (key, calls) in enumerate(by_key.items()):
@@ -517,6 +546,9 @@ def main(argv: list[str]) -> int:
             try:
                 ok = c is not None and chosen is not None and rebuild(chosen, values, record["symbols"],
                                                                        _STATE["words_of"]) == c[0]
+            except Refused:
+                guarded += 1
+                continue
             except Exception:
                 ok = False
             equal += ok
@@ -524,9 +556,36 @@ def main(argv: list[str]) -> int:
     print(f"record calls rebuilt from the table: {equal} equal, {differ} differ, {missing} with no stencil, "
           f"{guarded} with no stencil for their values (a guard or a feature value)")
     if a.out:
-        with open(a.out, "wb") as f:
-            pickle.dump({"table": table, "implicit": implicit, "splits": splits}, f)
+        write_table({"table": table, "implicit": implicit, "splits": splits}, a.out)
     return 0
+
+
+def write_table(data: dict[str, Any], path: Path) -> None:
+    """The table as a gzipped Python literal (Sprint 080: readable with no w2m class, committed), keys in sorted
+    order; a .pickle path pickles it."""
+    if path.suffix == ".pickle":
+        with open(path, "wb") as f:
+            pickle.dump(data, f)
+        return
+    import gzip
+    literal = {"table": dict(sorted(data["table"].items(), key=repr)),
+               "implicit": {row: sorted(regs) for row, regs in sorted(data["implicit"].items())},
+               "splits": sorted(data["splits"], key=repr)}
+    with open(path, "wb") as f, gzip.GzipFile(fileobj=f, mode="wb", mtime=0, filename="") as g:
+        g.write((repr(literal) + "\n").encode())
+
+
+def read_table(path: Path) -> dict[str, Any]:
+    if path.suffix == ".pickle":
+        with open(path, "rb") as f:
+            out: dict[str, Any] = pickle.load(f)
+        return out
+    import ast
+    import gzip
+    with gzip.open(path, "rt") as f:
+        data = ast.literal_eval(f.read())
+    data["implicit"] = {row: frozenset(regs) for row, regs in data["implicit"].items()}
+    return dict(data)
 
 
 if __name__ == "__main__":

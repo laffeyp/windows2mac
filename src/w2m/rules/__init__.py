@@ -34,6 +34,10 @@ class Ctx:
     address: int
 
 
+COMPILER = (Path(__file__).resolve().parent.parent / "vm_backend.py",
+            Path(__file__).resolve().parent.parent / "a64_encoder.py")
+
+
 @dataclass(frozen=True)
 class Rule:
     module: str
@@ -44,9 +48,11 @@ class Rule:
 
     @property
     def sha256(self) -> str:
-        """The candidate's identity: its module and every shared module it depends on."""
+        """The candidate's identity: its module, every shared module it depends on, and the compiler every verdict
+        runs it through (vm_backend.py's compile_insn, a64_encoder.py; review 2026-10-15, H2: Sprint 078 changed
+        the compiler and no class identity noticed)."""
         h = hashlib.sha256()
-        for p in (self.path, *self.shared):
+        for p in (self.path, *self.shared, *COMPILER):
             h.update(p.name.encode() + b"\0" + p.read_bytes() + b"\0")
         return "sha256:" + h.hexdigest()
 

@@ -45,7 +45,11 @@ def _changes(repo: Path) -> list[str]:
                              capture_output=True, text=True, check=True).stdout
     untracked = subprocess.run(["git", "-C", str(repo), "ls-files", "--others", "--exclude-standard", "--", "src", "tools"],
                                capture_output=True, text=True, check=True).stdout
-    return [line[3:] for line in tracked.splitlines() if line.strip()] + [f for f in untracked.splitlines() if f]
+    # the run indexes a sweep writes as its runs finish (family_run, class_run) are records, not code: a run started
+    # while another finishes ran the committed tree (review 2026-10-15, M3: 60 of 68 family records stamped dirty)
+    changed = [line[3:] for line in tracked.splitlines() if line.strip()]
+    changed = [f for f in changed if not (f.startswith("store/runs/") and f.endswith(".json") and f.count("/") == 2)]
+    return changed + [f for f in untracked.splitlines() if f]
 
 
 def uncommitted() -> list[str]:

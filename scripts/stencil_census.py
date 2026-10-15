@@ -238,8 +238,8 @@ def canonical_flags(ins: Any, nzcv_from: str | None, live_after: int, nzcv_out: 
     kind's NZCV_CONDITIONS holds. An argument the instruction cannot read is written as its default, so keys that
     differ only there are one key."""
     has_flags = any(op[0] == "flags" for op in ins.ops)
-    reads = nzcv_from is not None and any(op[0] == "br" and op[1] in vm_backend.NZCV_CONDITIONS[nzcv_from]
-                                          for op in ins.ops)
+    table = vm_backend.NZCV_CONDITIONS.get(nzcv_from or "", {})        # as compile_insn reads it
+    reads = any(op[0] == "br" and op[1] in table for op in ins.ops)
     return (nzcv_from if reads else None, live_after if has_flags else 0, nzcv_out if has_flags else False)
 
 
@@ -295,6 +295,51 @@ def decoded_form(call: Call, code: bytes, implicit: frozenset[int] = frozenset()
            tuple(value_class(v) for v in values), nzcv_from, live_after, nzcv_out, exit_va)
     return key, regs + values, len(regs)
 
+
+
+# The record in a form that needs none of w2m's classes to read (Sprint 080, review 2026-10-15 H3): a header line of
+# JSON (the runtime symbols, the exit address), then each compile call in record order as "address bytes nzcv_from
+# live_after nzcv_out count" (nzcv_from an index of [None, *NZCV_CONDITIONS]). Reading it lifts each instruction
+# again from its bytes, which Sprint 074 showed gives the recorded Lifted.
+NZCV_KINDS: list[str | None] = [None, *vm_backend.NZCV_CONDITIONS]
+
+
+def write_record(record: dict[str, Any], path: Path) -> None:
+    import gzip
+    import json
+    exits = {call[1] for call in record["calls"]}
+    assert len(exits) == 1, exits
+    lines = [json.dumps({"symbols": record["symbols"], "exit_va": exits.pop()}, sort_keys=True)]
+    for call, n in record["calls"].items():
+        ins, _, nzcv_from, live_after, nzcv_out = call
+        code = next(iter(record["bytes"][ins]))
+        lines.append(f"{ins.address:x} {code.hex()} {NZCV_KINDS.index(nzcv_from)} {live_after} {int(nzcv_out)} {n}")
+    with open(path, "wb") as f, gzip.GzipFile(fileobj=f, mode="wb", mtime=0, filename="") as g:
+        g.write(("\n".join(lines) + "\n").encode())
+
+
+def read_record(path: Path) -> dict[str, Any]:
+    """A record from write_record's file, or a pickled one."""
+    import gzip
+    import json
+    if path.suffix == ".pickle":
+        with open(path, "rb") as f:
+            out: dict[str, Any] = pickle.load(f)
+        return out
+    with gzip.open(path, "rt") as f:
+        head = json.loads(f.readline())
+        calls: dict[Any, int] = {}
+        codes: dict[Any, set[bytes]] = {}
+        lifted: dict[tuple[int, bytes], Any] = {}
+        for line in f:
+            address, code_hex, nzcv_from, live_after, nzcv_out, n = line.split()
+            a, code = int(address, 16), bytes.fromhex(code_hex)
+            ins = lifted.get((a, code))
+            if ins is None:
+                ins = lifted[(a, code)] = lift(code, a)
+                codes.setdefault(ins, set()).add(code)
+            calls[(ins, head["exit_va"], NZCV_KINDS[int(nzcv_from)], int(live_after), bool(int(nzcv_out)))] = int(n)
+    return {"calls": calls, "symbols": head["symbols"], "bytes": codes}
 
 M64 = (1 << 64) - 1
 
