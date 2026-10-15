@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 073
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -73,3 +73,4 @@ A to C; B and C with 0 differing; CI passes.
   5,232,559 calls, 394,453 distinct, over 126 of the 139 functions; each run through the C: 0 differ. The 13 the
   compiler did not call: `adr`, `bl`, `br`, `dmb_ish`, `dup_4s`, `ldp_q`, `ret`, `shl_4s`, `sshl_4s`, `sshr_4s`,
   `stp_q`, `ushl_4s`, `ushr_4s` (B covers them).
+- **Closed** on 4394114c (CI run 38677583192, success; the run found by commit). `uv run pytest`: 2,421 passed.

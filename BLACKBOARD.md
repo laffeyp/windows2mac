@@ -301,6 +301,13 @@
 
 ## Sprint tail
 
+### Sprint 073 (2026-10-14, closed: CI run 38677583192 success on 4394114c)
+- **Scope:** the arm64 encoders in C for the compiler inside the VM (Decision 2026-10-14's second build step), judged against `a64_encoder.py`.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run, compiler or runtime change, so no frontier record and no sweep; the differential (`tests/test_a64_encoder_c.py`) compared 1,066,482 words and 953,795 rejections over 138 functions, 0 differing; the 394,453 distinct encoder calls of Sprint 071's record gave the same words in C, 0 differing.
+  - *Observation 1 (blind plant check, of the judge):* a pass on the first run, in 3.3 s, could have meant a test that compared nothing. Disposition: resolved-here (three faults planted in a scratch copy, each caught: 8,413, 21 and 7,399 differing calls).
+- **Closed:** CI run 38677583192 (success on 4394114c).
+
 ### Sprint 072 (2026-10-14, closed: CI run 38670636259 success on b7b20617)
 - **Scope:** every compiled word from an encoder call (Decision 2026-10-14's first build step): six inline sites of `vm_backend.py` call new encoder forms, the words unchanged.
 - **Rubber Duck Pass:**
