@@ -1,0 +1,338 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
+"""The stencil census (Sprint 071, recentering step 6): does the compiler's output factor into stencils?
+
+Copy-and-patch (Xu and Kjolstad, OOPSLA 2021; CPython 3.13's JIT, PEP 744) builds code from a library of machine-code
+stencils with holes for an operation's values. This script takes the `compile_insn` calls a frontier run recorded
+(scratch driver record_insns.py: each distinct call with its count) and compiles each again with every arm64 encoder
+call logged (`a64_encoder`'s functions, the outermost call of a nest), so an instruction's words become a sequence of
+encoder calls, words no encoder made (raw) and branch words the assembler fills at its end. Instructions are grouped by
+form: the iclass and ops with guest registers and values taken out, and the flag arguments. Per form: the encoder
+sequences it produced (one is a stencil; several mean values choose the structure) and the arguments that vary
+across its instructions (the holes), each named by what it equals in the instruction (a guest register, a value or a
+piece of one) or `other`.
+
+Usage: uv run python scripts/stencil_census.py <record.pickle> [--top N]
+"""
+
+from __future__ import annotations
+
+import argparse
+import functools
+import pickle
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from w2m import a64_encoder, vm_backend  # noqa: E402
+
+NEAR = 0x40_0000                                         # each instruction is compiled again this far below its exit
+
+Call = tuple[Any, ...]                                   # (lifted, exit_va, nzcv_from, live_after, nzcv_out)
+
+
+class EncoderLog:
+    """Wraps every public function of a64_encoder; while `on`, the outermost calls are logged as (name, args,
+    words)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[Any, ...], list[int]]] = []
+        self.depth = 0
+        self.on = False
+        for name in dir(a64_encoder):
+            f = getattr(a64_encoder, name)
+            if callable(f) and not name.startswith("_") and getattr(f, "__module__", "") == a64_encoder.__name__:
+                setattr(a64_encoder, name, self._wrap(name, f))
+
+    def _wrap(self, name: str, f: Any) -> Any:
+        @functools.wraps(f)
+        def logged(*args: Any, **kwargs: Any) -> Any:
+            self.depth += 1
+            try:
+                out = f(*args, **kwargs)
+            finally:
+                self.depth -= 1
+            if self.on and self.depth == 0:
+                words = out if isinstance(out, list) else [out] if isinstance(out, int) else None
+                if words is not None:
+                    self.calls.append((name, args + tuple(sorted(kwargs.items())), list(words)))
+            return out
+        return logged
+
+
+def compile_logged(log: EncoderLog, call: Call, symbols: dict[str, int]) -> tuple[list[int], list[Any]]:
+    """The instruction's words and its items: ("enc", name, args), ("enc32", name, args) (the encoder's word with
+    bit 31, sf, cleared: its 32-bit form), ("raw", word) or ("branch", name, args)."""
+    ins, exit_va, nzcv_from, live_after, nzcv_out = call
+    a = vm_backend.Assembler(exit_va - NEAR)
+    log.calls, log.on = [], True
+    try:
+        vm_backend.compile_insn(a, ins, exit_va, symbols, nzcv_from, live_after, nzcv_out)
+        body_calls = log.calls
+        fixes = {i for i, _, _ in a.fix}
+        log.calls = []
+        words = a.finish()
+        branch_calls = log.calls
+    finally:
+        log.on = False
+    items: list[Any] = []
+    j = 0                                                # the next body call
+    i = 0
+    branches = iter(branch_calls)
+    while i < len(words):
+        if i in fixes:
+            name, args, _ = next(branches)
+            items.append(("branch", name, args))
+            i += 1
+            continue
+        k = j
+        while k < len(body_calls):                       # the next logged call whose words come next
+            ws = body_calls[k][2]
+            if ws and words[i:i + len(ws)] == ws and not fixes & set(range(i, i + len(ws))):
+                kind = "enc"
+                break
+            if len(ws) == 1 and words[i] == ws[0] & ~(1 << 31) != ws[0] and i not in fixes:
+                kind = "enc32"
+                break
+            k += 1
+        if k < len(body_calls):
+            name, args, ws = body_calls[k]
+            items.append((kind, name, args))
+            i += len(ws)
+            j = k + 1
+        else:
+            items.append(("raw", words[i]))
+            i += 1
+    return words, items
+
+
+def rebuild(items: list[Any], words_of: dict[str, Any]) -> list[int]:
+    """The words the items stand for (the rebuild check): each encoder called again with its arguments; a branch
+    item's word is taken as recorded."""
+    out: list[int] = []
+    for it in items:
+        if it[0] in ("enc", "enc32"):
+            pos = tuple(a for a in it[2] if not (isinstance(a, tuple) and len(a) == 2 and isinstance(a[0], str)))
+            kw = dict(a for a in it[2] if isinstance(a, tuple) and len(a) == 2 and isinstance(a[0], str))
+            w = words_of[it[1]](*pos, **kw)
+            ws = w if isinstance(w, list) else [w]
+            out.extend(ws if it[0] == "enc" else [ws[0] & ~(1 << 31)])
+        elif it[0] == "raw":
+            out.append(it[1])
+        else:
+            out.append(it[3])
+    return out
+
+
+def form(call: Call) -> tuple[tuple[Any, ...], list[int]]:
+    """The instruction's form (ops with guest registers and values taken out, the iclass and the flag arguments) and
+    its values in order: the guest registers (XMM registers as 1000 + n), then immediates and displacements."""
+    ins, exit_va, nzcv_from, live_after, nzcv_out = call
+    regs: list[int] = []                                 # guest registers, in order
+    values: list[int] = []                               # immediates and displacements, in order
+
+    def out(op: Any) -> Any:
+        k = op[0]
+        if k == "imm":
+            values.append(op[2])
+            return ("imm", op[1], "V")
+        if k == "addr":
+            _, t, base, index, scale, disp, abits, seg = op
+            for r in (base, index):
+                if isinstance(r, int):
+                    regs.append(r)
+            values.append(disp)
+            return ("addr", t, None if base is None else "R", None if index is None else "R", scale, "V", abits, seg)
+        return tuple(loc(x) for x in op)
+
+    def loc(x: Any) -> Any:
+        if isinstance(x, tuple) and x and x[0] == "r" and len(x) == 4:
+            regs.append(x[1])
+            return ("r", "R", x[2], x[3])
+        if isinstance(x, tuple) and x and x[0] == "x" and len(x) == 2:
+            regs.append(1000 + x[1])                     # an XMM register, apart from the general ones
+            return ("x", "X")
+        return x
+
+    ops = tuple(out(op) for op in ins.ops)
+    return (ins.iclass, ops, nzcv_from, live_after, nzcv_out, exit_va), regs + values
+
+
+def value_class(v: int) -> tuple[Any, ...]:
+    """The features of a value that compile_insn's choices read (_folded_addresses, the ADD/SUB immediates of
+    _operand_forms and of a computed address, mov_imm's halfwords): zero, sign, the 12-bit and 9-bit ranges, the scaled
+    12-bit offset for each access size, which halfwords are nonzero, and a shift count's 1 and 0 (5 and 6 bits)."""
+    m = v & (1 << 64) - 1
+    sv = m - (1 << 64) if m >> 63 else m
+    scaled = tuple(sv % size == 0 and 0 <= sv // size < 4096 for size in (1, 2, 4, 8, 16))
+    return (sv == 0, sv < 0, 0 <= sv < 4096, -4096 < sv < 4096, -256 <= sv <= 255, scaled,
+            tuple(bool(m >> (16 * h) & 0xFFFF) for h in range(4)),
+            m & 31 == 1, m & 63 == 1, m & 31 == 0, m & 63 == 0)   # a shift count: OF defined at 1; nothing at 0
+
+
+def refined(key: tuple[Any, ...], values: list[int], registers: int) -> tuple[Any, ...]:
+    """The form with each value's class, and which of its guest registers are the same register."""
+    regs = values[:registers]
+    same = tuple(regs.index(r) for r in regs)
+    return (*key, same, tuple(value_class(v) for v in values[registers:]))
+
+
+def name_of(arg: Any, values: list[int]) -> str:
+    """What a varying argument equals in its instruction."""
+    if not isinstance(arg, int):
+        return "other"
+    for v in values:
+        if v >= 1000 and arg == v - 1000:
+            return "value"
+        m = v & (1 << 64) - 1
+        if arg == v or arg == m:
+            return "value"
+        if any(arg == (m >> s) & 0xFFFF for s in (0, 16, 32, 48)) or arg == m & 0xFFF or arg == (m >> 12) & 0xFFF:
+            return "piece"
+        if arg == -v or arg == (-v) & (1 << 64) - 1:
+            return "negated"
+    return "other"
+
+
+def _values_only(call: Call) -> list[int]:
+    """The immediates and displacements of the call's instruction."""
+    out: list[int] = []
+    for op in call[0].ops:
+        if op[0] == "imm":
+            out.append(op[2])
+        elif op[0] == "addr":
+            out.append(op[5])
+    return out
+
+
+def census(record: dict[str, Any], top: int, refine: bool) -> int:
+    calls: dict[Call, int] = record["calls"]
+    symbols = record["symbols"]
+    log = EncoderLog()
+    words_of = {name: getattr(a64_encoder, name).__wrapped__ for name in dir(a64_encoder)
+                if hasattr(getattr(a64_encoder, name), "__wrapped__")}
+    by_form: dict[Any, list[tuple[int, list[int], tuple[Any, ...]]]] = defaultdict(list)
+    failures = Counter[str]()
+    raw_words = 0
+    kinds = Counter[str]()                               # compiled instructions with an item of each kind
+    for call, n in calls.items():
+        try:
+            words, items = compile_logged(log, call, symbols)
+        except Exception as ex:                          # the run compiled it; here a different base can fail it
+            failures[type(ex).__name__] += n
+            continue
+        fixed = [it if it[0] != "branch" else (*it, w) for it, w in zip(items, _item_words(items, words))]
+        if rebuild(fixed, words_of) != words:
+            failures["rebuild"] += n
+            continue
+        raw_words += sum(1 for it in items if it[0] == "raw") * n
+        kinds.update({it[0]: n for it in items})
+        key, values = form(call)
+        if refine:
+            registers = len(values) - len(_values_only(call))
+            key = refined(key, values, registers)
+        sig = tuple((it[0], it[1], len(it[2])) if it[0] != "raw" else ("raw",) for it in items)
+        by_form[key].append((n, values, (sig, tuple(items))))
+    total = sum(calls.values())
+    compiled = sum(n for group in by_form.values() for n, _, _ in group)
+    print(f"{len(calls)} distinct compile calls, {total} in all; {compiled} compiled again and rebuilt exactly; "
+          f"failures {dict(failures)}")
+    print(f"{len(by_form)} forms; raw words (no encoder) {raw_words}; instructions with an item of each kind "
+          f"{dict(kinds)}")
+    one = [k for k, g in by_form.items() if len({s for _, _, (s, _) in g}) == 1]
+    one_n = sum(n for k in one for n, _, _ in by_form[k])
+    print(f"forms with one encoder sequence: {len(one)} of {len(by_form)}, {one_n} of {compiled} compiled "
+          f"instructions ({100 * one_n / max(compiled, 1):.1f}%)")
+    holes = Counter[str]()
+    others: list[Any] = []                               # examples of holes named `other`
+    many: list[tuple[int, Any, int]] = []
+    for k, g in by_form.items():
+        sigs = Counter[Any]()
+        for n, _, (s, _) in g:
+            sigs[s] += n
+        if len(sigs) > 1:
+            many.append((sum(sigs.values()), k, len(sigs)))
+            continue
+        if len(g) < 2:
+            continue
+        first = g[0][2][1]
+        for pos, it in enumerate(first):                  # each varying argument of each item
+            if it[0] == "raw":
+                if any(items[pos] != it for _, _, (_, items) in g):
+                    holes["raw word"] += 1
+                continue
+            for ai, arg in enumerate(it[2]):
+                if any(items[pos][2][ai] != arg for _, _, (_, items) in g):
+                    named = Counter(name_of(items[pos][2][ai], values) for _, values, (_, items) in g)
+                    top_name = max(named, key=lambda x: named[x])
+                    holes[f"{it[0]} {top_name}"] += 1
+                    if top_name == "other" and len(others) < top:
+                        others.append((k[0], it[1], ai, [(items[pos][2][ai], values) for _, values, (_, items) in g[:3]]))
+    print(f"holes in one-sequence forms, by what they equal: {dict(holes)}")
+    for ic, enc, ai, samples in others:
+        print(f"  other: {ic} {enc} argument {ai}: " + "; ".join(f"{arg} in {vals}" for arg, vals in samples))
+    structures = Counter[Any]()                          # each distinct encoder sequence, by compiled instructions
+    for g in by_form.values():
+        for n, _, (sig, _) in g:
+            structures[sig] += n
+    by_len = Counter[int]()
+    for sig in structures:
+        by_len[len(sig)] += 1
+    print(f"distinct encoder sequences (stencils): {len(structures)}; the commonest 100 cover "
+          f"{100 * sum(n for _, n in structures.most_common(100)) / max(compiled, 1):.1f}% of compiled instructions, "
+          f"the commonest 1,000 {100 * sum(n for _, n in structures.most_common(1000)) / max(compiled, 1):.1f}%; "
+          f"items a stencil: {dict(sorted(by_len.items())[:12])} ...")
+    many.sort(key=lambda x: -x[0])
+    print(f"forms whose values choose the structure: {len(many)}, {sum(n for n, _, _ in many)} compiled instructions")
+    by_iclass = Counter[str]()
+    for n, k, _ in many:
+        by_iclass[k[0]] += n
+    print("  by iclass: " + ", ".join(f"{ic} {n}" for ic, n in by_iclass.most_common(top)))
+    for n, k, s in many[:top]:
+        print(f"  {n:>8} {s:>3} sequences: {k[0]} {k[1]} nzcv_from={k[2]} live=0x{k[3]:x} out={k[4]}")
+    return 0
+
+
+def _item_words(items: list[Any], words: list[int]) -> list[int | None]:
+    """The word at each item's start (a branch item's own word)."""
+    out: list[int | None] = []
+    i = 0
+    for it in items:
+        out.append(words[i] if i < len(words) else None)
+        if it[0] in ("branch", "raw", "enc32"):
+            i += 1
+        else:
+            i += _width(it)
+    return out
+
+
+_widths: dict[tuple[Any, ...], int] = {}
+
+
+def _width(it: Any) -> int:
+    key = (it[1], it[2])
+    if key not in _widths:
+        pos = tuple(a for a in it[2] if not (isinstance(a, tuple) and len(a) == 2 and isinstance(a[0], str)))
+        kw = dict(a for a in it[2] if isinstance(a, tuple) and len(a) == 2 and isinstance(a[0], str))
+        w = getattr(a64_encoder, it[1]).__wrapped__(*pos, **kw)
+        _widths[key] = len(w) if isinstance(w, list) else 1
+    return _widths[key]
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("record", type=Path)
+    ap.add_argument("--top", type=int, default=30)
+    ap.add_argument("--refine", action="store_true", help="split each form by its values' classes (value_class)")
+    a = ap.parse_args(argv)
+    with open(a.record, "rb") as f:
+        record = pickle.load(f)
+    return census(record, a.top, a.refine)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
