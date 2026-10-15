@@ -77,7 +77,8 @@ def test_a_hole_is_named_by_one_expression_over_all_its_instructions() -> None:
     """Sprint 074: 4294967295 from an immediate of -1 masked to 32 bits; a shuffle selector from bits 2-3; no name
     where no one expression gives every instruction's argument."""
     assert sc.hole_expression([(0xFFFFFFFF, [3, -1]), (0xFFFFFFFE, [5, -2])]) == ("piece", "masked to 32 bits", 1)
-    assert sc.hole_expression([(2, [0xAA]), (1, [0x14])])[:2] == ("field", "bits 2+2")
+    field = sc.hole_expression([(2, [0xAA]), (1, [0x14])])
+    assert field is not None and field[:2] == ("field", "bits 2+2")
     assert sc.hole_expression([(5, [5, 9]), (7, [8, 6])]) is None
 
 
