@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 075
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -77,3 +77,4 @@ A to C; 0 differ; CI passes.
   time: a RIP-relative displacement of 2 bytes (754 differ), `_LOCK` on XCHG (9), the SIB index extended by REX.B in
   place of REX.X (343).
 - **The record:** Sprint 074's 1,183,579 instructions, each decoded in C and in Python: all decoded, 0 differ.
+- **Closed** on 982bb22e (CI run 38679290552, success; its decoder-tables step checks both outputs). `uv run pytest`: 2,427 passed.

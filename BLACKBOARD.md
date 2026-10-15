@@ -303,6 +303,14 @@
 
 ## Sprint tail
 
+### Sprint 075 (2026-10-14, closed: CI run 38679290552 success on 982bb22e)
+- **Scope:** the decoder in C for the compiler inside the VM: `x86dec._decode` and `x86ops.operands` step for step over tables `gen_decoder.py` writes from the spec.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run, compiler or runtime change, so no frontier record and no sweep; the differential compared 84,409 strings (every row, every outcome, truncations) and the record's 1,183,579 instructions, 0 differing.
+  - *Observation 1 (payload anomaly, of the work):* the first run differed on 1,147 VEX, EVEX and XOP strings: their pp field orders F3 before F2, unlike the tables' prefix codes. Disposition: resolved-here (a mapping, as x86dec's `VEX_PFX`).
+  - *Observation 2 (blind plant check, of the judge):* three faults planted one at a time were caught (754, 9 and 343 differing strings).
+- **Closed:** CI run 38679290552 (success on 982bb22e).
+
 ### Sprint 074 (2026-10-14, closed: CI run 38678470845 success on 19f388a5)
 - **Scope:** the stencil key from the decoder: does a key the compiler inside the VM can compute from the instruction's bytes pick one encoder sequence, and is every hole a function of decoded fields?
 - **Rubber Duck Pass:**
