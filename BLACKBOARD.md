@@ -303,6 +303,16 @@
 
 ## Sprint tail
 
+### Sprint 077 (2026-10-14, closed: CI run 38691728944 success on ae831e71)
+- **Scope:** the compiler in C for one instruction: the key from the decoder, Sprint 076's table as C data, the emitter (Decision 2026-10-14).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `scripts/gen_stencil_table.py` over Sprint 076's scratch table; a scratch driver compiled the record's 1,186,511 distinct calls in both compilers at random bases and exits; no run, runtime or Python compiler change, so no frontier record and no sweep. C key and words equal in all, 0 with no stencil; 208 ns per instruction natively against `compile_insn`'s 12.5 µs.
+  - *Observation 1 (missing pair, of the judge):* the record reached one stencil of each of the 71 refined keys, so neither the record judge nor a per-key sample tests the other 75. Disposition: resolved-here (the samples add an instance made for each; 38,229 instructions in the CI test).
+  - *Observation 2 (blind plant check, of the judge):* four faults planted one at a time (exit offset, a value-class bit, the implicit mask, the `-v` expression) each failed the test.
+  - *Observation 3 (silent gate, of the work):* the CI wait loop passed `gh run list --commit` a short hash, found no run and reported exit 1 without watching anything. Disposition: resolved-here (the full hash).
+  - *Observation 4 (residual, of the work):* Sprint 076's 506 unvaried values stay open: the record judge agrees, but class runs have not compiled through the C. Disposition: open, for the sprint that puts the C in the VM.
+- **Closed:** CI run 38691728944 (success on ae831e71).
+
 ### Sprint 076 (2026-10-14, closed: CI run 38683458204 success on 1bb36655)
 - **Scope:** the stencil table from instances made per key (Decision 2026-10-14, the stencil key): each key's encoder sequence, each argument a constant or one expression of a decoded value.
 - **Rubber Duck Pass:**

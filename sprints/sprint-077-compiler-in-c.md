@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 077
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -92,3 +92,4 @@ A to D; D with 0 differing, or each difference's cause named and recorded; CI pa
 - **Not in this sprint:** the C compiles one instruction; block assembly (the prologue, flag liveness, the budget)
   and the dispatcher in the VM come next. The table is regenerated only from a record, which is a scratch file;
   `stencil_table.h` names the table's sha256.
+- **Closed** on ae831e71 (CI run 38691728944, success). `uv run pytest`: 2,432 passed.
