@@ -94,7 +94,28 @@ class ExactRows(Struct, frozen=True, forbid_unknown_fields=True,
     derivation: str = ""
 
 
-Acceptance = AllowedOutcomeSet | ExactReturnOfArgument | ExactRows
+class Judge(Struct, frozen=True, forbid_unknown_fields=True):
+    """One judge of an exact_words acceptance: its name, where its inputs come from, and whether that source is
+    outside every source the target was made from (KIT_DIARY #59: one judge must be)."""
+
+    name: str
+    source: str
+    outside_target_sources: bool
+
+
+class ExactWords(Struct, frozen=True, forbid_unknown_fields=True,
+                 tag="exact_words", tag_field="relation"):
+    """Where the target emits code for an input, its words equal the reference compiler's for the same input, word
+    for word (Sprint 081: the compiler in C against vm_backend.compile_insn and assemble_block). `refusal`: the
+    outcomes the target may give instead of words, each sending the input to the reference; a refusal is not a
+    divergence. The event's relation is `exact`."""
+
+    reference: str
+    refusal: tuple[str, ...]
+    judges: tuple[Judge, ...]
+
+
+Acceptance = AllowedOutcomeSet | ExactReturnOfArgument | ExactRows | ExactWords
 
 
 class Before(Struct, frozen=True, forbid_unknown_fields=True):
@@ -167,6 +188,11 @@ def _check(c: Contract, path: Path) -> None:
             raise ContractError(f"{c.contract_id}: roles {sorted(set(x.over_roles) - roles)} undeclared")
         if x.write_api == x.read_api:
             raise ContractError(f"{c.contract_id}: write_api and read_api must differ")
+    elif isinstance(c.acceptance, ExactWords):
+        if not any(j.outside_target_sources for j in c.acceptance.judges):
+            raise ContractError(f"{c.contract_id}: exact_words needs a judge from outside the target's sources")
+        if not any(e.category == "observed" for e in c.evidence):
+            raise ContractError(f"{c.contract_id}: exact_words is judged on executions; cite them")
     elif isinstance(c.acceptance, ExactRows):
         keys = [r.get(c.acceptance.key) for r in c.acceptance.rows]
         if not keys or None in keys or len(keys) != len(set(keys)):

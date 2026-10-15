@@ -104,8 +104,10 @@ def one_step_run(root: Path, *, profile: str, contract_version: str, purpose: Pu
             done.append(e)
             yield events.validate(e)
         discrepancies = sum(type(e).__name__ == "DISCREPANCY_REPORTED" for e in done)
+        accepted = sum(type(e).__name__ in ("CONTRACT_ACCEPTED", "CANDIDATE_ACCEPTED", "ARTIFACT_ACCEPTED")
+                       for e in done)                 # the tag's count (review 2026-10-15, small review of 080)
         yield events.validate(events.SESSION_COMPLETED(
-            outcome=outcome(done), discrepancy_count=discrepancies, accepted_count=0,
+            outcome=outcome(done), discrepancy_count=discrepancies, accepted_count=accepted,
             elapsed_seconds=round(time.monotonic() - t0, 3)))
 
     def topology(b: TopologyBuilder) -> None:

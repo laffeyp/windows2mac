@@ -1,0 +1,75 @@
+{
+ "contract_id": "w2m.vm_compiler.stencil_table",
+ "version": "0.80.0",
+ "status": "accepted",
+ "summary": "The compiler in C (tools/vm_compiler: vmc_compile for one instruction, vmc_block for a block) against the Python compiler: where the C emits words for an instruction or a block, they equal vm_backend.compile_insn's or assemble_block's for the same bytes, address, base, exit, slice stub, symbols and flag arguments; where its table has no stencil, or a guard or a hole's alternatives refuse the input, the C returns a status and the host compiles it in Python.",
+ "applicability": "tools/vm_compiler built by clang for the host (arm64 macOS) and with the guest runtime's flags; the table generated from store/stencil (record and table sha256 in tools/vm_compiler/stencil_table.h)",
+ "roles": [
+  "compiler"
+ ],
+ "scenario": {
+  "initial": {
+   "compiler": "tools/vm_compiler/{vm_compiler,x86_decode,a64_encoder}.c with the generated stencil_table.h"
+  },
+  "execution": {
+   "compiler": "scripts/stencil_judge.py: each judge's inputs at a base, exit and slice stub drawn at random"
+  },
+  "observation": {
+   "phase": "the words and marks each compiler returns"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_words",
+  "reference": "src/w2m/vm_backend.py compile_insn (one instruction) and assemble_block (a block)",
+  "refusal": [
+   "VMC_NO_STENCIL (-2): no key, or no variant for the flag arguments",
+   "VMC_GUARDED (-7): a value the derivation never varied differs, or a hole's alternatives disagree",
+   "VMC_DECODE (-1): the bytes do not decode",
+   "a block cut short before such an instruction, with every flag live at its new end"
+  ],
+  "judges": [
+   {
+    "name": "instructions",
+    "source": "store/stencil/record.txt.gz: every distinct compile call of the batch run's record",
+    "outside_target_sources": false
+   },
+   {
+    "name": "blocks",
+    "source": "blocks made from the same record, from every recorded address",
+    "outside_target_sources": false
+   },
+   {
+    "name": "cases",
+    "source": "the class case sets (semantics_differential.CASE_SETS): Intel-checked instructions with random operands",
+    "outside_target_sources": true
+   },
+   {
+    "name": "spec",
+    "source": "random encodings of every decoder spec row (tests/test_x86_decode_c.row_samples)",
+    "outside_target_sources": true
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "stencil-judge",
+   "category": "observed",
+   "source_ref": "store/runs/stencil-judge-1792098411625593000 on 1a769179 (Sprint 080): CANDIDATE_ACCEPTED; instructions 1,186,246 equal, 265 refused; blocks 1,171,592 equal; cases 31,273 equal, 242 refused; spec rows 70,899 equal, 546 refused; 0 differing in each",
+   "applicability": "the table of store/stencil at Sprint 080",
+   "execution_ids": [
+    "vm_compiler-instructions",
+    "vm_compiler-blocks",
+    "vm_compiler-cases",
+    "vm_compiler-spec"
+   ]
+  }
+ ],
+ "open_questions": [
+  "Coverage: 89-94% of inputs from outside the record have no stencil (Decision 2026-10-15, the inferred compiler against step 6).",
+  "A hole's alternatives are sought at its chosen position only, and two expressions count as one where they agree on stencil_table._PROBE_VALUES; agreement there is evidence, not proof (review 2026-10-15, small review of 080, finding 3)."
+ ],
+ "sections": {
+  "plan": "recentering step 6 (docs/recentering-2026-10-14.md)",
+  "decisions": "BLACKBOARD Decisions 2026-10-14 (copy-and-patch; the stencil key) and 2026-10-15 (the table's soundness; the inferred compiler)"
+ }
+}

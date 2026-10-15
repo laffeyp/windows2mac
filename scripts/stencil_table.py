@@ -251,7 +251,9 @@ def _hole(values: list[Any], valueses: list[list[int]], nregs: int) -> Any:
     register position only through the register map (Sprint 080: a register's other fits, min(v, 8) or bits 0+3,
     fit only where no sample reached a higher register); and every other expression that also fits a value position
     and differs from it somewhere (review 2026-10-15 M1(d): the samples cannot tell them apart, so an instruction on
-    which they disagree has no stencil)."""
+    which they disagree has no stencil). Not covered: an expression that fits at another position, a function of two
+    values or outside EXPRESSIONS, and two expressions that agree on _PROBE_VALUES but differ elsewhere (counted as
+    one); agreement on the probes is evidence, not proof."""
     if not all(isinstance(a, int) and not isinstance(a, bool) for a in values):
         return None
     m = (1 << 64) - 1

@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from w2m.contract import AllowedOutcomeSet, ContractError, load_contract
+from w2m.contract import AllowedOutcomeSet, ContractError, ExactWords, load_contract
 
 ROOT = Path(__file__).resolve().parent.parent
 EVENT = ROOT / "contracts" / "windows.event.auto_reset.single_signal" / "0.1.0.json"
@@ -97,3 +97,17 @@ def test_unknown_execution_id_refused(tmp_path: Path) -> None:
     doc["evidence"][-1]["execution_ids"] = ["evt-999"]
     with pytest.raises(ContractError, match="evt-999"):
         load_contract(_write(tmp_path, doc), store=Path(__file__).resolve().parent.parent / "store")
+
+
+def test_the_compiler_contract_names_a_judge_outside_its_sources(tmp_path: Path) -> None:
+    """Sprint 081: the compiler in C's contract (exact_words) loads; one whose judges all share the target's sources
+    is refused (KIT_DIARY #59)."""
+    path = ROOT / "contracts" / "w2m.vm_compiler.stencil_table" / "0.80.0.json"
+    c = load_contract(path)
+    assert c.status == "accepted" and isinstance(c.acceptance, ExactWords)
+    assert any(j.outside_target_sources for j in c.acceptance.judges)
+    doc = json.loads(path.read_text())
+    for j in doc["acceptance"]["judges"]:
+        j["outside_target_sources"] = False
+    with pytest.raises(ContractError, match="outside the target's sources"):
+        load_contract(_write(tmp_path, doc))
