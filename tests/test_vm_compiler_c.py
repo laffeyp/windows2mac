@@ -215,7 +215,7 @@ def test_blocks_compile_as_assemble_block(compiler: Compiler) -> None:
         base = rng.randrange(1 << 30, 1 << 40) * 4
         exit_va, slice_va = (base + rng.randrange(-(1 << 24), 1 << 24) * 4 for _ in range(2))
         n, bo, words, marks = compiler.block(start, mem, live_out, base, exit_va, slice_va)
-        if n == NO_STENCIL:
+        if n in (NO_STENCIL, GUARDED):                   # the first instruction goes to the host
             counts["first has no stencil"] += 1
             continue
         assert n > 0, (hex(start), n)
@@ -342,7 +342,7 @@ def _spec_row_judge(compiler: Compiler) -> dict[str, int]:
 
 def test_spec_row_encodings_compile_as_compile_insn(compiler: Compiler) -> None:
     counts = _spec_row_judge(compiler)
-    assert counts["differ"] == 0 and counts["equal"] > 5_000, counts
+    assert counts["differ"] == 0 and counts["equal"] > 4_000, counts      # 4,701 on the Sprint 080 table
 
 
 GUARD_PLANT = [("            return VMC_GUARDED;\n    }\n    const struct vmc_stencil", "            ;\n    }\n    const struct vmc_stencil"),

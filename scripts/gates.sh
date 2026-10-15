@@ -27,6 +27,7 @@ fi
 python3 scripts/check_vocab.py
 python3 scripts/gen_events.py --check
 python3 scripts/gen_decoder.py --check
+uv run python scripts/gen_stencil_table.py --check     # Sprint 080: the C table from store/stencil
 uv run ruff check src scripts tests
 uv run mypy
 uv run pytest -q

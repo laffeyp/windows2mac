@@ -74,6 +74,8 @@ jobs:
         run: uv run ruff check src scripts tests
       - name: mypy
         run: uv run mypy
+      - name: stencil table
+        run: uv run python scripts/gen_stencil_table.py --check   # the C table and samples from store/stencil (Sprint 080)
       - name: pytest
         env:
           W2M_REQUIRE_REFERENCES: "1"
