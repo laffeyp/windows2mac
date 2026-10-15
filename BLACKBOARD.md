@@ -305,6 +305,17 @@
 
 ## Sprint tail
 
+### Sprint 080 (2026-10-15, closed: CI run 38807493394 success on 0e760a2c)
+- **Scope:** the large review of Sprints 073-079 (no blocking defect; H1-H3, M1-M4, L1-L2) and its experiments E1 and E2.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* code committed (7c089ed8); every class re-run on it, 456 of 458 accepted, 458 stamped clean; the table derived on it from the committed portable record; the C table regenerated and checked byte for byte; `scripts/stencil_judge.py` wrote its record (four judges, CANDIDATE_ACCEPTED, 0 differing in each); no frontier run (the C is not in the VM).
+  - *Observation 1 (blind judge, of the judge):* the guard rule of 079 covered one inference failure; measuring ambiguity found register holes fitting `min(v, 8)` and value holes fitting `v` and `low 5 bits`. Disposition: resolved-here (every unvaried value guarded; register holes through the register map; value alternatives checked at emit time); a plant that removes the guards fails the spec-row judge.
+  - *Observation 2 (silent gate, of the work):* the class identity left out the compiler every verdict runs through, so Sprint 078's refactor was never re-judged by a class run. Disposition: resolved-here (`rules.COMPILER`; 458 re-run).
+  - *Observation 3 (wrong destination, of the work):* the first class sweep wrote to `runs/`, class_run's default, and the index check caught it. Disposition: resolved-here (re-run with `--runs store/runs`).
+  - *Observation 4 (provenance, of the record):* the table regenerated only from ignored pickles; the judges left no record. Disposition: resolved-here (store/stencil, `--check` in CI and gates.sh, the judge record); the record's own producing commit is inferred from file times (4394114c), not stamped.
+  - *Observation 5 (process, of the work):* gates had been run one by one all epic while `scripts/gates.sh` runs them in order. Disposition: resolved-here.
+- **Closed:** CI run 38807493394 (success on 0e760a2c).
+
 ### Sprint 079 (2026-10-15, closed: CI run 38803778005 success on c95b650d)
 - **Scope:** a red-team pass over Sprints 076-078 (user request): guards on values the derivation never varied, canonical flag arguments in the key, a held-out judge over the class case sets, the table's inputs kept.
 - **Rubber Duck Pass:**

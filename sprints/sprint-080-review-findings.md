@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 080
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -101,3 +101,4 @@ Every finding resolved or recorded with its disposition; CI passes.
   that puts the C in the VM.
 - **Process.** The gates had been run one by one this epic; `scripts/gates.sh` exists and runs them in order with
   `set -e`, now used: 2,438 passed, 27,918 records replay intact.
+- **Closed** on 0e760a2c (CI run 38807493394, success; its new `stencil table` step regenerated the header from store/stencil).
