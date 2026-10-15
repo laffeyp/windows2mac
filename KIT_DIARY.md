@@ -543,3 +543,20 @@ differed by up to 6.9 s.
 
 **Kit change suggested:** an observation contract that measures speed names the fixed amount of work, the stop that
 ends it, and the repeat count; a census that does not show its stop reason is not a census.
+
+### 2026-10-14 — Sprint 076: a judge drawn from the same generator as the work
+
+**What happened:** the stencil table derives each key's stencil from instances made by changing one recorded
+instruction's fields, and the first judge was a second set of instances made the same way with another seed. That
+judge passed 98.2% of its instances. The record's own instructions, rebuilt from the same table, differed on 133,748
+of 1,186,511: wherever the instance maker never changed a field (a displacement whose class its moves always left, a
+register in an opcode's low bits, equal registers it could only change one at a time), the argument became a
+constant, and the judge's instances, sharing the same unchanged field, agreed with it. Eleven causes were then found
+one by one from the record's failures, each fixed in the instance maker, until both judges showed 0.
+
+**Finding (#58):** a held-out set is held out only from what made it differently. Instances drawn by the generator
+that made the training set share its blind spots and confirm them. The judge needs data the generator did not make:
+here the key's recorded calls, half kept out of the derivation.
+
+**Kit change suggested:** a card whose output is learned or derived from generated samples names a judge drawn from
+outside the generator (recorded data, a different generator), and reports the two judges' results side by side.
