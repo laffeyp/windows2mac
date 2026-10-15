@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 074
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -90,3 +90,4 @@ A recorded and its re-lift exact; B run; C recorded.
   argument that did not vary was not tested. The stencil generator therefore takes the keys from the record and finds
   each key's holes by compiling instances made for it (registers and values changed within their classes), not from
   the record's variation. Recorded as Decision 2026-10-14 (the stencil key and how holes are found).
+- **Closed** on 19f388a5 (CI run 38678470845, success). The first commit (7b185c3e) went in with a mypy error in the new test, read past because the gate's output went through `tail`; fixed in 19f388a5.

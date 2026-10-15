@@ -303,6 +303,15 @@
 
 ## Sprint tail
 
+### Sprint 074 (2026-10-14, closed: CI run 38678470845 success on 19f388a5)
+- **Scope:** the stencil key from the decoder: does a key the compiler inside the VM can compute from the instruction's bytes pick one encoder sequence, and is every hole a function of decoded fields?
+- **Rubber Duck Pass:**
+  - *Sequence narration:* a scratch cold batch run recorded each compile call with its bytes (the same 1,186,511 distinct calls as Sprint 071's run); `scripts/stencil_census.py --decoder-key` over it; no frontier record, no sweep (no runtime or compiler change).
+  - *Observation 1 (missing pair, of the work):* the first decoder key split one MUL row in two, because the decoded operands leave out MUL's implicit RAX and RDX. Disposition: resolved-here (each row's implicit registers enter the key: 38,154 keys, each one sequence).
+  - *Observation 2 (payload anomaly, of the judge):* the census named holes by a vote per instruction, which can name a hole by coincidence. Disposition: resolved-here (one expression over every instruction of the form; 0 `other`); and the record leaves 17,276 keys' holes unshown, so Decision 2026-10-14 (the stencil key) takes holes from instances made per key.
+  - *Observation 3 (silent gate, of the work):* a mypy error went into 7b185c3e because the gate's output was piped through `tail`, whose exit status is 0. Disposition: resolved-here (19f388a5; gates run unpiped before a commit).
+- **Closed:** CI run 38678470845 (success on 19f388a5).
+
 ### Sprint 073 (2026-10-14, closed: CI run 38677583192 success on 4394114c)
 - **Scope:** the arm64 encoders in C for the compiler inside the VM (Decision 2026-10-14's second build step), judged against `a64_encoder.py`.
 - **Rubber Duck Pass:**
