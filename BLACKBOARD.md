@@ -303,6 +303,16 @@
 
 ## Sprint tail
 
+### Sprint 079 (2026-10-15, closed: CI run 38803778005 success on c95b650d)
+- **Scope:** a red-team pass over Sprints 076-078 (user request): guards on values the derivation never varied, canonical flag arguments in the key, a held-out judge over the class case sets, the table's inputs kept.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `stencil_table.py` rebuilt the table (21,182 canonical keys, none split; 3,365 stencils guarded); `gen_stencil_table.py` regenerated the C data; the held-out judge compiled the 250,840 class cases at two flag contexts on the old table and the new; the record judges reran; no frontier run, no family change (no host file touched).
+  - *Observation 1 (blind judge, of the judge):* Sprints 077 and 078 judged the C over the record the table came from and reported 0 differing; the class cases found 144 wrong compiles on 078's table (seven SSE shift classes: a register, and in other keys a return address and a branch target, taken for constants). Disposition: resolved-here (guards; 0 differing of 31,311 on the new table); KIT_DIARY #59. Decision 2026-10-14 (copy-and-patch) had required the class runs as a judge; 077 and 078 left that half out.
+  - *Observation 2 (missing pair, of the work):* flag arguments the instruction cannot read split keys: 38,154 became 21,182, and blocks the C could not compile fell from 17,842 to 5,661. Disposition: resolved-here.
+  - *Observation 3 (residual, of the work):* 94% of held-out compiles have no stencil; the table covers forms the game record reached. Disposition: open; measured against the VM's own host-compile rate once the C runs there (Decision 2026-10-14's keys-from-runs clause is the revisit point).
+  - *Observation 4 (provenance, of the record):* the table's inputs lived in /private/tmp. Disposition: resolved-here (`store/stencil-inputs/`, git-ignored, sha256 in the card).
+- **Closed:** CI run 38803778005 (success on c95b650d). Large review of 073-079 requested from the reviewer.
+
 ### Sprint 078 (2026-10-15, closed: CI run 38796163028 success on 01cd4765)
 - **Scope:** the block in C (`vmc_block`): extent, flag liveness inside the block, prologue, exits, the budget; the table keyed by form with each form's facts; `vm_backend.assemble_block` taken out of `Monitor._compile`.
 - **Rubber Duck Pass:**

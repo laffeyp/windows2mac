@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 079
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -96,3 +96,4 @@ A to D; C with 0 differing on the new table; CI passes.
 - **Open:** coverage. The table holds forms the record reached; 94% of the held-out compiles have none. Keys taken
   from the decoder's spec rows rather than the record (instances made per key as now) would widen it; the VM's own
   rate of host compiles decides whether that comes next.
+- **Closed** on c95b650d (CI run 38803778005, success). `uv run pytest`: 2,435 passed.
