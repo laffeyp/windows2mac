@@ -305,6 +305,16 @@
 
 ## Sprint tail
 
+### Sprint 081 (2026-10-15, closed: CI run 38810199578 success on 1753eca3)
+- **Scope:** the reviewer's small review of Sprint 080: the acceptance count, the compiler's contract, the residuals named.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* code and tests only; no run, no frontier, no sweep (no family or class identity touched).
+  - *Observation 1 (payload anomaly, of the record):* every session written through `one_step_run` reported accepted_count 0, against the tag's note, including stencil-judge-1792098411625593000. Disposition: resolved-here; that record stays as written (records are not rewritten).
+  - *Observation 2 (missing pair, of the work):* the judge cited a contract with no file. Disposition: resolved-here (`exact_words`, which requires a judge from outside the target's sources).
+  - *Observation 3 (residual, of the work):* alternatives are sought at the chosen position only, and agreement on the probe values counts as equality. Disposition: open, named in `_hole` and the contract (Decisions are not edited).
+  - *Observation 4 (trade-off, of the work):* `rules.COMPILER` takes all of vm_backend.py into every class identity. Disposition: kept; narrowed to compile_insn's sources if sweeps start costing.
+- **Closed:** CI run 38810199578 (success on 1753eca3).
+
 ### Sprint 080 (2026-10-15, closed: CI run 38807493394 success on 0e760a2c)
 - **Scope:** the large review of Sprints 073-079 (no blocking defect; H1-H3, M1-M4, L1-L2) and its experiments E1 and E2.
 - **Rubber Duck Pass:**

@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 081
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -64,3 +64,12 @@ The reviewer's small review of Sprint 080 (7c089ed8..0e760a2c): sound; the table
 1-3 done, 4-6 recorded; gates and CI pass.
 
 ## observed
+- **1.** `one_step_run` counts CONTRACT_ACCEPTED, CANDIDATE_ACCEPTED and ARTIFACT_ACCEPTED in `done`;
+  `test_a_session_that_accepts_counts_it` holds a run that accepts at 1.
+- **2.** `contracts/w2m.vm_compiler.stencil_table/0.80.0.json` loads under the new `exact_words` form; the cases and
+  spec judges are marked outside the target's sources; with every judge marked inside, the loader refuses it
+  (`test_the_compiler_contract_names_a_judge_outside_its_sources`).
+- **3.** Named in `_hole`'s docstring and the contract's open questions.
+- **Gates:** `scripts/gates.sh` exit 0, 2,440 passed; no family or class identity changed (record.py and contract.py
+  are in neither).
+- **Closed** on 1753eca3 (CI run 38810199578, success).
