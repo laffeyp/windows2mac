@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""gen_decoder.py — generate src/w2m/x86dec_tables.py from specs/x86_decode.json.
+"""gen_decoder.py — generate src/w2m/x86dec_tables.py and tools/vm_compiler/x86_decode_tables.h from
+specs/x86_decode.json.
 
-The spec is the authored artifact (Intel SDM opcode maps, cited per entry); the tables module is
-derived and never hand-edited. `--check` exits 1 when the committed tables are stale.
+The spec is the authored artifact (Intel SDM opcode maps, cited per entry); the tables are derived
+and never hand-edited. The C tables (Sprint 075) serve the decoder of the compiler inside the VM,
+tools/vm_compiler/x86_decode.c. `--check` exits 1 when either committed file is stale.
 
 Usage: python3 scripts/gen_decoder.py [--check]
 """
@@ -14,16 +16,26 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "specs" / "x86_decode.json"
 OUT = ROOT / "src" / "w2m" / "x86dec_tables.py"
+OUT_C = ROOT / "tools" / "vm_compiler" / "x86_decode_tables.h"
+
+Table = dict[tuple[str, int, str], list[tuple[Any, ...]]]
 
 
 def render(raw: bytes) -> str:
     spec = json.loads(raw)
     digest = hashlib.sha256(raw).hexdigest()
-    table: dict[tuple[str, int, str], list[tuple[object, ...]]] = {}
+    table = build_table(spec)
+    return render_python(spec, digest, table)
+
+
+def build_table(spec: dict[str, Any]) -> Table:
+    """(map, opcode, encoding class) -> the rows, in spec order, as tuples (the Python tables' Entry)."""
+    table: Table = {}
     seen: dict[str, int] = {}
     for idx, e in enumerate(spec["entries"]):
         h = json.dumps(e, sort_keys=True)
@@ -43,6 +55,10 @@ def render(raw: bytes) -> str:
              "sha256:" + hashlib.sha256(h.encode()).hexdigest(),    # row identity, as confirmations
              e.get("np") or False,                                    # SDM NP (True) or NFx ("nfx")
              tuple(e["reg_valid"]) if "reg_valid" in e else None))     # ModRM.reg values that exist
+    return table
+
+
+def render_python(spec: dict[str, Any], digest: str, table: Table) -> str:
     lines = [
         "# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0",
         "# Copyright (C) 2026 Peter Laffey",
@@ -69,16 +85,186 @@ def render(raw: bytes) -> str:
     return "\n".join(lines)
 
 
+MAPS = ["1", "0f", "0f38", "0f3a", "x8", "x9", "xa"]
+ENCODINGS = ["legacy", "vex", "evex", "xop"]
+PREFIXES = {"none": 0, "66": 1, "f2": 2, "f3": 3}
+IMMEDIATES = [None, "b", "w", "d", "z", "v", "moffs", "wb"]
+LETTERS = ["b", "w", "d", "q", "dq", "z", "y", "v"]
+OPSIZES = ["16", "32", "64"]
+# operand token kinds, in x86ops.operands' order of tests (x86_decode.h's enum x86_token)
+TOKENS = ["MF", "STI", "P", "NQ", "VX", "B", "H", "HX", "WX", "V", "EDB", "W", "E", "G", "Z", "M", "MCL", "MQDQ",
+          "I", "J", "ONE", "AL", "CL", "RAX"]
+SIZE_BYTES = {"b": 1, "w": 2, "d": 4, "q": 8, "dq": 16}
+
+
+def token(t: str) -> tuple[str, int]:
+    """One operand template token as (kind, argument), by the tests of x86ops.operands in their order. The argument:
+    a memory size in bytes (0 where x86ops' SIZE has no entry, which raises there), or a size letter's index."""
+    if t.startswith("Mf"):
+        return "MF", int(t[2:])
+    if t == "STi":
+        return "STI", 0
+    if t == "P":
+        return "P", 0
+    if t == "N" or t[0] == "Q":
+        return "NQ", SIZE_BYTES.get(t[1:], 0)
+    if t == "Vx":
+        return "VX", 0
+    if t[0] == "B":
+        return "B", LETTERS.index(t[1])
+    if t in ("H", "Hx"):
+        return ("H" if t == "H" else "HX"), 0
+    if t == "Wx":
+        return "WX", 0
+    if t == "V":
+        return "V", 0
+    if t == "Edb":
+        return "EDB", 0
+    if t[0] == "W":
+        return "W", SIZE_BYTES.get(t[1:], 0)
+    if t[0] in "EGZ":
+        return t[0], LETTERS.index(t[1])
+    if t in ("M", "Mcl", "Mqdq"):
+        return {"M": "M", "Mcl": "MCL", "Mqdq": "MQDQ"}[t], 0
+    if t[0] in "IJ":
+        return t[0], 0
+    if t in ("1", "AL", "CL", "rAX"):
+        return {"1": "ONE", "AL": "AL", "CL": "CL", "rAX": "RAX"}[t], 0
+    raise SystemExit(f"operand token {t!r}: x86ops.operands has no case for it")
+
+
+def render_c(spec: dict[str, Any], digest: str, table: Table) -> str:
+    """The C tables of tools/vm_compiler/x86_decode.c: the rows in the Python TABLE's order, an index by (map,
+    encoding, opcode), the operand templates as tokens, the iclass names with the names decode derives (_LOCK, REP_,
+    REPE_, REPNE_) and each row's identity."""
+    lockable, rep, repe = (set(spec["prefixes"].get(k, [])) for k in ("lockable", "rep_string", "repe_string"))
+    iclasses: dict[str, int] = {}
+
+    def ic(name: str) -> int:
+        return iclasses.setdefault(name, len(iclasses))
+
+    def mn_flags(mn: str) -> int:
+        return (mn in lockable) | (mn in rep) << 1 | (mn in repe) << 2
+
+    templates: dict[str | None, int] = {}
+    rows: list[str] = []
+    shas: list[str] = []
+    index: dict[tuple[int, int, int], tuple[int, int]] = {}
+    for (mp, op, enc) in sorted(table):
+        index[(MAPS.index(mp), ENCODINGS.index(enc), op)] = (len(rows), len(table[(mp, op, enc)]))
+        for (pfx, reg, has_modrm, imm, mn, sizes, mod, w, vex_l, form, iclass, isizes, _requires, _fallback, lock_ok,
+             vvvv, ops, osz64, row, np, reg_valid) in table[(mp, op, enc)]:
+            if ops is not None and ops not in templates:
+                templates[ops] = len(templates)
+            by_size_mn = [dict(sizes)[z] if sizes else mn for z in OPSIZES]
+            by_size_ic = [dict(isizes)[z] if isizes else iclass for z in OPSIZES]
+            for m, c in zip(by_size_mn, by_size_ic):
+                ic(c)
+            mask = sum(1 << r for r in reg_valid) if reg_valid else 0
+            rows.append(
+                f"    {{{PREFIXES[pfx]}, {int(has_modrm)}, {IMMEDIATES.index(imm)}, {['', 'reg', 'mem'].index(form or '')}, "
+                f"{int(lock_ok)}, {int(vvvv == '1111')}, {['', 'd64', 'f64'].index(osz64 or '')}, "
+                f"{0 if not np else 2 if np == 'nfx' else 1}, {-1 if reg is None else reg}, {-1 if w is None else w}, "
+                f"{-1 if vex_l is None else vex_l}, {-1 if mod is None else int(mod, 16)}, {int(reg_valid is not None)}, "
+                f"0x{mask:x}, {templates[ops] if ops is not None else 'X86_NO_TEMPLATE'}, "
+                f"{{{', '.join(str(ic(c)) for c in by_size_ic)}}}, {{{', '.join(str(mn_flags(m)) for m in by_size_mn)}}}}},")
+            shas.append(row)
+    for name in ("JECXZ", "XCHG"):
+        ic(name)
+    base = list(iclasses)
+    variants = []
+    for name in base:                                # each name's derived names, for every name decode may derive from
+        v = [ic(name + "_LOCK"), ic("REP_" + name), ic("REPE_" + name), ic("REPNE_" + name)]
+        variants.append(f"    {{{', '.join(map(str, v))}}},")
+    tmpl = []
+    for ops, _ in sorted(templates.items(), key=lambda x: x[1]):
+        toks = [] if ops == "-" else [token(t) for t in str(ops).split(",")]
+        kinds = ", ".join(f"X86_T_{k}" for k, _ in toks) or "0"
+        args = ", ".join(str(a) for _, a in toks) or "0"
+        tmpl.append(f"    {{{len(toks)}, {{{kinds}}}, {{{args}}}}},    /* {ops} */")
+    starts = [[[0] * 256 for _ in ENCODINGS] for _ in MAPS]
+    counts = [[[0] * 256 for _ in ENCODINGS] for _ in MAPS]
+    for (m, e, op), (start, n) in index.items():
+        starts[m][e][op], counts[m][e][op] = start, n
+
+    def array3(a: list[list[list[int]]]) -> str:
+        return "{\n" + ",\n".join("  {" + ",\n   ".join("{" + ",".join(map(str, row)) + "}" for row in plane) + "}"
+                                    for plane in a) + "\n}"
+
+    legacy = [f"    {{{MAPS.index(x['opcode'][0])}, 0x{x['opcode'][1]:02x}, "
+              f"0x{sum(1 << PREFIXES[p] for p in x['legacy']):x}}},"
+              for x in spec["prefixes"].get("legacy_prefix_opcodes", [])]
+    out = [
+        "// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0",
+        "// Copyright (C) 2026 Peter Laffey",
+        f"/* GENERATED by scripts/gen_decoder.py from specs/x86_decode.json (spec {spec['version']}, sha256:{digest}).",
+        " * Do not edit; regenerate. Included once, by tools/vm_compiler/x86_decode.c. */",
+        "",
+        f"#define X86_ROWS {len(rows)}",
+        f"#define X86_ICLASSES {len(iclasses)}",
+        f"#define X86_BASE_ICLASSES {len(base)}",
+        f"#define X86_TEMPLATES {len(templates)}",
+        f"#define X86_ICLASS_JECXZ {iclasses['JECXZ']}",
+        f"#define X86_ICLASS_XCHG {iclasses['XCHG']}",
+        f"#define X86_MN_FLAGS_XCHG {mn_flags('xchg')}            /* 41 90 decodes as xchg */",
+        "",
+        "/* pfx, has_modrm, imm, form, lock_ok, vvvv_ones, osz64, np, reg, w, l, modrm_byte, reg_rule, reg_valid, ops,",
+        " * iclass by operand size 16 32 64, mnemonic flags by operand size (1 lockable, 2 a REP string, 4 a REPE string) */",
+        "static const struct x86_row X86_ROW[X86_ROWS] = {",
+        *rows,
+        "};",
+        "",
+        "/* each base iclass's _LOCK, REP_, REPE_ and REPNE_ names */",
+        "static const u16 X86_VARIANT[X86_BASE_ICLASSES][4] = {",
+        *variants,
+        "};",
+        "",
+        "static const struct x86_template X86_TEMPLATE[X86_TEMPLATES] = {",
+        *tmpl,
+        "};",
+        "",
+        "/* (map, encoding, opcode): the first row and the count */",
+        f"static const u16 X86_INDEX_START[{len(MAPS)}][{len(ENCODINGS)}][256] = {array3(starts)};",
+        f"static const u8 X86_INDEX_COUNT[{len(MAPS)}][{len(ENCODINGS)}][256] = {array3(counts)};",
+        "",
+        "/* map, opcode, the prefixes (bit per pfx code) that keep their legacy meaning */",
+        f"static const u8 X86_LEGACY_PREFIX_OPCODES[{len(legacy)}][3] = {{",
+        *legacy,
+        "};",
+        "",
+        "#ifdef X86_DECODE_NAMES",
+        "const char *const x86_iclass_name[X86_ICLASSES] = {",
+        *(f'    "{n}",' for n in iclasses),
+        "};",
+        "const char *const x86_template_name[X86_TEMPLATES] = {",
+        *(f'    "{t}",' for t, _ in sorted(templates.items(), key=lambda x: x[1])),
+        "};",
+        "const char *const x86_row_name[X86_ROWS] = {",
+        *(f'    "{r}",' for r in shas),
+        "};",
+        "#endif",
+        "",
+    ]
+    return "\n".join(out)
+
+
 def main(argv: list[str]) -> int:
-    text = render(SPEC.read_bytes())
+    raw = SPEC.read_bytes()
+    spec = json.loads(raw)
+    digest = hashlib.sha256(raw).hexdigest()
+    table = build_table(spec)
+    outputs = {OUT: render_python(spec, digest, table), OUT_C: render_c(spec, digest, table)}
     if "--check" in argv:
-        if not OUT.exists() or OUT.read_text() != text:
-            print(f"stale: {OUT}; run scripts/gen_decoder.py", file=sys.stderr)
+        stale = [p for p, text in outputs.items() if not p.exists() or p.read_text() != text]
+        for p in stale:
+            print(f"stale: {p}; run scripts/gen_decoder.py", file=sys.stderr)
+        if stale:
             return 1
-        print(f"{OUT}: up to date")
+        print(f"{OUT}, {OUT_C}: up to date")
         return 0
-    OUT.write_text(text)
-    print(f"wrote {OUT}")
+    for p, text in outputs.items():
+        p.write_text(text)
+        print(f"wrote {p}")
     return 0
 
 
