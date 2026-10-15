@@ -255,6 +255,9 @@ def main(argv: list[str]) -> int:
             totals = vm.calls_total()
             state["faults"] = vm.faults()
             state["exit_classes"] = exit_classes(vm)
+            # the whole run's switches and time by exit (the progress line's are as of its last 30-second tick)
+            state["switching"] = (vm.switches_in_vm(), dict(vm.handovers))
+            state["time"] = (vm.run_ns, dict(vm.exit_ns))
             state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid else where(vm, t.x[17]))
                                      for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
@@ -371,6 +374,11 @@ def main(argv: list[str]) -> int:
     print(f"exits by hvc {dict(sorted(state.get('exits', {}).items(), key=lambda kv: -kv[1]))}; "
           f"{state.get('instructions', 0) / elapsed / 1e6:.2f} M instructions a second over {elapsed:.1f} s; "
           f"{state.get('thunks')} thunks")
+    run_ns, exit_ns = state.get("time", (0, {}))
+    print(f"time: in run {run_ns / 1e9:.1f} s; host by exit "
+          + ", ".join(f"hvc {k} {v / 1e9:.1f} s" for k, v in sorted(exit_ns.items(), key=lambda kv: -kv[1])[:8]))
+    switches, handovers = state.get("switching", (0, {}))
+    print(f"switches in the VM {switches}; hand-overs in the host {handovers}")
     if state.get("code"):
         x86, body, pro, by = state["code"]
         print(f"code census (recentering step 3): {x86} x86 instructions ran {body} arm64 words in bodies "
