@@ -12,11 +12,15 @@ arguments placed, defaults filled, a name as its enum index, a system register a
 or 1. An argument is a constant, a hole (an expression of stencil_census.EXPRESSIONS over one decoded value), a
 runtime symbol's address, or, in a branch to the exit, the exit's offset from the branch.
 
-`--samples <record.pickle>` also writes tests/data/stencil_samples.txt.gz: for each key and each of its stencils,
-the first recorded instruction that reaches it (its bytes, address and flag arguments), which
-tests/test_vm_compiler_c.py compiles with both compilers.
+The table is keyed by the form, the key without its flag arguments (Sprint 078): each form holds the facts the block
+compiler reads before an instruction's flags are known, derived from every recorded instruction of the form, and its
+stencils by flag arguments.
 
-Usage: uv run python scripts/gen_stencil_table.py <stencil-table.pickle> [--samples <record.pickle>]
+It also writes tests/data/stencil_samples.txt.gz: for each key and each of its stencils, the first recorded
+instruction that reaches it (its bytes, address and flag arguments), and tests/data/block_samples.txt.gz, blocks made
+from the record; tests/test_vm_compiler_c.py compiles both with both compilers.
+
+Usage: uv run python scripts/gen_stencil_table.py <stencil-table.pickle> <record.pickle>
 """
 
 from __future__ import annotations
@@ -39,9 +43,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import stencil_census as sc  # noqa: E402
 import stencil_table as st  # noqa: E402
 from w2m import a64_encoder, vm_backend, x86dec, x86ops  # noqa: E402
+from w2m.lift import lift  # noqa: E402
 
 OUT = ROOT / "tools" / "vm_compiler" / "stencil_table.h"
 SAMPLES = ROOT / "tests" / "data" / "stencil_samples.txt.gz"
+BLOCK_SAMPLES = ROOT / "tests" / "data" / "block_samples.txt.gz"
+BLOCKS = 3000
 DECODER_TABLES = ROOT / "tools" / "vm_compiler" / "x86_decode_tables.h"
 ENCODER_HEADER = ROOT / "tools" / "vm_compiler" / "a64_encoder.h"
 
@@ -286,12 +293,49 @@ def _array(ctype: str, name: str, values: list[Any], per_line: int = 16) -> list
     return lines + ["};"]
 
 
-def render(data: dict[str, Any], digest: str) -> tuple[str, dict[str, Any]]:
+FLAGS_BYTES = 3                                          # key_bytes ends with nzcv_from, live_after, nzcv_out
+
+
+def form_bytes(key: tuple[Any, ...]) -> bytes:
+    """The key without its flag arguments: the form, which the block reads its facts from (Sprint 078)."""
+    return key_bytes(key)[:-FLAGS_BYTES]
+
+
+def facts_of(ins: Any) -> tuple[int, ...]:
+    """What the block compiler reads of an instruction before its flags are known (Monitor._compile, assemble_block):
+    ends the block (a branch), falls through (no unconditional branch), the kind of NZCV it leaves (nzcv_setter, as
+    NZCV_FROM's index), the kinds its Jcc branches on (nzcv_branch: bit i for NZCV_FROM[i]), then the flags read and
+    written for each nzcv_from kind (insn_flags)."""
+    brs = [op for op in ins.ops if op[0] == "br"]
+    ok = sum(1 << i for i, kind in enumerate(NZCV_FROM)
+             if kind is not None and any(op[1] in vm_backend.NZCV_CONDITIONS[kind] for op in brs))
+    flags = [vm_backend.insn_flags(ins, kind) for kind in NZCV_FROM]
+    return (int(bool(brs)), int(not any(op[1] == "always" for op in brs)),
+            NZCV_FROM.index(vm_backend.nzcv_setter(ins)), ok, *(r for r, _ in flags), *(w for _, w in flags))
+
+
+def record_facts(record: dict[str, Any], implicit: dict[str, frozenset[int]]) -> tuple[dict[bytes, tuple[int, ...]],
+                                                                                        list[Any]]:
+    """Each form's facts over every recorded instruction, and the forms whose instructions disagree."""
+    facts: dict[bytes, tuple[int, ...]] = {}
+    disagree = []
+    for ins, codes in record["bytes"].items():
+        for code in codes:
+            if lift(code, ins.address) != ins:
+                continue                                 # Sprint 074's relift check: the bytes give another Lifted
+            key = sc.decoded_form((ins, 0, None, 0, False), code,
+                                  implicit.get(x86dec.decode(code).row or "", frozenset()))[0]
+            fb, f = form_bytes(key), facts_of(ins)
+            if facts.setdefault(fb, f) != f:
+                disagree.append((key[1], code.hex(), facts[fb], f))
+    return facts, disagree
+
+
+def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]]) -> tuple[str, dict[str, Any]]:
     table, implicit = data["table"], data["implicit"]
     r = Render()
-    entries = []                                         # (hash, key bytes, feature, position, choices)
-    for key, entry in table.items():
-        kb = key_bytes(key)
+    variants: dict[bytes, list[tuple[Any, ...]]] = {}    # form: (nzcv_from, live_after, nzcv_out, feature, position,
+    for key, entry in table.items():                     # choices)
         if entry[0] == "one":
             choices = [(0, r.stencil(entry[1]))]
             feature, pos = FEATURE_NONE, 0
@@ -299,18 +343,25 @@ def render(data: dict[str, Any], digest: str) -> tuple[str, dict[str, Any]]:
             _, pos, fname, by = entry
             feature = FEATURE_ID[fname]
             choices = sorted((int(fv), r.stencil(s)) for fv, s in by.items())
-        entries.append((fnv1a(kb), kb, feature, pos, choices))
-    entries.sort(key=lambda e: e[0])
-    hashes = [e[0] for e in entries]
-    assert len(set(hashes)) == len(hashes), "two keys with one hash"
+        flags = key_bytes(key)[-FLAGS_BYTES:]
+        variants.setdefault(form_bytes(key), []).append((*flags, feature, pos, choices))
+    forms = sorted(((fnv1a(fb), fb, sorted(v)) for fb, v in variants.items()), key=lambda e: e[0])
+    hashes = [e[0] for e in forms]
+    assert len(set(hashes)) == len(hashes), "two forms with one hash"
     keys_blob: list[int] = []
     choice_rows: list[tuple[int, int]] = []
-    entry_rows = []
-    for h, kb, feature, pos, choices in entries:
-        entry_rows.append(f"    {{0x{h:016x}u, {len(keys_blob)}, {len(kb)}, {feature}, {pos}, {len(choice_rows)}, "
-                          f"{len(choices)}}},")
-        keys_blob.extend(kb)
-        choice_rows.extend(choices)
+    variant_rows: list[str] = []
+    form_rows = []
+    for h, fb, vs in forms:
+        ends, falls, setter, ok, *rw = facts[fb]
+        form_rows.append(f"    {{0x{h:016x}u, {len(keys_blob)}, {len(fb)}, {ends}, {falls}, {setter}, {ok}, "
+                         f"{{{', '.join(map(str, rw[:len(NZCV_FROM)]))}}}, {{{', '.join(map(str, rw[len(NZCV_FROM):]))}}}, "
+                         f"{len(variant_rows)}, {len(vs)}}},")
+        keys_blob.extend(fb)
+        for nzcv_from, live_after, nzcv_out, feature, pos, choices in vs:
+            variant_rows.append(f"    {{{nzcv_from}, {live_after}, {nzcv_out}, {feature}, {pos}, {len(choice_rows)}, "
+                                f"{len(choices)}}},")
+            choice_rows.extend(choices)
     protos = c_prototypes()
     dispatch = []
     for name, e in sorted(r.encoders.items(), key=lambda x: x[1]):
@@ -349,7 +400,8 @@ def render(data: dict[str, Any], digest: str) -> tuple[str, dict[str, Any]]:
         f"/* GENERATED by scripts/gen_stencil_table.py from Sprint 076's stencil table (sha256:{digest}).",
         " * Do not edit; regenerate. Included once, by tools/vm_compiler/vm_compiler.c. */",
         "",
-        f"#define VMC_KEYS {len(entries)}",
+        f"#define VMC_FORMS {len(forms)}",
+        f"#define VMC_KEYS {len(table)}",
         f"#define VMC_STENCILS {len(r.stencil_rows)}",
         f"#define VMC_ITEMS {len(r.item_rows)}",
         f"#define VMC_SYMBOLS {len(symbols)}",
@@ -358,6 +410,9 @@ def render(data: dict[str, Any], digest: str) -> tuple[str, dict[str, Any]]:
         f"#define VMC_FEATURE_NONE {FEATURE_NONE}",
         f"#define VMC_ROWS {len(_ROWS)}",
         f"#define VMC_NZCV_FROM {len(NZCV_FROM)}",
+        f"#define VMC_MAX_BLOCK_INSNS {vm_backend.MAX_BLOCK_INSNS}",
+        f"#define VMC_ALL_FLAGS {vm_backend.ALL_FLAGS}",
+        f"#define VMC_REG_BUDGET {vm_backend.REG_BUDGET}",
         "",
         "/* a register's code in the key (0 none, 1-7 the class letters q d w b x y h, 16 and up a register kept by name:",
         f" * {' '.join(KEPT)}) and its number in the values, by decoder class and number */",
@@ -427,16 +482,23 @@ def render(data: dict[str, Any], digest: str) -> tuple[str, dict[str, Any]]:
         *(f"    {{{fv}, {s}}}," for fv, s in choice_rows),
         "};",
         "",
-        *_array("u8", "VMC_KEY_BYTES", keys_blob, 32),
+        *_array("u8", "VMC_FORM_BYTES", keys_blob, 32),
         "",
-        "/* by hash: hash, key bytes' start and length, feature (VMC_FEATURE_NONE: one stencil), the value it reads,",
-        " * the first choice and their count */",
-        "static const struct vmc_entry VMC_ENTRY[VMC_KEYS] = {",
-        *entry_rows,
+        "/* a form's stencils by its flag arguments: nzcv_from, live_after, nzcv_out, the feature (VMC_FEATURE_NONE: one",
+        " * stencil) and the value it reads, the first choice and their count */",
+        f"static const struct vmc_variant VMC_VARIANT[{len(variant_rows)}] = {{",
+        *variant_rows,
+        "};",
+        "",
+        "/* the forms by hash: hash, the form's bytes' start and length; its facts (ends the block, falls through, the",
+        " * NZCV kind it leaves, the kinds its Jcc branches on, the flags read and written per nzcv_from kind); its first",
+        " * variant and their count */",
+        "static const struct vmc_form VMC_FORM[VMC_FORMS] = {",
+        *form_rows,
         "};",
         "",
     ]
-    stats = {"keys": len(entries), "stencils": len(r.stencil_rows), "items": len(r.item_rows),
+    stats = {"keys": len(table), "forms": len(forms), "variants": len(variant_rows), "stencils": len(r.stencil_rows), "items": len(r.item_rows),
              "arguments": len(r.args), "pool": len(pool), "key bytes": len(keys_blob), "encoders": len(r.encoders),
              "symbols": symbols, "argument kinds": r.kinds}
     return "\n".join(out), stats
@@ -481,28 +543,73 @@ def samples(record: dict[str, Any], data: dict[str, Any]) -> list[str]:
     return lines
 
 
+def block_samples(record: dict[str, Any]) -> list[str]:
+    """Blocks made from the record (Sprint 078): BLOCKS recorded addresses drawn at random, each with its recorded
+    successors on, up to and including a branch and at most MAX_BLOCK_INSNS; the flags live at its end drawn from
+    those its last instruction was recorded with where a branch or the count ends it, else every flag:
+    "start live_out bytes"."""
+    by_addr: dict[int, tuple[Any, bytes]] = {}
+    for ins, codes in record["bytes"].items():
+        for code in codes:
+            if lift(code, ins.address) == ins:
+                by_addr.setdefault(ins.address, (ins, code))
+    lives: dict[int, set[int]] = {}
+    for call in record["calls"]:
+        lives.setdefault(call[0].address, set()).add(call[3])
+    rng = random.Random(78)
+    lines = []
+    for start in rng.sample(sorted(by_addr), BLOCKS):
+        addr, codes, last, ended = start, [], None, False
+        while len(codes) < vm_backend.MAX_BLOCK_INSNS and addr in by_addr:
+            ins, code = by_addr[addr]
+            codes.append(code)
+            last, addr = ins, addr + ins.length
+            if any(op[0] == "br" for op in ins.ops):
+                ended = True
+                break
+        else:
+            ended = len(codes) == vm_backend.MAX_BLOCK_INSNS
+        assert last is not None
+        live = rng.choice(sorted(lives[last.address])) if ended else vm_backend.ALL_FLAGS
+        lines.append(f"{start:x} {live} {b''.join(codes).hex()}")
+    return lines
+
+
 def _sample(call: Any, code: bytes) -> str:
     ins, _, nzcv_from, live_after, nzcv_out = call
     return f"{code.hex()} {ins.address:x} {NZCV_FROM.index(nzcv_from)} {live_after} {int(nzcv_out)}"
 
 
+def write_gzip(path: Path, lines: list[str]) -> None:
+    """The lines gzipped with no timestamp, so the same lines give the same bytes."""
+    with open(path, "wb") as f, gzip.GzipFile(fileobj=f, mode="wb", mtime=0, filename="") as g:
+        g.write(("\n".join(lines) + "\n").encode())
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("table", type=Path)
-    ap.add_argument("--samples", type=Path, help="the record the table was built from")
+    ap.add_argument("record", type=Path, help="the record the table was built from")
     a = ap.parse_args(argv)
     raw = a.table.read_bytes()
     data = pickle.loads(raw)
-    text, stats = render(data, hashlib.sha256(raw).hexdigest())
+    with open(a.record, "rb") as f:
+        record = pickle.load(f)
+    facts, disagree = record_facts(record, data["implicit"])
+    print(f"forms with facts {len(facts)}; recorded instructions whose facts disagree with their form's: "
+          f"{len(disagree)} {disagree[:5]}")
+    if disagree:
+        return 1
+    text, stats = render(data, hashlib.sha256(raw).hexdigest(), facts)
     OUT.write_text(text)
     print(f"wrote {OUT} ({len(text)} bytes): {stats}")
-    if a.samples:
-        with open(a.samples, "rb") as f:
-            lines = samples(pickle.load(f), data)
-        SAMPLES.parent.mkdir(exist_ok=True)
-        with gzip.open(SAMPLES, "wt") as g:
-            g.write("\n".join(lines) + "\n")
-        print(f"wrote {SAMPLES}: {len(lines)} instructions")
+    lines = samples(record, data)
+    SAMPLES.parent.mkdir(exist_ok=True)
+    write_gzip(SAMPLES, lines)
+    print(f"wrote {SAMPLES}: {len(lines)} instructions")
+    blocks = block_samples(record)
+    write_gzip(BLOCK_SAMPLES, blocks)
+    print(f"wrote {BLOCK_SAMPLES}: {len(blocks)} blocks")
     return 0
 
 

@@ -822,6 +822,57 @@ def nzcv_branch(setter: Lifted, nxt: Lifted) -> bool:
     return kind is not None and any(op[0] == "br" and op[1] in NZCV_CONDITIONS[kind] for op in nxt.ops)
 
 
+def assemble_block(insns: list[Lifted], base: int, exit_va: int, slice_va: int, symbols: dict[str, int] | None,
+                   live_out: int, flags_of: Callable[[Lifted, str | None], tuple[int, int]] = insn_flags,
+                   census: bool = False) -> tuple[Assembler, list[tuple[int, int]], int, int, int]:
+    """A block's code (Monitor._compile's code generation; Sprint 078): the budget's SUBS and its branch, each
+    instruction with its flag arguments (the flags live after it walked backward from `live_out`), the fall-through
+    exit, the budget's stop. Returns the assembler (not finished), the marks (host VA, x86 address: the entry, each
+    instruction, the budget's stop), the body's end, the census's overhead words and the census counter's label."""
+    a = Assembler(base)
+    start = insns[0].address
+    addr = insns[-1].address + insns[-1].length
+    pc_marks: list[tuple[int, int]] = [(a.here(), start)]    # the block entry: a guest boundary
+    counter = a.label()
+    if census:                                       # x16, x17 dead at a block's entry (the prologue loads x17)
+        a.branch(lambda off: a64.adr(16, off), counter)
+        a.emit(a64.ldr(8, 17, 16, 0), a64.addi(17, 17, 1), a64.str_(8, 17, 16, 0))
+    budget_stop, body = a.label(), a.label()
+    a.emit(0xF1000000 | len(insns) << 10 | REG_BUDGET << 5 | REG_BUDGET)       # SUBS x23, x23, #n
+    a.branch(lambda off: a64.bcond("mi", off), budget_stop)
+    a.bind(body)
+    ended = False
+    live = live_out
+    lives = [ALL_FLAGS] * len(insns)                 # the flags read after each instruction
+    for k in range(len(insns) - 1, -1, -1):
+        lives[k] = live
+        read, written = flags_of(insns[k], nzcv_setter(insns[k - 1]) if k else None)
+        live = live & ~written | read
+    previous: Lifted | None = None
+    for k, ins in enumerate(insns):
+        pc_marks.append((a.here(), ins.address))
+        ended = compile_insn(a, ins, exit_va, symbols, nzcv_setter(previous) if previous else None,
+                             lives[k], k + 1 < len(insns) and nzcv_branch(ins, insns[k + 1]))
+        previous = ins
+    body_end = a.here()                              # the census counts the fall-through exit as block overhead
+    if not ended:
+        a.emit(a64.mov_imm(17, addr))
+        a.branch(a64.b, exit_va)
+    a.bind(budget_stop)                              # the budget's stop, out of the block's path: an exit whose
+    pc_marks.append((a.here(), start))               # address maps to the block's first instruction, then on in
+    a.branch(a64.bl, slice_va)                       # the slice stub returns past the HVC when no exit is due
+    a.emit(a64.hvc(4))
+    a.branch(a64.b, body)
+    overhead = 0
+    if census:
+        overhead = (a.here() - body_end) // 4
+        if a.here() % 8:
+            a.emit(0xD503201F)                       # NOP: the counter 8-byte aligned
+        a.bind(counter)
+        a.emit(0, 0)
+    return a, pc_marks, body_end, overhead, counter
+
+
 def _exit_if_undefined(a: Assembler, f: str) -> None:
     """Exit with HVC 0x40|bit when flag f is undefined (runtime.Runtime._flag)."""
     a.emit(a64.tbz(REG_UNDEFINED_FLAGS, FLAG_BIT[f], 8), a64.hvc(0x40 | FLAG_BIT[f]))
@@ -3589,7 +3640,6 @@ class VM:
             if cached:
                 return cached
             self._scan_log = []
-        a = Assembler(MONITOR_VA + self.code_cursor)
         insns: list[Lifted] = []
         addr = start
         while len(insns) < (1 if self.lockstep else MAX_BLOCK_INSNS):
@@ -3606,47 +3656,13 @@ class VM:
             if any(op[0] == "br" for op in ins.ops):
                 break
         exit_va = self.miss_va if self.lockstep else self.dispatch_va
-        pc_marks: list[tuple[int, int]] = [(a.here(), start)]    # the block entry: a guest boundary
-        counter = a.label()
-        if BLOCK_CENSUS:                                 # x16, x17 dead at a block's entry (the prologue loads x17)
-            a.branch(lambda off: a64.adr(16, off), counter)
-            a.emit(a64.ldr(8, 17, 16, 0), a64.addi(17, 17, 1), a64.str_(8, 17, 16, 0))
-        budget_stop, body = a.label(), a.label()
-        a.emit(0xF1000000 | len(insns) << 10 | REG_BUDGET << 5 | REG_BUDGET)       # SUBS x23, x23, #n
-        a.branch(lambda off: a64.bcond("mi", off), budget_stop)
-        a.bind(body)
-        ended = False
         if not self.lockstep:
             self._protect_code(start, addr)              # before the successor scan, which reads the pages it covers
             for ins in insns:
                 self._remember(ins)
         live = self._flags_live_out(start, insns[-1], addr) if FLAG_LIVENESS and not self.lockstep else ALL_FLAGS
-        lives = [ALL_FLAGS] * len(insns)                 # the flags read after each instruction
-        for k in range(len(insns) - 1, -1, -1):
-            lives[k] = live
-            read, written = self._insn_flags(insns[k], nzcv_setter(insns[k - 1]) if k else None)
-            live = live & ~written | read
-        previous: Lifted | None = None
-        for k, ins in enumerate(insns):
-            pc_marks.append((a.here(), ins.address))
-            ended = compile_insn(a, ins, exit_va, self.runtime.symbols, nzcv_setter(previous) if previous else None,
-                                 lives[k], k + 1 < len(insns) and nzcv_branch(ins, insns[k + 1]))
-            previous = ins
-        body_end = a.here()                              # the census counts the fall-through exit as block overhead
-        if not ended:
-            a.emit(a64.mov_imm(17, addr))
-            a.branch(a64.b, exit_va)
-        a.bind(budget_stop)                              # the budget's stop, out of the block's path: an exit whose
-        pc_marks.append((a.here(), start))               # address maps to the block's first instruction, then on in
-        a.branch(a64.bl, self.slice_va)                  # the slice stub returns past the HVC when no exit is due
-        a.emit(a64.hvc(4))
-        a.branch(a64.b, body)
-        if BLOCK_CENSUS:
-            overhead = (a.here() - body_end) // 4
-            if a.here() % 8:
-                a.emit(0xD503201F)                       # NOP: the counter 8-byte aligned
-            a.bind(counter)
-            a.emit(0, 0)
+        a, pc_marks, body_end, overhead, counter = assemble_block(insns, MONITOR_VA + self.code_cursor, exit_va, self.slice_va,
+                                                        self.runtime.symbols, live, self._insn_flags, BLOCK_CENSUS)
         words = a.finish()
         if self.code_cursor + 4 * len(words) > CODE_CACHE + CODE_CACHE_SIZE:
             raise CompileError("code cache full")

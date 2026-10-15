@@ -37,10 +37,57 @@ struct vmc_flags {
 int vmc_key(const u8 *code, int n, u64 address, const struct vmc_flags *flags, u8 *key, u64 *values,
             int *nvalues, int *length);
 
+/* An instruction decoded and its form found (the table's struct, opaque here) */
+struct vmc_form;
+struct vmc_insn {
+    const struct vmc_form *form;
+    u64 address;
+    u64 values[VMC_MAX_VALUES];
+    int nvalues;
+    int length;
+};
+
+/* The instruction at code[0..n) at `address` and its form: 0, or a vmc_status */
+int vmc_decode(const u8 *code, int n, u64 address, struct vmc_insn *out);
+
+/* The words of a decoded instruction for its flag arguments, at `base`: the word count, or a vmc_status */
+int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base, u64 exit_va,
+             const u64 *symbols, u32 *out, int max_words);
+
 /* The words of the instruction at code[0..n), at `address`, placed at `base`, a taken branch going to `exit_va`;
  * `symbols` are the runtime's addresses of the table's symbols (vmc_symbol_name). Returns the word count, or a
  * vmc_status. */
 int vmc_compile(const u8 *code, int n, u64 address, u64 base, u64 exit_va, const struct vmc_flags *flags,
                 const u64 *symbols, u32 *out, int max_words);
+
+/* A block (Monitor._compile's extent, vm_backend.assemble_block's code; Sprint 078): its instructions read from
+ * mem[0..mem_size), which holds the guest's bytes from mem_base; it stops after a branch, before a thunk (sorted),
+ * before bytes that do not decode or have no form, and at VMC_MAX_BLOCK_INSNS (stencil_table.h). `live_out`: the
+ * flags read after the block (the successor scan's). */
+struct vmc_block_in {
+    u64 start;
+    const u8 *mem;
+    u64 mem_base, mem_size;
+    const u64 *thunks;
+    int nthunks;
+    u64 base, exit_va, slice_va;
+    const u64 *symbols;
+    int live_out;
+};
+
+struct vmc_mark { u64 host, guest; };
+
+/* the words; the marks: the entry, each instruction, the budget's stop (count + 2); `cut`: 0, or the status of the
+ * instruction the block stopped before when it was cut short (no form, or no stencil for its flags) */
+struct vmc_block_out {
+    u32 *words;
+    int max_words;
+    struct vmc_mark *marks;
+    int nwords, nmarks, count, cut;
+    u64 end;
+};
+
+/* The block's word count, or a vmc_status (its first instruction has no stencil, or the words do not fit) */
+int vmc_block(const struct vmc_block_in *in, struct vmc_block_out *out);
 
 #endif

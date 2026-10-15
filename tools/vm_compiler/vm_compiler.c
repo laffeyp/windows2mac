@@ -14,7 +14,16 @@
 struct vmc_item { u8 encoder, kind, count; u32 first; };
 struct vmc_stencil { u32 first; u16 count; };
 struct vmc_choice { u64 value; u32 stencil; };
-struct vmc_entry { u64 hash; u32 key; u16 length; u8 feature, position; u32 first; u16 count; };
+struct vmc_variant { u8 nzcv_from, live_after, nzcv_out, feature, position; u32 first; u16 count; };
+struct vmc_form {
+    u64 hash;
+    u32 key;
+    u16 length;
+    u8 ends, falls, setter, nzcv_ok;
+    u8 read[6], written[6];
+    u32 first;
+    u16 count;
+};
 
 enum { T_SMALL, T_POOL, T_HOLE, T_SYMBOL, T_EXIT };
 enum { K_ENC, K_ENC32, K_BRANCH };
@@ -196,45 +205,62 @@ static u64 fnv1a(const u8 *p, int n) {
     return h;
 }
 
-static const struct vmc_entry *lookup(const u8 *key, int n) {
+static const struct vmc_form *lookup(const u8 *key, int n) {
     u64 h = fnv1a(key, n);
-    int lo = 0, hi = VMC_KEYS;
+    int lo = 0, hi = VMC_FORMS;
     while (lo < hi) {
         int mid = lo + (hi - lo) / 2;
-        if (VMC_ENTRY[mid].hash < h)
+        if (VMC_FORM[mid].hash < h)
             lo = mid + 1;
         else
             hi = mid;
     }
-    if (lo == VMC_KEYS || VMC_ENTRY[lo].hash != h || VMC_ENTRY[lo].length != n)
+    if (lo == VMC_FORMS || VMC_FORM[lo].hash != h || VMC_FORM[lo].length != n)
         return 0;
-    const u8 *k = &VMC_KEY_BYTES[VMC_ENTRY[lo].key];
+    const u8 *k = &VMC_FORM_BYTES[VMC_FORM[lo].key];
     for (int i = 0; i < n; i++)
         if (k[i] != key[i])
             return 0;
-    return &VMC_ENTRY[lo];
+    return &VMC_FORM[lo];
 }
 
-int vmc_compile(const u8 *code, int n, u64 address, u64 base, u64 exit_va, const struct vmc_flags *flags,
-                const u64 *symbols, u32 *out, int max_words) {
+/* the instruction at code[0..n) and its form, or a vmc_status */
+int vmc_decode(const u8 *code, int n, u64 address, struct vmc_insn *out) {
+    static const struct vmc_flags none = {0, 0, 0};
     u8 key[VMC_MAX_KEY];
-    u64 values[VMC_MAX_VALUES];
-    int nvalues, length;
-    int kn = vmc_key(code, n, address, flags, key, values, &nvalues, &length);
+    int kn = vmc_key(code, n, address, &none, key, out->values, &out->nvalues, &out->length);
     if (kn < 0)
         return kn;
-    const struct vmc_entry *e = lookup(key, kn);
-    if (!e)
+    const struct vmc_form *f = lookup(key, kn - 3);       /* the key less its flag arguments */
+    if (!f)
         return VMC_NO_STENCIL;
-    u32 stencil = VMC_CHOICE[e->first].stencil;
-    if (e->feature != VMC_FEATURE_NONE) {
-        if (e->position >= nvalues)
+    out->form = f;
+    out->address = address;
+    return 0;
+}
+
+int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base, u64 exit_va,
+             const u64 *symbols, u32 *out, int max_words) {
+    const struct vmc_form *f = ins->form;
+    const struct vmc_variant *v = 0;
+    for (int i = 0; i < f->count; i++) {
+        const struct vmc_variant *c = &VMC_VARIANT[f->first + i];
+        if (c->nzcv_from == flags->nzcv_from && c->live_after == flags->live_after && c->nzcv_out == flags->nzcv_out)
+            v = c;
+    }
+    if (!v)
+        return VMC_NO_STENCIL;
+    const u64 *values = ins->values;
+    int nvalues = ins->nvalues;
+    u32 stencil = VMC_CHOICE[v->first].stencil;
+    if (v->feature != VMC_FEATURE_NONE) {
+        if (v->position >= nvalues)
             return VMC_NO_CHOICE;
-        u64 fv = vmc_feature(e->feature, values[e->position]);
+        u64 fv = vmc_feature(v->feature, values[v->position]);
         int found = 0;
-        for (int i = 0; i < e->count; i++)
-            if (VMC_CHOICE[e->first + i].value == fv) {
-                stencil = VMC_CHOICE[e->first + i].stencil;
+        for (int i = 0; i < v->count; i++)
+            if (VMC_CHOICE[v->first + i].value == fv) {
+                stencil = VMC_CHOICE[v->first + i].stencil;
                 found = 1;
             }
         if (!found)
@@ -280,4 +306,135 @@ int vmc_compile(const u8 *code, int n, u64 address, u64 base, u64 exit_va, const
             out[w++] = words[j];
     }
     return w;
+}
+
+int vmc_compile(const u8 *code, int n, u64 address, u64 base, u64 exit_va, const struct vmc_flags *flags,
+                const u64 *symbols, u32 *out, int max_words) {
+    struct vmc_insn ins;
+    int r = vmc_decode(code, n, address, &ins);
+    if (r < 0)
+        return r;
+    return vmc_emit(&ins, flags, base, exit_va, symbols, out, max_words);
+}
+
+/* the block: Monitor._compile's extent and vm_backend.assemble_block's code */
+static int is_thunk(const struct vmc_block_in *in, u64 address) {
+    int lo = 0, hi = in->nthunks;
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (in->thunks[mid] < address)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo < in->nthunks && in->thunks[lo] == address;
+}
+
+static u32 subs_budget(int n) {                         /* SUBS x23, x23, #n */
+    return 0xF1000000u | (u32)n << 10 | VMC_REG_BUDGET << 5 | VMC_REG_BUDGET;
+}
+
+int vmc_block(const struct vmc_block_in *in, struct vmc_block_out *out) {
+    struct vmc_insn insns[VMC_MAX_BLOCK_INSNS];
+    int count = 0, stopped_short = 0;
+    u64 addr = in->start;
+    out->cut = 0;
+    while (count < VMC_MAX_BLOCK_INSNS) {
+        if (count && is_thunk(in, addr))
+            break;
+        if (addr < in->mem_base || addr - in->mem_base >= in->mem_size) {
+            if (!count)
+                return VMC_DECODE;
+            stopped_short = 1;
+            break;
+        }
+        u64 off = addr - in->mem_base;
+        u64 avail = in->mem_size - off;
+        int r = vmc_decode(in->mem + off, avail > 15 ? 15 : (int)avail, addr, &insns[count]);
+        if (r < 0) {
+            if (!count)
+                return r;
+            out->cut = r;
+            stopped_short = 1;
+            break;
+        }
+        addr += insns[count].length;
+        count++;
+        if (insns[count - 1].form->ends)
+            break;
+    }
+    int natural = stopped_short ? -1 : count;           /* live_out holds where a branch, a thunk or the count
+                                                           ends the block; elsewhere every flag is live */
+    for (;;) {                                          /* an instruction with no stencil for its flags ends the block */
+        u64 end = in->start;
+        for (int k = 0; k < count; k++)
+            end += insns[k].length;
+        int live = count == natural ? in->live_out : VMC_ALL_FLAGS;
+        u8 lives[VMC_MAX_BLOCK_INSNS];
+        for (int k = count - 1; k >= 0; k--) {
+            lives[k] = (u8)live;
+            int kind = k ? insns[k - 1].form->setter : 0;
+            live = (live & ~insns[k].form->written[kind]) | insns[k].form->read[kind];
+        }
+        u32 *w = out->words;
+        int n = 0, max = out->max_words;
+        u64 base = in->base;
+        if (max < 2)
+            return VMC_FULL;
+        out->marks[0].host = base;
+        out->marks[0].guest = in->start;
+        w[n++] = subs_budget(count);
+        int bmi = n++;                                  /* B.MI to the budget's stop, filled at the end */
+        int body = n;
+        int failed = -1, status = 0;
+        for (int k = 0; k < count; k++) {
+            struct vmc_flags fl = {
+                k ? insns[k - 1].form->setter : 0, lives[k],
+                k + 1 < count && insns[k].form->setter && (insns[k + 1].form->nzcv_ok >> insns[k].form->setter & 1)};
+            out->marks[1 + k].host = base + 4 * (u64)n;
+            out->marks[1 + k].guest = insns[k].address;
+            int got = vmc_emit(&insns[k], &fl, base + 4 * (u64)n, in->exit_va, in->symbols, w + n, max - n);
+            if (got < 0) {
+                failed = k;
+                status = got;
+                break;
+            }
+            n += got;
+        }
+        if (failed >= 0) {
+            if (status == VMC_FULL)
+                return VMC_FULL;
+            if (failed == 0)
+                return status;
+            count = failed;
+            out->cut = status;
+            continue;
+        }
+        if (insns[count - 1].form->falls) {             /* the fall-through exit: x17 = the next address */
+            u32 mov[4];
+            int m = a64_mov_imm(mov, 17, end);
+            if (n + m + 1 > max)
+                return VMC_FULL;
+            for (int j = 0; j < m; j++)
+                w[n++] = mov[j];
+            w[n] = a64_b((int)(in->exit_va - (base + 4 * (u64)n)));
+            n++;
+        }
+        if (n + 3 > max)
+            return VMC_FULL;
+        int stop = n;                                   /* the budget's stop */
+        out->marks[1 + count].host = base + 4 * (u64)stop;
+        out->marks[1 + count].guest = in->start;
+        w[bmi] = a64_bcond(A64_MI, 4 * (stop - bmi));
+        w[n] = a64_bl((int)(in->slice_va - (base + 4 * (u64)n)));
+        n++;
+        w[n++] = a64_hvc(4);
+        w[n] = a64_b(4 * (body - n));
+        n++;
+        out->count = count;
+        out->end = end;
+        out->nwords = n;
+        out->nmarks = count + 2;
+        return n;
+    }
 }
