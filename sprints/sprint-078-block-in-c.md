@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 078
-status: open
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -92,3 +92,8 @@ A to D; D with 0 differing, or each difference's cause named and recorded; CI pa
 - **Open, for the VM:** the table covers the flag arguments the record compiled. In the VM a block starts where the
   run's blocks start, so the record's flag contexts recur; a context it never saw goes to the host until a stencil
   for it is derived (a superset of live flags is correct code, but not `compile_insn`'s words).
+- **Family re-run.** `vm_backend.py` is a host file of all 68 families, so A left every family's acceptance stale
+  (`tests/test_family_runs.py` failed on the first full run). Every family re-run on 3f28863d: 68 accepted, in 13 s,
+  8 at a time (01cd4765). The class index does not name `vm_backend.py`; its test held. `uv run pytest`: 2,434
+  passed; `scripts/check_replay.py` exit 0.
+- **Closed** on 01cd4765 (CI run 38796163028, success).

@@ -303,6 +303,16 @@
 
 ## Sprint tail
 
+### Sprint 078 (2026-10-15, closed: CI run 38796163028 success on 01cd4765)
+- **Scope:** the block in C (`vmc_block`): extent, flag liveness inside the block, prologue, exits, the budget; the table keyed by form with each form's facts; `vm_backend.assemble_block` taken out of `Monitor._compile`.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `gen_stencil_table.py` re-keyed the table (17,328 forms, facts from every recorded instruction, 0 disagreeing); a scratch driver compiled 1,177,340 blocks made from the record in both compilers; every family re-run on 3f28863d to CANDIDATE_ACCEPTED (68); no frontier run (the C is not in the VM). 1,163,021 blocks equal in words and marks, 0 differing; C 1.3 µs a block natively against 78.9 µs.
+  - *Observation 1 (missing pair, of the work):* 17,842 blocks reached a flag combination the record never compiled (14,319 at the first instruction, 3,523 later). Disposition: open, for the sprint that runs the C in the VM: measure the rate on the run's own block starts; a stencil for a superset of live flags is correct code but not `compile_insn`'s words.
+  - *Observation 2 (blind plant check, of the judge):* three block faults planted one at a time (the liveness walk's NZCV kind, the budget's B.MI, `nzcv_out`) each failed the test.
+  - *Observation 3 (silent gate, of the work):* the background suite reported exit 0 with one test failed, since the job's last command was an `echo`. Disposition: resolved-here (the status read from pytest's own line; the stale families re-run before the push).
+  - *Observation 4 (unmeasured cause, of the record):* the card first named mid-block starts as the cause of Observation 1 without measuring it. Disposition: resolved-here (the card states only the measured status).
+- **Closed:** CI run 38796163028 (success on 01cd4765).
+
 ### Sprint 077 (2026-10-14, closed: CI run 38691728944 success on ae831e71)
 - **Scope:** the compiler in C for one instruction: the key from the decoder, Sprint 076's table as C data, the emitter (Decision 2026-10-14).
 - **Rubber Duck Pass:**
