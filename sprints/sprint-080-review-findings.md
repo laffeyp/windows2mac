@@ -67,3 +67,37 @@ canonical_flags against compile_insn directly (199,826 non-canonical argument se
 Every finding resolved or recorded with its disposition; CI passes.
 
 ## observed
+- **H2.** `Rule.sha256` adds `vm_backend.py` and `a64_encoder.py` (`rules.COMPILER`). Every class re-run on
+  7c089ed8: 456 of 458 accepted, FCOS and FSIN not, as in every index before; 458 records stamped clean (00532c26).
+  The first sweep went to `runs/` (class_run's default, git-ignored scratch) and was run again with `--runs
+  store/runs`; the stray records are left in the ignored directory.
+- **M3.** `record._changes` leaves out `store/runs/*.json`; the class sweep above, which writes its index as runs
+  finish, stamped all 458 clean (Sprint 078's family sweep: 60 of 68 dirty).
+- **M2.** `canonical_flags` reads `NZCV_CONDITIONS.get`; the review's E2 in CI
+  (`test_canonical_flags_compile_as_the_raw_arguments`, over 5,000 non-canonical argument sets, 0 differing).
+- **M1.** Measured first: of 1,500 keys' holes, a second expression fit the samples and gave another argument for a
+  value of the same class in register positions (`min(v, 8)`, `bits 0+3`: no sample reached a higher register) and in
+  about 30 value positions (shift counts below 32 or 64 fit `v` and `low 5 bits`; a selector's top field fit 2 bits
+  and 1). Now: every unvaried value is guarded (3,569 of 21,244 stencils, 5,170 guards); a register hole is read only
+  through the register map; a value hole with alternatives (16,071) is checked at emit time, the instruction refused
+  where they disagree (41 distinct checked holes in the C). The review's E1 in CI (`test_spec_row_encodings_...`,
+  4,701 equal, 0 differing); a plant that takes the guards and the agreement check out of `vm_compiler.c` makes it
+  find differing words (`test_without_its_guards_the_c_compiles_wrong_code`).
+- **H3.** `store/stencil/record.txt.gz` (7.1 MB; `stencil_census.write_record`: symbols, the exit address, each call
+  in record order with its count; read back, every call, count, symbol and byte string equal the pickle's).
+  `store/stencil/table.txt.gz` (317 KB, a Python literal), derived on 7c089ed8. `gen_stencil_table.py --check`
+  regenerates the header and both sample files from the two, byte for byte (66 s), in CI and `scripts/gates.sh`; the
+  header names both sha256. The record's producing commit was not stamped by its run: by file times (written 20:44 on
+  2026-10-14, its driver 20:42) HEAD was 4394114c. `scripts/stencil_judge.py` holds the four judges and writes a
+  record.
+- **The judges** (`store/runs/stencil-judge-1792098411625593000`, on 1a769179, 33 s, CANDIDATE_ACCEPTED):
+  instructions 1,186,246 equal, 265 refused, 0 differing; blocks 1,171,592 equal, 0 differing, 5,748 to the host and
+  1,907 cut short (1,741 of them by a guard or an alternative: the price of refusing what the samples do not prove);
+  cases 31,273 equal, 242 refused, 0 differing; spec rows 70,899 equal, 546 refused, 0 differing.
+- **M4, H1.** Two Decisions of 2026-10-15 (BLACKBOARD): the table's soundness rules (refinement, canonical flag
+  arguments, guards, checked alternatives); the inferred compiler against step 6, kept and put in the VM, with its
+  revisit condition (host compiles over 1% of a play stretch's wall time, or over 5% of its first-entered blocks).
+- **L2.** Variants unique by flag arguments (asserted); `vmc_emit` breaks on the first match. **L1:** for the sprint
+  that puts the C in the VM.
+- **Process.** The gates had been run one by one this epic; `scripts/gates.sh` exists and runs them in order with
+  `set -e`, now used: 2,438 passed, 27,918 records replay intact.
