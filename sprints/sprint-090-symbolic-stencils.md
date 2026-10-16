@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 090
-status: active
+status: closed-partial
 phase: 5
 pass_kind: architecture
 ---
@@ -57,3 +57,25 @@ are known by construction, as copy-and-patch's are), and every value-dependent c
 ## done criteria
 
 compile_insn, run on every template, gives stencils whose evaluated words equal its own on every judged instruction.
+
+## observed
+- **Exact.** `src/w2m/symbolic_compile.py` runs compile_insn (and the rules' lowerings) on Sprint 089's templates,
+  its own arguments symbolic (`base`, `exit`, the runtime's three symbols, `live` six bits, `nzcv_out`); every word
+  an expression of the holes. `scripts/stencil_from_rules_judge.py`, 1,000 of the record's instructions at random
+  flag contexts, bases and exits: 996 equal to compile_insn's words, 0 differing, 4 with no stencil. The four are SSE
+  (CVTSS2SD, MULPS, MULSS, SHUFPS): their lowerings read the XMM number as a plain integer (`int(dst[1])`), which
+  pins it to the first instance's register; a stencil table would enumerate the 16 values. In CI
+  (`tests/test_symbolic_compile.py`): a move, a load through base and index, ADD of an immediate, a call and a Jcc at
+  three flag contexts, all equal.
+- **Fixes on the way.** A set compared by hash (`_folded_addresses`: `sizes == {scale}`) cannot see a symbol and took
+  the wrong path silently (6 differing of 3,000 in the first run): the scale is in the template's shape now. Forks that
+  decide nothing were cut: an expression against itself, a number against None, a test the path took (or its
+  negation), equalities in one order, mask tests the path's known bits decide, and tests the symbols' domains decide
+  (interval arithmetic).
+- **Not done: the count.** Run whole, compile_insn's choices multiply. ADD of an immediate: 98 stencils per NZCV kind
+  (five live-flag bits tested one by one, one in a group of two, register equality, nzcv_out); a load through base
+  and index: 23 (the displacement against 0 and 4,096 and its halfwords); an instruction with both, their product.
+  1,000 instructions made 363,546 stencils over 370 (template, NZCV kind) pairs in 441 s; over 5,504 templates and six
+  kinds that is tens of millions and hours. This is the revisit condition of Decision 2026-10-16 (the back end by
+  symbolic execution): the next link splits compile_insn's control (register allocation, liveness, fusion) from its
+  per-op lowering bodies, generating the bodies as stencils keyed by their own arguments, so the forks add.

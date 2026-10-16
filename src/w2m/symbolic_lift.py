@@ -82,6 +82,7 @@ class Expr:
     def __gt__(self, o: Any) -> bool: return _decide(Expr("gt", self, o))
     def __ge__(self, o: Any) -> bool: return _decide(Expr("ge", self, o))
     def __bool__(self) -> bool: return _decide(Expr("ne", self, 0))
+    def bit_length(self) -> Expr: return Expr("bitlen", self)
     def __index__(self) -> int: return _pin(self)
     def __int__(self) -> int: return _pin(self)
     def __hash__(self) -> int: return hash(self.key())
@@ -102,18 +103,89 @@ _OPS: dict[str, Callable[..., int]] = {
     "or": lambda a, b: a | b, "xor": lambda a, b: a ^ b, "shl": lambda a, b: a << b, "shr": lambda a, b: a >> b,
     "mod": lambda a, b: a % b, "div": lambda a, b: a // b, "neg": lambda a: -a, "not": lambda a: ~a,
     "eq": lambda a, b: a == b, "ne": lambda a, b: a != b, "lt": lambda a, b: a < b, "le": lambda a, b: a <= b,
-    "gt": lambda a, b: a > b, "ge": lambda a, b: a >= b,
+    "gt": lambda a, b: a > b, "ge": lambda a, b: a >= b, "bitlen": lambda a: a.bit_length(),
 }
+Interval = tuple[int, int] | None
+
+
+def interval(x: Any, domains: dict[str, tuple[int, int]]) -> Interval:
+    """Bounds of x over the symbols' domains (inclusive), or None where they are not known: interval arithmetic, so a
+    test the domains decide needs no fork (Sprint 090: a register number 0-15 passes an encoder's range check)."""
+    if isinstance(x, bool):
+        return (int(x), int(x))
+    if isinstance(x, int):
+        return (x, x)
+    if not isinstance(x, Expr):
+        return None
+    if isinstance(x, Sym):
+        return domains.get(x.args[0])
+    a = [interval(y, domains) for y in x.args]
+    if any(v is None for v in a):
+        if x.op == "and":                                    # a known nonnegative mask bounds the result
+            known = [v for v in a if v is not None and v[0] >= 0]
+            return (0, min(v[1] for v in known)) if known else None
+        return None
+    b = cast(list[tuple[int, int]], a)                 # every bound known from here
+    op = x.op
+    if op == "add":
+        return (b[0][0] + b[1][0], b[0][1] + b[1][1])
+    if op == "sub":
+        return (b[0][0] - b[1][1], b[0][1] - b[1][0])
+    if op == "mul":
+        p = [i * j for i in b[0] for j in b[1]]
+        return (min(p), max(p))
+    if op == "neg":
+        return (-b[0][1], -b[0][0])
+    if op == "not":
+        return (-b[0][1] - 1, -b[0][0] - 1)
+    if op == "bitlen" and b[0][0] >= 0:
+        return (b[0][0].bit_length(), b[0][1].bit_length())
+    nonneg = all(v[0] >= 0 for v in b)
+    if op == "and" and nonneg:
+        return (0, min(b[0][1], b[1][1]))
+    if op == "and" and (b[0][0] >= 0 or b[1][0] >= 0):
+        return (0, max(v[1] for v in b if v[0] >= 0))
+    if op in ("or", "xor") and nonneg:
+        return (0, (1 << max(b[0][1], b[1][1]).bit_length()) - 1)
+    if op == "shl" and b[0][0] >= 0 and b[1][0] >= 0 and b[1][1] < 256:
+        return (b[0][0] << b[1][0], b[0][1] << b[1][1])
+    if op == "shr" and b[0][0] >= 0 and b[1][0] >= 0:
+        return (b[0][0] >> b[1][1], b[0][1] >> b[1][0])
+    if op == "mod" and b[1][0] > 0 and b[0][0] >= 0:
+        return (0, b[1][1] - 1)
+    if op in ("eq", "ne", "lt", "le", "gt", "ge"):
+        decided = _compare(op, b[0], b[1])
+        return None if decided is None else (int(decided), int(decided))
+    return None
+
+
+def _compare(op: str, x: tuple[int, int], y: tuple[int, int]) -> bool | None:
+    if op == "lt":
+        return True if x[1] < y[0] else False if x[0] >= y[1] else None
+    if op == "le":
+        return True if x[1] <= y[0] else False if x[0] > y[1] else None
+    if op == "gt":
+        return _compare("lt", y, x)
+    if op == "ge":
+        return _compare("le", y, x)
+    if op == "eq":
+        return False if x[1] < y[0] or y[1] < x[0] else True if x[0] == x[1] == y[0] == y[1] else None
+    if op == "ne":
+        eq = _compare("eq", x, y)
+        return None if eq is None else not eq
+    return None
 
 
 class _Path:
     """The decisions a symbolic run takes: forced outcomes for its first tests, the tests it met, the pins."""
 
-    def __init__(self, forced: list[bool], env: dict[str, int]) -> None:
+    def __init__(self, forced: list[bool], env: dict[str, int],
+                 domains: dict[str, tuple[int, int]] | None = None) -> None:
         self.forced = forced
         self.taken: list[tuple[Expr, bool]] = []
         self.pins: dict[str, int] = {}
         self.env = env
+        self.domains = domains or {}
 
 
 class _Fork(Exception):
@@ -126,11 +198,80 @@ _path: _Path | None = None
 
 def _decide(cond: Expr) -> bool:
     assert _path is not None, "a symbol tested outside a symbolic run"
+    if cond.op in ("eq", "ne") and len(cond.args) == 2:
+        x, y = cond.args
+        same: bool | None = None
+        if not isinstance(y, (int, Expr)) or not isinstance(x, (int, Expr)):
+            same = False                                 # a number against None, a string, a tuple
+        elif isinstance(x, Expr) and isinstance(y, Expr) and x.key() == y.key():
+            same = True                                  # an expression against itself
+        if same is not None:
+            return same if cond.op == "eq" else not same
+    if cond.op in ("eq", "ne") and isinstance(cond.args[0], Expr) and isinstance(cond.args[1], Expr) and \
+            repr(cond.args[1].key()) < repr(cond.args[0].key()):
+        cond = Expr(cond.op, cond.args[1], cond.args[0])   # one order for an equality: x == y is y == x
+    bits = _known_bits(cond)
+    if bits is not None:
+        return bits
+    key = cond.key()
+    flipped = ({"eq": "ne", "ne": "eq", "lt": "ge", "ge": "lt", "le": "gt", "gt": "le"}.get(key[0]), *key[1:])
+    for c, outcome in _path.taken:                       # a test this path already took, or its negation
+        if c.key() == key:
+            return outcome
+        if c.key() == flipped:
+            return not outcome
+    if _path.domains:
+        decided = interval(cond, _path.domains)
+        if decided is not None and decided[0] == decided[1]:
+            return bool(decided[0])                      # the domains settle it: no fork
     i = len(_path.taken)
     if i < len(_path.forced):
         _path.taken.append((cond, _path.forced[i]))
         return _path.forced[i]
     raise _Fork(cond)
+
+
+def _mask_test(cond: Expr) -> tuple[str, int, bool] | None:
+    """(symbol, mask, wants nonzero) for a test `sym & mask != 0` or `== 0` (and `sym != 0`, `sym == 0`)."""
+    if cond.op not in ("eq", "ne"):
+        return None
+    x, zero = cond.args
+    if not isinstance(zero, int) or isinstance(zero, Expr) or zero != 0:
+        return None
+    if isinstance(x, Sym):
+        return x.args[0], -1, cond.op == "ne"
+    if isinstance(x, Expr) and x.op == "and" and isinstance(x.args[0], Sym) and isinstance(x.args[1], int):
+        return x.args[0].args[0], x.args[1], cond.op == "ne"
+    return None
+
+
+def _known_bits(cond: Expr) -> bool | None:
+    """A mask test the path's earlier mask tests on the same symbol decide: a bit known set makes `& m != 0` true for
+    every m holding it; every bit of m known clear makes it false (live's flags, tested one by one and in groups)."""
+    assert _path is not None
+    test = _mask_test(cond)
+    if test is None:
+        return None
+    name, mask, want_nonzero = test
+    ones = zeros = 0
+    for c, outcome in _path.taken:
+        t = _mask_test(c)
+        if t is None or t[0] != name:
+            continue
+        m, nonzero = t[1], t[2] == outcome
+        if not nonzero:
+            zeros |= m                                    # every bit of m clear
+        elif m != -1 and m & (m - 1) == 0:
+            ones |= m                                     # a single bit, set
+    if ones & mask:
+        result = True
+    elif mask != -1 and zeros & mask == mask:
+        result = False
+    elif mask == -1 and zeros == -1:
+        result = False
+    else:
+        return None
+    return result if want_nonzero else not result
 
 
 def _pin(e: Expr) -> int:
@@ -209,8 +350,9 @@ def shape(ops: tuple[str, ...]) -> tuple[str, ...]:
             # lift._operand reads a base's name: an E-named base (or none with an E index) gives 32-bit addressing
             def kind(r: str) -> str:
                 return r if r in ("INVALID", "RIP", "EIP") else f"r{REG[r][1]}{'E' if r.startswith('E') else ''}"
-            out.append(":".join([p[0], p[1] if p[0] == "M" else "", kind(base), kind(index),
-                                 p[6] if p[0] == "M" else ""]))
+            scale = p[4] if p[0] == "M" else p[3]          # in the key: compare-by-hash code (a set of sizes against
+            out.append(":".join([p[0], p[1] if p[0] == "M" else "", kind(base), kind(index), scale,   # {scale}) cannot
+                                 p[6] if p[0] == "M" else ""]))                                        # see a symbol
         elif p[0] == "I":
             out.append(f"I{p[1]}")
         elif p[0] == "MM":
@@ -235,7 +377,6 @@ def values(ops: tuple[str, ...], nxt: int, address: int) -> dict[str, int]:
                 env[f"o{k}.base"] = REG[base][0]
             if index in REG:
                 env[f"o{k}.index"] = REG[index][0]
-            env[f"o{k}.scale"] = int(scale)
             env[f"o{k}.disp"] = int(disp)
         elif p[0] == "I":
             env[f"o{k}.imm"] = int(p[2], 16)
@@ -272,7 +413,7 @@ def _sym_operand(b: _OpBuilder, s: str, next_ip: Any, width_hint: int | None = N
             b.emit("addr", t, None, None, 1, next_ip + d, abits, seg)
         else:
             b.emit("addr", t, None if base == "INVALID" else Sym(f"{k}.base"),
-                   None if index == "INVALID" else Sym(f"{k}.index"), Sym(f"{k}.scale"), d, abits, seg)
+                   None if index == "INVALID" else Sym(f"{k}.index"), int(scale), d, abits, seg)
         if p[0] == "A":
             return "addr", t, abits
         return "loc", ("m", t, int(p[6])), int(p[6]) * 8
