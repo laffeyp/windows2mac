@@ -23,6 +23,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "tools" / "guest_runtime"
+# the compiler inside the VM (Sprint 083): its C files join the image; block_compiler.c calls it
+COMPILER_SOURCE = ROOT / "tools" / "vm_compiler"
+COMPILER_FILES = ("vm_compiler.c", "x86_decode.c", "a64_encoder.c")
 CACHE = ROOT / "build" / "guest_runtime"
 CFLAGS = ("--target=arm64-apple-macos14", "-O2", "-std=c11", "-Wall", "-Werror", "-ffreestanding",
           "-fno-builtin", "-fno-stack-protector", "-fno-exceptions", "-fno-unwind-tables",
@@ -54,6 +57,12 @@ class Image:
 # a service's definition: u64 <dll prefix>_<import name>(...) {; WS2_32's prefix holds an underscore itself (Sprint 052)
 SERVICE = re.compile(r"^(W2M_VOID\s+)?u64\s+(ws2_32|[a-z0-9]+)_(\w+)\([^;{]*\)\s*\{", re.M)
 INTERNAL_APIS = ("Cpuid", "Exception")          # ring entries that are not services (runtime.c)
+
+
+def source_path(name: str) -> Path:
+    """Where a runtime file or header the build names lives: tools/guest_runtime, or tools/vm_compiler for the
+    compiler's (Sprint 083)."""
+    return SOURCE / name if (SOURCE / name).exists() else COMPILER_SOURCE / name
 
 
 def _texts() -> dict[str, str]:
@@ -130,6 +139,8 @@ class ObjectFile:
 def _texts_for(last_error_source: str | None, file_source: str | None,
                sources: dict[str, str] | None) -> dict[str, str]:
     texts = _texts()
+    for name in COMPILER_FILES:
+        texts[name] = (COMPILER_SOURCE / name).read_text()
     if last_error_source is not None:
         texts["last_error.c"] = '#include "runtime.h"\n' + last_error_source
     if file_source is not None:
@@ -155,6 +166,7 @@ def _compile(base_va: int, defines: dict[str, int], texts: dict[str, str]) -> tu
     """Every file compiled to an object (and its header list, clang -MD) under build/guest_runtime/<key>/, where
     either is missing; (that folder, the image's path there is to be linked to)."""
     header = (SOURCE / "runtime.h").read_text()
+    header += "".join(p.read_text() for p in sorted(COMPILER_SOURCE.glob("*.h")))   # the compiler's headers and table
     generated = generated_headers()
     dflags = [f"-D{k}=0x{v:x}ULL" for k, v in sorted(defines.items())]
     key = hashlib.sha256("\0".join([*(f"{k}\0{v}" for k, v in sorted(texts.items())), header,
@@ -175,7 +187,7 @@ def _compile(base_va: int, defines: dict[str, int], texts: dict[str, str]) -> tu
         src = work / name
         src.write_text(texts[name])
         obj = work / (src.stem + ".o")
-        r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{work}", "-MD", "-MF", str(work / (src.stem + ".d")),
+        r = subprocess.run(["clang", *CFLAGS, *dflags, f"-I{SOURCE}", f"-I{COMPILER_SOURCE}", f"-I{work}", "-MD", "-MF", str(work / (src.stem + ".d")),
                             "-c", str(src), "-o", str(obj)], capture_output=True, text=True)
         if r.returncode:
             raise BuildError(f"{name}: {r.stderr.strip()}")

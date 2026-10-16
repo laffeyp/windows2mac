@@ -32,6 +32,7 @@ import hashlib
 import json
 import mmap
 import pickle
+import re
 import os
 import random
 import struct
@@ -123,11 +124,17 @@ TRANSLATION_TABLES_SIZE = 0x40000
 # B's and BL's +-128 MB.
 CODE_CACHE = 0x60000
 CODE_CACHE_SIZE = 0x400_0000          # 64 MB
-RUNTIME_IMAGE = CODE_CACHE + CODE_CACHE_SIZE   # guest runtime (tools/guest_runtime), linked at MONITOR_VA + this
-RUNTIME_IMAGE_SIZE = 0x100000             # 1 MB: the system message table takes 430 KB (Sprint 049)
-RUNTIME_STACK = RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE   # the runtime's AArch64 stack (SP set by each bridge)
+# Sprint 083: the runtime image holds the compiler (tools/vm_compiler; its table 2.65 MB) and sits above the runtime's
+# stack, whose top stays at MONITOR_VA + 0x4170000: the stencil table holds that address as a constant (three helper
+# calls set SP to it), so the stack does not move. The 1 MB below the stack, the image's area until Sprint 083, is
+# unused. The image ends within B's and BL's 128 MB of the code cache's start.
+RUNTIME_STACK = CODE_CACHE + CODE_CACHE_SIZE + 0x100000   # the runtime's AArch64 stack (SP set by each bridge)
 RUNTIME_STACK_SIZE = 0x10000
-RECON_TABLE = RUNTIME_STACK + RUNTIME_STACK_SIZE     # reconstruction table: (host code VA, x86 address) pairs, sorted
+RUNTIME_IMAGE = RUNTIME_STACK + RUNTIME_STACK_SIZE   # guest runtime (tools/guest_runtime), linked at MONITOR_VA + this
+RUNTIME_IMAGE_SIZE = 0x800000             # 8 MB (Sprint 049: the system message table takes 430 KB)
+RECON_TABLE = RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE     # reconstruction table: (host code VA, x86 address) pairs, sorted
+assert RUNTIME_STACK + RUNTIME_STACK_SIZE == 0x4170000, "the stencil table's runtime stack top"
+assert RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE - CODE_CACHE <= 1 << 27, "B and BL between the code cache and the runtime"
 RECON_ENTRIES = 0x40_0000             # 4 Mi entries, 64 MB
 # The dispatch table: (x86 address, code VA) pairs indexed by the address's low DISPATCH_BITS bits. Sprint 064: with
 # 4,096 entries the game's 62,000 blocks evicted each other, and 8,474,510 of a billion-instruction frontier run's
@@ -170,7 +177,30 @@ TRANSPORT = "channel"        # "pipe": every exit's registers as text over the m
 # The run table (scheduler.py RT_*, E_*; Sprint 069): a header page, then one entry per thread, in thread id order
 RUN_TABLE = CHANNEL + PAGE
 RUN_THREADS = VECTOR_SLOT_COUNT
-MONITOR_SIZE = (RUN_TABLE + RT_ENTRIES + RUN_ENTRY * RUN_THREADS + BLOCK - 1) & ~(BLOCK - 1)   # mapped in 2 MB blocks
+# The compiler inside the VM (Sprint 083; tools/guest_runtime/block_compiler.c): its words (VMC_*), its counts by
+# cause, and its log of the blocks it compiled, which the host replays at every exit (VM._vm_compiled); then the
+# code-page set, the pages behind translated code as an open-addressed table of page addresses (0 empty, 1 removed)
+# that the host keeps with code_pages.
+VM_COMPILER = (RUN_TABLE + RT_ENTRIES + RUN_ENTRY * RUN_THREADS + PAGE - 1) & ~(PAGE - 1)
+VMC_ENABLED, VMC_CURSOR, VMC_LOG_COUNT, VMC_EXIT, VMC_SLICE, VMC_HOST_ONLY = 0x00, 0x08, 0x10, 0x18, 0x20, 0x28
+VMC_SYMBOLS = 0x40                         # the stencil table's symbols' addresses (vmc_symbol_name's order)
+VMC_COUNTS = 0x100                         # u64 counts, by VMC_COUNT_* (block_compiler.c)
+VMC_COUNT_NAMES = ("compiled", "not a code page", "host only", "decode", "no stencil", "no choice", "encoder",
+                   "full", "key size", "guarded", "scan pages", "log full", "code cache full", "recon full",
+                   "cut by decode", "cut by no stencil", "cut by no choice", "cut by encoder", "cut by key size",
+                   "cut by guarded")
+VMC_SAVE = 0x200                           # the miss stub's x0-x15, x17 and x30 while the C compiles
+VMC_LOG = 0x1000                           # the log: VMC_LOG_ENTRIES entries of VMC_LOG_ENTRY bytes
+VMC_LOG_ENTRY, VMC_LOG_ENTRIES, VMC_LOG_PAGES = 0x80, 4096, 8
+VM_COMPILER_SIZE = VMC_LOG + VMC_LOG_ENTRY * VMC_LOG_ENTRIES
+CODE_PAGE_SET = VM_COMPILER + VM_COMPILER_SIZE
+CODE_PAGE_BITS = 20
+CODE_PAGE_SLOTS = 1 << CODE_PAGE_BITS      # 8 MB, sparse; the game's code covers some 10,000 pages
+# recentering step 6 (Sprint 083): a dispatch miss is compiled in the VM where it can be (W2M_VM_COMPILE=0: never);
+# W2M_VM_COMPILE_JUDGE=1: each block the VM compiled is compiled again here and compared (VM._judge_vm_block)
+VM_COMPILE = os.environ.get("W2M_VM_COMPILE", "1") != "0"
+VM_COMPILE_JUDGE = os.environ.get("W2M_VM_COMPILE_JUDGE") == "1"
+MONITOR_SIZE = (CODE_PAGE_SET + 8 * CODE_PAGE_SLOTS + BLOCK - 1) & ~(BLOCK - 1)   # mapped in 2 MB blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -964,6 +994,13 @@ def _canonical_dll(name: str) -> str:
     return c if "." in c else c + ".dll"
 
 
+def _vm_compiler_symbols() -> list[str]:
+    """The stencil table's symbols in its order (tools/vm_compiler/stencil_table.h vmc_symbol_name)."""
+    text = (ROOT / "tools" / "vm_compiler" / "stencil_table.h").read_text()
+    body = text[text.index("vmc_symbol_name["):]
+    return re.findall(r'"(\w+)"', body[:body.index("};")])
+
+
 def runtime_defines() -> dict[str, int]:
     """The guest-memory addresses the guest runtime is compiled against (tools/guest_runtime)."""
     return {
@@ -985,6 +1022,10 @@ def runtime_defines() -> dict[str, int]:
         "W2M_RUN_X_OFF": E_X, "W2M_RUN_MONITOR_OFF": E_MONITOR, "W2M_RUN_STATE_OFF": E_STATE,
         "W2M_STATE_SIZE": STATE_SIZE, "W2M_TIME_SLICE": TIME_SLICE, "W2M_SLICE_UNTIL_OFF": SLICE_UNTIL,
         "W2M_RUN_END_OFF": RUN_END, "W2M_PAUSE_COUNT_OFF": PAUSE_COUNT, "W2M_MONITOR_VA": MONITOR_VA,
+        "W2M_VMC_VA": MONITOR_VA + VM_COMPILER, "W2M_VMC_LOG_ENTRIES": VMC_LOG_ENTRIES,
+        "W2M_CODE_PAGE_SET_VA": MONITOR_VA + CODE_PAGE_SET, "W2M_CODE_PAGE_BITS": CODE_PAGE_BITS,
+        "W2M_DISPATCH_VA": MONITOR_VA + DISPATCH_TABLE, "W2M_DISPATCH_BITS": DISPATCH_BITS,
+        "W2M_RECON_ENTRIES": RECON_ENTRIES,
         **{f"W2M_RUN_MONITOR_{i}": v for i, v in enumerate(x for (a, b), at in zip(PER_THREAD_MONITOR, E_MONITOR_AT)
                                                           for x in (a, b, at))}}
 
@@ -1958,6 +1999,8 @@ class VM:
         # Translated code is invalidated when its guest bytes change (Sprint 065 item 9e): the pages behind blocks are
         # read-only, a write to one faults (HVC_CODE_WRITE), and the blocks over it are dropped
         self.code_pages: dict[int, set[int]] = {}       # page VA -> the starts of the blocks over it
+        self._page_set_removed = 0                      # removed slots in the code-page set (Sprint 083)
+        self.vm_judged: Counter[str] = Counter()         # VM_COMPILE_JUDGE's counts
         self.tcache: dict[int, list[tuple[Any, ...]]] = {}   # the translation cache (TRANSLATION_CACHE_DIR's note)
         self.tcache_file: Path | None = None
         self.tcache_loaded = False
@@ -2015,7 +2058,104 @@ class VM:
         self.virtual.mapped = [(va, size) for va, _, size in maps] + [(THUNK_BASE, 1 << 32)]
         self.virtual.snapshot()
         self.slice_va = self._slice_stub()
+        struct.pack_into("<QQQ", self.mm, VM_COMPILER + VMC_EXIT, self.dispatch_va, self.slice_va, self._trace_from)
+        names = _vm_compiler_symbols()
+        struct.pack_into(f"<{len(names)}Q", self.mm, VM_COMPILER + VMC_SYMBOLS, *(self.runtime.symbols[n] for n in names))
         self._flush_point = (self.code_cursor, struct.unpack_from("<Q", self.mm, MONITOR_DATA + RECON_COUNT)[0])
+
+    @property
+    def code_cursor(self) -> int:
+        """The code cache's next free offset (from MONITOR_VA): a monitor word, since the VM compiles too (Sprint 083)."""
+        return int(struct.unpack_from("<Q", self.mm, VM_COMPILER + VMC_CURSOR)[0])
+
+    @code_cursor.setter
+    def code_cursor(self, off: int) -> None:
+        struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_CURSOR, off)
+
+    # the code-page set (Sprint 083): code_pages' keys where block_compiler.c reads them ---------------------------
+    @staticmethod
+    def _page_set_slot(page: int) -> int:
+        return ((page >> 12) * 0x9E3779B97F4A7C15 & M64) >> (64 - CODE_PAGE_BITS)
+
+    def _page_set_add(self, page: int) -> None:
+        i, free = self._page_set_slot(page), None
+        while True:
+            v = struct.unpack_from("<Q", self.mm, CODE_PAGE_SET + 8 * i)[0]
+            if v == page:
+                return
+            if v == 1 and free is None:
+                free = i
+            if v == 0:
+                break
+            i = (i + 1) & (CODE_PAGE_SLOTS - 1)
+        if free is not None:
+            self._page_set_removed -= 1
+        struct.pack_into("<Q", self.mm, CODE_PAGE_SET + 8 * (i if free is None else free), page)
+
+    def _page_set_remove(self, page: int) -> None:
+        i = self._page_set_slot(page)
+        while True:
+            v = struct.unpack_from("<Q", self.mm, CODE_PAGE_SET + 8 * i)[0]
+            if v == 0:
+                return
+            if v == page:
+                struct.pack_into("<Q", self.mm, CODE_PAGE_SET + 8 * i, 1)
+                self._page_set_removed += 1
+                break
+            i = (i + 1) & (CODE_PAGE_SLOTS - 1)
+        if self._page_set_removed > CODE_PAGE_SLOTS // 8:          # probes grow with removed slots: rebuild
+            self.mm[CODE_PAGE_SET:CODE_PAGE_SET + 8 * CODE_PAGE_SLOTS] = bytes(8 * CODE_PAGE_SLOTS)
+            self._page_set_removed = 0
+            for p in self.code_pages:
+                self._page_set_add(p)
+
+    def _vm_compiled(self) -> None:
+        """Take in the blocks block_compiler.c compiled since the last exit (its log), as _compile records its own:
+        blocks, pc_map, the tail notes, addrs, translations and the pages' owners. Runs first at every exit."""
+        n = struct.unpack_from("<Q", self.mm, VM_COMPILER + VMC_LOG_COUNT)[0]
+        for i in range(n):
+            at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i
+            start, end, code, first, nmarks, count, cut, live_out, live_used, npages = struct.unpack_from(
+                "<QQQIIIiIII", self.mm, at)
+            pages = struct.unpack_from(f"<{npages}Q", self.mm, at + 56)   # after 3 u64 and 8 u32 (log_entry)
+            marks = [struct.unpack_from("<QQ", self.mm, RECON_TABLE + 16 * (first + k)) for k in range(nmarks)]
+            self.pc_map.extend(marks)
+            self._note_tails([m for m, _ in marks[1:1 + count]])
+            self.addrs.update(g for _, g in marks[1:1 + count])
+            self.blocks[start] = code
+            for page in (*range(start & ~(PAGE - 1), end, PAGE), *pages):
+                self.code_pages[page].add(start)
+            self.translations.append((start, end, "static" if start == self.ld.entry else "runtime_transfer"))
+            if VM_COMPILE_JUDGE:
+                self._judge_vm_block(start, end, code, count, live_out, live_used, marks)
+        struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_LOG_COUNT, 0)
+
+    def _judge_vm_block(self, start: int, end: int, code: int, count: int, live_out: int, live_used: int,
+                        marks: list[tuple[int, int]]) -> None:
+        """VM_COMPILE_JUDGE: the block compiled here at its address with the flags the VM used, word for word, and the
+        VM's successor scan against _flags_live_out (equal, wider where a form was missing, never short)."""
+        insns, addr = [], start
+        for _ in range(count):
+            ins = lift(self.mem.code_at(addr), addr)
+            insns.append(ins)
+            addr += ins.length
+        a, py_marks, _, _, _ = assemble_block(insns, code, self.dispatch_va, self.slice_va, self.runtime.symbols,
+                                              live_used)
+        words = a.finish()
+        got = list(struct.unpack_from(f"<{len(words)}I", self.mm, code - MONITOR_VA))
+        if addr != end or got != words or [tuple(m) for m in marks] != py_marks:
+            raise CompileError(f"the VM compiled the block at 0x{start:x} unlike assemble_block")
+        self.vm_judged["equal"] += 1
+        if live_out != 0xFFFFFFFF:
+            py = self._flags_live_out(start, insns[-1], end) if len(insns) else ALL_FLAGS
+            if py & ~live_out:
+                raise CompileError(f"the VM's successor scan after 0x{start:x} found {live_out:#x}, short of {py:#x}")
+            self.vm_judged["scan equal" if py == live_out else "scan wider"] += 1
+
+    def vm_compile_counts(self) -> dict[str, int]:
+        """block_compiler.c's counts: its compiles, and its refusals and cut blocks by cause (VMC_COUNT_NAMES)."""
+        values = struct.unpack_from(f"<{len(VMC_COUNT_NAMES)}Q", self.mm, VM_COMPILER + VMC_COUNTS)
+        return dict(zip(VMC_COUNT_NAMES, values))
 
     def _slice_stub(self) -> int:
         """The slice stub every block's stop calls (BL, X30 the stop's HVC #4): when the count (the limit word minus
@@ -3409,6 +3549,24 @@ class VM:
         d.branch(lambda off: a64.bcond("ne", off), miss)
         d.emit(a64.br(25))
         d.bind(miss)
+        # Sprint 083: the compiler inside the VM first (block_compiler.c w2m_vm_compile; VMC_ENABLED). x16, x18 and x25
+        # are dead at a dispatch and NZCV with them; the C keeps x19-x29 and never touches x18 (Apple's arm64 ABI)
+        host = d.label()
+        d.emit(*a64.mov_imm(16, MONITOR_VA + VM_COMPILER), a64.ldr(8, 16, 16, VMC_ENABLED))
+        d.branch(lambda off: a64.cbz(16, off), host)
+        d.emit(*a64.mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE))
+        for r in range(0, 16, 2):
+            d.emit(a64.stp(r, r + 1, 16, 8 * r))
+        d.emit(a64.stp(17, 30, 16, 128))
+        d.emit(*a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0), a64.mov(0, 17),
+               *a64.mov_imm(16, self.runtime.symbols["w2m_vm_compile"]), a64.blr(16), a64.mov(25, 0),
+               *a64.mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE))
+        for r in range(0, 16, 2):
+            d.emit(a64.ldp(r, r + 1, 16, 8 * r))
+        d.emit(a64.ldp(17, 30, 16, 128))
+        d.branch(lambda off: a64.cbz(25, off), host)
+        d.emit(a64.br(25))
+        d.bind(host)
         self.miss_va = d.here()
         # the host may have compiled a block and made its pages read-only (_protect_code): drop stale TLB entries too
         d.emit(a64.hvc(1), a64.IC_IALLU, a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
@@ -3596,6 +3754,7 @@ class VM:
                 desc = struct.unpack_from("<Q", self.mm, at)[0]
                 struct.pack_into("<Q", self.mm, at, desc | AP_READ_ONLY)
                 blocks = self.code_pages[page] = set()
+                self._page_set_add(page)
             blocks.add(owner)
 
     def _code_written(self, address: int) -> bool:
@@ -3610,6 +3769,7 @@ class VM:
         blocks = self.code_pages.pop(page, None)
         if blocks is None:
             return False
+        self._page_set_remove(page)
         for start in blocks:
             if self.blocks.pop(start, None) is None:
                 continue
@@ -3988,6 +4148,9 @@ class VM:
 
         self._max_steps = max_steps
         self._set_budget()
+        # the compiler inside the VM, where nothing needs every miss to reach the host (Sprint 083)
+        struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_ENABLED, int(
+            VM_COMPILE and not self.lockstep and not BLOCK_CENSUS and on_dispatch is None and interrupt_every_ms is None))
         forced_stop = False
         runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
         self._cmd = cmd
@@ -4056,6 +4219,7 @@ class VM:
                 self.run_ns += marked - started
                 last_kind = 0
                 x = e.x
+                self._vm_compiled()                           # the VM's own compiles first: anything below may drop them
                 if not runtime_lo <= e.pc < runtime_hi:
                     # the limit as the slice stub left it: it raises the limit and x23 together (before, the limit
                     # read before the run made the count short by each refill, and the guest's clock went back)

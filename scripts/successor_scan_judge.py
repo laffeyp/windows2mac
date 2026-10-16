@@ -43,6 +43,7 @@ class Model:
 
     def __init__(self, thunks: tuple[int, ...] = ()) -> None:
         self.pages: dict[int, bytearray] = {}
+        self.placed: dict[int, bytearray] = {}           # per page, 1 where a byte was placed (not FILL)
         self.code: set[int] = set()
         self.thunks = tuple(sorted(thunks))
 
@@ -51,9 +52,16 @@ class Model:
             page = (address + i) & ~(PAGE - 1)
             if page not in self.pages:
                 self.pages[page] = bytearray([FILL]) * PAGE
+                self.placed[page] = bytearray(PAGE)
             if code:
                 self.code.add(page)
             self.pages[page][(address + i) & (PAGE - 1)] = b
+            self.placed[page][(address + i) & (PAGE - 1)] = 1
+
+    def is_fill(self, address: int) -> bool:
+        """A mapped byte no placed instruction covers (FILL)."""
+        mask = self.placed.get(address & ~(PAGE - 1))
+        return mask is not None and not mask[address & (PAGE - 1)]
 
     def read(self, address: int, limit: int, pages: set[int] | dict[int, bytearray]) -> bytes:
         """Up to `limit` bytes from `address` while their pages are in `pages`."""
@@ -75,8 +83,10 @@ class _Host:
         self.code_pages: dict[int, set[int]] = {}
         self._scan_log: list[tuple[int, int]] | None = None
         self.lifts: dict[int, Any] = {}
+        self.fetched: list[int] = []                     # every address the scan fetched, lifted or not
 
     def _lift(self, addr: int) -> Any:
+        self.fetched.append(addr)
         if addr not in self.lifts:
             if addr & ~(PAGE - 1) not in self.model.pages:
                 raise GuestFault(f"instruction fetch at 0x{addr:x} outside mapped memory")
@@ -99,7 +109,7 @@ class _Host:
         """live_out after `last` ending at `address` (live_in at `address` when last is None): the flags, the pages the
         scan made the block an owner of, the instructions it read."""
         self.code_pages = {p: set() for p in self.model.code}
-        self._scan_log = []
+        self._scan_log, self.fetched = [], []
         live = self._flags_live_in(1, address) if last is None else self._flags_live_out(1, last, address)
         return live, {p for p, owners in self.code_pages.items() if owners}, self._scan_log
 
@@ -172,8 +182,12 @@ def judge(c: CScan, model: Model, scans: list[tuple[int | None, int]], counts: C
         py, py_pages, read = host.scan(last, address)
         got, pages = c.scan(model, c_last, address)
         every_form = all(c.decode(model, a) is not None for a, _ in read)
+        # a scan that fetched a FILL byte (bytes the record never compiled) ends there on both sides by construction:
+        # counted apart from `equal` (review of Sprint 082, finding 3)
+        fill = any(model.is_fill(a) for a in host.fetched) or any(
+            model.is_fill(a + k) for a, n in read for k in range(n))
         if got == py and pages == py_pages and every_form:
-            counts["equal"] += 1
+            counts["equal at fill bytes" if fill else "equal"] += 1
         elif py & ~got:
             counts["short"] += 1
             examples.append(f"short {last_at and hex(last_at)} {address:x}: C {got:#x} host {py:#x}")
@@ -239,9 +253,15 @@ def spec_layout(rng: random.Random, encodings: list[bytes], segments: int = 4) -
     """`segments` runs of 1-12 encodings at random places near page ends, each but the last ending in a JMP, CALL or
     Jcc rel32 to another's start; one page in four after a run is mapped but not code. The scans: live_in at each
     encoding, live_out after each jump."""
-    model = Model()
-    starts = [0x1_4000_0000 + rng.randrange(1 << 12) * 4 * PAGE + PAGE - rng.randrange(1, 48)
+    near_process = rng.random() < 0.1                    # a run that crosses PROCESS_VA (the scan stops there)
+    base = vm_backend.PROCESS_VA - 8 * PAGE if near_process else 0x1_4000_0000
+    starts = [base + rng.randrange(8 if near_process else 1 << 12) * PAGE + PAGE - rng.randrange(1, 48)
               for _ in range(segments)]
+    if near_process:
+        starts[-1] = vm_backend.PROCESS_VA - rng.randrange(1, 24)
+    # thunks (review of Sprint 082, finding 1): one in four layouts makes a run's start, which jumps reach, a thunk
+    thunks = (rng.choice(starts),) if rng.random() < 0.25 else ()
+    model = Model(thunks)
     scans: list[tuple[int | None, int]] = []
     for s, start in enumerate(starts):
         at = start
@@ -256,6 +276,8 @@ def spec_layout(rng: random.Random, encodings: list[bytes], segments: int = 4) -
             model.place(at, op + ((target - (at + len(op) + 4)) & 0xFFFF_FFFF).to_bytes(4, "little"))
             scans.append((at, at + len(op) + 4))
             at += len(op) + 4
+        if rng.random() < 0.1:
+            model.thunks = tuple(sorted({*model.thunks, at}))   # a thunk where the run falls through
         if rng.random() < 0.25:
             model.place(at, rng.randbytes(16), code=False)
     return model, scans

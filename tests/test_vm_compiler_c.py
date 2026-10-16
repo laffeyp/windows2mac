@@ -400,23 +400,56 @@ def test_the_successor_scan_equals_the_hosts(compiler: Compiler) -> None:
     for counts in (record, spec):
         assert counts["short"] == 0 and counts["differ"] == 0, (counts, examples[:5])
     assert record["equal"] > 3000 and spec["equal"] > 3000, (record, spec)
+    assert record["equal at fill bytes"] < 600, record      # 465 of the 4,000 samples (review of Sprint 082)
 
 
-SCAN_PLANT = ("        addr = ins.values[f->target];\n", "        addr += (u64)ins.length;\n")
+SCAN_PLANTS = {
+    "follows no jump": ("        addr = ins.values[f->target];\n", "        addr += (u64)ins.length;\n"),
+    # review of Sprint 082, finding 1: the thunk and PROCESS_VA checks, which no judge reached before
+    "sees no thunk": ("    return lo < nthunks && thunks[lo] == address;\n", "    return 0;\n"),
+}
+# Not a plant: the scan's PROCESS_VA check. Without it the C still stops there, since no form decodes at or past
+# PROCESS_VA (the key holds the next address's value class, and no recorded code ran near 0x7FFE00000000) and the VM's
+# code-page set never holds a process page (_protect_code); the judges cannot see it removed (Sprint 083).
+SCAN_PLANT = SCAN_PLANTS["follows no jump"]
 
 
-def test_a_scan_that_does_not_follow_a_jump_is_caught(tmp_path: Path) -> None:
-    """A plant: the scan goes on past a jump instead of to its target. (Sprint 082's first plant, the NZCV kind taken
-    from the instruction itself, changed no scan: a Jcc's flags differ by kind only when it branches on its setter's
-    NZCV, and every setter writes the flags its Jcc tests, so they are decided before the scan reaches the Jcc.)"""
+@pytest.mark.parametrize("plant", sorted(SCAN_PLANTS))
+def test_a_planted_scan_fault_is_caught(tmp_path: Path, plant: str) -> None:
+    """Each plant changes what a scan returns, and the judges see it: the spec layouts place thunks (as jump targets
+    and where runs fall through) and runs that cross PROCESS_VA; the record has neither."""
     assert CLANG is not None
+    old, new = SCAN_PLANTS[plant]
     text = (SOURCE / "vm_compiler.c").read_text()
-    assert text.count(SCAN_PLANT[0]) == 1
-    (tmp_path / "vm_compiler.c").write_text(text.replace(*SCAN_PLANT))
+    assert text.count(old) == 1
+    (tmp_path / "vm_compiler.c").write_text(text.replace(old, new))
     (tmp_path / "harness.c").write_text(HARNESS)
     out = tmp_path / "planted.so"
     subprocess.run([CLANG, "-shared", "-fPIC", "-O2", "-std=c11", "-w", f"-I{tmp_path}", f"-I{SOURCE}", "-o", str(out),
                     str(tmp_path / "harness.c"), str(SOURCE / "x86_decode.c"), str(SOURCE / "a64_encoder.c")],
                    check=True, capture_output=True)
     record, spec, _ = _scan_judges(Compiler(out))
-    assert record["short"] + record["differ"] > 0 and spec["short"] + spec["differ"] > 0, (record, spec)
+    assert spec["short"] + spec["differ"] > 0, (plant, record, spec)
+    if plant == "follows no jump":
+        assert record["short"] + record["differ"] > 0, record
+
+
+def test_every_setter_writes_the_flags_its_jcc_tests() -> None:
+    """The invariant behind KIT_DIARY #60 (review of Sprint 082, finding 4): a Jcc that branches on its setter's NZCV
+    tests only flags the setter writes, so the scan has decided them before it reaches the Jcc and the NZCV kind
+    changes no scan's result. Over every recorded setter in the samples and every condition of its kind."""
+    jcc = {cc: vm_backend.insn_flags(lift(bytes([0x0F, 0x80 + cc, 0, 0, 0, 0]), 0x1_4000_0000))[0] for cc in range(16)}
+    conditions = {cc: next(op[1] for op in lift(bytes([0x0F, 0x80 + cc, 0, 0, 0, 0]), 0x1_4000_0000).ops
+                           if op[0] == "br") for cc in range(16)}
+    checked = 0
+    for code, address, _, _ in samples()[::4]:
+        ins = lift(code, address)
+        kind = vm_backend.nzcv_setter(ins)
+        if kind is None:
+            continue
+        written = vm_backend.insn_flags(ins)[1]
+        for cc, cond in conditions.items():
+            if cond in vm_backend.NZCV_CONDITIONS[kind]:
+                assert jcc[cc] & ~written == 0, (ins.iclass, kind, cond)
+                checked += 1
+    assert checked > 1000, checked

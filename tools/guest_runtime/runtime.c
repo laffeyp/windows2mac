@@ -43,6 +43,15 @@ void *memcpy(void *dst, const void *src, unsigned long n) {
     return dst;
 }
 
+/* ... and for zeroing one (the compiler's key builder, Sprint 083): Apple's clang calls bzero, others memset. */
+void *memset(void *dst, int c, unsigned long n) {
+    volatile u8 *d = (volatile u8 *)dst;                 /* volatile: the loop is not turned back into a memset call */
+    for (unsigned long i = 0; i < n; i++) d[i] = (u8)c;
+    return dst;
+}
+
+void bzero(void *dst, unsigned long n) { memset(dst, 0, n); }
+
 void w2m_unimplemented(u64 api, u64 detail) {
     host_call(W2M_HOST_UNIMPLEMENTED, api, detail);     /* the host stops the run; no return */
     for (;;) {}

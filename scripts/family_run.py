@@ -3022,7 +3022,7 @@ def requested_host_files(files: tuple[str, ...]) -> tuple[str, ...]:
     from w2m.vm_backend import REQUEST_FILES
     host: set[str] = set()
     for n in files:
-        for request in set(REQUEST.findall((GUEST / n).read_text())):
+        for request in set(REQUEST.findall(guest_runtime.source_path(n).read_text())):
             if request not in REQUEST_FILES:
                 raise ValueError(f"{n}: {request} answers from no Python vm_backend.REQUEST_FILES names")
             host.update(REQUEST_FILES[request])
@@ -3037,9 +3037,10 @@ def candidate_sha256(f: Family, sources: dict[str, str] | None = None) -> str:
     generated = guest_runtime.generated_headers()
     text = ""
     for n in files:
-        text += f"\0tools/guest_runtime/{n}\0" + (sources or {}).get(n, (GUEST / n).read_text())
+        source = guest_runtime.source_path(n)
+        text += f"\0{source.relative_to(ROOT)}\0" + (sources or {}).get(n, source.read_text())
     for h in headers:
-        text += f"\0{h}\0" + (generated[h] if h in generated else (GUEST / h).read_text())
+        text += f"\0{h}\0" + (generated[h] if h in generated else guest_runtime.source_path(h).read_text())
     for path in host:
         text += f"\0{path}\0" + (ROOT / path).read_text()
     return "sha256:" + hashlib.sha256(text.encode()).hexdigest()

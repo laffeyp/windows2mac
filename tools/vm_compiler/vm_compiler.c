@@ -35,6 +35,8 @@ enum { VMC_BRANCH_NONE, VMC_BRANCH_ALWAYS, VMC_BRANCH_OTHER };
 enum { VMC_TARGET_NOT_A_VALUE = 254, VMC_TARGET_NONE = 255 };
 
 #include "stencil_table.h"
+_Static_assert(VMC_BLOCK_LIMIT == VMC_MAX_BLOCK_INSNS, "vm_compiler.h VMC_BLOCK_LIMIT");
+_Static_assert(VMC_FLAGS_ALL == VMC_ALL_FLAGS, "vm_compiler.h VMC_FLAGS_ALL");
 
 /* stencil_census.value_class, as bits in key_bytes' order */
 static u32 value_class(u64 m) {
@@ -244,6 +246,8 @@ int vmc_decode(const u8 *code, int n, u64 address, struct vmc_insn *out) {
     out->address = address;
     return 0;
 }
+
+int vmc_ends(const struct vmc_insn *ins) { return ins->form->ends; }
 
 int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base, u64 exit_va,
              const u64 *symbols, u32 *out, int max_words) {

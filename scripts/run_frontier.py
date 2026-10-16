@@ -258,6 +258,7 @@ def main(argv: list[str]) -> int:
             # the whole run's switches and time by exit (the progress line's are as of its last 30-second tick)
             state["switching"] = (vm.switches_in_vm(), dict(vm.handovers))
             state["time"] = (vm.run_ns, dict(vm.exit_ns))
+            state["vm_compile"] = vm.vm_compile_counts()      # from the monitor's memory: before vm.close()
             state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid else where(vm, t.x[17]))
                                      for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
@@ -284,7 +285,8 @@ def main(argv: list[str]) -> int:
                      code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
                      tcache=(vm.tcache_hits, len(vm.translations) - vm.tcache_hits),
                      split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
-                     code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40])
+                     code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40],
+                     vm_judged=dict(vm.vm_judged), blocks_compiled=len(vm.translations))
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
         if vm.unimplemented is not None:
@@ -377,6 +379,10 @@ def main(argv: list[str]) -> int:
     run_ns, exit_ns = state.get("time", (0, {}))
     print(f"time: in run {run_ns / 1e9:.1f} s; host by exit "
           + ", ".join(f"hvc {k} {v / 1e9:.1f} s" for k, v in sorted(exit_ns.items(), key=lambda kv: -kv[1])[:8]))
+    vmc = state.get("vm_compile", {})
+    print(f"blocks compiled {state.get('blocks_compiled')}, in the VM (Sprint 083) {vmc.get('compiled', 0)}; refused to the host by cause "
+          f"{ {k: v for k, v in vmc.items() if v and k != 'compiled' and not k.startswith('cut')} }; cut short "
+          f"{ {k: v for k, v in vmc.items() if v and k.startswith('cut')} }; judged {state.get('vm_judged')}")
     switches, handovers = state.get("switching", (0, {}))
     print(f"switches in the VM {switches}; hand-overs in the host {handovers}")
     if state.get("code"):

@@ -51,6 +51,13 @@ struct vmc_insn {
 /* The instruction at code[0..n) at `address` and its form: 0, or a vmc_status */
 int vmc_decode(const u8 *code, int n, u64 address, struct vmc_insn *out);
 
+/* A decoded instruction ends a block (it has a branch) */
+int vmc_ends(const struct vmc_insn *ins);
+
+/* vm_backend.MAX_BLOCK_INSNS and ALL_FLAGS, for callers that do not see the table (vm_compiler.c asserts them) */
+#define VMC_BLOCK_LIMIT 64
+#define VMC_FLAGS_ALL 63
+
 /* The words of a decoded instruction for its flag arguments, at `base`: the word count, or a vmc_status */
 int vmc_emit(const struct vmc_insn *ins, const struct vmc_flags *flags, u64 base, u64 exit_va,
              const u64 *symbols, u32 *out, int max_words);
