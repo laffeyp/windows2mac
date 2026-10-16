@@ -1,0 +1,103 @@
+{
+ "contract_id": "w2m.vm_compiler.stencil_table",
+ "version": "0.83.0",
+ "status": "accepted",
+ "summary": "The compiler in C (tools/vm_compiler: vmc_compile for one instruction, vmc_block for a block, vmc_live_in and vmc_live_out for the flags a block's successors read) against the Python compiler: where the C emits words for an instruction or a block, they equal vm_backend.compile_insn's or assemble_block's for the same bytes, address, base, exit, slice stub, symbols and flag arguments; where its table has no stencil, or a guard or a hole's alternatives refuse the input, the C returns a status and the host compiles it in Python. Where every instruction the host's successor scan (VM._flags_live_in, _flags_live_out) reads has a form, the C scan's flags and pages equal the host's; elsewhere its flags hold all the host's.",
+ "applicability": "tools/vm_compiler built by clang for the host (arm64 macOS), and linked into the guest runtime image where tools/guest_runtime/block_compiler.c calls it at a dispatch miss (Sprint 083); the table generated from store/stencil (record and table sha256 in tools/vm_compiler/stencil_table.h); the successor scan reads at most LIVENESS_SCAN = 8 instructions per successor (vm_backend.LIVENESS_SCAN, VMC_LIVENESS_SCAN)",
+ "roles": [
+  "compiler"
+ ],
+ "scenario": {
+  "initial": {
+   "compiler": "tools/vm_compiler/{vm_compiler,x86_decode,a64_encoder}.c with the generated stencil_table.h"
+  },
+  "execution": {
+   "compiler": "scripts/stencil_judge.py: each judge's inputs at a base, exit and slice stub drawn at random"
+  },
+  "observation": {
+   "phase": "the words and marks each compiler returns"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_words",
+  "reference": "src/w2m/vm_backend.py compile_insn (one instruction), assemble_block (a block), VM._flags_live_in and VM._flags_live_out (the successor scan)",
+  "refusal": [
+   "VMC_NO_STENCIL (-2): no key, or no variant for the flag arguments",
+   "VMC_GUARDED (-7): a value the derivation never varied differs, or a hole's alternatives disagree",
+   "VMC_DECODE (-1): the bytes do not decode",
+   "a block cut short before such an instruction, with every flag live at its new end",
+   "a scan that reaches an instruction with no form: it stops there with every undecided flag live, more than the host's scan finds and never fewer"
+  ],
+  "judges": [
+   {
+    "name": "instructions",
+    "source": "store/stencil/record.txt.gz: every distinct compile call of the batch run's record",
+    "outside_target_sources": false
+   },
+   {
+    "name": "blocks",
+    "source": "blocks made from the same record, from every recorded address",
+    "outside_target_sources": false
+   },
+   {
+    "name": "cases",
+    "source": "the class case sets (semantics_differential.CASE_SETS): Intel-checked instructions with random operands",
+    "outside_target_sources": true
+   },
+   {
+    "name": "spec",
+    "source": "random encodings of every decoder spec row (tests/test_x86_decode_c.row_samples)",
+    "outside_target_sources": true
+   },
+   {
+    "name": "scan",
+    "source": "store/stencil/record.txt.gz laid out as memory: after every recorded branch and at every address one recorded instruction follows",
+    "outside_target_sources": false
+   },
+   {
+    "name": "scan-spec",
+    "source": "random encodings of every decoder spec row laid out with direct jumps between them (successor_scan_judge.spec_layout)",
+    "outside_target_sources": true
+   },
+   {
+    "name": "vm",
+    "source": "blocks the VM compiled during a frontier run of the game (VM_COMPILE_JUDGE): each lifted again from guest memory and assembled by assemble_block at its address with the flags the VM used; the VM's scan against _flags_live_out on the same memory",
+    "outside_target_sources": false
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "stencil-judge",
+   "category": "observed",
+   "source_ref": "store/runs/stencil-judge-1792098411625593000 on 1a769179 (Sprint 080): instructions, blocks, cases, spec, 0 differing; store/runs/stencil-judge-1792108383330932000 on d7a81658 (Sprint 082): CANDIDATE_ACCEPTED; scan 1,386,082 equal, 112 wider, 65 equal with a form missing, 0 short, 0 differing; scan-spec 174,796 equal, 29,975 wider, 67,591 equal with a form missing, 0 short, 0 differing",
+   "applicability": "the table of store/stencil at Sprint 082",
+   "execution_ids": [
+    "vm_compiler-instructions",
+    "vm_compiler-blocks",
+    "vm_compiler-cases",
+    "vm_compiler-spec",
+    "vm_compiler-scan",
+    "vm_compiler-scan-spec"
+   ]
+  },
+  {
+   "evidence_id": "vm-compile-judge",
+   "category": "observed",
+   "source_ref": "store/runs/frontier-643a6283510c-1792110029789531000 on 1db10a26 (Sprint 083, W2M_VM_COMPILE_JUDGE=1): 84,046 blocks compiled in the VM, every one equal to assemble_block's words and marks; scans 83,738 equal, 164 wider, 0 short; 3,930 misses on pages not yet behind translated code, 176 other refusals, to the host",
+   "applicability": "the game's frontier to 1,000,000,002 instructions",
+   "execution_ids": [
+    "frontier-643a6283510c-1792110029789531000"
+   ]
+  }
+ ],
+ "open_questions": [
+  "Coverage: 89-94% of inputs from outside the record have no stencil (Decision 2026-10-15, the inferred compiler against step 6).",
+  "A hole's alternatives are sought at its chosen position only, and two expressions count as one where they agree on stencil_table._PROBE_VALUES; agreement there is evidence, not proof (review 2026-10-15, small review of 080, finding 3).",
+  "The judges here show the C equals the Python; that the host's successor scan is right is tests/test_flag_liveness.py's differential (random programs run with and without flag liveness), which no mirror judge can be (review of Sprint 082, finding 2)."
+ ],
+ "sections": {
+  "plan": "recentering step 6 (docs/recentering-2026-10-14.md)",
+  "decisions": "BLACKBOARD Decisions 2026-10-14 (copy-and-patch; the stencil key) and 2026-10-15 (the table's soundness; the inferred compiler)"
+ }
+}
