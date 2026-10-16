@@ -314,6 +314,14 @@
 
 ## Sprint tail
 
+### Sprint 091 (2026-10-16, closed)
+- **Scope:** step 0 of the solution: the laptop's C:\Windows and its SOFTWARE and SYSTEM hives copied whole.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* 183,280 files listed on the laptop; tar given that list copied 183,222 (68.3 GB); 40 named unreadable (files Windows holds open), 18 neither copied nor named (12 reparse points, 6 deleted after the listing), 26 written during the copy; the first copy's 5,683 files equal by sha256.
+  - *Observation 1 (silent loss, of the tool):* the laptop's tar, walking the tree itself, left 25,796 readable files out with no error. Disposition: resolved-here (the file list given explicitly; the judge counts every listed file).
+  - *Observation 2 (a judge written from memory):* the tar-error pattern did not match the real line, so the judge would have called every unreadable file missing. Disposition: resolved-here (pattern and test from the laptop's own line).
+- **Closed:** CI pending at this entry.
+
 ### Sprint 090 (2026-10-16, closed-partial)
 - **Scope:** compile_insn run on the symbolic templates gives stencils.
 - **Rubber Duck Pass:**

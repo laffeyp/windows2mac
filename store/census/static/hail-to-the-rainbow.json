@@ -12245,7 +12245,7 @@
  "source": {
   "com_sha256": "628e9afdfbda3f6899c7f5ece98b5e723c39798052dfd281b16e355560cb9a33",
   "exports_sha256": "8320adad357cbaa97e337010a36fdf9207770814907fedfdcd65ed0bfef4c807",
-  "script_sha256": "d5837f240da23cbb7a06c4e95440cb548e34356c952f06dfbfce40646b40c46c",
+  "script_sha256": "47b77f4c97a7b092829344ab2bb512674f6954ba014b49dd2f73b9ed98a76f5c",
   "windows_build": "CurrentBuild=26200 UBR=0x1ea0 DisplayVersion=25H2 EditionID=Core"
  },
  "strings": {

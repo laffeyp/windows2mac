@@ -62,6 +62,7 @@ SUFFIXES = {".exe", ".dll", ".sys", ".ocx", ".drv", ".cpl", ".ax", ".acm", ".asi
 WINDOWS_RUN = ROOT / "store" / "game-runs" / "38006665419"
 DIR_CLR = 14                                             # PE Format: the CLR runtime header's data directory
 WINDOWS_DEPOT = "windows-system"                         # Windows's own DLLs: a source, not a game
+WINDOWS_TREE_DEPOT = "windows"                           # the laptop's whole C:\Windows (Sprint 091): a source too
 # Microsoft's redistributable runtimes (Microsoft Learn: "Latest supported Visual C++ Redistributable downloads"; the
 # DirectX End-User Runtime's d3dx, d3dcompiler, xinput1_x, XAudio2_x and X3DAudio): a game ships or installs them, so
 # w2m can load them as PE files where Windows's own DLLs are services
@@ -289,7 +290,7 @@ def main(argv: list[str]) -> int:
         f"{arch} {len(t)} DLLs {sum(len(n) for n in t.values())} names" for arch, t in windows["exports"].items())
           + f"; {len(com['interfaces'])} interfaces, {len(com['classes'])} classes")
     a.out.mkdir(parents=True, exist_ok=True)
-    for depot in sorted(p for p in a.depots.iterdir() if p.is_dir() and p.name != WINDOWS_DEPOT):
+    for depot in sorted(p for p in a.depots.iterdir() if p.is_dir() and p.name not in (WINDOWS_DEPOT, WINDOWS_TREE_DEPOT)):
         c = census(depot, windows, com, source)
         if not c["images"]:
             continue
