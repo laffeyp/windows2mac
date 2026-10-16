@@ -204,7 +204,7 @@
  "source": {
   "com_sha256": "628e9afdfbda3f6899c7f5ece98b5e723c39798052dfd281b16e355560cb9a33",
   "exports_sha256": "8320adad357cbaa97e337010a36fdf9207770814907fedfdcd65ed0bfef4c807",
-  "script_commit": "6dbad73ba8991c0a03acb5d27249052f3b27ab3b",
+  "script_sha256": "d5837f240da23cbb7a06c4e95440cb548e34356c952f06dfbfce40646b40c46c",
   "windows_build": "CurrentBuild=26200 UBR=0x1ea0 DisplayVersion=25H2 EditionID=Core"
  },
  "strings": {

@@ -23,7 +23,7 @@ For each depot under ~/w2m-depots it writes store/census/static/<depot>.json:
 - `strings`: Steam interface versions ("SteamUser021") and DLL names in each image's bytes;
 - `exports`: the names each image of the depot exports (the targets of its own GetProcAddress calls: mono's API);
 - `served`: for every Windows or unknown function the census names, whether w2m serves it (vm_backend.service_for);
-- `source`: the export and COM tables' Windows build and sha256, and this script's commit.
+- `source`: the export and COM tables' Windows build and sha256, and this script's sha256.
 
 and prints a summary per depot. The output is sorted and has no timestamps.
 
@@ -41,7 +41,6 @@ import hashlib
 import json
 import re
 import struct
-import subprocess
 import sys
 import uuid
 from collections import Counter, defaultdict
@@ -284,9 +283,8 @@ def main(argv: list[str]) -> int:
         build_windows_tables(a.windows)
         return 0
     windows, com, source = windows_tables()
-    commit = subprocess.run(["git", "-C", str(ROOT), "log", "-1", "--format=%H", "--", "scripts/static_census.py"],
-                            capture_output=True, text=True).stdout.strip()
-    source = {**source, "script_commit": commit}
+    # the script by its bytes, which a run before the commit already has (its commit would name the previous one)
+    source = {**source, "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     print(f"Windows build {source['windows_build']}: " + ", ".join(
         f"{arch} {len(t)} DLLs {sum(len(n) for n in t.values())} names" for arch, t in windows["exports"].items())
           + f"; {len(com['interfaces'])} interfaces, {len(com['classes'])} classes")

@@ -297,6 +297,7 @@
 - **2026-10-09 (Sprint 032)** — Answered for the Sprint 031 question above: version 0.2.0 picks three values at run time (QueryPerformanceCounter into a 256-entry table that carries each value's args_sha256) and judges with `exact` (GetLastError returns the argument of the latest SetLastError, checked by hash). The constant is rejected under 0.2.0; `test_constant_rejected_under_0_2_0_accepted_under_0_1_0` holds both verdicts.
 - **2026-10-09 (substrate, upstream)** — `substrate.api.Producer` declares its events as `substrate.types.Event` (the bus frame), while the kernel takes and checks the producer's own msgspec Structs. A fix belongs in laffeyp/substrate (`AsyncIterable[Struct]`); w2m bridges it in `w2m.record.producer` until then.
 - **2026-10-10 (review 2026-10-10 D8)** — The local VM needs internet when it runs the Steam client so `SteamAPI_Init` succeeds (Decision 2026-10-09, the VM's role), while the guest's lack of internet is "not a defect" for driving it (user, chat 2026-10-09). No sprint has needed Steam in the VM yet (local-VM review L3 open). Raise with the user when one does.
+- **2026-10-16 (Sprint 089)** — Does lift() address through R8D-R15D under the 0x67 prefix with 64 bits? `_operand` sets 32-bit addressing only for an E-named base (or an E-named index with no base); the SDM (Vol 1 3.3.7) computes any 32-bit address-size effective address in 32 bits. The class case sets hold 11,202 such cases, 944 with the base's upper half nonzero, and their classes are accepted against Intel's results: evidence against, not proof (both addresses may fault, or reach the same bytes). Settled by examining those 944 cases' accesses, or by a probe on the laptop's x86 processor.
 
 ## Drift watchlist
 
@@ -310,13 +311,21 @@
 
 ## Sprint tail
 
+### Sprint 089 (2026-10-16, closed)
+- **Scope:** the compiler from the rules, first link: each rule's ops as a template, by running it on symbols.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; the template judge filled 5,504 templates for 1,441,089 instructions of three sources and found every one equal to lift().
+  - *Observation 1 (blind judge, of the judge):* the game's record alone passed with a shape that missed a test lift() makes; the spec rows and class cases caught it. Disposition: resolved-here.
+  - *Observation 2 (a suspected semantics defect):* 0x67 addressing through R8D-R15D in lift(). Disposition: open question, to be measured.
+- **Closed:** CI pending at this entry.
+
 ### Sprint 088 (2026-10-16, closed)
 - **Scope:** the large review of 082-086 on the service census (H3, M1): Windows's own exports and COM registry from the laptop, DLL classes, P/Invoke from metadata, COM GUIDs, Steam interfaces.
 - **Rubber Duck Pass:**
   - *Sequence narration:* no run; System32 and SysWOW64 copied from the laptop; `--windows` built the two tables; the census rewrote store/census/static with the judge holding (803 of 803; 322 of 331).
   - *Observation 1 (missed input, of the work):* the first copy of System32 missed 227 files, and SysWOW64's 233, by the glob's case. Disposition: resolved-here (counted against the laptop's own listing).
   - *Observation 2 (low precision, of the work):* candidate lookups are about 8% precise. Disposition: recorded (labelled as candidates).
-- **Closed:** CI pending at this entry.
+- **Closed:** CI run 38843441901 (success on a41823fd).
 
 ### Sprint 087 (2026-10-16, closed)
 - **Scope:** the large review of 082-086 on the instruction census (H2, H3 in part, M2): jump tables out of the sweep, a precision judge, the 32-bit census, one count per image, the module map in the frontier record.
