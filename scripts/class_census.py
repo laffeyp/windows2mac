@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -51,10 +52,9 @@ MODEL_KINDS = frozenset({"x86", "x87", "ud", "fcw", "xgetbv"})   # vm_backend.co
 def census(path: Path) -> dict[str, Any]:
     data = path.read_bytes()
     img = parse(data)
-    reach = x86ref.walk(img, data)
-    raws = {rva: ins.raw for rva, ins in reach.insns.items()}
-    raws.update({rva: raw for rva, raw in sweep(img, data).items() if rva not in raws})
+    raws, only, tables = reachable(img, data)
     instances: Counter[str] = Counter()
+    only_by_class: Counter[str] = Counter()
     lifted: Counter[str] = Counter()
     model: Counter[str] = Counter()
     refusals: dict[str, Counter[str]] = defaultdict(Counter)
@@ -66,6 +66,7 @@ def census(path: Path) -> dict[str, Any]:
             undecoded += 1
             continue
         instances[d.iclass] += 1
+        only_by_class[d.iclass] += rva in only
         try:
             lifted_ins = lift(raw + b"\x90" * 15, img.image_base + rva)
             lifted[d.iclass] += 1
@@ -74,9 +75,12 @@ def census(path: Path) -> dict[str, Any]:
         except LiftError as e:
             refusals[d.iclass][str(e).split(" at ")[0]] += 1
     classes: dict[str, dict[str, Any]] = {ic: {"instances": n, "lifted": lifted[ic], "model": model[ic],
-                    "refusals": dict(refusals[ic].most_common(3))} for ic, n in instances.most_common()}
+                    "sweep_only": only_by_class[ic], "refusals": dict(refusals[ic].most_common(3))}
+                                          for ic, n in instances.most_common()}
     return {"file": path.name, "sha256": hashlib.sha256(data).hexdigest(),
-            "reachable_instructions": len(raws), "walked": len(reach.insns), "undecoded": undecoded,
+            "reachable_instructions": len(raws), "walked": len(raws) - len(only), "undecoded": undecoded,
+            "jump_tables": len(tables), "jump_table_entries": sum(len(e) for e in tables.values()),
+            "precision": precision(img, data, raws, only),
             "classes": len(classes),
             "lifted": sum(1 for c in classes.values() if c["lifted"] == c["instances"]),
             "partly_lifted": sum(1 for c in classes.values() if 0 < c["lifted"] < c["instances"]),
@@ -84,21 +88,120 @@ def census(path: Path) -> dict[str, Any]:
             "by_class": classes}
 
 
-def sweep(img: Any, data: bytes) -> dict[int, bytes]:
-    """Every instruction a linear decode of each `.pdata` function finds, start to end (x64 functions hold no data:
-    their jump tables are in .rdata), by RVA; a function's decode stops at a byte w2m's decoder refuses."""
+STOPS = frozenset({"RET_NEAR", "JMP", "INT3", "UD2", "HLT"})   # no fall-through: what follows is reached otherwise
+# MSVC's x64 switch (Sprint 087; large review of 082-086, H2): `mov r32, dword ptr [base + index*4 + table]` with base
+# the image base (an earlier `lea base, [rip - ...]`), so `table` is an RVA and each entry an RVA in the function
+TABLE_LOAD = re.compile(r"dword ptr \[(\w+) \+ (\w+)\*4 \+ (0x[0-9a-f]+)\]")
+
+
+def _functions(img: Any) -> list[tuple[int, int]]:
+    return sorted(zip(img.function_starts, img.function_ends, strict=True))
+
+
+def _function_at(functions: list[tuple[int, int]], rva: int) -> tuple[int, int] | None:
+    import bisect
+    i = bisect.bisect_right(functions, (rva, 1 << 32)) - 1
+    return functions[i] if i >= 0 and functions[i][0] <= rva < functions[i][1] else None
+
+
+def jump_tables(img: Any, data: bytes, insns: dict[int, Any]) -> dict[int, list[int]]:
+    """Each switch table a dispatch load names: its RVA and its entries, read while each is an RVA inside the load's
+    own `.pdata` function (the table ends where a word is not)."""
+    functions = _functions(img)
+    tables: dict[int, list[int]] = {}
+    for ins in insns.values():
+        m = TABLE_LOAD.search(ins.op_str) if ins.mnemonic in ("mov", "movsxd") else None
+        fn = _function_at(functions, ins.rva) if m else None
+        if m is None or fn is None:
+            continue
+        table, entries = int(m.group(3), 16), list[int]()
+        while len(entries) < 4096:
+            try:
+                word = int.from_bytes(img.read_rva(data, table + 4 * len(entries), 4), "little")
+            except PeError:
+                break
+            if not fn[0] <= word < fn[1]:
+                break
+            entries.append(word)
+        if entries:
+            tables[table] = entries
+    return tables
+
+
+def reachable(img: Any, data: bytes) -> tuple[dict[int, bytes], set[int], dict[int, list[int]]]:
+    """The walk, with the targets of the jump tables it finds walked too (until no new table appears), joined with the
+    sweep: (raw bytes by RVA, the RVAs only the sweep found, the tables)."""
+    reach = x86ref.walk(img, data)
+    tables = jump_tables(img, data, reach.insns)
+    for _ in range(4):
+        targets = {t for es in tables.values() for t in es} - set(reach.insns)
+        if not targets:
+            break
+        reach = x86ref.walk(img, data, extra_roots=tuple(sorted({t for es in tables.values() for t in es})))
+        tables = jump_tables(img, data, reach.insns)
+    raws = {rva: ins.raw for rva, ins in reach.insns.items()}
+    swept = sweep(img, data, set(raws) | {t for es in tables.values() for t in es},
+                  [(t, t + 4 * len(es)) for t, es in tables.items()])
+    only = {rva for rva in swept if rva not in raws}
+    raws.update({rva: swept[rva] for rva in only})
+    return raws, only, tables
+
+
+def sweep(img: Any, data: bytes, known: set[int] | None = None,
+          tables: list[tuple[int, int]] | None = None) -> dict[int, bytes]:
+    """A linear decode of each `.pdata` function, by RVA. After an instruction with no fall-through (STOPS) it
+    resumes only at the next address the walk or a jump table reaches inside the function (`known`), and it never
+    decodes a jump table's words: MSVC places tables inside functions (UnityPlayer.dll 0x130260: RET, NOP, then RVAs).
+    A function's decode stops at a byte w2m's decoder refuses."""
+    import bisect
+    known_sorted = sorted(known or ())
+    spans = sorted(tables or ())
     out: dict[int, bytes] = {}
+
+    def next_known(after: int, end: int) -> int | None:
+        i = bisect.bisect_right(known_sorted, after)
+        return known_sorted[i] if i < len(known_sorted) and known_sorted[i] < end else None
+
+    def in_table(rva: int) -> int | None:
+        i = bisect.bisect_right(spans, (rva, 1 << 32)) - 1
+        return spans[i][1] if i >= 0 and spans[i][0] <= rva < spans[i][1] else None
+
     for start, end in zip(img.function_starts, img.function_ends, strict=True):
         code = img.read_rva(data, start, end - start)
-        at = 0
-        while at < len(code):
+        at: int | None = start
+        while at is not None and at < end:
+            table_end = in_table(at)
+            if table_end is not None:
+                at = next_known(table_end - 1, end) if known is not None else table_end
+                continue
             try:
-                n = decode(code[at:at + 15] + bytes(15)).length
+                d = decode(code[at - start:at - start + 15] + bytes(15))
             except DecodeError:
                 break
-            out[start + at] = code[at:at + n]
-            at += n
+            out[at] = code[at - start:at - start + d.length]
+            at += d.length
+            if known is not None and d.iclass in STOPS:
+                at = next_known(at - 1, end)
     return out
+
+
+def precision(img: Any, data: bytes, raws: dict[int, bytes], only: set[int]) -> dict[str, int]:
+    """The large review's measure (H2): sweep-only instructions that hold a 4-byte word that is an RVA inside their own
+    function (a jump-table entry read as code), and sweep-only instructions that overlap a walked one's bytes."""
+    functions = _functions(img)
+    walked = sorted(r for r in raws if r not in only)
+    import bisect
+    table_like = overlap = 0
+    for rva in only:
+        raw = raws[rva]
+        fn = _function_at(functions, rva)
+        if fn and any(fn[0] <= int.from_bytes(raw[k:k + 4], "little") < fn[1] for k in range(0, len(raw) - 3)):
+            table_like += 1
+        i = bisect.bisect_right(walked, rva) - 1
+        if i >= 0 and walked[i] + len(raws[walked[i]]) > rva:
+            overlap += 1
+    return {"sweep-only": len(only), "holding an RVA into their function": table_like,
+            "overlapping a walked instruction": overlap}
 
 
 def judge_record(depot: Path, census_json: Path, record: Path) -> dict[str, tuple[int, int, int]]:
@@ -140,7 +243,7 @@ def judge_record(depot: Path, census_json: Path, record: Path) -> dict[str, tupl
                 pass
         if equal < len(mine) // 2:                       # not this image's code: the run did not load it here
             continue
-        raws = set(x86ref.walk(img, data).insns) | set(sweep(img, data))
+        raws = set(reachable(img, data)[0])
         out[rel] = (len(mine), sum(1 for at in mine if at - base in raws), equal)
     return out
 
@@ -185,22 +288,71 @@ def jit_census(path: Path) -> dict[str, Any]:
             "by_class": classes}
 
 
+TABLE32 = re.compile(r"dword ptr \[(\w+)\*4 \+ (0x[0-9a-f]+)\]")
+
+
+def census32(path: Path) -> dict[str, Any]:
+    """A 32-bit image (PE32, x86) sized by Capstone (w2m's decoder takes 64-bit mode only; its 32-bit mode is the
+    first item of the 32-bit work list): the walk from the entry, exports and TLS callbacks, with MSVC's 32-bit switch
+    tables (`jmp dword ptr [index*4 + table]`, entries VAs) walked too; instances by Capstone mnemonic. A PE32 image
+    has no `.pdata`, so there is no sweep."""
+    data = path.read_bytes()
+    img = parse(data, x86=True)
+    reach = x86ref.walk(img, data, x86=True)
+    for _ in range(4):
+        targets: set[int] = set()
+        for ins in reach.insns.values():
+            m = TABLE32.search(ins.op_str) if ins.mnemonic == "jmp" else None
+            if not m:
+                continue
+            at = int(m.group(2), 16) - img.image_base
+            for k in range(4096):
+                try:
+                    va = int.from_bytes(img.read_rva(data, at + 4 * k, 4), "little")
+                except PeError:
+                    break
+                rva = va - img.image_base
+                if not any(sec.virtual_address <= rva < sec.virtual_address + sec.virtual_size
+                           and sec.characteristics & 0x20000000 for sec in img.sections):
+                    break
+                targets.add(rva)
+        if not targets - set(reach.insns):
+            break
+        reach = x86ref.walk(img, data, extra_roots=tuple(sorted(targets)), x86=True)
+    mnemonics = Counter(i.mnemonic for i in reach.insns.values())
+    return {"file": path.name, "sha256": hashlib.sha256(data).hexdigest(), "machine": "x86",
+            "reachable_instructions": len(reach.insns), "unresolved_indirect": len(reach.unresolved_indirect),
+            "by_mnemonic": dict(mnemonics.most_common())}
+
+
 def depots(root: Path) -> int:
     """Every x86-64 image the static census found (store/census/static/<depot>.json), censused one process per image;
     each depot's result to store/census/static/instructions-<depot>.json."""
     from concurrent.futures import ProcessPoolExecutor
     static = ROOT / "store" / "census" / "static"
-    for f in sorted(static.glob("*.json")):
-        if f.name.startswith("instructions-"):
-            continue
+    seen: dict[str, str] = {}                            # sha256 -> the depot/path it was censused under
+    # a depot that copies another's images (hail-to-the-rainbow-native) comes after it, so the images count under the
+    # game's own depot; it keeps a file naming where each of its images was counted
+    files = sorted((f for f in static.glob("*.json") if not f.name.startswith("instructions-")),
+                   key=lambda f: (f.stem.endswith("-native"), f.stem))
+    for f in files:
         c = json.loads(f.read_text())
-        rels = [r for r, e in sorted(c["images"].items())
-                if e["machine"] == 0x8664 and not e.get("dotnet") and "refused" not in e]
-        if not rels:
+        rels, rels32, same = list[str](), list[str](), dict[str, str]()
+        for r, e in sorted(c["images"].items()):
+            if e.get("dotnet") or "refused" in e:
+                continue
+            if e["sha256"] in seen:                      # one image under two depots is counted once (large review M2)
+                same[r] = seen[e["sha256"]]
+                continue
+            seen[e["sha256"]] = f"{c['depot']}/{r}"
+            (rels if e["machine"] == 0x8664 else rels32).append(r)
+        if not rels and not rels32 and not same:
             continue
         with ProcessPoolExecutor() as pool:
             results = list(pool.map(census, [root / c["depot"] / r for r in rels]))
-        out = {"depot": c["depot"], "images": dict(zip(rels, results, strict=True))}
+            results32 = list(pool.map(census32, [root / c["depot"] / r for r in rels32]))
+        out = {"depot": c["depot"], "images": dict(zip(rels, results, strict=True)),
+               "images_x86": dict(zip(rels32, results32, strict=True)), "same_as": same}
         (static / f"instructions-{c['depot']}.json").write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
         print(depot_summary(out))
     return 0
@@ -208,6 +360,15 @@ def depots(root: Path) -> int:
 
 def depot_summary(out: dict[str, Any]) -> str:
     """Instances and classes native, run by the model, not lifted, over the depot's images; the two work lists."""
+    if not out["images"] and not out["images_x86"]:
+        return f"{out['depot']}: every image counted under another depot {sorted(set(out['same_as'].values()))[:3]}"
+    if not out["images"]:
+        n = sum(r["reachable_instructions"] for r in out["images_x86"].values())
+        top = Counter[str]()
+        for r in out["images_x86"].values():
+            top.update(r["by_mnemonic"])
+        return (f"{out['depot']}: {len(out['images_x86'])} x86 images, {n} reachable instructions, "
+                f"{len(top)} mnemonics; most {top.most_common(12)}")
     by: dict[str, Counter[str]] = defaultdict(Counter)
     for r in out["images"].values():
         for ic, v in r["by_class"].items():

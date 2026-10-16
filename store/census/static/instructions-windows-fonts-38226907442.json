@@ -4,226 +4,263 @@
   "traces-system-fonts-copy-1/probe.exe": {
    "by_class": {
     "ADD": {
-     "instances": 850,
-     "lifted": 850,
+     "instances": 847,
+     "lifted": 847,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ADDSD": {
      "instances": 18,
      "lifted": 18,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ADD_LOCK": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "AND": {
-     "instances": 485,
-     "lifted": 485,
+     "instances": 483,
+     "lifted": 483,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ANDPD": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "AND_LOCK": {
      "instances": 5,
      "lifted": 5,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "BSF": {
      "instances": 4,
      "lifted": 4,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "BSR": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "BT": {
      "instances": 39,
      "lifted": 39,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "BTR": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "BTS": {
      "instances": 21,
      "lifted": 21,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CALL_NEAR": {
-     "instances": 1458,
-     "lifted": 1458,
+     "instances": 1450,
+     "lifted": 1450,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CDQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CDQE": {
      "instances": 5,
      "lifted": 5,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVB": {
      "instances": 8,
      "lifted": 8,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVBE": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVL": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVLE": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVNB": {
      "instances": 18,
      "lifted": 18,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVNBE": {
      "instances": 8,
      "lifted": 8,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVNLE": {
      "instances": 4,
      "lifted": 4,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVNS": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVNZ": {
      "instances": 33,
      "lifted": 33,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVS": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMOVZ": {
      "instances": 32,
      "lifted": 32,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMP": {
-     "instances": 1427,
-     "lifted": 1427,
+     "instances": 1424,
+     "lifted": 1424,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CMPXCHG_LOCK": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "COMISD": {
      "instances": 4,
      "lifted": 4,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CPUID": {
      "instances": 9,
      "lifted": 9,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CVTDQ2PD": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "CVTTSD2SI": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "DEC": {
      "instances": 70,
      "lifted": 70,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "DIV": {
      "instances": 9,
      "lifted": 9,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "DIVSD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "IMUL": {
      "instances": 31,
      "lifted": 31,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "INC": {
      "instances": 200,
      "lifted": 200,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "INC_LOCK": {
      "instances": 10,
      "lifted": 10,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "INT": {
      "instances": 5,
@@ -231,375 +268,430 @@
      "model": 0,
      "refusals": {
       "no lifting rule for INT": 5
-     }
+     },
+     "sweep_only": 0
     },
     "INT3": {
-     "instances": 72,
+     "instances": 43,
      "lifted": 0,
      "model": 0,
      "refusals": {
-      "no operand template for INT3": 72
-     }
+      "no operand template for INT3": 43
+     },
+     "sweep_only": 1
     },
     "JB": {
      "instances": 91,
      "lifted": 91,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JBE": {
      "instances": 81,
      "lifted": 81,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JL": {
      "instances": 44,
      "lifted": 44,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JLE": {
      "instances": 51,
      "lifted": 51,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JMP": {
-     "instances": 866,
-     "lifted": 866,
+     "instances": 864,
+     "lifted": 864,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JNB": {
      "instances": 99,
      "lifted": 99,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JNBE": {
      "instances": 99,
      "lifted": 99,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JNL": {
      "instances": 23,
      "lifted": 23,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JNLE": {
      "instances": 33,
      "lifted": 33,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JNS": {
      "instances": 17,
      "lifted": 17,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JNZ": {
-     "instances": 821,
-     "lifted": 821,
+     "instances": 820,
+     "lifted": 820,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JS": {
      "instances": 19,
      "lifted": 19,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "JZ": {
-     "instances": 1280,
-     "lifted": 1280,
+     "instances": 1278,
+     "lifted": 1278,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "LDMXCSR": {
-     "instances": 8,
-     "lifted": 8,
+     "instances": 7,
+     "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "LEA": {
-     "instances": 1189,
-     "lifted": 1189,
+     "instances": 1188,
+     "lifted": 1188,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOV": {
-     "instances": 7239,
-     "lifted": 7239,
+     "instances": 7207,
+     "lifted": 7207,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVAPD": {
      "instances": 13,
      "lifted": 13,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVAPS": {
      "instances": 40,
      "lifted": 40,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVD": {
      "instances": 4,
      "lifted": 4,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVDQA": {
      "instances": 29,
      "lifted": 29,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVDQU": {
      "instances": 58,
      "lifted": 58,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVQ": {
      "instances": 14,
      "lifted": 14,
      "model": 0,
-     "refusals": {}
-    },
-    "MOVSB": {
-     "instances": 1,
-     "lifted": 1,
-     "model": 1,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVSD_XMM": {
      "instances": 40,
      "lifted": 40,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVSX": {
      "instances": 29,
      "lifted": 29,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVSXD": {
      "instances": 155,
      "lifted": 155,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVUPS": {
      "instances": 122,
      "lifted": 122,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MOVZX": {
      "instances": 173,
      "lifted": 173,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MUL": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "MULSD": {
      "instances": 24,
      "lifted": 24,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "NEG": {
      "instances": 48,
      "lifted": 48,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "NOP": {
-     "instances": 198,
-     "lifted": 198,
+     "instances": 167,
+     "lifted": 167,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "NOT": {
      "instances": 23,
      "lifted": 23,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "OR": {
      "instances": 243,
      "lifted": 243,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ORPS": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "OR_LOCK": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PAND": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PCMPEQB": {
      "instances": 14,
      "lifted": 14,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PCMPEQW": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PCMPISTRI": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PMOVMSKB": {
      "instances": 13,
      "lifted": 13,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "POP": {
-     "instances": 588,
-     "lifted": 588,
+     "instances": 581,
+     "lifted": 581,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "POR": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSHUFD": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSHUFLW": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSLLDQ": {
      "instances": 30,
      "lifted": 30,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSRLDQ": {
      "instances": 30,
      "lifted": 30,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSRLQ": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSUBD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PSUBQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PUNPCKLBW": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PUNPCKLQDQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "PUSH": {
      "instances": 518,
      "lifted": 518,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "REP_MOVSB": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "REP_STOSB": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "REP_STOSQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "REP_STOSW": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "RET_NEAR": {
-     "instances": 524,
-     "lifted": 524,
+     "instances": 523,
+     "lifted": 523,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ROL": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ROR": {
      "instances": 24,
      "lifted": 24,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "ROUNDSD": {
      "instances": 1,
@@ -607,175 +699,204 @@
      "model": 0,
      "refusals": {
       "no operand template for ROUNDSD": 1
-     }
+     },
+     "sweep_only": 0
     },
     "SAR": {
      "instances": 50,
      "lifted": 50,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SBB": {
      "instances": 37,
      "lifted": 37,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETB": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETBE": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETNB": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETNBE": {
      "instances": 4,
      "lifted": 4,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETNL": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETNLE": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETNZ": {
      "instances": 31,
      "lifted": 31,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SETZ": {
      "instances": 20,
      "lifted": 20,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SFENCE": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SHL": {
      "instances": 63,
      "lifted": 63,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SHR": {
      "instances": 173,
      "lifted": 173,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "STMXCSR": {
      "instances": 9,
      "lifted": 9,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SUB": {
      "instances": 716,
      "lifted": 716,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "SUBSD": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "TEST": {
-     "instances": 1127,
-     "lifted": 1127,
+     "instances": 1126,
+     "lifted": 1126,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VADDSD": {
      "instances": 9,
      "lifted": 9,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VCOMISD": {
      "instances": 4,
      "lifted": 4,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VCVTDQ2PD": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VDIVSD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VFMADD213SD": {
      "instances": 5,
      "lifted": 5,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VFMADD231SD": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VFMSUB213SD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VINSERTF128": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VMOVAPD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VMOVDQA": {
      "instances": 21,
      "lifted": 21,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VMOVDQU": {
      "instances": 54,
      "lifted": 54,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VMOVNTDQ": {
      "instances": 30,
@@ -783,150 +904,182 @@
      "model": 0,
      "refusals": {
       "no operand template for VMOVNTDQ": 30
-     }
+     },
+     "sweep_only": 0
     },
     "VMOVQ": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VMOVSD": {
      "instances": 8,
      "lifted": 8,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VMULSD": {
      "instances": 15,
      "lifted": 15,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPADDQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPAND": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPCMPEQB": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPCMPEQW": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPMOVMSKB": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPOR": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPSLLQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPSRLQ": {
      "instances": 2,
      "lifted": 2,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPSUBD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPSUBQ": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VPXOR": {
      "instances": 3,
      "lifted": 3,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VSUBSD": {
      "instances": 6,
      "lifted": 6,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "VZEROUPPER": {
      "instances": 6,
      "lifted": 6,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "XADD_LOCK": {
      "instances": 7,
      "lifted": 7,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "XCHG": {
      "instances": 9,
      "lifted": 9,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "XGETBV": {
      "instances": 2,
      "lifted": 2,
      "model": 2,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "XOR": {
-     "instances": 813,
-     "lifted": 813,
+     "instances": 811,
+     "lifted": 811,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "XORPD": {
      "instances": 1,
      "lifted": 1,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     },
     "XORPS": {
      "instances": 26,
      "lifted": 26,
      "model": 0,
-     "refusals": {}
+     "refusals": {},
+     "sweep_only": 0
     }
    },
-   "classes": 151,
+   "classes": 150,
    "file": "probe.exe",
-   "lifted": 147,
+   "jump_table_entries": 294,
+   "jump_tables": 12,
+   "lifted": 146,
    "missing": 4,
    "partly_lifted": 0,
-   "reachable_instructions": 23122,
+   "precision": {
+    "holding an RVA into their function": 0,
+    "overlapping a walked instruction": 0,
+    "sweep-only": 1
+   },
+   "reachable_instructions": 22995,
    "sha256": "4bdc4b05a52d5e8b7c8aed5631705d3a71236e8d28e82535b66725369569040e",
    "undecoded": 0,
-   "walked": 22681
+   "walked": 22994
   }
- }
+ },
+ "images_x86": {},
+ "same_as": {}
 }

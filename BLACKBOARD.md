@@ -310,6 +310,15 @@
 
 ## Sprint tail
 
+### Sprint 087 (2026-10-16, closed)
+- **Scope:** the large review of 082-086 on the instruction census (H2, H3 in part, M2): jump tables out of the sweep, a precision judge, the 32-bit census, one count per image, the module map in the frontier record.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no record run; the census rewrote store/census/static/instructions-*.json (6,201,183 instructions in Hail to the Rainbow; 848,970 in BioShock 2's 32-bit images); a scratch frontier wrote a module map.
+  - *Observation 1 (blind judge, of the work):* 086's judge measured recall only, so jump-table data counted as code went unseen. Disposition: resolved-here (the precision judge, 0 after).
+  - *Observation 2 (residual):* BioShock 2's count is a lower bound with no recall judge (no 32-bit run; no `.pdata`). Disposition: open, for the 32-bit work.
+  - *Observation 3 (process, of the work):* I started one census with the shell's `&`, against the rule for background jobs; stopped it and reran it as a job.
+- **Closed:** CI pending at this entry.
+
 ### Sprint 086 (2026-10-16, closed)
 - **Scope:** the instruction census (recentering 2026-10-16, step 1): every x86-64 image's reachable code, by how w2m runs each class (native, model, not lifted); the walk joined with a `.pdata` sweep.
 - **Rubber Duck Pass:**

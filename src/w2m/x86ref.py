@@ -67,9 +67,11 @@ def _exec_ranges(img: PeImage) -> list[tuple[int, int]]:
             for s in img.sections if s.characteristics & SCN_MEM_EXECUTE]
 
 
-def walk(img: PeImage, data: bytes) -> Reachable:
-    """Recursive-traversal disassembly of everything statically reachable."""
-    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+def walk(img: PeImage, data: bytes, extra_roots: tuple[int, ...] = (), x86: bool = False) -> Reachable:
+    """Recursive-traversal disassembly of everything statically reachable. `extra_roots` (RVAs) are walked too, as
+    "extra" roots (the census's jump-table targets, Sprint 087); `x86` decodes 32-bit code (a PE32 image), where a
+    branch's immediate is a VA and nothing is RIP-relative."""
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32 if x86 else capstone.CS_MODE_64)
     md.detail = True
     ranges = _exec_ranges(img)
 
@@ -87,7 +89,7 @@ def walk(img: PeImage, data: bytes) -> Reachable:
 
     out = Reachable()
     work: list[int] = []
-    for kind, rva in img.code_targets():
+    for kind, rva in [*img.code_targets(), *(("extra", r) for r in extra_roots)]:
         if executable(rva):
             out.roots[kind] += 1
             work.append(rva)

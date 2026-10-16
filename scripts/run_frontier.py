@@ -251,6 +251,12 @@ def main(argv: list[str]) -> int:
             (base / "frontier-calls").mkdir(parents=True, exist_ok=True)
             (base / "frontier-calls" / f"{xid}.tsv").write_text(call_compare.write_tsv(calls))
             (base / "frontier-calls" / f"{xid}.strings.tsv").write_text(call_compare.write_strings(vm.traced_strings()))
+            # the module map (Sprint 087; large review of 082-086, M2): each process's images at the bases this run
+            # loaded them, so a judge of the run's code reads bases instead of inferring them from bytes
+            rows = [(p.pid, p.vm.modules.image_name, i.name, i.base, i.pe.size_of_image, i.pe.timestamp)
+                    for p in machine.processes.values() for i in p.vm.ld.images]
+            (base / "frontier-calls" / f"{xid}.modules.tsv").write_text(
+                "".join(f"{pid}\t{proc}\t{name}\t{b:#x}\t{size:#x}\t{ts:#x}\n" for pid, proc, name, b, size, ts in rows))
             state.update(trace=trace_sha, trace_lines=text.count(b"\n"), traced=len(calls), dropped=dropped)
             totals = vm.calls_total()
             state["faults"] = vm.faults()

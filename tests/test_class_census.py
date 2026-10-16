@@ -29,11 +29,13 @@ def test_the_census_holds_the_walk_and_the_sweep() -> None:
     data = PROBE.read_bytes()
     img = parse(data)
     walked = set(x86ref.walk(img, data).insns)
-    swept = set(cc.sweep(img, data))
+    raws, only, tables = cc.reachable(img, data)
     c = cc.census(PROBE)
-    assert c["walked"] == len(walked) and c["reachable_instructions"] == len(walked | swept)
+    assert walked <= set(raws) and c["reachable_instructions"] == len(raws) and c["walked"] == len(raws) - len(only)
     assert sum(v["instances"] for v in c["by_class"].values()) + c["undecoded"] == c["reachable_instructions"]
     assert all(v["model"] <= v["lifted"] <= v["instances"] for v in c["by_class"].values())
+    # Sprint 087 (large review H2): no sweep-only instruction holds a jump-table word or splits a walked one
+    assert c["precision"]["holding an RVA into their function"] == 0 and c["precision"]["overlapping a walked instruction"] == 0
 
 
 @pytest.mark.depot

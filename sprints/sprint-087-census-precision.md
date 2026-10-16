@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 087
-status: active
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -64,3 +64,28 @@ must be right before it orders work.
 
 The census counts code, not jump-table data, says how each instruction was found, covers the 32-bit images, and
 counts each image once.
+
+## observed
+- **Jump tables.** `class_census.reachable`: Capstone's walk, with the targets of every MSVC switch table it finds
+  (`mov r32, dword ptr [base + index*4 + table]`, entries read while each is an RVA inside the load's function)
+  walked as extra roots until no new table appears; then the sweep, which after RET, JMP, INT3, UD2 or HLT resumes
+  only at an address the walk or a table reaches, and never decodes a table. UnityPlayer.dll: 649 tables, 14,885
+  entries; the walk alone now holds 4,996,586 instructions (4,904,229 before); the sweep adds 7.
+- **Precision judge** (`precision`, asserted in CI on a probe): sweep-only instructions holding an RVA into their own
+  function, 0 (the reviewer's lower bound before: 3,273 of 110,004 sweep-only); overlapping a walked instruction, 0.
+  UnityPlayer's CLI 19, STI 2, IN 4, OUT 6 remain, all walked, not swept; why the walk reaches them is not measured.
+- **The census** (5 min 53 s): Hail to the Rainbow 6,201,183 instructions in 475 classes; not lifted 10,900 in 46
+  classes (INT3 7,889; AES, SHA, CLMUL, ADX); run by the model 1,119 in 32 classes (SHRD 776, SHLD 198, RCR 22,
+  PUSHFQ 19, XGETBV 17, POPFQ 16, STC 10).
+- **Recall** (`judge_record`): UnityPlayer.dll 679,224 of 694,181 (97.8%; 97.9% with the noisy sweep),
+  mono-2.0-bdwgc.dll 200,233 of 200,733 (99.8%), steam_api64.dll 3,691 of 3,697 (99.8%).
+- **32-bit** (`census32`, Capstone in 32-bit mode; w2m's decoder takes 64-bit mode only): BioShock 2's 16 images,
+  848,970 reachable instructions, 275 mnemonics (mov 224,487, push 164,441, call 68,618). A PE32 image has no `.pdata`,
+  so only the walk and its switch tables find code: C++ virtual calls stay unresolved, and the count is a lower bound
+  whose recall no judge measures yet (no 32-bit run exists).
+- **One count per image.** Images are named by sha256 across depots; hail-to-the-rainbow-native's 7 images count
+  under hail-to-the-rainbow, and its file names where (`same_as`).
+- **The module map.** A frontier run writes `<execution id>.modules.tsv` beside its call tables: each process's images,
+  base, size and timestamp (a scratch run: the exe at 0x140000000, UnityPlayer.dll at 0x180000000, mono at
+  0x1180010000, and the crash handler, pid 4100, at 0x140000000). The batch run that made the stencil record predates
+  it, so `judge_record` still finds that run's bases from its bytes.
