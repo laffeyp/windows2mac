@@ -611,3 +611,23 @@ measure the value on each.
 
 **Kit change suggested:** a card that adds a run-stopping guard names the paths into the guarded point and the value
 measured on each, beside the plant's reach (#60).
+
+### 2026-10-16 — the frontier became the method: rediscovering what the files said
+
+The user, 2026-10-16: "What is supposed to be a clever way of finding things at the frontier has become the way of
+finding the whole thing. It's become a way of rediscovering things that can already be known just by asking." The
+user had said the same on 2026-10-10, and a memory held it. Measured on 2026-10-16: Hail to the Rainbow's 7 x86-64
+images declare 633 Windows imports in their import tables, which a script reads in seconds; w2m serves 238, written
+across some forty sprints that took their work from where the last run stopped. The compiler inside the VM (Sprints
+074-084) was inferred from one batch run and covers 484 of the decoder's 1,067 rows. BioShock 2's images are all
+32-bit, which w2m cannot read, and no sprint had looked at them. A census of Sprint 044 had already listed
+UnityPlayer's instruction classes, and it was not re-run.
+
+**Finding (#62):** a search loop (the frontier) answers only "what stops next", and a project that plans from its
+answers rebuilds by hand the inventory its inputs state. The remedy is not more care at each stop: it is a census of
+every knowable surface, committed as data, before any loop runs, with the loop's stops counted as the census's misses.
+
+**Kit change suggested:** a project's first architecture sprint, and every phase start, writes the knowable surface of
+its inputs (formats, interfaces, instruction set, declared dependencies) as committed data with coverage beside it;
+a sprint card names the census rows it closes; a sprint that found its work at a run's stop says why the census did
+not show it.
