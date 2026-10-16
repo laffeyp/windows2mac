@@ -188,7 +188,7 @@ VMC_COUNTS = 0x100                         # u64 counts, by VMC_COUNT_* (block_c
 VMC_COUNT_NAMES = ("compiled", "not a code page", "host only", "decode", "no stencil", "no choice", "encoder",
                    "full", "key size", "guarded", "scan pages", "log full", "code cache full", "recon full",
                    "cut by decode", "cut by no stencil", "cut by no choice", "cut by encoder", "cut by key size",
-                   "cut by guarded")
+                   "cut by guarded", "page needs a split", "pages protected")
 VMC_SAVE = 0x200                           # the miss stub's x0-x15, x17 and x30 while the C compiles
 VMC_LOG = 0x1000                           # the log: VMC_LOG_ENTRIES entries of VMC_LOG_ENTRY bytes
 VMC_LOG_ENTRY, VMC_LOG_ENTRIES, VMC_LOG_PAGES = 0x80, 4096, 8
@@ -1025,7 +1025,8 @@ def runtime_defines() -> dict[str, int]:
         "W2M_VMC_VA": MONITOR_VA + VM_COMPILER, "W2M_VMC_LOG_ENTRIES": VMC_LOG_ENTRIES,
         "W2M_CODE_PAGE_SET_VA": MONITOR_VA + CODE_PAGE_SET, "W2M_CODE_PAGE_BITS": CODE_PAGE_BITS,
         "W2M_DISPATCH_VA": MONITOR_VA + DISPATCH_TABLE, "W2M_DISPATCH_BITS": DISPATCH_BITS,
-        "W2M_RECON_ENTRIES": RECON_ENTRIES,
+        "W2M_RECON_ENTRIES": RECON_ENTRIES, "W2M_TRANSLATION_TABLES_OFF": TRANSLATION_TABLES, "W2M_IPA_BASE": IPA_BASE,
+        "W2M_PROCESS_VA": PROCESS_VA, "W2M_MONITOR_SIZE": MONITOR_SIZE, "W2M_AP_READ_ONLY": AP_READ_ONLY,
         **{f"W2M_RUN_MONITOR_{i}": v for i, v in enumerate(x for (a, b), at in zip(PER_THREAD_MONITOR, E_MONITOR_AT)
                                                           for x in (a, b, at))}}
 
@@ -2058,6 +2059,7 @@ class VM:
         self.virtual.mapped = [(va, size) for va, _, size in maps] + [(THUNK_BASE, 1 << 32)]
         self.virtual.snapshot()
         self.slice_va = self._slice_stub()
+        self.entry_va = self._entry_stub()
         struct.pack_into("<QQQ", self.mm, VM_COMPILER + VMC_EXIT, self.dispatch_va, self.slice_va, self._trace_from)
         names = _vm_compiler_symbols()
         struct.pack_into(f"<{len(names)}Q", self.mm, VM_COMPILER + VMC_SYMBOLS, *(self.runtime.symbols[n] for n in names))
@@ -2123,7 +2125,9 @@ class VM:
             self._note_tails([m for m, _ in marks[1:1 + count]])
             self.addrs.update(g for _, g in marks[1:1 + count])
             self.blocks[start] = code
-            for page in (*range(start & ~(PAGE - 1), end, PAGE), *pages):
+            for page in range(start & ~(PAGE - 1), end, PAGE):   # its own pages: one the VM protected is new here
+                self.code_pages.setdefault(page, set()).add(start)
+            for page in pages:
                 self.code_pages[page].add(start)
             self.translations.append((start, end, "static" if start == self.ld.entry else "runtime_transfer"))
             if VM_COMPILE_JUDGE:
@@ -2156,6 +2160,19 @@ class VM:
         """block_compiler.c's counts: its compiles, and its refusals and cut blocks by cause (VMC_COUNT_NAMES)."""
         values = struct.unpack_from(f"<{len(VMC_COUNT_NAMES)}Q", self.mm, VM_COMPILER + VMC_COUNTS)
         return dict(zip(VMC_COUNT_NAMES, values))
+
+    def _entry_stub(self) -> int:
+        """Where a run starts (Sprint 084): SP at the runtime stack's top, which the miss stub checks, then the
+        dispatcher. A run starts a new monitor and so a new vCPU, whose SP nothing had set before its first bridge."""
+        a = Assembler(MONITOR_VA + self.code_cursor)
+        a.emit(*a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0))
+        a.branch(a64.b, self.dispatch_va)
+        words = a.finish()
+        va = MONITOR_VA + self.code_cursor
+        self._write_words(self.code_cursor, words)
+        self.code_cursor += 4 * len(words)
+        self._recon_append([(va, 0)])                   # not the guest's code
+        return va
 
     def _slice_stub(self) -> int:
         """The slice stub every block's stop calls (BL, X30 the stop's HVC #4): when the count (the limit word minus
@@ -3554,6 +3571,9 @@ class VM:
         host = d.label()
         d.emit(*a64.mov_imm(16, MONITOR_VA + VM_COMPILER), a64.ldr(8, 16, 16, VMC_ENABLED))
         d.branch(lambda off: a64.cbz(16, off), host)
+        # SP is reset to the runtime stack's top: guest code runs with no runtime frame live (runtime.h, beside
+        # w2m_call_guest). SP itself cannot show that (Sprint 084): a fault resumed by w2m_resume_context leaves SP
+        # inside frames that will never return
         d.emit(*a64.mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE))
         for r in range(0, 16, 2):
             d.emit(a64.stp(r, r + 1, 16, 8 * r))
@@ -4173,7 +4193,7 @@ class VM:
         x[17] = self.ld.entry
         x[REG_UNDEFINED_FLAGS] = 0x3F                                       # every flag undefined at entry
         x[28] = MONITOR_VA + MONITOR_DATA
-        pc = self.dispatch_va
+        pc = self.entry_va
         cpsr = CPSR_EL1H
         stop = "timeout"
         report_at = time.monotonic() + PROGRESS_SECONDS

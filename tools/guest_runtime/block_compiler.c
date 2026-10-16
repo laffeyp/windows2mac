@@ -24,7 +24,7 @@ enum { VMC_ENABLED, VMC_CURSOR, VMC_LOG_COUNT, VMC_EXIT, VMC_SLICE, VMC_HOST_ONL
 
 /* the counts (vm_backend.VMC_COUNT_NAMES) */
 enum { C_COMPILED, C_NOT_CODE, C_HOST_ONLY, C_STATUS, C_SCAN_PAGES = C_STATUS + 7, C_LOG_FULL, C_CODE_FULL,
-       C_RECON_FULL, C_CUT };
+       C_RECON_FULL, C_CUT, C_NEEDS_SPLIT = C_CUT + 6, C_PROTECTED };
 static const u8 CUT_INDEX[8] = {0, C_CUT + 0, C_CUT + 1, C_CUT + 2, C_CUT + 3, 0, C_CUT + 4, C_CUT + 5};
 
 /* one log entry; the host reads it at W2M_VMC_VA + VMC_LOG_OFF + VMC_LOG_ENTRY * i */
@@ -60,6 +60,61 @@ static int code_page(u64 page) {
         i = (i + 1) & (slots - 1);
     }
     return 0;
+}
+
+/* `page` added to the code-page set (vm_backend._page_set_add: the first removed slot on the probe, else the empty
+   one that ends it) */
+static void set_add(u64 page) {
+    volatile u64 *set = (volatile u64 *)W2M_CODE_PAGE_SET_VA;
+    u64 slots = 1ull << W2M_CODE_PAGE_BITS;
+    u64 i = ((page >> 12) * 0x9E3779B97F4A7C15ull) >> (64 - W2M_CODE_PAGE_BITS), free = slots;
+    for (u64 n = 0; n < slots; n++) {
+        u64 v = set[i];
+        if (v == page)
+            return;
+        if (v == 1 && free == slots)
+            free = i;
+        if (v == 0)
+            break;
+        i = (i + 1) & (slots - 1);
+    }
+    set[free == slots ? i : free] = page;
+}
+
+/* Sprint 084: a page made read-only here, as vm_backend._protect_code does on the host, so a guest write to it faults
+   (HVC_CODE_WRITE) and drops the blocks over it. The stage-1 walk is _page_descriptor's, but a 2 MB or 1 GB block
+   descriptor over the page is left to the host: replacing it with a table while it may be in a TLB needs
+   break-before-make (Arm ARM D8), which the host's exit gives. A permission change needs none. */
+enum { PAGE_OK, PAGE_UNMAPPED, PAGE_IN_BLOCK };
+static volatile u64 *page_descriptor(u64 va, int *why) {
+    u64 off = W2M_TRANSLATION_TABLES_OFF;
+    for (int shift = 39; shift >= 21; shift -= 9) {
+        u64 desc = ((volatile u64 *)(W2M_MONITOR_VA + off))[(va >> shift) & 0x1FF];
+        if (!(desc & 1)) {
+            *why = PAGE_UNMAPPED;
+            return 0;
+        }
+        if (!(desc & 2)) {
+            *why = PAGE_IN_BLOCK;
+            return 0;
+        }
+        off = (desc & 0x0000FFFFFFFFF000ull) - W2M_IPA_BASE;
+    }
+    volatile u64 *at = (volatile u64 *)(W2M_MONITOR_VA + off) + ((va >> 12) & 0x1FF);
+    *why = *at & 1 ? PAGE_OK : PAGE_UNMAPPED;
+    return *why == PAGE_OK ? at : 0;
+}
+
+/* guest code may be here: below the process area and outside the monitor (whose bytes no guest instruction is) */
+static int guest_page(u64 page) {
+    return page < W2M_PROCESS_VA && !(page >= W2M_MONITOR_VA && page < W2M_MONITOR_VA + W2M_MONITOR_SIZE);
+}
+
+static void protect(volatile u64 *desc, u64 page) {
+    *desc |= W2M_AP_READ_ONLY;
+    __asm__ volatile("dsb ishst\n\ttlbi vaae1is, %0\n\tdsb ish\n\tisb" ::"r"(page >> 12) : "memory");
+    set_add(page);
+    count(C_PROTECTED);
 }
 
 struct scan { u64 pages[VMC_LOG_PAGES]; u32 npages; int overflow; };
@@ -152,9 +207,14 @@ u64 w2m_vm_compile(u64 target) {
         return 0;
     }
     u64 page = target & ~0xFFFull;
+    volatile u64 *unprotected = 0;                       /* the page's descriptor, to protect once the block compiles */
     if (!code_page(page)) {
-        count(C_NOT_CODE);
-        return 0;
+        int why = PAGE_UNMAPPED;
+        unprotected = guest_page(page) ? page_descriptor(page, &why) : 0;
+        if (!unprotected) {
+            count(why == PAGE_IN_BLOCK ? C_NEEDS_SPLIT : C_NOT_CODE);
+            return 0;
+        }
     }
     u64 n_log = v[VMC_LOG_COUNT];
     if (n_log >= W2M_VMC_LOG_ENTRIES) {
@@ -208,6 +268,8 @@ u64 w2m_vm_compile(u64 target) {
         recon[2 * (first + i) + 1] = marks[i].guest;
     }
     sync_code(code, code + 4 * (u64)words);
+    if (unprotected)
+        protect(unprotected, page);                      /* the replay gives it its code_pages entry */
     struct log_entry *e = (struct log_entry *)(W2M_VMC_VA + VMC_LOG_OFF + VMC_LOG_ENTRY * n_log);
     e->start = target;
     e->end = out.end;

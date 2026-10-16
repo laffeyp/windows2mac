@@ -383,6 +383,10 @@ def _scan_judges(compiler: Compiler) -> tuple[Counter[str], Counter[str], list[s
     for _ in range(400):
         model, scans = sj.spec_layout(rng, with_form if rng.random() < 0.8 else encodings)
         sj.judge(c, model, scans, spec, examples)
+    reaching = sj.process_area_layouts(c, with_form)
+    assert len(reaching) >= 5, len(reaching)
+    for model, scans in reaching:
+        sj.judge(c, model, scans, spec, examples)
     return record, spec, examples
 
 
@@ -407,10 +411,11 @@ SCAN_PLANTS = {
     "follows no jump": ("        addr = ins.values[f->target];\n", "        addr += (u64)ins.length;\n"),
     # review of Sprint 082, finding 1: the thunk and PROCESS_VA checks, which no judge reached before
     "sees no thunk": ("    return lo < nthunks && thunks[lo] == address;\n", "    return 0;\n"),
+    # Sprint 084 (review of 083): seen through successor_scan_judge.process_area_layouts, a jump past PROCESS_VA. The
+    # VM's code-page set never holds a process page (_protect_code), so in the VM this check is the second defense.
+    "scans the process area": ("in_thunks(m->thunks, m->nthunks, addr) || addr >= VMC_PROCESS_VA)",
+                               "in_thunks(m->thunks, m->nthunks, addr))"),
 }
-# Not a plant: the scan's PROCESS_VA check. Without it the C still stops there, since no form decodes at or past
-# PROCESS_VA (the key holds the next address's value class, and no recorded code ran near 0x7FFE00000000) and the VM's
-# code-page set never holds a process page (_protect_code); the judges cannot see it removed (Sprint 083).
 SCAN_PLANT = SCAN_PLANTS["follows no jump"]
 
 

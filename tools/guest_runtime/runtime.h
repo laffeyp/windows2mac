@@ -267,6 +267,11 @@ struct w2m_guest_call {
 u64 w2m_guest_stubs(void);                                               /* the stubs' page */
 void *w2m_guest_frame(u64 rsp, u64 size, void (*resume)(struct w2m_guest_call *, u64));   /* zeroed, below rsp */
 void w2m_call_guest(struct w2m_guest_call *c, u64 fn, u64 a0, u64 a1, u64 a2, u64 a3);
+/* No runtime frame is live while guest code runs: a service that calls guest code keeps its state in the frame on the
+ * guest's stack and returns, and `resume` runs on a fresh runtime stack. The dispatcher's miss stub relies on it (it
+ * calls block_compiler.c with SP at the runtime stack's top; Sprint 083). SP cannot check it: a fault resumed by
+ * w2m_resume_context leaves SP inside frames that never return (Sprint 084). A service that ran guest code and
+ * waited for it on the runtime stack would break the miss stub. */
 void w2m_return_to(u64 rsp, u64 value);           /* the service entered with stack pointer rsp returns value */
 struct w2m_guest_call *w2m_guest_call_at(u64 rsp);   /* the frame a stub call at rsp belongs to, or 0 */
 

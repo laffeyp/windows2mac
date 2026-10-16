@@ -295,3 +295,30 @@ def spec_encodings(rng: random.Random, per_row: int) -> list[bytes]:
             continue
         out.append(code)
     return out
+
+
+def process_area_layouts(c: CScan, encodings: list[bytes], n: int = 20) -> list[tuple[Model, list[tuple[int | None, int]]]]:
+    """Layouts that reach PROCESS_VA, where the host's scan stops (review of Sprint 083): a JMP rel32 below it to
+    PROCESS_VA + 0x12345000, onto an instruction that writes every flag and reads none and has a form there (at
+    PROCESS_VA itself no form decodes: the next address's second halfword is 0, a value class no recorded code had).
+    The host's scan stops at the jump with every flag live; one that went on would find none."""
+    target = vm_backend.PROCESS_VA + 0x1234_5000
+    source = vm_backend.PROCESS_VA - 0x800
+    jump = b"\xe9" + ((target - (source + 5)) & 0xFFFF_FFFF).to_bytes(4, "little")
+    out = []
+    for code in encodings:
+        try:
+            read, written = vm_backend.insn_flags(lift(code, target))
+        except Exception:
+            continue
+        if read or written != vm_backend.ALL_FLAGS:
+            continue
+        model = Model()
+        model.place(source, jump)
+        model.place(target, code)
+        if c.decode(model, source) is None or c.decode(model, target) is None:
+            continue
+        out.append((model, [(source, source + 5), (None, source)]))
+        if len(out) == n:
+            break
+    return out
