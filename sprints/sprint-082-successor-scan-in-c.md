@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 082
-status: active
+status: closed
 phase: 5
 pass_kind: architecture
 ---
@@ -67,3 +67,20 @@ input; the VM has no way to compute it. This sprint writes it in C:
 
 The C scan equals the Python's wherever every instruction it reads has a form, and is never short of it; both judges
 in CI.
+
+## observed
+- **Facts.** 17,328 forms; 2,514 have a branch, 2,361 a constant target, every one held by a decoded value
+  (`constant targets no value holds`: 0); no recorded instruction's facts disagree with its form's.
+- **Judges** (`store/runs/stencil-judge-1792108383330932000` on d7a81658, 382 s, CANDIDATE_ACCEPTED): scan over the
+  record's memory 1,386,082 equal, 112 wider than the host's, 65 equal with a form missing, 11 with no form for the
+  last instruction, 0 short, 0 differing; scan-spec 174,796 equal, 29,975 wider, 67,591 equal with a form missing,
+  18,383 with no form for the last instruction, 0 short, 0 differing. In CI: 4,000 record samples
+  (`tests/data/scan_samples.txt.gz`, written by `gen_stencil_table.py`, covered by `--check`) and 400 spec layouts.
+- **Plant.** The one this card named first (the NZCV kind taken from the instruction itself) changed no scan: both
+  judges passed it. A Jcc's flags differ by kind only when it branches on its setter's NZCV, and every setter writes
+  the flags its Jcc tests, so they are decided before the scan reaches the Jcc. The plant in CI steps past a jump
+  instead of following it: record 621 differing and 2 short of 4,000, spec 129 differing and 74 short. KIT_DIARY #60.
+- **Contract** `w2m.vm_compiler.stencil_table` 0.82.0: the scan's relation (equal where every instruction read has a
+  form, else wider) and the two judges; 0.80.0 unchanged.
+- **Gates:** `scripts/gates.sh` exit 0, 2,442 passed, 27,919 records intact. No family or class identity changed
+  (vm_backend.py untouched).

@@ -578,3 +578,20 @@ from a different source than everything that made the work: here, cases written 
 **Kit change suggested:** a derived artifact's card names each judge's data source and the work's sources, and
 requires one judge whose source is none of them; where a value never varied in the work's sources, the artifact
 refuses inputs that vary it (a guard) rather than generalizing.
+
+### 2026-10-15 — Sprint 082: a planted fault that could not fail
+
+The card named its plant before the code existed: the scan reads an instruction's NZCV kind from the instruction
+itself instead of the one before it. Both judges passed the planted C unchanged (4,000 record scans equal, 7,108
+spec scans equal). The plant was not missed; it changed nothing a scan returns. A Jcc's flags differ by kind only when
+it branches on its setter's NZCV, and every setter writes the flags its Jcc tests, so the scan has decided them before
+it reaches the Jcc. The replacement plant (the scan steps past a jump instead of following it) fails both judges: 623
+of 4,000 record scans and 203 spec scans short or differing.
+
+**Finding (#60):** a plant chosen before the code is a guess about where the code can be wrong. A plant that the
+judges pass is either a blind judge or an unobservable fault, and the two look the same until the fault's reach is
+measured; here the tables showed the kind cannot change a result.
+
+**Kit change suggested:** a card names the behavior its plant must change, not only the line it edits; a plant the
+judges pass is reported with the measurement that tells a blind judge from a fault with no effect, and replaced by
+one that changes the named behavior.

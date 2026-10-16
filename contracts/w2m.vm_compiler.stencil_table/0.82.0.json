@@ -65,7 +65,7 @@
   {
    "evidence_id": "stencil-judge",
    "category": "observed",
-   "source_ref": "PENDING",
+   "source_ref": "store/runs/stencil-judge-1792098411625593000 on 1a769179 (Sprint 080): instructions, blocks, cases, spec, 0 differing; store/runs/stencil-judge-1792108383330932000 on d7a81658 (Sprint 082): CANDIDATE_ACCEPTED; scan 1,386,082 equal, 112 wider, 65 equal with a form missing, 0 short, 0 differing; scan-spec 174,796 equal, 29,975 wider, 67,591 equal with a form missing, 0 short, 0 differing",
    "applicability": "the table of store/stencil at Sprint 082",
    "execution_ids": [
     "vm_compiler-instructions",

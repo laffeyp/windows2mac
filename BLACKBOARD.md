@@ -305,6 +305,14 @@
 
 ## Sprint tail
 
+### Sprint 082 (2026-10-15, closed)
+- **Scope:** the successor scan in C (`vmc_live_in`, `vmc_live_out`), the first link of putting the compiler in the VM: two form facts (the first branch's kind, its constant target's value position) and two judges against `VM._flags_live_in` and `_flags_live_out`.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the table regenerated on the new facts (0 disagreeing); code committed (d7a81658); `stencil_judge.py --judges scan,scan-spec` wrote one CANDIDATE_GENERATED, two COMPARISON_COMPLETED (conforms) and CANDIDATE_ACCEPTED (stencil-judge-1792108383330932000): 1,386,082 and 174,796 scans equal, 0 short, 0 differing; no frontier run, no sweep (vm_backend.py untouched).
+  - *Observation 1 (blind plant check, of the judge):* the card's named plant (the NZCV kind from the instruction itself) passed both judges; measured, it can change no scan, since every setter writes the flags its Jcc tests. Disposition: resolved-here (a plant that steps past a jump fails both); KIT_DIARY #60.
+  - *Observation 2 (residual, of the work):* where an instruction the scan reads has no form, the C's flags are wider than the host's (112 of the record's scans, 29,975 of the spec layouts'): correct code, other words than the host would compile. Disposition: open, for Sprint 083's VM judge, which compiles with the flags the C found and counts how often they differ from the host's.
+- **Closed:** CI pending at this entry; see the closing commit.
+
 ### Sprint 081 (2026-10-15, closed: CI run 38810199578 success on 1753eca3)
 - **Scope:** the reviewer's small review of Sprint 080: the acceptance count, the compiler's contract, the residuals named.
 - **Rubber Duck Pass:**
