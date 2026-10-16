@@ -314,6 +314,14 @@
 
 ## Sprint tail
 
+### Sprint 092 (2026-10-16, closed)
+- **Scope:** step 1 of the solution, the laptop's recordings: DTrace installed; E1, a process's start; E3, calls per frame.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* DTrace installed and booted; E1 traced probes/hello's 483 system calls (342 before main; one port, csrss's ApiPort); E3 ran the game four times, three failing on one DTrace defect each, then after a search of each defect's class, once with every check: 1,132 frames in 10.012 s, 314.1 NT and 18.4 win32k system calls a frame.
+  - *Observation 1 (one error fixed at a time, of the method):* each failed run named one defect and the next run found the next. Disposition: resolved-here (each class searched whole, in the tool's issues and by short tests, before the next run: eight more found, among them three ntdll stubs with no syscall probe and frames from a second clock); recorded as the working rule.
+  - *Observation 2 (a contract written from belief):* the card said E1's trace ends with NtTerminateProcess; 15 calls follow it. Disposition: resolved-here (corrected in the observed section from the trace).
+- **Closed:** CI pending at this entry; 091's CI run 38965622909 (success on e1b41f1b).
+
 ### Sprint 091 (2026-10-16, closed)
 - **Scope:** step 0 of the solution: the laptop's C:\Windows and its SOFTWARE and SYSTEM hives copied whole.
 - **Rubber Duck Pass:**
