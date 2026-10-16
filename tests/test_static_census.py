@@ -75,3 +75,19 @@ def test_the_census_reproduces_its_committed_bytes(tmp_path: Path) -> None:
     for f in sorted(CENSUS.glob("*.json")):
         if not f.name.startswith("instructions-"):          # class_census.py writes those (Sprint 086)
             assert (tmp_path / f.name).read_bytes() == f.read_bytes(), f.name
+
+
+CLR = ROOT / "tests" / "data" / "clr"
+
+
+def test_the_pinvoke_reader_reads_implmap_and_moduleref() -> None:
+    """Sprint 088 (large review H3): two assemblies from the game's Managed folder, XInputDotNetPure (MIT) and mono's
+    System.EnterpriseServices; the first's two DllImports are exports of the XInputInterface.dll the game ships."""
+    from w2m.clr_metadata import pinvokes
+    got = {}
+    for f in sorted(CLR.glob("*.dll")):
+        data = f.read_bytes()
+        got[f.name] = pinvokes(data, parse(data, x86=True))
+    assert got == {"System.EnterpriseServices.dll": [("kernel32.dll", "SearchPath")],
+                   "XInputDotNetPure.dll": [("XInputInterface", "XInputGamePadGetState"),
+                                            ("XInputInterface", "XInputGamePadSetState")]}

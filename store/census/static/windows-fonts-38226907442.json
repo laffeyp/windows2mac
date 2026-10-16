@@ -1,5 +1,12 @@
 {
+ "com": {},
  "depot": "windows-fonts-38226907442",
+ "dlls": {
+  "crtdll.dll": "windows",
+  "kernel.appcore.dll": "windows",
+  "kernel32.dll": "windows",
+  "mscoree.dll": "windows"
+ },
  "exports": {},
  "images": {
   "traces-system-fonts-copy-1/probe.exe": {
@@ -99,14 +106,20 @@
    "AppPolicyGetProcessTerminationMethod",
    "AreFileApisANSI",
    "CompareStringEx",
+   "CorExitProcess",
    "FlsGetValue2",
    "LCMapStringEx",
    "LocaleNameToLCID",
    "log10"
   ]
  },
+ "pinvoke": {},
  "served": {
+  "crtdll.dll!log10": false,
+  "kernel.appcore.dll!AppPolicyGetProcessTerminationMethod": false,
+  "kernel32.dll!AreFileApisANSI": true,
   "kernel32.dll!CloseHandle": true,
+  "kernel32.dll!CompareStringEx": false,
   "kernel32.dll!CompareStringW": false,
   "kernel32.dll!CopyFileW": false,
   "kernel32.dll!CreateDirectoryW": true,
@@ -159,9 +172,11 @@
   "kernel32.dll!IsDebuggerPresent": true,
   "kernel32.dll!IsProcessorFeaturePresent": true,
   "kernel32.dll!IsValidCodePage": true,
+  "kernel32.dll!LCMapStringEx": true,
   "kernel32.dll!LCMapStringW": true,
   "kernel32.dll!LeaveCriticalSection": true,
   "kernel32.dll!LoadLibraryExW": true,
+  "kernel32.dll!LocaleNameToLCID": false,
   "kernel32.dll!MultiByteToWideChar": true,
   "kernel32.dll!QueryPerformanceCounter": true,
   "kernel32.dll!RaiseException": true,
@@ -184,11 +199,20 @@
   "kernel32.dll!WriteFile": true,
   "kernel32.dll!lstrcatW": false,
   "kernel32.dll!lstrcpyW": false,
-  "msvcrt.dll!log10": false,
-  "xaudio2_9.dll!AppPolicyGetProcessTerminationMethod": false,
-  "xaudio2_9.dll!AreFileApisANSI": false,
-  "xaudio2_9.dll!CompareStringEx": false,
-  "xaudio2_9.dll!LCMapStringEx": false,
-  "xaudio2_9.dll!LocaleNameToLCID": false
+  "mscoree.dll!CorExitProcess": false
+ },
+ "source": {
+  "com_sha256": "628e9afdfbda3f6899c7f5ece98b5e723c39798052dfd281b16e355560cb9a33",
+  "exports_sha256": "8320adad357cbaa97e337010a36fdf9207770814907fedfdcd65ed0bfef4c807",
+  "script_commit": "6dbad73ba8991c0a03acb5d27249052f3b27ab3b",
+  "windows_build": "CurrentBuild=26200 UBR=0x1ea0 DisplayVersion=25H2 EditionID=Core"
+ },
+ "strings": {
+  "traces-system-fonts-copy-1/probe.exe": {
+   "dlls": [
+    "kernel32.dll",
+    "mscoree.dll"
+   ]
+  }
  }
 }

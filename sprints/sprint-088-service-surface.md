@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 088
-status: active
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -70,3 +70,32 @@ The reviewer's large review of Sprints 082-086 (H3, M1; Decision 2026-10-16, the
 
 The service surface counts Windows's real exports, separates what w2m must write from what it can load, and names
 the managed code's native calls and the COM interfaces exactly.
+
+## observed
+- **Windows's own tables.** The laptop's System32 (3,415 DLLs) and SysWOW64 (2,268), copied whole to
+  ~/w2m-depots/windows-system (2.6 GB; the first copy missed 460 files whose extension is upper or mixed case, since
+  scp's remote glob is case-sensitive; recopied and counted), Windows 11 25H2, build 26200, UBR 0x1ea0, Home.
+  `store/census/windows-exports.json.gz` (1.3 MB): x86-64 2,978 DLLs with exports, 120,902 names; x86 1,901 DLLs,
+  110,695 names. `store/census/windows-com.json.gz` (0.6 MB): 27,915 registered interfaces and 7,505 classes from the
+  registry's HKCR\Interface and HKCR\CLSID. The census no longer reads mingw-w64.
+- **P/Invoke** (`src/w2m/clr_metadata.py`, ECMA-335 II.22.22 ImplMap, II.22.31 ModuleRef): all 122 assemblies of Hail
+  to the Rainbow read, 1,102 distinct DllImports; 910 to steam_api64, of which 902 are exports of the steam_api64.dll
+  the game ships (the 8 are newer Steamworks bindings the DLL lacks); the others advapi32, kernel32, iphlpapi and the
+  macOS frameworks mono's class library names. A CI test reads two committed assemblies (XInputDotNetPure, mono's
+  System.EnterpriseServices); XInputDotNetPure's two imports are the two exports of the XInputInterface.dll shipped.
+- **DLL classes.** BioShock 2's 1,114 imports: 931 from Windows DLLs (187 served by name), 164 from Microsoft
+  redistributables w2m can load as PE files (msvcp140 63, msvcr110 62, vcruntime140 21, msvcp110 6, d3dx9_43 6,
+  d3dcompiler_43 4, xinput1_3 2), and 19 from mss32.dll (Miles Sound System), which no file in the depot has. Hail to
+  the Rainbow's 634: all Windows, 238 served.
+- **COM.** GUIDs of registered interfaces and classes in each native image's bytes: Hail to the Rainbow 126 (73
+  interfaces, 53 classes: WinRT's IInspectable and IAsyncInfo, Media Foundation's IMFTransform); BioShock 2 399 (311
+  interfaces, 88 classes; among them Windows Update's IAutomaticUpdates: matched, not explained).
+- **Strings.** Steam interface versions: 17 in Hail to the Rainbow (SteamClient020, SteamInput005), 16 in BioShock 2;
+  DLL names per image.
+- **Candidate lookups.** Names equal to a Windows export, only in native images that import GetProcAddress, .NET
+  strings dropped: Hail to the Rainbow 504, of which the Windows run looked up 40 (precision about 8%); labelled
+  candidates in the summary.
+- **Judge** (Sprint 085's, in CI): 803 of 803 imports; 322 of 331 run-time lookups, the 9 Unity plugin hooks left.
+- **Not done:** shader bytecode (the graphics phase's census); the precision of the candidate lookups beyond the
+  label (an xref to a GetProcAddress call would narrow them).
+- **Gates:** `scripts/gates.sh` exit 0, 2,451 passed.

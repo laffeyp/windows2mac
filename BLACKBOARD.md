@@ -310,6 +310,14 @@
 
 ## Sprint tail
 
+### Sprint 088 (2026-10-16, closed)
+- **Scope:** the large review of 082-086 on the service census (H3, M1): Windows's own exports and COM registry from the laptop, DLL classes, P/Invoke from metadata, COM GUIDs, Steam interfaces.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; System32 and SysWOW64 copied from the laptop; `--windows` built the two tables; the census rewrote store/census/static with the judge holding (803 of 803; 322 of 331).
+  - *Observation 1 (missed input, of the work):* the first copy of System32 missed 227 files, and SysWOW64's 233, by the glob's case. Disposition: resolved-here (counted against the laptop's own listing).
+  - *Observation 2 (low precision, of the work):* candidate lookups are about 8% precise. Disposition: recorded (labelled as candidates).
+- **Closed:** CI pending at this entry.
+
 ### Sprint 087 (2026-10-16, closed)
 - **Scope:** the large review of 082-086 on the instruction census (H2, H3 in part, M2): jump tables out of the sweep, a precision judge, the 32-bit census, one count per image, the module map in the frontier record.
 - **Rubber Duck Pass:**
@@ -317,7 +325,7 @@
   - *Observation 1 (blind judge, of the work):* 086's judge measured recall only, so jump-table data counted as code went unseen. Disposition: resolved-here (the precision judge, 0 after).
   - *Observation 2 (residual):* BioShock 2's count is a lower bound with no recall judge (no 32-bit run; no `.pdata`). Disposition: open, for the 32-bit work.
   - *Observation 3 (process, of the work):* I started one census with the shell's `&`, against the rule for background jobs; stopped it and reran it as a job.
-- **Closed:** CI pending at this entry.
+- **Closed:** CI run 38840947861 (success on 4584edfb).
 
 ### Sprint 086 (2026-10-16, closed)
 - **Scope:** the instruction census (recentering 2026-10-16, step 1): every x86-64 image's reachable code, by how w2m runs each class (native, model, not lifted); the walk joined with a `.pdata` sweep.
