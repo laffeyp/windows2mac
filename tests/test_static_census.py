@@ -41,6 +41,7 @@ def test_the_census_holds_every_call_the_game_made_on_windows() -> None:
 BIOSHOCK = sc.DEPOTS / "bioshock2-remastered"
 
 
+@pytest.mark.depot
 @pytest.mark.skipif(not BIOSHOCK.is_dir() or shutil.which("objdump") is None, reason="the depot or objdump is absent")
 def test_pe32_imports_equal_objdumps() -> None:
     """pe.parse(x86=True) against llvm-objdump -p, over every 32-bit image of BioShock 2 Remastered."""
@@ -67,8 +68,10 @@ def test_pe32_imports_equal_objdumps() -> None:
     assert checked == 16
 
 
+@pytest.mark.depot
 @pytest.mark.skipif(not sc.DEPOTS.is_dir(), reason="the depots are absent")
 def test_the_census_reproduces_its_committed_bytes(tmp_path: Path) -> None:
     sc.main(["--out", str(tmp_path)])
     for f in sorted(CENSUS.glob("*.json")):
-        assert (tmp_path / f.name).read_bytes() == f.read_bytes(), f.name
+        if not f.name.startswith("instructions-"):          # class_census.py writes those (Sprint 086)
+            assert (tmp_path / f.name).read_bytes() == f.read_bytes(), f.name
