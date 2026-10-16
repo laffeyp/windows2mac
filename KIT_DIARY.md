@@ -595,3 +595,19 @@ measured; here the tables showed the kind cannot change a result.
 **Kit change suggested:** a card names the behavior its plant must change, not only the line it edits; a plant the
 judges pass is reported with the measurement that tells a blind judge from a fault with no effect, and replaced by
 one that changes the named behavior.
+
+### 2026-10-16 — Sprint 084: a guard that checked the wrong witness
+
+The reviewer asked that the runtime stack's invariant (no runtime frame live while guest code runs) be checked. The
+check I wrote compared SP with the stack's top at every dispatch miss and stopped the run otherwise. It stopped the
+translation-cache test, a correct run: an exception the runtime resolves resumes the guest through
+`w2m_resume_context`, which never returns, so SP sits inside frames that are dead. SP is a witness of where frames were
+pushed, not of whether any is live. Writing it did find a real gap: a run's vCPU had no SP at all before its first
+bridge.
+
+**Finding (#61):** a guard must check the property, not a value that coincides with it on the paths in mind. Before a
+guard stops runs, list the paths that reach it (here: the run's start, a bridge's return, an exception resumed) and
+measure the value on each.
+
+**Kit change suggested:** a card that adds a run-stopping guard names the paths into the guarded point and the value
+measured on each, beside the plant's reach (#60).

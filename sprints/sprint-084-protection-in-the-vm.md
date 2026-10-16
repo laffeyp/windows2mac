@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 084
-status: active
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -71,3 +71,30 @@ set and the cache sequence correct) and asked for five things:
 ## done criteria
 
 The VM compiles blocks on pages no block covered yet, with the host's words; the review's other asks closed.
+
+## observed
+- **Protection in the VM.** Judged frontier (`store/runs/frontier-643a6283510c-1792112049004716000` on 48a1baf3):
+  87,938 blocks, 87,731 compiled in the VM (99.8%), each equal to `assemble_block`'s words and marks; scans 86,816
+  equal, 719 wider, 0 short. The VM protected 3,661 pages; 7 lay under a block descriptor and went to the host. Host
+  misses 472 (264 on a page that is not guest code, unmapped, the process area or the monitor, not broken down; 149
+  that do not decode; 49 with no stencil), from 4,106 in 083.
+- **Outcome.** The judged and the timed run end as the run with the compiler off: their stop, calls by service and
+  host requests lines byte-equal, 76 divergences each. The timed run compiled 87,935 blocks to the judged run's
+  87,938; the cause of the three is not measured.
+- **Timing** (`frontier-643a6283510c-1792112215283098000`, load average 21 from other processes): 2.7 s for
+  1,000,000,002 instructions (370 million a second), host misses 0.1 s; 083's run took 3.8 s, the compiler off 28.3 s.
+- **The PROCESS_VA plant** fails the spec judge through `process_area_layouts` (a JMP below PROCESS_VA to
+  PROCESS_VA + 0x12345000 onto a flag writer with a form there). Forms do depend on the address (the next address's
+  value class: a NOP has a form at 0x140001000, none at PROCESS_VA), and 083's MOV and CMP had no form anywhere.
+- **The stack invariant.** A check that SP is the stack's top at every miss failed the translation-cache test: a fault
+  resumed by `w2m_resume_context` leaves SP inside frames that never return, so SP cannot show a live frame. The check
+  is gone; runtime.h states the invariant and why SP cannot test it. Building it found that a run's first vCPU had no
+  SP set before its first bridge: runs now start at an entry stub that sets it.
+- **Counts on the record:** moved to Sprint 085. MEASUREMENT_RECORDED's metric is an enum of 12 values with no block
+  count; the counts need vocabulary 0.8, with the measure they serve.
+- **Layout constants:** contract 0.84.0 states the rule (a layout change re-derives the table; CI's instruction judges
+  hold it).
+- **Sweeps on 48a1baf3:** 456 of 458 classes accepted (FCOS, FSIN as before); 68 families exit 0; 527 records clean.
+- **Process slips:** the first sweep started with the BLACKBOARD uncommitted (its records would have stamped dirty);
+  stopped, its 18 records moved to the scratchpad, rerun. 083's two frontier records' call tables and traces had been
+  left out of 7d904142; committed in 48a1baf3.
