@@ -18,8 +18,9 @@ The frontier was meant to find what nothing written down tells. It became the wa
   x64 images list every function's start in their exception directory (`.pdata`), so the instructions a game holds
   can be read without running it.
 - **Image formats.** BioShock 2 Remastered, the other game on disk, is 16 PE files, all 32-bit (machine 0x14C); w2m
-  reads PE32+ only. Hail to the Rainbow's depot holds 122 32-bit PE files beside its 7 x86-64 ones. Nothing had
-  looked.
+  reads PE32+ only. Nothing had looked. (Hail to the Rainbow's depot also holds 122 images marked 0x14C beside its 7
+  x86-64 ones; the census of Sprint 085 shows all 122 are .NET assemblies, IL that mono runs, not native 32-bit code.
+  This note corrects the first version of this document, which counted them as 32-bit images.)
 
 ## What is knowable, and how each enters
 

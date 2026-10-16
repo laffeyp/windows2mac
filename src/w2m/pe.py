@@ -15,7 +15,9 @@ import struct
 from dataclasses import dataclass, field
 
 IMAGE_FILE_MACHINE_AMD64 = 0x8664
+IMAGE_FILE_MACHINE_I386 = 0x14C
 PE32_PLUS = 0x20B
+PE32 = 0x10B                     # a 32-bit image's optional header (PE Format, "Optional Header Standard Fields")
 SCN_MEM_EXECUTE = 0x20000000
 SCN_MEM_READ = 0x40000000
 SCN_MEM_WRITE = 0x80000000
@@ -133,8 +135,11 @@ def _rva_to_offset(sections: tuple[Section, ...], rva: int) -> int:
     raise PeError(f"RVA 0x{rva:x} is in no section")
 
 
-def parse(data: bytes) -> PeImage:
-    """Parse a PE32+ x86-64 image; raise PeError on anything malformed."""
+def parse(data: bytes, x86: bool = False) -> PeImage:
+    """Parse a PE32+ x86-64 image; raise PeError on anything malformed. With `x86`, a PE32 x86 (i386) image is read too
+    (Sprint 085, the static census): its optional header holds BaseOfData and a 32-bit ImageBase, 32-bit stack and heap
+    sizes, the data directories at +96, and 32-bit import, delay-import and TLS entries (PE Format). The loader takes
+    PE32+ only."""
     r = _Reader(data)
     if data[:2] != b"MZ":
         raise PeError("no MZ signature at offset 0")
@@ -143,23 +148,27 @@ def parse(data: bytes) -> PeImage:
         raise PeError(f"no PE signature at e_lfanew 0x{lfanew:x}")
     coff = lfanew + 4
     machine, nsec, timestamp, _, _, opt_size, chars = r.u("<HHIIIHH", coff)
-    if machine != IMAGE_FILE_MACHINE_AMD64:
+    wide = machine == IMAGE_FILE_MACHINE_AMD64
+    if not wide and not (x86 and machine == IMAGE_FILE_MACHINE_I386):
         raise PeError(f"machine 0x{machine:x} is not AMD64 (0x8664)")
     opt = coff + 20
     (magic,) = r.u("<H", opt)
-    if magic != PE32_PLUS:
-        raise PeError(f"optional header magic 0x{magic:x} is not PE32+ (0x20b)")
+    if magic != (PE32_PLUS if wide else PE32):
+        raise PeError(f"optional header magic 0x{magic:x} is not {'PE32+ (0x20b)' if wide else 'PE32 (0x10b)'}")
     (entry,) = r.u("<I", opt + 16)
-    (image_base,) = r.u("<Q", opt + 24)
+    (image_base,) = r.u("<Q", opt + 24) if wide else r.u("<I", opt + 28)
     sect_align, _ = r.u("<II", opt + 32)
     size_of_image, _ = r.u("<II", opt + 56)
     subsystem, dllchars = r.u("<HH", opt + 68)
-    stack_reserve, stack_commit = r.u("<QQ", opt + 72)      # PE Format, Optional Header Windows-Specific Fields
-    (ndirs,) = r.u("<I", opt + 108)
+    # PE Format, Optional Header Windows-Specific Fields: four stack and heap sizes, 8 bytes each in PE32+, 4 in PE32
+    stack_reserve, stack_commit = r.u("<QQ", opt + 72) if wide else r.u("<II", opt + 72)
+    dir_at = opt + (112 if wide else 96)
+    (ndirs,) = r.u("<I", dir_at - 4)
     dirs: list[tuple[int, int]] = []
     for i in range(min(ndirs, 16)):
-        va, sz = r.u("<II", opt + 112 + 8 * i)
+        va, sz = r.u("<II", dir_at + 8 * i)
         dirs.append((va, sz))
+    thunk_fmt, thunk_size, ordinal_bit = ("<Q", 8, 63) if wide else ("<I", 4, 31)
 
     sections = tuple(
         Section(
@@ -186,16 +195,16 @@ def parse(data: bytes) -> PeImage:
             names: list[str] = []
             slot = ft
             while True:
-                (t,) = r.u("<Q", thunk)
+                (t,) = r.u(thunk_fmt, thunk)
                 if t == 0:
                     break
-                if t >> 63:
+                if t >> ordinal_bit:
                     names.append(f"#{t & 0xFFFF}")
                 else:
                     names.append(r.cstr(_rva_to_offset(sections, t & 0x7FFFFFFF) + 2))
                 iat[slot] = f"{dll}!{names[-1]}"
-                thunk += 8
-                slot += 8
+                thunk += thunk_size
+                slot += thunk_size
             imports[dll] = tuple(names)
             off += 20
 
@@ -215,14 +224,14 @@ def parse(data: bytes) -> PeImage:
             dll = r.cstr(_rva_to_offset(sections, name_rva))
             thunk, slot, names = _rva_to_offset(sections, dint), diat, []
             while True:
-                (t,) = r.u("<Q", thunk)
+                (t,) = r.u(thunk_fmt, thunk)
                 if t == 0:
                     break
-                names.append(f"#{t & 0xFFFF}" if t >> 63
+                names.append(f"#{t & 0xFFFF}" if t >> ordinal_bit
                              else r.cstr(_rva_to_offset(sections, t & 0x7FFFFFFF) + 2))
                 iat[slot] = f"{dll}!{names[-1]}"
-                thunk += 8
-                slot += 8
+                thunk += thunk_size
+                slot += thunk_size
             delay[dll] = tuple(names)
             off += 32
 
@@ -257,22 +266,21 @@ def parse(data: bytes) -> PeImage:
     tls = None
     rva, size = d(DIR_TLS)
     if rva:
-        start_va, end_va, index_va, _, zero_fill = r.u("<QQQQI", _rva_to_offset(sections, rva))
+        start_va, end_va, index_va, cb_va, zero_fill = r.u("<QQQQI" if wide else "<IIIII", _rva_to_offset(sections, rva))
         tls = (start_va, end_va, index_va, zero_fill)
-        (cb_va,) = r.u("<Q", _rva_to_offset(sections, rva) + 24)
         if cb_va:
             off = _rva_to_offset(sections, cb_va - image_base)
             while True:
-                (va,) = r.u("<Q", off)
+                (va,) = r.u(thunk_fmt, off)
                 if va == 0:
                     break
                 callbacks.append(va - image_base)
-                off += 8
+                off += thunk_size
 
     starts: list[int] = []
     ends: list[int] = []
     rva, size = d(DIR_EXCEPTION)
-    if rva:
+    if rva and wide:                                     # x86-64's RUNTIME_FUNCTION table; PE32 has none of its kind
         off = _rva_to_offset(sections, rva)
         for i in range(size // 12):
             begin, end, _ = r.u("<III", off + 12 * i)

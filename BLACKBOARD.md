@@ -308,6 +308,14 @@
 
 ## Sprint tail
 
+### Sprint 085 (2026-10-16, closed)
+- **Scope:** the static census (recentering 2026-10-16, step 1): every depot's images and the Windows functions they import or name, with w2m's coverage; PE32 read.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; `static_census.py` wrote store/census/static (4 depots); the judge found all 803 Windows-run imports and 322 of 331 run-time lookups (the 9 left: Unity plugin hooks nothing exports); PE32 imports equal objdump's on 16 images.
+  - *Observation 1 (unmeasured claim, of the work):* I counted Hail to the Rainbow's 122 0x14C images as 32-bit code in chat and in the new recentering document; they are .NET assemblies. Disposition: resolved-here (the document and the card correct it; the user told in chat).
+  - *Observation 2 (the gap the census exists for):* 396 of the game's 634 imported Windows functions and 927 of BioShock 2's 1,114 are not served. Disposition: open, the work list for the sprints after 086.
+- **Closed:** CI pending at this entry.
+
 ### Sprint 084 (2026-10-16, closed)
 - **Scope:** the reviewer's small review of 083: a block's page protected in the VM; the PROCESS_VA plant observable; the runtime stack's invariant; layout constants in the contract; the counts on the record (moved to 085).
 - **Rubber Duck Pass:**
@@ -316,7 +324,7 @@
   - *Observation 2 (vocabulary gap):* MEASUREMENT_RECORDED has no metric for a count of blocks. Disposition: deferred to Sprint 085 (vocabulary 0.8 with the measure it serves).
   - *Observation 3 (unmeasured difference):* the judged and timed runs compiled 87,938 and 87,935 blocks with the same outcome. Disposition: recorded, cause not measured.
   - *Observation 4 (process):* a sweep started on an uncommitted BLACKBOARD, and 083's frontier side files were not committed. Disposition: resolved-here.
-- **Closed:** CI pending at this entry.
+- **Closed:** CI run 38833133755 (success on b350f53a).
 
 ### Sprint 083 (2026-10-15, closed)
 - **Scope:** a dispatch miss compiled inside the VM: `block_compiler.c` (`w2m_vm_compile`) over the code-page set, the runtime image above the stack, the host replaying the VM's log at every exit, `VM_COMPILE_JUDGE`; the review of 082's three asks.
