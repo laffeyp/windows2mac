@@ -318,7 +318,7 @@
   - *Observation 2 (noise, of the work):* the sweep decodes bytes that are not code (CLI, STI, IN, OUT in a game). Disposition: recorded; not measured.
   - *Observation 3 (my judge, first version):* mapped addresses by preferred base and reported mono 10% reachable; three DLLs share 0x180000000 and were relocated. Disposition: resolved-here (bases from the record).
   - *Observation 4 (silent gate):* 085 closed with CI failing on its skipped depot tests. Disposition: resolved-here (`depot` marker).
-- **Closed:** CI pending at this entry.
+- **Closed:** CI run 38837044927 (success on 066c69a4); Sprint 085 closes on it too.
 
 ### Sprint 085 (2026-10-16, closed)
 - **Scope:** the static census (recentering 2026-10-16, step 1): every depot's images and the Windows functions they import or name, with w2m's coverage; PE32 read.
@@ -326,7 +326,7 @@
   - *Sequence narration:* no run; `static_census.py` wrote store/census/static (4 depots); the judge found all 803 Windows-run imports and 322 of 331 run-time lookups (the 9 left: Unity plugin hooks nothing exports); PE32 imports equal objdump's on 16 images.
   - *Observation 1 (unmeasured claim, of the work):* I counted Hail to the Rainbow's 122 0x14C images as 32-bit code in chat and in the new recentering document; they are .NET assemblies. Disposition: resolved-here (the document and the card correct it; the user told in chat).
   - *Observation 2 (the gap the census exists for):* 396 of the game's 634 imported Windows functions and 927 of BioShock 2's 1,114 are not served. Disposition: open, the work list for the sprints after 086.
-- **Closed:** not on its own CI: run 38834313370 failed (its two depot tests skipped in CI, where W2M_REQUIRE_REFERENCES fails a skip); 085 closes on Sprint 086's CI, whose commit carries the fix.
+- **Closed:** not on its own CI: run 38834313370 failed (its two depot tests skipped in CI, where W2M_REQUIRE_REFERENCES fails a skip); 085 closes on Sprint 086's CI (run 38837044927, success on 066c69a4), whose commit carries the fix.
 
 ### Sprint 084 (2026-10-16, closed)
 - **Scope:** the reviewer's small review of 083: a block's page protected in the VM; the PROCESS_VA plant observable; the runtime stack's invariant; layout constants in the contract; the counts on the record (moved to 085).
