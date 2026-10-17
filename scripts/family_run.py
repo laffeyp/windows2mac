@@ -928,6 +928,13 @@ FAMILIES: dict[str, Family] = {
                 "only_exact_key_wakes": Plant("        if (!key || !waits_on || waits_on == key) {",
                                               "        if (waits_on == key) {", ("event_auto.multiple_waiter",),
                                               file="threads.c"),
+                # Sprint 095: a release readies only the waiter its grant chose; dropping that wake loses it (the
+                # waiter never runs), named as semaphore_not_handed_over's measured reach: the probe deadlocks
+                "granted_waiter_not_readied": Plant("        waiters[i].granted = 1;\n        w2m_ready_thread(waiters[i].tid);",
+                                                    "        waiters[i].granted = 1;",
+                                                    ("semaphore.one_waiter", "semaphore.three_waiters_two_released",
+                                                     "semaphore.order", "event_auto.one_waiter", "mutex.one_waiter",
+                                                     "event_auto.multiple_waiter")),
                 "any_key_waiters_ignored": Plant("        if (!key || !waits_on || waits_on == key) {",
                                                  "        if (!key || waits_on == key) {",
                                                  ("event_auto.multiple_waiter",), file="threads.c")}),

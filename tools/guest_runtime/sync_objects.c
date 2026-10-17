@@ -18,6 +18,7 @@
  */
 #include "runtime.h"
 
+
 #define OBJECT_BASE 0x2000ull
 #define OBJECTS 256
 #define WAIT_OBJECT_0 0u
@@ -224,6 +225,7 @@ static void grant(struct object *o) {
             o->count--;
         }
         waiters[i].granted = 1;
+        w2m_ready_thread(waiters[i].tid);        /* the one waiter the release satisfies (Sprint 095) */
     }
 }
 
@@ -241,7 +243,8 @@ u64 k32_SetEvent(u64 h) {
         o->count = 1;
         grant(o);
     }
-    w2m_signal(o && o->kind != SHARED_EVENT ? (u64)o : 0);
+    if (o && o->kind == EVENT_AUTO) w2m_signal_any_waiters();      /* grant readied its waiter (Sprint 095) */
+    else w2m_signal(o && o->kind != SHARED_EVENT ? (u64)o : 0);     /* a manual-reset event releases every waiter */
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
 u64 k32_ResetEvent(u64 h) {
@@ -261,7 +264,7 @@ u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     if (previous) *(s32 *)previous = (s32)o->count;
     o->count += (s32)count;
     grant(o);
-    w2m_signal((u64)o);
+    w2m_signal_any_waiters();
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
 
@@ -274,7 +277,7 @@ u64 k32_ReleaseMutex(u64 h) {
     if (--o->count == 0) {
         o->max = 0;
         grant(o);
-        w2m_signal((u64)o);
+        w2m_signal_any_waiters();
     }
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }

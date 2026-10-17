@@ -116,6 +116,37 @@ void w2m_signal(u64 key) {
     if (woke) *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
 }
 
+/* Sprint 095: a release that hands its object to one waiter (sync_objects.c grant) readies that thread alone; the
+ * other waiters on the object stay blocked, as Windows releases "a single waiting thread" (SetEvent, auto-reset) and
+ * one waiter per unit (ReleaseSemaphore). Before, every waiter on the key woke and all but one blocked again (the
+ * wake census: 11,086 of 186,272 readies on the batch run, 99.5% in wait_one). */
+void w2m_ready_thread(u32 tid) {
+    for (u64 i = 0; i < RUN->count; i++) {
+        struct w2m_run_entry *e = run_entry(i);
+        if (e->tid != tid || e->status != BLOCKED) continue;
+        set_status(e, READY);
+        w2m_wake_census.readied++;
+        *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
+        return;
+    }
+}
+
+/* The threads whose wait takes any signal (key 0: a wait on several objects, Sprint 069) ready, after a release that
+ * readied its own waiter by w2m_ready_thread. */
+void w2m_signal_any_waiters(void) {
+    if (!RUN->blocked) return;
+    int woke = 0;
+    for (u64 i = 0; i < RUN->count; i++) {
+        struct w2m_run_entry *e = run_entry(i);
+        if (e->status == BLOCKED && !scratch_of(e)->wait_key) {
+            set_status(e, READY);
+            w2m_wake_census.readied++;
+            woke = 1;
+        }
+    }
+    if (woke) *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
+}
+
 /* vm_backend.py _wake_expired: on the instruction clock, a blocked thread whose deadline has passed is ready. */
 static void wake_expired(void) {
     if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return;

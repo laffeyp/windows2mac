@@ -146,6 +146,8 @@ void w2m_block(u64 deadline, u64 key);       /* threads.c: RETRY until `key` is 
                                               * deadline; key 0 wakes on any signal, W2M_KEY_NONE on none */
 #define W2M_KEY_NONE (~0ull)               /* Sleep: only its deadline ends it */
 void w2m_signal(u64 key);                    /* threads.c: what `key` names changed; its waiters re-check */
+void w2m_ready_thread(u32 tid);               /* threads.c: one blocked thread ready (Sprint 095) */
+void w2m_signal_any_waiters(void);           /* threads.c: the waits that take any signal ready */
 u64 w2m_guest_rip_at(u64 host_pc);           /* runtime.c: the x86 address translated code at host_pc stands for */
 _Static_assert(__builtin_offsetof(struct w2m_state, st) == 768, "state.st0");
 
