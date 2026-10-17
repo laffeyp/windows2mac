@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 108
-status: active
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -76,3 +76,24 @@ call, frame and ambient-progress tags wait for the sprints that emit them (H5, s
 The batch run's deciding numbers are on its record under vocabulary 0.9; CI green.
 
 ## observed
+- **Made** (018422051, then the reader): signals/0.9.json and its rationale, P20 ratified, current.json 0.9,
+  VOCAB_VERSION 0.9, events.py regenerated (`--check` 0, check_vocab: 62 tags, 102 foreign keys resolved);
+  `run_measurements`, `measurement_table`, `measurement_problems` in run_frontier.py; `VM.pauses_executed` (the
+  monitor's PAUSE count, apart from the thread census, so the PAUSE sum is a check and not an identity);
+  `scripts/run_numbers.py`; `tests/test_run_measurements.py`. 0.9's `rationale` names its own file; 0.6 to 0.8 had
+  left it at 0.5's.
+- **Judge** (frontier-643a6283510c-1792267359516238000, on 018422051; the batch run conforms: the log's 168 lines,
+  0 divergences, 24 values Windows varies): `run_numbers.py` reads 107 numbers from the record through substrate and
+  finds 0 that do not add up. The process retired 82,709,305,055 instructions, the sum of its 28 threads' (thread 4,
+  the main thread, 56,199,454,901); 83,934,637 PAUSEs, 83,934,283 of them thread 4's; 31.159 s in the VM and 8.316 s
+  in the host (hvc 8 7.305 s, hvc 13 0.458 s, hvc 1 0.402 s), 2,095,145,119 instructions a second over those
+  39.48 s; exits hvc 8 44,010, hvc 13 13,673, hvc 1 1,091, hvc 11 286, hvc 10 258, hvc 14 167, hvc 4 8, hvc 12 2;
+  762,122 switches in the VM and 2 host hand-overs; 181,421 threads readied and 53 rewaits; the load 4.13, 3.35,
+  3.24 at the end. Each equals the run's printed line.
+- **Not met as written:** the card expected the seconds within 1% of the runner's wall time around `machine.run`;
+  the runner does not time `machine.run`, so the check was not made. The printed rate (1,978.30 M a second over
+  41.8 s) divides by the session's time, set-up and comparison included; the record's by the run's 39.48 s.
+- **Plant:** a thread census short of thread 8: `measurement_problems` reports the instructions (1000 against 700)
+  and the PAUSEs (4 against 3); `tests/test_run_measurements.py`.
+- **No change elsewhere** (e1cbc46f): 456 of 458 classes (FSIN and FCOS open, as before; 94 s), 68 of 68 families,
+  every one of the 526 records stamped with the clean commit; `scripts/gates.sh` exit 0, 32,755 records intact.

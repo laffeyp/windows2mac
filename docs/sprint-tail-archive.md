@@ -341,6 +341,13 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 097 (2026-10-16, closed)
+- **Scope:** roadmap step 2's last item: the GICv3 made before any vCPU.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; 68 family item runs to CANDIDATE_ACCEPTED; the frontier's SESSION_INIT, EXECUTION_STARTED, its stop, TRACE_INGESTED, COMPARISON_COMPLETED `conforms`, SESSION_COMPLETED.
+  - *Observation 1 (none):* the GIC changed no row; nothing raises an interrupt yet.
+- **Closed:** CI pending at this entry; Sprint 094's CI run 38999283011 (success on 293abc6a).
+
 ### Sprint 096 (2026-10-16, closed-partial)
 - **Scope:** roadmap step 2: a PAUSE yields the slice when another thread is ready.
 - **Rubber Duck Pass:**
