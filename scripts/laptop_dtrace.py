@@ -20,8 +20,17 @@ DXGI Present starts (presents.tsv) at the game's seconds ATTACH + FROM on must a
 stderr (drops among them), a window off 10 s by more than 0.1 s, or no frames fails the run. Writes
 store/laptop-traces/frame-calls-hail-to-the-rainbow.tsv: each call's kind, count and count per frame.
 
+`session` (Sprint 093, E2's judge): a person plays the game for up to SESSION seconds (scripts/windows_machine.py game
+--person --record, full screen, no keys sent, the keyboard and mouse kept as inputs.jsonl). tools/laptop_dtrace/
+session_system.d, armed before the game starts, counts every NT system call of each process whose name contains
+"Hail"; once the game has run 5 s, tools/laptop_dtrace/session_win32u.d attaches to it and counts its win32u calls,
+the three unprobed ntdll stubs, and its NtGdiDdDDIPresent calls each 15 s. Both print cumulative blocks every 15 s, so
+the last block is the session's total. Writes store/laptop-traces/session-<run>/ (the two outputs, gzipped) and prints
+the calls and the frames per second, 15 s at a time.
+
 Usage: uv run python scripts/laptop_dtrace.py start
        uv run python scripts/laptop_dtrace.py frames
+       uv run python scripts/laptop_dtrace.py session
 """
 
 from __future__ import annotations
@@ -202,11 +211,84 @@ Get-Content errors.txt | ForEach-Object {{ "dtrace stderr $_" }}"""
     return 0
 
 
+SESSION = 7200
+
+
+def last_counts(text: str, kind: str) -> dict[str, int]:
+    """The last block's counts of `kind` lines in a session output, keyed by call (by "pid call" for S lines). A
+    pid-attached DTrace that exits with its target prints its aggregations once more in DTrace's own format (measured
+    2026-10-16 on notepad: "  NtUserUnregisterClass   1"), which this does not read: the 15 s blocks before it hold
+    all but the last seconds."""
+    counts: dict[str, int] = {}
+    for line in text.replace("\r", "").splitlines():
+        if line.startswith("B\t"):
+            counts = {}
+        elif line.startswith(kind + "\t"):
+            cells = line.split("\t")
+            counts[" ".join(cells[1:-1])] = int(cells[-1])
+    return counts
+
+
+def session() -> int:
+    stage = "C:\\w2m-stage\\session"
+    subprocess.run(["ssh", HOST, f'cmd /c "mkdir {stage} 2>nul"'], check=False)
+    for name in ("wait_for_process.d", "session_system.d", "session_win32u.d"):
+        subprocess.run(["scp", "-q", str(ROOT / "tools" / "laptop_dtrace" / name), f"{HOST}:C:/w2m-stage/session/{name}"],
+                       check=True)
+    # The system-call DTrace is stopped by this script once the game has gone (it ends only after its seconds); the
+    # win32u DTrace ends with its target (measured on notepad, 2026-10-16). An empty pid would make -p read -o as the
+    # pid (measured: "dtrace: invalid pid: -o"), so a missing or ended game fails the run here.
+    tracer = f"""cd {stage}; Remove-Item system.txt, win32u.txt, *.err -ErrorAction SilentlyContinue
+$sys = Start-Process "{DTRACE}" -ArgumentList '-q -s session_system.d Hail {SESSION + 600} -o system.txt' -PassThru `
+  -NoNewWindow -RedirectStandardError system.err
+$game = "$(& "{DTRACE}" -q -s wait_for_process.d Hail 5 | Select-Object -First 1)".Trim()
+"game pid $game"
+if (-not $game -or -not (Get-Process -Id $game -ErrorAction SilentlyContinue)) {{
+  "dtrace exit no-game"; Stop-Process -Id $sys.Id -Force; exit 1 }}
+& "{DTRACE}" -q -s session_win32u.d -p $game -o win32u.txt 2> win32u.err
+"win32u dtrace exit $LASTEXITCODE"
+[void]$sys.WaitForExit(20000)
+if (-not $sys.HasExited) {{ Stop-Process -Id $sys.Id -Force }}
+Get-Content system.err, win32u.err | ForEach-Object {{ "dtrace stderr $_" }}"""
+    encoded = base64.b64encode(tracer.encode("utf-16-le")).decode()
+    trace = subprocess.Popen(["ssh", HOST, f"powershell -NoProfile -EncodedCommand {encoded}"], stdout=subprocess.PIPE,
+                             text=True)
+    game = subprocess.run([sys.executable, str(ROOT / "scripts" / "windows_machine.py"), "game", "--executions", "1",
+                           "--seconds", str(SESSION), "--mode", "play", "--person", "--record", "--capture", "off"],
+                          capture_output=True, text=True)
+    print(game.stdout[-2000:])
+    out = trace.communicate()[0]
+    print(out)
+    run = next((w for w in game.stdout.split() if w.startswith("lap-")), "").rstrip(":")
+    dest = OUT / f"session-{run or 'unknown'}"
+    dest.mkdir(parents=True, exist_ok=True)
+    texts = {}
+    for name in ("system.txt", "win32u.txt"):
+        texts[name] = subprocess.run(["ssh", HOST, f"type {stage}\\{name}"], capture_output=True,
+                                     text=True).stdout.replace("\r", "")
+        (dest / f"{name}.gz").write_bytes(gzip.compress(texts[name].encode(), mtime=0))
+    system = last_counts(texts["system.txt"], "S")
+    win32u = last_counts(texts["win32u.txt"], "W")
+    ntdll = last_counts(texts["win32u.txt"], "N")
+    pids = sorted({k.split()[0] for k in system})
+    calls = sorted({k.split()[1] for k in system} | set(ntdll))
+    stubs = win32u_stubs()
+    print(f"processes {pids}; NT calls {len(calls)} kinds, {sum(system.values()) + sum(ntdll.values())} calls; "
+          f"win32k calls {len([c for c in win32u if c in stubs])} kinds, "
+          f"{sum(n for c, n in win32u.items() if c in stubs)} calls")
+    fps = [int(line.split("\t")[1]) / 15 for line in texts["win32u.txt"].splitlines() if line.startswith("F\t")]
+    print("frames a second, 15 s at a time: " + " ".join(f"{f:.0f}" for f in fps))
+    failed = game.returncode != 0 or "1 of 1 executions back" not in game.stdout or "dtrace stderr" in out \
+        or not system or not win32u
+    print("the session failed" if failed else f"session stored in {dest.relative_to(ROOT)}")
+    return 1 if failed else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["start", "frames"])
+    ap.add_argument("what", choices=["start", "frames", "session"])
     a = ap.parse_args(argv)
-    return start() if a.what == "start" else frames()
+    return {"start": start, "frames": frames, "session": session}[a.what]()
 
 
 if __name__ == "__main__":

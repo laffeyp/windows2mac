@@ -227,7 +227,8 @@ try {
           Note "execution $i`: wpr started (sampled)"
         }
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $gameArgs = if ($spec.mode -eq 'play') { @('-screen-fullscreen', '0', '-screen-width', '1280', '-screen-height', '720', '-logFile', '"C:\w2m\unity.log"') }
+        $gameArgs = if ($spec.person) { @('-screen-fullscreen', '1', '-logFile', '"C:\w2m\unity.log"') }
+                    elseif ($spec.mode -eq 'play') { @('-screen-fullscreen', '0', '-screen-width', '1280', '-screen-height', '720', '-logFile', '"C:\w2m\unity.log"') }
                     else { @('-batchmode', '-nographics', '-logFile', '"C:\w2m\unity.log"') }
         $p = Start-Process -FilePath "$app\$exe.exe" -WorkingDirectory $app -ArgumentList $gameArgs -PassThru
         $deadline = (Get-Date).AddSeconds([int]$spec.seconds)
@@ -236,8 +237,9 @@ try {
         $frameEvery = if ($spec.frame_seconds) { [int]$spec.frame_seconds } else { 10 }; $nextFrame = 0
         # the input (R5): job.json `input_script` names a script in games/<game>/inputs/ (JSON lines: t, kind, values; t in
         # seconds since the game started), played with SendInput (input.cs); without one, play mode sends Enter and
-        # Space every 3 s as windows-game.yml does. job.json `record` keeps the raw keyboard and mouse as
-        # out\<i>\inputs.jsonl (a person playing, or the round trip that checks the player).
+        # Space every 3 s as windows-game.yml does, unless job.json `person` says a person plays (full screen, no keys).
+        # job.json `record` keeps the raw keyboard and mouse as out\<i>\inputs.jsonl (a person playing, or the round
+        # trip that checks the player).
         $script = @()
         if ($spec.input_script) {
           $script = @(Get-Content "games/$($spec.game)/inputs/$($spec.input_script).jsonl" | Where-Object { $_.Trim() } |
@@ -259,7 +261,7 @@ try {
             $tl = if (Test-Path out\jit_capture.bin.trace.tsv) { @(Get-Content out\jit_capture.bin.trace.tsv -ErrorAction SilentlyContinue).Count } else { 0 }
             $ll = if (Test-Path C:\w2m\unity.log) { @(Get-Content C:\w2m\unity.log -ErrorAction SilentlyContinue).Count } else { 0 }
             "{0:N1}`t{1}`t{2}" -f $now, $tl, $ll | Add-Content out\curve.tsv
-            if ($spec.mode -eq 'play' -and -not $spec.input_script) {
+            if ($spec.mode -eq 'play' -and -not $spec.input_script -and -not $spec.person) {   # a person plays: no keys sent
               [void]$shell.AppActivate($p.Id); $shell.SendKeys('{ENTER}'); $shell.SendKeys(' ')
             }
             $nextCurve += 3

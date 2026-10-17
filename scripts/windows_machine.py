@@ -230,7 +230,7 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
 
 def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audio: str = "on",
              inputs: str | None = None, record: bool = False, pmc: bool = False, capture: str = "on",
-             pmc_sample: bool = False) -> int:
+             pmc_sample: bool = False, person: bool = False) -> int:
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -243,6 +243,7 @@ def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audi
         spec: dict[str, object] = {"kind": "game", "execution_id": run, "game": game, "exe": exe, "seconds": seconds,
                                    "mode": mode, "audio": audio, "input_script": inputs, "record": record,
                                    "pmc": pmc, "pmc_sample": pmc_sample, "capture": capture,
+                                   "person": person, "frame_seconds": 30 if person else 10,
                                    "executions": executions, "repeat": 0, "commit": head,
                                    "session": "desktop", "limit_minutes": limit}
         with tempfile.TemporaryDirectory() as d:
@@ -297,6 +298,8 @@ def main(argv: list[str]) -> int:
     gm.add_argument("--mode", choices=("batch", "play"), default="batch")
     gm.add_argument("--input", help="an input script in games/<game>/inputs/<name>.jsonl, played with SendInput")
     gm.add_argument("--record", action="store_true", help="keep the raw keyboard and mouse as inputs.jsonl")
+    gm.add_argument("--person", action="store_true",
+                    help="a person plays: full screen, no Enter and Space every 3 s, a screen frame every 30 s")
     gm.add_argument("--pmc", action="store_true",
                     help="instructions per thread and DXGI Presents, per second (pmc.wprp; Sprint 068 item I)")
     gm.add_argument("--pmc-sample", action="store_true",
@@ -322,7 +325,7 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     if a.kind == "game":
         return run_game(a.game, a.exe, a.executions, a.seconds, a.mode, a.audio, a.input, a.record, a.pmc, a.capture,
-                        a.pmc_sample)
+                        a.pmc_sample, a.person)
     if a.kind == "batch":
         sys.path.insert(0, str(ROOT / "scripts"))
         import family_run
