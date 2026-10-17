@@ -128,4 +128,4 @@ def test_the_census_outlives_the_vm() -> None:
     vm.run(max_steps=1 << 20, timeout_ms=10_000)
     vm.close()
     (n, pauses), = vm.thread_census().values()
-    assert pauses == 1 and n >= 2
+    assert pauses == 1 and n == 1                              # the PAUSE; the faulting store retires nothing (099)

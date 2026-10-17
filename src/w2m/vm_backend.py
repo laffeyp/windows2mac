@@ -1057,6 +1057,7 @@ HOST_LOWERED = frozenset({"PAUSE", "PACKSSDW", "PMULLD", "FNSTCW", "FLD", "FSTP"
 HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
 HVC_SCHEDULE = 12            # a service handed the vCPU to the scheduler (state.schedule; Sprint 051)
 HVC_CODE_WRITE = 13          # a write faulted on a page behind translated code: x17 the address (Sprint 065)
+HVC_FAULT_GIVE_BACK = 14     # a guest fault left its block: x2 ELR; the host gives back the unrun instructions (099)
 AP_READ_ONLY = 1 << 7        # a descriptor's AP[2]: no writes at EL1 (Arm ARM D8.4.1)
 # A level-3 permission fault on a write from the current EL: ESR's EC 0x25, WnR, DFSC 0x0F (Arm ARM D17.2.40)
 CODE_WRITE_ESR_MASK = (0x3F << 26) | (1 << 6) | 0x3F
@@ -2091,6 +2092,7 @@ class VM:
         self.flags_cache: dict[tuple[int, str | None], tuple[int, int]] = {}
         self.lift_pages: dict[int, set[int]] = {}       # page VA -> the cached addresses whose bytes it holds
         self.code_writes = 0                            # writes that dropped blocks
+        self.fault_give_backs = 0                       # guest faults whose unrun instructions were given back (099)
         self.blocks_dropped = 0
         self.mem.on_write = self._host_wrote            # the host's own writes into guest memory fault on nothing
         self.code_cursor = CODE_CACHE
@@ -3797,6 +3799,9 @@ class VM:
         e.emit(a64.str_(8, 30, 16, 8 * 30))
         e.emit(a64.mrs(0, a64.ESR_EL1), a64.mrs(1, a64.FAR_EL1), a64.mrs(2, a64.ELR_EL1),
                a64.stp(0, 1, 16, 0x100), a64.str_(8, 2, 16, 0x110), a64.stp(31, 31, 16, 0x118))
+        # the block's entry counted every instruction in it; the faulting one does not retire and those after it do not
+        # run, so the host takes them off x23 (its tail table holds each block's, the VM's compiles noted at the exit)
+        e.emit(a64.hvc(HVC_FAULT_GIVE_BACK))
         for i in range(0, 16, 2):                                # XMM0-15 for the CONTEXT
             e.emit(a64.stp_q(i, i + 1, 16, SAVE_VECTORS + 16 * i))
         cont = e.here() + 4 * 8                         # four words of MOV, MSR, MOVZ, MSR, ERET below
@@ -3964,10 +3969,14 @@ class VM:
         self.tail_hosts.extend(marks)
         self.tail_left.extend(range(len(marks) - 1, -1, -1))
 
+    @staticmethod
+    def _in_code_cache(pc: int) -> bool:
+        return MONITOR_VA + CODE_CACHE <= pc < MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE
+
     def _unrun_after(self, pc: int) -> int:
         """The instructions after the one whose code holds host address `pc` in its block: counted at the block's entry,
         not run when a model step there resumes at the next instruction's own block."""
-        if not MONITOR_VA + CODE_CACHE <= pc < MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE:
+        if not self._in_code_cache(pc):
             return 0
         i = bisect_right(self.tail_hosts, pc) - 1
         return self.tail_left[i] if i >= 0 else 0
@@ -4342,6 +4351,8 @@ class VM:
                     left = x[REG_BUDGET] - (1 << 64) if x[REG_BUDGET] >> 63 else x[REG_BUDGET]
                     if e.kind == "hvc" and e.syndrome & 0xFFFF in (HVC_SLOW_SSE, HVC_SLOW_STEP):
                         left += self._unrun_after(e.pc - 4)           # the block's instructions after the step
+                    elif e.kind == "hvc" and e.syndrome & 0xFFFF == HVC_FAULT_GIVE_BACK and self._in_code_cache(x[2]):
+                        left += self._unrun_after(x[2]) + 1           # the faulting instruction and those after it
                     x[REG_BUDGET] = left & M64
                     struct.pack_into("<Q", self.mm, MONITOR_DATA, (limit - left) & M64)   # the count, from x23
                 if e.kind == "cancel" and interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
@@ -4447,6 +4458,9 @@ class VM:
                         pc = self.resume_va
                     else:
                         pc = e.pc
+                elif imm == HVC_FAULT_GIVE_BACK:                # given back above; on to w2m_exception
+                    self.fault_give_backs += 1
+                    pc = e.pc
                 elif imm == HVC_CODE_WRITE:                     # a write faulted: behind translated code?
                     x[17] = 1 if self._code_written(x[17]) else 0
                     pc = e.pc

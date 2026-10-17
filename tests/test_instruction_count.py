@@ -4,8 +4,9 @@
 step limit. Two ways it went wrong on 2026-10-14: the host computed it from the limit it read before a run while the
 slice stub raised the limit in the VM, so each refill went missing; and a model step that leaves its block mid-way
 resumes at the next instruction's own block, whose entry counts again what the first block's entry had counted.
-A fault still counts its block's instructions after it (the runtime's exception path leaves the block, not the host):
-each program ends with a faulting store and a JMP, a block of two, so its end counts one instruction it did not run."""
+Each program ends with a faulting store, three NOPs and a JMP, one block: its entry counts five, none of which runs (a
+fault is reported before its instruction executes, Intel SDM Vol 3A 6.5), and the exception path has the host give the
+five back (Sprint 098; before, the count held them)."""
 
 from __future__ import annotations
 
@@ -39,7 +40,7 @@ def run(code: bytes, monkeypatch: pytest.MonkeyPatch, refill: bool) -> int:
     return int(r.instructions_executed)
 
 
-END = bytes.fromhex("c6042500000000 00" "ebfe")             # mov byte [0], 0 (the end, a fault); jmp $
+END = bytes.fromhex("c6042500000000 00" "909090" "ebfe")     # mov byte [0], 0 (the end, a fault); nop x3; jmp $
 LOOP = bytes.fromhex("b9") + struct.pack("<I", N) + bytes.fromhex("ffc9" "75fc") + END
 # mov ecx, N; l: dec ecx; jnz l
 
@@ -57,7 +58,7 @@ STEPPED = (bytes.fromhex("b9") + struct.pack("<I", 1000)       # mov ecx, 1000
 
 @pytest.mark.hvf
 def test_a_model_step_mid_block_counts_the_rest_of_its_block_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    exact = 1 + 5 * 1000 + 2                                  # the mov, five a turn, the store and the JMP
+    exact = 1 + 5 * 1000                                      # the mov, five a turn; the end's block runs none
     assert run(STEPPED, monkeypatch, refill=True) == exact
 
 
@@ -96,9 +97,16 @@ def test_a_pause_yields_the_slice_when_another_thread_is_ready_and_the_count_hol
         monkeypatch: pytest.MonkeyPatch) -> None:
     """Sprint 096 (KVM's directed yield): a PAUSE with another thread ready ends the slice at the next block's entry,
     the limit moved to the count so no instruction is counted that did not run; with none ready it only counts."""
-    exact = 1 + 3 * SPINS + 2                                  # the mov, three a turn, the store and the JMP
+    exact = 1 + 3 * SPINS                                      # the mov, three a turn; the end's block runs none
     yielded, yield_ends = slice_ends(SPIN, monkeypatch, ready=True)
     alone, alone_ends = slice_ends(SPIN, monkeypatch, ready=False)
     assert yielded == alone == exact
     assert yield_ends >= SPINS - 1                             # about one slice end a PAUSE
     assert alone_ends <= exact // 20_000 + 2                   # the slices of a lone thread
+
+
+@pytest.mark.hvf
+def test_a_fault_counts_only_the_instructions_before_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two instructions run in the faulting block before the store; the store and the four after it are given back."""
+    code = bytes.fromhex("4801c0" "4801c0") + END              # add rax, rax x2; the end
+    assert run(code, monkeypatch, refill=True) == 2

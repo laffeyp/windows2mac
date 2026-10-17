@@ -290,6 +290,7 @@ def main(argv: list[str]) -> int:
         state.update(code=getattr(vm, "_final_code_census", None) or (vm.code_census() if vm.block_census else None),
                      threads=vm.thread_census(), exits=dict(vm.exits), exit_sites=vm.exit_sites.most_common(12), thunks=len(vm.ld.thunks),
                      code_writes=(vm.code_writes, vm.blocks_dropped, len(vm.code_pages)),
+                     fault_give_backs=vm.fault_give_backs,
                      tcache=(vm.tcache_hits, len(vm.translations) - vm.tcache_hits),
                      split_tables=(vm._next_table - SPLIT_TABLES) // 0x1000,
                      code_regions=sorted({p >> 21 << 21 for p in vm.code_pages})[:40],
@@ -414,6 +415,7 @@ def main(argv: list[str]) -> int:
     writes, dropped_blocks, pages = state.get("code_writes", (0, 0, 0))
     print(f"writes to translated code {writes}, blocks dropped {dropped_blocks}, pages behind blocks at the stop {pages}; "
           f"split tables {state.get('split_tables')}; 2 MB regions " + " ".join(hex(r) for r in state.get("code_regions", [])))
+    print(f"guest faults whose unrun instructions were given back (Sprint 099): {state.get('fault_give_backs', 0)}")
     print(f"traced calls {state.get('traced')} (left out {state.get('dropped')}); guest trace {state.get('trace')}")
     found = state.get("divergences", [])
     varies = state.get("varies", [])
