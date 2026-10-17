@@ -310,6 +310,7 @@
 - **2026-10-17** — Sprint 106 (one lock around the guest runtime) closed. SWPA/STLR at RUN_TABLE + 0x80 around the bridges, the exception entry, the switch stub and the miss stub; the host frees it where it abandons a runtime frame; dispatch slots and live descriptors as single 64-bit stores. Two vCPUs, 20,000 HeapAlloc/HeapFree each, no foreign mark; without the lock, foreign marks and faults. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 108 (vocabulary 0.9: the batch run's numbers on its record) closed. P20: eight `metric` values; run_frontier.py emits 84 more numbers a batch run; `scripts/run_numbers.py` reads them from the record and checks that the threads add up to the process. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 109 (every record checked against the vocabulary's rules) closed. `scripts/check_records.py`: T1 to T4, T7, S1 to S13, E1 (the zero placeholder named) and E6 over the 32,755 records in 27 s; 1,962 violations, all older than 2026-10-17 or known; in the gates, holding new records. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 110 (the frontier's execution placed in time on its record) closed. The run in a worker thread; `--timeout-seconds` (10,800) and a 60 s grace on EXECUTION_STARTED, `timed_out` at the bound; `elapsed_seconds` on EXECUTION_COMPLETED, which now follows an unserved service; T3 checked on the batch run, 0 violations. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -374,6 +375,16 @@
 ---
 
 ## Sprint tail
+
+### Sprint 110 (2026-10-17, closed)
+- **Scope:** H2's second half: the frontier's execution placed in time on its record, within a stated bound.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (frontier-643a6283510c-1792269281973223000, by `t` from RunStarted): SESSION_INIT 0.001 s; EXECUTION_STARTED 0.207 s (timeout_seconds 10,800, kill_grace_seconds 60); the 107 MEASUREMENT_RECORDED; EXECUTION_COMPLETED 33.965 s (killed, elapsed_seconds 33.546); TRACE_INGESTED 33.978 s; COMPARISON_COMPLETED (0 divergences); SESSION_COMPLETED 34.265 s. Before, every event of a run carried its end's time.
+  - *Observation 1 (an event loop held by a run):* `machine.run` on the loop's thread kept substrate's writer from stamping anything until the run ended. Disposition: resolved-here (`asyncio.to_thread`).
+  - *Observation 2 (a stop that skipped its completion):* 41 of 43 frontier records with no EXECUTION_COMPLETED stopped at SERVICE_UNIMPLEMENTED. Disposition: resolved-here.
+  - *Observation 3 (a plant that missed by chance):* the EnTSO-off litmus plant missed one time in 600, not one in a billion. Disposition: resolved-here (ten runs).
+  - *Correction:* Sprint 109's table and Deferred entry count T3's 452 unchecked as frontier records; they are 394 laptop probe runs, 46 frontier runs and 12 judge records.
+- **Closed:** CI pending at this entry; Sprint 109's CI run 39067108857 (success on a1060c55).
 
 ### Sprint 109 (2026-10-17, closed)
 - **Scope:** H2 of the SDD hardening order, its first half: every record checked against the vocabulary's rules.
@@ -447,11 +458,4 @@
   - *Observation 2 (a re-derivation regressed another sprint):* emptying HOST_LOWERED handed the x87 forms to stencils derived without their runtime symbols. Disposition: resolved in Sprint 098's 1d55c7da, with a judge.
 - **Closed:** CI pending at this entry.
 
-### Sprint 099 (2026-10-17, closed)
-- **Scope:** a guest fault gives back the instructions its block counted and did not run.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no new tag; 4 count tests and the census test; the batch run gave back 167 faults, all stack growth (0 dispatched).
-  - *Observation 1 (a test held the defect):* the census test asserted a count the defect produced. Disposition: resolved-here.
-- **Closed:** CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-098 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-099 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.

@@ -341,6 +341,13 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 099 (2026-10-17, closed)
+- **Scope:** a guest fault gives back the instructions its block counted and did not run.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; 4 count tests and the census test; the batch run gave back 167 faults, all stack growth (0 dispatched).
+  - *Observation 1 (a test held the defect):* the census test asserted a count the defect produced. Disposition: resolved-here.
+- **Closed:** CI pending at this entry.
+
 ### Sprint 098 (2026-10-17, closed)
 - **Scope:** the batch run's model-stepped classes (hvc 10 and 11) made native.
 - **Rubber Duck Pass:**

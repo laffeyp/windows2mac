@@ -183,6 +183,8 @@ def test_the_store_buffer_shows_in_sb(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.hvf
 def test_planted_entso_off_shows_mp_forbidden_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The plant: ACTLR_EL1.EnTSO clear on every vCPU. MP's forbidden outcome then appeared 4 to 9 times in 100,000
-    on five runs (2026-10-17); up to three runs, so the plant's own miss stays near one in a billion."""
-    assert any(run_test("MP", monkeypatch, entso=False) > 0 for _ in range(3))
+    """The plant: ACTLR_EL1.EnTSO clear on every vCPU. A run shows MP's forbidden outcome or does not: 3 of 25 runs on
+    2026-10-17 showed none, the rest 1 to 11 in 100,000 (a run's count is not Poisson, so three runs, which Sprint 105
+    took, missed about one time in 600 and failed the gates once, Sprint 110). Up to ten runs: the plant's own miss
+    near 0.12 ** 10, six in ten billion; ten runs take about 4 s."""
+    assert any(run_test("MP", monkeypatch, entso=False) > 0 for _ in range(10))

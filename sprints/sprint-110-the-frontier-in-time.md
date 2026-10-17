@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 110
-status: active
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -68,3 +68,24 @@ One concept: the frontier's record says when its execution ran, how long, and wi
 The frontier's record places its execution in time and within a stated bound, checked by T3; CI green.
 
 ## observed
+- **Made** (ff2fe2b4): the run in a worker thread (`asyncio.to_thread`, the worker at user-interactive QoS);
+  `--timeout-seconds` (default 10,800) and a 60 s kill grace on EXECUTION_STARTED, the bound stopping the run as
+  `timed_out`; `elapsed_seconds` on EXECUTION_COMPLETED; the completion emitted after SERVICE_UNIMPLEMENTED too, and
+  the trace ingested on the completion alone (with both kinds on the record the ingest would have fired twice).
+- **Judge** (frontier-643a6283510c-1792269281973223000; conforms: 168 lines, 0 divergences, 81,743,163,703
+  instructions): `check_records.py` T1 to T4 applied, T3 checked, 0 violations. EXECUTION_STARTED at 0.207 s after
+  SESSION_INIT (before: 41 s, at the run's end); EXECUTION_COMPLETED at 33.965 s with `elapsed_seconds` 33.546, its
+  `t` 0.212 s after start plus elapsed. Sprint 108's unmade check, made: `run_seconds` sum to 33.29 s, 0.76% under
+  `elapsed_seconds`.
+- **Plant** (`--timeout-seconds 5 --scratch`, runs/frontier-643a6283510c-1792269317173502000): stopped "timed out
+  after 5 s" at 10,326,297,451 instructions; EXECUTION_COMPLETED `timed_out`, `elapsed_seconds` 5.164, 6.647 s after
+  EXECUTION_STARTED (within 5 + 60 s); T3 holds.
+- **Found:** 41 of the 43 frontier records with no completion had stopped at SERVICE_UNIMPLEMENTED, which ended the
+  runner before EXECUTION_COMPLETED; the runner now emits both. `exit_code` stays absent on the batch run: the run
+  is stopped by the harness (`killed`), and the game never exits.
+- **The card's plant, amended:** it expected the bound's stop as `killed`; the vocabulary's own `timed_out` ("the
+  harness killed it after timeout_seconds", EXECUTION_COMPLETED's note) is the one emitted.
+- **A gate that failed by chance:** the first gate run failed `test_planted_entso_off_shows_mp_forbidden_outcome`.
+  Measured: 3 of 25 runs show no forbidden MP outcome with EnTSO off, the others 1 to 11 in 100,000, so Sprint 105's
+  three runs missed about one time in 600 (its "near one in a billion" took the count for Poisson). Now up to ten
+  runs (about 6 in 10 billion); `tests/test_litmus.py`.
