@@ -145,6 +145,56 @@ def host_load() -> dict[str, Any]:
             "busy": [f"{name} {c}%" for c, name in busy]}
 
 
+def run_measurements(xid: str, profile: str, warm: Literal["cold", "warm"], instructions: int, pauses: int,
+                     threads: dict[int, tuple[int, int]], run_ns: int, exit_ns: dict[int, int], exits: dict[int, int],
+                     switches: tuple[int, dict[str, int]], wakes: tuple[int, int],
+                     load: list[float]) -> list[events.MEASUREMENT_RECORDED]:
+    """The batch run's deciding numbers as MEASUREMENT_RECORDED (vocabulary 0.9, P20; Sprint 108), each dimension in
+    the variant: instructions and PAUSEs for the process and each thread, the rate over the run's wall time, seconds in
+    the VM and in the host by the exit before them (-1: before the first run; 0: an exit other than an hvc), exits by
+    hvc, thread switches in the VM and the host's hand-overs by cause, the wake census, the load average at the end."""
+    rows: list[tuple[events.EnumMetric, str, float, str]] = [("instructions_retired", "process", instructions, "instructions"),
+                                               ("pause_instructions", "process", pauses, "instructions")]
+    for tid, (n, p) in sorted(threads.items()):
+        rows += [("instructions_retired", f"thread {tid}", n, "instructions"),
+                 ("pause_instructions", f"thread {tid}", p, "instructions")]
+    wall = (run_ns + sum(exit_ns.values())) / 1e9
+    rows.append(("instructions_per_second", "process", instructions / wall if wall else 0.0, "instructions/s"))
+    rows.append(("run_seconds", "vm", run_ns / 1e9, "s"))
+    rows += [("run_seconds", f"host hvc {k}" if k > 0 else "host start" if k < 0 else "host other", ns / 1e9, "s")
+             for k, ns in sorted(exit_ns.items())]
+    rows += [("vm_exits", f"hvc {k}", n, "exits") for k, n in sorted(exits.items())]
+    rows.append(("thread_switches", "in the VM", switches[0], "switches"))
+    rows += [("thread_switches", f"host: {cause}", n, "switches") for cause, n in sorted(switches[1].items())]
+    rows += [("thread_wakes", "readied", wakes[0], "threads"), ("thread_wakes", "rewaits", wakes[1], "threads")]
+    rows += [("load_average", span, value, "load") for span, value in zip(("1 min", "5 min", "15 min"), load)]
+    return [events.validate(events.MEASUREMENT_RECORDED(
+        measurement_id=f"{xid}-{metric}-{re.sub(r'[^a-z0-9]+', '_', variant.lower()).strip('_')}", metric=metric,
+        value=float(value), unit=unit, phase="discovery", backend="managed_vm", application_profile_id=profile,
+        artifact_state=warm, destination_profile_id="w2m-vm", variant=variant)) for metric, variant, value, unit in rows]
+
+
+def measurement_table(recorded: list[dict[str, Any]]) -> dict[tuple[str, str], float]:
+    """(metric, variant) -> value, from a record's MEASUREMENT_RECORDED payloads: the run's numbers read back."""
+    return {(m["metric"], m.get("variant", "")): float(m["value"]) for m in recorded}
+
+
+def measurement_problems(table: dict[tuple[str, str], float]) -> list[str]:
+    """What does not add up in a run's numbers: the threads' instructions and PAUSEs against the process's, and the
+    rate against the instructions over the seconds in the VM and in the host."""
+    problems = []
+    for metric in ("instructions_retired", "pause_instructions"):
+        whole = table.get((metric, "process"))
+        parts = sum(v for (m, variant), v in table.items() if m == metric and variant.startswith("thread "))
+        if whole != parts:
+            problems.append(f"{metric}: the process {whole}, its threads {parts}")
+    seconds = sum(v for (m, _), v in table.items() if m == "run_seconds")
+    rate = table.get(("instructions_per_second", "process"), 0.0)
+    if seconds and abs(rate * seconds - table.get(("instructions_retired", "process"), 0.0)) > 1e-6 * rate * seconds:
+        problems.append(f"instructions_per_second {rate} over {seconds} s is not the instructions retired")
+    return problems
+
+
 def interactive_qos() -> None:
     """This thread at user-interactive QoS (0x21, sys/qos.h), as the monitor sets its vCPU thread: macOS keeps such
     threads on the performance cores when the Mac is loaded (Sprint 068 item F)."""
@@ -266,6 +316,7 @@ def main(argv: list[str]) -> int:
             state["switching"] = (vm.switches_in_vm(), dict(vm.handovers))
             state["wakes"] = vm.wake_census()
             state["time"] = (vm.run_ns, dict(vm.exit_ns))
+            state["pauses"] = vm.pauses_executed()            # the monitor's count, apart from the thread census
             state["vm_compile"] = vm.vm_compile_counts()      # from the monitor's memory: before vm.close()
             state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid else where(vm, t.x[17]))
                                      for t in vm.threads.values()}
@@ -307,6 +358,11 @@ def main(argv: list[str]) -> int:
                 value=float(n), unit="blocks", phase="discovery", backend="managed_vm",
                 application_profile_id=profile_slug, artifact_state=warm, destination_profile_id="w2m-vm",
                 variant=cause))
+        readied, rewaits, _ = state["wakes"]
+        for m in run_measurements(xid, profile_slug, warm, r.instructions_executed, state["pauses"], state["threads"], state["time"][0],
+                                  state["time"][1], state["exits"], state["switching"], (readied, rewaits),
+                                  host_load()["load_average"]):
+            yield m
         if vm.unimplemented is not None:
             name, ret = vm.unimplemented
             yield events.validate(events.SERVICE_UNIMPLEMENTED(

@@ -3562,6 +3562,10 @@ class VM:
         """The guest instructions this VM has run (the monitor data's count)."""
         return int(struct.unpack_from("<Q", self.mm, self._md)[0])
 
+    def pauses_executed(self) -> int:
+        """The PAUSEs among them (the monitor data's PAUSE count, apart from the threads' census)."""
+        return int(struct.unpack_from("<Q", self.mm, self._md + PAUSE_COUNT)[0])
+
     def traced_calls(self) -> tuple[list[tuple[int, int, str, str, str, tuple[int, ...], int, int]], int]:
         """The calls call_trace.c recorded, in the Windows trace's shape (tools/jit_capture/call_trace.h): (seq, tid,
         image, dll, function, a0..a7, ret, last error), and the count of calls the full area left out."""

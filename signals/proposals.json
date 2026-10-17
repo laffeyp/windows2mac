@@ -300,6 +300,23 @@
     "into": "0.8",
     "grounds": "project \u2014 Decision 2026-10-15 (the host-compile share read from signals), v0.2 \u00a73.1 (performance numbers kept apart from acceptance); SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2; practice \u2014 a measure's dimension in a label, not in the metric's name (Prometheus naming practice: labels for dimensions)"
    }
+  },
+  {
+   "id": "P20",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "metric += instructions_retired, pause_instructions, instructions_per_second, run_seconds, vm_exits, thread_switches, thread_wakes, load_average"
+   ],
+   "source": "docs/review-2026-10-17-sdd-hardening.md item 1 (the speed numbers have no tag; Sprint 094's table rebuilt from logs); Decision 2026-10-17 (H1, taking in D1); sprints/sprint-108-the-batch-runs-numbers-on-its-record.md",
+   "rationale": "The batch run gathers its deciding numbers (instructions by thread, PAUSEs, time in the VM and in the host by exit, exits by kind, thread switches, the wake census, the load) and prints them; its record holds none. Eight metric values, each with its dimension in the existing variant field, as P19 did for the compile counts; every value is emitted by the sprint that adds it.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-17",
+    "by": "agent-resolved",
+    "into": "0.9",
+    "grounds": "project \u2014 Decision 2026-10-17 (SDD hardening first), plan step 1's measure (instructions a second), v0.2 \u00a73.1 (performance numbers kept apart from acceptance); SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2, the signal contract (every value emitted); practice \u2014 a measure's dimension in a label, not its name (Prometheus naming practice), as P19"
+   }
   }
  ]
 }

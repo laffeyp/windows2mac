@@ -8,4 +8,4 @@ named by signals/current.json; its version is pinned here so every emitted SESSI
 trace can assert it.
 """
 
-VOCAB_VERSION = "0.8"
+VOCAB_VERSION = "0.9"
