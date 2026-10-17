@@ -66,3 +66,19 @@ noted here rather than hidden.
 The instruction count at a guest fault is the instructions retired before it; every judge holds; CI green.
 
 ## observed
+
+- **Made** (b197c09b): hvc 14 in the exception entry's hardware-fault path; the host adds `_unrun_after(ELR) + 1` to
+  x23 when ELR is in the code cache. The code-write exit (hvc 13) needed nothing: its `back` path returns by ERET to
+  the same store in the same block, whose entry does not run again (read in `_write_exception_entry`).
+- **Judge:** tests/test_instruction_count.py, 4 tests: each count equals the instructions before the faulting store
+  (5,001; 60,001; 2). tests/test_thread_switch_vectors.py's census test asserted `n >= 2` for a PAUSE and a faulting
+  store, which held only because the fault was counted; it now asserts 1.
+- **Plant:** the give-back removed: 5,006 for 5,001, 60,006 for 60,001, 7 for 2; each count five high, the store and
+  the four instructions after it.
+- **Batch run** (cd6cac64, frontier-643a6283510c-1792220209039481000): conforms, 168 of 168 lines, 0 divergences;
+  80,806,055,313 instructions to the stop (Sprint 097's run: 81.4 billion, before Sprints 098-101); 167 faults given
+  back and 0 dispatched; w2m_exception (runtime.c) leaves by a runtime fault (which stops the run), a guard-page
+  touch (w2m_stack_grow, the instruction run again) or a dispatch, so all 167 were the stack growing on demand. The
+  count fell for more than one reason in between (four sprints of changes), so no part of the 0.6 billion is put down
+  to this sprint alone.
+- **Families:** 68 of 68 on 90093828.

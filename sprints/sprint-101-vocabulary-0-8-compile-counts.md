@@ -58,3 +58,12 @@ proposal taxonomy), so 0.8.
 The VM's compile counts are on the batch run's record under a ratified vocabulary; CI green.
 
 ## observed
+
+- **Made** (94eead46): signals/0.8.json and its rationale, P19 ratified, current.json 0.8, events.py regenerated; the
+  runner emits the counts. The gates' mypy stopped the first gate run on `artifact_state` typed as `str`; it was
+  made the Literal before the commit.
+- **Judge:** the batch run's record (frontier-643a6283510c-1792220209039481000, read through substrate's
+  `read_record`) holds 23 MEASUREMENT_RECORDED events, one a cause, `artifact_state` warm (the translation cache hit),
+  each value equal to the printed count: compiled 274,939; refused for protected pages 17,092; not a code page 366;
+  decode 304; guarded 280; no stencil 123; page needs a split 15; pause 2; host only 1; cut by decode 243, by no
+  stencil 142, by guarded 210; ten causes 0.

@@ -60,3 +60,18 @@ open games up to not the beginning"); §5 already names it, and it is declared w
 Every laptop game run starts from a declared initial state it proves in its output; CI green.
 
 ## observed
+
+- **Made** (90093828, cd6cac64): games/hail-to-the-rainbow/state.json (company NSS and product Hail to the Rainbow
+  from app.info; the `empty` state); run-job.ps1 resets, reads back and proves the state in `state.json`, and stops
+  before the game on a difference; windows_machine.py `--initial-state` and `--plant-state`.
+- **First run, stopped by the check** (lap-20261017T065012358Z-90093828): "temp_entries 4, declared 0". The user's
+  TEMP is shared: Steam now runs on the laptop in the job's session, with Defender's session helper. Of the five
+  entries listed afterwards (all written at the job's minute: `steam`, `remoteIpMoProxy_ConfigDefender_...`,
+  `79A1.tmp`, `tmp_sfyc2iip.opk`, a GUID-named `.tmp`), four deleted and the `.tmp` was held open by a process not
+  identified. The game's TEMP became
+  the job's own `C:\w2m\temp` (cd6cac64; GetTempPath reads TMP first); §5's row says so.
+- **Judge** (lap-20261017T065856365Z-cd6cac64): state.json equal to the declared state: registry key and LocalLow
+  absent, 0 TEMP entries, no unity.log, 0 game processes, 297 tree files checked against files.json (sha256
+  c4c7b444...); the game then ran its 60 s (63 s, stopped by the job).
+- **Plant** (lap-20261017T070416493Z-cd6cac64, `--plant-state`): stopped before the game with "initial state empty:
+  registry_key present, declared absent", no exec.json written.

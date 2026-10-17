@@ -203,8 +203,8 @@ try {
         }
         if (Test-Path $app) { cmd /c rmdir $app }
         New-Item -ItemType Junction -Path $app -Target $gameDir | Out-Null
-        # the game's TEMP is the job's own folder: Steam and Defender's session helper write the user's TEMP and hold
-        # files open in it (2026-10-17: 5 entries, one in use), so it cannot be proved empty (Sprint 102). GetTempPath
+        # the game's TEMP is the job's own folder: the user's TEMP is shared with the session's other programs (Steam,
+        # Defender's helper; 2026-10-17: 5 entries after the reset, one held open), so it cannot be proved empty (Sprint 102). GetTempPath
         # reads TMP first, then TEMP
         New-Item -ItemType Directory -Force C:\w2m\temp | Out-Null
         # the initial state (§5): no saved settings, an empty TEMP, no log, no game process; each item read back and

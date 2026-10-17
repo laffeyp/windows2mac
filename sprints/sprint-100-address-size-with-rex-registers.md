@@ -74,3 +74,15 @@ indexes by R8D under an EAX base, already 32-bit), so a base R8D-R15D addresses 
 Every 0x67 address is computed in 32 bits as the SDM defines, every judge holds, CI green.
 
 ## observed
+
+- **Made** (9c45bd8c): `_operand` and symbolic_lift take the address size from the register's width; the stencil table
+  re-derived from its record in 161 s (21,182 keys; the record's 1,186,246 calls rebuilt equal from it, 0 differ) and
+  rendered again; `HOST_LOWERED` empty; the frozen sets' placement unchanged.
+- **Judge:** tests/test_address_size.py: 4 instructions run before the fault (the MOV and three loads through R8D as
+  base, as base with an index, as index alone). The equal-words judges (tests/test_vm_compiler_c.py, 15 tests) pass on
+  the re-derived table, with no iclass held back. The 039 and 041 case sets: 34 tests pass, the Intel and AMD CPUs'
+  results agreeing with the model on every case as before.
+- **Plant:** the old rule restored: the run faults at the first load (x86 0x2000000a) and counts 1.
+- **Classes:** 456 of 458 accepted on 90093828 (FSIN and FCOS, as since 065). **Families:** 68 of 68. **Batch run**
+  (cd6cac64): conforms, 168 of 168, 0 divergences. The VM compiled 274,939 blocks; 123 went to the host for want of a
+  stencil.
