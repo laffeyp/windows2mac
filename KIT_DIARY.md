@@ -631,3 +631,20 @@ every knowable surface, committed as data, before any loop runs, with the loop's
 its inputs (formats, interfaces, instruction set, declared dependencies) as committed data with coverage beside it;
 a sprint card names the census rows it closes; a sprint that found its work at a run's stop says why the census did
 not show it.
+
+### 2026-10-16 — Sprints 094-096: a speed measure that the program itself paced
+
+Roadmap step 1 measured the batch run (seconds and instructions to the stop) and step 2 was judged by it. Sprint 095
+cut the wake path's re-blocks from 11,086 to 58 and Sprint 096 cut the spinning that waited on other threads, PAUSEs
+from 508-608 million to 62.7 million, and the instructions to the stop barely moved (81.3 to 80.4 billion). The rest
+of the main thread's work was a busy-wait on QueryPerformanceCounter (62.9 million calls, one per PAUSE) with every
+other thread blocked without a timeout. On the instruction clock the game waits for guest time, so the run covers about
+57 guest seconds whatever w2m's speed, and Windows itself took 90 to 102 s to the same log line, against w2m's 38-39 s.
+
+**Finding (#63):** before a run is made the gate for speed, ask what bounds it: the work, or the program's own clock.
+A run that waits for time measures the clock, and no speed-up shows in it. The check is cheap: the share of the
+dominant thread's instructions in a spin, and the clock calls beside its PAUSEs (one query of the end report here),
+then the reference's own time to the same point.
+
+**Kit change suggested:** a speed sprint's observation contract names what bounds the measured run (work, I/O, the
+program's clock) with the measurement that shows it, before any optimization is judged by it.

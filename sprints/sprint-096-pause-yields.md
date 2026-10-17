@@ -77,3 +77,22 @@ PAUSE yields when another thread is ready, every judge holds, the spin census an
 CI green.
 
 ## observed
+
+- **The yield** (a5daea7b): a PAUSE with another thread ready moves the limit to the count and x23 to 0. Test
+  `test_a_pause_yields_the_slice_when_another_thread_is_ready_and_the_count_holds`: 60,003 instructions with and
+  without yields, about one slice end a PAUSE with a thread ready. The plant (x23 zeroed, the limit left) gave
+  400,059,999 and failed it. The VM's compiler leaves PAUSE to the host: 2 blocks refused for "pause" on the batch
+  run. The equal-words judges skip PAUSE (the review cut the rule; the VM never runs the table's PAUSE).
+- **Judges:** 456 of 458 classes (FSIN, FCOS pinned as since 065; PAUSE 204 cases on the model and the VM), 68 of
+  68 families, the batch run conforming (168 of 168 lines, 0 divergences; frontier-643a6283510c-1792211740266968000).
+- **The measure:** PAUSEs to the stop 62,688,226 (from 508 to 608 million in Sprint 094's runs to the stop): 8.1 to
+  9.7 times fewer, short of the card's 10. Instructions to the stop 80.4 billion (from 81.3): the yield removed the
+  spinning that waited on other threads, and the instructions went elsewhere.
+- **What the rest is:** the main thread called QueryPerformanceCounter 62,935,408 times against 62,584,183 PAUSEs,
+  every other thread blocked with no timeout: a busy-wait on the clock, which no yield or deadline warp can shorten
+  (a warp at a PAUSE with only timed waiters was built and fired 0 times on the batch run, so it was not kept).
+  On the instruction clock (1.4 billion a second) the run to the stop covers 80.4 / 1.4 = 57 guest seconds whatever
+  w2m's speed: the game paces it. Windows reached the same 168 lines in 90 to 102 s (the laptop's five batch runs,
+  lap-20261014T032442034Z-c8814547-01 to -05, curve.tsv); w2m reaches them in 38 to 39 s on a quiet Mac. The batch
+  run is not a speed gate; Decision 2026-10-16 (how steps 2 to 5 are measured) records what is.
+

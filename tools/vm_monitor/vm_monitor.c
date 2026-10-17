@@ -224,6 +224,8 @@ static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exi
     }
 }
 
+static uint64_t gic_distributor, gic_redistributor, gic_region;   /* Sprint 097 */
+
 int main(int argc, char **argv) {
     if (argc != 4) {
         fprintf(stderr, "usage: vm_monitor <memfile> <ipa_base_hex> <size_hex>\n");
@@ -252,9 +254,37 @@ int main(int argc, char **argv) {
         fprintf(stderr, "vm setup failed: hv_return 0x%x\n", r);
         return 1;
     }
+    /* The GICv3 (Sprint 097, roadmap step 2): after the VM and before any vCPU, as hv_gic.h requires ("so that GIC
+     * CPU system resources can be allocated"), its regions at the top of the 40-bit IPA space, above the guest's
+     * memory, at the alignments the host reports; the redistributor region holds every vCPU's. */
+    size_t dist_size, dist_align, redist_region, redist_align;
+    if ((r = hv_gic_get_distributor_size(&dist_size)) || (r = hv_gic_get_distributor_base_alignment(&dist_align)) ||
+        (r = hv_gic_get_redistributor_region_size(&redist_region)) ||
+        (r = hv_gic_get_redistributor_base_alignment(&redist_align))) {
+        fprintf(stderr, "gic parameters failed: hv_return 0x%x\n", r);
+        return 1;
+    }
+    gic_redistributor = ((1ull << 40) - redist_region) & ~(uint64_t)(redist_align - 1);
+    gic_distributor = (gic_redistributor - dist_size) & ~(uint64_t)(dist_align - 1);
+    gic_region = redist_region;
+    if (gic_distributor < ipa + size) {
+        fprintf(stderr, "gic regions overlap the guest's memory\n");
+        return 1;
+    }
+    hv_gic_config_t gic = hv_gic_config_create();
+    if ((r = hv_gic_config_set_distributor_base(gic, gic_distributor)) ||
+        (r = hv_gic_config_set_redistributor_base(gic, gic_redistributor)) || (r = hv_gic_create(gic))) {
+        fprintf(stderr, "gic_create failed: hv_return 0x%x\n", r);
+        return 1;
+    }
     hv_vcpu_exit_t *ex;
     if ((r = hv_vcpu_create(&vcpu, &ex, NULL))) {
         fprintf(stderr, "vcpu_create failed: hv_return 0x%x\n", r);
+        return 1;
+    }
+    /* affinity 0.0.0.0 (bit 31 RES1): "vCPU's must set affinity values in their MPIDR_EL1 register" (hv_gic.h) */
+    if ((r = hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_MPIDR_EL1, 1ull << 31))) {
+        fprintf(stderr, "mpidr failed: hv_return 0x%x\n", r);
         return 1;
     }
     pthread_t wd;
@@ -263,7 +293,14 @@ int main(int argc, char **argv) {
     char line[4096];
     while (fgets(line, sizeof line, stdin)) {
         char *p = line;
-        if (!strncmp(p, "sys ", 4)) {
+        if (!strncmp(p, "gic", 3)) {               /* the GIC as created (Sprint 097's test) */
+            hv_ipa_t base = 0;
+            uint64_t mpidr = 0;
+            hv_gic_get_redistributor_base(vcpu, &base);
+            hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_MPIDR_EL1, &mpidr);
+            printf("gic %llx %llx %llx %llx\n", (unsigned long long)gic_distributor, (unsigned long long)base,
+                   (unsigned long long)gic_region, (unsigned long long)mpidr);
+        } else if (!strncmp(p, "sys ", 4)) {
             uint64_t id = strtoull(p + 4, &p, 16), v = strtoull(p, &p, 16);
             r = hv_vcpu_set_sys_reg(vcpu, (hv_sys_reg_t)id, v);
             if (r) printf("err %x\n", r);
