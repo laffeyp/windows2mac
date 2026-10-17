@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 114
-status: active
+status: done
 phase: 5
 pass_kind: architecture
 ---
@@ -58,3 +58,9 @@ as written, each `continue` a `Resume`, each `break` a `Stop`.
 One exit handler serves every exit of a run; behaviour unchanged by every judge; CI green.
 
 ## observed
+- **Made** (123de94c): `VM.serve_exit`, `RunState`, `Resume`, `Stop`, `Slice`, `Switched`; `steps`'s loop calls it.
+- **Judge:** the batch run (frontier-643a6283510c-1792273674526334000) conforms: the log's 168 lines at
+  80,821,897,382 instructions, 0 divergences; `check_records.py` 0 violations; `run_numbers.py` 107 numbers, 0 that do
+  not add up; its exits the same eight kinds as Sprint 110's run (hvc 1 1,091, 4 8, 8 39,979, 10 258, 11 286, 12 2,
+  13 13,646, 14 167). 456 of 458 classes (95 s), 68 of 68 families. Before the commit, the 65 tests of the VM's
+  files passed, `tests/test_switch_in_vm.py`'s census equalities among them.
