@@ -42,7 +42,7 @@ static u64 rescale(u64 ticks, u64 from, u64 to) {
 static u64 counter_now(void) {
     if (clock_from_host()) return w2m_host(W2M_HOST_CLOCK, 0, 0, 0, 0, 0);
     if (clock_mode() == 2)                 /* the instructions this process ran at a set rate, plus the idle warp */
-        return rescale(monitor_word(0), monitor_word(W2M_CLOCK_RATE_OFF), QPC_FREQUENCY) + monitor_word(W2M_CLOCK_WARP_OFF);
+        return rescale(monitor_word(0), monitor_word(W2M_CLOCK_RATE_OFF), QPC_FREQUENCY) + *(const volatile u64 *)W2M_CLOCK_WARP_VA;
     return rescale(cntvct(), cntfrq(), QPC_FREQUENCY);
 }
 

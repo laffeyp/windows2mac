@@ -287,11 +287,11 @@ struct w2m_guest_call *w2m_guest_call_at(u64 rsp);   /* the frame a stub call at
 
 /* Monitor data word: 0, the counter is the guest's CNTVCT_EL0; 1, the host's clock (lockstep, where
  * model and VM must read the same count); 2, the instructions the process ran (monitor data word 0) at
- * W2M_CLOCK_RATE_OFF a second, plus W2M_CLOCK_WARP_OFF ticks the host adds when no thread can run, the wall
- * clock starting at W2M_CLOCK_EPOCH_OFF (Sprint 065 item 10; QEMU's -icount sleep=off). src/w2m/vm_backend.py. */
+ * W2M_CLOCK_RATE_OFF a second, plus the ticks the host adds when no thread can run (the word at W2M_CLOCK_WARP_VA,
+ * on the run table's page, which every vCPU shares; Sprint 107), the wall clock starting at W2M_CLOCK_EPOCH_OFF
+ * (Sprint 065 item 10; QEMU's -icount sleep=off). src/w2m/vm_backend.py. */
 #define W2M_CLOCK_MODE_OFF 0x60
 #define W2M_CLOCK_RATE_OFF 0x90
-#define W2M_CLOCK_WARP_OFF 0x98
 #define W2M_CLOCK_EPOCH_OFF 0xA0
 
 /* Host file primitives (src/w2m/file_bridge.py). */

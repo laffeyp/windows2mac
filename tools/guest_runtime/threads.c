@@ -48,7 +48,8 @@ _Static_assert(__builtin_offsetof(struct w2m_run_entry, monitor) == W2M_RUN_MONI
 _Static_assert(__builtin_offsetof(struct w2m_run_entry, state) == W2M_RUN_STATE_OFF, "run entry state");
 _Static_assert(sizeof(struct w2m_run_entry) == W2M_RUN_ENTRY, "run entry size");
 struct w2m_run_table {
-    u64 count, current, current_entry, in_vm, blocked, slice_count, slice_pauses, switches;
+    u64 count, unused_current, unused_current_entry, in_vm, blocked, unused_slice_count, unused_slice_pauses, switches;
+    /* the current thread, its entry and the slice's start: on each vCPU's monitor data page since Sprint 107 */
 };
 #define RUN ((struct w2m_run_table *)W2M_RUN_TABLE_VA)
 enum { READY, BLOCKED, ENDED };
@@ -158,7 +159,7 @@ static u64 slice_until(u64 cur) {
     }
     if (!timed) return ~0ull;
     if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return 0;
-    u64 rate = *monitor_word(W2M_CLOCK_RATE_OFF), warp = *monitor_word(W2M_CLOCK_WARP_OFF);
+    u64 rate = *monitor_word(W2M_CLOCK_RATE_OFF), warp = *(volatile u64 *)W2M_CLOCK_WARP_VA;
     if (nearest <= warp) return 0;
     u64 ticks = nearest - warp;
     return ticks / 10000000 * rate + ticks % 10000000 * rate / 10000000;
@@ -213,7 +214,7 @@ static u64 nearest_deadline(u64 cur, u64 deadline) {
  * limit, one thread, no thread ready and none to warp to. */
 u64 w2m_switch(u64 schedule, u64 stop) {
     struct w2m_run_table *rt = RUN;
-    u64 n = rt->count, cur = rt->current;
+    u64 n = rt->count, cur = *monitor_word(W2M_CURRENT_OFF);
     u64 *count = monitor_word(0), *limit = monitor_word(8);
     if (!rt->in_vm || (schedule & W2M_SCHEDULE_END) || n < 2) return 0;
     struct w2m_run_entry *c = run_entry(cur);
@@ -245,7 +246,7 @@ u64 w2m_switch(u64 schedule, u64 stop) {
     if (warped != n) {
         struct w2m_run_entry *w = run_entry(warped);
         u64 now = w2m_counter_now();
-        if (w->deadline > now) *monitor_word(W2M_CLOCK_WARP_OFF) += w->deadline - now;
+        if (w->deadline > now) *(volatile u64 *)W2M_CLOCK_WARP_VA += w->deadline - now;
         set_status(w, READY);
     }
     if (schedule & W2M_SCHEDULE_ANSWER) c->x[0] = next != cur;
@@ -253,16 +254,16 @@ u64 w2m_switch(u64 schedule, u64 stop) {
     if (next != cur) {
         struct w2m_run_entry *e = run_entry(next);
         u64 pauses = *monitor_word(W2M_PAUSE_COUNT_OFF);
-        c->instructions += *count - rt->slice_count;
-        c->pauses += pauses - rt->slice_pauses;
-        rt->slice_count = *count;
-        rt->slice_pauses = pauses;
+        c->instructions += *count - *monitor_word(W2M_SLICE_COUNT_OFF);
+        c->pauses += pauses - *monitor_word(W2M_SLICE_PAUSES_OFF);
+        *monitor_word(W2M_SLICE_COUNT_OFF) = *count;
+        *monitor_word(W2M_SLICE_PAUSES_OFF) = pauses;
         monitor_words(c->monitor, 1);
         __builtin_memcpy(c->state, (const void *)W2M_STATE_VA, W2M_STATE_SIZE);
         monitor_words(e->monitor, 0);
         __builtin_memcpy((void *)W2M_STATE_VA, e->state, W2M_STATE_SIZE);
-        rt->current = next;
-        rt->current_entry = (u64)e;
+        *monitor_word(W2M_CURRENT_OFF) = next;
+        *monitor_word(W2M_CURRENT_ENTRY_OFF) = (u64)e;
         rt->switches++;
         c = e;
     }
