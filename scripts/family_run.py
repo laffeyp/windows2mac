@@ -920,13 +920,18 @@ FAMILIES: dict[str, Family] = {
                 "last_waiter_first": Plant("    for (int i = 0; i < nwaiters; i++) {\n        if (waiters[i].object != index",
                                            "    for (int i = nwaiters - 1; i >= 0; i--) {\n        if (waiters[i].object != index",
                                            ("semaphore.three_waiters_two_released", "semaphore.order")),
+                # 2 rows from Sprint 095: without the grant nothing readies the mutex's waiter (a release readies
+                # only the thread it grants), so the probe deadlocks before multiple_waiter, as the semaphore's plant
                 "mutex_not_handed_over": Plant("        o->max = 0;\n        grant(o);", "        o->max = 0;",
-                                               ("mutex.one_waiter",)),
+                                               ("mutex.one_waiter", "event_auto.multiple_waiter")),
                 # recentering step 5: a wait on several objects takes any signal (key 0); waking only the threads
                 # whose key equals the signal's, or none of those whose wait takes any key, leaves that waiter blocked
                 # (Sprint 069: threads.c's w2m_signal wakes them in the VM)
-                "only_exact_key_wakes": Plant("        if (!key || !waits_on || waits_on == key) {",
-                                              "        if (waits_on == key) {", ("event_auto.multiple_waiter",),
+                # re-anchored in Sprint 095: an auto-reset event's release wakes the waits that take any signal
+                # through w2m_signal_any_waiters, not w2m_signal, so the plants on w2m_signal's key test reached no
+                # row (both came back blind); these two break the new path the row takes
+                "only_exact_key_wakes": Plant("        if (e->status == BLOCKED && !scratch_of(e)->wait_key) {",
+                                              "        if (0) {", ("event_auto.multiple_waiter",),
                                               file="threads.c"),
                 # Sprint 095: a release readies only the waiter its grant chose; dropping that wake loses it (the
                 # waiter never runs), named as semaphore_not_handed_over's measured reach: the probe deadlocks
@@ -935,9 +940,9 @@ FAMILIES: dict[str, Family] = {
                                                     ("semaphore.one_waiter", "semaphore.three_waiters_two_released",
                                                      "semaphore.order", "event_auto.one_waiter", "mutex.one_waiter",
                                                      "event_auto.multiple_waiter")),
-                "any_key_waiters_ignored": Plant("        if (!key || !waits_on || waits_on == key) {",
-                                                 "        if (!key || waits_on == key) {",
-                                                 ("event_auto.multiple_waiter",), file="threads.c")}),
+                "any_key_waiters_ignored": Plant("    if (o && o->kind == EVENT_AUTO) w2m_signal_any_waiters();",
+                                                 "    if (o && o->kind == EVENT_AUTO) {}",
+                                                 ("event_auto.multiple_waiter",))}),
     "code_pages": Family(
         name="code_pages",
         contract_id="windows.code_pages.ansi_1252",

@@ -9,6 +9,8 @@
  * thread's own zero-timeout wait right after the release find the object signaled? And with two waiters, which
  * one the release wakes. Waiters block in a known order: each sets `ready` and the main thread sleeps 200 ms.
  * And (recentering step 5, the wake keys) a thread waiting on either of two auto-reset events when the second is set.
+ * And (Sprint 095) a thread waiting for all of a semaphore and an auto-reset event: after the semaphore alone is
+ * released, and after the event is set too, with the releaser's zero-timeout wait on each right after.
  * No C runtime. Rows: each wait's return, the released count, which waiters have finished.
  */
 #include <windows.h>
@@ -68,6 +70,7 @@ static HANDLE spawn(waiter_t *w, HANDLE object, HANDLE finish) { return spawn_as
 /* Waits on either of `objects` (two); then until `finish` is set. */
 typedef struct {
     HANDLE *objects, ready, finish;
+    BOOL all;
     volatile DWORD ret;
     volatile LONG done;
 } multi_t;
@@ -75,7 +78,7 @@ typedef struct {
 static DWORD WINAPI multi_waiter(LPVOID p) {
     multi_t *w = (multi_t *)p;
     SetEvent(w->ready);
-    w->ret = WaitForMultipleObjects(2, w->objects, FALSE, INFINITE);
+    w->ret = WaitForMultipleObjects(2, w->objects, w->all, INFINITE);
     InterlockedExchange(&w->done, 1);
     WaitForSingleObject(w->finish, INFINITE);
     return 0;
@@ -156,6 +159,7 @@ void start(void) {
     pair[1] = CreateEventW(NULL, FALSE, FALSE, NULL);
     multi_t m;
     m.objects = pair;
+    m.all = FALSE;
     m.ready = CreateEventW(NULL, FALSE, FALSE, NULL);
     m.finish = fin;
     m.ret = 0xFFFF;
@@ -169,6 +173,36 @@ void start(void) {
     row("event_auto.multiple_waiter"); field("set", s); field("releaser_wait", mine); field("waiter_done", m.done);
     field("waiter_ret", m.ret); end();
     if (mine == WAIT_OBJECT_0) SetEvent(pair[1]);   /* a w2m that kept it: the waiter still finishes */
+    finish(fin, t, 1);
+
+    /* a semaphore at 0 and an auto-reset event, one waiter for all of them: release the semaphore, then set the
+     * event, then wait on each at once */
+    ResetEvent(fin);
+    HANDLE both[2];
+    both[0] = CreateSemaphoreW(NULL, 0, 0x7FFFFFFF, NULL);
+    both[1] = CreateEventW(NULL, FALSE, FALSE, NULL);
+    multi_t w;
+    w.objects = both;
+    w.all = TRUE;
+    w.ready = CreateEventW(NULL, FALSE, FALSE, NULL);
+    w.finish = fin;
+    w.ret = 0xFFFF;
+    w.done = 0;
+    t[0] = CreateThread(NULL, 0, multi_waiter, &w, 0, NULL);
+    WaitForSingleObject(w.ready, INFINITE);
+    Sleep(200);                                     /* the waiter is in its wait */
+    r = ReleaseSemaphore(both[0], 1, &prev);
+    Sleep(200);
+    LONG done_after_one = w.done;
+    s = SetEvent(both[1]);
+    DWORD mine_sem = WaitForSingleObject(both[0], 0), mine_ev = WaitForSingleObject(both[1], 0);
+    Sleep(200);
+    row("wait_all.semaphore_and_event"); field("release", r); field("previous", (unsigned long long)prev);
+    field("done_after_semaphore", (unsigned long long)done_after_one); field("set", s);
+    field("releaser_wait_semaphore", mine_sem); field("releaser_wait_event", mine_ev); field("waiter_done", w.done);
+    field("waiter_ret", w.ret); end();
+    if (mine_sem == WAIT_OBJECT_0) ReleaseSemaphore(both[0], 1, NULL);   /* a w2m that took them: the waiter still */
+    if (mine_ev == WAIT_OBJECT_0) SetEvent(both[1]);                     /* finishes */
     finish(fin, t, 1);
     ExitProcess(0);
 }
