@@ -111,3 +111,49 @@ lock's wait. Revisit if: a run spends a measured share of its vCPUs' time waitin
 at once on two vCPUs (a family's threads under the litmus harness) with a plant (the lock removed: the heap's lists
 corrupt); 107, the host serving every vCPU's channel; 108, an idle vCPU parked until a wake (an SGI through the
 GIC); 109, the batch run on two to four vCPUs, judged as before and measured.
+
+## The host for several vCPUs, designed twice (Sprint 113)
+
+Sprint 107's first attempt (branch `wip/sprint-107-host`, 2d254cd4) ran its first judge into a hang and failed the
+adherence check of 2026-10-17 (`docs/review-2026-10-17-sdd-hardening.md` §3): a second run loop beside `steps` with
+about 100 lines of its exit handling repeated, a `VM.serving` attribute read at about 70 sites and right only under
+the lock, the lock's protocol spread over six places each with a one-vCPU case, and a 50 ms cut of every run so a host
+thread could see a stop. What both designs below share, from that attempt and the code at 4d09f7e7:
+
+- **A `Vcpu` object, passed.** Each vCPU's channel, the file offsets of its private monitor page and state block,
+  its pending vector swap, the thread it runs and whether its host thread holds the runtime lock. Each handler takes
+  the `Vcpu` it serves as an argument (`_schedule(vcpu, x, schedule)`, `_host_request(vcpu, x)`, ...); `VM.serving`
+  does not exist. The one-vCPU run is a `Vcpu` too, index 0.
+- **One exit handler.** `serve_exit(vcpu, exit) -> Resume(pc, x) | Idle | Stop(reason)`, the body of today's `steps`
+  loop; `steps` (one vCPU, with the oracle's hooks and a kernel.Machine's yields) and each host thread of several
+  vCPUs both call it. A new hvc is written once.
+- **A kick, not a cut.** A word per vCPU on its channel page; the host writes it and wakes the monitor, whose thread
+  for that vCPU calls `hv_vcpus_exit`. The SDK's hv_vcpu.h: hv_vcpus_exit takes a set of vCPUs and, unlike the
+  functions beside it, says nothing of an owning thread (the watchdog already calls it from its own thread); "If a
+  vcpu is not running, the next time hv_vcpu_run is called ... it will return immediately", so a kick between runs
+  is not lost. A stop and a preemption (SuspendThread on a thread another vCPU runs) are kicks.
+
+**Design A: one lock, held by whoever serves.** The guest runtime lock (Sprint 106) is the only lock. A `RuntimeLock`
+object owns the word and the C helper (`tools/runtime_lock/runtime_lock.c`, through ctypes CDLL, which releases the
+GIL); `with lock.serving(vcpu):` takes it with the vCPU's value unless the vCPU holds it already (an exit made inside
+the runtime's C), gives it back on leaving unless the vCPU resumes inside that C, and is a no-op object on one vCPU.
+Each vCPU's host thread runs its channel and calls `serve_exit` inside the lock. Host state (threads, blocks, the
+dispatch table, the transport page) is touched only there.
+
+**Design B: a process server.** One host thread owns the VM's Python state and serves requests; each vCPU's host
+thread runs its channel and sends each exit to the server through a queue, waiting for its answer (the shape of
+Wine's wineserver, which owns the objects while each process's threads ask it). The server still takes the guest
+runtime lock before it touches what the runtime's C reads (the run table, the reconstruction table), because guest C
+on another vCPU reads them without the host.
+
+**Choice: A.** Both serialise the handlers; B adds a queue crossing to every exit (two thread hand-offs) and still
+needs A's lock against guest C, so it is A plus a queue. A's lock is already the serialisation point the guest uses,
+and its one-vCPU case is a no-op object, not a branch at each site. Revisit if: a measure shows host threads waiting
+on the lock for a share of the run worth a second design (the lock's wait is countable on the record, vocabulary 0.9's
+`run_seconds`, a variant per wait).
+
+**The chain, one concept each:** (1) `serve_exit` extracted from `steps`, one vCPU, no change in behaviour (the batch
+run conforms and its numbers on the record are unchanged in kind); (2) the `Vcpu` object in place of `VM.serving`'s
+role, one vCPU; (3) `RuntimeLock`; (4) the kick (vm_monitor.c, one thread per vCPU on its kick word); (5) the RUNNING
+mark and the per-vCPU host threads, judged by the threads family on two vCPUs, its record naming the vCPU count;
+(6) a thread suspended on another vCPU. Sprint 107's first part (4d09f7e7) stands under all of them.
