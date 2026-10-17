@@ -341,6 +341,46 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 092 (2026-10-16, closed)
+- **Scope:** step 1 of the solution, the laptop's recordings: DTrace installed; E1, a process's start; E3, calls per frame.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* DTrace installed and booted; E1 traced probes/hello's 483 system calls (342 before main; one port, csrss's ApiPort); E3 ran the game four times, three failing on one DTrace defect each, then after a search of each defect's class, once with every check: 1,132 frames in 10.012 s, 314.1 NT and 18.4 win32k system calls a frame.
+  - *Observation 1 (one error fixed at a time, of the method):* each failed run named one defect and the next run found the next. Disposition: resolved-here (each class searched whole, in the tool's issues and by short tests, before the next run: eight more found, among them three ntdll stubs with no syscall probe and frames from a second clock); recorded as the working rule.
+  - *Observation 2 (a contract written from belief):* the card said E1's trace ends with NtTerminateProcess; 15 calls follow it. Disposition: resolved-here (corrected in the observed section from the trace).
+- **Closed:** CI pending at this entry; 091's CI run 38965622909 (success on e1b41f1b).
+
+### Sprint 091 (2026-10-16, closed)
+- **Scope:** step 0 of the solution: the laptop's C:\Windows and its SOFTWARE and SYSTEM hives copied whole.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* 183,280 files listed on the laptop; tar given that list copied 183,222 (68.3 GB); 40 named unreadable (files Windows holds open), 18 neither copied nor named (12 reparse points, 6 deleted after the listing), 26 written during the copy; the first copy's 5,683 files equal by sha256.
+  - *Observation 1 (silent loss, of the tool):* the laptop's tar, walking the tree itself, left 25,796 readable files out with no error. Disposition: resolved-here (the file list given explicitly; the judge counts every listed file).
+  - *Observation 2 (a judge written from memory):* the tar-error pattern did not match the real line, so the judge would have called every unreadable file missing. Disposition: resolved-here (pattern and test from the laptop's own line).
+- **Closed:** CI pending at this entry.
+
+### Sprint 090 (2026-10-16, closed-partial)
+- **Scope:** compile_insn run on the symbolic templates gives stencils.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; the judge compared 1,000 instructions' stencils with compile_insn: 996 equal, 0 differing, 4 pinned SSE with no stencil; 363,546 stencils made.
+  - *Observation 1 (silent bake, of the method):* a set compared by hash took the wrong path without a fork. Disposition: resolved-here (scale in the shape); the class of hazard (code that hashes or tests type instead of value) noted in the card.
+  - *Observation 2 (the measure the Decision named):* forks multiply across ops. Disposition: recorded (Decision 2026-10-16, the back end's form: control in C, per-op stencils).
+- **Closed:** partial (the stencils' count); CI pending at this entry.
+
+### Sprint 089 (2026-10-16, closed)
+- **Scope:** the compiler from the rules, first link: each rule's ops as a template, by running it on symbols.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; the template judge filled 5,504 templates for 1,441,089 instructions of three sources and found every one equal to lift().
+  - *Observation 1 (blind judge, of the judge):* the game's record alone passed with a shape that missed a test lift() makes; the spec rows and class cases caught it. Disposition: resolved-here.
+  - *Observation 2 (a suspected semantics defect):* 0x67 addressing through R8D-R15D in lift(). Disposition: open question, to be measured.
+- **Closed:** CI run 38846969380 (success on 1a8351b0).
+
+### Sprint 088 (2026-10-16, closed)
+- **Scope:** the large review of 082-086 on the service census (H3, M1): Windows's own exports and COM registry from the laptop, DLL classes, P/Invoke from metadata, COM GUIDs, Steam interfaces.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; System32 and SysWOW64 copied from the laptop; `--windows` built the two tables; the census rewrote store/census/static with the judge holding (803 of 803; 322 of 331).
+  - *Observation 1 (missed input, of the work):* the first copy of System32 missed 227 files, and SysWOW64's 233, by the glob's case. Disposition: resolved-here (counted against the laptop's own listing).
+  - *Observation 2 (low precision, of the work):* candidate lookups are about 8% precise. Disposition: recorded (labelled as candidates).
+- **Closed:** CI run 38843441901 (success on a41823fd).
+
 ### Sprint 087 (2026-10-16, closed)
 - **Scope:** the large review of 082-086 on the instruction census (H2, H3 in part, M2): jump tables out of the sweep, a precision judge, the 32-bit census, one count per image, the module map in the frontier record.
 - **Rubber Duck Pass:**

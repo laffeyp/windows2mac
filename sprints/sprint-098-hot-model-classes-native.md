@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 098
-status: active
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -76,3 +76,25 @@ FNSTCW natively where the x87 state makes it exact.
 The batch run's common model-stepped classes run natively, every judge holds, CI green.
 
 ## observed
+
+- **Made** (2851cbe0, b894705b, 1d55c7da): PACKSSDW as SQXTN and SQXTN2, PMULLD as MUL .4S, FNSTCW as a load of the
+  control word, all in the block; FLD m64, FSTP m64 and FSQRT through tools/guest_runtime/x87_fast.c where the
+  result is exact (PC 53 bits, round to nearest, every exception masked), the model step otherwise. b894705b lowered
+  the case-set judge's floor from 30,000 to 28,000 rows: the x87 classes then left to the host took 29,113 below it.
+- **Judges:** the six classes accept on the model and the VM against the Xeon's cases (FLD 6,231, FSTP 5,896, FSQRT
+  1,968 among them); a native differential of x87_fast.c against x87.py's rounding, ties included
+  (tests/test_runtime_native.py); 456 of 458 classes and 68 of 68 families on 69d7f9ba.
+- **Plants:** a fault planted in each of the PACKSSDW, PMULLD and FNSTCW lowerings fails its class run; the
+  precision-control check removed: FSQRT's 64-bit-precision cases fail; FSTP without its round-up: FSTP's cases fail;
+  ties rounded away from even: the native differential fails (the case sets held no tie, so that plant was blind until
+  the differential was written).
+- **Measure:** hvc 10 and 11 on the batch run, 69d7f9ba (frontier-643a6283510c-1792223122466394000, conforms, 168
+  of 168, 0 divergences): 258 and 286, 544 in all, from 16,365 and 22,666 on Sprint 097's run. Left: POPFQ 170,
+  VCVTSS2SI and VCVTSI2SS 128 each, FSIN and FCOS 52 each, XGETBV 11, MOVHPD 2, RCR 1.
+- **A regression of this sprint's, found by its measure:** the run on cd6cac64 still made 10,166 hvc 11 exits. A
+  tally of the x87 state at each (scratch run) showed states x87_fast.c accepts, at three encodings: the blocks the
+  VM compiles never called it. The stencil record's runtime (509 symbols) predates x87_fast.c, so FLD, FSTP and
+  FSQRT derived as the model step; HOST_LOWERED had kept them on the host until Sprint 100's re-derivation emptied it.
+  The derivation now uses this tree's runtime restricted to `vm_backend.lowering_symbols()`; the whole runtime let a
+  constant pass for another symbol's address (a64_movz), caught by the equal-words judges. A judge names every symbol
+  a lowering calls in the table.

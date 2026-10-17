@@ -296,6 +296,11 @@
 - **2026-10-16** — Sprint 095 (a release readies the waiter it can satisfy) closed partial. The wake census (`w2m_wake_census`) and the stop asked each second; a handed-over release readies only the thread `grant()` chose; a wait for all of several objects granted at the release that completes it (the laptop's row `wait_all.semaphore_and_event`, wait_handoff 0.3.0); re-blocks 11,086 to 58. Timing deferred (another project's load). Closed: CI of Sprint 097's closing commit.
 - **2026-10-16** — Sprint 096 (a PAUSE yields the slice when another thread is ready) closed partial. compile_insn's PAUSE ends the slice with the count exact when a thread is ready; the VM's compiler leaves PAUSE to the host; PAUSEs to the stop 508-608 million to 62.7 million; the rest is the game's busy-wait on QueryPerformanceCounter, and the batch run is paced by guest time (Decision 2026-10-16). Timing deferred. Closed: CI of Sprint 097's closing commit.
 - **2026-10-16** — Sprint 097 (the GICv3 created before any vCPU) closed. The monitor makes the GIC after the VM and before its vCPU, MPIDR_EL1 set; `tests/test_gic.py`; the plant answers HV_BUSY. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 098 (the batch run's model-stepped classes made native) closed. PACKSSDW, PMULLD and FNSTCW in the block; FLD m64, FSTP m64 and FSQRT through x87_fast.c where exact; the stencils derived against this tree's runtime, restricted to `lowering_symbols()`. hvc 10 and 11 on the batch run: 544, from about 39,000. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 099 (a fault gives back the instructions it did not run) closed. hvc 14 from the exception entry; the host adds `_unrun_after(ELR) + 1` to x23; the plant leaves each count five high. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 100 (32-bit addressing through R8D-R15D) closed. lift and symbolic_lift take the address size from the register's width (SDM Vol 1 3.3.7); the stencil table re-derived; the frozen case sets keep their placement. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 101 (vocabulary 0.8) closed. P19: `metric` gains `vm_compile_blocks`; the batch run's record holds 23 compile counts. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 102 (the game's initial state on the laptop) closed. games/hail-to-the-rainbow/state.json; run-job.ps1 proves the declared state in each run's state.json and stops on a difference; the game's TEMP is `C:\w2m\temp`. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -358,6 +363,43 @@
 
 ## Sprint tail
 
+### Sprint 102 (2026-10-17, closed)
+- **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine.md §5).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; the proof is a file of the run's output beside exec.json; three laptop jobs: one stopped by the check, the judge, the plant.
+  - *Observation 1 (the check found a shared folder):* the first run stopped with 4 TEMP entries, one held open by another program in the session (Steam now runs on the laptop). Disposition: resolved-here (the game's TEMP is the job's own).
+- **Closed:** CI pending at this entry.
+
+### Sprint 101 (2026-10-17, closed)
+- **Scope:** vocabulary 0.8 (P19), the VM compiler's counts as MEASUREMENT_RECORDED.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the batch run's runner emits 23 MEASUREMENT_RECORDED between its stop and EXECUTION_COMPLETED; read back through `read_record`, each equal to the printed count.
+  - *Observation 1 (the vocabulary still holds names nothing emits):* 25 of 62 tags have no emit site (review 2026-10-17). Disposition: deferred to design sprint D1 (plan.md).
+- **Closed:** CI pending at this entry.
+
+### Sprint 100 (2026-10-17, closed)
+- **Scope:** the open question of Sprint 089: a 0x67 address through R8D-R15D, 32 bits by the SDM.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; the address test, the equal-words judges, the 039 and 041 case sets, 456 class runs, 68 family runs, the batch run conforming.
+  - *Observation 1 (one rule, four homes):* the rule lived in lift, symbolic_lift, the stencil table and the case generator's placement; each was found by its own failing judge, not by a search first. Disposition: resolved-here; the review of 2026-10-17 names the same spread (change amplification), plan.md D2.
+  - *Observation 2 (a re-derivation regressed another sprint):* emptying HOST_LOWERED handed the x87 forms to stencils derived without their runtime symbols. Disposition: resolved in Sprint 098's 1d55c7da, with a judge.
+- **Closed:** CI pending at this entry.
+
+### Sprint 099 (2026-10-17, closed)
+- **Scope:** a guest fault gives back the instructions its block counted and did not run.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; 4 count tests and the census test; the batch run gave back 167 faults, all stack growth (0 dispatched).
+  - *Observation 1 (a test held the defect):* the census test asserted a count the defect produced. Disposition: resolved-here.
+- **Closed:** CI pending at this entry.
+
+### Sprint 098 (2026-10-17, closed)
+- **Scope:** the batch run's model-stepped classes (hvc 10 and 11) made native.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* 458 class runs (456 CANDIDATE_ACCEPTED, FSIN and FCOS pinned), 68 family runs to CANDIDATE_ACCEPTED, the batch run COMPARISON_COMPLETED `conforms` with 544 model exits.
+  - *Observation 1 (the measure found what the judges could not):* every judge passed while the VM compiled the x87 forms to the model step; only the exit count showed it. Disposition: resolved-here (the derivation's symbols; a judge of them).
+  - *Observation 2 (a plant blind in the case sets):* ties never occurred in the x87 cases. Disposition: resolved-here (the native differential).
+- **Closed:** CI pending at this entry; Sprint 097's CI run 39004897894 (success on bc626dfc).
+
 ### Sprint 097 (2026-10-16, closed)
 - **Scope:** roadmap step 2's last item: the GICv3 made before any vCPU.
 - **Rubber Duck Pass:**
@@ -397,44 +439,4 @@
   - *Observation 2 (the syscall provider may count the kernel's own calls):* NtPlugPlayControl's user stack tops at NtDeviceIoControlFile's stub. Disposition: deferred (recorded in the card; a probe-name against stub-name test settles it if a trace's call list is used as a kernel's list in roadmap step 7).
 - **Closed:** CI pending at this entry; 092's CI run 38977332489 (success on 0237a77a).
 
-### Sprint 092 (2026-10-16, closed)
-- **Scope:** step 1 of the solution, the laptop's recordings: DTrace installed; E1, a process's start; E3, calls per frame.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* DTrace installed and booted; E1 traced probes/hello's 483 system calls (342 before main; one port, csrss's ApiPort); E3 ran the game four times, three failing on one DTrace defect each, then after a search of each defect's class, once with every check: 1,132 frames in 10.012 s, 314.1 NT and 18.4 win32k system calls a frame.
-  - *Observation 1 (one error fixed at a time, of the method):* each failed run named one defect and the next run found the next. Disposition: resolved-here (each class searched whole, in the tool's issues and by short tests, before the next run: eight more found, among them three ntdll stubs with no syscall probe and frames from a second clock); recorded as the working rule.
-  - *Observation 2 (a contract written from belief):* the card said E1's trace ends with NtTerminateProcess; 15 calls follow it. Disposition: resolved-here (corrected in the observed section from the trace).
-- **Closed:** CI pending at this entry; 091's CI run 38965622909 (success on e1b41f1b).
-
-### Sprint 091 (2026-10-16, closed)
-- **Scope:** step 0 of the solution: the laptop's C:\Windows and its SOFTWARE and SYSTEM hives copied whole.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* 183,280 files listed on the laptop; tar given that list copied 183,222 (68.3 GB); 40 named unreadable (files Windows holds open), 18 neither copied nor named (12 reparse points, 6 deleted after the listing), 26 written during the copy; the first copy's 5,683 files equal by sha256.
-  - *Observation 1 (silent loss, of the tool):* the laptop's tar, walking the tree itself, left 25,796 readable files out with no error. Disposition: resolved-here (the file list given explicitly; the judge counts every listed file).
-  - *Observation 2 (a judge written from memory):* the tar-error pattern did not match the real line, so the judge would have called every unreadable file missing. Disposition: resolved-here (pattern and test from the laptop's own line).
-- **Closed:** CI pending at this entry.
-
-### Sprint 090 (2026-10-16, closed-partial)
-- **Scope:** compile_insn run on the symbolic templates gives stencils.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no run; the judge compared 1,000 instructions' stencils with compile_insn: 996 equal, 0 differing, 4 pinned SSE with no stencil; 363,546 stencils made.
-  - *Observation 1 (silent bake, of the method):* a set compared by hash took the wrong path without a fork. Disposition: resolved-here (scale in the shape); the class of hazard (code that hashes or tests type instead of value) noted in the card.
-  - *Observation 2 (the measure the Decision named):* forks multiply across ops. Disposition: recorded (Decision 2026-10-16, the back end's form: control in C, per-op stencils).
-- **Closed:** partial (the stencils' count); CI pending at this entry.
-
-### Sprint 089 (2026-10-16, closed)
-- **Scope:** the compiler from the rules, first link: each rule's ops as a template, by running it on symbols.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no run; the template judge filled 5,504 templates for 1,441,089 instructions of three sources and found every one equal to lift().
-  - *Observation 1 (blind judge, of the judge):* the game's record alone passed with a shape that missed a test lift() makes; the spec rows and class cases caught it. Disposition: resolved-here.
-  - *Observation 2 (a suspected semantics defect):* 0x67 addressing through R8D-R15D in lift(). Disposition: open question, to be measured.
-- **Closed:** CI run 38846969380 (success on 1a8351b0).
-
-### Sprint 088 (2026-10-16, closed)
-- **Scope:** the large review of 082-086 on the service census (H3, M1): Windows's own exports and COM registry from the laptop, DLL classes, P/Invoke from metadata, COM GUIDs, Steam interfaces.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no run; System32 and SysWOW64 copied from the laptop; `--windows` built the two tables; the census rewrote store/census/static with the judge holding (803 of 803; 322 of 331).
-  - *Observation 1 (missed input, of the work):* the first copy of System32 missed 227 files, and SysWOW64's 233, by the glob's case. Disposition: resolved-here (counted against the laptop's own listing).
-  - *Observation 2 (low precision, of the work):* candidate lookups are about 8% precise. Disposition: recorded (labelled as candidates).
-- **Closed:** CI run 38843441901 (success on a41823fd).
-
-Older entries (Sprints 000-035, and 036-087 moved 2026-10-16): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-092 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
