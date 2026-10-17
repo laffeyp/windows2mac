@@ -341,6 +341,13 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 103 (2026-10-17, closed)
+- **Scope:** several vCPUs: the per-vCPU state measured and two designs.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; Apple's and Arm's documents quoted.
+  - *Observation 1 (none):* the inventory's counts are reproducible from the card.
+- **Closed:** CI pending at this entry; Sprints 098-102's CI run 39016421561 (success on ca5cb64b).
+
 ### Sprint 102 (2026-10-17, closed)
 - **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine.md §5).
 - **Rubber Duck Pass:**

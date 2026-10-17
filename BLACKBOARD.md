@@ -315,6 +315,7 @@
 - **2026-10-17** — Sprint 111 (Signal Reports from the record) closed. `scripts/signal_report.py` writes a sprint's report from the records its commits made (substrate's narrate and narration_summary) and checks the card's Emits tag by tag; reports for 108 to 111; WORKING_AGREEMENT's rule that Emits name the tags code fires. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 112 (discrepancy reports that name their program and state) closed. Class runs: each class's first failing case hashed (bytes; the rest through `w2m.record.state_sha256`) and a REDUCTION_COMPLETED with steps 0 before each report; family and file runs: the probe binary and the run's start (`family_run.vm_inputs`). FCOS and FSIN pass S4, S5 and E1. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 113 (the host for several vCPUs designed twice) closed. Design A (the guest runtime lock held by whoever serves; a `Vcpu` passed to each handler; one exit handler; a kick through hv_vcpus_exit) over design B (a process server); six sprints chained. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 114 (one exit handler) closed. `VM.serve_exit(run, exit, cpsr)` answers Resume, Stop, Slice or Switched; `steps` keeps the setup, the monitor call and the Machine's yields. The batch run conforms with the same exit kinds; 456 of 458 classes, 68 families. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -380,6 +381,13 @@
 ---
 
 ## Sprint tail
+
+### Sprint 114 (2026-10-17, closed)
+- **Scope:** step 1, chain step 1: one exit handler (`VM.serve_exit`), no change in behaviour.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-114-report.md`, 527 records): the batch run as Sprint 110's in kind and order (EXECUTION_STARTED, 107 MEASUREMENT_RECORDED, EXECUTION_COMPLETED, TRACE_INGESTED, COMPARISON_COMPLETED with 0 divergences); the sweep's item runs as Sprint 112's.
+  - *Observation 1 (an Emits that named tags by reference):* the card wrote "their item runs' tags as on Sprint 112's sweep", so the check counts CANDIDATE_ACCEPTED, CANDIDATE_GENERATED, REDUCTION_COMPLETED and the discrepancy tags as unnamed. Disposition: resolved-here for cards from 115 on (each tag by name).
+- **Closed:** CI pending at this entry; Sprint 112's CI run 39071634064 (success on 5ae905d4) and Sprint 113's 39072223099 (success on 58051c43).
 
 ### Sprint 113 (2026-10-17, closed)
 - **Scope:** step 1 resumes: the host for several vCPUs designed twice (docs/design-several-vcpus.md).
@@ -457,11 +465,4 @@
   - *Observation 2 (a name reused):* Channel's `base` held two meanings; one VM hid it. Disposition: resolved-here.
 - **Closed:** CI pending at this entry.
 
-### Sprint 103 (2026-10-17, closed)
-- **Scope:** several vCPUs: the per-vCPU state measured and two designs.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no run; Apple's and Arm's documents quoted.
-  - *Observation 1 (none):* the inventory's counts are reproducible from the card.
-- **Closed:** CI pending at this entry; Sprints 098-102's CI run 39016421561 (success on ca5cb64b).
-
-Older entries (Sprints 000-035, and 036-102 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-103 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
