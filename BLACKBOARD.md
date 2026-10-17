@@ -311,6 +311,7 @@
 - **2026-10-17** — Sprint 108 (vocabulary 0.9: the batch run's numbers on its record) closed. P20: eight `metric` values; run_frontier.py emits 84 more numbers a batch run; `scripts/run_numbers.py` reads them from the record and checks that the threads add up to the process. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 109 (every record checked against the vocabulary's rules) closed. `scripts/check_records.py`: T1 to T4, T7, S1 to S13, E1 (the zero placeholder named) and E6 over the 32,755 records in 27 s; 1,962 violations, all older than 2026-10-17 or known; in the gates, holding new records. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 110 (the frontier's execution placed in time on its record) closed. The run in a worker thread; `--timeout-seconds` (10,800) and a 60 s grace on EXECUTION_STARTED, `timed_out` at the bound; `elapsed_seconds` on EXECUTION_COMPLETED, which now follows an unserved service; T3 checked on the batch run, 0 violations. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 111 (Signal Reports from the record) closed. `scripts/signal_report.py` writes a sprint's report from the records its commits made (substrate's narrate and narration_summary) and checks the card's Emits tag by tag; reports for 108 to 111; WORKING_AGREEMENT's rule that Emits name the tags code fires. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -375,6 +376,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 111 (2026-10-17, closed)
+- **Scope:** H3 of the SDD hardening order: Signal Reports made from the record, each card's Emits checked against what fired.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `signal-reports/sprint-111-report.md`: the sprint made no record; its card names no tag. Its reports for 108 to 110 narrate their records (108: 527 records; 110: EXECUTION_STARTED 0.207 s, EXECUTION_COMPLETED 33.965 s).
+  - *Observation 1 (cards that name too little):* 108's card named MEASUREMENT_RECORDED alone while its records fired nine other tags; 110's named four of seven. Disposition: resolved-here for cards from 111 on (WORKING_AGREEMENT's rule: Emits name every tag the code fires).
+  - *Observation 2 (a summary that hides one producer):* substrate's narration_summary of 110's batch run counts 5 producers started and 4 completed, with none failed or cancelled. Disposition: deferred (the next sprint that reads lifecycles).
+- **Closed:** CI pending at this entry; Sprint 110's CI run 39068519125 (success on 2be498eb).
 
 ### Sprint 110 (2026-10-17, closed)
 - **Scope:** H2's second half: the frontier's execution placed in time on its record, within a stated bound.
@@ -450,12 +459,4 @@
   - *Observation 1 (the vocabulary still holds names nothing emits):* 25 of 62 tags have no emit site (review 2026-10-17). Disposition: deferred to design sprint D1 (plan.md).
 - **Closed:** CI pending at this entry.
 
-### Sprint 100 (2026-10-17, closed)
-- **Scope:** the open question of Sprint 089: a 0x67 address through R8D-R15D, 32 bits by the SDM.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no new tag; the address test, the equal-words judges, the 039 and 041 case sets, 456 class runs, 68 family runs, the batch run conforming.
-  - *Observation 1 (one rule, four homes):* the rule lived in lift, symbolic_lift, the stencil table and the case generator's placement; each was found by its own failing judge, not by a search first. Disposition: resolved-here; the review of 2026-10-17 names the same spread (change amplification), plan.md D2.
-  - *Observation 2 (a re-derivation regressed another sprint):* emptying HOST_LOWERED handed the x87 forms to stencils derived without their runtime symbols. Disposition: resolved in Sprint 098's 1d55c7da, with a judge.
-- **Closed:** CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-099 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-100 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.

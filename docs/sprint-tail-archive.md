@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 100 (2026-10-17, closed)
+- **Scope:** the open question of Sprint 089: a 0x67 address through R8D-R15D, 32 bits by the SDM.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; the address test, the equal-words judges, the 039 and 041 case sets, 456 class runs, 68 family runs, the batch run conforming.
+  - *Observation 1 (one rule, four homes):* the rule lived in lift, symbolic_lift, the stencil table and the case generator's placement; each was found by its own failing judge, not by a search first. Disposition: resolved-here; the review of 2026-10-17 names the same spread (change amplification), plan.md D2.
+  - *Observation 2 (a re-derivation regressed another sprint):* emptying HOST_LOWERED handed the x87 forms to stencils derived without their runtime symbols. Disposition: resolved in Sprint 098's 1d55c7da, with a judge.
+- **Closed:** CI pending at this entry.
+
 ### Sprint 099 (2026-10-17, closed)
 - **Scope:** a guest fault gives back the instructions its block counted and did not run.
 - **Rubber Duck Pass:**
