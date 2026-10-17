@@ -25,25 +25,43 @@ speed gate.
 
 ## Do next, in this order
 
-Measured by instructions a second and seconds to the first scene (the paste cuts the heading after "in this order").
+From the 360 review of 2026-10-17 (`docs/review-2026-10-17-360.md`, §5), applied by Decision 2026-10-17. Steps 1 and 2
+of the order of 2026-10-16 are done (Sprints 094 to 097: the whole run measured; the scheduler, waits and
+NtDelayExecution in the VM; the GICv3 before any vCPU). Measured by instructions a second and seconds to the first
+scene.
 
-1. **Measure the whole run now.** Hail to the Rainbow's batch run on today's tree: instructions, seconds, and the
-   fps-equivalent (the rate over 41 million). The last whole-run figure is Sprint 070's 62.42 s warm.
-2. **The scheduler, waits and NtDelayExecution inside the VM**, the wake path waking one waiter; per-vCPU queues and
-   the GICv3 made before any vCPU. Judges: the 7 threading families and E3's three top calls.
-3. **Several vCPUs under M:N.** Gated by the litmus tests (MP, SB, LB, 2+2W and IRIW). The ceiling rises from about
-   14 to about 50 (the review's figures; the paste cuts what they count).
+1. **Several vCPUs under M:N.** Gated by the litmus tests (MP, SB, LB, 2+2W and IRIW). The ceiling rises from about
+   14 to about 50 (the 2026-10-16 review's figures).
+2. **The nt module, designed twice before its first handler.** One entry, `syscall(number, args)`, over E1's 73 kinds
+   of system call (488 numbers), with Microsoft's user mode above it; a new module from its first line, not grown
+   inside `VM`. The design to compare against is Wine's split: a server that owns the objects, a client-side ntdll.
+   First E1's start-up list (342 calls of 62 kinds before main) and csrss's `\Windows\ApiPort`; then the families,
+   moved one at a time. The game stays on the service path until the new path conforms.
+3. **vm_backend.py split along five layers** (cpu, memory, nt, host, diagnostics) as the nt module lands; the
+   diagnostics (lockstep, state differential) move out first.
 4. **Two compiler passes:** flag liveness across blocks, then register allocation over a region.
-5. **The ahead-of-time cache** (the review: the cached set retires 76.9% of play's instructions).
+5. **The ahead-of-time cache** (the cached set retires 76.9% of play's instructions).
 6. **The window on AppKit behind the seam: the first frame.** Input follows, using exactly the call list the laptop's
    play runs made. Route: DXMT's d3d11.dll and dxgi.dll loaded in place of Microsoft's, reaching Metal; Microsoft's DLLs
-   serve their 200 imports. A UMD of w2m's own comes after, if ever (review item 8; it bends the 2026-10-16 decision
-   at this one DLL pair).
-7. **Microsoft's DLLs over the w2m kernel**, in parallel and off the critical path. First E1's start-up list (342
-   calls of 62 kinds before main) and csrss's `\Windows\ApiPort`; then the families, moved one at a time. The game
-   stays on the service path until the new path conforms.
+   serve their 200 imports. A UMD of w2m's own comes after, if ever.
 
-Steps 2 to 5 are where the speed comes from; step 6 is where the picture comes from.
+**Design work, one sprint in every five** (Ousterhout's 10 to 20% strategic investment, A Philosophy of Software
+Design ch. 3), in this order:
+
+- **D1. Measurements as signals.** TRANSLATION_INVALIDATED and GUEST_FAULT_RAISED emitted where the events happen; the
+  batch run's deciding numbers (exits by hvc, host seconds, PAUSEs, the wake and thread censuses) on its record; the
+  tags with no emit site (25 of 62 in 0.8) retired by typed proposal or given one.
+- **D2. One semantics source, one generated compiler.** The symbolic line (symbolic_lift.py, symbolic_compile.py)
+  goes, once the user decides on deleting superseded code (review item 8; the kit deletes no file on its own); `tools/vm_compiler/stencil_table.h` becomes a build product checked by hash.
+- **D3. scripts/ as thin mains.** Code that other scripts and tests import (family_run.py, stencil_census.py) moves
+  into `src/w2m`; mypy's `scripts:tests` path goes.
+- **D4. Comments that say what the code cannot.** The registry rewritten; the sprint history (743 "Sprint NNN" in
+  source and C) leaves comments for commit messages; vm_backend.py's docstring made current; each of the 18 broad
+  except clauses names its exception.
+- **D5. Substrate made real or named as a record store** (the review's section on it is cut from the paste).
+
+Steps 1 and 4 to 5 are where the speed comes from; step 6 is where the picture comes from; steps 2 and 3 are the
+design the pivot to Microsoft's DLLs needs.
 
 ## Cut
 
