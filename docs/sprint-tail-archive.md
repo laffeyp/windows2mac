@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 096 (2026-10-16, closed-partial)
+- **Scope:** roadmap step 2: a PAUSE yields the slice when another thread is ready.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* 458 class runs (456 CANDIDATE_ACCEPTED, FSIN and FCOS pinned) and 68 family runs to CANDIDATE_ACCEPTED; frontier runs to the stop, each COMPARISON_COMPLETED `conforms`.
+  - *Observation 1 (timing surprise, of the measure):* PAUSEs fell 8 to 10 times and the instructions to the stop did not: the game's busy-wait on QueryPerformanceCounter paces the run. Disposition: recorded (Decision 2026-10-16, how steps 2-5 are measured; KIT_DIARY #63).
+  - *Observation 2 (unused path):* a warp at a PAUSE with only timed waiters fired 0 times. Disposition: resolved-here (not kept).
+- **Closed:** partial (timing deferred); CI pending at this entry.
+
 ### Sprint 095 (2026-10-16, closed-partial)
 - **Scope:** roadmap step 2: a release readies the waiter it can satisfy, not every waiter.
 - **Rubber Duck Pass:**

@@ -306,6 +306,7 @@
 - **2026-10-17** — Sprint 103 (several vCPUs designed twice) closed. docs/design-several-vcpus.md: design B, one address and a private page per vCPU through its own translation root. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 104 (N vCPUs, each on its own thread with its private translation chain) closed. vm_monitor.c `vcpus`; vm_backend.py's private chains; EnTSO on every vCPU (never set before); the IS invalidations. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 105 (the litmus tests as x86 on several vCPUs) closed. MP, LB, 2+2W and IRIW's forbidden outcomes 0 in 2,000,000 iterations each; SB's relaxation seen; EnTSO off shows MP's. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 106 (one lock around the guest runtime) closed. SWPA/STLR at RUN_TABLE + 0x80 around the bridges, the exception entry, the switch stub and the miss stub; the host frees it where it abandons a runtime frame; dispatch slots and live descriptors as single 64-bit stores. Two vCPUs, 20,000 HeapAlloc/HeapFree each, no foreign mark; without the lock, foreign marks and faults. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -340,6 +341,7 @@
 - **2026-10-16 (Sprint 084, carried by 085 and 086 without action; large review M3)** — The VM's compile counts as MEASUREMENT_RECORDED: the metric enum has no block count, so they need vocabulary 0.8. Re-visit with the first sprint that measures the host-compile share (Decision 2026-10-15's revisit), which reads them from the record.
 - **2026-10-16 (Sprint 067, closed partial in Sprint 096's commit)** — Step E, the game's initial state on the laptop (§5 of docs/windows-reference-machine.md), has no observed entry. Re-visit when a game run's divergence is traced to state the laptop held before the run (a saved setting, a cache, the profile).
 - **2026-10-16 (Sprints 095, 096)** — Seconds to the stop before and after the wake fix and the PAUSE yield, two runs each at a load average under 4: twelve processes of another project held the load at 15 to 46 for over an hour. Re-visit at the next batch run on a quiet Mac (step 3's measure is the same run).
+- **2026-10-17 (Sprint 106)** — substrate's producer task (`substrate/src/substrate/kernel/runtime.py`, `_producer_task`) catches `Exception`, so a BaseException raised in a producer (pytest's `Failed`, KeyboardInterrupt) ends the task with no PRODUCER_FAILED and the run waits on its inbox forever; w2m's gates hung 8 h 59 min on it. w2m now ends a timed-out test with pytest-timeout's thread method. Re-visit with the next substrate change on w2m's branch, or when a run is stopped by Ctrl-C.
 
 ## Open questions
 
@@ -367,6 +369,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 106 (2026-10-17, closed)
+- **Scope:** roadmap step 1: one lock around the guest runtime, so guest code on several vCPUs calls it one vCPU at a time.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; two x86 threads on vCPUs 1 and 2 through the runtime's heap; 458 class runs, 68 family runs and the batch run at one vCPU.
+  - *Observation 1 (a write that is two writes):* `struct.pack_into` zero-fills before it packs, and a vCPU read a zeroed dispatch slot and branched to 0. Disposition: resolved-here (one 64-bit store after a barrier; 0 faults in 60 runs).
+  - *Observation 2 (a lock across a frame the host abandons):* on_exception resumed a vCPU at the dispatcher with w2m_exception's frame holding the lock; the gates hung 8 h 59 min. Disposition: resolved-here (the host frees the lock there and at each run's start).
+  - *Observation 3 (a timeout that cannot end its test):* pytest-timeout's signal method raises a BaseException, which substrate's producer task does not catch, so the run waited forever. Disposition: resolved-here for w2m (`timeout_method = "thread"`); deferred to substrate (a BaseException in a producer leaves its run waiting).
+- **Closed:** CI pending at this entry; Sprints 103-105's CI run 39020048181 (success on 2785934a).
 
 ### Sprint 105 (2026-10-17, closed)
 - **Scope:** roadmap step 1's gate: the five litmus tests as x86 compiled by w2m, one thread a vCPU.
@@ -435,12 +446,4 @@
   - *Observation 1 (none):* the GIC changed no row; nothing raises an interrupt yet.
 - **Closed:** CI pending at this entry; Sprint 094's CI run 38999283011 (success on 293abc6a).
 
-### Sprint 096 (2026-10-16, closed-partial)
-- **Scope:** roadmap step 2: a PAUSE yields the slice when another thread is ready.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* 458 class runs (456 CANDIDATE_ACCEPTED, FSIN and FCOS pinned) and 68 family runs to CANDIDATE_ACCEPTED; frontier runs to the stop, each COMPARISON_COMPLETED `conforms`.
-  - *Observation 1 (timing surprise, of the measure):* PAUSEs fell 8 to 10 times and the instructions to the stop did not: the game's busy-wait on QueryPerformanceCounter paces the run. Disposition: recorded (Decision 2026-10-16, how steps 2-5 are measured; KIT_DIARY #63).
-  - *Observation 2 (unused path):* a warp at a PAUSE with only timed waiters fired 0 times. Disposition: resolved-here (not kept).
-- **Closed:** partial (timing deferred); CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-095 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-096 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
