@@ -302,6 +302,9 @@
 - **2026-10-17** — Sprint 100 (32-bit addressing through R8D-R15D) closed. lift and symbolic_lift take the address size from the register's width (SDM Vol 1 3.3.7); the stencil table re-derived; the frozen case sets keep their placement. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 101 (vocabulary 0.8) closed. P19: `metric` gains `vm_compile_blocks`; the batch run's record holds 23 compile counts. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 102 (the game's initial state on the laptop) closed. games/hail-to-the-rainbow/state.json; run-job.ps1 proves the declared state in each run's state.json and stops on a difference; the game's TEMP is `C:\w2m\temp`. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 103 (several vCPUs designed twice) closed. docs/design-several-vcpus.md: design B, one address and a private page per vCPU through its own translation root. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 104 (N vCPUs, each on its own thread with its private translation chain) closed. vm_monitor.c `vcpus`; vm_backend.py's private chains; EnTSO on every vCPU (never set before); the IS invalidations. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 105 (the litmus tests as x86 on several vCPUs) closed. MP, LB, 2+2W and IRIW's forbidden outcomes 0 in 2,000,000 iterations each; SB's relaxation seen; EnTSO off shows MP's. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -364,6 +367,29 @@
 
 ## Sprint tail
 
+### Sprint 105 (2026-10-17, closed)
+- **Scope:** roadmap step 1's gate: the five litmus tests as x86 compiled by w2m, one thread a vCPU.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; the tests run inside a VM run's on_dispatch hook, through vCPUs 1-4's channels.
+  - *Observation 1 (a judge with a chance of failing):* SB's relaxed outcome is rare (0 in 3 runs of 100). Disposition: resolved-here (measured, then up to five runs).
+  - *Observation 2 (state copied, not set):* SLICE_UNTIL on a private page came from vCPU 0 as 0. Disposition: deferred to Sprint 106 (the scheduler sets it per vCPU).
+- **Closed:** CI pending at this entry.
+
+### Sprint 104 (2026-10-17, closed)
+- **Scope:** N vCPUs on their own threads, each with its private translation chain (design B).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; 458 class runs, 68 family runs and the batch run at one vCPU as before.
+  - *Observation 1 (an assumption never wired):* the backend decision rested on guest TSO, and no write of ACTLR_EL1.EnTSO existed. Disposition: resolved-here; Sprint 105's plant shows what it holds.
+  - *Observation 2 (a name reused):* Channel's `base` held two meanings; one VM hid it. Disposition: resolved-here.
+- **Closed:** CI pending at this entry.
+
+### Sprint 103 (2026-10-17, closed)
+- **Scope:** several vCPUs: the per-vCPU state measured and two designs.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no run; Apple's and Arm's documents quoted.
+  - *Observation 1 (none):* the inventory's counts are reproducible from the card.
+- **Closed:** CI pending at this entry; Sprints 098-102's CI run 39016421561 (success on ca5cb64b).
+
 ### Sprint 102 (2026-10-17, closed)
 - **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine.md §5).
 - **Rubber Duck Pass:**
@@ -416,28 +442,4 @@
   - *Observation 2 (unused path):* a warp at a PAUSE with only timed waiters fired 0 times. Disposition: resolved-here (not kept).
 - **Closed:** partial (timing deferred); CI pending at this entry.
 
-### Sprint 095 (2026-10-16, closed-partial)
-- **Scope:** roadmap step 2: a release readies the waiter it can satisfy, not every waiter.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* frontier runs to the stop before and after (COMPARISON_COMPLETED `conforms` each); wait_handoff's item run CANDIDATE_REJECTED on the new wait-all row, then CANDIDATE_ACCEPTED after the fix; 68 family runs to CANDIDATE_ACCEPTED.
-  - *Observation 1 (missing pair, of the judge):* two plants came back blind once the wake path moved, and the case they stood for had no row; the new row found a defect (KIT_DIARY #54 again). Disposition: resolved-here.
-  - *Observation 2 (silent gap, of the records):* `## Built` stopped at Sprint 066, the tail held about 60 entries, and Sprint 094's frontier logs were never committed. Disposition: resolved-here (Built entries 065, 067-097; tail trimmed to 10; the logs committed in a87ec94c).
-- **Closed:** partial (timing deferred); CI pending at this entry.
-
-### Sprint 094 (2026-10-16, closed)
-- **Scope:** roadmap step 1: the whole batch run measured on today's tree.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* five runs on 3d703c02 (warm-up, two to the stop, two at 100 billion instructions), all conforming; 48.7 and 44.3 s at equal work against 070's 50.5 and 51.6 s; 2,055 to 2,259 M instructions a second, an fps-equivalent of 50 to 55.
-  - *Observation 1 (the rate counts spinning):* the main thread retires 63.8% of the instructions with 233.6 million PAUSEs. Disposition: carried to roadmap step 2 (waits inside the VM).
-  - *Observation 2 (facts tested that were already known):* in 093's last runs, documented facts (NTFS's lazy directory size, session 0 isolation, Win11's notepad hand-off) were found by tests. Disposition: resolved-here (rule kept: look up before measuring).
-- **Closed:** CI pending at this entry; 093's CI run 38998451939 on 3d703c02 failed: test_reach's test of the copied Windows skipped without the `depot` mark, which W2M_REQUIRE_REFERENCES=1 turns into an error; marked in this commit.
-
-### Sprint 093 (2026-10-16, closed)
-- **Scope:** E2, the static reach of both games' imports through the copied Windows to system calls; closed once by the full review of 2026-10-16 (item 3).
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the walk built (API set schema, forwarders, ordinals, both stub shapes, value tracking, the pointer tier); E3's misses went 11, 8, 4, 0, each a class searched whole; a person's 884 s session judged it at 303 of 305; the review then made the roadmap and the user stopped the E1 judge and the stutter replays.
-  - *Observation 1 (the bound is loose):* the pointer tier reaches 1,336 of 1,486 win32k calls, so passing the judge says little. Disposition: resolved-by-decision (the review cuts static reach as an ordering tool; its loader fixes stay).
-  - *Observation 2 (the syscall provider may count the kernel's own calls):* NtPlugPlayControl's user stack tops at NtDeviceIoControlFile's stub. Disposition: deferred (recorded in the card; a probe-name against stub-name test settles it if a trace's call list is used as a kernel's list in roadmap step 7).
-- **Closed:** CI pending at this entry; 092's CI run 38977332489 (success on 0237a77a).
-
-Older entries (Sprints 000-035, and 036-092 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-095 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.

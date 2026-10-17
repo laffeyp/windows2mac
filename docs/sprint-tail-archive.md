@@ -341,6 +341,30 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 095 (2026-10-16, closed-partial)
+- **Scope:** roadmap step 2: a release readies the waiter it can satisfy, not every waiter.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* frontier runs to the stop before and after (COMPARISON_COMPLETED `conforms` each); wait_handoff's item run CANDIDATE_REJECTED on the new wait-all row, then CANDIDATE_ACCEPTED after the fix; 68 family runs to CANDIDATE_ACCEPTED.
+  - *Observation 1 (missing pair, of the judge):* two plants came back blind once the wake path moved, and the case they stood for had no row; the new row found a defect (KIT_DIARY #54 again). Disposition: resolved-here.
+  - *Observation 2 (silent gap, of the records):* `## Built` stopped at Sprint 066, the tail held about 60 entries, and Sprint 094's frontier logs were never committed. Disposition: resolved-here (Built entries 065, 067-097; tail trimmed to 10; the logs committed in a87ec94c).
+- **Closed:** partial (timing deferred); CI pending at this entry.
+
+### Sprint 094 (2026-10-16, closed)
+- **Scope:** roadmap step 1: the whole batch run measured on today's tree.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* five runs on 3d703c02 (warm-up, two to the stop, two at 100 billion instructions), all conforming; 48.7 and 44.3 s at equal work against 070's 50.5 and 51.6 s; 2,055 to 2,259 M instructions a second, an fps-equivalent of 50 to 55.
+  - *Observation 1 (the rate counts spinning):* the main thread retires 63.8% of the instructions with 233.6 million PAUSEs. Disposition: carried to roadmap step 2 (waits inside the VM).
+  - *Observation 2 (facts tested that were already known):* in 093's last runs, documented facts (NTFS's lazy directory size, session 0 isolation, Win11's notepad hand-off) were found by tests. Disposition: resolved-here (rule kept: look up before measuring).
+- **Closed:** CI pending at this entry; 093's CI run 38998451939 on 3d703c02 failed: test_reach's test of the copied Windows skipped without the `depot` mark, which W2M_REQUIRE_REFERENCES=1 turns into an error; marked in this commit.
+
+### Sprint 093 (2026-10-16, closed)
+- **Scope:** E2, the static reach of both games' imports through the copied Windows to system calls; closed once by the full review of 2026-10-16 (item 3).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the walk built (API set schema, forwarders, ordinals, both stub shapes, value tracking, the pointer tier); E3's misses went 11, 8, 4, 0, each a class searched whole; a person's 884 s session judged it at 303 of 305; the review then made the roadmap and the user stopped the E1 judge and the stutter replays.
+  - *Observation 1 (the bound is loose):* the pointer tier reaches 1,336 of 1,486 win32k calls, so passing the judge says little. Disposition: resolved-by-decision (the review cuts static reach as an ordering tool; its loader fixes stay).
+  - *Observation 2 (the syscall provider may count the kernel's own calls):* NtPlugPlayControl's user stack tops at NtDeviceIoControlFile's stub. Disposition: deferred (recorded in the card; a probe-name against stub-name test settles it if a trace's call list is used as a kernel's list in roadmap step 7).
+- **Closed:** CI pending at this entry; 092's CI run 38977332489 (success on 0237a77a).
+
 ### Sprint 092 (2026-10-16, closed)
 - **Scope:** step 1 of the solution, the laptop's recordings: DTrace installed; E1, a process's start; E3, calls per frame.
 - **Rubber Duck Pass:**

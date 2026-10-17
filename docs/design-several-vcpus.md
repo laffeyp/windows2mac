@@ -79,4 +79,6 @@ vCPU-state chain. Requires CnP = 0 (held).
    must appear (as Sprint 009 saw).
 3. **Sprint 106:** the in-VM scheduler across vCPUs: the run table under LSE atomics, a ready thread taken by any idle
    vCPU, a wake to an idle vCPU by an SGI through the GIC, the TEB per thread (GS base), the process-wide words on a
-   process page; the 7 threading families and the batch run as judges.
+   process page, SLICE_UNTIL set per vCPU (Sprint 105 found a PAUSE yields on a private page copied with 0); the
+   compiler inside the VM made safe for two vCPUs missing at once (its register save area `VMC_SAVE`, its cursor and
+   its log are one shared page at `MONITOR_VA + VM_COMPILER`); the 7 threading families and the batch run as judges.

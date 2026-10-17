@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 104
-status: active
+status: closed
 phase: 5
 pass_kind: architecture
 ---
@@ -69,3 +69,21 @@ Design B of `docs/design-several-vcpus.md` (Decision 2026-10-17), its first half
 N vCPUs run on their own threads with their own state at shared addresses; nothing else changes; CI green.
 
 ## observed
+
+- **Made** (9d9ce7f4): vm_monitor.c `vcpus`, one thread a vCPU with its own slot, watchdog and channel; vm_backend.py
+  `_private_chain`, `_write_descriptor` (a parent write mirrored into each copy), `_start_vcpus`; the vCPU area
+  (8 vCPUs, 0x20000 each) after the code-page set; ACTLR_EL1.EnTSO on every vCPU; TLBI VMALLE1IS and IC IALLUIS in the
+  dispatcher and the code-write path, `tlbi vmalle1is` in runtime.h's w2m_tlb_flush (encodings checked against
+  clang's assembler: d508831f, d508711f).
+- **Judge** (tests/test_vcpus.py): vCPUs 1-3 read MPIDR_EL1 0x80000001-0x80000003, each read its own value back from
+  the monitor data page and the state block at the shared addresses, each value in its own page of the memory file,
+  vCPU 0's word untouched; all three read 0x5eed0fa11cafe from the heap page mapped after they started; ACTLR_EL1 2
+  (EnTSO) and TTBR0_EL1 with CnP clear on all four.
+- **Plant:** every vCPU's monitor-data leaf at vCPU 0's page: the private pages hold 0, vCPU 0's page the last
+  store (0x80000003).
+- **A defect of this sprint's, found by the gates:** `Channel.__init__` reused the name `base` for the buffer's
+  process address and read its sequence word there; with one VM the address fell inside the 550 GB sparse file and
+  read 0; with several VMs in one process it fell outside (11 tests failed, struct.error and BufferError). Fixed
+  before the commit.
+- **No change at one vCPU** (9d9ce7f4): 456 of 458 classes, 68 of 68 families; the batch run conforms, 168 of 168
+  lines, 0 divergences (frontier-643a6283510c-1792226660662772000).
