@@ -32,4 +32,6 @@ uv run ruff check src scripts tests
 uv run mypy
 uv run pytest -q
 uv run python scripts/check_replay.py
+# the vocabulary's rules over every record; records made from 2026-10-17 on are held to them (Sprint 109)
+uv run python scripts/check_records.py --since 2026-10-17 --show 0
 echo "gates: all passed"

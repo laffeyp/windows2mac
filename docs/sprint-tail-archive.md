@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 098 (2026-10-17, closed)
+- **Scope:** the batch run's model-stepped classes (hvc 10 and 11) made native.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* 458 class runs (456 CANDIDATE_ACCEPTED, FSIN and FCOS pinned), 68 family runs to CANDIDATE_ACCEPTED, the batch run COMPARISON_COMPLETED `conforms` with 544 model exits.
+  - *Observation 1 (the measure found what the judges could not):* every judge passed while the VM compiled the x87 forms to the model step; only the exit count showed it. Disposition: resolved-here (the derivation's symbols; a judge of them).
+  - *Observation 2 (a plant blind in the case sets):* ties never occurred in the x87 cases. Disposition: resolved-here (the native differential).
+- **Closed:** CI pending at this entry; Sprint 097's CI run 39004897894 (success on bc626dfc).
+
 ### Sprint 097 (2026-10-16, closed)
 - **Scope:** roadmap step 2's last item: the GICv3 made before any vCPU.
 - **Rubber Duck Pass:**

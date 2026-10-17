@@ -309,6 +309,7 @@
 - **2026-10-17** — Sprint 105 (the litmus tests as x86 on several vCPUs) closed. MP, LB, 2+2W and IRIW's forbidden outcomes 0 in 2,000,000 iterations each; SB's relaxation seen; EnTSO off shows MP's. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 106 (one lock around the guest runtime) closed. SWPA/STLR at RUN_TABLE + 0x80 around the bridges, the exception entry, the switch stub and the miss stub; the host frees it where it abandons a runtime frame; dispatch slots and live descriptors as single 64-bit stores. Two vCPUs, 20,000 HeapAlloc/HeapFree each, no foreign mark; without the lock, foreign marks and faults. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 108 (vocabulary 0.9: the batch run's numbers on its record) closed. P20: eight `metric` values; run_frontier.py emits 84 more numbers a batch run; `scripts/run_numbers.py` reads them from the record and checks that the threads add up to the process. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 109 (every record checked against the vocabulary's rules) closed. `scripts/check_records.py`: T1 to T4, T7, S1 to S13, E1 (the zero placeholder named) and E6 over the 32,755 records in 27 s; 1,962 violations, all older than 2026-10-17 or known; in the gates, holding new records. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -344,6 +345,8 @@
 - **2026-10-16 (Sprint 067, closed partial in Sprint 096's commit)** — Step E, the game's initial state on the laptop (§5 of docs/windows-reference-machine.md), has no observed entry. Re-visit when a game run's divergence is traced to state the laptop held before the run (a saved setting, a cache, the profile).
 - **2026-10-16 (Sprints 095, 096)** — Seconds to the stop before and after the wake fix and the PAUSE yield, two runs each at a load average under 4: twelve processes of another project held the load at 15 to 46 for over an hour. Re-visit at the next batch run on a quiet Mac (step 3's measure is the same run).
 - **2026-10-17 (Sprint 106)** — substrate's producer task (`substrate/src/substrate/kernel/runtime.py`, `_producer_task`) catches `Exception`, so a BaseException raised in a producer (pytest's `Failed`, KeyboardInterrupt) ends the task with no PRODUCER_FAILED and the run waits on its inbox forever; w2m's gates hung 8 h 59 min on it. w2m now ends a timed-out test with pytest-timeout's thread method. Re-visit with the next substrate change on w2m's branch, or when a run is stopped by Ctrl-C.
+- **2026-10-17 (Sprint 109)** — Class and family runs report a discrepancy with no REDUCTION_COMPLETED before it (S5) and with `minimized_program_sha256` and `initial_state_sha256` the zero placeholder (E1; file runs too, 16 of the 789): 676 and 789 such violations on the record, 57 and 113 from 2026-10-17 (FCOS's open class runs, wait_handoff's plant run). `scripts/check_records.py` reports them as known and does not hold them. The fix: the failing case's bytes and state hashed, and a REDUCTION_COMPLETED with steps 0 for a one-instruction case (the tag's note: "If nothing could be removed, minimized equals source and steps=0"); for a family's probe, a reduction or the probe's own hash with steps 0 stated as unreduced. Re-visit with H2's follow-up sprint, before the next sprint that reports a discrepancy.
+- **2026-10-17 (Sprint 109)** — The frontier's EXECUTION_STARTED omits timeout_seconds (T3 unchecked on 452 records) and is emitted after the run; EXECUTION_COMPLETED omits elapsed_seconds and exit_code; the laptop's probe and game imports record executions with no TRACE_INGESTED (T4, 432 records). Re-visit: the next sprint (H2's second half: the frontier states its timeout, its start and its elapsed time), and the next laptop import for T4.
 
 ## Open questions
 
@@ -371,6 +374,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 109 (2026-10-17, closed)
+- **Scope:** H2 of the SDD hardening order, its first half: every record checked against the vocabulary's rules.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no record of its own; `scripts/check_records.py` read the application events of 32,755 records (SESSION_INIT through SESSION_COMPLETED) and found 1,962 violations, every one in a record made before 2026-10-17 or in the two known class- and family-run defects.
+  - *Observation 1 (placeholders that pass a format check):* 789 sha256 fields are `sha256:` and 64 zeros, which E1's pattern accepts. Disposition: resolved-here (named as a placeholder); the payloads deferred.
+  - *Observation 2 (a report with no reduction):* S5 fails 676 times in class and family runs, which have no reducer. Disposition: deferred (Deferred 2026-10-17).
+  - *Observation 3 (a start emitted at the end):* the frontier emits EXECUTION_STARTED after its run, without timeout_seconds, so T3 is unchecked on 452 records. Disposition: deferred to the next sprint.
+- **Closed:** CI pending at this entry; Sprint 108's CI run 39065947856 (success on 4a8f0eb1).
 
 ### Sprint 108 (2026-10-17, closed)
 - **Scope:** H1 of the SDD hardening order: vocabulary 0.9 (P20) and the batch run's numbers on its record.
@@ -442,12 +454,4 @@
   - *Observation 1 (a test held the defect):* the census test asserted a count the defect produced. Disposition: resolved-here.
 - **Closed:** CI pending at this entry.
 
-### Sprint 098 (2026-10-17, closed)
-- **Scope:** the batch run's model-stepped classes (hvc 10 and 11) made native.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* 458 class runs (456 CANDIDATE_ACCEPTED, FSIN and FCOS pinned), 68 family runs to CANDIDATE_ACCEPTED, the batch run COMPARISON_COMPLETED `conforms` with 544 model exits.
-  - *Observation 1 (the measure found what the judges could not):* every judge passed while the VM compiled the x87 forms to the model step; only the exit count showed it. Disposition: resolved-here (the derivation's symbols; a judge of them).
-  - *Observation 2 (a plant blind in the case sets):* ties never occurred in the x87 cases. Disposition: resolved-here (the native differential).
-- **Closed:** CI pending at this entry; Sprint 097's CI run 39004897894 (success on bc626dfc).
-
-Older entries (Sprints 000-035, and 036-097 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-098 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
