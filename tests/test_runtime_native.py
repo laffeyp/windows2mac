@@ -281,6 +281,7 @@ u32 w2m_error_mode(void) { return 0; }
 int w2m_is_file_handle(u64 h) { (void)h; return 0; }
 int w2m_is_std_handle(u64 h) { (void)h; return 0; }
 void w2m_signal(u64 key) { (void)key; }
+void w2m_ready_thread(u32 tid) { (void)tid; }         /* threads.c (Sprint 095) */
 int w2m_thread_ended(u32 tid) { (void)tid; return 0; }
 static const u16 here[] = {'C', ':', '\\\\', 'w', '2', 'm', 0};
 const u16 *w2m_working_directory(void) { return here; }

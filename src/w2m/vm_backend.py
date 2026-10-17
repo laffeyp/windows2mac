@@ -190,7 +190,7 @@ VMC_COUNTS = 0x100                         # u64 counts, by VMC_COUNT_* (block_c
 VMC_COUNT_NAMES = ("compiled", "not a code page", "host only", "decode", "no stencil", "no choice", "encoder",
                    "full", "key size", "guarded", "scan pages", "log full", "code cache full", "recon full",
                    "cut by decode", "cut by no stencil", "cut by no choice", "cut by encoder", "cut by key size",
-                   "cut by guarded", "page needs a split", "pages protected")
+                   "cut by guarded", "page needs a split", "pages protected", "pause")
 VMC_SAVE = 0x200                           # the miss stub's x0-x15, x17 and x30 while the C compiles
 VMC_LOG = 0x1000                           # the log: VMC_LOG_ENTRIES entries of VMC_LOG_ENTRY bytes
 VMC_LOG_ENTRY, VMC_LOG_ENTRIES, VMC_LOG_PAGES = 0x80, 4096, 8
@@ -1699,6 +1699,13 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
             a.emit(a64.movz(16, op[1]), a64.str_(1, 16, 28, DF_BYTE))
         elif k == "pause":                                      # PAUSE counted: the spin census (Sprint 068 item J)
             a.emit(a64.ldr(8, 16, 28, PAUSE_COUNT), a64.addi(16, 16, 1), a64.str_(8, 16, 28, PAUSE_COUNT))
+            # and a yield when another thread is ready (SLICE_UNTIL 0; Sprint 096, KVM's directed yield): the limit
+            # becomes the count (limit - x23) and x23 0, so the next block's entry ends the slice with the count exact
+            stay = a.label()
+            a.emit(a64.ldr(8, 16, 28, SLICE_UNTIL))
+            a.branch(lambda off: a64.cbnz(16, off), stay)
+            a.emit(a64.ldr(8, 16, 28, 8), a64.sub(16, 16, REG_BUDGET), a64.str_(8, 16, 28, 8), a64.movz(REG_BUDGET, 0))
+            a.bind(stay)
         elif k == "br":
             target = a64.mov_imm(17, quiet[op[2]]) if op[2] in quiet else [a64.mov(17, reg_of(op[2]))]
             if op[1] == "always":

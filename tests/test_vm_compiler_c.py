@@ -160,11 +160,19 @@ def test_the_expressions_and_features_equal_the_python(compiler: Compiler) -> No
             assert compiler.lib.vmc_test_feature(i, v & mask) == int(fn(v & mask)), (name, v)
 
 
+def left_to_host(ins: Any) -> bool:
+    """A PAUSE: block_compiler.c ends a block before it and leaves a block that starts at one to the host, where
+    compile_insn yields the slice when another thread is ready (Sprint 096); the table's PAUSE stencil never runs."""
+    return bool(ins.iclass == "PAUSE")
+
+
 def test_every_key_of_the_table_compiles_as_compile_insn(compiler: Compiler) -> None:
     rng = random.Random(7702)
     rows = 0
     for code, address, flags, nzcv_from in samples():
         ins = lift(code, address)
+        if left_to_host(ins):
+            continue
         call = (ins, 0, nzcv_from, flags.live_after, bool(flags.nzcv_out))
         row = x86dec.decode(code).row or ""
         key, values, _ = sc.decoded_form(call, code, compiler.implicit.get(row, frozenset()))
@@ -266,6 +274,8 @@ def test_the_case_sets_compile_as_compile_insn(compiler: Compiler) -> None:
             code = case.code[:x86dec.decode(case.code).length]
             address = 0x1_4000_0000 + rng.randrange(1 << 20) * 16
             ins = lift(code, address)
+            if left_to_host(ins):
+                continue
             for live in (vm_backend.ALL_FLAGS, 0):
                 base = rng.randrange(1 << 30, 1 << 40) * 4
                 exit_va = base + rng.randrange(-(1 << 24), 1 << 24) * 4
@@ -327,6 +337,8 @@ def _spec_row_judge(compiler: Compiler) -> dict[str, int]:
             address = 0x1_4000_0000 + rng.randrange(1 << 24)
             ins = lift(code, address)
         except Exception:
+            continue
+        if left_to_host(ins):
             continue
         for nf, live, no in contexts:
             base = rng.randrange(1 << 30, 1 << 40) * 4

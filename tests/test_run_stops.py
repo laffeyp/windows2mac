@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Peter Laffey
 """A run ends with its record when asked (Sprint 065). Frontier 643a6283510c-1791820793446300000 wrote the reference's
 168 log lines by 09:19 on 2026-10-12, ran two more hours toward --max-steps with no line printed, and its stop by
-signal lost the record. The Machine's stop_requested (a signal) and stop_when (asked at each progress line) end the
+signal lost the record. The Machine's stop_requested (a signal) and stop_when (asked each second from Sprint 095; at each progress line before) end the
 main process's run as any other stop does."""
 
 from __future__ import annotations
@@ -21,7 +21,8 @@ def stopped(requested: str | None, when: str | None, monkeypatch: pytest.MonkeyP
     from w2m.file_bridge import FileBridge
     from w2m.kernel import Machine
     from w2m.loader import load
-    monkeypatch.setattr(vm_backend, "PROGRESS_SECONDS", 0)       # a progress line, and the test, at every exit
+    monkeypatch.setattr(vm_backend, "PROGRESS_SECONDS", 0)       # a progress line at every exit
+    monkeypatch.setattr(vm_backend, "STOP_CHECK_SECONDS", 0)     # and the test (asked each second; Sprint 095)
     asked = []
     with tempfile.TemporaryDirectory() as d:
         files = FileBridge(Path(d))

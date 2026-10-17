@@ -24,7 +24,7 @@ enum { VMC_ENABLED, VMC_CURSOR, VMC_LOG_COUNT, VMC_EXIT, VMC_SLICE, VMC_HOST_ONL
 
 /* the counts (vm_backend.VMC_COUNT_NAMES) */
 enum { C_COMPILED, C_NOT_CODE, C_HOST_ONLY, C_STATUS, C_SCAN_PAGES = C_STATUS + 7, C_LOG_FULL, C_CODE_FULL,
-       C_RECON_FULL, C_CUT, C_NEEDS_SPLIT = C_CUT + 6, C_PROTECTED };
+       C_RECON_FULL, C_CUT, C_NEEDS_SPLIT = C_CUT + 6, C_PROTECTED, C_PAUSE };
 static const u8 CUT_INDEX[8] = {0, C_CUT + 0, C_CUT + 1, C_CUT + 2, C_CUT + 3, 0, C_CUT + 4, C_CUT + 5};
 
 /* one log entry; the host reads it at W2M_VMC_VA + VMC_LOG_OFF + VMC_LOG_ENTRY * i */
@@ -178,6 +178,22 @@ static void sync_code(u64 start, u64 end) {
 /* The block's extent as vmc_block takes it (Monitor._compile's rule over the window's bytes): its last instruction,
    its end, its count, and whether it ended there naturally (a branch, or the count) rather than at the window's edge
    or bytes with no form. */
+/* PAUSE (F3 90, F3 the last of any legacy prefixes or REX before 90): compile_insn yields the slice at one when another
+ * thread is ready (Sprint 096), and the stencil table's PAUSE does not, so a block ends before it and a block that starts
+ * at one goes to the host. A form this misses compiles here without the yield, which is correct code, only slower. */
+static int is_pause(const u8 *p, int n) {
+    if (n < 2 || p[n - 1] != 0x90) return 0;
+    int f3 = 0;
+    for (int i = 0; i < n - 1; i++) {
+        u8 b = p[i];
+        if (b == 0xF3) f3 = 1;
+        else if (b == 0xF2) f3 = 0;
+        else if (!((b >= 0x40 && b <= 0x4F) || b == 0x66 || b == 0x67 || b == 0x2E || b == 0x3E || b == 0x26 ||
+                   b == 0x36 || b == 0x64 || b == 0x65 || b == 0xF0)) return 0;
+    }
+    return f3;
+}
+
 static int extent(u64 start, const u8 *mem, u64 base, u64 size, struct vmc_insn *last, u64 *end, int *natural) {
     u64 addr = start;
     int n = 0;
@@ -188,6 +204,8 @@ static int extent(u64 start, const u8 *mem, u64 base, u64 size, struct vmc_insn 
         u64 avail = size - (addr - base);
         if (vmc_decode(mem + (addr - base), avail > 15 ? 15 : (int)avail, addr, last) < 0)
             return n;
+        if (is_pause(mem + (addr - base), last->length))
+            return n;                                    /* compile_insn's PAUSE, at the host (Sprint 096) */
         addr += (u64)last->length;
         *end = addr;
         n++;
@@ -231,6 +249,10 @@ u64 w2m_vm_compile(u64 target) {
         struct vmc_insn first;
         u64 avail = page + size - target;
         int s = vmc_decode((const u8 *)target, avail > 15 ? 15 : (int)avail, target, &first);
+        if (s >= 0 && is_pause((const u8 *)target, first.length)) {
+            count(C_PAUSE);
+            return 0;
+        }
         count(C_STATUS + (s < 0 && s >= -7 ? -s - 1 : 0));
         return 0;
     }

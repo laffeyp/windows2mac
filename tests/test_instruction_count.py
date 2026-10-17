@@ -59,3 +59,46 @@ STEPPED = (bytes.fromhex("b9") + struct.pack("<I", 1000)       # mov ecx, 1000
 def test_a_model_step_mid_block_counts_the_rest_of_its_block_once(monkeypatch: pytest.MonkeyPatch) -> None:
     exact = 1 + 5 * 1000 + 2                                  # the mov, five a turn, the store and the JMP
     assert run(STEPPED, monkeypatch, refill=True) == exact
+
+
+SPINS = 20_000
+SPIN = (bytes.fromhex("b9") + struct.pack("<I", SPINS)         # mov ecx, SPINS
+        + bytes.fromhex("f390" "ffc9" "75fa")                  # l: pause; dec ecx; jnz l
+        + END)
+
+
+def slice_ends(code: bytes, monkeypatch: pytest.MonkeyPatch, ready: bool) -> tuple[int, int]:
+    """The instructions run and the slice ends (hvc #4 exits) with another thread ready (SLICE_UNTIL 0) or none."""
+    from w2m import vm_backend
+    from w2m.kernel32 import M64
+    from w2m.loader import Loaded, Memory
+    from w2m.scheduler import TIME_SLICE
+    monkeypatch.setattr(vm_backend, "TRANSLATION_CACHE_DIR", None)
+    monkeypatch.setattr(vm_backend.VM, "_set_budget", lambda self: struct.pack_into(
+        "<Q", self.mm, vm_backend.MONITOR_DATA + 8, min(self._max_steps, struct.unpack_from(
+            "<Q", self.mm, vm_backend.MONITOR_DATA)[0] + TIME_SLICE)))
+    monkeypatch.setattr(vm_backend.VM, "_slice_until", lambda self, forced: 0 if forced or ready else M64)
+    mem = Memory()
+    mem.map(CODE, 0x1000, "code").data[:len(code)] = code
+    mem.map(STACK, 0x10000, "stack")
+    vm = vm_backend.VM(Loaded(None, mem, CODE, {}, STACK + 0x10000))   # type: ignore[arg-type]
+    try:
+        r = vm.run(max_steps=1 << 40, timeout_ms=60_000)
+        ends = vm.exits[4]
+    finally:
+        vm.close()
+    assert r.stop.startswith("UnhandledException 0xc0000005"), r.stop
+    return int(r.instructions_executed), int(ends)
+
+
+@pytest.mark.hvf
+def test_a_pause_yields_the_slice_when_another_thread_is_ready_and_the_count_holds(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sprint 096 (KVM's directed yield): a PAUSE with another thread ready ends the slice at the next block's entry,
+    the limit moved to the count so no instruction is counted that did not run; with none ready it only counts."""
+    exact = 1 + 3 * SPINS + 2                                  # the mov, three a turn, the store and the JMP
+    yielded, yield_ends = slice_ends(SPIN, monkeypatch, ready=True)
+    alone, alone_ends = slice_ends(SPIN, monkeypatch, ready=False)
+    assert yielded == alone == exact
+    assert yield_ends >= SPINS - 1                             # about one slice end a PAUSE
+    assert alone_ends <= exact // 20_000 + 2                   # the slices of a lone thread
