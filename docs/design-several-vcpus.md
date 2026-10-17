@@ -72,9 +72,11 @@ vCPU-state chain. Requires CnP = 0 (held).
 
 ## The order of the work
 
-1. **Sprint 104:** the monitor creates N vCPUs, one thread each, each with its own channel and private translation
-   chain; the host runs one x86 thread on each with no scheduler; the litmus programs (MP, SB, LB, 2+2W, IRIW) as x86
-   guest code, judged against x86-TSO's allowed outcomes, with the IS invalidations. Plant: EnTSO off on one vCPU,
-   MP's forbidden outcome must appear (as Sprint 009 saw).
-2. **Sprint 105:** the in-VM scheduler across vCPUs: the run table under LSE atomics, a ready thread picked by any idle
-   vCPU, a wake to an idle vCPU by an SGI through the GIC; the 7 threading families and the batch run as judges.
+1. **Sprint 104:** the monitor creates N vCPUs, one thread each, each with its own channel; each vCPU's private
+   translation chain; the IS invalidations. Judged by raw AArch64 on four vCPUs reading four values at one address.
+2. **Sprint 105:** the litmus programs (MP, SB, LB, 2+2W, IRIW) as x86 guest code compiled by w2m, one thread a
+   vCPU, no scheduler; judged against x86-TSO's allowed outcomes. Plant: EnTSO off on one vCPU, MP's forbidden outcome
+   must appear (as Sprint 009 saw).
+3. **Sprint 106:** the in-VM scheduler across vCPUs: the run table under LSE atomics, a ready thread taken by any idle
+   vCPU, a wake to an idle vCPU by an SGI through the GIC, the TEB per thread (GS base), the process-wide words on a
+   process page; the 7 threading families and the batch run as judges.

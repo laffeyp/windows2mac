@@ -328,9 +328,9 @@ enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_S
        W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL_RETIRED, W2M_THREAD_STACK_GROW };   /* 8: Sprint 069 */
 
 /* After a request that mapped or unmapped pages (a thread's stack: THREAD_CREATE, THREAD_STACK_GROW), the stage-1
- * translations cached for them go (Arm ARM D8.13: TLBI VMALLE1, then DSB and ISB). */
+ * translations cached for them go on every vCPU (Arm ARM D8.13: TLBI VMALLE1IS, then DSB and ISB; Sprint 104). */
 static inline void w2m_tlb_flush(void) {
-    __asm__ volatile("dsb ishst\n\ttlbi vmalle1\n\tdsb ish\n\tisb" ::: "memory");
+    __asm__ volatile("dsb ishst\n\ttlbi vmalle1is\n\tdsb ish\n\tisb" ::: "memory");
 }
 
 /* Commit the current thread's stack down to address's page, as Windows does on a touch of the stack's guard pages

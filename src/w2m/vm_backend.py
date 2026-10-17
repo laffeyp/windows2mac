@@ -202,7 +202,15 @@ CODE_PAGE_SLOTS = 1 << CODE_PAGE_BITS      # 8 MB, sparse; the game's code cover
 # W2M_VM_COMPILE_JUDGE=1: each block the VM compiled is compiled again here and compared (VM._judge_vm_block)
 VM_COMPILE = os.environ.get("W2M_VM_COMPILE", "1") != "0"
 VM_COMPILE_JUDGE = os.environ.get("W2M_VM_COMPILE_JUDGE") == "1"
-MONITOR_SIZE = (CODE_PAGE_SET + 8 * CODE_PAGE_SLOTS + BLOCK - 1) & ~(BLOCK - 1)   # mapped in 2 MB blocks
+# Each vCPU past the first (Sprint 104; docs/design-several-vcpus.md, design B): its channel, then the private pages its
+# translation chain maps at the shared addresses of the monitor data page, the state block and the runtime stack,
+# then the tables of that chain. vm_monitor.c VCPU_STRIDE is the same.
+MAX_VCPUS = 8
+VCPU_AREA = CODE_PAGE_SET + 8 * CODE_PAGE_SLOTS
+VCPU_STRIDE = 0x20000
+VS_CHANNEL, VS_MONITOR_DATA, VS_STATE, VS_STACK, VS_TABLES = 0x0000, 0x1000, 0x2000, 0x3000, 0x13000
+assert VS_STACK + RUNTIME_STACK_SIZE == VS_TABLES and VS_TABLES + 8 * PAGE <= VCPU_STRIDE
+MONITOR_SIZE = (VCPU_AREA + MAX_VCPUS * VCPU_STRIDE + BLOCK - 1) & ~(BLOCK - 1)   # mapped in 2 MB blocks
 # process area: Windows-visible state at specs/guest_state.json offsets (Sprint 034)
 PROCESS_VA = 0x7FFE_0000_0000
 TEB_OFF, PEB_OFF, STATE_OFF, TRANSPORT_OFF, RING_OFF = 0x0000, 0x2000, 0x3000, 0x4000, 0x5000
@@ -328,7 +336,8 @@ PROCESS_ID = 4096                   # TEB.ClientId.UniqueProcess: Windows ids ar
 Discovery = Literal["static", "runtime_transfer"]           # vocabulary 0.5 enum `discovery`, the values used
 
 SYS_REG_ID = {"SCTLR_EL1": 0xC080, "CPACR_EL1": 0xC082, "TTBR0_EL1": 0xC100, "TCR_EL1": 0xC102,
-              "MAIR_EL1": 0xC510, "VBAR_EL1": 0xC600}
+              "MAIR_EL1": 0xC510, "VBAR_EL1": 0xC600, "ACTLR_EL1": 0xC081}
+ACTLR_ENTSO = 1 << 1                         # ACTLR_EL1.EnTSO: x86's store order in the guest (hv_vcpu_types.h; Sprint 009)
 CPACR_FPEN = 3 << 20                         # FP/SIMD at EL1 and EL0 not trapped (Arm ARM D19 CPACR_EL1.FPEN)
 PAGE_ATTRIBUTES = (3 << 8) | (1 << 10)                 # AttrIndx 0 (MAIR byte 0 = 0xFF, Normal WB), ISH, AF
 SCTLR = 0x30D01805                          # M, C, I; alignment checks off (Sprint 012 value)
@@ -1829,26 +1838,27 @@ class Channel:
     SPIN_NS = 50_000
     KINDS = {1: "hvc", 2: "exc", 3: "cancel", 4: "fail"}
 
-    def __init__(self, mm: mmap.mmap) -> None:
+    def __init__(self, mm: mmap.mmap, base: int = CHANNEL) -> None:
         import ctypes
         self.mm = mm
-        self._ref = ctypes.c_char.from_buffer(mm, CHANNEL)          # dropped at close, before the map closes
+        self.base = base                                              # a vCPU past the first: its own page
+        self._ref = ctypes.c_char.from_buffer(mm, base)          # dropped at close, before the map closes
         # the two sequence words, each written and read as one 32-bit access: struct writes an integer a byte at a time
-        self._cmd_word = ctypes.c_uint32.from_buffer(mm, CHANNEL + CH_CMD)
-        self._exit_word = ctypes.c_uint32.from_buffer(mm, CHANNEL + CH_EXIT)
-        base = ctypes.addressof(self._ref)
-        self.cmd_addr, self.exit_addr = ctypes.c_void_p(base + CH_CMD), ctypes.c_void_p(base + CH_EXIT)
+        self._cmd_word = ctypes.c_uint32.from_buffer(mm, base + CH_CMD)
+        self._exit_word = ctypes.c_uint32.from_buffer(mm, base + CH_EXIT)
+        address = ctypes.addressof(self._ref)
+        self.cmd_addr, self.exit_addr = ctypes.c_void_p(address + CH_CMD), ctypes.c_void_p(address + CH_EXIT)
         lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
         self.wait = lib.os_sync_wait_on_address
         self.wait.argtypes = [ctypes.c_void_p, ctypes.c_uint64, ctypes.c_size_t, ctypes.c_uint32]
         self.wake = lib.os_sync_wake_by_address_any
         self.wake.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint32]
         self.barrier = lib.OSMemoryBarrier
-        self.seq = struct.unpack_from("<I", mm, CHANNEL + CH_CMD)[0]
+        self.seq = struct.unpack_from("<I", mm, self.base + CH_CMD)[0]
 
     def call(self, op: int) -> int:
         """Run `op` with the fields already written; its status."""
-        struct.pack_into("<Q", self.mm, CHANNEL + CH_OP, op)
+        struct.pack_into("<Q", self.mm, self.base + CH_OP, op)
         self.barrier()
         self.seq = (self.seq + 1) & 0xFFFFFFFF
         self._cmd_word.value = self.seq
@@ -1858,33 +1868,33 @@ class Channel:
             if time.perf_counter_ns() > until:
                 self.wait(self.exit_addr, done, 4, 1)
         self.barrier()
-        return int(struct.unpack_from("<Q", self.mm, CHANNEL + CH_STATUS)[0])
+        return int(struct.unpack_from("<Q", self.mm, self.base + CH_STATUS)[0])
 
     def run(self, pc: int, cpsr: int, x: list[int], ms: int, swap: tuple[int, int] | None) -> tuple["VcpuExit", int]:
-        struct.pack_into("<QQQQ", self.mm, CHANNEL + CH_MS, ms, *(swap or (0, 0)), pc)
-        struct.pack_into("<Q31Q", self.mm, CHANNEL + CH_CPSR, cpsr, *x)
+        struct.pack_into("<QQQQ", self.mm, self.base + CH_MS, ms, *(swap or (0, 0)), pc)
+        struct.pack_into("<Q31Q", self.mm, self.base + CH_CPSR, cpsr, *x)
         if self.call(OP_RUN):
             raise RuntimeError(f"vm_monitor: vswap {swap} failed")
-        kind, syn, epc, cpsr_out, esr, far, elr = struct.unpack_from("<7Q", self.mm, CHANNEL + CH_KIND)
-        regs = list(struct.unpack_from("<31Q", self.mm, CHANNEL + CH_EX))
+        kind, syn, epc, cpsr_out, esr, far, elr = struct.unpack_from("<7Q", self.mm, self.base + CH_KIND)
+        regs = list(struct.unpack_from("<31Q", self.mm, self.base + CH_EX))
         return VcpuExit(self.KINDS.get(kind, "fail"), syn, epc, esr, far, elr, regs), cpsr_out
 
     def swap(self, swap: tuple[int, int]) -> None:
-        struct.pack_into("<QQ", self.mm, CHANNEL + CH_SAVE, *swap)
+        struct.pack_into("<QQ", self.mm, self.base + CH_SAVE, *swap)
         if self.call(OP_SWAP):
             raise RuntimeError(f"vm_monitor: vswap {swap} failed")
 
     def vget(self) -> tuple[list[int], int, int]:
         if self.call(OP_VGET):
             raise RuntimeError("vm_monitor: vget failed")
-        xmm = [int.from_bytes(self.mm[CHANNEL + CH_VEC + 16 * i:CHANNEL + CH_VEC + 16 * i + 16], "little") for i in range(16)]
-        fpcr, fpsr = struct.unpack_from("<QQ", self.mm, CHANNEL + CH_VEC + 256)
+        xmm = [int.from_bytes(self.mm[self.base + CH_VEC + 16 * i:self.base + CH_VEC + 16 * i + 16], "little") for i in range(16)]
+        fpcr, fpsr = struct.unpack_from("<QQ", self.mm, self.base + CH_VEC + 256)
         return xmm, int(fpcr), int(fpsr)
 
     def vset(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
         for i, q in enumerate(xmm):
-            self.mm[CHANNEL + CH_VEC + 16 * i:CHANNEL + CH_VEC + 16 * i + 16] = q.to_bytes(16, "little")
-        struct.pack_into("<QQ", self.mm, CHANNEL + CH_VEC + 256, fpcr, fpsr)
+            self.mm[self.base + CH_VEC + 16 * i:self.base + CH_VEC + 16 * i + 16] = q.to_bytes(16, "little")
+        struct.pack_into("<QQ", self.mm, self.base + CH_VEC + 256, fpcr, fpsr)
         if self.call(OP_VSET):
             raise RuntimeError("vm_monitor: vset failed")
 
@@ -2108,6 +2118,11 @@ class VM:
         self.lift_pages: dict[int, set[int]] = {}       # page VA -> the cached addresses whose bytes it holds
         self.code_writes = 0                            # writes that dropped blocks
         self.fault_give_backs = 0                       # guest faults whose unrun instructions were given back (099)
+        self.vcpu_count = 1                             # vCPUs the monitor runs (Sprint 104); set before run
+        self.vcpu_channels: list[Channel] = []          # vCPU 1.. by index - 1
+        self.vcpu_readback: list[tuple[int, int]] = []  # each vCPU's ACTLR_EL1 and TTBR0_EL1, read by its owner
+        self._private_tables: list[dict[object, int]] = []   # per vCPU past the first: shared table -> its copy
+        self._private_regions: set[int] = set()         # the 2 MB regions whose leaves differ per vCPU
         self.blocks_dropped = 0
         self.mem.on_write = self._host_wrote            # the host's own writes into guest memory fault on nothing
         self.code_cursor = CODE_CACHE
@@ -3698,7 +3713,7 @@ class VM:
         d.bind(host)
         self.miss_va = d.here()
         # the host may have compiled a block and made its pages read-only (_protect_code): drop stale TLB entries too
-        d.emit(a64.hvc(1), a64.IC_IALLU, a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
+        d.emit(a64.hvc(1), a64.IC_IALLUIS, a64.TLBI_VMALLE1IS, a64.DSB_ISH, a64.ISB)   # every vCPU (Sprint 104)
         d.branch(a64.b, top)
         self.dispatch_va = MONITOR_VA + DISPATCHER
         # where a thread goes on after a switch or a model step, x17 its next x86 address: the dispatcher's table,
@@ -3803,7 +3818,7 @@ class VM:
         e.branch(lambda off: a64.bcond("ne", off), other)
         e.emit(a64.mrs(17, a64.FAR_EL1), a64.hvc(HVC_CODE_WRITE))           # x17: 1 when the host dropped blocks
         e.branch(lambda off: a64.cbz(17, off), other)
-        e.emit(a64.TLBI_VMALLE1, a64.DSB_ISH, a64.ISB)
+        e.emit(a64.TLBI_VMALLE1IS, a64.DSB_ISH, a64.ISB)              # every vCPU (Sprint 104)
         e.branch(a64.b, back)
         e.bind(other)
         e.emit(a64.mov_imm(16, MONITOR_VA + MONITOR_DATA + CODE_WRITE_SPILL), a64.ldr(8, 17, 16, 0),
@@ -3844,10 +3859,104 @@ class VM:
         self.mm[off:off + 4 * len(words)] = struct.pack(f"<{len(words)}I", *words)
 
     # code pages ------------------------------------------------------------------------------
+    def _write_descriptor(self, at: int, value: int) -> None:
+        """Write a descriptor in a shared table and in each vCPU's copy of that table where the copy held the same
+        descriptor (where it differs, the entry is the vCPU's private chain; Sprint 104)."""
+        old = struct.unpack_from("<Q", self.mm, at)[0]
+        struct.pack_into("<Q", self.mm, at, value)
+        table = at & ~(PAGE - 1)
+        for copies in self._private_tables:
+            copy = copies.get(table)
+            if copy is not None and struct.unpack_from("<Q", self.mm, copy + at - table)[0] == old:
+                struct.pack_into("<Q", self.mm, copy + at - table, value)
+
+    def _vcpu_pages(self, i: int) -> list[tuple[int, int]]:
+        """(virtual address, memory-file offset) of vCPU i's private pages: the monitor data page, the state block,
+        the runtime stack (docs/design-several-vcpus.md)."""
+        area = VCPU_AREA + i * VCPU_STRIDE
+        return ([(MONITOR_VA + MONITOR_DATA, area + VS_MONITOR_DATA), (PROCESS_VA + STATE_OFF, area + VS_STATE)]
+                + [(MONITOR_VA + RUNTIME_STACK + k, area + VS_STACK + k) for k in range(0, RUNTIME_STACK_SIZE, PAGE)])
+
+    def _private_chain(self, i: int) -> int:
+        """vCPU i's level-0 table and the chain below it to its private pages: a copy of each shared table on the way,
+        a block on the way split into the vCPU's own next-level table, the leaves at the vCPU's pages; every other
+        descriptor the shared one. Its TTBR0_EL1 value (CnP, bit 0, clear)."""
+        area = VCPU_AREA + i * VCPU_STRIDE
+        free = [area + VS_TABLES]
+        copies: dict[object, int] = {}
+        address = 0x0000_FFFF_FFFF_F000
+
+        def fresh() -> int:
+            t = free[0]
+            free[0] += PAGE
+            if free[0] > area + VCPU_STRIDE:
+                raise CompileError(f"vCPU {i}: its private tables do not fit")
+            return t
+
+        def copy_of(shared: int) -> int:
+            if shared not in copies:
+                copies[shared] = fresh()
+                self.mm[copies[shared]:copies[shared] + PAGE] = self.mm[shared:shared + PAGE]
+            return copies[shared]
+
+        root = copy_of(TRANSLATION_TABLES)
+        for va, page in self._vcpu_pages(i):
+            shared: int | None = TRANSLATION_TABLES
+            private = root
+            for level, shift in ((0, 39), (1, 30), (2, 21)):
+                at = 8 * ((va >> shift) & 0x1FF)
+                mine = struct.unpack_from("<Q", self.mm, private + at)[0]
+                desc = struct.unpack_from("<Q", self.mm, shared + at)[0] if shared is not None else mine
+                if not desc & 1:
+                    raise CompileError(f"vCPU {i}: nothing maps 0x{va:x}")
+                if mine != desc or (shared is None and desc & 2):   # already the vCPU's own (a copy or a split)
+                    private = int((mine & address) - IPA_BASE)
+                    shared = int((desc & address) - IPA_BASE) if shared is not None and desc & 2 else None
+                elif desc & 2:                                  # a shared table: the vCPU's copy of it
+                    below = int((desc & address) - IPA_BASE)
+                    struct.pack_into("<Q", self.mm, private + at, (IPA_BASE + copy_of(below)) | 0x3)
+                    shared, private = below, copies[below]
+                else:                                           # a block: split into the vCPU's own table
+                    size = 1 << shift
+                    base = desc & address & ~(size - 1)
+                    attributes = desc & ~address & ~0x3
+                    low = 0x3 if level == 2 else 0x1
+                    own = fresh()
+                    for k in range(512):
+                        struct.pack_into("<Q", self.mm, own + 8 * k, (base + k * (size >> 9)) | attributes | low)
+                    struct.pack_into("<Q", self.mm, private + at, (IPA_BASE + own) | 0x3)
+                    shared, private = None, own
+                    self._private_regions.add(va & ~(BLOCK - 1))
+            leaf = private + 8 * ((va >> 12) & 0x1FF)
+            old = struct.unpack_from("<Q", self.mm, leaf)[0]
+            struct.pack_into("<Q", self.mm, leaf, (old & ~address) | (IPA_BASE + page))
+            self._private_regions.add(va & ~(BLOCK - 1))
+        self._private_tables.append(copies)
+        return IPA_BASE + root
+
+    def _start_vcpus(self, cmd: Callable[[str], list[str]]) -> None:
+        """vCPUs 1 .. vcpu_count - 1 (Sprint 104): each one's private pages start as vCPU 0's (the process-wide words
+        of the monitor data page among them), its private chain, then the monitor's threads and channels."""
+        n = self.vcpu_count
+        if not 1 < n <= MAX_VCPUS:
+            raise CompileError(f"{n} vCPUs: 2 to {MAX_VCPUS}")
+        ttbrs = []
+        for i in range(1, n):
+            for va, page in self._vcpu_pages(i):
+                source = (MONITOR_DATA if va == MONITOR_VA + MONITOR_DATA else
+                          self._process(STATE_OFF) if va == PROCESS_VA + STATE_OFF else va - MONITOR_VA)
+                self.mm[page:page + PAGE] = self.mm[source:source + PAGE]
+            ttbrs.append(self._private_chain(i))
+        reply = cmd(f"vcpus {n} {VCPU_AREA:x} " + " ".join(f"{t:x}" for t in ttbrs))
+        self.vcpu_readback = [(int(reply[1 + 2 * k], 16), int(reply[2 + 2 * k], 16)) for k in range(n)]
+        self.vcpu_channels = [Channel(self.mm, VCPU_AREA + i * VCPU_STRIDE + VS_CHANNEL) for i in range(1, n)]
+
     def _page_descriptor(self, va: int) -> int:
         """The offset in the memory file of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB block over it
         split into the next level's 512 descriptors with the block's attributes (Arm ARM D8.3); 0 when nothing maps
         it."""
+        if va & ~(BLOCK - 1) in self._private_regions:
+            raise CompileError(f"a page-table change at 0x{va:x}, in a region whose pages differ per vCPU")
         off = TRANSLATION_TABLES
         for level, shift in ((0, 39), (1, 30), (2, 21)):
             at = off + 8 * ((va >> shift) & 0x1FF)
@@ -3865,7 +3974,7 @@ class VM:
                 low = 0x3 if level == 2 else 0x1                # pages at level 3, blocks at level 2
                 for i in range(512):
                     struct.pack_into("<Q", self.mm, new + 8 * i, (base + i * (size >> 9)) | attributes | low)
-                struct.pack_into("<Q", self.mm, at, (IPA_BASE + new) | 0x3)
+                self._write_descriptor(at, (IPA_BASE + new) | 0x3)
                 desc = (IPA_BASE + new) | 0x3
             off = int((desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE)
         return off + 8 * ((va >> 12) & 0x1FF)
@@ -4205,7 +4314,7 @@ class VM:
 
         try:
             for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
-                            ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
+                            ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR), ("ACTLR_EL1", ACTLR_ENTSO)):
                 cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
             at = self.code_cursor
             self._write_words(at, [a64.hvc(0x7E), a64.b(-4)])            # hvc #0x7e; b . - 4
@@ -4299,8 +4408,10 @@ class VM:
         cmd(f"vset {' '.join('0' * 32 for _ in range(16))} "
             f"{fpcr_for(struct.unpack_from('<I', self.mm, MONITOR_DATA + MXCSR_OFF)[0]):x} 0")
         for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
-                        ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR)):
+                        ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR), ("ACTLR_EL1", ACTLR_ENTSO)):
             cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
+        if self.vcpu_count > 1:
+            self._start_vcpus(cmd)
         if TRANSPORT == "channel":
             cmd(f"channel {CHANNEL:x}")
             self._channel = Channel(self.mm)
@@ -4505,6 +4616,9 @@ class VM:
                 BridgeRequestError) as ex:              # DecodeError: record frontier-...1791800847886016000 crashed
             stop = f"{type(ex).__name__}: {ex}"
         finally:
+            for channel in self.vcpu_channels:                   # each vCPU's thread returns
+                channel.leave()
+            self.vcpu_channels = []
             if self._channel is not None:
                 self._channel.leave()                            # the monitor is back on its pipe
                 self._channel = None

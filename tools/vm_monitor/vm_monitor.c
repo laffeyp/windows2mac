@@ -17,6 +17,11 @@
  *   vget                                -> v <q0> ... <q15> <fpcr> <fpsr>  (q as 32 hex digits, low byte last)
  *   vset <q0> ... <q15> <fpcr> <fpsr>   -> ok   (Sprint 041: XMM i lives in V i)
  *   spin <n>                            resume through n HVC exits in C   -> spin <taken> <ns>  (Sprint 048)
+ *   vcpus <n> <channel_base> <ttbr_1> ... <ttbr_n-1>
+ *                                       vCPUs 1..n-1, each on its own thread with vCPU 0's system registers, its own
+ *                                       TTBR0_EL1 and MPIDR_EL1 Aff0 = its index, serving the channel at
+ *                                       channel_base + index * 0x20000 (Sprint 104)
+ *                                       -> ok <actlr_0> <ttbr_0> ... <actlr_n-1> <ttbr_n-1>, each read back by its owner
  *   quit
  * VTIMER exits are masked and the run continues (the guest never enables the timer).
  */
@@ -33,22 +38,33 @@
 #include <sys/mman.h>
 #include <time.h>
 
-static hv_vcpu_t vcpu;
-static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
-static int running, fired;
-static struct timespec deadline;
+/* One vCPU and what its runs need. hv_vcpu.h: a vCPU belongs to the thread that created it, and its calls must come
+ * from that thread, so each vCPU past the first has a thread of its own (Sprint 104). */
+#define MAX_VCPUS 8
+#define VCPU_STRIDE 0x20000ull                /* vm_backend.py VCPU_STRIDE: one vCPU's channel and private pages */
+struct vslot {
+    hv_vcpu_t vcpu;
+    hv_vcpu_exit_t *ex;
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int running, fired, index;
+    struct timespec deadline;
+    uint64_t ttbr, channel_off, actlr_read, ttbr_read;
+    hv_return_t status;
+};
+static struct vslot slots[MAX_VCPUS];
+static hv_vcpu_t vcpu;                        /* vCPU 0's, which the text commands address */
 
 /* Cancels the vCPU when a run passes its deadline. hv_vcpus_exit may be called from any thread
  * (hv_vcpu.h). */
 static void *watchdog(void *arg) {
-    (void)arg;
-    pthread_mutex_lock(&mu);
+    struct vslot *s = arg;
+    pthread_mutex_lock(&s->mu);
     for (;;) {
-        while (!running || fired) pthread_cond_wait(&cv, &mu);
-        if (pthread_cond_timedwait(&cv, &mu, &deadline) == ETIMEDOUT && running && !fired) {
-            fired = 1;
-            hv_vcpus_exit(&vcpu, 1);
+        while (!s->running || s->fired) pthread_cond_wait(&s->cv, &s->mu);
+        if (pthread_cond_timedwait(&s->cv, &s->mu, &s->deadline) == ETIMEDOUT && s->running && !s->fired) {
+            s->fired = 1;
+            hv_vcpus_exit(&s->vcpu, 1);
         }
     }
     return NULL;
@@ -72,33 +88,34 @@ static void report(const char *kind, uint64_t syndrome) {
 }
 
 /* Runs the vCPU until an exit the host must see; returns its kind and sets *syn_out. */
-static const char *run_vcpu(long ms, hv_vcpu_exit_t *ex, uint64_t *syn_out) {
+static const char *run_vcpu(struct vslot *s, long ms, uint64_t *syn_out) {
     struct timespec now;
+    hv_vcpu_exit_t *ex = s->ex;
     clock_gettime(CLOCK_REALTIME, &now);
-    pthread_mutex_lock(&mu);
-    deadline.tv_sec = now.tv_sec + ms / 1000;
-    deadline.tv_nsec = now.tv_nsec + (ms % 1000) * 1000000L;
-    if (deadline.tv_nsec >= 1000000000L) {
-        deadline.tv_sec++;
-        deadline.tv_nsec -= 1000000000L;
+    pthread_mutex_lock(&s->mu);
+    s->deadline.tv_sec = now.tv_sec + ms / 1000;
+    s->deadline.tv_nsec = now.tv_nsec + (ms % 1000) * 1000000L;
+    if (s->deadline.tv_nsec >= 1000000000L) {
+        s->deadline.tv_sec++;
+        s->deadline.tv_nsec -= 1000000000L;
     }
-    running = 1;
-    fired = 0;
-    pthread_cond_signal(&cv);
-    pthread_mutex_unlock(&mu);
+    s->running = 1;
+    s->fired = 0;
+    pthread_cond_signal(&s->cv);
+    pthread_mutex_unlock(&s->mu);
     const char *kind = NULL;
     uint64_t syn = 0;
     while (!kind) {
-        hv_return_t r = hv_vcpu_run(vcpu);
+        hv_return_t r = hv_vcpu_run(s->vcpu);
         if (r != HV_SUCCESS) {
             kind = "fail";
             syn = (uint64_t)r;
         } else if (ex->reason == HV_EXIT_REASON_VTIMER_ACTIVATED) {
-            hv_vcpu_set_vtimer_mask(vcpu, true);
+            hv_vcpu_set_vtimer_mask(s->vcpu, true);
         } else if (ex->reason == HV_EXIT_REASON_CANCELED) {
-            pthread_mutex_lock(&mu);
-            if (fired) kind = "cancel";
-            pthread_mutex_unlock(&mu);
+            pthread_mutex_lock(&s->mu);
+            if (s->fired) kind = "cancel";
+            pthread_mutex_unlock(&s->mu);
         } else if (ex->reason == HV_EXIT_REASON_EXCEPTION) {
             syn = ex->exception.syndrome;
             kind = ((syn >> 26) & 0x3f) == 0x16 ? "hvc" : "exc";
@@ -107,16 +124,16 @@ static const char *run_vcpu(long ms, hv_vcpu_exit_t *ex, uint64_t *syn_out) {
             syn = 0x10000u | ex->reason;
         }
     }
-    pthread_mutex_lock(&mu);
-    running = 0;
-    pthread_mutex_unlock(&mu);
+    pthread_mutex_lock(&s->mu);
+    s->running = 0;
+    pthread_mutex_unlock(&s->mu);
     *syn_out = syn;
     return kind;
 }
 
-static void run(long ms, hv_vcpu_exit_t *ex) {
+static void run(long ms) {
     uint64_t syn = 0;
-    const char *kind = run_vcpu(ms, ex, &syn);
+    const char *kind = run_vcpu(&slots[0], ms, &syn);
     report(kind, syn);
 }
 
@@ -149,7 +166,7 @@ static uint32_t wait_change(volatile uint32_t *word, uint32_t old) {
     return v;
 }
 
-static int get_vectors(unsigned char *at) {
+static int get_vectors(hv_vcpu_t vcpu, unsigned char *at) {
     int bad = 0;
     for (int i = 0; i < 16; i++) {
         hv_simd_fp_uchar16_t q;
@@ -163,7 +180,7 @@ static int get_vectors(unsigned char *at) {
     return bad;
 }
 
-static int set_vectors(unsigned char *at) {
+static int set_vectors(hv_vcpu_t vcpu, unsigned char *at) {
     int bad = 0;
     for (int i = 0; i < 16; i++) {
         hv_simd_fp_uchar16_t q;
@@ -177,12 +194,15 @@ static int set_vectors(unsigned char *at) {
     return bad;
 }
 
-static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exit_t *ex) {
+static void channel(struct vslot *s, unsigned char *mem, uint64_t size, uint64_t off) {
+    hv_vcpu_t vcpu = s->vcpu;
     unsigned char *c = mem + off;
     volatile uint32_t *cmd = (volatile uint32_t *)(c + CH_CMD), *done = (volatile uint32_t *)(c + CH_EXIT);
     uint32_t seen = __atomic_load_n(cmd, __ATOMIC_ACQUIRE);
-    printf("ok\n");
-    fflush(stdout);
+    if (s->index == 0) {                     /* vCPU 0's channel answers the pipe's command; the others' start silently */
+        printf("ok\n");
+        fflush(stdout);
+    }
     for (;;) {
         seen = wait_change(cmd, seen);
         uint64_t op = *(uint64_t *)(c + CH_OP), status = 0;
@@ -190,8 +210,8 @@ static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exi
             uint64_t save = *(uint64_t *)(c + CH_SAVE), load = *(uint64_t *)(c + CH_LOAD);
             if ((save && save + 288 > size) || (load && load + 288 > size)) status = 1;
             else {
-                if (save) status |= get_vectors(mem + save);
-                if (load) status |= set_vectors(mem + load);
+                if (save) status |= get_vectors(vcpu, mem + save);
+                if (load) status |= set_vectors(vcpu, mem + load);
             }
         }
         if (op == OP_RUN) {
@@ -199,7 +219,7 @@ static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exi
             hv_vcpu_set_reg(vcpu, HV_REG_CPSR, *(uint64_t *)(c + CH_CPSR));
             for (int i = 0; i <= 30; i++) hv_vcpu_set_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), *(uint64_t *)(c + CH_X + 8 * i));
             uint64_t syn = 0;
-            const char *kind = run_vcpu((long)*(uint64_t *)(c + CH_MS), ex, &syn);
+            const char *kind = run_vcpu(s, (long)*(uint64_t *)(c + CH_MS), &syn);
             *(uint64_t *)(c + CH_KIND) = kind[0] == 'h' ? 1 : kind[0] == 'e' ? 2 : kind[0] == 'c' ? 3 : 4;
             *(uint64_t *)(c + CH_SYN) = syn;
             uint64_t v;
@@ -213,9 +233,9 @@ static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exi
                 *(uint64_t *)(c + CH_EX + 8 * i) = v;
             }
         } else if (op == OP_VGET) {
-            status = get_vectors(c + CH_VEC);
+            status = get_vectors(vcpu, c + CH_VEC);
         } else if (op == OP_VSET) {
-            status = set_vectors(c + CH_VEC);
+            status = set_vectors(vcpu, c + CH_VEC);
         }
         *(uint64_t *)(c + CH_STATUS) = status;
         __atomic_store_n(done, seen, __ATOMIC_RELEASE);
@@ -225,6 +245,38 @@ static void channel(unsigned char *mem, uint64_t size, uint64_t off, hv_vcpu_exi
 }
 
 static uint64_t gic_distributor, gic_redistributor, gic_region;   /* Sprint 097 */
+
+/* The system registers a vCPU past the first takes from vCPU 0 (the host sets them on vCPU 0 by `sys`); TTBR0_EL1 is
+ * its own, naming its private translation chain (docs/design-several-vcpus.md, design B). */
+static const hv_sys_reg_t copied[] = {HV_SYS_REG_CPACR_EL1, HV_SYS_REG_MAIR_EL1, HV_SYS_REG_TCR_EL1,
+                                      HV_SYS_REG_VBAR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_ACTLR_EL1};
+#define COPIED (sizeof copied / sizeof copied[0])
+static uint64_t copied_values[COPIED];
+static unsigned char *memory;
+static uint64_t memory_size;
+static pthread_mutex_t ready_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t ready_cv = PTHREAD_COND_INITIALIZER;
+static int ready;
+
+static void *vcpu_thread(void *arg) {
+    struct vslot *s = arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    hv_return_t r = hv_vcpu_create(&s->vcpu, &s->ex, NULL);
+    if (!r) r = hv_vcpu_set_sys_reg(s->vcpu, HV_SYS_REG_MPIDR_EL1, (1ull << 31) | (uint64_t)s->index);
+    for (size_t i = 0; i < COPIED && !r; i++) r = hv_vcpu_set_sys_reg(s->vcpu, copied[i], copied_values[i]);
+    if (!r) r = hv_vcpu_set_sys_reg(s->vcpu, HV_SYS_REG_TTBR0_EL1, s->ttbr);
+    if (!r) r = hv_vcpu_get_sys_reg(s->vcpu, HV_SYS_REG_ACTLR_EL1, &s->actlr_read);
+    if (!r) r = hv_vcpu_get_sys_reg(s->vcpu, HV_SYS_REG_TTBR0_EL1, &s->ttbr_read);
+    pthread_t wd;
+    if (!r) pthread_create(&wd, NULL, watchdog, s);
+    pthread_mutex_lock(&ready_mu);
+    s->status = r;
+    ready++;
+    pthread_cond_broadcast(&ready_cv);
+    pthread_mutex_unlock(&ready_mu);
+    if (!r) channel(s, memory, memory_size, s->channel_off);
+    return NULL;
+}
 
 int main(int argc, char **argv) {
     if (argc != 4) {
@@ -277,6 +329,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "gic_create failed: hv_return 0x%x\n", r);
         return 1;
     }
+    for (int i = 0; i < MAX_VCPUS; i++) {
+        pthread_mutex_init(&slots[i].mu, NULL);
+        pthread_cond_init(&slots[i].cv, NULL);
+        slots[i].index = i;
+    }
+    memory = mem;
+    memory_size = size;
     hv_vcpu_exit_t *ex;
     if ((r = hv_vcpu_create(&vcpu, &ex, NULL))) {
         fprintf(stderr, "vcpu_create failed: hv_return 0x%x\n", r);
@@ -287,8 +346,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "mpidr failed: hv_return 0x%x\n", r);
         return 1;
     }
+    slots[0].vcpu = vcpu;
+    slots[0].ex = ex;
     pthread_t wd;
-    pthread_create(&wd, NULL, watchdog, NULL);
+    pthread_create(&wd, NULL, watchdog, &slots[0]);
+    int vcpus = 1;
     setvbuf(stdout, NULL, _IOLBF, 0);
     char line[4096];
     while (fgets(line, sizeof line, stdin)) {
@@ -386,9 +448,40 @@ int main(int argc, char **argv) {
         } else if (!strncmp(p, "channel ", 8)) {
             uint64_t off = strtoull(p + 8, NULL, 16);
             if (off + 0x1000 > size) printf("err channel range\n");
-            else channel((unsigned char *)mem, size, off, ex);
+            else channel(&slots[0], (unsigned char *)mem, size, off);
+        } else if (!strncmp(p, "vcpus ", 6)) {
+            long n = strtol(p + 6, &p, 10);
+            uint64_t base = strtoull(p, &p, 16);
+            hv_return_t bad = 0;
+            if (vcpus != 1 || n < 2 || n > MAX_VCPUS || base + (uint64_t)n * VCPU_STRIDE > size) bad = 1;
+            for (size_t i = 0; i < COPIED && !bad; i++) bad = hv_vcpu_get_sys_reg(vcpu, copied[i], &copied_values[i]);
+            if (!bad) bad = hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_ACTLR_EL1, &slots[0].actlr_read);
+            if (!bad) bad = hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_TTBR0_EL1, &slots[0].ttbr_read);
+            if (bad) {
+                printf("err vcpus %x\n", bad);
+                continue;
+            }
+            for (long i = 1; i < n; i++) {
+                slots[i].ttbr = strtoull(p, &p, 16);
+                slots[i].channel_off = base + (uint64_t)i * VCPU_STRIDE;
+                pthread_t t;
+                pthread_create(&t, NULL, vcpu_thread, &slots[i]);
+            }
+            pthread_mutex_lock(&ready_mu);
+            while (ready < n - 1) pthread_cond_wait(&ready_cv, &ready_mu);
+            pthread_mutex_unlock(&ready_mu);
+            for (long i = 1; i < n && !bad; i++) bad = slots[i].status;
+            if (bad) {
+                printf("err vcpus %x\n", bad);
+                continue;
+            }
+            vcpus = (int)n;
+            printf("ok");
+            for (long i = 0; i < n; i++)
+                printf(" %llx %llx", (unsigned long long)slots[i].actlr_read, (unsigned long long)slots[i].ttbr_read);
+            printf("\n");
         } else if (!strncmp(p, "run ", 4)) {
-            run(strtol(p + 4, NULL, 10), ex);
+            run(strtol(p + 4, NULL, 10));
         } else if (!strncmp(p, "spin ", 5)) {
             /* the raw cost of a VM exit (Sprint 048; review 2026-10-10 F1): run until n HVC exits, resuming each in
              * C with no reply on the pipe; prints the exits taken and the nanoseconds (CLOCK_MONOTONIC_RAW) */

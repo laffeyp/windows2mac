@@ -918,5 +918,7 @@ def msr(reg: tuple[int, int, int, int, int], rt: int) -> int:
 ERET = 0xD69F03E0
 IC_IALLU = 0xD508751F
 TLBI_VMALLE1 = 0xD508871F           # stage-1 EL1&0 entries of this VM, this core (Arm ARM C5.5)
+TLBI_VMALLE1IS = 0xD508831F         # the same on every PE of the Inner Shareable domain (clang assembles it so)
+IC_IALLUIS = 0xD508711F             # IC IALLU on every PE of the Inner Shareable domain (clang assembles it so)
 DSB_ISH = 0xD5033B9F
 ISB = 0xD5033FDF
