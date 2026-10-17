@@ -314,6 +314,7 @@
 - **2026-10-17** — Sprint 110 (the frontier's execution placed in time on its record) closed. The run in a worker thread; `--timeout-seconds` (10,800) and a 60 s grace on EXECUTION_STARTED, `timed_out` at the bound; `elapsed_seconds` on EXECUTION_COMPLETED, which now follows an unserved service; T3 checked on the batch run, 0 violations. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 111 (Signal Reports from the record) closed. `scripts/signal_report.py` writes a sprint's report from the records its commits made (substrate's narrate and narration_summary) and checks the card's Emits tag by tag; reports for 108 to 111; WORKING_AGREEMENT's rule that Emits name the tags code fires. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 112 (discrepancy reports that name their program and state) closed. Class runs: each class's first failing case hashed (bytes; the rest through `w2m.record.state_sha256`) and a REDUCTION_COMPLETED with steps 0 before each report; family and file runs: the probe binary and the run's start (`family_run.vm_inputs`). FCOS and FSIN pass S4, S5 and E1. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 113 (the host for several vCPUs designed twice) closed. Design A (the guest runtime lock held by whoever serves; a `Vcpu` passed to each handler; one exit handler; a kick through hv_vcpus_exit) over design B (a process server); six sprints chained. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -379,6 +380,13 @@
 ---
 
 ## Sprint tail
+
+### Sprint 113 (2026-10-17, closed)
+- **Scope:** step 1 resumes: the host for several vCPUs designed twice (docs/design-several-vcpus.md).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `signal-reports/sprint-113-report.md`: no record; a design sprint.
+  - *Observation 1 (polling that a documented call removes):* the parked attempt cut every run at 50 ms so a host thread could see a stop; hv_vcpu.h's hv_vcpus_exit, callable from any thread and sticky for a vCPU not running, stops one on demand. Disposition: resolved-here (the kick, chain step 4).
+- **Closed:** CI pending at this entry; Sprint 112's CI run 39071634064 (see the next entry).
 
 ### Sprint 112 (2026-10-17, closed)
 - **Scope:** in H4's place: discrepancy reports that name the program and state they failed from, and class runs' reports after a reduction.
@@ -456,11 +464,4 @@
   - *Observation 1 (none):* the inventory's counts are reproducible from the card.
 - **Closed:** CI pending at this entry; Sprints 098-102's CI run 39016421561 (success on ca5cb64b).
 
-### Sprint 102 (2026-10-17, closed)
-- **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine.md §5).
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no new tag; the proof is a file of the run's output beside exec.json; three laptop jobs: one stopped by the check, the judge, the plant.
-  - *Observation 1 (the check found a shared folder):* the first run stopped with 4 TEMP entries, one held open by another program in the session (Steam now runs on the laptop). Disposition: resolved-here (the game's TEMP is the job's own).
-- **Closed:** CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-101 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-102 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.

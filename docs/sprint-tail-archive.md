@@ -341,6 +341,13 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 102 (2026-10-17, closed)
+- **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine.md §5).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; the proof is a file of the run's output beside exec.json; three laptop jobs: one stopped by the check, the judge, the plant.
+  - *Observation 1 (the check found a shared folder):* the first run stopped with 4 TEMP entries, one held open by another program in the session (Steam now runs on the laptop). Disposition: resolved-here (the game's TEMP is the job's own).
+- **Closed:** CI pending at this entry.
+
 ### Sprint 101 (2026-10-17, closed)
 - **Scope:** vocabulary 0.8 (P19), the VM compiler's counts as MEASUREMENT_RECORDED.
 - **Rubber Duck Pass:**
