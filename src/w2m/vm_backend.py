@@ -1335,6 +1335,19 @@ def _x87_fast(a: Assembler, op: Op, reg_of: Callable[[int], int], symbols: dict[
     return True
 
 
+def lowering_symbols() -> frozenset[str]:
+    """The runtime symbols the compiler's lowerings can call: every w2m_ name a module-level function given the symbol
+    table names. The stencil table is derived against exactly these (scripts/stencil_table.py), with this tree's
+    runtime's addresses: a name it lacks derives as its lowering's fallback (Sprint 098's x87 calls did, as hvc #11),
+    and a name it adds can be mistaken for a constant equal to its address."""
+    import inspect
+    names: set[str] = set()
+    for fn in list(globals().values()):
+        if inspect.isfunction(fn) and fn.__module__ == __name__ and "symbols" in inspect.signature(fn).parameters:
+            names |= set(re.findall(r'"(w2m_[a-z0-9_]+)"', inspect.getsource(fn)))
+    return frozenset(names)
+
+
 def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None,
                  nzcv_from: str | None = None, live_after: int = ALL_FLAGS, nzcv_out: bool = False) -> bool:
     """Append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`. `symbols` are the

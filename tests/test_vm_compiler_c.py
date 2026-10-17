@@ -472,3 +472,13 @@ def test_every_setter_writes_the_flags_its_jcc_tests() -> None:
                 assert jcc[cc] & ~written == 0, (ins.iclass, kind, cond)
                 checked += 1
     assert checked > 1000, checked
+
+
+def test_every_symbol_a_lowering_calls_is_in_the_table(compiler: Compiler) -> None:
+    """A lowering that calls a runtime symbol the table does not name derives as its fallback: the stencils of FLD m64,
+    FSTP m64 and FSQRT were the model step (hvc #11) until they were derived against the runtime that defines
+    x87_fast.c's functions (Sprint 098: 9,850 model steps in a batch run). Every symbol a module-level function given
+    the symbol table names must be in vmc_symbol_name."""
+    named = vm_backend.lowering_symbols()
+    assert named >= {"w2m_x87_fld64", "w2m_cpuid"}, named
+    assert named <= set(compiler.symbol_names), sorted(named - set(compiler.symbol_names))

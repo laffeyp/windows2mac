@@ -500,6 +500,12 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--workers", type=int, default=max(1, (multiprocessing.cpu_count() or 2) - 1))
     a = ap.parse_args(argv)
     record = sc.read_record(a.record)
+    # the stencils call the runtime this tree builds, not the one of the record's day: a lowering that calls a symbol
+    # the record's runtime lacked (x87_fast.c's, Sprint 098) otherwise derives as the model step it falls back to;
+    # only the names a lowering calls, so no constant is taken for another symbol's address
+    from w2m import vm_backend
+    runtime = vm_backend.build_runtime().symbols
+    record["symbols"] = {name: runtime[name] for name in sorted(vm_backend.lowering_symbols())}
     by_key, implicit = keys_of(record)
     jobs = []
     for n, (key, calls) in enumerate(by_key.items()):
