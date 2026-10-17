@@ -72,11 +72,27 @@ static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
 static u64 host(u64 sub, u64 a, u64 b, u64 c) { return w2m_host(W2M_HOST_THREAD, sub, a, b, c, 0); }
 
+/* The wake census (Sprint 095): threads a signal made ready, waits that blocked again unsatisfied before their
+ * deadline (a retried wait or sleep: its deadline set by an earlier block), and up to 16 call sites of those re-blocks
+ * by return address (vm_backend.py VM.wake_census names them). */
+struct w2m_wake_census { u64 readied, rewaits, sites[16][2]; } w2m_wake_census;
+
 /* Recentering step 5: a blocked thread names what it waits on, and a signal names what it signals, so the host wakes
  * only the threads that wait on it (before, every blocked thread woke on any signal, ran to find its wait unmet and
  * blocked again). Key 0 on either side wakes every blocked thread: a wait on several objects, a pipe. */
 void w2m_block(u64 deadline, u64 key) {
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    if (sc->wait_deadline) {                       /* woken, and blocking again */
+        u64 site = (u64)__builtin_return_address(0);
+        w2m_wake_census.rewaits++;
+        for (int i = 0; i < 16; i++) {
+            if (w2m_wake_census.sites[i][0] == site || !w2m_wake_census.sites[i][0]) {
+                w2m_wake_census.sites[i][0] = site;
+                w2m_wake_census.sites[i][1]++;
+                break;
+            }
+        }
+    }
     if (!sc->wait_deadline) sc->wait_deadline = deadline;
     sc->wait_key = key;
     w2m_state()->schedule |= W2M_SCHEDULE_RETRY;
@@ -93,6 +109,7 @@ void w2m_signal(u64 key) {
         u64 waits_on = scratch_of(e)->wait_key;
         if (!key || !waits_on || waits_on == key) {
             set_status(e, READY);
+            w2m_wake_census.readied++;
             woke = 1;
         }
     }

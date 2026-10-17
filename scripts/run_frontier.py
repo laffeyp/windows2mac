@@ -263,6 +263,7 @@ def main(argv: list[str]) -> int:
             state["exit_classes"] = exit_classes(vm)
             # the whole run's switches and time by exit (the progress line's are as of its last 30-second tick)
             state["switching"] = (vm.switches_in_vm(), dict(vm.handovers))
+            state["wakes"] = vm.wake_census()
             state["time"] = (vm.run_ns, dict(vm.exit_ns))
             state["vm_compile"] = vm.vm_compile_counts()      # from the monitor's memory: before vm.close()
             state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid else where(vm, t.x[17]))
@@ -391,6 +392,9 @@ def main(argv: list[str]) -> int:
           f"{ {k: v for k, v in vmc.items() if v and k.startswith('cut')} }; judged {state.get('vm_judged')}")
     switches, handovers = state.get("switching", (0, {}))
     print(f"switches in the VM {switches}; hand-overs in the host {handovers}")
+    readied, rewaits, sites = state.get("wakes", (0, 0, {}))
+    print(f"wakes (Sprint 095): readied by a signal {readied}; blocked again unsatisfied {rewaits}; by site "
+          f"{dict(sorted(sites.items(), key=lambda kv: -kv[1]))}")
     if state.get("code"):
         x86, body, pro, by = state["code"]
         print(f"code census (recentering step 3): {x86} x86 instructions ran {body} arm64 words in bodies "

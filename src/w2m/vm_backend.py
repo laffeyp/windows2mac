@@ -35,6 +35,7 @@ import pickle
 import re
 import os
 import random
+import bisect
 import struct
 import subprocess
 import sys
@@ -94,6 +95,7 @@ STATE_GS_BASE = 0xb0               # the state block's gs_base (specs/guest_stat
 START_MODE = 0x68                   # MONITOR_DATA + this: 0 console start (redirected stdout), 1 GUI start (console.c)
 FOREGROUND_MODE = 0x80              # MONITOR_DATA + this: 0 the process takes the foreground, 1 another holds it (windows.c)
 PROGRESS_SECONDS = 30               # a run prints a progress line this often (wall clock) on stderr
+STOP_CHECK_SECONDS = 1              # a machine's stop_when is asked this often (wall clock; Sprint 095)
 CLOCK_MODE = 0x60                   # MONITOR_DATA + this: 0 the guest counter (CNTVCT_EL0), 1 the host's clock,
                                     # 2 the instructions run at CLOCK_RATE a second plus CLOCK_WARP (process.c)
 CLOCK_RATE, CLOCK_WARP, CLOCK_EPOCH = 0x90, 0x98, 0xA0   # MONITOR_DATA + these (runtime.h; Sprint 065 item 10)
@@ -2782,6 +2784,20 @@ class VM:
             return bytes(self.mm[self._process(off):self._process(off) + n])
         return bytes(self.mem.read(va, n))
 
+    def wake_census(self) -> tuple[int, int, dict[str, int]]:
+        """threads.c w2m_wake_census (Sprint 095): threads a signal made ready, waits blocked again unsatisfied, and
+        those re-blocks by the runtime function that blocked (its nearest symbol at or below the return address)."""
+        at = self.runtime.symbols["w2m_wake_census"] - MONITOR_VA
+        readied, rewaits = struct.unpack_from("<QQ", self.mm, at)
+        names = sorted((va, name) for name, va in self.runtime.symbols.items())
+        by: dict[str, int] = {}
+        for i in range(16):
+            site, n = struct.unpack_from("<QQ", self.mm, at + 16 + 16 * i)
+            if site:
+                k = bisect.bisect_right([va for va, _ in names], site) - 1
+                by[names[k][1] if k >= 0 else hex(site)] = by.get(names[k][1] if k >= 0 else hex(site), 0) + int(n)
+        return int(readied), int(rewaits), by
+
     def switches_in_vm(self) -> int:
         """Thread switches threads.c w2m_switch made inside the VM (the run table's header)."""
         return int(struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_SWITCHES)[0])
@@ -4197,6 +4213,7 @@ class VM:
         cpsr = CPSR_EL1H
         stop = "timeout"
         report_at = time.monotonic() + PROGRESS_SECONDS
+        check_at = time.monotonic() + STOP_CHECK_SECONDS
         reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()), time.monotonic())
         marked, last_kind = time.perf_counter_ns(), -1
         try:
@@ -4208,6 +4225,8 @@ class VM:
                 if time.monotonic() >= report_at:             # a run that goes quiet says where it is
                     reported = self._progress(reported, x)
                     report_at = time.monotonic() + PROGRESS_SECONDS
+                if time.monotonic() >= check_at:              # the stop each second, so a run's time is its own
+                    check_at = time.monotonic() + STOP_CHECK_SECONDS     # (Sprint 095; KIT_DIARY #57)
                     why = machine.stop_when() if machine is not None and machine.stop_when is not None else None
                     if why:
                         stop = why
