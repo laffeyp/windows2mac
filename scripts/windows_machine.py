@@ -230,7 +230,8 @@ def run_batch(items: list[dict[str, str]], repeat: int, pin: str | None = None, 
 
 def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audio: str = "on",
              inputs: str | None = None, record: bool = False, pmc: bool = False, capture: str = "on",
-             pmc_sample: bool = False, person: bool = False) -> int:
+             pmc_sample: bool = False, person: bool = False, initial_state: str = "empty",
+             plant_state: bool = False) -> int:
     (ROOT / "build").mkdir(exist_ok=True)
     with (ROOT / "build" / "windows_machine.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -244,6 +245,7 @@ def run_game(game: str, exe: str, executions: int, seconds: int, mode: str, audi
                                    "mode": mode, "audio": audio, "input_script": inputs, "record": record,
                                    "pmc": pmc, "pmc_sample": pmc_sample, "capture": capture,
                                    "person": person, "frame_seconds": 30 if person else 10,
+                                   "initial_state": initial_state, "plant_state": plant_state,
                                    "executions": executions, "repeat": 0, "commit": head,
                                    "session": "desktop", "limit_minutes": limit}
         with tempfile.TemporaryDirectory() as d:
@@ -308,6 +310,10 @@ def main(argv: list[str]) -> int:
                     help="off: the game's own exe without the capture's launcher and hooks")
     gm.add_argument("--audio", choices=("on", "off"), default="on",
                     help="off: the audio endpoints disabled for the job, as the runners have none")
+    gm.add_argument("--initial-state", default="empty",
+                    help="the declared state in games/<game>/state.json each execution starts from (Sprint 102)")
+    gm.add_argument("--plant-state", action="store_true",
+                    help="the plant: a PlayerPrefs value left after the reset; the job must stop before the game")
     bt = sub.add_parser("batch")
     bt.add_argument("families", nargs="*")
     bt.add_argument("--repeat", type=int, default=2)
@@ -325,7 +331,7 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     if a.kind == "game":
         return run_game(a.game, a.exe, a.executions, a.seconds, a.mode, a.audio, a.input, a.record, a.pmc, a.capture,
-                        a.pmc_sample, a.person)
+                        a.pmc_sample, a.person, a.initial_state, a.plant_state)
     if a.kind == "batch":
         sys.path.insert(0, str(ROOT / "scripts"))
         import family_run

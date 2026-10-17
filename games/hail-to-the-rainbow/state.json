@@ -1,0 +1,15 @@
+{
+ "about": "The game's declared initial states (docs/windows-reference-machine.md §5; Sprint 102). run-job.ps1 resets each item before an execution, reads it back, writes what it read to the run's state.json, and stops before the game starts when it differs from the state job.json names (default empty). company and product are the first two lines of Hail to the Rainbow_Data/app.info, the PlayerPrefs key HKCU\\Software\\<company>\\<product> and the folder %USERPROFILE%\\AppData\\LocalLow\\<company>\\<product>.",
+ "company": "NSS",
+ "product": "Hail to the Rainbow",
+ "states": {
+  "empty": {
+   "about": "a first launch: no saved settings or saves, an empty TEMP, no log, no process from the game's folder",
+   "registry_key": "absent",
+   "locallow": "absent",
+   "temp_entries": 0,
+   "unity_log": "absent",
+   "game_processes": 0
+  }
+ }
+}

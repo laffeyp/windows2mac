@@ -204,14 +204,44 @@ try {
         if (Test-Path $app) { cmd /c rmdir $app }
         New-Item -ItemType Junction -Path $app -Target $gameDir | Out-Null
         New-Item -ItemType Directory -Force C:\Users\w2m\AppData\Local\Temp | Out-Null
-        # the initial state (§5): no saved settings, no log, no game process
-        Remove-Item "HKCU:\Software\$company\$product" -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item "$env:USERPROFILE\AppData\LocalLow\$company\$product" -Recurse -Force -ErrorAction SilentlyContinue
+        # the initial state (§5): no saved settings, an empty TEMP, no log, no game process; each item read back and
+        # compared with the state games/<game>/state.json declares, the run stopped before the game on a difference
+        # (Sprint 102)
+        $key = "HKCU:\Software\$company\$product"; $low = "$env:USERPROFILE\AppData\LocalLow\$company\$product"
+        $tempDir = 'C:\Users\w2m\AppData\Local\Temp'
+        Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $low -Recurse -Force -ErrorAction SilentlyContinue
+        Get-ChildItem $tempDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item C:\w2m\unity.log -Force -ErrorAction SilentlyContinue
+        $fromGame = { Get-Process | Where-Object { $_.Path -and ($_.Path.StartsWith($gameDir) -or $_.Path.StartsWith($app)) } }
+        & $fromGame | ForEach-Object { Stop-Process -Id $_.Id -Force; [void]$_.WaitForExit(30000) }
+        if ($spec.plant_state) {   # the plant: a saved setting left after the reset
+          New-Item $key -Force | Out-Null
+          Set-ItemProperty $key 'w2m_plant' 1
+        }
+        $stateName = if ($spec.initial_state) { $spec.initial_state } else { 'empty' }
+        $declared = (Get-Content "games/$($spec.game)/state.json" -Raw | ConvertFrom-Json).states.$stateName
+        if ($null -eq $declared) { throw "initial state: games/$($spec.game)/state.json declares no state $stateName" }
+        $seen = [ordered]@{
+          registry_key = if (Test-Path $key) { 'present' } else { 'absent' }
+          locallow = if (Test-Path $low) { 'present' } else { 'absent' }
+          temp_entries = @(Get-ChildItem $tempDir -Force -ErrorAction SilentlyContinue).Count
+          unity_log = if (Test-Path C:\w2m\unity.log) { 'present' } else { 'absent' }
+          game_processes = @(& $fromGame).Count
+        }
+        $differ = @(foreach ($k in $seen.Keys) { if ("$($seen[$k])" -ne "$($declared.$k)") { "$k $($seen[$k]), declared $($declared.$k)" } })
+        $proof = [ordered]@{ state = $stateName; files_json_sha256 = (Get-FileHash "games/$($spec.game)/files.json" -Algorithm SHA256).Hash.ToLower()
+                             game_tree_files = $present; seen = $seen; differs = $differ }
+        if ($differ.Count) {
+          Note "execution $i`: initial state differs: $($differ -join '; ')"
+          throw "initial state $stateName`: $($differ -join '; ')"
+        }
+        Note "execution $i`: initial state $stateName proved"
         # run (windows-game.yml)
         if (Test-Path out) { Remove-Item out -Recurse -Force }
         New-Item -ItemType Directory -Force out | Out-Null
         $machine | Out-File -Encoding ascii -NoNewline out/profile.txt
+        ConvertTo-Json -Depth 4 $proof | Out-File -Encoding ascii out/state.json
         $cpuName | Out-File -Encoding ascii -NoNewline out/cpu.txt
         $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
         $env:TMP = 'C:\Users\w2m\AppData\Local\Temp'; $env:TEMP = 'C:\Users\w2m\AppData\Local\Temp'
