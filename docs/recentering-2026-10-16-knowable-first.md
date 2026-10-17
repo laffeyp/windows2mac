@@ -1,5 +1,7 @@
 # Recentering, 2026-10-16: knowable first
 
+**History from 2026-10-16:** superseded by `docs/plan.md`, the one live direction document (full review `docs/review-2026-10-16-full.md`, item 6; BLACKBOARD Decisions, 2026-10-16 user).
+
 Amends `docs/recentering-2026-10-14.md` (not edited) on the user's direction of 2026-10-16 (BLACKBOARD Decisions):
 w2m runs any game, at speed, and everything a file, header or specification states is entered before a run looks
 for it. The frontier finds only the residue.

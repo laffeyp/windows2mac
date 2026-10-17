@@ -5,13 +5,13 @@
   "Build/Final/Bioshock2HD.exe": {
    "by_mnemonic": {
     "adc": 4,
-    "add": 7849,
+    "add": 7846,
     "and": 298,
     "bnd jb": 1,
     "bnd jmp": 1,
     "bnd jne": 1,
     "bnd ret": 4,
-    "call": 24607,
+    "call": 24603,
     "cbw": 6,
     "cdq": 16,
     "cmova": 9,
@@ -24,7 +24,7 @@
     "cmovle": 2,
     "cmovne": 95,
     "cmovs": 1,
-    "cmp": 4062,
+    "cmp": 4060,
     "comiss": 4,
     "cpuid": 10,
     "cvtsi2ss": 5,
@@ -58,27 +58,27 @@
     "in": 1,
     "inc": 277,
     "int": 3,
-    "int3": 16,
-    "ja": 77,
+    "int3": 14,
+    "ja": 76,
     "jae": 64,
-    "jb": 74,
+    "jb": 73,
     "jbe": 61,
     "je": 5086,
     "jg": 59,
     "jge": 69,
     "jl": 132,
     "jle": 166,
-    "jmp": 7017,
+    "jmp": 7016,
     "jne": 9617,
     "jns": 45,
     "js": 36,
-    "lea": 3439,
+    "lea": 3438,
     "leave": 11,
     "lock cmpxchg": 1,
     "lock dec": 2,
     "lock inc": 2,
     "maxss": 1,
-    "mov": 73752,
+    "mov": 73746,
     "movaps": 2,
     "movq": 1,
     "movss": 16,
@@ -92,14 +92,14 @@
     "not": 12,
     "or": 159,
     "out": 1,
-    "pop": 5272,
-    "push": 40950,
+    "pop": 5271,
+    "push": 40943,
     "pushfd": 3,
     "rcl": 3,
     "rep movsb": 17,
     "rep movsd": 20,
     "rep stosd": 5,
-    "ret": 5238,
+    "ret": 5237,
     "ror": 3,
     "sar": 70,
     "sbb": 36,
@@ -111,7 +111,7 @@
     "seto": 1,
     "shl": 178,
     "shr": 180,
-    "sub": 1711,
+    "sub": 1710,
     "test": 11456,
     "wait": 9,
     "xchg": 2,
@@ -121,16 +121,16 @@
    },
    "file": "Bioshock2HD.exe",
    "machine": "x86",
-   "reachable_instructions": 205219,
+   "reachable_instructions": 205188,
    "sha256": "c2a31fb67b285c136203a4a6e739545177be5753d972e6aea0f44c65ddf22f8c",
-   "unresolved_indirect": 3356
+   "unresolved_indirect": 3110
   },
   "Build/Final/ShaderPackager.exe": {
    "by_mnemonic": {
     "adc": 2,
     "add": 111,
     "and": 9,
-    "call": 365,
+    "call": 364,
     "cmovae": 1,
     "cmovb": 5,
     "cmovne": 15,
@@ -147,14 +147,14 @@
     "je": 133,
     "jl": 3,
     "jle": 3,
-    "jmp": 113,
+    "jmp": 112,
     "jne": 153,
     "jns": 6,
     "js": 1,
     "lea": 163,
     "leave": 2,
     "lock cmpxchg": 1,
-    "mov": 1892,
+    "mov": 1888,
     "movsd": 2,
     "movsx": 1,
     "movzx": 19,
@@ -163,13 +163,13 @@
     "nop": 3,
     "not": 3,
     "or": 18,
-    "pop": 399,
-    "push": 878,
+    "pop": 397,
+    "push": 876,
     "pushfd": 1,
     "rep stosd": 1,
     "rep stosw": 1,
     "repz ret": 1,
-    "ret": 155,
+    "ret": 154,
     "sar": 9,
     "sbb": 5,
     "sete": 1,
@@ -185,9 +185,9 @@
    },
    "file": "ShaderPackager.exe",
    "machine": "x86",
-   "reachable_instructions": 5330,
+   "reachable_instructions": 5319,
    "sha256": "fbdf0fce4d40992fc82a85293d0b1137c18b448fde480d5bd3f116e1857c5ce1",
-   "unresolved_indirect": 123
+   "unresolved_indirect": 44
   },
   "Build/Final/bink2w32.dll": {
    "by_mnemonic": {
@@ -342,7 +342,7 @@
    "machine": "x86",
    "reachable_instructions": 45708,
    "sha256": "c8b70c0aac84b3b6c393f490e5b83cd3352650f36bc705205d5de7d80678ddf8",
-   "unresolved_indirect": 500
+   "unresolved_indirect": 321
   },
   "Build/Final/fmod_event.dll": {
    "by_mnemonic": {
@@ -412,7 +412,7 @@
     "idiv": 6,
     "imul": 10,
     "inc": 427,
-    "int3": 4,
+    "int3": 3,
     "ja": 64,
     "jae": 68,
     "jb": 163,
@@ -490,9 +490,9 @@
    },
    "file": "fmod_event.dll",
    "machine": "x86",
-   "reachable_instructions": 45035,
+   "reachable_instructions": 45034,
    "sha256": "eb2ecc42f8e6a9b9e6d94b2193b311a01beceb36f62aa5f7e2fef56944c21660",
-   "unresolved_indirect": 750
+   "unresolved_indirect": 583
   },
   "Build/Final/fmod_event_net.dll": {
    "by_mnemonic": {
@@ -562,7 +562,7 @@
     "idiv": 6,
     "imul": 11,
     "inc": 438,
-    "int3": 5,
+    "int3": 4,
     "ja": 74,
     "jae": 71,
     "jb": 165,
@@ -642,9 +642,9 @@
    },
    "file": "fmod_event_net.dll",
    "machine": "x86",
-   "reachable_instructions": 53525,
+   "reachable_instructions": 53524,
    "sha256": "6716a4f3a24b07f23203d143b7432692bb43dd2e3c6c843dac8f05409d8d32d0",
-   "unresolved_indirect": 816
+   "unresolved_indirect": 640
   },
   "Build/Final/fmodex.dll": {
    "by_mnemonic": {
@@ -715,7 +715,7 @@
     "idiv": 5,
     "imul": 147,
     "inc": 510,
-    "int3": 5,
+    "int3": 4,
     "ja": 134,
     "jae": 88,
     "jb": 190,
@@ -798,9 +798,9 @@
    },
    "file": "fmodex.dll",
    "machine": "x86",
-   "reachable_instructions": 86254,
+   "reachable_instructions": 86253,
    "sha256": "43e4ca76aed0aef796a9707c6e9348b053c93e5a28cb812aaba317584fc52160",
-   "unresolved_indirect": 902
+   "unresolved_indirect": 675
   },
   "Build/Final/steam_api.dll": {
    "by_mnemonic": {
@@ -866,7 +866,7 @@
     "imul": 66,
     "inc": 477,
     "int": 4,
-    "int3": 23,
+    "int3": 22,
     "ja": 135,
     "jae": 124,
     "jb": 123,
@@ -972,9 +972,9 @@
    },
    "file": "steam_api.dll",
    "machine": "x86",
-   "reachable_instructions": 40258,
+   "reachable_instructions": 40257,
    "sha256": "e5a6c93e20de33a2bb75c3c84aae4319159a000086aa2ccb2e857cf247cb9016",
-   "unresolved_indirect": 875
+   "unresolved_indirect": 672
   },
   "_CommonRedist/DirectX/Jun2010/DSETUP.dll": {
    "by_mnemonic": {
@@ -990,7 +990,6 @@
     "idiv": 8,
     "imul": 52,
     "inc": 291,
-    "int3": 1,
     "ja": 42,
     "jae": 29,
     "jb": 76,
@@ -1041,9 +1040,9 @@
    },
    "file": "DSETUP.dll",
    "machine": "x86",
-   "reachable_instructions": 18146,
+   "reachable_instructions": 18145,
    "sha256": "2a61679eeedabf7d0d0ac14e5447486575622d6b7cfa56f136c1576ff96da21f",
-   "unresolved_indirect": 443
+   "unresolved_indirect": 155
   },
   "_CommonRedist/DirectX/Jun2010/DXSETUP.exe": {
    "by_mnemonic": {
@@ -1061,7 +1060,6 @@
     "idiv": 9,
     "imul": 51,
     "inc": 277,
-    "int3": 1,
     "ja": 48,
     "jae": 29,
     "jb": 77,
@@ -1114,9 +1112,9 @@
    },
    "file": "DXSETUP.exe",
    "machine": "x86",
-   "reachable_instructions": 17381,
+   "reachable_instructions": 17380,
    "sha256": "8f47d7121ef6532ad9ad9901e44e237f5c30448b752028c58a9d19521414e40d",
-   "unresolved_indirect": 398
+   "unresolved_indirect": 138
   },
   "_CommonRedist/DirectX/Jun2010/dsetup32.dll": {
    "by_mnemonic": {
@@ -1132,7 +1130,6 @@
     "idiv": 8,
     "imul": 56,
     "inc": 333,
-    "int3": 1,
     "ja": 62,
     "jae": 44,
     "jb": 125,
@@ -1183,9 +1180,9 @@
    },
    "file": "dsetup32.dll",
    "machine": "x86",
-   "reachable_instructions": 22330,
+   "reachable_instructions": 22329,
    "sha256": "fb0e534f9b0926e518f1c2980640dfd29f14217cdfa37cf3a0c13349127ed9a8",
-   "unresolved_indirect": 534
+   "unresolved_indirect": 161
   },
   "_CommonRedist/vcredist/2010/vcredist_x64.exe": {
    "by_mnemonic": {
@@ -1200,7 +1197,7 @@
     "idiv": 2,
     "imul": 3,
     "inc": 247,
-    "int3": 3,
+    "int3": 1,
     "ja": 26,
     "jae": 65,
     "jb": 30,
@@ -1250,9 +1247,9 @@
    },
    "file": "vcredist_x64.exe",
    "machine": "x86",
-   "reachable_instructions": 8818,
+   "reachable_instructions": 8816,
    "sha256": "cc7ec044218c72a9a15fca2363baed8fc51095ee3b2a7593476771f9eba3d223",
-   "unresolved_indirect": 307
+   "unresolved_indirect": 117
   },
   "_CommonRedist/vcredist/2010/vcredist_x86.exe": {
    "by_mnemonic": {
@@ -1267,7 +1264,7 @@
     "idiv": 2,
     "imul": 3,
     "inc": 247,
-    "int3": 3,
+    "int3": 1,
     "ja": 26,
     "jae": 65,
     "jb": 30,
@@ -1317,9 +1314,9 @@
    },
    "file": "vcredist_x86.exe",
    "machine": "x86",
-   "reachable_instructions": 8818,
+   "reachable_instructions": 8816,
    "sha256": "67313b3d1bc86e83091e8de22981f14968f1a7fb12eb7ad467754c40cd94cc3d",
-   "unresolved_indirect": 307
+   "unresolved_indirect": 117
   },
   "_CommonRedist/vcredist/2012/vcredist_x64.exe": {
    "by_mnemonic": {
@@ -1335,7 +1332,7 @@
     "idiv": 1,
     "imul": 80,
     "inc": 530,
-    "int3": 3,
+    "int3": 1,
     "ja": 93,
     "jae": 76,
     "jb": 290,
@@ -1392,9 +1389,9 @@
    },
    "file": "vcredist_x64.exe",
    "machine": "x86",
-   "reachable_instructions": 60701,
+   "reachable_instructions": 60699,
    "sha256": "681be3e5ba9fd3da02c09d7e565adfa078640ed66a0d58583efad2c1e3cc4064",
-   "unresolved_indirect": 1180
+   "unresolved_indirect": 493
   },
   "_CommonRedist/vcredist/2012/vcredist_x86.exe": {
    "by_mnemonic": {
@@ -1410,7 +1407,7 @@
     "idiv": 1,
     "imul": 80,
     "inc": 530,
-    "int3": 3,
+    "int3": 1,
     "ja": 93,
     "jae": 76,
     "jb": 290,
@@ -1467,9 +1464,9 @@
    },
    "file": "vcredist_x86.exe",
    "machine": "x86",
-   "reachable_instructions": 60701,
+   "reachable_instructions": 60699,
    "sha256": "b924ad8062eaf4e70437c8be50fa612162795ff0839479546ce907ffa8d6e386",
-   "unresolved_indirect": 1180
+   "unresolved_indirect": 493
   },
   "_CommonRedist/vcredist/2019/VC_redist.x64.exe": {
    "by_mnemonic": {
@@ -1540,7 +1537,7 @@
     "imul": 88,
     "inc": 651,
     "int": 4,
-    "int3": 17,
+    "int3": 16,
     "ja": 137,
     "jae": 181,
     "jb": 352,
@@ -1647,9 +1644,9 @@
    },
    "file": "VC_redist.x64.exe",
    "machine": "x86",
-   "reachable_instructions": 85373,
+   "reachable_instructions": 85372,
    "sha256": "c2d74d9b85d0030eaa134679a2392268baa773185c5a21657390e43f8b518f69",
-   "unresolved_indirect": 1500
+   "unresolved_indirect": 639
   },
   "_CommonRedist/vcredist/2019/VC_redist.x86.exe": {
    "by_mnemonic": {
@@ -1720,7 +1717,7 @@
     "imul": 88,
     "inc": 651,
     "int": 4,
-    "int3": 17,
+    "int3": 16,
     "ja": 137,
     "jae": 181,
     "jb": 352,
@@ -1827,9 +1824,9 @@
    },
    "file": "VC_redist.x86.exe",
    "machine": "x86",
-   "reachable_instructions": 85373,
+   "reachable_instructions": 85372,
    "sha256": "5c7dfa4fd52809813cf9350c4e5807434d78a0bb1fd0d61c85e02b41646a5780",
-   "unresolved_indirect": 1500
+   "unresolved_indirect": 639
   }
  },
  "same_as": {}

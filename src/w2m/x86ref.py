@@ -87,6 +87,17 @@ def walk(img: PeImage, data: bytes, extra_roots: tuple[int, ...] = (), x86: bool
         i = bisect.bisect_right(inside, (rva, 1 << 32)) - 1
         return i >= 0 and inside[i][0] < rva < inside[i][1]
 
+    def slot_of(op: cx86.X86Op, nxt: int) -> int | None:
+        """The RVA a memory operand names outright: [rip + disp] in 64-bit code; [disp], an absolute VA, in 32-bit
+        code (Sprint 093: read as RIP-only, the 32-bit walk resolved none of SysWOW64 kernelbase's 6,508 IAT calls)."""
+        if op.mem.index != 0:
+            return None
+        if op.mem.base == cx86.X86_REG_RIP:
+            return nxt + int(op.mem.disp)
+        if x86 and op.mem.base == 0 and op.mem.segment == 0:
+            return int(op.mem.disp & 0xFFFFFFFF) - img.image_base
+        return None
+
     out = Reachable()
     work: list[int] = []
     for kind, rva in [*img.code_targets(), *(("extra", r) for r in extra_roots)]:
@@ -105,9 +116,9 @@ def walk(img: PeImage, data: bytes, extra_roots: tuple[int, ...] = (), x86: bool
             out.insns[rva] = ins
             nxt = rva + got.size
             for op in got.operands:
-                if (op.type == cx86.X86_OP_MEM and op.mem.base == cx86.X86_REG_RIP
-                        and nxt + op.mem.disp in img.iat):
-                    out.imports_referenced[img.iat[nxt + op.mem.disp]] += 1
+                named = slot_of(op, nxt) if op.type == cx86.X86_OP_MEM else None
+                if named is not None and named in img.iat:
+                    out.imports_referenced[img.iat[named]] += 1
                 if (got.mnemonic == "lea" and op.type == cx86.X86_OP_MEM and op.mem.base == cx86.X86_REG_RIP
                         and op.mem.index == 0 and executable(nxt + op.mem.disp)
                         and nxt + op.mem.disp not in out.insns and not interior(nxt + op.mem.disp)):
@@ -119,9 +130,8 @@ def walk(img: PeImage, data: bytes, extra_roots: tuple[int, ...] = (), x86: bool
                 op = got.operands[0] if got.operands else None
                 if op is not None and op.type == cx86.X86_OP_IMM:
                     work.append(op.imm - img.image_base)
-                elif (op is not None and op.type == cx86.X86_OP_MEM
-                      and op.mem.base == cx86.X86_REG_RIP and op.mem.index == 0):
-                    slot = nxt + op.mem.disp
+                elif op is not None and op.type == cx86.X86_OP_MEM and slot_of(op, nxt) is not None:
+                    slot = slot_of(op, nxt)
                     if slot in img.iat:
                         out.imports_called[img.iat[slot]] += 1
                         if (cx86.X86_GRP_CALL in groups

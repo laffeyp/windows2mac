@@ -63,6 +63,10 @@ class PeImage:
     relocation_sites: tuple[tuple[int, int], ...] = ()          # (RVA, type), type != ABSOLUTE
     delay_imports: dict[str, tuple[str, ...]] = field(default_factory=dict)  # bound on first call
     exports: tuple[tuple[str, int], ...] = ()                  # (name, rva)
+    # an export whose RVA lies inside the export directory is a forwarder: a string naming another DLL's function
+    # (kernel32 forwards 211 of its named exports, gdi32 294; Sprint 093); keyed by "#ordinal", and by name if named
+    forwarders: dict[str, str] = field(default_factory=dict)
+    export_ordinals: dict[int, int] = field(default_factory=dict)  # ordinal -> RVA, every export not forwarded
     tls_callbacks: tuple[int, ...] = ()                         # RVAs
     tls: tuple[int, int, int, int] | None = None                 # TLS directory: template start, end, index (VAs), zero fill
     iat: dict[int, str] = field(default_factory=dict)           # IAT slot RVA -> "dll!name" (incl. delay)
@@ -252,15 +256,30 @@ def parse(data: bytes, x86: bool = False) -> PeImage:
             off += block
 
     exports: list[tuple[str, int]] = []
+    forwarders: dict[str, str] = {}
+    export_ordinals: dict[int, int] = {}
     rva, size = d(DIR_EXPORT)
     if rva:
         e = _rva_to_offset(sections, rva)
-        _, _, _, _, _, _, nfuncs, nnames, funcs, names_rva, ords = r.u("<IIHHIIIIIII", e)
+        _, _, _, _, _, ordinal_base, nfuncs, nnames, funcs, names_rva, ords = r.u("<IIHHIIIIIII", e)
+        named: dict[int, str] = {}
         for i in range(nnames):
             (nrva,) = r.u("<I", _rva_to_offset(sections, names_rva) + 4 * i)
             (ordinal,) = r.u("<H", _rva_to_offset(sections, ords) + 2 * i)
             (frva,) = r.u("<I", _rva_to_offset(sections, funcs) + 4 * ordinal)
-            exports.append((r.cstr(_rva_to_offset(sections, nrva)), frva))
+            named[ordinal] = r.cstr(_rva_to_offset(sections, nrva))
+            exports.append((named[ordinal], frva))
+        for index in range(nfuncs):
+            (frva,) = r.u("<I", _rva_to_offset(sections, funcs) + 4 * index)
+            if frva == 0:
+                continue                                  # an unused slot
+            if rva <= frva < rva + size:             # under its ordinal always, and its name if it has one (d3d11
+                target = r.cstr(_rva_to_offset(sections, frva))   # imports dxcore's named forwarders by ordinal)
+                forwarders[f"#{ordinal_base + index}"] = target
+                if index in named:
+                    forwarders[named[index]] = target
+            else:
+                export_ordinals[ordinal_base + index] = frva
 
     callbacks: list[int] = []
     tls = None
@@ -327,6 +346,7 @@ def parse(data: bytes, x86: bool = False) -> PeImage:
                    size_of_image=size_of_image, subsystem=subsystem, dll_characteristics=dllchars,
                    sections=sections, imports=imports, relocations=relocs,
                    relocation_sites=tuple(sites), delay_imports=delay,
-                   exports=tuple(exports), tls_callbacks=tuple(callbacks), tls=tls, iat=iat,
+                   exports=tuple(exports), forwarders=forwarders, export_ordinals=export_ordinals,
+                   tls_callbacks=tuple(callbacks), tls=tls, iat=iat,
                    function_starts=tuple(starts), function_ends=tuple(ends), stack_reserve=stack_reserve, stack_commit=stack_commit,
                    resources=tuple(resources))

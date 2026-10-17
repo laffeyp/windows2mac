@@ -111,6 +111,8 @@ class Image:
         return self.base + self.pe.entry_rva if self.pe.entry_rva else None
 
     def export(self, name: str) -> int | None:
+        if name in self.pe.forwarders:   # its RVA is a string, not code (none of the games' 145 images forward)
+            raise ValueError(f"{self.name}!{name} is forwarded to {self.pe.forwarders[name]}")
         rva = next((r for n, r in self.pe.exports if n == name), None)
         return None if rva is None else self.base + rva
 

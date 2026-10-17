@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 093
-status: active
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -109,3 +109,45 @@ system calls it can reach, with the information class at each call site where it
 E2's sets are committed for both games with their builds; the two judges hold, or each miss is named with its cause.
 
 ## observed
+
+- **Closed once, as the full review of 2026-10-16 directs** (item 3: static reach sizes the work against the traces;
+  it does not order it). The walk, `src/w2m/reach.py` (sha256 f8f8cbb1…) and `scripts/reach_census.py`, wrote
+  `store/census/reach/{hail-to-the-rainbow,bioshock2-remastered}.json` in 60 min 31 s on this Mac.
+- **The counts** (direct tier; pointer tier in brackets, which adds code addresses taken, imports read as values,
+  data code pointers and run-time lookups):
+
+  | game, roots | roots | NT calls of 488 | win32k calls of 1,486 | (call, class) rows | unresolved indirect sites |
+  |---|---|---|---|---|---|
+  | Hail to the Rainbow, imports | 1,446 | 244 (373) | 342 (1,336) | 400 | 31,099 |
+  | Hail to the Rainbow, P/Invokes | 101 | 200 (354) | 207 (1,336) | 272 | 1,082 |
+  | Hail to the Rainbow, lookups | 852 | 206 (354) | 246 (1,336) | 316 | 1,492 |
+  | Hail to the Rainbow, loader | 8 | 124 (137) | 0 | 100 | 269 |
+  | BioShock 2 Remastered, imports | 3,081 | 228 (341) | 331 (1,332) | 295 | 41,932 |
+  | BioShock 2 Remastered, lookups | 361 | 217 (340) | 254 (1,332) | 282 | 38,390 |
+  | BioShock 2 Remastered, loader | 4 | 98 (98) | 0 | 73 | 189 |
+
+  The pointer tier reaches 1,336 of 1,486 win32k calls: an upper bound that covers nearly the table, as the review
+  says. Roots left unbound: Hail to the Rainbow 1,001 (910 steam_api64 P/Invokes, E10's; macOS P/Invokes; six
+  extension API sets with no host; psmserviceexthost.dll, absent from the copy; shell32 #102), BioShock 2 10.
+- **E3 as judge: 0 misses.** The misses went 11, 8, 4, 0; each named a class, and each class was searched whole
+  before the next run: run-time loading (UnityPlayer loads d3d11 and dxgi), named forwarders imported by ordinal
+  (d3d11's 100 D3DKMT imports), function pointers passed as arguments (CFG's `jmp rax` dispatch), imports stored into
+  tables (d3d11 fills the driver's callback table: `mov [rdi+0x250], rax`), and lookups by name inside Windows's own
+  DLLs (D3DKMTGetDeviceState in d3d11, dxgi and nvwgf2umx).
+- **A person's session as judge: 303 of 305.** A person played 884 s (lap-20261017T022622359Z-ced97d27;
+  `store/laptop-traces/session-lap-20261017T022622359Z-ced97d27/`): 155 NT and 150 win32k call kinds, 263 of them outside E3's window. One miss was
+  the check's own (a Zw name not mapped to Nt). The other, NtPlugPlayControl (1,230 calls, all in the start's 15 s;
+  classes 14 DeviceStatus and 23 GetDeviceInterfaceEnabled), has a user stack whose top is ntdll+0x161b34, the
+  return of **NtDeviceIoControlFile**'s stub, called from KernelBase+0x4348c (the laptop's DLLs equal the copy by
+  sha256). So the user-mode call was NtDeviceIoControlFile, which the walk reaches; the stack fits a Zw call the kernel
+  made on its own, which the syscall provider counts as the process's. Not tested further: the roadmap's order moves
+  on (a test would compare each probe's name with the stub atop its user stack).
+- **Defect classes fixed, kept for the loader:** pe.py reads forwarders (keyed by ordinal, and by name where named)
+  and ordinal-only exports; `Image.export` refuses a forwarded name; x86ref resolves 32-bit absolute IAT slots
+  (SysWOW64 kernelbase: 0 to 6,371 calls resolved), so `store/census/static/instructions-bioshock2-remastered.json`
+  was regenerated (its 32-bit unresolved indirect counts fell, e.g. 1,500 to 493); `src/w2m/apiset.py` reads the
+  version-6 schema with per-importer values.
+- **E1 as judge: not run.** hello.exe was fetched from the laptop and matches E1's sha256 (5b520ef1…); its walk was stopped unfinished when the user moved the project to the new roadmap (2026-10-16).
+- **Stutter, not settled.** The person reported stutter. The session's 15 s present counts show the menu at the display's 144 Hz and the first level at 47 to 92 frames a second; frame times were not recorded. Two replays of the session (without and with DTrace, with per-present times from `pmc_summary.py`'s new present_times.tsv) were stopped unfinished by the same move.
+- **Limits:** pointers passed on the stack (argument 5 on) are not followed; 32-bit code has no parameter tracking;
+  calls made only by the vendor's driver (nvwgf2umx) are listed apart.

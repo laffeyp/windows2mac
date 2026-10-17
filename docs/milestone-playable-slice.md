@@ -1,5 +1,7 @@
 # Milestone P: a person plays the first seconds on the Mac
 
+**History from 2026-10-16:** superseded by `docs/plan.md`, the one live direction document (full review `docs/review-2026-10-16-full.md`, item 6; BLACKBOARD Decisions, 2026-10-16 user).
+
 Status: proposal, 2026-10-13, for the user's decision. It changes the method, not only the next sprint.
 
 ## Why the method changes

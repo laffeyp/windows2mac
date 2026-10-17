@@ -1,5 +1,7 @@
 # Recentering, 2026-10-14
 
+**History from 2026-10-16:** superseded by `docs/plan.md`, the one live direction document (full review `docs/review-2026-10-16-full.md`, item 6; BLACKBOARD Decisions, 2026-10-16 user).
+
 ## What w2m is
 
 w2m runs a Windows x86-64 game on an Apple Silicon Mac with no part of Windows. It builds its own x86 compiler, its own
