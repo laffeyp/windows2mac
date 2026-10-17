@@ -121,7 +121,7 @@ A run's state is everything the game or probe can read that a previous run could
 | The game tree | verified against `files.json` before each run; any difference reinstalls | the listing's digest |
 | PlayerPrefs, `HKCU\Software\NSS\Hail to the Rainbow` | key deleted, then restored from the declared state's export (empty for a first-launch run) | the key's export digest before the run |
 | `%USERPROFILE%\AppData\LocalLow\NSS\Hail to the Rainbow` | folder deleted, then restored from the declared state | the folder's listing digest |
-| `C:\Users\w2m\AppData\Local\Temp` (TMP, TEMP) | emptied | its listing digest |
+| `C:\w2m\temp`, the game's TMP and TEMP (not the user's TEMP, which Steam and Defender's session helper write and hold open; Sprint 102) | emptied | its entry count, 0 |
 | `C:\w2m\unity.log`, crash handler output | deleted | absence |
 | Leftover processes from the game folder | stopped, as `windows-game.yml` does, and waited for | process list from the game folder, empty |
 | Windows itself | updates paused for a measurement series; the build recorded | build and UBR in `profile.json` |

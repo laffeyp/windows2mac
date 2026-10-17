@@ -203,12 +203,15 @@ try {
         }
         if (Test-Path $app) { cmd /c rmdir $app }
         New-Item -ItemType Junction -Path $app -Target $gameDir | Out-Null
-        New-Item -ItemType Directory -Force C:\Users\w2m\AppData\Local\Temp | Out-Null
+        # the game's TEMP is the job's own folder: Steam and Defender's session helper write the user's TEMP and hold
+        # files open in it (2026-10-17: 5 entries, one in use), so it cannot be proved empty (Sprint 102). GetTempPath
+        # reads TMP first, then TEMP
+        New-Item -ItemType Directory -Force C:\w2m\temp | Out-Null
         # the initial state (§5): no saved settings, an empty TEMP, no log, no game process; each item read back and
         # compared with the state games/<game>/state.json declares, the run stopped before the game on a difference
         # (Sprint 102)
         $key = "HKCU:\Software\$company\$product"; $low = "$env:USERPROFILE\AppData\LocalLow\$company\$product"
-        $tempDir = 'C:\Users\w2m\AppData\Local\Temp'
+        $tempDir = 'C:\w2m\temp'
         Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item $low -Recurse -Force -ErrorAction SilentlyContinue
         Get-ChildItem $tempDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -244,7 +247,7 @@ try {
         ConvertTo-Json -Depth 4 $proof | Out-File -Encoding ascii out/state.json
         $cpuName | Out-File -Encoding ascii -NoNewline out/cpu.txt
         $env:W2M_JIT_CAPTURE = "$PWD\out\jit_capture.bin"
-        $env:TMP = 'C:\Users\w2m\AppData\Local\Temp'; $env:TEMP = 'C:\Users\w2m\AppData\Local\Temp'
+        $env:TMP = $tempDir; $env:TEMP = $tempDir
         if ($spec.pmc) {           # instructions per thread and Presents (pmc.wprp, Sprint 068 item I)
           wpr -cancel 2>$null | Out-Null
           wpr -start (Join-Path $PSScriptRoot 'pmc.wprp') -filemode
