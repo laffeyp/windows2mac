@@ -23,6 +23,35 @@ the paste cut the name, E3's table gives it), NtWaitForSingleObject (100) and Nt
 host, those calls alone would take 0.53 s of every second of real time. The in-VM scheduler on several vCPUs is the
 speed gate.
 
+## First: SDD hardening (before step 1 resumes)
+
+From the SDD hardening review of 2026-10-17 (`docs/review-2026-10-17-sdd-hardening.md`, its counts checked in §2)
+and the adherence check of Sprint 107 the same day (§3), applied by Decision 2026-10-17. The work under way (speed,
+the scheduler, vCPUs, the compiler, the coming nt module) puts almost nothing on the record; these sprints put it
+there before step 1 goes on. Each is one concept (WORKING_AGREEMENT's hard rule 6 override).
+
+- **H1. Vocabulary 0.9 by typed proposals** (review item 1; takes in D1). Categories for the VM (vCPU, exit), the
+  kernel (scheduler, wait, system call) and the compiler; a per-run summary (instructions retired, guest seconds per
+  wall second, host seconds by exit kind, PAUSEs, the load average, per-vCPU counts); the ambient progress line as a
+  tag; a system call served and unserved; TRANSLATION_INVALIDATED and GUEST_FAULT_RAISED given emit sites; tags with
+  none (27 of 62 by §2's scan) given one or deprecated.
+- **H2. A record checker** (item 4): T1 to T4 and the state rules over every record in `store/runs/`, beside
+  `check_replay.py`; EXECUTION_COMPLETED's `elapsed_seconds` and `exit_code` filled on the frontier.
+- **H3. Signal contracts that bind** (items 5, 6): a card's Emits names the tags its code path fires and their
+  expected payload values, never "None new" for code that runs; a speed sprint's observation read from the record,
+  not stderr; a script narrates each sprint's records in time order for the Rubber Duck Pass; Signal Reports resume
+  or a Decision ends them (the stop since Sprint 048 is logged as a bypass, WORKING_AGREEMENT).
+- **H4. Typed C emitters generated from the vocabulary** (item 3): `gen_events.py` writes the C the probes and the
+  guest runtime emit through, checked when they compile.
+- **H5. One schema across the system-call boundary** (item 2), with step 2's first sprint: the laptop's DTrace
+  recordings as guest-plane records, the reference against which w2m's system calls are compared.
+
+Then step 1 resumes from Sprint 107's first part (4d09f7e7): a design sprint first (the vCPU host designed twice:
+a `Vcpu` object passed to each handler in place of `VM.serving`, a `RuntimeLock` that hides the one-vCPU case, one
+exit handler for one and several vCPUs), then one concept a sprint (the RUNNING mark; the host loop; the wake, after
+Sprint 108's SGI or by a recorded Decision; a thread suspended on another vCPU), each several-vCPU judge a record that
+names its vCPU count. The parked attempt is branch `wip/sprint-107-host` (2d254cd4).
+
 ## Do next, in this order
 
 From the 360 review of 2026-10-17 (`docs/review-2026-10-17-360.md`, §5), applied by Decision 2026-10-17. Steps 1 and 2

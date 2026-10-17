@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 107
-status: active
+status: parked
 phase: 5
 pass_kind: architecture
 ---
@@ -79,3 +79,10 @@ Found on opening (2026-10-17), each item with the code it rests on:
 Every vCPU runs guest threads with services, faults and switches; CI green.
 
 ## observed
+
+- **Parked 2026-10-17** after its first part (4d09f7e7: the shared words on the run table's page, the per-vCPU
+  current thread, the lock's owner value, the host lock library). The rest, on branch `wip/sprint-107-host`
+  (2d254cd4), hung its first judge (the threads probe on two vCPUs, stopped by its 240 s timer) and broke the
+  project's one-concept rule and resolve-and-record (four unrecorded choices); the adherence check and the SDD
+  hardening review of the same day (`docs/review-2026-10-17-sdd-hardening.md`) put the hardening sprints first
+  (docs/plan.md). Three family records written from dirty trees during it are in `build/sprint-107-dirty-records/`.

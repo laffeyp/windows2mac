@@ -136,6 +136,7 @@ Host: macOS 26.5.1 (25F80), Apple M5 Max, 128 GB, 16 KB pages, Xcode 26.6 (17F11
 
 - **2026-10-05, Sprint 000** — `scripts/check_vocab.py` was authored outside its card's artifact contract to gate the vocabulary; recorded in that sprint's tail, entered here 2026-10-08 (Sprint 027) after the project review found the log empty.
 - **2026-10-13, Sprint 068 item A** — the native PCMPISTRI (`tools/guest_runtime/string_compare.c`, commits d31f35e6 and 78768984) was authored from the time census before any card named it; its card, `sprints/sprint-068-speed-to-playable.md`, was written after. Bypassed: card-first. Contracts run on the result: the model equal on 25,600 cases, classes PCMPISTRI (1,277) and PCMPISTRI64 (713) accepted on the VM, a planted fault caught, family sweep 68 of 68 (index 1ecc22b2).
+- **2026-10-17, Sprints 049 to 107** — Signal Reports stopped: `signal-reports/` holds 26, the last for Sprint 048, and no Decision or log entry ended them (SDD hardening review, 2026-10-17, item 3). Bypassed: the kit's Signal Report on each close; the BLACKBOARD tail entry and its Rubber Duck Pass stood in, with no signal walked in time order. Entered here when the review found the stop; whether reports resume or a Decision ends them is the hardening order's (docs/plan.md).
 
 ---
 
