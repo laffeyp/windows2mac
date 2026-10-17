@@ -49,6 +49,7 @@ def test_an_api_set_maps_by_name_up_to_its_last_hyphen() -> None:
     assert m.host("kernel32.dll") is None and m.host("api-ms-win-core-file-l1-1-0.dll") is None
 
 
+@pytest.mark.depot
 @pytest.mark.skipif(not WINDOWS.is_dir(), reason="the copy of C:\\Windows is absent")
 def test_the_copy_resolves_forwarders_api_sets_and_classes() -> None:
     from w2m import reach

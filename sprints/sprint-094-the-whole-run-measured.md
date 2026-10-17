@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 094
-status: active
+status: closed
 phase: 5
 pass_kind: functional
 ---
@@ -71,3 +71,31 @@ the runs show is fixed here only if the run cannot finish without it.
 The whole run measured on today's tree in both forms, compared with Sprint 070, with CI green.
 
 ## observed
+
+- **Tree 3d703c02**, records in `store/runs/`, `frontier-643a6283510c-` then 1792207287629103000 (warm-up),
+  1792207349427127000 and 1792207411272865000 (to the stop), 1792207473041515000 and 1792207522108796000 (equal
+  work); logs in `build/sprint-094/`. Every run: 168 of 168 log lines, 0
+  divergences against the 11 reference runs, 24 values Windows varies.
+- **At equal work**, warm cache:
+
+  | | Sprint 070, all in the VM | work-1 | work-2 |
+  |---|---|---|---|
+  | load average at start | 2.0 to 3.7 | 3.45 | 3.10 |
+  | instructions | 100,000,000,020 | 100,000,000,033 | 100,000,000,033 |
+  | session seconds | 50.5, 51.6 | 48.7 | 44.3 |
+  | seconds in the run | 39.5, 40.5 | 37.5 | 35.3 |
+  | M instructions a second (session) | 1,938 to 1,980 | 2,055 | 2,259 |
+  | fps-equivalent (over 41 M) | 47 to 48 | 50.1 | 55.1 |
+  | host seconds at hvc 8 | — | 7.2 | 4.4 |
+  | switches in the VM | 998,771 | 997,529 | 997,529 |
+
+  The two runs did identical work (equal exits by kind, switches and thread census); they differ by 4.4 s, within
+  070's 6.9 s spread. The whole run is 4 to 14% faster than 070's: no sprint since moved it far.
+- **To the stop**: 61.35 to 61.38 s each, two ticks of the 30-second progress line on which the stop is checked
+  (070's finding), with 131.5, 139.2 and 143.0 billion instructions retired; the seconds measure the tick, not the
+  run.
+- **Where the instructions go**: thread 4, the main thread, retires 63.8% of the 100 billion with 233.6 million
+  PAUSEs; to the stop, 58 to 59% with 508 to 608 million. The rate counts a spin-wait as work, so the fps-equivalent
+  overstates what the game gets. Step 2 (the scheduler and waits inside the VM) is where this goes.
+- **Host time** at equal work: hvc 8 (host requests) 4.4 to 7.2 s, hvc 11 1.3 to 1.7 s, hvc 10 0.8 to 1.0 s.
+

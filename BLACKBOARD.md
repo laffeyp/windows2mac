@@ -317,6 +317,14 @@
 
 ## Sprint tail
 
+### Sprint 094 (2026-10-16, closed)
+- **Scope:** roadmap step 1: the whole batch run measured on today's tree.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* five runs on 3d703c02 (warm-up, two to the stop, two at 100 billion instructions), all conforming; 48.7 and 44.3 s at equal work against 070's 50.5 and 51.6 s; 2,055 to 2,259 M instructions a second, an fps-equivalent of 50 to 55.
+  - *Observation 1 (the rate counts spinning):* the main thread retires 63.8% of the instructions with 233.6 million PAUSEs. Disposition: carried to roadmap step 2 (waits inside the VM).
+  - *Observation 2 (facts tested that were already known):* in 093's last runs, documented facts (NTFS's lazy directory size, session 0 isolation, Win11's notepad hand-off) were found by tests. Disposition: resolved-here (rule kept: look up before measuring).
+- **Closed:** CI pending at this entry; 093's CI run 38998451939 on 3d703c02 failed: test_reach's test of the copied Windows skipped without the `depot` mark, which W2M_REQUIRE_REFERENCES=1 turns into an error; marked in this commit.
+
 ### Sprint 093 (2026-10-16, closed)
 - **Scope:** E2, the static reach of both games' imports through the copied Windows to system calls; closed once by the full review of 2026-10-16 (item 3).
 - **Rubber Duck Pass:**
