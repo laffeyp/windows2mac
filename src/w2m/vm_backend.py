@@ -1946,6 +1946,51 @@ class VcpuExit:
     x: list[int]
 
 
+# what serve_exit decides after an exit (docs/design-several-vcpus.md, the host designed twice: one exit handler)
+@dataclass
+class Resume:
+    """Run on from `pc` with registers `x` and `cpsr`."""
+    pc: int
+    x: list[int]
+    cpsr: int = 0
+
+
+@dataclass
+class Stop:
+    """The run ends: why."""
+    reason: str
+
+
+@dataclass
+class Slice:
+    """A kernel.Machine's other VM is ready: this thread is saved; its runner yields "slice" and resumes it after."""
+    x: list[int]
+
+
+@dataclass
+class Switched:
+    """_schedule's answer at a slice's end (`at_slice`) or a hand-over: the next registers, IDLE (its runner yields
+    "idle" and asks _resume_idle), or None (every thread ended)."""
+    switched: list[int] | None
+    at_slice: bool
+
+
+Outcome = Resume | Stop | Slice | Switched
+
+
+@dataclass
+class RunState:
+    """A run's settings and the state its exits change, which serve_exit reads and writes."""
+    max_steps: int
+    interrupt_every_ms: int | None = None
+    on_dispatch: Callable[["VM", list[int]], None] | None = None
+    on_exception: Callable[["VM", dict[str, int]], bool] | None = None
+    on_boundary: Callable[["VM", list[int], int], None] | None = None
+    on_unimplemented: Callable[["VM", list[int], str], bool] | None = None
+    forced_stop: bool = False
+    last_kind: int = -1
+
+
 def _write_translation_tables(mm: mmap.mmap, maps: list[tuple[int, int, int]]) -> tuple[int, int]:
     """Write 4-level stage-1 tables for (va, ipa, size) maps into the TRANSLATION_TABLES area; return the
     root table's IPA and the offset of the next free table. Descriptor layout: Arm ARM D8.3 (VMSAv8-64 translation
@@ -4482,7 +4527,6 @@ class VM:
         # the compiler inside the VM, where nothing needs every miss to reach the host (Sprint 083)
         struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_ENABLED, int(
             VM_COMPILE and not self.lockstep and not BLOCK_CENSUS and on_dispatch is None and interrupt_every_ms is None))
-        forced_stop = False
         runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
         self._cmd = cmd
         if not self.threads:                              # the first thread (scheduler.py; Sprint 051)
@@ -4513,7 +4557,8 @@ class VM:
         report_at = time.monotonic() + PROGRESS_SECONDS
         check_at = time.monotonic() + STOP_CHECK_SECONDS
         reported = (0, Counter(self.exits), Counter(self.exit_sites), sum(self.calls_total().values()), time.monotonic())
-        marked, last_kind = time.perf_counter_ns(), -1
+        marked = time.perf_counter_ns()
+        run = RunState(max_steps, interrupt_every_ms, on_dispatch, on_exception, on_boundary, on_unimplemented)
         try:
             while True:
                 machine = self.machine if self.machine is not None and self.machine.main is self else None
@@ -4530,14 +4575,14 @@ class VM:
                         stop = why
                         break
                 started = time.perf_counter_ns()
-                self.exit_ns[last_kind] += started - marked
+                self.exit_ns[run.last_kind] += started - marked
                 ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
                 count, limit = struct.unpack_from("<QQ", self.mm, self._md)
-                struct.pack_into("<QQ", self.mm, self._md + SLICE_UNTIL, self._slice_until(forced_stop), max_steps)
+                struct.pack_into("<QQ", self.mm, self._md + SLICE_UNTIL, self._slice_until(run.forced_stop), max_steps)
                 # another process ready or waiting with a deadline needs the host at each slice's end (_slice_until); one
                 # becomes ready only by a host request, after which this is computed again
                 struct.pack_into("<Q", self.mm, RUN_TABLE + RT_IN_VM, int(
-                    SWITCH_IN_VM and not self.lockstep and not forced_stop and not self._other_process_due()))
+                    SWITCH_IN_VM and not self.lockstep and not run.forced_stop and not self._other_process_due()))
                 if not runtime_lo <= pc < runtime_hi:           # in the runtime's C, x23 is the C's own
                     x[REG_BUDGET] = (limit - count) & M64       # the budget left, in x23
                 if self._channel is not None:
@@ -4554,153 +4599,27 @@ class VM:
                     cpsr = int(r[4], 16)
                 marked = time.perf_counter_ns()
                 self.run_ns += marked - started
-                last_kind = 0
-                x = e.x
-                self._vm_compiled()                           # the VM's own compiles first: anything below may drop them
-                if not runtime_lo <= e.pc < runtime_hi:
-                    # the limit as the slice stub left it: it raises the limit and x23 together (before, the limit
-                    # read before the run made the count short by each refill, and the guest's clock went back)
-                    limit = struct.unpack_from("<Q", self.mm, self._md + 8)[0]
-                    left = x[REG_BUDGET] - (1 << 64) if x[REG_BUDGET] >> 63 else x[REG_BUDGET]
-                    if e.kind == "hvc" and e.syndrome & 0xFFFF in (HVC_SLOW_SSE, HVC_SLOW_STEP):
-                        left += self._unrun_after(e.pc - 4)           # the block's instructions after the step
-                    elif e.kind == "hvc" and e.syndrome & 0xFFFF == HVC_FAULT_GIVE_BACK and self._in_code_cache(x[2]):
-                        left += self._unrun_after(x[2]) + 1           # the faulting instruction and those after it
-                    x[REG_BUDGET] = left & M64
-                    struct.pack_into("<Q", self.mm, self._md, (limit - left) & M64)   # the count, from x23
-                if e.kind == "cancel" and interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
-                    # the rule specs/guest_state.json forbids: restart the interrupted instruction
-                    x[17] = self.x86_address_at(e.pc)
-                    pc = self.miss_va
-                    cpsr = CPSR_EL1H
-                    if runtime_lo <= e.pc < runtime_hi:
-                        self._release_runtime_lock()          # stopped in the runtime's C: its frame is left
-                    if on_boundary:
-                        on_boundary(self, x, x[17])
+                out = self.serve_exit(run, e, cpsr)
+                if isinstance(out, Stop):
+                    stop = out.reason
+                    break
+                if isinstance(out, Slice):
+                    yield "slice"                            # another VM's turn; this thread goes on after
+                    x, pc, cpsr = self._load_thread(self.threads[self.current_tid]), self.resume_va, CPSR_EL1H
                     continue
-                if e.kind == "cancel" and interrupt_every_ms is not None:
-                    # an asynchronous stop at an arbitrary host instruction: stop at the next
-                    # block entry instead (set the stop point below the count) and resume as is
-                    executed = struct.unpack_from("<Q", self.mm, self._md)[0]
-                    struct.pack_into("<Q", self.mm, self._md + 8, executed)
-                    forced_stop = True
-                    pc = e.pc
-                    continue
-                cpsr = CPSR_EL1H
-                if e.kind == "cancel":
-                    stop = "timeout"
-                    break
-                if e.kind != "hvc":
-                    stop = f"VmExit: {e.kind} syndrome 0x{e.syndrome:x} at pc 0x{e.pc:x}"
-                    break
-                imm = e.syndrome & 0xFFFF
-                last_kind = imm
-                # a dispatch miss exits from the dispatcher, outside every block: its site is the target it missed
-                where = x[17] if imm == 1 else self.x86_address_at(e.pc - 4)
-                self.exits[imm] += 1                          # the exit census (Sprint 064): kind, then the site
-                self.exit_sites[(imm, where)] += 1
-                if imm == 1:
-                    if on_dispatch:
-                        on_dispatch(self, x)                  # may replace the state in x
-                    target = x[17]
-                    if target in self.bridges:
-                        va = self.bridges[target]
-                    else:
-                        va = self.blocks.get(target) or self._compile(target)
-                    self._dispatch_insert(target, va)
-                    pc = self.miss_va + 4                     # ic iallu; dsb; isb; re-dispatch
-                elif imm == 8:
-                    if not self._host_request(x):
-                        exc = self.exception()
-                        if exc is not None and on_exception is not None and on_exception(self, exc):
-                            self.exit_code = None
-                            self.clear_exception()
-                            self._release_runtime_lock()      # w2m_exception's frame is left, unreturned
-                            pc = self.miss_va                 # hvc #1: the driver sets the next state
-                            continue
-                        stop = ("ExitProcess" if exc is None else
-                                f"UnhandledException 0x{exc['code']:x} at x86 0x{exc['rip']:x}")
-                        break
-                    pc = e.pc
-                elif imm == 9:
-                    name = self.ld.thunks.get(x[17], hex(x[17]))
-                    # the call's return address is at the guest RSP (the bridge has not popped it)
-                    ret = int.from_bytes(self.mem.read(x[4], 8), "little")
-                    if on_unimplemented is not None and on_unimplemented(self, x, name):
-                        x[17], x[4] = ret, x[4] + 8           # ret, with x[RAX] as the hook left it
-                        self._release_runtime_lock()          # the service's frame is left, unreturned
-                        pc = self.miss_va
-                        continue
-                    self.unimplemented = (name, ret)
-                    raise Unimplemented(f"import {name}")
-                elif imm == 2:
-                    ec = e.esr >> 26 & 0x3F
-                    if ec == 0x25:
-                        stop = (f"GuestFault: access at 0x{e.far:x} outside mapped memory "
-                                f"(x86 0x{self.x86_address_at(e.elr):x})")
-                    else:
-                        stop = f"VmExit: EL1 exception EC 0x{ec:x} at x86 0x{self.x86_address_at(e.elr):x}"
-                    break
-                elif imm in (HVC_SLOW_SSE, HVC_SLOW_STEP):
-                    pc = self._slow_sse(x, where)
-                elif imm == 4 and forced_stop:
-                    forced_stop = False
-                    self._set_budget()
-                    if on_boundary:
-                        on_boundary(self, x, where)
-                    pc = e.pc                                   # on into the block from its entry
-                elif imm == 4:
-                    executed = struct.unpack_from("<Q", self.mm, self._md)[0]
-                    if executed >= max_steps:
-                        stop = "max_steps"
-                        break
-                    self._set_budget()
-                    self._wake_expired()
-                    if self.machine is not None and self.machine.others_ready(self):
-                        x[17] = where
-                        self._give_back(e.pc)
-                        self._save_thread(self.threads[self.current_tid], x)
-                        yield "slice"                            # another VM's turn; this thread goes on after
-                        x = self._load_thread(self.threads[self.current_tid])
-                        pc = self.resume_va
-                    elif len(self.threads) > 1:                 # the time slice ran out: another thread's turn
-                        x[17] = where
-                        self._give_back(e.pc)
-                        switched = self._schedule(x, 0)
-                        while switched is IDLE:
-                            yield "idle"
-                            switched = self._resume_idle(x)
-                        assert switched is not None
-                        x = switched
-                        pc = self.resume_va
-                    else:
-                        pc = e.pc
-                elif imm == HVC_FAULT_GIVE_BACK:                # given back above; on to w2m_exception
-                    self.fault_give_backs += 1
-                    pc = e.pc
-                elif imm == HVC_CODE_WRITE:                     # a write faulted: behind translated code?
-                    x[17] = 1 if self._code_written(x[17]) else 0
-                    pc = e.pc
-                elif imm == HVC_SCHEDULE:                       # a service handed the vCPU over (state.schedule)
-                    st = self._st
-                    schedule = struct.unpack_from("<I", self.mm, st + STATE_SCHEDULE)[0]
-                    struct.pack_into("<I", self.mm, st + STATE_SCHEDULE, 0)
-                    switched = self._schedule(x, schedule)
+                if isinstance(out, Switched):
+                    switched = out.switched
                     while switched is IDLE:
                         yield "idle"
-                        switched = self._resume_idle(x)
+                        switched = self._resume_idle(e.x)
                     if switched is None:
+                        assert not out.at_slice
                         self.exit_code = self.threads[self.current_tid].exit_code
                         stop = "ExitProcess"
                         break
-                    x = switched
-                    pc = self.resume_va
-                elif imm & 0x40:
-                    stop = f"UndefinedFlag: {'CZSOP'[imm & 7]} read while undefined at 0x{where:x}"
-                    break
-                else:
-                    stop = f"VmExit: hvc #{imm}"
-                    break
+                    x, pc, cpsr = switched, self.resume_va, CPSR_EL1H
+                    continue
+                x, pc, cpsr = out.x, out.pc, out.cpsr
         except StopRun:
             stop = "stopped by on_dispatch"
         except (LiftError, DecodeError, GuestFault, Unimplemented, HandlerFailed, CompileError,
@@ -4723,6 +4642,125 @@ class VM:
         self.final = x
         return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop,
                       self.calls_total(), self.calls_dropped())
+
+    def serve_exit(self, run: RunState, e: VcpuExit, cpsr: int) -> Outcome:
+        """One exit of the vCPU, served (docs/design-several-vcpus.md, the host designed twice: one exit handler): the
+        count kept from x23, then the exit by kind. What the run does next is the answer; the yields to a
+        kernel.Machine are the caller's (Slice, Switched). Raises what the handlers raise (Unimplemented, ...)."""
+        runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
+        run.last_kind = 0
+        x = e.x
+        self._vm_compiled()                                   # the VM's own compiles first: anything below may drop them
+        if not runtime_lo <= e.pc < runtime_hi:
+            # the limit as the slice stub left it: it raises the limit and x23 together (before, the limit
+            # read before the run made the count short by each refill, and the guest's clock went back)
+            limit = struct.unpack_from("<Q", self.mm, self._md + 8)[0]
+            left = x[REG_BUDGET] - (1 << 64) if x[REG_BUDGET] >> 63 else x[REG_BUDGET]
+            if e.kind == "hvc" and e.syndrome & 0xFFFF in (HVC_SLOW_SSE, HVC_SLOW_STEP):
+                left += self._unrun_after(e.pc - 4)           # the block's instructions after the step
+            elif e.kind == "hvc" and e.syndrome & 0xFFFF == HVC_FAULT_GIVE_BACK and self._in_code_cache(x[2]):
+                left += self._unrun_after(x[2]) + 1           # the faulting instruction and those after it
+            x[REG_BUDGET] = left & M64
+            struct.pack_into("<Q", self.mm, self._md, (limit - left) & M64)   # the count, from x23
+        if e.kind == "cancel" and run.interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
+            # the rule specs/guest_state.json forbids: restart the interrupted instruction
+            x[17] = self.x86_address_at(e.pc)
+            if runtime_lo <= e.pc < runtime_hi:
+                self._release_runtime_lock()                  # stopped in the runtime's C: its frame is left
+            if run.on_boundary:
+                run.on_boundary(self, x, x[17])
+            return Resume(self.miss_va, x, CPSR_EL1H)
+        if e.kind == "cancel" and run.interrupt_every_ms is not None:
+            # an asynchronous stop at an arbitrary host instruction: stop at the next
+            # block entry instead (set the stop point below the count) and resume as is
+            executed = struct.unpack_from("<Q", self.mm, self._md)[0]
+            struct.pack_into("<Q", self.mm, self._md + 8, executed)
+            run.forced_stop = True
+            return Resume(e.pc, x, cpsr)
+        if e.kind == "cancel":
+            return Stop("timeout")
+        if e.kind != "hvc":
+            return Stop(f"VmExit: {e.kind} syndrome 0x{e.syndrome:x} at pc 0x{e.pc:x}")
+        imm = e.syndrome & 0xFFFF
+        run.last_kind = imm
+        # a dispatch miss exits from the dispatcher, outside every block: its site is the target it missed
+        where = x[17] if imm == 1 else self.x86_address_at(e.pc - 4)
+        self.exits[imm] += 1                                  # the exit census (Sprint 064): kind, then the site
+        self.exit_sites[(imm, where)] += 1
+        if imm == 1:
+            if run.on_dispatch:
+                run.on_dispatch(self, x)                      # may replace the state in x
+            target = x[17]
+            if target in self.bridges:
+                va = self.bridges[target]
+            else:
+                va = self.blocks.get(target) or self._compile(target)
+            self._dispatch_insert(target, va)
+            return Resume(self.miss_va + 4, x, CPSR_EL1H)     # ic iallu; dsb; isb; re-dispatch
+        if imm == 8:
+            if not self._host_request(x):
+                exc = self.exception()
+                if exc is not None and run.on_exception is not None and run.on_exception(self, exc):
+                    self.exit_code = None
+                    self.clear_exception()
+                    self._release_runtime_lock()              # w2m_exception's frame is left, unreturned
+                    return Resume(self.miss_va, x, CPSR_EL1H) # hvc #1: the driver sets the next state
+                return Stop("ExitProcess" if exc is None else
+                            f"UnhandledException 0x{exc['code']:x} at x86 0x{exc['rip']:x}")
+            return Resume(e.pc, x, CPSR_EL1H)
+        if imm == 9:
+            name = self.ld.thunks.get(x[17], hex(x[17]))
+            # the call's return address is at the guest RSP (the bridge has not popped it)
+            ret = int.from_bytes(self.mem.read(x[4], 8), "little")
+            if run.on_unimplemented is not None and run.on_unimplemented(self, x, name):
+                x[17], x[4] = ret, x[4] + 8                   # ret, with x[RAX] as the hook left it
+                self._release_runtime_lock()                  # the service's frame is left, unreturned
+                return Resume(self.miss_va, x, CPSR_EL1H)
+            self.unimplemented = (name, ret)
+            raise Unimplemented(f"import {name}")
+        if imm == 2:
+            ec = e.esr >> 26 & 0x3F
+            if ec == 0x25:
+                return Stop(f"GuestFault: access at 0x{e.far:x} outside mapped memory "
+                            f"(x86 0x{self.x86_address_at(e.elr):x})")
+            return Stop(f"VmExit: EL1 exception EC 0x{ec:x} at x86 0x{self.x86_address_at(e.elr):x}")
+        if imm in (HVC_SLOW_SSE, HVC_SLOW_STEP):
+            return Resume(self._slow_sse(x, where), x, CPSR_EL1H)
+        if imm == 4 and run.forced_stop:
+            run.forced_stop = False
+            self._set_budget()
+            if run.on_boundary:
+                run.on_boundary(self, x, where)
+            return Resume(e.pc, x, CPSR_EL1H)                 # on into the block from its entry
+        if imm == 4:
+            executed = struct.unpack_from("<Q", self.mm, self._md)[0]
+            if executed >= run.max_steps:
+                return Stop("max_steps")
+            self._set_budget()
+            self._wake_expired()
+            if self.machine is not None and self.machine.others_ready(self):
+                x[17] = where
+                self._give_back(e.pc)
+                self._save_thread(self.threads[self.current_tid], x)
+                return Slice(x)                               # another VM's turn; this thread goes on after
+            if len(self.threads) > 1:                         # the time slice ran out: another thread's turn
+                x[17] = where
+                self._give_back(e.pc)
+                return Switched(self._schedule(x, 0), at_slice=True)
+            return Resume(e.pc, x, CPSR_EL1H)
+        if imm == HVC_FAULT_GIVE_BACK:                        # given back above; on to w2m_exception
+            self.fault_give_backs += 1
+            return Resume(e.pc, x, CPSR_EL1H)
+        if imm == HVC_CODE_WRITE:                             # a write faulted: behind translated code?
+            x[17] = 1 if self._code_written(x[17]) else 0
+            return Resume(e.pc, x, CPSR_EL1H)
+        if imm == HVC_SCHEDULE:                               # a service handed the vCPU over (state.schedule)
+            schedule = struct.unpack_from("<I", self.mm, self._st + STATE_SCHEDULE)[0]
+            struct.pack_into("<I", self.mm, self._st + STATE_SCHEDULE, 0)
+            return Switched(self._schedule(x, schedule), at_slice=False)
+        if imm & 0x40:
+            return Stop(f"UndefinedFlag: {'CZSOP'[imm & 7]} read while undefined at 0x{where:x}")
+        return Stop(f"VmExit: hvc #{imm}")
 
     def _progress(self, before: tuple[int, Counter[int], Counter[tuple[int, int]], int, float],
                   x: list[int]) -> tuple[int, Counter[int], Counter[tuple[int, int]], int, float]:
