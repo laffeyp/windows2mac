@@ -1052,8 +1052,10 @@ FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, 
 HVC_SLOW_SSE = 10
 # The iclasses whose compile_insn lowering changed after the stencil table was derived (store/stencil; Sprints 096,
 # 098): scripts/gen_stencil_table.py leaves their forms out of the VM's table, so the compiler in the VM refuses them
-# ("no stencil") and the host compiles every one with the current lowering; the equal-words judges skip them.
-HOST_LOWERED = frozenset({"PAUSE", "PACKSSDW", "PMULLD", "FNSTCW", "FLD", "FSTP", "FSQRT"})
+# ("no stencil") and the host compiles every one with the current lowering; the equal-words judges skip them. Empty
+# from Sprint 100, whose lift change re-derived the table from compile_insn as it stands: a lowering changed later goes
+# here until the table is re-derived again.
+HOST_LOWERED: frozenset[str] = frozenset()
 HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
 HVC_SCHEDULE = 12            # a service handed the vCPU to the scheduler (state.schedule; Sprint 051)
 HVC_CODE_WRITE = 13          # a write faulted on a page behind translated code: x17 the address (Sprint 065)

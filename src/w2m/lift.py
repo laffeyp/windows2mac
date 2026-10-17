@@ -185,7 +185,9 @@ def _operand(b: _OpBuilder, s: str, next_ip: int, width_hint: int | None = None)
     if p[0] in ("M", "A"):
         base, index, scale, disp = (p[2], p[3], p[4], p[5]) if p[0] == "M" else (p[1], p[2], p[3], p[4])
         t = b.t()
-        abits = 32 if base.startswith("E") or (base == "INVALID" and index.startswith("E")) else 64
+        # the 0x67 prefix: a 32-bit address from 32-bit registers, R8D-R15D among them (SDM Vol 1 3.3.7; Sprint 100)
+        named = base if base != "INVALID" else index
+        abits = 32 if named == "EIP" or (named in REG and REG[named][1] == 32) else 64
         seg = p[1] if p[0] == "M" and p[1] in ("FS", "GS") else None
         if seg == "FS":                    # Windows x64 user code reaches the TEB through GS (Sprint 044)
             raise LiftError(f"FS-relative memory operand {s}: the FS base is not modeled")

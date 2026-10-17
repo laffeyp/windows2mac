@@ -347,7 +347,8 @@ def shape(ops: tuple[str, ...]) -> tuple[str, ...]:
             out.append(f"R{p[1].rstrip('0123456789')}")         # XMM, YMM
         elif p[0] in ("M", "A"):
             base, index = (p[2], p[3]) if p[0] == "M" else (p[1], p[2])
-            # lift._operand reads a base's name: an E-named base (or none with an E index) gives 32-bit addressing
+            # a 32-bit base (or none with a 32-bit index) gives 32-bit addressing (lift._operand, Sprint 100); the E
+            # marker that once chose it still splits the key, which changes no template
             def kind(r: str) -> str:
                 return r if r in ("INVALID", "RIP", "EIP") else f"r{REG[r][1]}{'E' if r.startswith('E') else ''}"
             scale = p[4] if p[0] == "M" else p[3]          # in the key: compare-by-hash code (a set of sizes against
@@ -404,7 +405,8 @@ def _sym_operand(b: _OpBuilder, s: str, next_ip: Any, width_hint: int | None = N
     if p[0] in ("M", "A"):
         base, index, scale, disp = (p[2], p[3], p[4], p[5]) if p[0] == "M" else (p[1], p[2], p[3], p[4])
         t = b.t()
-        abits = 32 if base.startswith("E") or (base == "INVALID" and index.startswith("E")) else 64
+        named = base if base != "INVALID" else index           # lift._operand's rule (Sprint 100): a 32-bit register
+        abits = 32 if named == "EIP" or (named in REG and REG[named][1] == 32) else 64
         seg = p[1] if p[0] == "M" and p[1] in ("FS", "GS") else None
         if seg == "FS":
             raise LiftError(f"FS-relative memory operand {s}: the FS base is not modeled")

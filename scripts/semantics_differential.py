@@ -259,6 +259,11 @@ def _place(ins: Lifted, regs: list[int], rng: random.Random, target_of: Any = No
         _, _, base, index, scale, disp, abits, _seg = op
         if base is None:
             return False
+        if abits == 32 and base >= 8:
+            # a base R8D-R15D: 32-bit since Sprint 100 (SDM Vol 1 3.3.7), 64-bit when every frozen set was built; the
+            # placement keeps that rule so the files stay what the runners ran (KIT_DIARY #23). It sets the base's
+            # upper half to what the subtraction gives, so the 32-bit and 64-bit addresses are the same target
+            abits = 64
         mask = M64 if abits == 64 else 0xFFFF_FFFF
         slots = (WINDOW - size) // 8 + 1 if size > 24 else 6
         target = target_of() if target_of else DATA_VA + DATA_OFF + 8 * rng.randrange(slots)
