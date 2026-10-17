@@ -36,9 +36,8 @@ SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 PLACEHOLDER = "sha256:" + "0" * 64
 # violations known, with their cause, which the gate reports and does not hold: (rule, record name prefix) -> where
 # the cause and its fix are recorded. Each is a defect with a sprint to come, never a rule waived.
-KNOWN = {(rule, prefix): f"BLACKBOARD Deferred 2026-10-17 (Sprint 109): class and family runs report {what}"
-         for rule, what in (("S5", "with no reduction"), ("E1", "zero program and state hashes"))
-         for prefix in ("class-", "family-")}
+KNOWN = {("S5", "family-"): "BLACKBOARD Deferred 2026-10-17 (Sprint 112): no reducer cuts a compiled probe, so a "
+                            "family run reports with no REDUCTION_COMPLETED"}
 Event = dict[str, Any]
 
 

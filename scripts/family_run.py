@@ -43,7 +43,7 @@ from w2m.contract import Contract, ExactRows, load_contract  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.kernel import Machine, spawner  # noqa: E402
 from w2m.loader import load  # noqa: E402
-from w2m.record import producer, run_with_provenance  # noqa: E402
+from w2m.record import producer, run_with_provenance, state_sha256  # noqa: E402
 
 GUEST = ROOT / "tools" / "guest_runtime"
 RETRIEVED = "retrieved 2026-10-10"
@@ -2888,6 +2888,20 @@ def contract(f: Family) -> Contract:
 INSTRUCTION_CLOCK = (1_400_000_000, 134362624920000000)
 
 
+def vm_inputs(binary: str, f: Family | None = None, dll: str | None = None) -> dict[str, Any]:
+    """What a probe's VM run starts from, as run_in_vm uses it and a discrepancy's initial_state_sha256 hashes it
+    (Sprint 112): the program and DLL by their sha256, where the DLL is, the command line, the environment, and how the
+    process starts (GUI, the foreground, the instruction clock)."""
+    if dll is None and f is not None and f.dll_name is not None:
+        dll = next(r.dll for r in f.runs.values() if r.binary == binary)
+    return {"program": binary, "dll": dll, "dll_name": None if f is None else f.dll_name,
+            "dll_on_disk": f is not None and f.dll_on_disk,
+            "command_line": None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}',
+            "environment": list(() if f is None else f.environment), "gui": f is not None and f.gui,
+            "foreground_held": f is not None and f.foreground_held,
+            "instruction_clock": INSTRUCTION_CLOCK if f is not None and f.instruction_clock else None}
+
+
 def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | None = None,
               dll: str | None = None) -> tuple[bytes, str, float]:
     """A runner's probe binary in the managed VM with a fresh file-system root, started as `f` says;
@@ -2898,9 +2912,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         files = FileBridge(Path(d))
         # the program's own file at its path, as on the runner (Sprint 055: a probe that starts itself reads it)
         (Path(d) / "probe.exe").write_bytes((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes())
-        line = None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}'
-        if dll is None and f is not None and f.dll_name is not None:
-            dll = next(r.dll for r in f.runs.values() if r.binary == binary)
+        inputs = vm_inputs(binary, f, dll)
+        line, dll = inputs["command_line"], inputs["dll"]
         dll_bytes = None if dll is None else (ROOT / "store" / "binaries" / f"{dll}.dll").read_bytes()
         if f is not None and f.dll_on_disk and f.dll_name is not None and dll_bytes is not None:
             (Path(d) / f.dll_name).write_bytes(dll_bytes)    # as the runner's out/ has it beside probe.exe
@@ -2908,8 +2921,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         def dlls(name: str) -> bytes | None:
             return dll_bytes if f is not None and f.dll_name is not None and name.lower() == f.dll_name.lower() else None
 
-        environment = () if f is None else f.environment
-        clock = INSTRUCTION_CLOCK if f is not None and f.instruction_clock else None
+        environment = tuple(inputs["environment"])
+        clock = inputs["instruction_clock"]
         vm = VM(load((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes(), dlls, "probe.exe"), files=files,
                 runtime_sources=sources, image_name="probe.exe",      # the runner ran it as probe.exe
                 gui=f is not None and f.gui, command_line=line, environment=environment,
@@ -3151,7 +3164,8 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
         first = next(r for r, v in state["verdicts"].items() if v != "conforms")
         yield events.validate(events.DISCREPANCY_REPORTED(
             discrepancy_id=f"{run_id}-d1", contract_id=f.contract_id, contract_version=f.version, mismatch_class="exact",
-            minimized_program_sha256="sha256:" + f.runs[first].binary, initial_state_sha256="sha256:" + "0" * 64,
+            minimized_program_sha256="sha256:" + f.runs[first].binary,
+            initial_state_sha256=state_sha256(vm_inputs(f.runs[first].binary, f)),
             first_divergence=f"{f.runs[first].image} binary: {state['divergence'][first]}"[:500],
             reference_profile_id=f"{f.runs[first].image} run {first}", destination_profile_id="w2m-managed_vm",
             comparison_id=f"cmp-{cand}-{first}"))

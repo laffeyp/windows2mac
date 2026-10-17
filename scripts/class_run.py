@@ -46,7 +46,7 @@ import semantics_differential as sd  # noqa: E402
 import vm_oracle  # noqa: E402
 
 from w2m import VOCAB_VERSION, events  # noqa: E402
-from w2m.record import producer, run_with_provenance  # noqa: E402
+from w2m.record import producer, run_with_provenance, state_sha256  # noqa: E402
 from w2m.rules import registry  # noqa: E402
 from w2m.x86dec import decode  # noqa: E402
 
@@ -103,14 +103,26 @@ def cases_for(iclass: str) -> tuple[list[str], list[sd.Case], list[sd.Result]]:
     return sets, cases, results
 
 
-def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> Counter[str]:
+def judge_model(cases: list[sd.Case], results: list[sd.Result]) -> tuple[Counter[str], dict[str, int]]:
+    """The model's difference classes, and the first case of each."""
     out: Counter[str] = Counter()
-    for c, r in zip(cases, results, strict=True):
+    first: dict[str, int] = {}
+    for i, (c, r) in enumerate(zip(cases, results, strict=True)):
         if sd.undefined_memory(c):                   # set aside, as the semantics judge does (Sprint 044)
             continue
         for k, _detail in sd.judge(c, r, c.label):
             out[k] += 1
-    return out
+            first.setdefault(k, i)
+    return out, first
+
+
+def case_hashes(c: sd.Case) -> tuple[str, str]:
+    """A case's program (its instruction bytes) and its initial state (everything else it sets: registers, flags,
+    memory, MXCSR, vectors, x87), each as a sha256 (Sprint 112)."""
+    import dataclasses
+    import hashlib
+    state = {k: v for k, v in dataclasses.asdict(c).items() if k not in ("code", "label")}
+    return "sha256:" + hashlib.sha256(c.code).hexdigest(), state_sha256(state)
 
 
 def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored)") -> dict[str, Any]:
@@ -128,7 +140,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
     run_id = f"class-{iclass.lower()}-{time.time_ns()}"
     cand = f"rule-{rule.module}-{rule.sha256[7:19]}"
     t0 = time.monotonic()
-    state: dict[str, Any] = {"verdicts": {}, "diffs": {}}
+    state: dict[str, Any] = {"verdicts": {}, "diffs": {}, "first_case": {}}
 
     async def harness(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         yield events.validate(events.SESSION_INIT(
@@ -144,14 +156,20 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
     def judge(executor: str) -> Any:
         async def run(inp: dict[str, Any]) -> AsyncIterator[msgspec.Struct]:
             if executor == "model":
-                diffs = judge_model(cases, results)
+                diffs, first_case = judge_model(cases, results)
                 example: dict[str, str] = {}
             else:
                 diffs, example, skipped, judged, _faults = vm_oracle.run_cases(cases, results)
+                first_case = {k: vm_oracle.case_of(e) for k, e in example.items()}
                 not_compiled = {k: n for k, n in skipped.items() if "(not judged)" not in k}   # set-asides are not
                 if not_compiled:                                                             # the VM's failures
                     diffs.update({f"not compiled: {k}": n for k, n in not_compiled.items()})
+                    for i, c in enumerate(cases):                # each refusal's first case, by run_cases's own test
+                        why = vm_oracle.vm_compiles(c.code) or sd.undefined_memory(c)
+                        if why:
+                            first_case.setdefault(f"not compiled: {c.label}: {why}", i)
             state["diffs"][executor] = (diffs, example)
+            state["first_case"][executor] = first_case
             verdict: events.EnumVerdict = "discrepancy" if diffs else "conforms"
             state["verdicts"][executor] = verdict
             first = next(iter(diffs.most_common(1)), None)
@@ -169,15 +187,22 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
                 candidate_id=cand, contract_id=cid, contract_version=version,
                 comparison_ids=tuple(f"cmp-{cand}-{e}" for e in ("model", "managed_vm"))))
             return
-        empty = "sha256:" + "0" * 64
         n = 0
         for executor, (diffs, example) in state["diffs"].items():
             for k, count in diffs.most_common():
                 n += 1
                 did = f"{run_id}-d{n}"
+                # the class's first failing case: one instruction, so nothing can be cut from it (REDUCTION_COMPLETED's
+                # note: "If nothing could be removed, minimized equals source and steps=0"; Sprint 112); for a refusal,
+                # the first case the VM refused that way
+                case = cases[state["first_case"][executor][k]]
+                program, initial = case_hashes(case)
+                yield events.validate(events.REDUCTION_COMPLETED(
+                    reduction_id=f"{did}-reduction", comparison_id=f"cmp-{cand}-{executor}",
+                    source_program_sha256=program, minimized_program_sha256=program, steps=0, preserved_mismatch=True))
                 yield events.validate(events.DISCREPANCY_REPORTED(
                     discrepancy_id=did, contract_id=cid, contract_version=version,
-                    mismatch_class="exact", minimized_program_sha256=empty, initial_state_sha256=empty,
+                    mismatch_class="exact", minimized_program_sha256=program, initial_state_sha256=initial,
                     first_divergence=f"{executor}: {k} ({count} cases) {example.get(k, '')}"[:500],
                     reference_profile_id=reference, destination_profile_id=f"w2m-{executor}",
                     comparison_id=f"cmp-{cand}-{executor}"))
@@ -202,7 +227,7 @@ def item_run(iclass: str, runs: Path, generator_ref: str = "hand (agent-authored
                         factory=lambda: producer(judge("model")))
         b.producer_kind("vm_judge", schemas=[events.COMPARISON_COMPLETED], schema_version=1,
                         factory=lambda: producer(judge("managed_vm")))
-        b.producer_kind("acceptance", schemas=[events.CANDIDATE_ACCEPTED, events.DISCREPANCY_REPORTED,
+        b.producer_kind("acceptance", schemas=[events.CANDIDATE_ACCEPTED, events.REDUCTION_COMPLETED, events.DISCREPANCY_REPORTED,
                         events.DISCREPANCY_ROUTED], schema_version=1, factory=lambda: producer(decide))
         b.producer_kind("harness_close", schemas=[events.SESSION_COMPLETED], schema_version=1,
                         factory=lambda: producer(close))

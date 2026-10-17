@@ -45,7 +45,7 @@ from w2m.compare import compare_exact_rows  # noqa: E402
 from w2m.contract import Contract, ExactRows, load_contract  # noqa: E402
 from w2m.file_bridge import FileBridge  # noqa: E402
 from w2m.loader import load  # noqa: E402
-from w2m.record import producer, run_with_provenance  # noqa: E402
+from w2m.record import producer, run_with_provenance, state_sha256  # noqa: E402
 
 CONTRACT_ID = "windows.file.create_file.dispositions_sharing"
 VERSION = "0.1.0"
@@ -240,14 +240,15 @@ def item_run(runs: Path, file_source: str | None = None,
                 candidate_id=cand, contract_id=CONTRACT_ID, contract_version=VERSION,
                 comparison_ids=tuple(f"cmp-{cand}-{RUNS[r][0]}" for r in RUNS)))
             return
-        empty = "sha256:" + "0" * 64
         for n, (run, verdict) in enumerate(state["verdicts"].items(), 1):
             if verdict == "conforms":
                 continue
             did = f"{run_id}-d{n}"
             yield events.validate(events.DISCREPANCY_REPORTED(
                 discrepancy_id=did, contract_id=CONTRACT_ID, contract_version=VERSION, mismatch_class="exact",
-                minimized_program_sha256=empty, initial_state_sha256=empty,
+                minimized_program_sha256="sha256:" + RUNS[run][1],
+                # run_in_vm's start: the VM's defaults on a fresh FileBridge root (Sprint 112)
+                initial_state_sha256=state_sha256({"program": RUNS[run][1], "bridge": "FileBridge", "root": "empty"}),
                 first_divergence=f"{RUNS[run][0]} binary: {state['divergence'][run]}"[:500],
                 reference_profile_id=f"{RUNS[run][0]} run {run}", destination_profile_id="w2m-managed_vm",
                 comparison_id=f"cmp-{cand}-{RUNS[run][0]}"))

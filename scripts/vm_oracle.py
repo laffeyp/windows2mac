@@ -167,6 +167,11 @@ def windows(mem: Memory, r: sd.Result) -> list[tuple[str, str]]:
     return out
 
 
+def case_of(example: str) -> int:
+    """The case index an example names (run_cases writes each as "case {i}: ...")."""
+    return int(example.split(":", 1)[0].removeprefix("case "))
+
+
 def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None = None,
               slow: list[int] | None = None) -> tuple[Counter[str], dict[str, str], Counter[str], int, int]:
     """Judge every case the VM compiles. Returns (difference classes, an example per class,

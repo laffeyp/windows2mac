@@ -66,6 +66,24 @@ def provenance() -> dict[str, str]:
     return {"w2m_commit": _commit(ROOT), "substrate_commit": _commit(ROOT / "substrate")}
 
 
+def state_sha256(inputs: dict[str, Any]) -> str:
+    """A discrepancy's initial_state_sha256 (Sprint 112): the canonical JSON (sorted keys, no spaces) of what the run
+    was started with, so equal inputs hash equal; bytes as hex."""
+    import hashlib
+    import json
+
+    def plain(v: Any) -> Any:
+        if isinstance(v, (bytes, bytearray)):
+            return v.hex()
+        if isinstance(v, dict):
+            return {str(k): plain(x) for k, x in v.items()}
+        if isinstance(v, (list, tuple)):
+            return [plain(x) for x in v]
+        return v
+    text = json.dumps(plain(inputs), sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+
+
 def run_with_provenance(root: Path, topology: Callable[[TopologyBuilder], None]) -> RunResult:
     """Run `topology` at `root` with provenance() added to its baseline. Every w2m record is
     written through here (tests/test_record_provenance.py)."""

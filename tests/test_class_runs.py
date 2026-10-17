@@ -116,4 +116,4 @@ def test_an_open_class_differs_exactly_as_pinned(ic: str) -> None:
     """The model's differences on the open class are those OPEN names, no more and no fewer: a change either way
     shows here before it reaches the index."""
     _, cases, results = class_run.cases_for(ic)
-    assert dict(class_run.judge_model(cases, results)) == OPEN[ic]
+    assert dict(class_run.judge_model(cases, results)[0]) == OPEN[ic]
