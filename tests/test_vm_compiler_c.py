@@ -161,9 +161,9 @@ def test_the_expressions_and_features_equal_the_python(compiler: Compiler) -> No
 
 
 def left_to_host(ins: Any) -> bool:
-    """A PAUSE: block_compiler.c ends a block before it and leaves a block that starts at one to the host, where
-    compile_insn yields the slice when another thread is ready (Sprint 096); the table's PAUSE stencil never runs."""
-    return bool(ins.iclass == "PAUSE")
+    """An iclass lowered anew since the table was derived (vm_backend.HOST_LOWERED: PAUSE's yield, Sprint 096; the
+    native PACKSSDW, PMULLD and FNSTCW, Sprint 098): the table leaves it out and the host compiles it."""
+    return bool(ins.iclass in vm_backend.HOST_LOWERED)
 
 
 def test_every_key_of_the_table_compiles_as_compile_insn(compiler: Compiler) -> None:

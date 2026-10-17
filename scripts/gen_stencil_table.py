@@ -375,6 +375,8 @@ def render(data: dict[str, Any], digest: str, facts: dict[bytes, tuple[int, ...]
     r = Render()
     variants: dict[bytes, list[tuple[Any, ...]]] = {}    # form: (nzcv_from, live_after, nzcv_out, feature, position,
     for key, entry in table.items():                     # choices)
+        if key[1] in vm_backend.HOST_LOWERED:            # lowered anew since the table (Sprints 096, 098): the host's
+            continue
         if entry[0] == "one":
             choices = [(0, r.stencil(entry[1]), entry[2])]
             feature, pos = FEATURE_NONE, 0

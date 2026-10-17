@@ -790,8 +790,8 @@ FLAGS_WRITTEN = {kind: ALL_FLAGS for kind in ("add", "sub", "adc", "sbb", "logic
 FLAGS_WRITTEN.update(inc=ALL_FLAGS & ~U_CF, dec=ALL_FLAGS & ~U_CF, bt=ALL_FLAGS & ~U_ZF)   # SDM INC, DEC, BT
 FLAGS_SSE = {"COMISS", "UCOMISS", "COMISD", "UCOMISD", "PCMPISTRI", "PCMPISTRI64"}       # each writes all six
 FLAGS_NONE = {"imm", "addr", "ld", "st", "sel", "cst", "cstz", "mxcsr", "mmx", "fence", "rep", "cpuid", "df", "pause",
-              "vex", "vexs", "fma", "vzeroupper"}
-FLAGS_ALL_READ = {"x86", "ud", "fcw", "xgetbv", "x87"}        # the model's steps read the whole state
+              "vex", "vexs", "fma", "vzeroupper", "fcw"}
+FLAGS_ALL_READ = {"x86", "ud", "xgetbv", "x87"}        # the model's steps read the whole state
 SHIFT_KINDS = ("shr", "shl", "sar", "rol", "ror")
 LIVENESS_SCAN = 8                                              # instructions a successor is scanned for, at most
 
@@ -973,6 +973,10 @@ def _temps_read(op: Op) -> list[int]:
         return [op[2][1]] if op[2][0] == "m" else []
     if k == "mxcsr":                                    # ("mxcsr", "st"|"ld", m32): lowered in A64 (Sprint 065)
         return [op[2][1]]
+    if k == "fcw":                                      # ("fcw", "st", m16): lowered in A64 (Sprint 098)
+        return [op[2][1]]
+    if k == "x87":                                      # ("x87", ic, opcode, reg, st, mem): FLD and FSTP m64 read
+        return [op[5][1]] if op[5] is not None and op[5][0] == "m" else []    # their address in A64 (Sprint 098)
     if k == "mmx":                                      # ("mmx", ic, dst, src, imm): lowered in A64 (Sprint 065)
         return [o[1] for o in (op[2], op[3]) if o[0] == "m"]
     if k == "sel":
@@ -1023,7 +1027,8 @@ def runtime_defines() -> dict[str, int]:
         "W2M_RUN_TABLE_VA": MONITOR_VA + RUN_TABLE, "W2M_RUN_ENTRIES_OFF": RT_ENTRIES, "W2M_RUN_ENTRY": RUN_ENTRY,
         "W2M_RUN_X_OFF": E_X, "W2M_RUN_MONITOR_OFF": E_MONITOR, "W2M_RUN_STATE_OFF": E_STATE,
         "W2M_STATE_SIZE": STATE_SIZE, "W2M_TIME_SLICE": TIME_SLICE, "W2M_SLICE_UNTIL_OFF": SLICE_UNTIL,
-        "W2M_RUN_END_OFF": RUN_END, "W2M_PAUSE_COUNT_OFF": PAUSE_COUNT, "W2M_MONITOR_VA": MONITOR_VA,
+        "W2M_RUN_END_OFF": RUN_END, "W2M_PAUSE_COUNT_OFF": PAUSE_COUNT, "W2M_FCW_OFF": FCW_OFF, "W2M_MXCSR_OFF": MXCSR_OFF,
+        "W2M_X87_ST_OFF": X87_ST_OFF, "W2M_MONITOR_VA": MONITOR_VA,
         "W2M_VMC_VA": MONITOR_VA + VM_COMPILER, "W2M_VMC_LOG_ENTRIES": VMC_LOG_ENTRIES,
         "W2M_CODE_PAGE_SET_VA": MONITOR_VA + CODE_PAGE_SET, "W2M_CODE_PAGE_BITS": CODE_PAGE_BITS,
         "W2M_DISPATCH_VA": MONITOR_VA + DISPATCH_TABLE, "W2M_DISPATCH_BITS": DISPATCH_BITS,
@@ -1045,6 +1050,10 @@ FP_CLASSES = {f"{op}{t}" for op in ("ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "
     "UCOMISS", "UCOMISD", "COMISS", "COMISD"}
 FPSR_TO_MXCSR = ((0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1))   # (FPSR bit, MXCSR bit): IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE
 HVC_SLOW_SSE = 10
+# The iclasses whose compile_insn lowering changed after the stencil table was derived (store/stencil; Sprints 096,
+# 098): scripts/gen_stencil_table.py leaves their forms out of the VM's table, so the compiler in the VM refuses them
+# ("no stencil") and the host compiles every one with the current lowering; the equal-words judges skip them.
+HOST_LOWERED = frozenset({"PAUSE", "PACKSSDW", "PMULLD", "FNSTCW", "FLD", "FSTP", "FSQRT"})
 HVC_SLOW_STEP = 11           # one instruction run by the model (a misaligned LOCK operand)
 HVC_SCHEDULE = 12            # a service handed the vCPU to the scheduler (state.schedule; Sprint 051)
 HVC_CODE_WRITE = 13          # a write faulted on a page behind translated code: x17 the address (Sprint 065)
@@ -1266,6 +1275,61 @@ def _fused_move(a: Assembler, op: Op, ops: tuple[Op, ...], i: int, last: dict[in
         a.emit(_mem(False, dst[2], s, folded[dst[1]]) if folded and dst[1] in folded else a64.str_(dst[2], s, reg_of(dst[1])))
         return True
     return False
+
+
+def _x87_fast(a: Assembler, op: Op, reg_of: Callable[[int], int], symbols: dict[str, int]) -> bool:
+    """FLD m64, FSTP m64 and FSQRT run in the VM where the result is exact (Sprint 098; tools/guest_runtime/
+    x87_fast.c): a call into the runtime's C, which answers 0 and changes nothing where it is not, and the model step
+    (hvc #11) then runs the instruction whole, as before. The guest's x0-x15 go to the state block round each call, as
+    for PCMPISTRI; the C uses no vector register (-mgeneral-regs-only). FSTP stores before its commit and FLD loads
+    before its push, so a fault leaves the x87 state as it was (the commit rule). False: not one of the three forms."""
+    _, ic, opcode, reg, st, mem = op
+    n = NATIVE_OPERANDS
+    if ic == "FLD" and opcode == 0xDD and reg == 0 and st is None and mem is not None and mem[0] == "m":
+        form = "fld"
+    elif ic == "FSTP" and opcode == 0xDD and reg == 3 and st is None and mem is not None and mem[0] == "m":
+        form = "fstp"
+    elif ic == "FSQRT" and opcode == 0xD9 and mem is None:
+        form = "fsqrt"
+    else:
+        return False
+    state = PROCESS_VA + STATE_OFF
+
+    def call(symbol: str, x0: list[int]) -> None:
+        """symbol(x0 as the words set it) with the GPRs saved; its answer in x17."""
+        a.emit(a64.mov_imm(16, state))
+        for i in range(0, 16, 2):
+            a.emit(a64.stp(i, i + 1, 16, 8 * i))
+        a.emit(*x0, a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
+               a64.mov_imm(16, symbols[symbol]), a64.blr(16), a64.mov(17, 0), a64.mov_imm(16, state))
+        for i in range(0, 16, 2):
+            a.emit(a64.ldp(i, i + 1, 16, 8 * i))
+
+    slow, done = a.label(), a.label()
+    if form == "fld":
+        a.emit(a64.ldr(8, 17, reg_of(mem[1]), 0))              # the load first: its fault before any change
+        call("w2m_x87_fld64", [a64.mov(0, 17)])
+        a.branch(lambda off: a64.cbz(17, off), slow)
+    elif form == "fstp":
+        a.emit(a64.str_(8, reg_of(mem[1]), 28, n + 24))        # the address, kept past the call (x30 is a temp)
+        call("w2m_x87_st0_double", [a64.addi(0, 28, n)])
+        a.branch(lambda off: a64.cbz(17, off), slow)
+        a.emit(a64.ldr(8, 16, 28, n), a64.ldr(8, 17, 28, n + 24), a64.str_(8, 16, 17, 0))     # the store: may fault
+        call("w2m_x87_fstp_commit", [a64.ldr(8, 0, 28, n + 8)])
+    else:
+        call("w2m_x87_st0_exact", [a64.addi(0, 28, n)])
+        a.branch(lambda off: a64.cbz(17, off), slow)
+        a.emit(a64.mrs(16, a64.FPSR), a64.str_(8, 16, 28, n + 16),          # FPSR kept: MXCSR's flags live there
+               a64.ldr_v(8, 30, 28, n), a64.fsqrt_scalar(8, 31, 30),
+               a64.fp_fused("fmsub", 8, 30, 31, 31, 30),                  # x - r*r, exact
+               a64.str_v(8, 31, 28, n), a64.str_v(8, 30, 28, n + 8),
+               a64.ldr(8, 16, 28, n + 16), a64.msr(a64.FPSR, 16))
+        call("w2m_x87_sqrt_commit", [a64.addi(0, 28, n)])
+    a.branch(a64.b, done)
+    a.bind(slow)
+    a.emit(a64.hvc(HVC_SLOW_STEP))
+    a.bind(done)
+    return True
 
 
 def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int] | None = None,
@@ -1511,7 +1575,12 @@ def compile_insn(a: Assembler, ins: Lifted, exit_va: int, symbols: dict[str, int
         elif k == "mmx":                                         # Sprint 065: src/w2m/rules/_mmx.py
             from w2m.rules import _mmx
             _mmx.lower(a, op, reg_of)
-        elif k in ("ud", "fcw", "xgetbv", "x87"):              # run by the model (hvc #11): MXCSR's fault rule
+        elif k == "fcw":                                        # FNSTCW: the control word to memory (Sprint 098:
+            a.emit(a64.ldr(2, 16, 28, FCW_OFF))                  # 2,648 model steps on the batch run before)
+            store(op[2], 16)
+        elif k == "x87" and symbols and "w2m_x87_fld64" in symbols and _x87_fast(a, op, reg_of, symbols):
+            pass                                                 # FLD m64, FSTP m64, FSQRT in the VM (Sprint 098)
+        elif k in ("ud", "xgetbv", "x87"):                      # run by the model (hvc #11): MXCSR's fault rule
             a.emit(a64.hvc(HVC_SLOW_STEP))                       # and FPCR, the profile's #UD, said once
         elif k == "fence":
             a.emit({"st": a64.dmb_ishst, "ld": a64.dmb_ishld, "full": a64.dmb_ish}[op[1]]())

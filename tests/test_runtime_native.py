@@ -387,3 +387,63 @@ int main(void) {
 }
 """, INHERIT)
     assert r.returncode == STOPPED, (r.returncode, r.stdout, r.stderr[-2000:])
+
+
+X87_PREFIX = """
+static unsigned char test_state[1024];
+#define W2M_STATE_VA ((unsigned long long)test_state)
+#define W2M_FCW_OFF 0x70
+#define W2M_MXCSR_OFF 0x50
+#define W2M_X87_ST_OFF 768
+"""
+
+
+def test_x87_fast_rounds_and_converts_as_the_model() -> None:
+    """Sprint 098: x87_fast.c's FSTP m64 rounding and FLD m64 conversion against src/w2m/x87.py (the model the Xeon's
+    cases judge), on values the class case sets hold none of: exact ties both ways, a carry into a new bit, the
+    edges of the double range. Where the C answers 0 the model's case must be one it leaves to the model."""
+    import random
+    from w2m import x87
+    rng = random.Random(9801)
+    values = []
+    for _ in range(3000):
+        e = rng.randrange(16383 - 1030, 16383 + 1030)
+        m = x87.J | rng.getrandbits(63)
+        values.append(rng.getrandbits(1) << 79 | e << 64 | m)
+    for _ in range(500):                                        # ties: the dropped 11 bits exactly half
+        e = rng.randrange(16383 - 1022, 16383 + 1023)
+        kept = 1 << 52 | rng.getrandbits(52)
+        values.append(e << 64 | kept << 11 | 0x400)
+    values += [16383 << 64 | (1 << 64) - 1, (16383 + 1023) << 64 | (1 << 64) - 1, (16383 - 1022) << 64 | x87.J,
+               0, 1 << 79]
+    body = "int main(void) {\n    static const unsigned long long v[][2] = {\n"
+    body += ",\n".join(f"        {{0x{x & (1 << 64) - 1:x}ull, 0x{x >> 64:x}ull}}" for x in values)
+    body += """};
+    unsigned short *fsw = (unsigned short *)(test_state + 0x9e);
+    unsigned long long out[2];
+    for (unsigned i = 0; i < sizeof v / sizeof v[0]; i++) {
+        *(unsigned short *)((unsigned char *)test_monitor_data + 0x70) = 0x27F;
+        *fsw = 0;
+        test_state[0xa0] = 1;                                  /* physical register 0, TOP 0: ST(0) in use */
+        memcpy(test_state + 768, &v[i][0], 8);
+        memcpy(test_state + 776, &v[i][1], 2);
+        unsigned long long ok = w2m_x87_st0_double(out);
+        printf("%llu %llx %llx\\n", ok, ok ? out[0] : 0, ok ? out[1] : 0);
+    }
+    return 0;
+}
+"""
+    r = run_native(["x87_fast.c"], body, X87_PREFIX)
+    assert r.returncode == 0, r.stderr
+    taken = 0
+    for x, line in zip(values, r.stdout.split("\n")):
+        ok, bits, flags = (int(w, 16) for w in line.split())
+        want, want_flags = x87.to_ieee(x87.M64, x, 0)
+        if ok:
+            taken += 1
+            assert (bits, flags) == (want, want_flags & (x87.PE | x87.C1)), hex(x)
+            assert not want_flags & ~(x87.PE | x87.C1), hex(x)        # nothing the C leaves out
+        else:
+            assert want_flags & (x87.OE | x87.UE) or x87.kind(x) not in ("normal", "zero") or \
+                (x >> 64 & 0x7FFF) - 16383 < -1022, hex(x)
+    assert taken > 3000

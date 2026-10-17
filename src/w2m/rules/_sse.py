@@ -107,7 +107,8 @@ LANE_LOWERED = {"PUNPCKLQDQ": ("zip1", 3), "UNPCKLPD": ("zip1", 3), "UNPCKHPD": 
                 "PUNPCKLWD": ("zip1", 1), "PCMPEQW": ("cmeq", 1),
                 "PUNPCKHQDQ": ("zip2", 3),      # Sprint 065: 1.4M model steps at UnityPlayer.dll+0x3cf4 and its neighbours
                 "PADDUSB": ("uqadd", 0), "PCMPGTB": ("cmgt", 0), "PADDB": ("add", 0),     # Sprint 065
-                "PCMPEQQ": ("cmeq", 3)}                          # Sprint 068 item C: 68,124 model steps (VEX)
+                "PCMPEQQ": ("cmeq", 3),                          # Sprint 068 item C: 68,124 model steps (VEX)
+                "PMULLD": ("mul", 2)}       # Sprint 098: each dword product's low 32 bits; 6,426 model steps a batch run
 SSE2_INT_LOWERED_APPROXIMATE = {"RCPPS", "RSQRTPS", "RCPSS", "RSQRTSS"}
 CMP_LOWERED = {"CMPPS", "CMPPD"}                               # Sprint 068 item C
 SHIFTS = {"PSRLD": (2, "right"), "PSLLD": (2, "left"), "PSRAD": (2, "arith"), "PSRLW": (1, "right"),
@@ -121,6 +122,7 @@ SSE2_INT_LOWERED |= {"PUNPCKHQDQ"}                                              
 SSE2_INT_LOWERED |= {"PADDUSB", "PCMPGTB", "PADDB", "PACKSSWB", "PMULHW", "PSHUFB", "MOVLPS"}
 SSE2_INT_LOWERED |= {"PSADBW", "PMADDUBSW"}                                     # Sprint 068
 SSE2_INT_LOWERED |= {"PCMPEQQ", "MOVNTDQ"}                                       # Sprint 068 item C
+SSE2_INT_LOWERED |= {"PACKSSDW", "PMULLD"}       # Sprint 098: 9,681 and 6,426 model steps on the batch run to its stop
 SSE2_INT_LOWERED |= {'MOVMSKPS', 'PADDD', 'MOVLHPS', 'PSRAD', 'PSRLD', 'PSLLD', 'UNPCKHPS', 'ANDNPS', 'MOVHLPS', 'PXOR', 'PUNPCKLDQ', 'SHUFPS', 'UNPCKLPS'}     # Sprint 046
 
 
@@ -291,6 +293,8 @@ def _lower_int(a: Assembler, ic: str, dst: Op, src: Op, imm: int | None, reg_of:
         a.emit(a64.sqxtun(30, d, False), a64.sqxtun(30, v, True), a64.mov_v(d, 30))
     elif ic == "PACKSSWB":                                       # as PACKUSWB, to signed bytes
         a.emit(a64.sqxtn(30, d, False), a64.sqxtn(30, v, True), a64.mov_v(d, 30))
+    elif ic == "PACKSSDW":                                       # dwords to signed words, saturated: the destination's
+        a.emit(a64.sqxtn_h(30, d, False), a64.sqxtn_h(30, v, True), a64.mov_v(d, 30))   # low half, the source's high
     elif ic == "PMULHW":                                         # each word's signed product, its high half
         a.emit(a64.smull(30, d, v, False), a64.smull(31, d, v, True), a64.three_same("uzp2", d, 30, 31, 1))
     elif ic == "PSHUFB":                                         # a byte's index with bit 7 set gives 0; TBL gives 0
