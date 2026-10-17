@@ -186,7 +186,9 @@ def measurement_problems(table: dict[tuple[str, str], float]) -> list[str]:
     for metric in ("instructions_retired", "pause_instructions"):
         whole = table.get((metric, "process"))
         parts = sum(v for (m, variant), v in table.items() if m == metric and variant.startswith("thread "))
-        if whole != parts:
+        if whole is None:
+            problems.append(f"{metric}: not on the record")
+        elif whole != parts:
             problems.append(f"{metric}: the process {whole}, its threads {parts}")
     seconds = sum(v for (m, _), v in table.items() if m == "run_seconds")
     rate = table.get(("instructions_per_second", "process"), 0.0)
