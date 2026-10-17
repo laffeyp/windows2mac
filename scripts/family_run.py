@@ -891,7 +891,7 @@ FAMILIES: dict[str, Family] = {
     "wait_handoff": Family(
         name="wait_handoff",
         contract_id="windows.sync.wait_handoff",
-        version="0.2.0",
+        version="0.3.0",
         summary=("Who gets a semaphore, auto-reset event or mutex released while threads wait for it (Sprint 065; game "
                  "run 38216081440 seq 1317 and 1402-1508, where all 16 Background Job.Worker waits on one semaphore "
                  "return and in w2m 15 never did). The release hands the object to the waiters at once, in the order "
@@ -899,50 +899,52 @@ FAMILIES: dict[str, Family] = {
                  "the first two of three waiters, and of two waiters the first wakes. 0.2.0 (recentering step 5, the "
                  "wake keys): a thread waiting on either of two auto-reset events gets the second when it is set, and "
                  "the setter's own zero-timeout wait finds it taken (laptop run lap-20261014T094031671Z-93f645c3; the "
-                 "runners' 0.1.0 runs hold no such row)."),
+                 "runners' 0.1.0 runs hold no such row). 0.3.0 (Sprint 095): a thread waiting for all of a semaphore and an "
+                 "auto-reset event stays waiting after the semaphore alone is released, and takes both when the event "
+                 "is set, so the setter's zero-timeout waits on each right after find them taken (laptop run "
+                 "lap-20261017T040446837Z-dc268176)."),
         probe="wait_handoff", guest_file="sync_objects.c",
         runs={
-              "lap-20261014T094031671Z-93f645c3": Run("laptop", "8040095534464f89c17d296986bd6cf2433e532b05b269bac3bc7072c4fc3e17", "wait_handoff-20261014T094031671Z", "13th Gen Intel(R) Core(TM) i5-13420H"),
+              "lap-20261017T040446837Z-dc268176": Run("laptop", "c45bd6f706ee778fe35f45c6d81a006c5e517822a65d9c1efb3eb9f2aaacb7f6", "wait_handoff-20261017T040446837Z", "13th Gen Intel(R) Core(TM) i5-13420H"),
         },
         documented=(),
         open_questions=(
             "The order (first waiter first) is the rows' on two runners, three runs each; no Microsoft page read for "
             "this family promises it.",
-            "A release while a thread waits on several objects is one row (event_auto.multiple_waiter): two events, "
-            "the second set; a semaphore or mutex among several, or a wait for all, has none."),
+            "A release while a thread waits on several objects is two rows (event_auto.multiple_waiter, either of "
+            "two events; wait_all.semaphore_and_event, all of a semaphore and an event); a mutex among several has "
+            "none."),
         plants={"semaphore_not_handed_over": Plant("    o->count += (s32)count;\n    grant(o);", "    o->count += (s32)count;",
                                                    # named first as 2 rows; it changed 5: the releaser keeps the
                                                    # unit, the waiter never ends, and the probe deadlocks (recorded);
                                                    # 0.2.0's row after them never runs
                                                    ("semaphore.one_waiter", "semaphore.three_waiters_two_released",
                                                     "semaphore.order", "event_auto.one_waiter", "mutex.one_waiter",
-                                                    "event_auto.multiple_waiter")),
+                                                    "event_auto.multiple_waiter",
+                                                    "wait_all.semaphore_and_event")),
                 "last_waiter_first": Plant("    for (int i = 0; i < nwaiters; i++) {\n        if (waiters[i].object != index",
                                            "    for (int i = nwaiters - 1; i >= 0; i--) {\n        if (waiters[i].object != index",
                                            ("semaphore.three_waiters_two_released", "semaphore.order")),
-                # 2 rows from Sprint 095: without the grant nothing readies the mutex's waiter (a release readies
+                # 2 rows from Sprint 095 (3 with 0.3.0's wait-all row, which a deadlock never reaches): without the grant nothing readies the mutex's waiter (a release readies
                 # only the thread it grants), so the probe deadlocks before multiple_waiter, as the semaphore's plant
                 "mutex_not_handed_over": Plant("        o->max = 0;\n        grant(o);", "        o->max = 0;",
-                                               ("mutex.one_waiter", "event_auto.multiple_waiter")),
+                                               ("mutex.one_waiter", "event_auto.multiple_waiter",
+                                                "wait_all.semaphore_and_event")),
                 # recentering step 5: a wait on several objects takes any signal (key 0); waking only the threads
                 # whose key equals the signal's, or none of those whose wait takes any key, leaves that waiter blocked
                 # (Sprint 069: threads.c's w2m_signal wakes them in the VM)
-                # re-anchored in Sprint 095: an auto-reset event's release wakes the waits that take any signal
-                # through w2m_signal_any_waiters, not w2m_signal, so the plants on w2m_signal's key test reached no
-                # row (both came back blind); these two break the new path the row takes
-                "only_exact_key_wakes": Plant("        if (e->status == BLOCKED && !scratch_of(e)->wait_key) {",
-                                              "        if (0) {", ("event_auto.multiple_waiter",),
-                                              file="threads.c"),
-                # Sprint 095: a release readies only the waiter its grant chose; dropping that wake loses it (the
-                # waiter never runs), named as semaphore_not_handed_over's measured reach: the probe deadlocks
                 "granted_waiter_not_readied": Plant("        waiters[i].granted = 1;\n        w2m_ready_thread(waiters[i].tid);",
                                                     "        waiters[i].granted = 1;",
                                                     ("semaphore.one_waiter", "semaphore.three_waiters_two_released",
                                                      "semaphore.order", "event_auto.one_waiter", "mutex.one_waiter",
-                                                     "event_auto.multiple_waiter")),
-                "any_key_waiters_ignored": Plant("    if (o && o->kind == EVENT_AUTO) w2m_signal_any_waiters();",
-                                                 "    if (o && o->kind == EVENT_AUTO) {}",
-                                                 ("event_auto.multiple_waiter",))}),
+                                                     "event_auto.multiple_waiter", "wait_all.semaphore_and_event")),
+                # Sprint 095: the wait for all of several objects, granted at the release that completes it; these
+                # replace two plants on w2m_signal's key test, which no row reaches since a handed-over release
+                # readies only the threads its grants chose (a blind spot recorded in the card)
+                "wait_all_not_granted": Plant("        if (w->granted) continue;", "        continue;",
+                                              ("wait_all.semaphore_and_event",)),
+                "wait_all_not_readied": Plant("        w->granted = 1;\n        w2m_ready_thread(w->tid);",
+                                              "        w->granted = 1;", ("wait_all.semaphore_and_event",))}),
     "code_pages": Family(
         name="code_pages",
         contract_id="windows.code_pages.ansi_1252",

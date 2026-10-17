@@ -131,22 +131,6 @@ void w2m_ready_thread(u32 tid) {
     }
 }
 
-/* The threads whose wait takes any signal (key 0: a wait on several objects, Sprint 069) ready, after a release that
- * readied its own waiter by w2m_ready_thread. */
-void w2m_signal_any_waiters(void) {
-    if (!RUN->blocked) return;
-    int woke = 0;
-    for (u64 i = 0; i < RUN->count; i++) {
-        struct w2m_run_entry *e = run_entry(i);
-        if (e->status == BLOCKED && !scratch_of(e)->wait_key) {
-            set_status(e, READY);
-            w2m_wake_census.readied++;
-            woke = 1;
-        }
-    }
-    if (woke) *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
-}
-
 /* vm_backend.py _wake_expired: on the instruction clock, a blocked thread whose deadline has passed is ready. */
 static void wake_expired(void) {
     if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return;

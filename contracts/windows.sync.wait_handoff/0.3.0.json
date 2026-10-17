@@ -1,0 +1,104 @@
+{
+ "contract_id": "windows.sync.wait_handoff",
+ "version": "0.3.0",
+ "status": "accepted",
+ "summary": "Who gets a semaphore, auto-reset event or mutex released while threads wait for it (Sprint 065; game run 38216081440 seq 1317 and 1402-1508, where all 16 Background Job.Worker waits on one semaphore return and in w2m 15 never did). The release hands the object to the waiters at once, in the order they began to wait: the releaser's own zero-timeout wait right after finds it taken, two units go to the first two of three waiters, and of two waiters the first wakes. 0.2.0 (recentering step 5, the wake keys): a thread waiting on either of two auto-reset events gets the second when it is set, and the setter's own zero-timeout wait finds it taken (laptop run lap-20261014T094031671Z-93f645c3; the runners' 0.1.0 runs hold no such row). 0.3.0 (Sprint 095): a thread waiting for all of a semaphore and an auto-reset event stays waiting after the semaphore alone is released, and takes both when the event is set, so the setter's zero-timeout waits on each right after find them taken (laptop run lap-20261017T040446837Z-dc268176).",
+ "applicability": "laptop (13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/wait_handoff/wait_handoff.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "semaphore.one_waiter",
+    "release": 1,
+    "previous": 0,
+    "releaser_wait": 258,
+    "waiter_done": 1,
+    "waiter_ret": 0
+   },
+   {
+    "s": "semaphore.three_waiters_two_released",
+    "previous": 0,
+    "releaser_wait": 258,
+    "done": 2,
+    "first_done": 1,
+    "second_done": 1,
+    "third_done": 0
+   },
+   {
+    "s": "semaphore.order",
+    "first_done": 1,
+    "second_done": 0
+   },
+   {
+    "s": "event_auto.one_waiter",
+    "set": 1,
+    "releaser_wait": 258,
+    "waiter_done": 1,
+    "waiter_ret": 0
+   },
+   {
+    "s": "mutex.one_waiter",
+    "owned": 0,
+    "release": 1,
+    "releaser_wait": 258,
+    "waiter_done": 1,
+    "waiter_ret": 0
+   },
+   {
+    "s": "event_auto.multiple_waiter",
+    "set": 1,
+    "releaser_wait": 258,
+    "waiter_done": 1,
+    "waiter_ret": 1
+   },
+   {
+    "s": "wait_all.semaphore_and_event",
+    "release": 1,
+    "previous": 0,
+    "done_after_semaphore": 0,
+    "set": 1,
+    "releaser_wait_semaphore": 258,
+    "releaser_wait_event": 258,
+    "waiter_done": 1,
+    "waiter_ret": 0
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run lap-20261017T040446837Z-dc268176: laptop, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:c45bd6f706ee778fe35f45c6d81a006c5e517822a65d9c1efb3eb9f2aaacb7f6",
+   "applicability": "the builds and CPUs observed",
+   "execution_ids": [
+    "wait_handoff-20261017T040446837Z-1",
+    "wait_handoff-20261017T040446837Z-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "The order (first waiter first) is the rows' on two runners, three runs each; no Microsoft page read for this family promises it.",
+  "A release while a thread waits on several objects is two rows (event_auto.multiple_waiter, either of two events; wait_all.semaphore_and_event, all of a semaphore and an event); a mutex among several has none."
+ ],
+ "sections": {
+  "probe": "probes/wait_handoff (Sprint 044)",
+  "implementation": "tools/guest_runtime/sync_objects.c",
+  "rows": "scripts/family_run.py wait_handoff",
+  "excluded": "none"
+ }
+}
