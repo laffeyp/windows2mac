@@ -11,6 +11,7 @@ microseconds from the trace's start.
 
 instructions.tsv: second, pid, process, tid, instructions, for every process whose name holds the image name part.
 presents.tsv: second, pid, process, event, count: DXGI events whose name holds "Present", for the same processes.
+present_times.tsv: microsecond, pid: each IDXGISwapChain_Present start of those processes (frame times, hitches).
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ def main(argv: list[str]) -> int:
     pending: tuple[int, int] | None = None          # the Pmc row waiting for its CSwitch: (timestamp, value)
     instructions: Counter[tuple[int, int, str, int]] = Counter()
     presents: Counter[tuple[int, int, str, str]] = Counter()
+    starts: list[tuple[int, int]] = []
     unmatched = 0
     with dump.open(encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -62,6 +64,8 @@ def main(argv: list[str]) -> int:
                     name, pid = process_of(p[2])
                     if part in name.lower():
                         presents[(int(p[1]) // 1_000_000, pid, name, p[0])] += 1
+                        if p[0].endswith("IDXGISwapChain_Present/win:Start"):
+                            starts.append((int(p[1]), pid))
     out.mkdir(parents=True, exist_ok=True)
     with (out / "instructions.tsv").open("w") as w:
         w.write("second\tpid\tprocess\ttid\tinstructions\n")
@@ -71,6 +75,10 @@ def main(argv: list[str]) -> int:
         w.write("second\tpid\tprocess\tevent\tcount\n")
         for (s, pid, name, ev), n in sorted(presents.items()):
             w.write(f"{s}\t{pid}\t{name}\t{ev}\t{n}\n")
+    with (out / "present_times.tsv").open("w") as w:
+        w.write("microsecond\tpid\n")
+        for ts, pid in sorted(starts):
+            w.write(f"{ts}\t{pid}\n")
     print(f"{sum(instructions.values())} instructions over {len({k[3] for k in instructions})} threads; "
           f"{sum(presents.values())} Present events; {unmatched} switches without their counter row")
     return 0

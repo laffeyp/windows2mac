@@ -30,7 +30,7 @@ the calls and the frames per second, 15 s at a time.
 
 Usage: uv run python scripts/laptop_dtrace.py start
        uv run python scripts/laptop_dtrace.py frames
-       uv run python scripts/laptop_dtrace.py session
+       uv run python scripts/laptop_dtrace.py session [--input <recorded session>] [--pmc] [--seconds N]
 """
 
 from __future__ import annotations
@@ -229,7 +229,7 @@ def last_counts(text: str, kind: str) -> dict[str, int]:
     return counts
 
 
-def session() -> int:
+def session(inputs: str | None = None, pmc: bool = False, seconds: int = SESSION) -> int:
     stage = "C:\\w2m-stage\\session"
     subprocess.run(["ssh", HOST, f'cmd /c "mkdir {stage} 2>nul"'], check=False)
     for name in ("wait_for_process.d", "session_system.d", "session_win32u.d"):
@@ -239,7 +239,7 @@ def session() -> int:
     # win32u DTrace ends with its target (measured on notepad, 2026-10-16). An empty pid would make -p read -o as the
     # pid (measured: "dtrace: invalid pid: -o"), so a missing or ended game fails the run here.
     tracer = f"""cd {stage}; Remove-Item system.txt, win32u.txt, *.err -ErrorAction SilentlyContinue
-$sys = Start-Process "{DTRACE}" -ArgumentList '-q -s session_system.d Hail {SESSION + 600} -o system.txt' -PassThru `
+$sys = Start-Process "{DTRACE}" -ArgumentList '-q -s session_system.d Hail {seconds + 600} -o system.txt' -PassThru `
   -NoNewWindow -RedirectStandardError system.err
 $game = "$(& "{DTRACE}" -q -s wait_for_process.d Hail 5 | Select-Object -First 1)".Trim()
 "game pid $game"
@@ -253,9 +253,10 @@ Get-Content system.err, win32u.err | ForEach-Object {{ "dtrace stderr $_" }}"""
     encoded = base64.b64encode(tracer.encode("utf-16-le")).decode()
     trace = subprocess.Popen(["ssh", HOST, f"powershell -NoProfile -EncodedCommand {encoded}"], stdout=subprocess.PIPE,
                              text=True)
+    job = ["--input", inputs] if inputs else ["--record"]           # a replay of a recorded session, or a person
     game = subprocess.run([sys.executable, str(ROOT / "scripts" / "windows_machine.py"), "game", "--executions", "1",
-                           "--seconds", str(SESSION), "--mode", "play", "--person", "--record", "--capture", "off"],
-                          capture_output=True, text=True)
+                           "--seconds", str(seconds), "--mode", "play", "--person", *job, "--capture", "off",
+                           *(["--pmc"] if pmc else [])], capture_output=True, text=True)
     print(game.stdout[-2000:])
     out = trace.communicate()[0]
     print(out)
@@ -287,8 +288,13 @@ Get-Content system.err, win32u.err | ForEach-Object {{ "dtrace stderr $_" }}"""
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("what", choices=["start", "frames", "session"])
+    ap.add_argument("--input", help="session: replay games/hail-to-the-rainbow/inputs/<name>.jsonl instead of a person")
+    ap.add_argument("--pmc", action="store_true", help="session: also record presents and their times (--pmc)")
+    ap.add_argument("--seconds", type=int, default=SESSION, help="session: the game's seconds at most")
     a = ap.parse_args(argv)
-    return {"start": start, "frames": frames, "session": session}[a.what]()
+    if a.what == "session":
+        return session(a.input, a.pmc, a.seconds)
+    return start() if a.what == "start" else frames()
 
 
 if __name__ == "__main__":
