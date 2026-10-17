@@ -490,6 +490,30 @@ def _adds_subs(add: bool, rd: int, rn: int, rm: int, bits: int) -> int:
     return w if bits == 64 else w & ~(1 << 31)
 
 
+RUNTIME_LOCK = 0x80                         # RUN_TABLE + this: the runtime lock, 0 free, 1 held (Sprint 106)
+
+
+def lock_runtime(a: Assembler) -> None:
+    """Take the runtime lock (docs/design-several-vcpus.md: one lock first): SWPA 1 into it until the old value is 0,
+    reading it plainly between tries. Uses x16 and x18, dead at every entry into the runtime's C. Never held while
+    guest code runs (runtime.h: no runtime frame is live then), so a guest callback's services cannot deadlock."""
+    spin, wait, got = a.label(), a.label(), a.label()
+    a.emit(*a64.mov_imm(16, MONITOR_VA + RUN_TABLE + RUNTIME_LOCK))
+    a.bind(spin)
+    a.emit(a64.movz(18, 1), a64.SWPA_W18_W18_X16)
+    a.branch(lambda off: a64.cbz(18, off), got)
+    a.bind(wait)
+    a.emit(a64.ldr(4, 18, 16, 0))
+    a.branch(lambda off: a64.cbnz(18, off), wait)
+    a.branch(a64.b, spin)
+    a.bind(got)
+
+
+def unlock_runtime(a: Assembler) -> None:
+    """Release the runtime lock (STLR: every store the runtime made is seen before the lock is free). Uses x16."""
+    a.emit(*a64.mov_imm(16, MONITOR_VA + RUN_TABLE + RUNTIME_LOCK), a64.STLR_WZR_X16)
+
+
 def count_from_budget() -> list[int]:
     """Monitor data word 0 (the count) = word 8 (the limit) - x23, before a call into the runtime's C (uses x17)."""
     return [a64.ldr(8, 17, 28, 8), a64.sub(17, 17, REG_BUDGET), a64.str_(8, 17, 28, 0)]
@@ -2082,6 +2106,11 @@ class VM:
         self.mm = mmap.mmap(fd, self.size)
         os.close(fd)
         view = self._view = memoryview(self.mm)
+        # words other vCPUs may read while the host writes them, each one aligned 64-bit store (Sprint 106): struct's
+        # pack_into zero-fills its whole destination before it packs (CPython _struct.c s_pack_internal, memset)
+        self._words = view.cast("Q")
+        import ctypes
+        self._barrier = ctypes.CDLL("/usr/lib/libSystem.B.dylib").OSMemoryBarrier
         self.mem = Memory()
         for r, off in placed:
             n = len(r.data)
@@ -2332,6 +2361,7 @@ class VM:
         def vectors_at_x17() -> None:
             a.emit(a64.ldr(8, 17, 16, 0x28), *a64.mov_imm(18, MONITOR_VA), a64.add(17, 17, 18))   # E_VSLOT
 
+        lock_runtime(a)                                  # before the first store to the shared run table
         entry_in_x16()
         registers(a64.stp)
         vectors_at_x17()
@@ -2353,9 +2383,11 @@ class VM:
             a.emit(a64.ldp_q(q, q + 1, 17, 16 * q))
         a.emit(a64.ldp(18, 25, 17, 256), a64.msr(a64.FPCR, 18), a64.msr(a64.FPSR, 25))
         registers(a64.ldp)
+        unlock_runtime(a)                                # x16 is not among the registers loaded
         a.branch(a64.b, self.dispatch_va)
         a.bind(decline)
         registers(a64.ldp)
+        unlock_runtime(a)
         a.emit(a64.ret() if from_slice else a64.hvc(HVC_SCHEDULE))
         words = a.finish()
         va = MONITOR_VA + self.code_cursor
@@ -2794,7 +2826,7 @@ class VM:
             at = self._page_descriptor(page)
             if at:
                 desc = struct.unpack_from("<Q", self.mm, at)[0]
-                struct.pack_into("<Q", self.mm, at, desc | 1 if valid else desc & ~1)
+                self._words[at // 8] = desc | 1 if valid else desc & ~1     # one store: a walker may read it
 
     def _stack_grow(self, address: int, probe: bool) -> int:
         """Commit the current thread's stack down to `address`'s page, as Windows does on a touch of its guard: the
@@ -3157,8 +3189,10 @@ class VM:
                     self.mm[self._process(TRACE_OFF) + TRACE_WIDE_OFF + (thunk - THUNK_BASE) // 16] = TRACE_WIDE_ARGS[fn]
                 symbol = "w2m_traced"
             a.emit(*count_from_budget())
+            lock_runtime(a)
             a.emit(a64.mov_imm(16, self.runtime.symbols[symbol]), a64.blr(16))
             a.emit(*budget_from_count())
+            unlock_runtime(a)
             a.emit(a64.mov_imm(16, state))
             if sets_rax:
                 a.emit(a64.str_(8, 0, 16, 0))
@@ -3698,6 +3732,7 @@ class VM:
         # SP is reset to the runtime stack's top: guest code runs with no runtime frame live (runtime.h, beside
         # w2m_call_guest). SP itself cannot show that (Sprint 084): a fault resumed by w2m_resume_context leaves SP
         # inside frames that will never return
+        lock_runtime(d)                                  # the compiler's page is shared: before the save
         d.emit(*a64.mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE))
         for r in range(0, 16, 2):
             d.emit(a64.stp(r, r + 1, 16, 8 * r))
@@ -3708,6 +3743,7 @@ class VM:
         for r in range(0, 16, 2):
             d.emit(a64.ldp(r, r + 1, 16, 8 * r))
         d.emit(a64.ldp(17, 30, 16, 128))
+        unlock_runtime(d)
         d.branch(lambda off: a64.cbz(25, off), host)
         d.emit(a64.br(25))
         d.bind(host)
@@ -3840,9 +3876,11 @@ class VM:
         assert e.here() == cont
         self.exception_call_va = cont
         e.emit(*count_from_budget())
+        lock_runtime(e)
         e.emit(a64.mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE), a64.addi(31, 16, 0),
                a64.mov_imm(16, self.runtime.symbols["w2m_exception"]), a64.blr(16))
         e.emit(*budget_from_count())
+        unlock_runtime(e)
         e.emit(a64.mov_imm(16, PROCESS_VA + STATE_OFF))
         for i in range(0, 16, 2):
             e.emit(a64.ldp(i, i + 1, 16, 8 * i))
@@ -3863,12 +3901,12 @@ class VM:
         """Write a descriptor in a shared table and in each vCPU's copy of that table where the copy held the same
         descriptor (where it differs, the entry is the vCPU's private chain; Sprint 104)."""
         old = struct.unpack_from("<Q", self.mm, at)[0]
-        struct.pack_into("<Q", self.mm, at, value)
+        self._words[at // 8] = value                     # one store: another vCPU's walker may read it
         table = at & ~(PAGE - 1)
         for copies in self._private_tables:
             copy = copies.get(table)
             if copy is not None and struct.unpack_from("<Q", self.mm, copy + at - table)[0] == old:
-                struct.pack_into("<Q", self.mm, copy + at - table, value)
+                self._words[(copy + at - table) // 8] = value
 
     def _vcpu_pages(self, i: int) -> list[tuple[int, int]]:
         """(virtual address, memory-file offset) of vCPU i's private pages: the monitor data page, the state block,
@@ -3993,7 +4031,7 @@ class VM:
                 if not at:
                     continue
                 desc = struct.unpack_from("<Q", self.mm, at)[0]
-                struct.pack_into("<Q", self.mm, at, desc | AP_READ_ONLY)
+                self._words[at // 8] = desc | AP_READ_ONLY   # one store: a walker may read it
                 blocks = self.code_pages[page] = set()
                 self._page_set_add(page)
             blocks.add(owner)
@@ -4019,7 +4057,7 @@ class VM:
                     struct.pack_into("<QQ", self.mm, slot, M64, self.miss_va)
             self.blocks_dropped += 1
         at = self._page_descriptor(page)
-        struct.pack_into("<Q", self.mm, at, struct.unpack_from("<Q", self.mm, at)[0] & ~AP_READ_ONLY)
+        self._words[at // 8] = struct.unpack_from("<Q", self.mm, at)[0] & ~AP_READ_ONLY   # one store
         self.code_writes += 1
         return True
 
@@ -4271,17 +4309,36 @@ class VM:
             addr, previous = constant[br[2]] & M64, None
         return live | undecided
 
+    def _release_runtime_lock(self) -> None:
+        """Free the runtime lock where the host moves a vCPU off a runtime frame that holds it: a service's or the
+        exception entry's C that exited to the host (hvc 8, hvc 9), which the host then resumes elsewhere, so the
+        frame's unlock never runs (Sprint 106: a class run's fault, taken by on_exception, left it held and the next
+        case's first service spun on it for the run's 600 s). One vCPU runs then: the frame was the holder."""
+        self._barrier()
+        self._words[(RUN_TABLE + RUNTIME_LOCK) // 8] = 0
+
     def _dispatch_insert(self, target: int, va: int) -> None:
         """Put (target, va) in its pair of the dispatch table: in a slot that is empty or holds it, else first, the first
         slot's entry moved to the second (the newest checked first)."""
         at = DISPATCH_TABLE + 16 * dispatch_slot(target)
         t0, v0, t1, _ = struct.unpack_from("<QQQQ", self.mm, at)
+        words, i = self._words, at // 8
+
+        def publish(slot: int, t: int, v: int) -> None:
+            """Another vCPU may read the slot meanwhile (Sprint 106): its target emptied first, so no reader matches
+            while its code address changes, then the address, then the target, a barrier before each (the Mac's
+            stores may otherwise reach another core out of order; before the first, the block's own words)."""
+            for k, value in ((slot, M64), (slot + 1, v), (slot, t)):
+                self._barrier()
+                words[k] = value
+
         if t0 in (M64, target):
-            struct.pack_into("<QQ", self.mm, at, target, va)
+            publish(i, target, va)
         elif t1 in (M64, target):
-            struct.pack_into("<QQ", self.mm, at + 16, target, va)
+            publish(i + 2, target, va)
         else:
-            struct.pack_into("<QQQQ", self.mm, at, target, va, t0, v0)
+            publish(i + 2, t0, v0)                               # the first entry moved down, whole, then replaced
+            publish(i, target, va)
 
     def _recon_append(self, marks: list[tuple[int, int]]) -> None:
         """Append (host code VA, x86 address) pairs to the reconstruction table in guest memory.
@@ -4393,6 +4450,7 @@ class VM:
 
         self._max_steps = max_steps
         self._set_budget()
+        self._release_runtime_lock()                      # a run before this one may have stopped inside the runtime
         # the compiler inside the VM, where nothing needs every miss to reach the host (Sprint 083)
         struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_ENABLED, int(
             VM_COMPILE and not self.lockstep and not BLOCK_CENSUS and on_dispatch is None and interrupt_every_ms is None))
@@ -4486,6 +4544,8 @@ class VM:
                     x[17] = self.x86_address_at(e.pc)
                     pc = self.miss_va
                     cpsr = CPSR_EL1H
+                    if runtime_lo <= e.pc < runtime_hi:
+                        self._release_runtime_lock()          # stopped in the runtime's C: its frame is left
                     if on_boundary:
                         on_boundary(self, x, x[17])
                     continue
@@ -4526,6 +4586,7 @@ class VM:
                         if exc is not None and on_exception is not None and on_exception(self, exc):
                             self.exit_code = None
                             self.clear_exception()
+                            self._release_runtime_lock()      # w2m_exception's frame is left, unreturned
                             pc = self.miss_va                 # hvc #1: the driver sets the next state
                             continue
                         stop = ("ExitProcess" if exc is None else
@@ -4538,6 +4599,7 @@ class VM:
                     ret = int.from_bytes(self.mem.read(x[4], 8), "little")
                     if on_unimplemented is not None and on_unimplemented(self, x, name):
                         x[17], x[4] = ret, x[4] + 8           # ret, with x[RAX] as the hook left it
+                        self._release_runtime_lock()          # the service's frame is left, unreturned
                         pc = self.miss_va
                         continue
                     self.unimplemented = (name, ret)
@@ -4686,6 +4748,7 @@ class VM:
             if isinstance(r.data, memoryview):
                 r.data.release()
         self.mem.regions.clear()
+        self._words.release()
         self._view.release()
         self.mm.close()
         os.unlink(self.path)
