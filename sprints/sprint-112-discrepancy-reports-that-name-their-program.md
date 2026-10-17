@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 112
-status: active
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -71,3 +71,18 @@ Class, family and file runs report the program and state they failed from; the c
 reduction; CI green.
 
 ## observed
+- **Made** (b1ad0cfb): as scoped; `tests/test_discrepancy_reports.py` (the state hash canonical; a case's program and
+  state hashed apart; an example's case read back; a probe's start hashed from `vm_inputs`).
+- **Judge:** the sweep on b1ad0cfb, 456 of 458 classes (118 s) and 68 of 68 families, every record stamped with it.
+  FCOS (class-fcos-1792271833338157000) and FSIN (class-fsin-1792271845527921000): `check_records.py` S4, S5 and E1
+  applied, 0 violations. FCOS's four reports (st0 and FSW, by the model and the VM) each follow a REDUCTION_COMPLETED
+  with steps 0, and all name program sha256:88781aa2b72d… and state sha256:0c75e6575429…: the first failing case of
+  both classes in both judges is case 321.
+- **Plant** (a scratch copy of class_run.py with the reduction not emitted, runs/class-fcos-1792271993540122000):
+  S5 names all 4 reports, "DISCREPANCY_REPORTED with no REDUCTION_COMPLETED before it".
+- **Left:** family runs report with no reduction (S5, known in `check_records.py`); a reducer for a compiled probe
+  does not exist.
+- **The gate's cut-off:** the first gate run held today's earlier FCOS and FSIN records (zero hashes, no reduction),
+  which records being never rewritten keep. `check_records.py`'s known list now carries each fix's commit time
+  (b1ad0cfb): a fixed defect is known only in records made before it, and held after. The second gate run passed:
+  33,282 records, 0 held, 170 known (56 and 113 from before the fix, 1 the family runs' S5).

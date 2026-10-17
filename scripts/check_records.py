@@ -34,10 +34,18 @@ ROOT = Path(__file__).resolve().parent.parent
 STORE = ROOT / "store" / "runs"
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 PLACEHOLDER = "sha256:" + "0" * 64
-# violations known, with their cause, which the gate reports and does not hold: (rule, record name prefix) -> where
-# the cause and its fix are recorded. Each is a defect with a sprint to come, never a rule waived.
-KNOWN = {("S5", "family-"): "BLACKBOARD Deferred 2026-10-17 (Sprint 112): no reducer cuts a compiled probe, so a "
-                            "family run reports with no REDUCTION_COMPLETED"}
+# violations known, with their cause, which the gate reports and does not hold: (rule, record name prefix) -> (where
+# the cause and its fix are recorded, the time in ns of the commit that fixed it or None). A fixed defect is known only
+# in records made before its fix, which are never rewritten; a defect without a fix is a sprint to come, never a rule
+# waived.
+FIXED_IN_112 = 1792271815 * 10**9          # b1ad0cfb: class and file runs report a reduction and real hashes
+KNOWN: dict[tuple[str, str], tuple[str, int | None]] = {
+    ("S5", "family-"): ("BLACKBOARD Deferred 2026-10-17 (Sprint 112): no reducer cuts a compiled probe, so a family "
+                        "run reports with no REDUCTION_COMPLETED", None),
+    ("S5", "class-"): ("Sprint 112: class runs reported with no reduction before b1ad0cfb", FIXED_IN_112),
+    **{("E1", prefix): ("Sprint 112: runs reported zero program and state hashes before b1ad0cfb", FIXED_IN_112)
+       for prefix in ("class-", "family-", "file-")},
+}
 Event = dict[str, Any]
 
 
@@ -177,9 +185,14 @@ def application_events(record: Path) -> list[Event]:
     return [e for e in read_record(record) if not e["kind"].startswith("substrate.")]
 
 
-def made_on(record: Path) -> datetime.date | None:
+def made_ns(record: Path) -> int | None:
     m = re.search(r"-(\d{19})$", record.name)
-    return datetime.datetime.fromtimestamp(int(m.group(1)) / 1e9, datetime.UTC).date() if m else None
+    return int(m.group(1)) if m else None
+
+
+def made_on(record: Path) -> datetime.date | None:
+    ns = made_ns(record)
+    return datetime.datetime.fromtimestamp(ns / 1e9, datetime.UTC).date() if ns is not None else None
 
 
 def main(argv: list[str]) -> int:
@@ -206,7 +219,9 @@ def main(argv: list[str]) -> int:
             day = made_on(r)
             if a.since is None or day is None or day < a.since:
                 continue
-            cause = next((c for (k, prefix), c in KNOWN.items() if k == rule and r.name.startswith(prefix)), None)
+            made = made_ns(r)
+            cause = next((c for (k, prefix), (c, fixed) in KNOWN.items() if k == rule and r.name.startswith(prefix)
+                          and (fixed is None or (made is not None and made < fixed))), None)
             if cause is not None:
                 known[cause] += 1
             else:
