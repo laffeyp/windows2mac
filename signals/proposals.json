@@ -283,6 +283,23 @@
    "source": "docs/review-2026-10-11-ground-up.md K2 and its verification; BLACKBOARD Drift watchlist 2026-10-11 (lift refusal); Sprint 049's stop at CVTDQ2PS",
    "rationale": "The frontier stops when the translator refuses a guest instruction it does not lift, and reports EXECUTION_COMPLETED (faulted) with the refusal in `unobserved`, which vocabulary 0.4 (P13) defines as the place to name what a run did not observe. A refusal is neither a guest fault nor a service w2m lacks (SERVICE_UNIMPLEMENTED); like SERVICE_UNIMPLEMENTED it closes the execution and is the frontier's measurement of what comes next. Sprint 050 was planned from such a stop. The unresolved API set of Sprint 059, which the review also named, is a service w2m does not serve and is reported as SERVICE_UNIMPLEMENTED from Sprint 060; it needs no tag.",
    "status": "open"
+  },
+  {
+   "id": "P19",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "metric += vm_compile_blocks"
+   ],
+   "source": "BLACKBOARD Deferred 2026-10-16 (Sprint 084, carried by 085 and 086; large review M3); Decision 2026-10-16 (user): deferred work the project can do now is done now; sprints/sprint-101-vocabulary-0-8-compile-counts.md",
+   "rationale": "The compiler in the VM (tools/guest_runtime/block_compiler.c) counts its compiles and its refusals and cut blocks by cause (vm_backend.VMC_COUNT_NAMES, 23 names); the batch run prints them and its record holds none, because MEASUREMENT_RECORDED's metric names no block count. One value, the cause in the existing variant field: the causes change with the compiler (Sprint 096 added pause), and an enum value per cause would bump the vocabulary each time.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-16",
+    "by": "agent-resolved",
+    "into": "0.8",
+    "grounds": "project \u2014 Decision 2026-10-15 (the host-compile share read from signals), v0.2 \u00a73.1 (performance numbers kept apart from acceptance); SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2; practice \u2014 a measure's dimension in a label, not in the metric's name (Prometheus naming practice: labels for dimensions)"
+   }
   }
  ]
 }

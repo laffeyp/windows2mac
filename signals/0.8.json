@@ -1,0 +1,2475 @@
+{
+ "version": "0.8",
+ "project": "w2m",
+ "locked": true,
+ "locked_at": "2026-10-16",
+ "locked_by": "agent via proposal P19, 2026-10-16, per sdd-kit-3 resolve-and-record",
+ "prior_version": "0.7",
+ "founding_document": "windows_to_macos_research_direction_v0_2.md",
+ "rationale": "signals/0.5-rationale.md",
+ "transport": {
+  "harness_plane": "Every tag outside category 'guest' is a substrate application event. The msgspec Struct class name equals the tag name, so the event kind on the run record IS the tag (substrate kernel/sequencer.py: event_kind = type(obj).__name__). Payload validation is the Struct's typed fields at the bus boundary.",
+  "guest_plane": "Category 'guest' tags are lines in a JSONL guest-trace file written by the profile under test (Windows reference tracer, VM guest runtime, native-process runtime). The file is content-addressed (trace_sha256) and ingested by the trace_ingester operator, which validates every line against this vocabulary and emits TRACE_INGESTED or TRACE_REJECTED on the harness plane. Guest lines never ride the substrate bus.",
+  "ordering": "Substrate seq orders orchestration work only (v0.2 section 11.4). Guest-trace order is the partial order given by (thread_id, thread_seq) plus hb_refs; substrate seq is never used to order guest effects."
+ },
+ "types": {
+  "sha256": "string matching ^sha256:[0-9a-f]{64}$ (substrate content_hash format)",
+  "id": "string, ULID or stable slug; unique per entity kind",
+  "contract_id": "string, dotted stable identifier, e.g. windows.event.auto_reset.single_signal",
+  "version": "string, major.minor[.patch] (the vocabulary's own version is major.minor)",
+  "u64": "integer >= 0; on the harness plane limited to [-(2^53-1), 2^53-1] because substrate canonicalizes payloads with RFC 8785 (larger values must be strings); the guest plane keeps the full 64-bit range",
+  "i64": "integer; on the harness plane limited to [-(2^53-1), 2^53-1] because substrate canonicalizes payloads with RFC 8785 (larger values must be strings); the guest plane keeps the full 64-bit range",
+  "float": "number",
+  "bool": "boolean",
+  "text": "string, lowercase first word, no exclamation mark, no credential material",
+  "list<T>": "JSON array of T"
+ },
+ "enums": {
+  "profile_kind": [
+   "windows_reference",
+   "windows_arm_emulated",
+   "native_process",
+   "managed_vm",
+   "model",
+   "service_fixture"
+  ],
+  "backend": [
+   "native_process",
+   "managed_vm"
+  ],
+  "session_purpose": [
+   "contract_construction",
+   "conformance",
+   "compilation",
+   "capability",
+   "measurement",
+   "application",
+   "product"
+  ],
+  "session_outcome": [
+   "completed",
+   "completed_with_discrepancies",
+   "aborted"
+  ],
+  "evidence_category": [
+   "documented",
+   "observed",
+   "hypothesis"
+  ],
+  "hypothesis_resolution": [
+   "supported",
+   "refuted",
+   "inconclusive"
+  ],
+  "proposer": [
+   "agent",
+   "user",
+   "generator"
+  ],
+  "probe_origin": [
+   "hand",
+   "generated",
+   "reduced"
+  ],
+  "subject_kind": [
+   "probe",
+   "application",
+   "candidate_runtime"
+  ],
+  "exit_status": [
+   "exited",
+   "faulted",
+   "timed_out",
+   "killed"
+  ],
+  "execution_failure": [
+   "launch_failed",
+   "transport_lost",
+   "profile_mismatch",
+   "harness_error"
+  ],
+  "relation": [
+   "exact",
+   "state_relation",
+   "allowed_outcome_set",
+   "partial_order",
+   "numerical_envelope",
+   "progress_obligation"
+  ],
+  "verdict": [
+   "conforms",
+   "discrepancy",
+   "inconclusive"
+  ],
+  "repair_path": [
+   "implementation_repair",
+   "contract_revision",
+   "undetermined"
+  ],
+  "discrepancy_resolution": [
+   "implementation_repaired",
+   "contract_revised",
+   "profile_excluded"
+  ],
+  "altered_object": [
+   "expected_output",
+   "checker",
+   "contract",
+   "evidence"
+  ],
+  "discovery": [
+   "static",
+   "runtime_transfer",
+   "export",
+   "relocation",
+   "callback",
+   "loaded_module",
+   "generated_code"
+  ],
+  "stage": [
+   "install",
+   "update",
+   "execution"
+  ],
+  "translation_invalidation": [
+   "code_modified",
+   "unmapped",
+   "remapped",
+   "address_reused",
+   "contract_revised",
+   "assumption_failed"
+  ],
+  "artifact_kind": [
+   "translation_unit",
+   "native_module",
+   "runtime_component",
+   "bridge_adapter",
+   "metal_library",
+   "pipeline_archive",
+   "bundle"
+  ],
+  "artifact_invalidation": [
+   "source_changed",
+   "contract_revised",
+   "compiler_changed",
+   "capability_changed",
+   "validity_condition_failed"
+  ],
+  "capability": [
+   "ipa_granule_4k",
+   "guest_tsoen",
+   "guest_tsoen_context_switch",
+   "native_process_tso",
+   "host_page_16k",
+   "metal_device_family",
+   "native_mprotect_4k",
+   "native_page_check_4k",
+   "guest_page_protection_4k",
+   "guest_fp_alternate_handling",
+   "guest_fp_minmax_x86",
+   "guest_fp_nan_x86",
+   "guest_fp_tininess_x86",
+   "guest_fp_denormal_x86",
+   "guest_fp_to_int_x86"
+  ],
+  "capability_outcome": [
+   "present",
+   "absent",
+   "error",
+   "not_established"
+  ],
+  "metric": [
+   "install_seconds",
+   "cold_launch_seconds",
+   "warm_launch_seconds",
+   "frame_time_ms_p50",
+   "frame_time_ms_p99",
+   "compile_critical_path_ms",
+   "copied_bytes",
+   "dispatch_ns",
+   "ordering_ops",
+   "cpu_gpu_wait_ms",
+   "invalidation_count",
+   "ns_per_access",
+   "vm_compile_blocks"
+  ],
+  "measurement_phase": [
+   "installation",
+   "cold_launch",
+   "warm_launch",
+   "sustained",
+   "discovery",
+   "update"
+  ],
+  "artifact_state": [
+   "cold",
+   "warm"
+  ],
+  "acquisition_tool": [
+   "depotdownloader",
+   "local_path",
+   "steamcmd"
+  ],
+  "acquisition_failure": [
+   "auth_required",
+   "auth_failed",
+   "not_licensed",
+   "network",
+   "tool_error"
+  ],
+  "session_failure": [
+   "client_unavailable",
+   "not_licensed",
+   "interface_unmapped",
+   "bridge_error"
+  ],
+  "launch_kind": [
+   "cold",
+   "warm"
+  ],
+  "exit_kind": [
+   "normal",
+   "crash",
+   "killed"
+  ],
+  "lifecycle_step": [
+   "resolve",
+   "acquire",
+   "prepare",
+   "session",
+   "launch",
+   "state",
+   "close",
+   "relaunch",
+   "update",
+   "remove"
+  ],
+  "access": [
+   "load",
+   "store",
+   "rmw",
+   "execute"
+  ],
+  "clock": [
+   "qpc",
+   "tick_count",
+   "tick_count64",
+   "rdtsc",
+   "system_time"
+  ]
+ },
+ "ontology": {
+  "entities": [
+   {
+    "name": "Contract",
+    "definition": "A versioned, machine-readable behavioral definition with a stable identifier.",
+    "source": "v0.2 section 11.2"
+   },
+   {
+    "name": "Evidence",
+    "definition": "A documented requirement, an observed implementation behavior, or a hypothesis supporting a contract.",
+    "source": "v0.2 section 11.1"
+   },
+   {
+    "name": "ReferenceProfile",
+    "definition": "Windows build, CPU identity and features, library versions, GPU and driver, hashes, initial state, controlled inputs.",
+    "source": "v0.2 section 11.1"
+   },
+   {
+    "name": "DestinationProfile",
+    "definition": "The Mac host and backend capabilities a target run or artifact depends on.",
+    "source": "v0.2 sections 2, 8.2, 14"
+   },
+   {
+    "name": "ApplicationProfile",
+    "definition": "A selected game's distribution, dependency graph, execution paths, graphics profile, and service requirements.",
+    "source": "v0.2 section 12.1"
+   },
+   {
+    "name": "Backend",
+    "definition": "Execution mode: native_process or managed_vm.",
+    "source": "v0.2 section 4.3"
+   },
+   {
+    "name": "Probe",
+    "definition": "A small discriminating program run to observe behavior.",
+    "source": "v0.2 section 11.1"
+   },
+   {
+    "name": "Execution",
+    "definition": "One run of a probe, application, or candidate runtime on one profile, producing a guest trace.",
+    "source": "v0.2 sections 3, 11.1, 14"
+   },
+   {
+    "name": "Trace",
+    "definition": "The content-addressed guest-trace file of one execution.",
+    "source": "v0.2 section 3"
+   },
+   {
+    "name": "ModelCheck",
+    "definition": "Exploration of the executions a contract permits for one program.",
+    "source": "v0.2 sections 9, 11.1"
+   },
+   {
+    "name": "Comparison",
+    "definition": "Application of one declared relation between a reference and a target.",
+    "source": "v0.2 section 3"
+   },
+   {
+    "name": "Discrepancy",
+    "definition": "A failed comparison, minimized and classified.",
+    "source": "v0.2 section 11.3"
+   },
+   {
+    "name": "Candidate",
+    "definition": "An implementation candidate generated against an unchanged contract version.",
+    "source": "v0.2 section 11.3"
+   },
+   {
+    "name": "Translation",
+    "definition": "Native code for a guest address range at a code version, with its assumptions.",
+    "source": "v0.2 section 5.1"
+   },
+   {
+    "name": "Artifact",
+    "definition": "A generated output with source hashes, contract versions, compiler version, and evidence.",
+    "source": "v0.2 section 14"
+   },
+   {
+    "name": "Capability",
+    "definition": "An observed destination capability on a named host.",
+    "source": "v0.2 section 8.1"
+   },
+   {
+    "name": "Measurement",
+    "definition": "A performance number recorded apart from semantic acceptance.",
+    "source": "v0.2 sections 3.1, 13"
+   },
+   {
+    "name": "Distribution",
+    "definition": "The Windows depot content of one Steam app build.",
+    "source": "v0.2 section 4.1"
+   },
+   {
+    "name": "SteamSession",
+    "definition": "The launch/session state the application's Steamworks calls depend on.",
+    "source": "v0.2 sections 4.1, 4.2"
+   },
+   {
+    "name": "BridgeInterface",
+    "definition": "A versioned Windows-facing Steam interface and its Mac endpoint.",
+    "source": "v0.2 section 4.2"
+   },
+   {
+    "name": "Bundle",
+    "definition": "The native Mac application bundle produced for an application profile.",
+    "source": "v0.2 section 4.3"
+   },
+   {
+    "name": "GuestThread",
+    "definition": "A Windows-visible thread inside an execution; the unit of guest-trace ordering.",
+    "source": "v0.2 sections 7, 9"
+   }
+  ],
+  "value_objects": [
+   "GuestAddress",
+   "CodeVersion",
+   "ClockValue",
+   "HappensBeforeRef"
+  ]
+ },
+ "categories": [
+  {
+   "name": "session",
+   "description": "Harness run baseline and close.",
+   "boundary": "harness"
+  },
+  {
+   "name": "evidence",
+   "description": "Inputs to contract construction.",
+   "boundary": "contract-construction pipeline (v0.2 11.1)"
+  },
+  {
+   "name": "contract",
+   "description": "Contract versions: proposed, accepted, revised, rejected, invalidation of dependents.",
+   "boundary": "specification compiler (v0.2 11.2-11.3)"
+  },
+  {
+   "name": "probe",
+   "description": "Probe authorship, executions on profiles, trace ingest.",
+   "boundary": "probe pipeline (v0.2 11.1)"
+  },
+  {
+   "name": "model",
+   "description": "Model exploration of permitted executions.",
+   "boundary": "model checker (v0.2 9, 11.1)"
+  },
+  {
+   "name": "verify",
+   "description": "Comparison, reduction, discrepancy report, routing, resolution.",
+   "boundary": "checker and reducer (v0.2 3, 11.3)"
+  },
+  {
+   "name": "candidate",
+   "description": "Implementation candidates and acceptance-condition protection.",
+   "boundary": "generator vs checker separation (v0.2 11.2-11.3)"
+  },
+  {
+   "name": "compile",
+   "description": "Code discovery, translation validity, artifacts.",
+   "boundary": "application compiler (v0.2 5.1, 6, 14)"
+  },
+  {
+   "name": "capability",
+   "description": "Destination capability probes and backend evaluation/selection.",
+   "boundary": "destination contract (v0.2 8.1-8.2)"
+  },
+  {
+   "name": "perf",
+   "description": "Measurements, separate from acceptance.",
+   "boundary": "optimization objective (v0.2 13)"
+  },
+  {
+   "name": "product",
+   "description": "Acquisition, Steam session and bridge, launch, lifecycle.",
+   "boundary": "product (v0.2 4, 12.1)"
+  },
+  {
+   "name": "guest",
+   "description": "Guest-trace lines from a profile under test.",
+   "boundary": "guest/host trace plane (v0.2 3, 9)"
+  }
+ ],
+ "tags": [
+  {
+   "name": "SESSION_INIT",
+   "category": "session",
+   "stratum": "event",
+   "payload": [
+    "vocab_version",
+    "profile",
+    "contract_version",
+    "harness_version",
+    "purpose"
+   ],
+   "optional_payload": [],
+   "types": {
+    "vocab_version": "version",
+    "profile": "id",
+    "contract_version": "version",
+    "harness_version": "version",
+    "purpose": "enum:session_purpose"
+   },
+   "note": "First application event of every w2m harness run (after substrate's own RunStarted). profile names the ReferenceProfile or DestinationProfile the run targets; contract_version names the contract-set version in force. Every later tag is read against this baseline."
+  },
+  {
+   "name": "SESSION_COMPLETED",
+   "category": "session",
+   "stratum": "summary",
+   "payload": [
+    "outcome",
+    "discrepancy_count",
+    "accepted_count",
+    "elapsed_seconds"
+   ],
+   "optional_payload": [],
+   "types": {
+    "outcome": "enum:session_outcome",
+    "discrepancy_count": "u64",
+    "accepted_count": "u64",
+    "elapsed_seconds": "float"
+   },
+   "note": "Last application event of every harness run. accepted_count counts CONTRACT_ACCEPTED + CANDIDATE_ACCEPTED + ARTIFACT_ACCEPTED in this run; discrepancy_count counts DISCREPANCY_REPORTED."
+  },
+  {
+   "name": "EVIDENCE_RECORDED",
+   "category": "evidence",
+   "stratum": "event",
+   "payload": [
+    "evidence_id",
+    "evidence_category",
+    "contract_id",
+    "source_ref",
+    "applicability"
+   ],
+   "optional_payload": [
+    "distinguishing_check"
+   ],
+   "types": {
+    "evidence_id": "id",
+    "evidence_category": "enum:evidence_category",
+    "contract_id": "contract_id",
+    "source_ref": "text",
+    "applicability": "text",
+    "distinguishing_check": "text"
+   },
+   "note": "One piece of evidence enters the record. source_ref is a URL plus retrieval date for documented, an execution_id for observed, a model_check_id or reasoning reference for hypothesis. applicability names the profiles it covers (e.g. 'windows_reference:win11-26100/x86-64'). distinguishing_check is required for hypothesis: the observation or model check that would separate it from alternatives."
+  },
+  {
+   "name": "EVIDENCE_SUPERSEDED",
+   "category": "evidence",
+   "stratum": "event",
+   "payload": [
+    "evidence_id",
+    "superseded_by",
+    "reason"
+   ],
+   "optional_payload": [],
+   "types": {
+    "evidence_id": "id",
+    "superseded_by": "id",
+    "reason": "text"
+   },
+   "note": "An evidence entry is replaced; the old entry stays on the record (no deletion)."
+  },
+  {
+   "name": "HYPOTHESIS_RESOLVED",
+   "category": "evidence",
+   "stratum": "event",
+   "payload": [
+    "evidence_id",
+    "resolution",
+    "deciding_evidence_ids"
+   ],
+   "optional_payload": [],
+   "types": {
+    "evidence_id": "id",
+    "resolution": "enum:hypothesis_resolution",
+    "deciding_evidence_ids": "list<id>"
+   },
+   "note": "A hypothesis is settled by named observed or documented evidence. Repeated observations alone never resolve a hypothesis into a universal rule (v0.2 11.1)."
+  },
+  {
+   "name": "CONTRACT_PROPOSED",
+   "category": "contract",
+   "stratum": "event",
+   "payload": [
+    "contract_id",
+    "version",
+    "evidence_ids",
+    "proposer"
+   ],
+   "optional_payload": [],
+   "types": {
+    "contract_id": "contract_id",
+    "version": "version",
+    "evidence_ids": "list<id>",
+    "proposer": "enum:proposer"
+   },
+   "note": "A candidate behavioral definition is written to contracts/ and offered for model and reference checks."
+  },
+  {
+   "name": "CONTRACT_ACCEPTED",
+   "category": "contract",
+   "stratum": "event",
+   "payload": [
+    "contract_id",
+    "version",
+    "evidence_ids",
+    "open_question_count",
+    "applicability"
+   ],
+   "optional_payload": [],
+   "types": {
+    "contract_id": "contract_id",
+    "version": "version",
+    "evidence_ids": "list<id>",
+    "open_question_count": "u64",
+    "applicability": "text"
+   },
+   "note": "A contract version becomes an acceptance condition. Implementations are judged against exactly this (contract_id, version) until a CONTRACT_REVISED."
+  },
+  {
+   "name": "CONTRACT_REVISED",
+   "category": "contract",
+   "stratum": "event",
+   "payload": [
+    "contract_id",
+    "from_version",
+    "to_version",
+    "rationale_ref",
+    "evidence_ids"
+   ],
+   "optional_payload": [
+    "triggering_discrepancy_id"
+   ],
+   "types": {
+    "contract_id": "contract_id",
+    "from_version": "version",
+    "to_version": "version",
+    "rationale_ref": "text",
+    "evidence_ids": "list<id>",
+    "triggering_discrepancy_id": "id"
+   },
+   "note": "The contract-revision path (v0.2 11.3): a new accepted version replaces an old one on evidence. Always followed by DEPENDENTS_INVALIDATED for the same contract_id."
+  },
+  {
+   "name": "CONTRACT_REJECTED",
+   "category": "contract",
+   "stratum": "incident",
+   "payload": [
+    "contract_id",
+    "version",
+    "reason"
+   ],
+   "optional_payload": [],
+   "types": {
+    "contract_id": "contract_id",
+    "version": "version",
+    "reason": "text"
+   },
+   "note": "A proposed version failed its model or reference checks and is not accepted."
+  },
+  {
+   "name": "DEPENDENTS_INVALIDATED",
+   "category": "contract",
+   "stratum": "summary",
+   "payload": [
+    "contract_id",
+    "from_version",
+    "to_version",
+    "artifact_count",
+    "candidate_count",
+    "evidence_count"
+   ],
+   "optional_payload": [],
+   "types": {
+    "contract_id": "contract_id",
+    "from_version": "version",
+    "to_version": "version",
+    "artifact_count": "u64",
+    "candidate_count": "u64",
+    "evidence_count": "u64"
+   },
+   "note": "Everything that claimed conformance to from_version is marked for revalidation (v0.2 14). Counts are what was invalidated, not what was revalidated."
+  },
+  {
+   "name": "PROBE_AUTHORED",
+   "category": "probe",
+   "stratum": "event",
+   "payload": [
+    "probe_id",
+    "probe_sha256",
+    "contract_ids",
+    "origin"
+   ],
+   "optional_payload": [
+    "parent_probe_id"
+   ],
+   "types": {
+    "probe_id": "id",
+    "probe_sha256": "sha256",
+    "contract_ids": "list<contract_id>",
+    "origin": "enum:probe_origin",
+    "parent_probe_id": "id"
+   },
+   "note": "A probe program enters the content store. origin=reduced means a reducer produced it from parent_probe_id."
+  },
+  {
+   "name": "EXECUTION_STARTED",
+   "category": "probe",
+   "stratum": "event",
+   "payload": [
+    "execution_id",
+    "subject_kind",
+    "subject_sha256",
+    "profile_kind",
+    "profile_id",
+    "initial_state_sha256",
+    "injected_inputs_sha256"
+   ],
+   "optional_payload": [
+    "timeout_seconds",
+    "kill_grace_seconds",
+    "unobserved"
+   ],
+   "types": {
+    "execution_id": "id",
+    "subject_kind": "enum:subject_kind",
+    "subject_sha256": "sha256",
+    "profile_kind": "enum:profile_kind",
+    "profile_id": "id",
+    "initial_state_sha256": "sha256",
+    "injected_inputs_sha256": "sha256",
+    "timeout_seconds": "float",
+    "kill_grace_seconds": "float",
+    "unobserved": "text"
+   },
+   "note": "A program begins running on one named profile. injected_inputs_sha256 covers clock observations, input events, and service responses for controlled replay (v0.2 3.1). The timeout is per execution; there is no global constant. An execution imported from elsewhere (the Windows runner) omits what the harness did not set or observe and names each omitted or inferred field, with the reason, in unobserved (0.4, P13)."
+  },
+  {
+   "name": "EXECUTION_COMPLETED",
+   "category": "probe",
+   "stratum": "summary",
+   "payload": [
+    "execution_id",
+    "exit_status",
+    "trace_sha256",
+    "guest_line_count"
+   ],
+   "optional_payload": [
+    "exit_code",
+    "elapsed_seconds",
+    "unobserved"
+   ],
+   "types": {
+    "execution_id": "id",
+    "exit_status": "enum:exit_status",
+    "exit_code": "i64",
+    "trace_sha256": "sha256",
+    "guest_line_count": "u64",
+    "elapsed_seconds": "float",
+    "unobserved": "text"
+   },
+   "note": "The program ended and its trace was collected. A guest fault is exit_status=faulted and is an observation, not a harness failure. timed_out means the harness killed it after timeout_seconds. exit_code and elapsed_seconds are omitted when not observed; unobserved says which and why (0.4, P13)."
+  },
+  {
+   "name": "EXECUTION_FAILED",
+   "category": "probe",
+   "stratum": "incident",
+   "payload": [
+    "execution_id",
+    "failure",
+    "diagnostic"
+   ],
+   "optional_payload": [],
+   "types": {
+    "execution_id": "id",
+    "failure": "enum:execution_failure",
+    "diagnostic": "text"
+   },
+   "note": "The harness could not obtain an execution: launch failed, the transport to the reference machine dropped, the profile did not match its declaration, or harness code raised. No trace exists; the execution is not evidence."
+  },
+  {
+   "name": "TRACE_INGESTED",
+   "category": "probe",
+   "stratum": "summary",
+   "payload": [
+    "trace_sha256",
+    "execution_id",
+    "line_count",
+    "thread_count",
+    "vocab_version"
+   ],
+   "optional_payload": [],
+   "types": {
+    "trace_sha256": "sha256",
+    "execution_id": "id",
+    "line_count": "u64",
+    "thread_count": "u64",
+    "vocab_version": "version"
+   },
+   "note": "Every line of the guest trace validated against this vocabulary (strict extras). Only an ingested trace may be cited as observed evidence or used in a comparison."
+  },
+  {
+   "name": "TRACE_REJECTED",
+   "category": "probe",
+   "stratum": "incident",
+   "payload": [
+    "trace_sha256",
+    "execution_id",
+    "first_invalid_line",
+    "reason"
+   ],
+   "optional_payload": [],
+   "types": {
+    "trace_sha256": "sha256",
+    "execution_id": "id",
+    "first_invalid_line": "u64",
+    "reason": "text"
+   },
+   "note": "A guest trace failed validation (unknown tag, missing field, extra field, broken thread_seq). The trace is kept but cannot be evidence."
+  },
+  {
+   "name": "MODEL_CHECK_STARTED",
+   "category": "model",
+   "stratum": "event",
+   "payload": [
+    "model_check_id",
+    "contract_id",
+    "contract_version",
+    "program_sha256",
+    "state_bound"
+   ],
+   "optional_payload": [],
+   "types": {
+    "model_check_id": "id",
+    "contract_id": "contract_id",
+    "contract_version": "version",
+    "program_sha256": "sha256",
+    "state_bound": "u64"
+   },
+   "note": "Exploration of the executions contract_version permits for one program begins, bounded at state_bound states."
+  },
+  {
+   "name": "MODEL_CHECK_COMPLETED",
+   "category": "model",
+   "stratum": "summary",
+   "payload": [
+    "model_check_id",
+    "permitted_outcome_count",
+    "states_explored",
+    "exhaustive",
+    "outcome_set_sha256"
+   ],
+   "optional_payload": [],
+   "types": {
+    "model_check_id": "id",
+    "permitted_outcome_count": "u64",
+    "states_explored": "u64",
+    "exhaustive": "bool",
+    "outcome_set_sha256": "sha256"
+   },
+   "note": "exhaustive=false means state_bound was hit; the permitted set is a lower bound and an outcome outside it is inconclusive, not forbidden."
+  },
+  {
+   "name": "COMPARISON_COMPLETED",
+   "category": "verify",
+   "stratum": "summary",
+   "payload": [
+    "comparison_id",
+    "contract_id",
+    "contract_version",
+    "relation",
+    "reference_ref",
+    "target_execution_id",
+    "verdict"
+   ],
+   "optional_payload": [
+    "rule_ref",
+    "first_divergence"
+   ],
+   "types": {
+    "comparison_id": "id",
+    "contract_id": "contract_id",
+    "contract_version": "version",
+    "relation": "enum:relation",
+    "reference_ref": "id",
+    "target_execution_id": "id",
+    "verdict": "enum:verdict",
+    "rule_ref": "text",
+    "first_divergence": "text"
+   },
+   "note": "One declared relation (v0.2 3) applied between a reference (an execution_id on a reference profile, or a model_check_id) and a target execution. rule_ref names the published rule for numerical_envelope. first_divergence is set when verdict=discrepancy: thread_id:thread_seq of the first diverging guest line, or the field path."
+  },
+  {
+   "name": "REDUCTION_COMPLETED",
+   "category": "verify",
+   "stratum": "summary",
+   "payload": [
+    "reduction_id",
+    "comparison_id",
+    "source_program_sha256",
+    "minimized_program_sha256",
+    "steps",
+    "preserved_mismatch"
+   ],
+   "optional_payload": [],
+   "types": {
+    "reduction_id": "id",
+    "comparison_id": "id",
+    "source_program_sha256": "sha256",
+    "minimized_program_sha256": "sha256",
+    "steps": "u64",
+    "preserved_mismatch": "bool"
+   },
+   "note": "Delta-reduction of a failing program ended. If nothing could be removed, minimized equals source and steps=0. preserved_mismatch=false means the reduction lost the failure and the source program is reported instead."
+  },
+  {
+   "name": "DISCREPANCY_REPORTED",
+   "category": "verify",
+   "stratum": "incident",
+   "payload": [
+    "discrepancy_id",
+    "contract_id",
+    "contract_version",
+    "mismatch_class",
+    "minimized_program_sha256",
+    "initial_state_sha256",
+    "first_divergence",
+    "reference_profile_id",
+    "destination_profile_id",
+    "comparison_id"
+   ],
+   "optional_payload": [],
+   "types": {
+    "discrepancy_id": "id",
+    "contract_id": "contract_id",
+    "contract_version": "version",
+    "mismatch_class": "enum:relation",
+    "minimized_program_sha256": "sha256",
+    "initial_state_sha256": "sha256",
+    "first_divergence": "text",
+    "reference_profile_id": "id",
+    "destination_profile_id": "id",
+    "comparison_id": "id"
+   },
+   "note": "The v0.2 11.3 structured discrepancy: everything the generation system needs to reproduce the failure without prose. mismatch_class is the relation that failed."
+  },
+  {
+   "name": "DISCREPANCY_ROUTED",
+   "category": "verify",
+   "stratum": "event",
+   "payload": [
+    "discrepancy_id",
+    "repair_path",
+    "reference_conforms",
+    "grounds"
+   ],
+   "optional_payload": [],
+   "types": {
+    "discrepancy_id": "id",
+    "repair_path": "enum:repair_path",
+    "reference_conforms": "bool",
+    "grounds": "text"
+   },
+   "note": "Deterministic routing: reference conforms to the contract and target does not -> implementation_repair; reference violates the contract -> contract_revision; otherwise undetermined, which needs a new probe."
+  },
+  {
+   "name": "DISCREPANCY_RESOLVED",
+   "category": "verify",
+   "stratum": "event",
+   "payload": [
+    "discrepancy_id",
+    "resolution",
+    "resolving_ref"
+   ],
+   "optional_payload": [],
+   "types": {
+    "discrepancy_id": "id",
+    "resolution": "enum:discrepancy_resolution",
+    "resolving_ref": "id"
+   },
+   "note": "resolving_ref is the CANDIDATE_ACCEPTED candidate_id, the CONTRACT_REVISED contract_id@to_version, or the decision that excluded the profile."
+  },
+  {
+   "name": "CANDIDATE_GENERATED",
+   "category": "candidate",
+   "stratum": "event",
+   "payload": [
+    "candidate_id",
+    "contract_id",
+    "contract_version",
+    "generator_ref",
+    "attempt",
+    "candidate_sha256"
+   ],
+   "optional_payload": [
+    "parent_candidate_id",
+    "discrepancy_id"
+   ],
+   "types": {
+    "candidate_id": "id",
+    "contract_id": "contract_id",
+    "contract_version": "version",
+    "generator_ref": "text",
+    "attempt": "u64",
+    "candidate_sha256": "sha256",
+    "parent_candidate_id": "id",
+    "discrepancy_id": "id"
+   },
+   "note": "An implementation candidate is produced against an unchanged acceptance condition. generator_ref names the substrate topology and model (or 'hand'). discrepancy_id is set on a repair attempt."
+  },
+  {
+   "name": "CANDIDATE_ACCEPTED",
+   "category": "candidate",
+   "stratum": "event",
+   "payload": [
+    "candidate_id",
+    "contract_id",
+    "contract_version",
+    "comparison_ids"
+   ],
+   "optional_payload": [],
+   "types": {
+    "candidate_id": "id",
+    "contract_id": "contract_id",
+    "contract_version": "version",
+    "comparison_ids": "list<id>"
+   },
+   "note": "Every cited comparison has verdict=conforms under this exact contract version. Measurements are never cited here (v0.2 3.1)."
+  },
+  {
+   "name": "CANDIDATE_REJECTED",
+   "category": "candidate",
+   "stratum": "event",
+   "payload": [
+    "candidate_id",
+    "contract_id",
+    "contract_version",
+    "reason"
+   ],
+   "optional_payload": [
+    "discrepancy_id"
+   ],
+   "types": {
+    "candidate_id": "id",
+    "contract_id": "contract_id",
+    "contract_version": "version",
+    "reason": "text",
+    "discrepancy_id": "id"
+   },
+   "note": "A candidate failed a check or altered its acceptance condition."
+  },
+  {
+   "name": "ACCEPTANCE_CONDITION_ALTERED",
+   "category": "candidate",
+   "stratum": "incident",
+   "payload": [
+    "candidate_id",
+    "altered",
+    "path",
+    "expected_sha256",
+    "observed_sha256"
+   ],
+   "optional_payload": [],
+   "types": {
+    "candidate_id": "id",
+    "altered": "enum:altered_object",
+    "path": "text",
+    "expected_sha256": "sha256",
+    "observed_sha256": "sha256"
+   },
+   "note": "The acceptance guard found that a candidate changed an expected output, a checker, a contract, or evidence (v0.2 11.3: no candidate may change its expected output to pass). The guard is a separate operator from the generator. Forces CANDIDATE_REJECTED."
+  },
+  {
+   "name": "CODE_TARGET_DISCOVERED",
+   "category": "compile",
+   "stratum": "event",
+   "payload": [
+    "image_sha256",
+    "guest_address",
+    "discovery",
+    "stage"
+   ],
+   "optional_payload": [],
+   "types": {
+    "image_sha256": "sha256",
+    "guest_address": "u64",
+    "discovery": "enum:discovery",
+    "stage": "enum:stage"
+   },
+   "note": "A guest instruction target becomes known. Shipped code first reached at run time is discovery=runtime_transfer, stage=execution (v0.2 5.1). Discovery selects work; it does not define meaning."
+  },
+  {
+   "name": "TRANSLATION_PUBLISHED",
+   "category": "compile",
+   "stratum": "event",
+   "payload": [
+    "translation_id",
+    "image_sha256",
+    "guest_range_start",
+    "guest_range_end",
+    "code_version",
+    "stage",
+    "contract_version",
+    "artifact_id"
+   ],
+   "optional_payload": [],
+   "types": {
+    "translation_id": "id",
+    "image_sha256": "sha256",
+    "guest_range_start": "u64",
+    "guest_range_end": "u64",
+    "code_version": "u64",
+    "stage": "enum:stage",
+    "contract_version": "version",
+    "artifact_id": "id"
+   },
+   "note": "Native code for [guest_range_start, guest_range_end) at code_version becomes enterable. AOT and on-demand translations carry the same fields and acceptance rules (v0.2 6)."
+  },
+  {
+   "name": "TRANSLATION_INVALIDATED",
+   "category": "compile",
+   "stratum": "event",
+   "payload": [
+    "translation_id",
+    "cause"
+   ],
+   "optional_payload": [],
+   "types": {
+    "translation_id": "id",
+    "cause": "enum:translation_invalidation"
+   },
+   "note": "A translation's assumptions no longer hold. After this, entering its range must resolve to a new translation or the prescribed fault."
+  },
+  {
+   "name": "STALE_TRANSLATION_ENTERED",
+   "category": "compile",
+   "stratum": "incident",
+   "payload": [
+    "translation_id",
+    "guest_address",
+    "expected_code_version",
+    "actual_code_version"
+   ],
+   "optional_payload": [],
+   "types": {
+    "translation_id": "id",
+    "guest_address": "u64",
+    "expected_code_version": "u64",
+    "actual_code_version": "u64"
+   },
+   "note": "Violation of the v0.2 5.1 execution invariant: an invalidated or wrong-version translation ran. Must never fire in an accepted build; fires only from a validity checker in test builds."
+  },
+  {
+   "name": "ARTIFACT_BUILT",
+   "category": "compile",
+   "stratum": "event",
+   "payload": [
+    "artifact_id",
+    "artifact_kind",
+    "source_sha256",
+    "source_contract_version",
+    "target_contract_version",
+    "compiler_version",
+    "stage"
+   ],
+   "optional_payload": [
+    "application_profile_id"
+   ],
+   "types": {
+    "artifact_id": "id",
+    "artifact_kind": "enum:artifact_kind",
+    "source_sha256": "sha256",
+    "source_contract_version": "version",
+    "target_contract_version": "version",
+    "compiler_version": "version",
+    "stage": "enum:stage",
+    "application_profile_id": "id"
+   },
+   "note": "A generated artifact is written with its v0.2 14 identity. source_sha256 is the hash over all input hashes."
+  },
+  {
+   "name": "ARTIFACT_ACCEPTED",
+   "category": "compile",
+   "stratum": "event",
+   "payload": [
+    "artifact_id",
+    "comparison_ids"
+   ],
+   "optional_payload": [],
+   "types": {
+    "artifact_id": "id",
+    "comparison_ids": "list<id>"
+   },
+   "note": "The artifact passed every cited comparison and may be reused from cache under its validity conditions."
+  },
+  {
+   "name": "ARTIFACT_INVALIDATED",
+   "category": "compile",
+   "stratum": "event",
+   "payload": [
+    "artifact_id",
+    "cause"
+   ],
+   "optional_payload": [],
+   "types": {
+    "artifact_id": "id",
+    "cause": "enum:artifact_invalidation"
+   },
+   "note": "An artifact may no longer be reused; regeneration happens at the earliest valid stage."
+  },
+  {
+   "name": "CAPABILITY_PROBED",
+   "category": "capability",
+   "stratum": "event",
+   "payload": [
+    "capability",
+    "host_id",
+    "outcome",
+    "detail"
+   ],
+   "optional_payload": [
+    "execution_id"
+   ],
+   "types": {
+    "capability": "enum:capability",
+    "host_id": "id",
+    "outcome": "enum:capability_outcome",
+    "detail": "text",
+    "execution_id": "id"
+   },
+   "note": "One destination capability observed on one host (v0.2 8.1). An observation about this development Mac is evidence for its profile only (v0.2 8.2). outcome=not_established: the probe could not decide; detail says what was searched or run (0.4, P12; v0.2 8.1 forbids asserting an absence the evidence does not show)."
+  },
+  {
+   "name": "BACKEND_EVALUATED",
+   "category": "capability",
+   "stratum": "summary",
+   "payload": [
+    "evaluation_id",
+    "backend",
+    "application_profile_id",
+    "destination_profile_id",
+    "conformance_pass_count",
+    "conformance_fail_count",
+    "objective_ref",
+    "measurement_ids"
+   ],
+   "optional_payload": [],
+   "types": {
+    "evaluation_id": "id",
+    "backend": "enum:backend",
+    "application_profile_id": "id",
+    "destination_profile_id": "id",
+    "conformance_pass_count": "u64",
+    "conformance_fail_count": "u64",
+    "objective_ref": "text",
+    "measurement_ids": "list<id>"
+   },
+   "note": "One backend measured on one application path with its required host interfaces in place (v0.2 8.2, 13)."
+  },
+  {
+   "name": "BACKEND_SELECTED",
+   "category": "capability",
+   "stratum": "event",
+   "payload": [
+    "backend",
+    "application_profile_id",
+    "destination_profile_id",
+    "evaluation_ids",
+    "decision_ref"
+   ],
+   "optional_payload": [],
+   "types": {
+    "backend": "enum:backend",
+    "application_profile_id": "id",
+    "destination_profile_id": "id",
+    "evaluation_ids": "list<id>",
+    "decision_ref": "text"
+   },
+   "note": "A recorded backend decision; decision_ref cites the BLACKBOARD Decisions entry. evaluation_ids cover both backends."
+  },
+  {
+   "name": "MEASUREMENT_RECORDED",
+   "category": "perf",
+   "stratum": "event",
+   "payload": [
+    "measurement_id",
+    "metric",
+    "value",
+    "unit",
+    "phase",
+    "backend",
+    "application_profile_id",
+    "artifact_state",
+    "destination_profile_id"
+   ],
+   "optional_payload": [
+    "variant"
+   ],
+   "types": {
+    "measurement_id": "id",
+    "metric": "enum:metric",
+    "value": "float",
+    "unit": "text",
+    "phase": "enum:measurement_phase",
+    "backend": "enum:backend",
+    "application_profile_id": "id",
+    "artifact_state": "enum:artifact_state",
+    "destination_profile_id": "id",
+    "variant": "text"
+   },
+   "note": "A performance number, kept apart from semantic acceptance (v0.2 3.1). Quality settings are fixed by application_profile_id. variant names the configuration measured when one metric compares alternatives (e.g. 'ldapr_stlr', 'entso_on'). ns_per_access is wall-clock nanoseconds divided by guest memory accesses performed. vm_compile_blocks counts blocks the compiler in the VM handled, variant naming the outcome (compiled, or a refusal or cut cause, vm_backend.VMC_COUNT_NAMES)."
+  },
+  {
+   "name": "DISTRIBUTION_RESOLVED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "app_id",
+    "build_id",
+    "depot_ids",
+    "platform"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "build_id": "u64",
+    "depot_ids": "list<u64>",
+    "platform": "text"
+   },
+   "note": "The Windows depots for one Steam app build are named. platform is 'windows' for every w2m input."
+  },
+  {
+   "name": "DISTRIBUTION_ACQUIRED",
+   "category": "product",
+   "stratum": "summary",
+   "payload": [
+    "app_id",
+    "build_id",
+    "bytes",
+    "content_sha256",
+    "tool"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "build_id": "u64",
+    "bytes": "u64",
+    "content_sha256": "sha256",
+    "tool": "enum:acquisition_tool"
+   },
+   "note": "The depot content is on disk under the user's account. content_sha256 hashes the sorted file manifest."
+  },
+  {
+   "name": "ACQUISITION_FAILED",
+   "category": "product",
+   "stratum": "incident",
+   "payload": [
+    "app_id",
+    "reason",
+    "diagnostic"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "reason": "enum:acquisition_failure",
+    "diagnostic": "text"
+   },
+   "note": "Acquisition stopped. auth_required means a real account step is pending; the system never fabricates success (v0.2 4.1)."
+  },
+  {
+   "name": "APPLICATION_PREPARED",
+   "category": "product",
+   "stratum": "summary",
+   "payload": [
+    "application_profile_id",
+    "bundle_id",
+    "backend",
+    "artifact_count",
+    "elapsed_seconds"
+   ],
+   "optional_payload": [],
+   "types": {
+    "application_profile_id": "id",
+    "bundle_id": "id",
+    "backend": "enum:backend",
+    "artifact_count": "u64",
+    "elapsed_seconds": "float"
+   },
+   "note": "The bundle exists and its manifest names the backend used (v0.2 4.3, 14)."
+  },
+  {
+   "name": "STEAM_SESSION_ESTABLISHED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "app_id",
+    "bridge_contract_version",
+    "user_context_present"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "bridge_contract_version": "version",
+    "user_context_present": "bool"
+   },
+   "note": "The application's Steamworks initialization succeeded through the bridge against the real Mac Steam client."
+  },
+  {
+   "name": "STEAM_SESSION_FAILED",
+   "category": "product",
+   "stratum": "incident",
+   "payload": [
+    "app_id",
+    "reason",
+    "diagnostic"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "reason": "enum:session_failure",
+    "diagnostic": "text"
+   },
+   "note": "Steamworks initialization did not succeed; diagnostic names the failing interface call."
+  },
+  {
+   "name": "BRIDGE_CALL_UNMAPPED",
+   "category": "product",
+   "stratum": "incident",
+   "payload": [
+    "interface_name",
+    "interface_version",
+    "method"
+   ],
+   "optional_payload": [],
+   "types": {
+    "interface_name": "text",
+    "interface_version": "text",
+    "method": "text"
+   },
+   "note": "A Windows-facing Steam interface method was called that has no Mac endpoint mapping (v0.2 4.2, 15). The fields are the diagnostic."
+  },
+  {
+   "name": "APPLICATION_LAUNCHED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "application_profile_id",
+    "bundle_id",
+    "backend",
+    "launch_kind"
+   ],
+   "optional_payload": [],
+   "types": {
+    "application_profile_id": "id",
+    "bundle_id": "id",
+    "backend": "enum:backend",
+    "launch_kind": "enum:launch_kind"
+   },
+   "note": "The bundle's launcher started the application. A local executable launch and a Steam launch are distinguished by whether STEAM_SESSION_ESTABLISHED preceded it in the lifecycle."
+  },
+  {
+   "name": "APPLICATION_EXITED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "application_profile_id",
+    "exit_kind",
+    "exit_code"
+   ],
+   "optional_payload": [],
+   "types": {
+    "application_profile_id": "id",
+    "exit_kind": "enum:exit_kind",
+    "exit_code": "i64"
+   },
+   "note": "The application process (or guest) ended."
+  },
+  {
+   "name": "SAVE_STATE_VERIFIED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "application_profile_id",
+    "state_sha256",
+    "verified"
+   ],
+   "optional_payload": [],
+   "types": {
+    "application_profile_id": "id",
+    "state_sha256": "sha256",
+    "verified": "bool"
+   },
+   "note": "Saved state written in one launch was read back in the next and matched under the storage contract."
+  },
+  {
+   "name": "APPLICATION_UPDATED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "app_id",
+    "from_build_id",
+    "to_build_id",
+    "artifacts_invalidated"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "from_build_id": "u64",
+    "to_build_id": "u64",
+    "artifacts_invalidated": "u64"
+   },
+   "note": "A new build replaced the old one; affected artifacts were invalidated and state preserved."
+  },
+  {
+   "name": "APPLICATION_REMOVED",
+   "category": "product",
+   "stratum": "event",
+   "payload": [
+    "app_id",
+    "bytes_removed",
+    "state_retained"
+   ],
+   "optional_payload": [],
+   "types": {
+    "app_id": "u64",
+    "bytes_removed": "u64",
+    "state_retained": "bool"
+   },
+   "note": "The application and its generated artifacts were removed from the command line."
+  },
+  {
+   "name": "PRODUCT_LIFECYCLE_QUALIFIED",
+   "category": "product",
+   "stratum": "summary",
+   "payload": [
+    "application_profile_id",
+    "profile_scope",
+    "passed",
+    "steps_passed"
+   ],
+   "optional_payload": [
+    "failed_step"
+   ],
+   "types": {
+    "application_profile_id": "id",
+    "profile_scope": "text",
+    "passed": "bool",
+    "steps_passed": "list<enum:lifecycle_step>",
+    "failed_step": "enum:lifecycle_step"
+   },
+   "note": "One product-slice qualification result. profile_scope states the covered categories (v0.2 12.1: every qualification result states its profile)."
+  },
+  {
+   "name": "GUEST_TRACE_OPENED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "execution_id",
+    "vocab_version",
+    "profile_id",
+    "trace_format_version"
+   ],
+   "optional_payload": [],
+   "types": {
+    "execution_id": "id",
+    "vocab_version": "version",
+    "profile_id": "id",
+    "trace_format_version": "version"
+   },
+   "note": "First line of every guest-trace file; the SESSION_INIT of the guest plane."
+  },
+  {
+   "name": "GUEST_THREAD_STARTED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "parent_thread_id",
+    "start_address",
+    "suspended"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "parent_thread_id": "u64",
+    "start_address": "u64",
+    "suspended": "bool"
+   },
+   "note": "A guest thread exists. thread_seq is 0. hb_refs holds the creating thread's 'thread_id:thread_seq'."
+  },
+  {
+   "name": "GUEST_THREAD_EXITED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "exit_code"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "exit_code": "i64"
+   },
+   "note": "A guest thread terminated; its thread object becomes signaled (v0.2 7)."
+  },
+  {
+   "name": "GUEST_CALL_RETURNED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "api",
+    "args_sha256",
+    "return_value",
+    "last_error"
+   ],
+   "optional_payload": [
+    "out_sha256"
+   ],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "api": "text",
+    "args_sha256": "sha256",
+    "return_value": "i64",
+    "last_error": "u64",
+    "out_sha256": "sha256"
+   },
+   "note": "An observed API boundary call returned. api is 'module!Function' (e.g. 'kernel32!WaitForSingleObject'). hb_refs carries the synchronizing edge, e.g. the SetEvent that satisfied a wait. args_sha256 is the sha256 of the UTF-8 canonical argument rendering 'Function(a1,a2,...)': handles and pointers by role name (e.g. 'event'), integers in decimal, no spaces (0.4 note; the tag's schema is unchanged)."
+  },
+  {
+   "name": "GUEST_MEMORY_OBSERVED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "address",
+    "width",
+    "value",
+    "access"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "address": "u64",
+    "width": "u64",
+    "value": "u64",
+    "access": "enum:access"
+   },
+   "note": "An instrumented memory access in a probe (litmus tests, page-protection probes). Not emitted for every access in application runs."
+  },
+  {
+   "name": "GUEST_FAULT_RAISED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "exception_code",
+    "fault_address",
+    "access"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "exception_code": "u64",
+    "fault_address": "u64",
+    "access": "enum:access"
+   },
+   "note": "A guest-visible exception was raised (e.g. 0xC0000005 access violation, 0x80000001 guard page). Prescribed faults are observations, not failures."
+  },
+  {
+   "name": "GUEST_CALLBACK_ENTERED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "callback_kind",
+    "target_address"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "callback_kind": "text",
+    "target_address": "u64"
+   },
+   "note": "Control entered guest code from the system side: window procedure, APC, thread-pool work, TLS callback, completion routine."
+  },
+  {
+   "name": "GUEST_CLOCK_READ",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "clock",
+    "value"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "clock": "enum:clock",
+    "value": "u64"
+   },
+   "note": "A clock observation (v0.2 3.1). Each clock has its own contract; tick_count wraps at 2^32 ms (about 49.7 days), so no universal monotonic check applies."
+  },
+  {
+   "name": "GUEST_THREAD_STATE_OBSERVED",
+   "category": "guest",
+   "stratum": "event",
+   "payload": [
+    "thread_id",
+    "thread_seq",
+    "hb_refs",
+    "subject_thread_id",
+    "thread_state",
+    "wait_reason",
+    "source"
+   ],
+   "optional_payload": [],
+   "types": {
+    "thread_id": "u64",
+    "thread_seq": "u64",
+    "hb_refs": "list<text>",
+    "subject_thread_id": "u64",
+    "thread_state": "u64",
+    "wait_reason": "u64",
+    "source": "text"
+   },
+   "note": "The observing thread (thread_id) read another thread's scheduler state. thread_state and wait_reason are the operating system's raw values (Windows: SYSTEM_THREAD_INFORMATION.ThreadState and WaitReason from NtQuerySystemInformation(SystemProcessInformation); documented meanings in .NET System.Diagnostics.ThreadState, Wait = 5, and ThreadWaitReason, UserRequest = 6, valid only when the state is Wait). source names the interface read. Used to witness a contract precondition such as 'both waiters are pending' (0.5, P14)."
+  },
+  {
+   "name": "GUEST_TRACE_CLOSED",
+   "category": "guest",
+   "stratum": "summary",
+   "payload": [
+    "line_count",
+    "thread_count",
+    "dropped_count"
+   ],
+   "optional_payload": [],
+   "types": {
+    "line_count": "u64",
+    "thread_count": "u64",
+    "dropped_count": "u64"
+   },
+   "note": "Last line of every guest-trace file. dropped_count > 0 means the tracer lost lines; such a trace is ingested but cannot support an exact or partial_order comparison."
+  },
+  {
+   "name": "SERVICE_UNIMPLEMENTED",
+   "category": "probe",
+   "stratum": "summary",
+   "payload": [
+    "execution_id",
+    "service",
+    "guest_address",
+    "instructions_executed"
+   ],
+   "optional_payload": [],
+   "types": {
+    "execution_id": "id",
+    "service": "text",
+    "guest_address": "u64",
+    "instructions_executed": "u64"
+   },
+   "note": "A destination execution stopped because the guest called a Windows service (\"DLL!Function\", or an argument form of one) that w2m does not implement. Closes the execution like EXECUTION_COMPLETED; it is the frontier's measurement of what the application needs next (roadmap Sprint 038), not a guest fault and not a harness failure. guest_address is the call's return address in the guest. Distinct from BRIDGE_CALL_UNMAPPED, which is a Steam interface method with no Mac mapping (v0.2 4.2)."
+  }
+ ],
+ "sessions": {
+  "strata": [
+   {
+    "name": "harness_run",
+    "open": "SESSION_INIT",
+    "close": "SESSION_COMPLETED",
+    "parent": null,
+    "frames": "every non-guest tag",
+    "persistent_attributes": [
+     "vocab_version",
+     "profile",
+     "contract_version",
+     "harness_version",
+     "purpose"
+    ]
+   },
+   {
+    "name": "execution",
+    "open": "EXECUTION_STARTED",
+    "close": "EXECUTION_COMPLETED | EXECUTION_FAILED | SERVICE_UNIMPLEMENTED",
+    "parent": "harness_run",
+    "key": "execution_id",
+    "frames": [
+     "TRACE_INGESTED",
+     "TRACE_REJECTED"
+    ],
+    "persistent_attributes": [
+     "subject_kind",
+     "profile_kind",
+     "profile_id"
+    ]
+   },
+   {
+    "name": "guest_trace",
+    "open": "GUEST_TRACE_OPENED",
+    "close": "GUEST_TRACE_CLOSED",
+    "parent": "execution (linked by execution_id; separate transport)",
+    "frames": "every guest tag",
+    "persistent_attributes": [
+     "execution_id",
+     "vocab_version",
+     "profile_id"
+    ]
+   },
+   {
+    "name": "model_check",
+    "open": "MODEL_CHECK_STARTED",
+    "close": "MODEL_CHECK_COMPLETED",
+    "parent": "harness_run",
+    "key": "model_check_id",
+    "frames": [],
+    "persistent_attributes": [
+     "contract_id",
+     "contract_version",
+     "program_sha256"
+    ]
+   },
+   {
+    "name": "product_lifecycle",
+    "open": "DISTRIBUTION_RESOLVED",
+    "close": "PRODUCT_LIFECYCLE_QUALIFIED",
+    "parent": "harness_run",
+    "key": "app_id / application_profile_id",
+    "framing_inferred": true,
+    "frames": [
+     "DISTRIBUTION_ACQUIRED",
+     "ACQUISITION_FAILED",
+     "APPLICATION_PREPARED",
+     "STEAM_SESSION_ESTABLISHED",
+     "STEAM_SESSION_FAILED",
+     "BRIDGE_CALL_UNMAPPED",
+     "APPLICATION_LAUNCHED",
+     "APPLICATION_EXITED",
+     "SAVE_STATE_VERIFIED",
+     "APPLICATION_UPDATED",
+     "APPLICATION_REMOVED"
+    ],
+    "persistent_attributes": [
+     "app_id"
+    ]
+   }
+  ]
+ },
+ "temporal_invariants": {
+  "invariants": [
+   {
+    "id": "T1",
+    "kind": "forced_first",
+    "tags": [
+     "SESSION_INIT"
+    ],
+    "rule": "SESSION_INIT is the first application event of a harness run.",
+    "source": "TECHNIQUES.md #9"
+   },
+   {
+    "id": "T2",
+    "kind": "terminal",
+    "tags": [
+     "SESSION_COMPLETED"
+    ],
+    "rule": "SESSION_COMPLETED is the last application event of a harness run.",
+    "source": "BOOTSTRAP Step 4"
+   },
+   {
+    "id": "T3",
+    "kind": "window",
+    "tags": [
+     "EXECUTION_STARTED",
+     "EXECUTION_COMPLETED",
+     "EXECUTION_FAILED"
+    ],
+    "rule": "For each execution_id, exactly one EXECUTION_COMPLETED or EXECUTION_FAILED follows within timeout_seconds + kill_grace_seconds of EXECUTION_STARTED, measured on the harness clock. Not checked for an execution whose EXECUTION_STARTED omits timeout_seconds (an imported execution; 0.4, P13); its unobserved field says so.",
+    "duration": "per-event payload",
+    "source": "v0.2 3.1 (timeouts are observable and cannot be erased)"
+   },
+   {
+    "id": "T4",
+    "kind": "pairing",
+    "tags": [
+     "EXECUTION_COMPLETED",
+     "TRACE_INGESTED",
+     "TRACE_REJECTED"
+    ],
+    "rule": "Each EXECUTION_COMPLETED is followed by exactly one TRACE_INGESTED or TRACE_REJECTED with the same trace_sha256 before SESSION_COMPLETED.",
+    "source": "v0.2 11.1"
+   },
+   {
+    "id": "T5",
+    "kind": "forced_first",
+    "tags": [
+     "GUEST_TRACE_OPENED"
+    ],
+    "rule": "Line 1 of every guest trace is GUEST_TRACE_OPENED; the last line is GUEST_TRACE_CLOSED.",
+    "source": "transport decision"
+   },
+   {
+    "id": "T6",
+    "kind": "cadence",
+    "tags": [
+     "guest:*"
+    ],
+    "rule": "Within one trace, thread_seq for a given thread_id starts at 0 on GUEST_THREAD_STARTED and increases by exactly 1 per line; a gap is a validation failure (TRACE_REJECTED).",
+    "duration": "per-line, not per-time",
+    "source": "v0.2 9, 11.4 (guest order is per-thread plus hb edges)"
+   },
+   {
+    "id": "T7",
+    "kind": "eventually_must",
+    "tags": [
+     "CONTRACT_REVISED",
+     "DEPENDENTS_INVALIDATED"
+    ],
+    "rule": "Every CONTRACT_REVISED is followed by DEPENDENTS_INVALIDATED for the same contract_id and to_version before SESSION_COMPLETED.",
+    "source": "v0.2 14"
+   }
+  ]
+ },
+ "state_transitions": {
+  "rules": [
+   {
+    "id": "S1",
+    "kind": "pairing_ordering",
+    "from_tag": "CONTRACT_PROPOSED",
+    "to_tags_allowed": [
+     "CONTRACT_ACCEPTED",
+     "CONTRACT_REJECTED"
+    ],
+    "payload_match": [
+     "contract_id",
+     "version"
+    ],
+    "rule": "A version is accepted or rejected only after it was proposed."
+   },
+   {
+    "id": "S2",
+    "kind": "forbidden_after",
+    "from_tag": "CONTRACT_REVISED",
+    "to_tags_forbidden": [
+     "CANDIDATE_ACCEPTED",
+     "ARTIFACT_ACCEPTED"
+    ],
+    "payload_match": [
+     "contract_id",
+     "contract_version == from_version"
+    ],
+    "rule": "Nothing may claim acceptance under a replaced version (v0.2 14)."
+   },
+   {
+    "id": "S3",
+    "kind": "pairing_ordering",
+    "from_tag": "COMPARISON_COMPLETED",
+    "to_tags_allowed": [
+     "CANDIDATE_ACCEPTED",
+     "ARTIFACT_ACCEPTED"
+    ],
+    "payload_match": [
+     "every comparison_ids entry has verdict=conforms and the same contract_version"
+    ],
+    "rule": "Acceptance cites only conforming comparisons that precede it."
+   },
+   {
+    "id": "S4",
+    "kind": "pairing_ordering",
+    "from_tag": "COMPARISON_COMPLETED",
+    "to_tags_allowed": [
+     "REDUCTION_COMPLETED"
+    ],
+    "payload_match": [
+     "comparison_id",
+     "verdict=discrepancy"
+    ],
+    "rule": "Reduction runs only on a discrepancy comparison."
+   },
+   {
+    "id": "S5",
+    "kind": "pairing_ordering",
+    "from_tag": "REDUCTION_COMPLETED",
+    "to_tags_allowed": [
+     "DISCREPANCY_REPORTED"
+    ],
+    "payload_match": [
+     "comparison_id"
+    ],
+    "rule": "The report follows reduction."
+   },
+   {
+    "id": "S6",
+    "kind": "pairing_ordering",
+    "from_tag": "DISCREPANCY_REPORTED",
+    "to_tags_allowed": [
+     "DISCREPANCY_ROUTED"
+    ],
+    "payload_match": [
+     "discrepancy_id"
+    ],
+    "rule": "Routing follows the report; resolution follows routing."
+   },
+   {
+    "id": "S7",
+    "kind": "pairing_ordering",
+    "from_tag": "DISCREPANCY_ROUTED",
+    "to_tags_allowed": [
+     "DISCREPANCY_RESOLVED"
+    ],
+    "payload_match": [
+     "discrepancy_id; repair_path=implementation_repair requires resolution=implementation_repaired, repair_path=contract_revision requires resolution=contract_revised"
+    ],
+    "rule": "The repair path taken matches the route (v0.2 11.3 keeps the paths distinct)."
+   },
+   {
+    "id": "S8",
+    "kind": "forced_next",
+    "from_tag": "ACCEPTANCE_CONDITION_ALTERED",
+    "to_tags_allowed": [
+     "CANDIDATE_REJECTED"
+    ],
+    "payload_match": [
+     "candidate_id"
+    ],
+    "rule": "An altered acceptance condition rejects the candidate; no CANDIDATE_ACCEPTED for it may follow."
+   },
+   {
+    "id": "S9",
+    "kind": "forbidden_after",
+    "from_tag": "TRANSLATION_INVALIDATED",
+    "to_tags_forbidden": [
+     "STALE_TRANSLATION_ENTERED"
+    ],
+    "payload_match": [
+     "translation_id"
+    ],
+    "rule": "Entering an invalidated translation is the incident the validity checker exists to catch; in an accepted build it never fires."
+   },
+   {
+    "id": "S10",
+    "kind": "pairing_ordering",
+    "from_tag": "BACKEND_EVALUATED",
+    "to_tags_allowed": [
+     "BACKEND_SELECTED"
+    ],
+    "payload_match": [
+     "application_profile_id; evaluation_ids include one native_process and one managed_vm evaluation"
+    ],
+    "rule": "Backend selection follows evaluation of both candidates (v0.2 8.2)."
+   },
+   {
+    "id": "S11",
+    "kind": "allowed_set",
+    "from_tag": "DISTRIBUTION_RESOLVED",
+    "to_tags_allowed": [
+     "DISTRIBUTION_ACQUIRED",
+     "ACQUISITION_FAILED"
+    ],
+    "payload_match": [
+     "app_id"
+    ],
+    "rule": "Product lifecycle order: resolve, acquire, prepare, session, launch, exit, state verify, relaunch, update, remove, qualify."
+   },
+   {
+    "id": "S12",
+    "kind": "pairing_ordering",
+    "from_tag": "APPLICATION_LAUNCHED",
+    "to_tags_allowed": [
+     "APPLICATION_EXITED"
+    ],
+    "payload_match": [
+     "application_profile_id"
+    ],
+    "rule": "Every launch ends in exactly one exit before the next launch of the same profile."
+   },
+   {
+    "id": "S13",
+    "kind": "pairing_ordering",
+    "from_tag": "SAVE_STATE_VERIFIED",
+    "to_tags_allowed": [
+     "PRODUCT_LIFECYCLE_QUALIFIED"
+    ],
+    "payload_match": [
+     "application_profile_id; passed=true requires every lifecycle_step in steps_passed and a preceding event for each step"
+    ],
+    "rule": "A passed qualification is backed by the whole lifecycle on the record."
+   },
+   {
+    "id": "S14",
+    "kind": "terminal",
+    "from_tag": "GUEST_TRACE_CLOSED",
+    "to_tags_forbidden": [
+     "guest:*"
+    ],
+    "payload_match": [],
+    "rule": "Nothing follows GUEST_TRACE_CLOSED in a trace file."
+   }
+  ]
+ },
+ "operators": {
+  "operators": [
+   {
+    "name": "harness",
+    "runs_on": "host (Python, substrate topology)",
+    "emits": [
+     "SESSION_INIT",
+     "SESSION_COMPLETED"
+    ],
+    "consumes": [],
+    "model_route": null
+   },
+   {
+    "name": "contract_builder",
+    "runs_on": "host",
+    "emits": [
+     "EVIDENCE_RECORDED",
+     "EVIDENCE_SUPERSEDED",
+     "HYPOTHESIS_RESOLVED",
+     "CONTRACT_PROPOSED",
+     "CONTRACT_ACCEPTED",
+     "CONTRACT_REVISED",
+     "CONTRACT_REJECTED",
+     "DEPENDENTS_INVALIDATED"
+    ],
+    "consumes": [
+     "TRACE_INGESTED",
+     "MODEL_CHECK_COMPLETED",
+     "COMPARISON_COMPLETED",
+     "DISCREPANCY_ROUTED"
+    ],
+    "model_route": "substrate Responder for drafting contract text; acceptance is deterministic (checks pass) never model-judged",
+    "fallback": "hand authoring in a sprint, generator_ref='hand'"
+   },
+   {
+    "name": "probe_author",
+    "runs_on": "host",
+    "emits": [
+     "PROBE_AUTHORED"
+    ],
+    "consumes": [
+     "CONTRACT_PROPOSED",
+     "CONTRACT_ACCEPTED",
+     "REDUCTION_COMPLETED"
+    ],
+    "model_route": "substrate Responder for generated probes; origin field says which"
+   },
+   {
+    "name": "reference_runner",
+    "runs_on": "Windows reference machine (profile_kind windows_reference); tracer writes the guest plane",
+    "emits": [
+     "EXECUTION_STARTED",
+     "EXECUTION_COMPLETED",
+     "EXECUTION_FAILED",
+     "GUEST_TRACE_OPENED",
+     "GUEST_THREAD_STARTED",
+     "GUEST_THREAD_EXITED",
+     "GUEST_CALL_RETURNED",
+     "GUEST_MEMORY_OBSERVED",
+     "GUEST_THREAD_STATE_OBSERVED",
+     "GUEST_FAULT_RAISED",
+     "GUEST_CALLBACK_ENTERED",
+     "GUEST_CLOCK_READ",
+     "GUEST_TRACE_CLOSED"
+    ],
+    "consumes": [
+     "PROBE_AUTHORED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "destination_runner",
+    "runs_on": "this Mac, profile_kind native_process or managed_vm; the guest runtime writes the guest plane",
+    "emits": [
+     "EXECUTION_STARTED",
+     "EXECUTION_COMPLETED",
+     "EXECUTION_FAILED",
+     "GUEST_TRACE_OPENED",
+     "GUEST_THREAD_STARTED",
+     "GUEST_THREAD_EXITED",
+     "GUEST_CALL_RETURNED",
+     "GUEST_MEMORY_OBSERVED",
+     "GUEST_THREAD_STATE_OBSERVED",
+     "GUEST_FAULT_RAISED",
+     "GUEST_CALLBACK_ENTERED",
+     "GUEST_CLOCK_READ",
+     "GUEST_TRACE_CLOSED",
+     "SERVICE_UNIMPLEMENTED"
+    ],
+    "consumes": [
+     "PROBE_AUTHORED",
+     "ARTIFACT_ACCEPTED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "trace_ingester",
+    "runs_on": "host",
+    "emits": [
+     "TRACE_INGESTED",
+     "TRACE_REJECTED"
+    ],
+    "consumes": [
+     "EXECUTION_COMPLETED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "model_checker",
+    "runs_on": "host, profile_kind model",
+    "emits": [
+     "MODEL_CHECK_STARTED",
+     "MODEL_CHECK_COMPLETED"
+    ],
+    "consumes": [
+     "CONTRACT_PROPOSED",
+     "PROBE_AUTHORED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "comparator",
+    "runs_on": "host",
+    "emits": [
+     "COMPARISON_COMPLETED"
+    ],
+    "consumes": [
+     "TRACE_INGESTED",
+     "MODEL_CHECK_COMPLETED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "reducer",
+    "runs_on": "host, drives runners",
+    "emits": [
+     "REDUCTION_COMPLETED",
+     "DISCREPANCY_REPORTED",
+     "DISCREPANCY_ROUTED",
+     "DISCREPANCY_RESOLVED"
+    ],
+    "consumes": [
+     "COMPARISON_COMPLETED",
+     "CANDIDATE_ACCEPTED",
+     "CONTRACT_REVISED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "candidate_generator",
+    "runs_on": "host",
+    "emits": [
+     "CANDIDATE_GENERATED"
+    ],
+    "consumes": [
+     "CONTRACT_ACCEPTED",
+     "DISCREPANCY_ROUTED"
+    ],
+    "model_route": "substrate Responder via best_of_n_verified-shaped topology"
+   },
+   {
+    "name": "acceptance_guard",
+    "runs_on": "host; separate operator from candidate_generator",
+    "emits": [
+     "CANDIDATE_ACCEPTED",
+     "CANDIDATE_REJECTED",
+     "ACCEPTANCE_CONDITION_ALTERED"
+    ],
+    "consumes": [
+     "CANDIDATE_GENERATED",
+     "COMPARISON_COMPLETED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "application_compiler",
+    "runs_on": "host at install/update; runtime component at execution",
+    "emits": [
+     "CODE_TARGET_DISCOVERED",
+     "TRANSLATION_PUBLISHED",
+     "TRANSLATION_INVALIDATED",
+     "STALE_TRANSLATION_ENTERED",
+     "ARTIFACT_BUILT",
+     "ARTIFACT_ACCEPTED",
+     "ARTIFACT_INVALIDATED"
+    ],
+    "consumes": [
+     "CONTRACT_ACCEPTED",
+     "DEPENDENTS_INVALIDATED",
+     "CAPABILITY_PROBED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "destination_evaluator",
+    "runs_on": "this Mac",
+    "emits": [
+     "CAPABILITY_PROBED",
+     "BACKEND_EVALUATED",
+     "BACKEND_SELECTED",
+     "MEASUREMENT_RECORDED"
+    ],
+    "consumes": [
+     "COMPARISON_COMPLETED",
+     "APPLICATION_EXITED"
+    ],
+    "model_route": null
+   },
+   {
+    "name": "acquirer",
+    "runs_on": "this Mac (wraps DepotDownloader)",
+    "emits": [
+     "DISTRIBUTION_RESOLVED",
+     "DISTRIBUTION_ACQUIRED",
+     "ACQUISITION_FAILED"
+    ],
+    "consumes": [],
+    "model_route": null
+   },
+   {
+    "name": "steam_bridge",
+    "runs_on": "inside the prepared application (either backend)",
+    "emits": [
+     "STEAM_SESSION_ESTABLISHED",
+     "STEAM_SESSION_FAILED",
+     "BRIDGE_CALL_UNMAPPED"
+    ],
+    "consumes": [],
+    "model_route": null
+   },
+   {
+    "name": "product_driver",
+    "runs_on": "this Mac (the w2m CLI and launcher)",
+    "emits": [
+     "APPLICATION_PREPARED",
+     "APPLICATION_LAUNCHED",
+     "APPLICATION_EXITED",
+     "SAVE_STATE_VERIFIED",
+     "APPLICATION_UPDATED",
+     "APPLICATION_REMOVED",
+     "PRODUCT_LIFECYCLE_QUALIFIED"
+    ],
+    "consumes": [
+     "DISTRIBUTION_ACQUIRED",
+     "ARTIFACT_ACCEPTED",
+     "STEAM_SESSION_ESTABLISHED"
+    ],
+    "model_route": null
+   }
+  ]
+ },
+ "evidence_constraints": {
+  "constraints": [
+   {
+    "id": "E1",
+    "kind": "format",
+    "target": "every field typed sha256",
+    "spec": "^sha256:[0-9a-f]{64}$",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E2",
+    "kind": "conditional_required",
+    "target": "EVIDENCE_RECORDED.distinguishing_check",
+    "spec": "required when evidence_category=hypothesis",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E3",
+    "kind": "cross_reference",
+    "target": "EVIDENCE_RECORDED.source_ref",
+    "spec": "observed: an execution_id with TRACE_INGESTED on record; documented: a URL and retrieval date; hypothesis: a model_check_id or a reasoning reference",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E4",
+    "kind": "cross_reference",
+    "target": "EVIDENCE_RECORDED (observed) for contracts on instruction, ordering, or fault behavior",
+    "spec": "the execution's profile_kind is windows_reference; windows_arm_emulated never satisfies it (v0.2 11.1)",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E5",
+    "kind": "conditional_required",
+    "target": "COMPARISON_COMPLETED.rule_ref",
+    "spec": "required when relation=numerical_envelope; names a published rule (e.g. Direct3D 11 floating-point rules), never a tolerance chosen after the mismatch (v0.2 10.2)",
+    "enforceability": "mechanical (presence) + manual_review (rule identity)"
+   },
+   {
+    "id": "E6",
+    "kind": "conditional_required",
+    "target": "COMPARISON_COMPLETED.first_divergence",
+    "spec": "required when verdict=discrepancy",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E7",
+    "kind": "diagnostic_required",
+    "target": "incident tags",
+    "spec": "CONTRACT_REJECTED.reason, EXECUTION_FAILED.diagnostic, TRACE_REJECTED.reason + first_invalid_line, DISCREPANCY_REPORTED.first_divergence + minimized_program_sha256, ACCEPTANCE_CONDITION_ALTERED.path + both hashes, STALE_TRANSLATION_ENTERED both code versions, ACQUISITION_FAILED.diagnostic, STEAM_SESSION_FAILED.diagnostic, BRIDGE_CALL_UNMAPPED interface_name + interface_version + method: non-empty",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E8",
+    "kind": "outcome_required",
+    "target": "summary tags",
+    "spec": "SESSION_COMPLETED.outcome, DEPENDENTS_INVALIDATED counts, EXECUTION_COMPLETED.exit_status, TRACE_INGESTED.line_count, MODEL_CHECK_COMPLETED.exhaustive, COMPARISON_COMPLETED.verdict, REDUCTION_COMPLETED.preserved_mismatch, BACKEND_EVALUATED counts, DISTRIBUTION_ACQUIRED.bytes, APPLICATION_PREPARED.artifact_count, PRODUCT_LIFECYCLE_QUALIFIED.passed, GUEST_TRACE_CLOSED.dropped_count: present, SERVICE_UNIMPLEMENTED.service (the service the run needs next).",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E9",
+    "kind": "range",
+    "target": "TRANSLATION_PUBLISHED",
+    "spec": "guest_range_start < guest_range_end",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E10",
+    "kind": "exclusion",
+    "target": "CANDIDATE_ACCEPTED.comparison_ids, ARTIFACT_ACCEPTED.comparison_ids",
+    "spec": "never cite a measurement_id; performance is not acceptance (v0.2 3.1)",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E11",
+    "kind": "security",
+    "target": "every text field",
+    "spec": "contains no password, Steam login token, 2FA code, or session key; scanned for credential patterns before append (v0.2 4.1: credentials are real service inputs, never record content)",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E12",
+    "kind": "tonal",
+    "target": "every text field",
+    "spec": "lowercase first word, no exclamation mark, no emoji, absolute paths (WORKING_AGREEMENT.md tone canon)",
+    "enforceability": "mechanical"
+   },
+   {
+    "id": "E13",
+    "kind": "cross_reference",
+    "target": "every *_id field naming an entity",
+    "spec": "resolves to an earlier event introducing that id in the same record, or to a registry file (profiles/, contracts/)",
+    "enforceability": "mechanical"
+   }
+  ]
+ },
+ "report_binding": {
+  "observed_categories": [
+   "session",
+   "evidence",
+   "contract",
+   "probe",
+   "model",
+   "verify",
+   "candidate",
+   "compile",
+   "capability",
+   "perf",
+   "product"
+  ],
+  "rendered_categories": [],
+  "notes_categories": [
+   "incident"
+  ],
+  "guest_plane": "Guest traces are cited by trace_sha256 in OBSERVED; first_divergence lines are quoted in DELTA.",
+  "grammar_drift": "signals/proposals.json"
+ },
+ "grammar_growth": {
+  "taxonomy_version": "0.1",
+  "project_overrides": [
+   "Validator-extras posture: strict on both planes (msgspec forbid_unknown_fields on guest-trace ingest; Struct fields on the harness plane).",
+   "Adding an enum value is a PAYLOAD_FIELD_PROPOSED-class change and bumps the minor version, because a guest trace or record written with the new value would fail validation under the old version.",
+   "Guest-plane compatibility: a vocabulary version lists the earlier versions whose guest traces it still ingests (guest_plane_compatible_versions). A change to any guest tag removes earlier versions from the list."
+  ]
+ },
+ "guest_plane_compatible_versions": [
+  "0.1",
+  "0.2",
+  "0.3",
+  "0.4",
+  "0.5",
+  "0.6",
+  "0.7",
+  "0.8"
+ ]
+}

@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import signal
 import sys
 import time
@@ -297,6 +298,15 @@ def main(argv: list[str]) -> int:
                      vm_judged=dict(vm.vm_judged), blocks_compiled=len(vm.translations))
         state.update(stop=r.stop, instructions=r.instructions_executed, calls=r.calls,
                      host_requests=dict(sorted(vm.host_requests.items())), calls_total=totals)
+        # the VM compiler's counts on the record (vocabulary 0.8, P19; Sprint 101): one a cause, the cause the variant
+        warm: Literal["cold", "warm"] = "warm" if vm.tcache_hits else "cold"
+        profile_slug = re.sub(r"[^a-z0-9]+", "-", a.exe.stem.lower()).strip("-") + "-" + sha[7:19]
+        for cause, n in (state.get("vm_compile") or {}).items():
+            yield events.validate(events.MEASUREMENT_RECORDED(
+                measurement_id=f"{xid}-vm-compile-{cause.replace(' ', '_')}", metric="vm_compile_blocks",
+                value=float(n), unit="blocks", phase="discovery", backend="managed_vm",
+                application_profile_id=profile_slug, artifact_state=warm, destination_profile_id="w2m-vm",
+                variant=cause))
         if vm.unimplemented is not None:
             name, ret = vm.unimplemented
             yield events.validate(events.SERVICE_UNIMPLEMENTED(
@@ -347,7 +357,7 @@ def main(argv: list[str]) -> int:
                    reference_set=[run.name for run in reference_runs], load_at_start=load_at_start)
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
-                        events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
+                        events.MEASUREMENT_RECORDED, events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))
         b.producer_kind("ingester", schemas=[events.TRACE_INGESTED, events.TRACE_REJECTED], schema_version=1,
                         factory=lambda: producer(trace_ingester(base)))
         b.producer_kind("comparator", schemas=[events.COMPARISON_COMPLETED], schema_version=1,
