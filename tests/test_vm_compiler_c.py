@@ -290,7 +290,9 @@ def test_the_case_sets_compile_as_compile_insn(compiler: Compiler) -> None:
                 vm_backend.compile_insn(a, ins, exit_va, compiler.symbols, None, live, False)
                 assert got == a.finish(), (ins.iclass, code.hex())
                 counts["equal"] += 1
-    assert counts["equal"] > 30_000, counts
+    # the judge must compare many: 30,000 before Sprint 098, whose x87 FLD, FSTP and FSQRT (14,095 cases, two flag
+    # contexts) are vm_backend.HOST_LOWERED, compiled by the host and judged by their class runs instead
+    assert counts["equal"] > 28_000, counts
 
 
 def test_canonical_flags_compile_as_the_raw_arguments() -> None:
