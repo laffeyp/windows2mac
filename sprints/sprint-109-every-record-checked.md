@@ -100,3 +100,6 @@ green.
   41 s after the runner started), so the record cannot place the execution in time either.
 - **Held from now on:** a new record breaking any rule fails the gate, but for the two known class- and family-run
   defects, which the report prints with their counts (57 and 113 from 2026-10-17) and a Deferred entry.
+- **Correction (2026-10-17, Sprint 110):** T3's 452 unchecked are 394 laptop probe runs, 46 frontier runs and 12
+  judge records, not 452 frontier runs as the table and the Deferred entry say (87 frontier records exist); its 43
+  violations are all frontier runs.

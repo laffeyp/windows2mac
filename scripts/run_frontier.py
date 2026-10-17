@@ -31,6 +31,7 @@ Usage: uv run python scripts/run_frontier.py <exe> [--scratch] [--max-steps N]
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import re
@@ -68,6 +69,8 @@ CLOCK_RATE = 1_400_000_000
 REFERENCE_START = 134362624920000000   # game run 38216081440's start, 2026-10-12T07:08:12Z, as a FILETIME
 REACH_AFTER_LOG = 20_000_000_000    # instructions a run goes on past the reference's last line for its main thread
 HARNESS_STOPS = ("stopped by signal", "the log holds", "max_steps", "timeout")    # stops the harness chose: killed
+TIMED_OUT = "timed out"                    # the wall-time bound's stop (exit_status timed_out; Sprint 110)
+KILL_GRACE_SECONDS = 60                    # the bound's stop is read once a second (kernel.STOP_CHECK_SECONDS)
 REFERENCE = ROOT / "store" / "game-runs" / "38216081440"     # the batch run with thread names (Sprint 064)
 CONTRACT = ("windows.game.calls", "0.1.0")
 # Planted faults the comparison must catch at the call they change (Sprint 060's observation contract): file, the
@@ -213,6 +216,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--scratch", action="store_true", help="write to runs/, not store/runs/; a dirty tree allowed")
     ap.add_argument("--plant", choices=sorted(PLANTS), help="run with a planted fault (recorded in the baseline)")
     ap.add_argument("--max-steps", type=int, default=1_000_000_000)    # a run goes to its stop (Sprint 050: 20.6 M)
+    # the run's wall-time bound, stated on EXECUTION_STARTED so T3 can check it (Sprint 110): the longest frontier on
+    # record took 8,013 s (frontier-643a6283510c-1791802134771149000), the median 95 s
+    ap.add_argument("--timeout-seconds", type=float, default=10_800.0)
     # the guest's clock counts instructions at this rate (Sprint 065 item 10); 0: the host's clock
     ap.add_argument("--clock-rate", type=int, default=CLOCK_RATE)
     ap.add_argument("--no-translation-cache", action="store_true",
@@ -249,7 +255,8 @@ def main(argv: list[str]) -> int:
     async def runner(_inp: Any) -> AsyncIterator[msgspec.Struct]:
         yield events.validate(events.EXECUTION_STARTED(
             execution_id=xid, subject_kind="application", subject_sha256=sha, profile_kind="managed_vm",
-            profile_id="w2m-vm", initial_state_sha256=EMPTY, injected_inputs_sha256=EMPTY))
+            profile_id="w2m-vm", initial_state_sha256=EMPTY, injected_inputs_sha256=EMPTY,
+            timeout_seconds=a.timeout_seconds, kill_grace_seconds=KILL_GRACE_SECONDS))
         here = a.exe.resolve().parent                        # the program's directory supplies its DLLs (Sprint 046)
         # the program's directory is C:\\w2m\\app and the working directory, read-only (Sprint 048)
         files = FileBridge(here, read_only=True)
@@ -277,7 +284,11 @@ def main(argv: list[str]) -> int:
         windows_main = Counter((c[2].lower(), c[4]) for c in reference_calls if c[1] == min(reference_calls)[1])
         log_end: list[int] = []
 
+        started = [time.monotonic()]
+
         def stop_when() -> str | None:
+            if time.monotonic() - started[0] > a.timeout_seconds:
+                return f"{TIMED_OUT} after {a.timeout_seconds:g} s"
             if not (log.is_file() and len(log.read_bytes().splitlines()) >= reference_lines):
                 return None
             executed = vm.instructions_executed()
@@ -293,8 +304,18 @@ def main(argv: list[str]) -> int:
         machine.stop_when = stop_when
         for number in (signal.SIGINT, signal.SIGTERM):       # a stopped run still writes its record
             signal.signal(number, lambda n, _f: setattr(machine, "stop_requested", f"stopped by signal {n}"))
+        def run_off_the_loop() -> Any:
+            """The run in a worker thread, so substrate's writer stamps each event as it comes (runtime.py's
+            _submit_emission only queues it; a run on the loop's thread held every event to the run's end)."""
+            interactive_qos()                            # the worker's own QoS (Sprint 068 item F)
+            started[0] = time.monotonic()
+            try:
+                return machine.run(vm)
+            finally:
+                state["elapsed"] = time.monotonic() - started[0]
+
         try:
-            r = machine.run(vm)
+            r = await asyncio.to_thread(run_off_the_loop)
             calls, dropped = vm.traced_calls()
             threads = {t.tid: (t.parent, t.start, t.created_suspended) for t in vm.threads.values()}
             text = call_compare.guest_trace(xid, calls, threads, dropped, SIGNATURES)
@@ -369,10 +390,14 @@ def main(argv: list[str]) -> int:
             name, ret = vm.unimplemented
             yield events.validate(events.SERVICE_UNIMPLEMENTED(
                 execution_id=xid, service=name, guest_address=ret, instructions_executed=r.instructions_executed))
-            return
+        # the completion follows an unserved service too (T3: exactly one per EXECUTION_STARTED; 41 of the 43 frontier
+        # records with none had stopped at SERVICE_UNIMPLEMENTED, Sprint 110): the harness stopped the run, killed
         yield events.validate(events.EXECUTION_COMPLETED(
             execution_id=xid, exit_status=("exited" if r.exit_code is not None else
-                                           "killed" if r.stop.startswith(HARNESS_STOPS) else "faulted"),
+                                           "timed_out" if r.stop.startswith(TIMED_OUT) else
+                                           "killed" if vm.unimplemented is not None or r.stop.startswith(HARNESS_STOPS)
+                                           else "faulted"),
+            elapsed_seconds=round(state["elapsed"], 3),
             trace_sha256=state["trace"], guest_line_count=state["trace_lines"],
             **({"exit_code": r.exit_code} if r.exit_code is not None else {}),
             unobserved=f"the guest trace holds the traced images' calls only; the run stopped: {r.stop}"))
@@ -424,7 +449,8 @@ def main(argv: list[str]) -> int:
         b.initial("harness", input=None)
         b.trigger("run", subscription=Subscription(kinds=frozenset({"SESSION_INIT"})), predicate=lambda c: True,
                   starts="destination_runner", policy=PerEvent(), input_builder=lambda c: None)
-        b.trigger("ingest", subscription=Subscription(kinds=frozenset({"SERVICE_UNIMPLEMENTED", "EXECUTION_COMPLETED"})),
+        # on the completion alone: an unserved service is followed by one now (Sprint 110), and T4 wants one ingest
+        b.trigger("ingest", subscription=Subscription(kinds=frozenset({"EXECUTION_COMPLETED"})),
                   predicate=lambda c: True, starts="ingester", policy=PerEvent(),
                   input_builder=lambda c: {"trace_sha256": state["trace"], "execution_id": xid})
         b.trigger("compare", subscription=Subscription(kinds=frozenset({"TRACE_INGESTED"})),
