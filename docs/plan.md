@@ -41,8 +41,11 @@ there before step 1 goes on. Each is one concept (WORKING_AGREEMENT's hard rule 
   expected payload values, never "None new" for code that runs; a speed sprint's observation read from the record,
   not stderr; a script narrates each sprint's records in time order for the Rubber Duck Pass; Signal Reports resume
   or a Decision ends them (the stop since Sprint 048 is logged as a bypass, WORKING_AGREEMENT).
-- **H4. Typed C emitters generated from the vocabulary** (item 3): `gen_events.py` writes the C the probes and the
-  guest runtime emit through, checked when they compile.
+- **H4. Typed C emitters generated from the vocabulary** (item 3): deferred by Decision 2026-10-17 until C writes a
+  guest-trace line on a live path (the frontier's trace is built from msgspec structs; four Phase 1 probes alone
+  write lines in C). In its place: the class and family runs' discrepancy reports, with a reduction and real program
+  and state hashes (Deferred 2026-10-17, Sprint 109).
+- **Done:** H1 (Sprint 108), H2 (Sprints 109, 110), H3 (Sprint 111).
 - **H5. One schema across the system-call boundary** (item 2), with step 2's first sprint: the laptop's DTrace
   recordings as guest-plane records, the reference against which w2m's system calls are compared.
 
