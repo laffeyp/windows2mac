@@ -29,6 +29,10 @@ packages = ["src/w2m"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 timeout = 30
+# a test past its timeout ends the run with every thread's stack (pytest-timeout's thread method, os._exit): the
+# signal method raises pytest's Failed, a BaseException, inside the test, and in a substrate producer that task
+# then dies unrecorded (runtime.py catches Exception) and the run waits forever (Sprint 106: gates hung 8 h 59 min)
+timeout_method = "thread"
 
 [tool.ruff]
 target-version = "py312"
