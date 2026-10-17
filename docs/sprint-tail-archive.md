@@ -341,6 +341,13 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 101 (2026-10-17, closed)
+- **Scope:** vocabulary 0.8 (P19), the VM compiler's counts as MEASUREMENT_RECORDED.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* the batch run's runner emits 23 MEASUREMENT_RECORDED between its stop and EXECUTION_COMPLETED; read back through `read_record`, each equal to the printed count.
+  - *Observation 1 (the vocabulary still holds names nothing emits):* 25 of 62 tags have no emit site (review 2026-10-17). Disposition: deferred to design sprint D1 (plan.md).
+- **Closed:** CI pending at this entry.
+
 ### Sprint 100 (2026-10-17, closed)
 - **Scope:** the open question of Sprint 089: a 0x67 address through R8D-R15D, 32 bits by the SDM.
 - **Rubber Duck Pass:**

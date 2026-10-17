@@ -313,6 +313,7 @@
 - **2026-10-17** — Sprint 109 (every record checked against the vocabulary's rules) closed. `scripts/check_records.py`: T1 to T4, T7, S1 to S13, E1 (the zero placeholder named) and E6 over the 32,755 records in 27 s; 1,962 violations, all older than 2026-10-17 or known; in the gates, holding new records. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 110 (the frontier's execution placed in time on its record) closed. The run in a worker thread; `--timeout-seconds` (10,800) and a 60 s grace on EXECUTION_STARTED, `timed_out` at the bound; `elapsed_seconds` on EXECUTION_COMPLETED, which now follows an unserved service; T3 checked on the batch run, 0 violations. Closed: CI of its closing commit.
 - **2026-10-17** — Sprint 111 (Signal Reports from the record) closed. `scripts/signal_report.py` writes a sprint's report from the records its commits made (substrate's narrate and narration_summary) and checks the card's Emits tag by tag; reports for 108 to 111; WORKING_AGREEMENT's rule that Emits name the tags code fires. Closed: CI of its closing commit.
+- **2026-10-17** — Sprint 112 (discrepancy reports that name their program and state) closed. Class runs: each class's first failing case hashed (bytes; the rest through `w2m.record.state_sha256`) and a REDUCTION_COMPLETED with steps 0 before each report; family and file runs: the probe binary and the run's start (`family_run.vm_inputs`). FCOS and FSIN pass S4, S5 and E1. Closed: CI of its closing commit.
 
 ## Deferred
 
@@ -378,6 +379,14 @@
 ---
 
 ## Sprint tail
+
+### Sprint 112 (2026-10-17, closed)
+- **Scope:** in H4's place: discrepancy reports that name the program and state they failed from, and class runs' reports after a reduction.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-112-report.md`, 526 records of the sweep on b1ad0cfb): per class and family SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED (524) or, for FCOS and FSIN, REDUCTION_COMPLETED then DISCREPANCY_REPORTED then DISCREPANCY_ROUTED (8 each), SESSION_COMPLETED. Emits check: every named tag fired; CANDIDATE_ACCEPTED fired unnamed.
+  - *Observation 1 (a fix the gate turned on old records):* removing the class runs from the known list held today's earlier FCOS and FSIN records. Disposition: resolved-here (a fix's commit time bounds what is known).
+  - *Observation 2 (a reduction no one ran):* a family's probe has no reducer, so no REDUCTION_COMPLETED is claimed for it. Disposition: deferred (Deferred 2026-10-17, Sprint 112).
+- **Closed:** CI pending at this entry; Sprint 111's CI run 39069254531 (success on a285ffc9).
 
 ### Sprint 111 (2026-10-17, closed)
 - **Scope:** H3 of the SDD hardening order: Signal Reports made from the record, each card's Emits checked against what fired.
@@ -454,11 +463,4 @@
   - *Observation 1 (the check found a shared folder):* the first run stopped with 4 TEMP entries, one held open by another program in the session (Steam now runs on the laptop). Disposition: resolved-here (the game's TEMP is the job's own).
 - **Closed:** CI pending at this entry.
 
-### Sprint 101 (2026-10-17, closed)
-- **Scope:** vocabulary 0.8 (P19), the VM compiler's counts as MEASUREMENT_RECORDED.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* the batch run's runner emits 23 MEASUREMENT_RECORDED between its stop and EXECUTION_COMPLETED; read back through `read_record`, each equal to the printed count.
-  - *Observation 1 (the vocabulary still holds names nothing emits):* 25 of 62 tags have no emit site (review 2026-10-17). Disposition: deferred to design sprint D1 (plan.md).
-- **Closed:** CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-100 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-101 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
