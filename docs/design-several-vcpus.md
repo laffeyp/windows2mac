@@ -82,3 +82,32 @@ vCPU-state chain. Requires CnP = 0 (held).
    process page, SLICE_UNTIL set per vCPU (Sprint 105 found a PAUSE yields on a private page copied with 0); the
    compiler inside the VM made safe for two vCPUs missing at once (its register save area `VMC_SAVE`, its cursor and
    its log are one shared page at `MONITOR_VA + VM_COMPILER`); the 7 threading families and the batch run as judges.
+
+## The runtime under several vCPUs (before Sprint 106)
+
+Sprints 104 and 105 ran guest code on several vCPUs with no service, no fault and no switch on them. The guest
+runtime was written for one vCPU, and so was the host:
+
+- 28 of the runtime's 52 C files keep state in file-scope variables (the heap's lists, the objects and their waiters
+  in sync_objects.c, the run table in threads.c, the registry, files, modules, windows), and nothing locks them.
+- threads.c's run table has one `current`, one `current_entry`, one `slice_count`; a thread is READY, BLOCKED or
+  ENDED, with no state that says another vCPU is running it.
+- The host serves exits in one generator, `VM.steps`, for vCPU 0's channel.
+
+**Design A: one runtime lock first.** A spinlock (LSE compare-and-swap) taken at every entry from guest code into
+the runtime (the service bridges, the exception entry, the switch stub, the compiler's miss path) and released at
+its return; guest code runs on every vCPU at once, the runtime on one at a time. The run table gains RUNNING and
+a current thread per vCPU (on its private monitor page). The host serves each vCPU's channel on its own thread, the
+handlers under one Python lock. The practice it follows: Linux's SMP kernel ran under one big kernel lock before
+its locking was split up, and FreeBSD's under its Giant lock.
+
+**Design B: a lock per object from the start.** Every one of the 28 files locks its own state.
+
+**Choice: A,** then B where a measure shows the lock held: B touches every service before any measure says which
+ones matter, and the measure that decides (guest seconds per wall second on the batch run, step 1's) can count the
+lock's wait. Revisit if: a run spends a measured share of its vCPUs' time waiting on the lock.
+
+**The sprints:** 106, the runtime lock and RUNNING in the run table, judged by two guest threads calling services
+at once on two vCPUs (a family's threads under the litmus harness) with a plant (the lock removed: the heap's lists
+corrupt); 107, the host serving every vCPU's channel; 108, an idle vCPU parked until a wake (an SGI through the
+GIC); 109, the batch run on two to four vCPUs, judged as before and measured.
