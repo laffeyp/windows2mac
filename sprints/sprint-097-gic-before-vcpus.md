@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 097
-status: active
+status: closed
 phase: 5
 pass_kind: architecture
 ---
@@ -66,3 +66,13 @@ before.
 The GICv3 exists in every w2m VM, made in the order Apple requires, every judge unchanged, CI green.
 
 ## observed
+
+- **Made** (7172bd6a): the host reports a distributor region and alignment and a redistributor region of 32 MB (256
+  vCPUs at two 64 KB frames each); the monitor places the distributor at 0xfffdff0000 and the redistributors at
+  0xfffe000000, under the 1 TB IPA top and above the guest's memory; the `gic` command reads back the vCPU's
+  redistributor base 0xfffe000000 and MPIDR_EL1 0x80000000. `tests/test_gic.py` passes.
+- **Plant:** hv_gic_create moved after hv_vcpu_create; the monitor stops at start with hv_return 0xfae94002, HV_BUSY
+  in the SDK's hv_error.h, as Apple's rule says.
+- **Judges:** 68 of 68 families accept on 7172bd6a; the batch run conforms (168 of 168 lines, 0 divergences;
+  frontier-643a6283510c-1792212450643953000, 81.4 billion instructions to the stop).
+
