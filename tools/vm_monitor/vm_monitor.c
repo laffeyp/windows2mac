@@ -47,9 +47,10 @@ struct vslot {
     hv_vcpu_exit_t *ex;
     pthread_mutex_t mu;
     pthread_cond_t cv;
-    int running, fired, index;
+    int running, fired, kicked, index;       /* kicked: the host's kick word changed (Sprint 117) */
     struct timespec deadline;
     uint64_t ttbr, channel_off, actlr_read, ttbr_read;
+    volatile uint32_t *kick_word;           /* its channel page's CH_KICK */
     hv_return_t status;
 };
 static struct vslot slots[MAX_VCPUS];
@@ -114,7 +115,12 @@ static const char *run_vcpu(struct vslot *s, long ms, uint64_t *syn_out) {
             hv_vcpu_set_vtimer_mask(s->vcpu, true);
         } else if (ex->reason == HV_EXIT_REASON_CANCELED) {
             pthread_mutex_lock(&s->mu);
-            if (s->fired) kind = "cancel";
+            if (s->kicked) {                    /* the host's ask first: a deadline passed with it waits for the next */
+                s->kicked = 0;
+                kind = "kick";
+            } else if (s->fired) {
+                kind = "cancel";
+            }
             pthread_mutex_unlock(&s->mu);
         } else if (ex->reason == HV_EXIT_REASON_EXCEPTION) {
             syn = ex->exception.syndrome;
@@ -144,7 +150,7 @@ static void run(long ms) {
  * is vm_backend.py's CHANNEL_* offsets. */
 enum { CH_CMD = 0, CH_EXIT = 4, CH_OP = 8, CH_MS = 16, CH_SAVE = 24, CH_LOAD = 32, CH_PC = 40, CH_CPSR = 48, CH_X = 56,
        CH_KIND = 320, CH_SYN = 328, CH_EPC = 336, CH_ECPSR = 344, CH_ESR = 352, CH_FAR = 360, CH_ELR = 368,
-       CH_EX = 376, CH_STATUS = 640, CH_VEC = 1024 };
+       CH_EX = 376, CH_STATUS = 640, CH_VEC = 1024, CH_KICK = 2048 };
 enum { OP_RUN = 1, OP_VGET = 2, OP_VSET = 3, OP_LEAVE = 4, OP_SWAP = 5 };
 #define SPIN_NS 50000
 
@@ -164,6 +170,32 @@ static uint32_t wait_change(volatile uint32_t *word, uint32_t old) {
         }
     }
     return v;
+}
+
+/* Stops the channel's vCPU each time the host changes its kick word (Sprint 117; docs/design-several-vcpus.md: a kick,
+ * not a cut). The host writes the word with one 32-bit store, so any change is a kick: two kicks before this thread
+ * looks are one. hv_vcpu.h: hv_vcpus_exit names no owning thread (the watchdog calls it from its own), and a vCPU not
+ * running returns at once from its next hv_vcpu_run, so a kick between runs is kept. */
+static void *kicker(void *arg) {
+    struct vslot *s = arg;
+    volatile uint32_t *word = s->kick_word;
+    uint32_t seen = __atomic_load_n(word, __ATOMIC_ACQUIRE);
+    for (;;) {
+        uint32_t v;
+        uint64_t until = now_ns() + SPIN_NS;
+        while ((v = __atomic_load_n(word, __ATOMIC_ACQUIRE)) == seen) {
+            if (now_ns() > until) {
+                os_sync_wait_on_address((void *)word, seen, 4, OS_SYNC_WAIT_ON_ADDRESS_SHARED);
+                until = now_ns() + SPIN_NS;
+            }
+        }
+        seen = v;
+        pthread_mutex_lock(&s->mu);
+        s->kicked = 1;
+        pthread_mutex_unlock(&s->mu);
+        hv_vcpus_exit(&s->vcpu, 1);
+    }
+    return NULL;
 }
 
 static int get_vectors(hv_vcpu_t vcpu, unsigned char *at) {
@@ -199,6 +231,10 @@ static void channel(struct vslot *s, unsigned char *mem, uint64_t size, uint64_t
     unsigned char *c = mem + off;
     volatile uint32_t *cmd = (volatile uint32_t *)(c + CH_CMD), *done = (volatile uint32_t *)(c + CH_EXIT);
     uint32_t seen = __atomic_load_n(cmd, __ATOMIC_ACQUIRE);
+    s->kick_word = (volatile uint32_t *)(c + CH_KICK);
+    pthread_t k;
+    pthread_create(&k, NULL, kicker, s);         /* waits on the kick word for the process's life */
+    pthread_detach(k);
     if (s->index == 0) {                     /* vCPU 0's channel answers the pipe's command; the others' start silently */
         printf("ok\n");
         fflush(stdout);
@@ -220,7 +256,7 @@ static void channel(struct vslot *s, unsigned char *mem, uint64_t size, uint64_t
             for (int i = 0; i <= 30; i++) hv_vcpu_set_reg(vcpu, (hv_reg_t)(HV_REG_X0 + i), *(uint64_t *)(c + CH_X + 8 * i));
             uint64_t syn = 0;
             const char *kind = run_vcpu(s, (long)*(uint64_t *)(c + CH_MS), &syn);
-            *(uint64_t *)(c + CH_KIND) = kind[0] == 'h' ? 1 : kind[0] == 'e' ? 2 : kind[0] == 'c' ? 3 : 4;
+            *(uint64_t *)(c + CH_KIND) = kind[0] == 'h' ? 1 : kind[0] == 'e' ? 2 : kind[0] == 'c' ? 3 : kind[0] == 'k' ? 5 : 4;
             *(uint64_t *)(c + CH_SYN) = syn;
             uint64_t v;
             hv_vcpu_get_reg(vcpu, HV_REG_PC, &v); *(uint64_t *)(c + CH_EPC) = v;

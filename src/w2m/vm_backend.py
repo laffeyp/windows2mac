@@ -180,6 +180,7 @@ CHANNEL = VECTOR_SLOTS + VECTOR_SLOT * VECTOR_SLOT_COUNT
 CH_CMD, CH_EXIT, CH_OP, CH_MS, CH_SAVE, CH_LOAD, CH_PC, CH_CPSR, CH_X = 0, 4, 8, 16, 24, 32, 40, 48, 56
 CH_KIND, CH_SYN, CH_EPC, CH_ECPSR, CH_ESR, CH_FAR, CH_ELR, CH_EX, CH_STATUS, CH_VEC = (
     320, 328, 336, 344, 352, 360, 368, 376, 640, 1024)
+CH_KICK = 2048               # a word the host bumps to stop the channel's vCPU (vm_monitor.c kicker; Sprint 117)
 OP_RUN, OP_VGET, OP_VSET, OP_LEAVE, OP_SWAP = 1, 2, 3, 4, 5
 BLOCK_CENSUS = False         # recentering step 3: each block counts its own executions (arm64 words per x86 instruction)
 FLAGS_FROM_NZCV = True       # recentering step 5: ADD SUB INC DEC set CF ZF SF OF through NZCV; False: the bitwise way
@@ -1879,7 +1880,7 @@ class Channel:
     publishes them (a barrier, then the command word), wakes the monitor, and waits for the exit word: a spin of up
     to SPIN_NS, then os_sync_wait_on_address on the shared page (macOS 14.4)."""
     SPIN_NS = 50_000
-    KINDS = {1: "hvc", 2: "exc", 3: "cancel", 4: "fail"}
+    KINDS = {1: "hvc", 2: "exc", 3: "cancel", 4: "fail", 5: "kick"}
 
     def __init__(self, mm: mmap.mmap, base: int = CHANNEL) -> None:
         import ctypes
@@ -1889,6 +1890,8 @@ class Channel:
         # the two sequence words, each written and read as one 32-bit access: struct writes an integer a byte at a time
         self._cmd_word = ctypes.c_uint32.from_buffer(mm, base + CH_CMD)
         self._exit_word = ctypes.c_uint32.from_buffer(mm, base + CH_EXIT)
+        self._kick_word = ctypes.c_uint32.from_buffer(mm, base + CH_KICK)
+        self.kick_addr = ctypes.c_void_p(ctypes.addressof(self._kick_word))
         address = ctypes.addressof(self._ref)
         self.cmd_addr, self.exit_addr = ctypes.c_void_p(address + CH_CMD), ctypes.c_void_p(address + CH_EXIT)
         lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
@@ -1941,9 +1944,16 @@ class Channel:
         if self.call(OP_VSET):
             raise RuntimeError("vm_monitor: vset failed")
 
+    def kick(self) -> None:
+        """Stop the vCPU now, or at once when it next runs (vm_monitor.c kicker, hv_vcpus_exit): its run returns kind
+        `kick`. From any thread; kicks made before the monitor looks count as one."""
+        self.barrier()
+        self._kick_word.value = (self._kick_word.value + 1) & 0xFFFFFFFF      # one 32-bit store
+        self.wake(self.kick_addr, 4, 1)
+
     def leave(self) -> None:
         self.call(OP_LEAVE)
-        del self._ref, self._cmd_word, self._exit_word
+        del self._ref, self._cmd_word, self._exit_word, self._kick_word
 
 
 class Vcpu:
@@ -1965,6 +1975,11 @@ class Vcpu:
             area = VCPU_AREA + index * VCPU_STRIDE
             self.md, self.st = area + VS_MONITOR_DATA, area + VS_STATE
         self.vswap: tuple[int, int] | None = None
+
+    def kick(self) -> None:
+        """Stop this vCPU's run on demand (Sprint 117): serve_exit resumes it where it stopped."""
+        assert self.channel is not None, f"vCPU {self.index} has no channel"
+        self.channel.kick()
 
     def counts(self) -> tuple[int, int]:
         """The instructions this vCPU has run and the PAUSEs among them (its monitor data page's counts)."""
@@ -2373,6 +2388,7 @@ class VM:
         self.flags_cache: dict[tuple[int, str | None], tuple[int, int]] = {}
         self.lift_pages: dict[int, set[int]] = {}       # page VA -> the cached addresses whose bytes it holds
         self.code_writes = 0                            # writes that dropped blocks
+        self.kicks = 0                                  # runs a host thread stopped through Vcpu.kick (Sprint 117)
         self.fault_give_backs = 0                       # guest faults whose unrun instructions were given back (099)
         self.vcpu_count = 1                             # vCPUs the monitor runs (Sprint 104); set before run
         self.vcpu_readback: list[tuple[int, int]] = []  # each vCPU's ACTLR_EL1 and TTBR0_EL1, read by its owner
@@ -4740,6 +4756,9 @@ class VM:
                 left += self._unrun_after(x[2]) + 1           # the faulting instruction and those after it
             x[REG_BUDGET] = left & M64
             struct.pack_into("<Q", self.mm, vcpu.md, (limit - left) & M64)   # the count, from x23
+        if e.kind == "kick":                                 # a host thread asked; it acts at the run loop's top
+            self.kicks += 1
+            return Resume(e.pc, x, cpsr)
         if e.kind == "cancel" and run.interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
             # the rule specs/guest_state.json forbids: restart the interrupted instruction
             x[17] = self.x86_address_at(e.pc)
