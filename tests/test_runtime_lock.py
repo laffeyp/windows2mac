@@ -147,12 +147,18 @@ def test_two_vcpus_allocate_through_the_runtime_one_at_a_time(monkeypatch: pytes
 @pytest.mark.hvf
 def test_planted_no_lock_lets_two_vcpus_corrupt_the_heap(monkeypatch: pytest.MonkeyPatch) -> None:
     """The plant: no lock words. On 2026-10-17 three runs showed 45 and 141, 16 and 12, 14 and 7 foreign marks, two
-    of them a fault at a mark read as a free-list pointer, and an earlier one a torn record in the service ring."""
-    try:
-        found = run_two(monkeypatch, locked=False)
-    except (KeyError, RuntimeError, AssertionError):            # the host meets the corruption first
-        return
-    assert found["failures"] or any(found.get("counts", (1,))), found
+    of them a fault at a mark read as a free-list pointer, and an earlier one a torn record in the service ring. A race:
+    one run in the gates of 2026-10-18 (Sprint 120) showed none, so the test runs until one does, at most five times."""
+    seen = []
+    for _ in range(5):
+        try:
+            found = run_two(monkeypatch, locked=False)
+        except (KeyError, RuntimeError, AssertionError):        # the host meets the corruption first
+            return
+        if found["failures"] or any(found.get("counts", (1,))):
+            return
+        seen.append(found)
+    raise AssertionError(seen)
 
 
 def hosts_count(shared: bool, n: int = 2_000) -> int:
