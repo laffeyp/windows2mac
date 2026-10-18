@@ -109,8 +109,13 @@ def test_planted_suspend_not_waiting_lets_the_thread_run_on(monkeypatch: pytest.
         if self._held_elsewhere(vcpu, t):
             self.remote_suspends += 1
     monkeypatch.setattr(vm_backend.VM, "_stop_elsewhere", no_wait)
-    seen = until_remote(monkeypatch, "threads")
-    assert seen[-1][2] > 0 and seen[-1][0] != "conforms", seen
+    # a crossing run diverged in 8 of 9 (Sprint 120, measured): the spinner, stopped within a slice since Sprint 120,
+    # can stop before main reads its count, so the test runs until a crossing run diverges
+    seen: list[tuple[str, str, int]] = []
+    while len(seen) < RUNS and not any(r and v != "conforms" for v, _, r in seen):
+        verdict, stop, _, remote = on_vcpus(monkeypatch, "threads", 2)
+        seen.append((verdict, stop, remote))
+    assert any(r and v != "conforms" for v, _, r in seen), seen
 
 
 def pending_slot_reads(monkeypatch: pytest.MonkeyPatch) -> tuple[int, int]:
