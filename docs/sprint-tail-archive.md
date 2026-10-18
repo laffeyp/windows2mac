@@ -341,6 +341,15 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 108 (2026-10-17, closed)
+- **Scope:** H1 of the SDD hardening order: vocabulary 0.9 (P20) and the batch run's numbers on its record.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (frontier-643a6283510c-1792267359516238000, read by `scripts/run_numbers.py`): SESSION_INIT; EXECUTION_STARTED; 23 MEASUREMENT_RECORDED `vm_compile_blocks`; 84 MEASUREMENT_RECORDED of P20 (instructions and PAUSEs for the process and 28 threads, the rate, seconds in the VM and by exit, exits by hvc, switches, wakes, the load); EXECUTION_COMPLETED (elapsed_seconds and exit_code still absent: H2's); TRACE_INGESTED; COMPARISON_COMPLETED (0 divergences); SESSION_COMPLETED.
+  - *Observation 1 (a check that could not fail):* the process's PAUSEs were first the sum of the threads'. Disposition: resolved-here (`VM.pauses_executed`, the monitor's count).
+  - *Observation 2 (an expectation the code cannot meet):* the card's 1% check against the runner's time around `machine.run`, which the runner does not take. Disposition: deferred to H2 (EXECUTION_COMPLETED's elapsed_seconds).
+  - *Observation 3 (a push without its sweep):* CI run 39062977196 failed on 24853602, which carried Sprint 107's part 1 with the class and family indexes stale. Disposition: resolved-here (the sweep on e1cbc46f).
+- **Closed:** CI pending at this entry; Sprint 106's CI run 39060474900 (success on 8398f1c8).
+
 ### Sprint 106 (2026-10-17, closed)
 - **Scope:** roadmap step 1: one lock around the guest runtime, so guest code on several vCPUs calls it one vCPU at a time.
 - **Rubber Duck Pass:**

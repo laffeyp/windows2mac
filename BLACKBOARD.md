@@ -358,6 +358,7 @@
 - **2026-10-17 (Sprint 109)** — Class and family runs report a discrepancy with no REDUCTION_COMPLETED before it (S5) and with `minimized_program_sha256` and `initial_state_sha256` the zero placeholder (E1; file runs too, 16 of the 789): 676 and 789 such violations on the record, 57 and 113 from 2026-10-17 (FCOS's open class runs, wait_handoff's plant run). `scripts/check_records.py` reports them as known and does not hold them. The fix: the failing case's bytes and state hashed, and a REDUCTION_COMPLETED with steps 0 for a one-instruction case (the tag's note: "If nothing could be removed, minimized equals source and steps=0"); for a family's probe, a reduction or the probe's own hash with steps 0 stated as unreduced. Re-visit with H2's follow-up sprint, before the next sprint that reports a discrepancy.
 - **2026-10-17 (Sprint 109)** — The frontier's EXECUTION_STARTED omits timeout_seconds (T3 unchecked on 452 records) and is emitted after the run; EXECUTION_COMPLETED omits elapsed_seconds and exit_code; the laptop's probe and game imports record executions with no TRACE_INGESTED (T4, 432 records). Re-visit: the next sprint (H2's second half: the frontier states its timeout, its start and its elapsed time), and the next laptop import for T4.
 - **2026-10-17 (Sprint 112)** — No reducer cuts a compiled probe, so a family run reports a discrepancy with no REDUCTION_COMPLETED before it (S5; `check_records.py` holds it as known with no fix). Its report now names the probe binary's sha256 and the run's start (`family_run.vm_inputs`). Re-visit when a family's discrepancy needs a smaller program than its probe: a reducer over the probe's rows (one row, one call), or a probe built from one row's code.
+- **2026-10-18 (Sprint 118)** — A parked vCPU learns of a ready thread only at the next host serve; a thread readied inside the VM runs on the vCPU that readied it, so vCPU 1 ran 144 of wait_handoff's 10,207 instructions. Re-visit when a measure on several vCPUs (the batch run, chain step 6's threads family) needs the second vCPU busy: the design's wake is an SGI through the GIC (Sprint 097), or the guest's w2m_signal kicking a parked vCPU's channel.
 
 ## Open questions
 
@@ -385,6 +386,16 @@
 ---
 
 ## Sprint tail
+
+### Sprint 118 (2026-10-18, closed)
+- **Scope:** step 1, chain step 5: one process's guest threads on several vCPUs, a host thread serving each vCPU past the first; judged by wait_handoff on two vCPUs.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-118-report.md`, 528 records): the batch run (frontier-643a6283510c-1792306704577911000) as Sprint 117's in kind and order, 0 divergences; the sweep's 458 class and 68 family runs as Sprint 117's; family-wait_handoff-1792306860114860000, baseline `vcpus` 2: SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED (conforms), CANDIDATE_ACCEPTED, SESSION_COMPLETED. Emits check: each of the 12 named tags fired; none fired unnamed.
+  - *Observation 1 (a word that named the wrong holder):* the first two-vCPU run hung; the runtime lock's exchange (Sprint 106) left the last waiter's value in the word, which RuntimeLock (Sprint 116) reads as the holder. Disposition: resolved-here (compare-and-swap, guest and host).
+  - *Observation 2 (a wakeup lost between two vCPUs):* 1 of 3 runs stopped as a deadlock; a signal from vCPU 1 before vCPU 0's switch blocked the waiting thread woke nobody. Disposition: resolved-here (`w2m_block` blocks under the lock; 30 of 30 runs conform since).
+  - *Observation 3 (a plant the rows could not see):* ignoring the mark let vCPU 1 run a stale copy of vCPU 0's thread, retiring nothing. Disposition: resolved-here (`_load_thread` refuses; the plant stops 5 of 5).
+  - *Observation 4 (a second vCPU that idles):* vCPU 1 ran 144 of 10,207 instructions. Disposition: deferred (Deferred 2026-10-18, Sprint 118).
+- **Closed:** CI pending at this entry; Sprint 117's CI run 39100682750 (success on 165d49c5).
 
 ### Sprint 117 (2026-10-17, closed)
 - **Scope:** step 1, chain step 4: the kick; a host thread stops one vCPU on demand through its channel's kick word, and the monitor's kicker calls hv_vcpus_exit.
@@ -459,13 +470,4 @@
   - *Observation 3 (a start emitted at the end):* the frontier emits EXECUTION_STARTED after its run, without timeout_seconds, so T3 is unchecked on 452 records. Disposition: deferred to the next sprint.
 - **Closed:** CI pending at this entry; Sprint 108's CI run 39065947856 (success on 4a8f0eb1).
 
-### Sprint 108 (2026-10-17, closed)
-- **Scope:** H1 of the SDD hardening order: vocabulary 0.9 (P20) and the batch run's numbers on its record.
-- **Rubber Duck Pass:**
-  - *Sequence narration* (frontier-643a6283510c-1792267359516238000, read by `scripts/run_numbers.py`): SESSION_INIT; EXECUTION_STARTED; 23 MEASUREMENT_RECORDED `vm_compile_blocks`; 84 MEASUREMENT_RECORDED of P20 (instructions and PAUSEs for the process and 28 threads, the rate, seconds in the VM and by exit, exits by hvc, switches, wakes, the load); EXECUTION_COMPLETED (elapsed_seconds and exit_code still absent: H2's); TRACE_INGESTED; COMPARISON_COMPLETED (0 divergences); SESSION_COMPLETED.
-  - *Observation 1 (a check that could not fail):* the process's PAUSEs were first the sum of the threads'. Disposition: resolved-here (`VM.pauses_executed`, the monitor's count).
-  - *Observation 2 (an expectation the code cannot meet):* the card's 1% check against the runner's time around `machine.run`, which the runner does not take. Disposition: deferred to H2 (EXECUTION_COMPLETED's elapsed_seconds).
-  - *Observation 3 (a push without its sweep):* CI run 39062977196 failed on 24853602, which carried Sprint 107's part 1 with the class and family indexes stale. Disposition: resolved-here (the sweep on e1cbc46f).
-- **Closed:** CI pending at this entry; Sprint 106's CI run 39060474900 (success on 8398f1c8).
-
-Older entries (Sprints 000-035, and 036-106 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-108 moved 2026-10-16 to 2026-10-18): `docs/sprint-tail-archive.md`.
