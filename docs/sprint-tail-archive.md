@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 104 (2026-10-17, closed)
+- **Scope:** N vCPUs on their own threads, each with its private translation chain (design B).
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; 458 class runs, 68 family runs and the batch run at one vCPU as before.
+  - *Observation 1 (an assumption never wired):* the backend decision rested on guest TSO, and no write of ACTLR_EL1.EnTSO existed. Disposition: resolved-here; Sprint 105's plant shows what it holds.
+  - *Observation 2 (a name reused):* Channel's `base` held two meanings; one VM hid it. Disposition: resolved-here.
+- **Closed:** CI pending at this entry.
+
 ### Sprint 103 (2026-10-17, closed)
 - **Scope:** several vCPUs: the per-vCPU state measured and two designs.
 - **Rubber Duck Pass:**

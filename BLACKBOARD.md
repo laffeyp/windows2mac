@@ -383,6 +383,14 @@
 
 ## Sprint tail
 
+### Sprint 115 (2026-10-17, closed)
+- **Scope:** step 1, chain step 2: the `Vcpu` object, passed to every handler that reads a vCPU's state; no `VM` attribute names a served vCPU.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-115-report.md`, 527 records): the batch run (frontier-643a6283510c-1792295964556678000) as Sprint 114's in kind and order (SESSION_INIT, EXECUTION_STARTED, 107 MEASUREMENT_RECORDED, EXECUTION_COMPLETED, TRACE_INGESTED, COMPARISON_COMPLETED with 0 divergences, SESSION_COMPLETED); the sweep's 458 class and 68 family runs as Sprint 114's. Emits check: each of the 12 named tags fired; none fired unnamed.
+  - *Observation 1 (a judge that cannot judge):* the card expected Sprint 114's instruction count; the batch run stops when its log holds 168 lines, which moves between runs (80.8, 81.7 and 82.5 billion on 114, 110 and 115). Disposition: resolved-here (the card amended: lines, divergences and exit kinds judge unchanged behaviour).
+  - *Observation 2 (a failure an exit code hid):* the first test run failed one test, and a pipe to `tail` reported exit 0. Disposition: resolved-here (the class checked: four patched methods in `tests/test_instruction_count.py`; reruns keep pytest's status with `pipefail`).
+- **Closed:** CI pending at this entry; Sprint 114's CI run 39073184106 (success on 36a9556a).
+
 ### Sprint 114 (2026-10-17, closed)
 - **Scope:** step 1, chain step 1: one exit handler (`VM.serve_exit`), no change in behaviour.
 - **Rubber Duck Pass:**
@@ -458,12 +466,4 @@
   - *Observation 2 (state copied, not set):* SLICE_UNTIL on a private page came from vCPU 0 as 0. Disposition: deferred to Sprint 106 (the scheduler sets it per vCPU).
 - **Closed:** CI pending at this entry.
 
-### Sprint 104 (2026-10-17, closed)
-- **Scope:** N vCPUs on their own threads, each with its private translation chain (design B).
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no new tag; 458 class runs, 68 family runs and the batch run at one vCPU as before.
-  - *Observation 1 (an assumption never wired):* the backend decision rested on guest TSO, and no write of ACTLR_EL1.EnTSO existed. Disposition: resolved-here; Sprint 105's plant shows what it holds.
-  - *Observation 2 (a name reused):* Channel's `base` held two meanings; one VM hid it. Disposition: resolved-here.
-- **Closed:** CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-103 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-104 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
