@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 118
-status: active
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -85,3 +85,32 @@ threads family, whose probe suspends a spinning thread).
 ## done criteria
 
 One process's threads run on two vCPUs at once with the same rows as on one; one vCPU unchanged; CI green.
+
+## observed
+- **Made** (f26cf79c): the mark (threads.c `vcpu`, scheduler.py `E_VCPU`, `_load_thread`/`_save_thread`), both
+  switches skipping a thread another vCPU holds; `thread_vcpus`, `_serve_vcpu`, `_park`, `_wait_for_change`,
+  `_stop_all`, `_before_run`; per-vCPU counts from 0 and summed; `--vcpus` in family_run.py;
+  `tests/test_threads_on_vcpus.py`.
+- **Found on the way, two defects one vCPU could not show, both fixed here:**
+  - *A lock word naming the last waiter.* The first two-vCPU run hung, both Python threads in
+    `w2m_runtime_lock_take` (macOS `sample`), the word 1 with one thread in the table. Sprint 106's guest SWPA and the
+    helper's exchange write the waiter's value over the holder's; RuntimeLock reads the holder from the word. Now
+    compare-and-swap (CASA, encoded 0x88FF7E12 by clang; `__atomic_compare_exchange_n`).
+  - *A lost wakeup.* 1 of 3 runs stopped as "every thread ... waits with no timeout (a deadlock)": a waiting service
+    set RETRY, the bridge freed the lock, and a signal from the other vCPU before the switch marked the thread BLOCKED
+    woke nobody. `w2m_block` now blocks the thread under the lock; both switches leave a thread woken since READY.
+- **The plant, amended:** ignoring the mark in both switches (guest source and host) conformed 5 of 5 runs with vCPU
+  1 at 0 instructions: vCPU 1 took the thread vCPU 0 ran from its stale saved state (RIP 0) and spun unseen. Now
+  `_load_thread` refuses a thread another vCPU has loaded, and the plant (the host's switch and park ignoring the mark)
+  stops 5 of 5 runs with "thread 4 loaded on vCPU 1 while vCPU 0 has it". The guest-side half is not planted: vCPU 1
+  runs about 100 instructions a run, too few for a double load there to show.
+- **Judge:** wait_handoff on two vCPUs conformed 30 of 30 runs (measured before the commit); its record
+  (family-wait_handoff-1792306860114860000) conforms, CANDIDATE_ACCEPTED, baseline `vcpus` 2, instructions by vCPU
+  [10,063, 144]. On one vCPU (the sweep) it conforms as before, its baseline naming no `vcpus`.
+- **Unchanged on one vCPU:** the batch run (frontier-643a6283510c-1792306704577911000) conforms: 168 lines, 0
+  divergences, 81,490,118,223 instructions; `check_records.py` 0 violations; `run_numbers.py` 107 numbers, 0 that do
+  not add up; the same eight exit kinds. 456 of 458 classes (FCOS and FSIN as before), 68 of 68 families. The VM test
+  files: 191 passed before the commit, the 192nd the family index the sweep then rewrote.
+- **Open:** vCPU 1 runs about 1.4% of wait_handoff's instructions: vCPU 0 takes threads readied inside the VM by its
+  own switch, and a parked vCPU learns of a ready thread only at the next host serve (an SGI wake is the design's
+  answer, not built).
