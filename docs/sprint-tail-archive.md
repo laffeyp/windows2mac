@@ -341,6 +341,15 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 106 (2026-10-17, closed)
+- **Scope:** roadmap step 1: one lock around the guest runtime, so guest code on several vCPUs calls it one vCPU at a time.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; two x86 threads on vCPUs 1 and 2 through the runtime's heap; 458 class runs, 68 family runs and the batch run at one vCPU.
+  - *Observation 1 (a write that is two writes):* `struct.pack_into` zero-fills before it packs, and a vCPU read a zeroed dispatch slot and branched to 0. Disposition: resolved-here (one 64-bit store after a barrier; 0 faults in 60 runs).
+  - *Observation 2 (a lock across a frame the host abandons):* on_exception resumed a vCPU at the dispatcher with w2m_exception's frame holding the lock; the gates hung 8 h 59 min. Disposition: resolved-here (the host frees the lock there and at each run's start).
+  - *Observation 3 (a timeout that cannot end its test):* pytest-timeout's signal method raises a BaseException, which substrate's producer task does not catch, so the run waited forever. Disposition: resolved-here for w2m (`timeout_method = "thread"`); deferred to substrate (a BaseException in a producer leaves its run waiting).
+- **Closed:** CI pending at this entry; Sprints 103-105's CI run 39020048181 (success on 2785934a).
+
 ### Sprint 105 (2026-10-17, closed)
 - **Scope:** roadmap step 1's gate: the five litmus tests as x86 compiled by w2m, one thread a vCPU.
 - **Rubber Duck Pass:**

@@ -385,6 +385,14 @@
 
 ## Sprint tail
 
+### Sprint 117 (2026-10-17, closed)
+- **Scope:** step 1, chain step 4: the kick; a host thread stops one vCPU on demand through its channel's kick word, and the monitor's kicker calls hv_vcpus_exit.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-117-report.md`, 527 records): the batch run (frontier-643a6283510c-1792300672353112000) as Sprint 116's in kind and order, COMPARISON_COMPLETED with 0 divergences; the sweep's 458 class and 68 family runs as Sprint 116's. Emits check: each of the 12 named tags fired; none fired unnamed. The kick fires no tag: it is a monitor exit kind, counted in `VM.kicks`, and no run on the record was kicked.
+  - *Observation 1 (a wait that could miss a kick):* the channel's `wait_change` waits for exactly old + 1, so two kicks before the kicker looked would leave it waiting forever. Disposition: resolved-here (the kicker waits for any change; Decision 2026-10-17, Sprint 117).
+  - *Observation 2 (a commit before its count was read):* the code commit went in on the test run's exit status before its pass count was read (188 passed, read after). Disposition: resolved-here (the count read; `pipefail` made the status pytest's).
+- **Closed:** CI pending at this entry; Sprint 116's CI run 39099022393 (success on 6230f933).
+
 ### Sprint 116 (2026-10-17, closed)
 - **Scope:** step 1, chain step 3: the guest runtime lock's host side as one object, `RuntimeLock`: one rule frees it, a shared lock is taken.
 - **Rubber Duck Pass:**
@@ -459,13 +467,4 @@
   - *Observation 3 (a push without its sweep):* CI run 39062977196 failed on 24853602, which carried Sprint 107's part 1 with the class and family indexes stale. Disposition: resolved-here (the sweep on e1cbc46f).
 - **Closed:** CI pending at this entry; Sprint 106's CI run 39060474900 (success on 8398f1c8).
 
-### Sprint 106 (2026-10-17, closed)
-- **Scope:** roadmap step 1: one lock around the guest runtime, so guest code on several vCPUs calls it one vCPU at a time.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no new tag; two x86 threads on vCPUs 1 and 2 through the runtime's heap; 458 class runs, 68 family runs and the batch run at one vCPU.
-  - *Observation 1 (a write that is two writes):* `struct.pack_into` zero-fills before it packs, and a vCPU read a zeroed dispatch slot and branched to 0. Disposition: resolved-here (one 64-bit store after a barrier; 0 faults in 60 runs).
-  - *Observation 2 (a lock across a frame the host abandons):* on_exception resumed a vCPU at the dispatcher with w2m_exception's frame holding the lock; the gates hung 8 h 59 min. Disposition: resolved-here (the host frees the lock there and at each run's start).
-  - *Observation 3 (a timeout that cannot end its test):* pytest-timeout's signal method raises a BaseException, which substrate's producer task does not catch, so the run waited forever. Disposition: resolved-here for w2m (`timeout_method = "thread"`); deferred to substrate (a BaseException in a producer leaves its run waiting).
-- **Closed:** CI pending at this entry; Sprints 103-105's CI run 39020048181 (success on 2785934a).
-
-Older entries (Sprints 000-035, and 036-105 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-106 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
