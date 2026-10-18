@@ -341,6 +341,15 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 109 (2026-10-17, closed)
+- **Scope:** H2 of the SDD hardening order, its first half: every record checked against the vocabulary's rules.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no record of its own; `scripts/check_records.py` read the application events of 32,755 records (SESSION_INIT through SESSION_COMPLETED) and found 1,962 violations, every one in a record made before 2026-10-17 or in the two known class- and family-run defects.
+  - *Observation 1 (placeholders that pass a format check):* 789 sha256 fields are `sha256:` and 64 zeros, which E1's pattern accepts. Disposition: resolved-here (named as a placeholder); the payloads deferred.
+  - *Observation 2 (a report with no reduction):* S5 fails 676 times in class and family runs, which have no reducer. Disposition: deferred (Deferred 2026-10-17).
+  - *Observation 3 (a start emitted at the end):* the frontier emits EXECUTION_STARTED after its run, without timeout_seconds, so T3 is unchecked on 452 records. Disposition: deferred to the next sprint.
+- **Closed:** CI pending at this entry; Sprint 108's CI run 39065947856 (success on 4a8f0eb1).
+
 ### Sprint 108 (2026-10-17, closed)
 - **Scope:** H1 of the SDD hardening order: vocabulary 0.9 (P20) and the batch run's numbers on its record.
 - **Rubber Duck Pass:**
