@@ -287,6 +287,6 @@ def test_a_context_read_whose_caller_is_suspended_is_retried(monkeypatch: pytest
         return answer
     monkeypatch.setattr(vm_backend.VM, "_thread_request", counted)
     seen: list[tuple[str, bytes]] = []
-    while len(seen) < 10 and not retried[0]:
+    while len(seen) < 40 and not retried[0]:             # 3 runs of 6 alone, 0 of 10 in the gates; a run 0.2 s
         seen.append(run_guest("mutual_context", 2))
     assert retried[0] and all(r == ("ExitProcess", b"done\n") for r in seen), (retried, seen)
