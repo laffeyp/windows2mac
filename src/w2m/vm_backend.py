@@ -3607,6 +3607,7 @@ class VM:
         for t in self.threads.values():
             if t.status == "blocked":
                 t.status = "ready"
+        self._notify_waiters()                           # a parked vCPU of this process looks again (Sprint 120)
 
     def _bridge(self, import_name: str, thunk: int) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
@@ -4881,6 +4882,7 @@ class VM:
         run = RunState(max_steps, interrupt_every_ms, on_dispatch, on_exception, on_boundary, on_unimplemented)
         # the lock is held from an exit until the next run (Sprint 118): the serve and the words written before a run
         took, held, resumes = self.lock.enter(vcpu), True, True
+        self._catch_up(vcpu)                                 # a child starts on the machine's clock, not behind it
         try:
             while True:
                 if self._stopping is not None:               # another vCPU's host thread saw the run's end

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
 """Every timed wait ends (Sprint 120). Three small guests in tests/data/timed_waits, each built from its .c beside it
-with `x86_64-w64-mingw32-gcc -O1 -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -e start -o X.exe X.c
+with `x86_64-w64-mingw32-gcc -O1 -Wall -Werror -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -e start -o X.exe X.c
 -lkernel32` (GCC 16.2.0):
 
 - sleeper: Sleep(20) while a second thread spins, then "woke" and "done". On the wall clock the sleep never ended, on
@@ -11,11 +11,15 @@ with `x86_64-w64-mingw32-gcc -O1 -ffreestanding -fno-builtin -fno-stack-protecto
 - mutual_context: as mutual, and one thread reads the other's context while it holds it suspended (20 reads). A
   GetThreadContext whose caller is suspended while it waits is retried (threads.c), which a run reaches when
   SuspendThread does not wait (a reach plant: 3 runs of 6, measured).
-- twoproc: the program starts itself as a child, which sleeps 20 ms and exits, and spins polling the child's handle. The
-  child never ran: a process of one thread kept its whole run's budget once it had started a second process, so it
-  never reached a slice's end, where the Machine gives another process its turn.
-- qpc: QueryPerformanceCounter's value, which on the wall clock is the host's time.monotonic count (the host reads the
-  guest's clock to wake expired waits).
+- twoproc: the program starts itself as a child, passing its counter, and spins polling the child's handle; the child
+  reads its counter, sleeps 1 ms and exits 7 if that reading was not behind the parent's. The child never ran: a
+  process of one thread kept its whole run's budget once it had started a second process, so it never reached a
+  slice's end, where the Machine gives another process its turn. On the instruction clock each process counted only
+  its own instructions, so the child started behind its parent and its sleep stood still while the parent spun.
+- spinchild: a spinner thread, a child process that sleeps, and the main thread sleeping 20 ms: on two vCPUs vCPU 0
+  waits for vCPU 1 while another process exists, which w2m refuses (vCPU 0 drives the Machine).
+- qpc, qpc2: QueryPerformanceCounter's value, read by the main thread on vCPU 0 and by a worker on vCPU 1, which on the
+  wall clock is the host's time.monotonic count (the host reads the guest's clock to wake expired waits).
 
 Every run here also stops after twice its limit in all (Machine.stop_when): the VM's limit bounds one run of the VM,
 which a host thread's wait, or a guest that calls the host often, never reaches."""
@@ -103,16 +107,43 @@ def test_planted_expiry_on_the_instruction_clock_only_never_ends_the_sleep(monke
 @pytest.mark.timeout(60)
 def test_planted_untimed_host_wait_never_ends_the_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     """vCPU 0 waits in the host while vCPU 1 runs the spinner, whose run began before the sleep's deadline existed:
-    only the host wait's timeout wakes the sleeper."""
+    only the host wait's timeout wakes the sleeper. A run reaches that wait only when the threads land so (a race), so
+    the plant counts the host waits that had a deadline pending, and the test runs until one did."""
     from w2m import vm_backend
-    monkeypatch.setattr(vm_backend.VM, "_seconds_to_deadline", lambda self, vcpu: None)
-    assert run_guest("sleeper", 2) == ("timeout", b"")
+    seconds = vm_backend.VM._seconds_to_deadline
+    reached = [0]
+
+    def untimed(self: Any, vcpu: Any) -> None:
+        reached[0] += seconds(self, vcpu) is not None
+        return None
+    monkeypatch.setattr(vm_backend.VM, "_seconds_to_deadline", untimed)
+    seen: list[tuple[str, bytes]] = []
+    while len(seen) < 30 and not reached[0]:            # a run that misses the wait ends in about 0.1 s
+        seen.append(run_guest("sleeper", 2))
+    assert reached[0] and seen[-1] == ("timeout", b""), (reached, seen)
 
 
 @pytest.mark.hvf
 @pytest.mark.timeout(60)
-def test_a_child_sleeps_while_its_parent_spins() -> None:
-    assert run_guest("twoproc", 1) == ("ExitProcess", b"child ended\n")
+@pytest.mark.parametrize("instruction_clock", [False, True])
+def test_a_child_sleeps_while_its_parent_spins(instruction_clock: bool) -> None:
+    assert run_guest("twoproc", 1, instruction_clock) == ("ExitProcess", b"child ended\n")
+
+
+@pytest.mark.hvf
+@pytest.mark.timeout(60)
+def test_planted_child_clock_behind_its_parent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The plant: a process's clock catches up to the machine's on a resume, not at its start."""
+    from w2m import vm_backend
+    catch_up = vm_backend.VM._catch_up
+    started: set[int] = set()
+
+    def not_at_start(self: Any, vcpu: Any) -> None:
+        if id(self) in started:
+            catch_up(self, vcpu)
+        started.add(id(self))
+    monkeypatch.setattr(vm_backend.VM, "_catch_up", not_at_start)
+    assert run_guest("twoproc", 1, instruction_clock=True) == ("ExitProcess", b"clock behind\n")
 
 
 @pytest.mark.hvf
@@ -173,7 +204,7 @@ def test_planted_waits_of_sprint_119_hang_on_a_mutual_suspend(monkeypatch: pytes
     monkeypatch.setattr(vm_backend.VM, "_await_put_down", await_put_down)
     monkeypatch.setattr(vm_backend.VM, "_stop_elsewhere", stop_elsewhere)
     seen = mutual_until_crossed(monkeypatch)
-    assert seen[-1][2] > 0 and seen[-1][0] != "ExitProcess", seen
+    assert seen[-1][2] > 0 and "nothing can wake one (a deadlock)" in seen[-1][0], seen
 
 
 @pytest.mark.hvf
@@ -184,6 +215,39 @@ def test_the_guest_counter_is_the_hosts_monotonic_count() -> None:
     after = monotonic_count()
     assert stop == "ExitProcess"
     assert before <= int(out, 16) <= after, (before, out, after)
+
+
+@pytest.mark.hvf
+@pytest.mark.timeout(60)
+def test_the_guest_counter_on_vcpu_1_is_the_hosts_monotonic_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The worker reads the counter and ends within one slice, so the vCPU that serves its end (THREAD_END) read it.
+    Which vCPU runs the worker is a race (the main thread ran on vCPU 1 in 1 run of 5, measured): run until it is 1."""
+    from w2m import vm_backend
+    ends: list[tuple[int, int]] = []
+    request = vm_backend.VM._thread_request
+
+    def seen(self: Any, vcpu: Any, sub: int, a0: int, a1: int, a2: int) -> int:
+        if sub == vm_backend.THREAD_END:
+            ends.append((self.current_tid(vcpu), vcpu.index))
+        return request(self, vcpu, sub, a0, a1, a2)
+    monkeypatch.setattr(vm_backend.VM, "_thread_request", seen)
+    for _ in range(5):
+        before = monotonic_count()
+        stop, out = run_guest("qpc2", 2)
+        after = monotonic_count()
+        assert stop == "ExitProcess" and before <= int(out, 16) <= after, (before, out, after)
+        if (8, 1) in ends:
+            break
+    assert (8, 1) in ends, ends
+
+
+@pytest.mark.hvf
+@pytest.mark.timeout(120)
+def test_several_vcpus_refuse_to_wait_while_another_process_could_run() -> None:
+    stops: list[str] = []
+    while len(stops) < 5 and not any("several processes" in s for s in stops):
+        stops.append(run_guest("spinchild", 2)[0])      # reached in 2 runs of 3 (measured)
+    assert stops[-1].startswith("Unimplemented: a thread waiting on vCPU 0 for another vCPU while another process"), stops
 
 
 @pytest.mark.hvf

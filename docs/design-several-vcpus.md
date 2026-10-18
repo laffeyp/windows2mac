@@ -185,3 +185,10 @@ So no waiter holds a suspended thread, and each wait is for a suspended thread w
 slice. When every vCPU waits a whole second with no deadline and no notify, the run stops as a deadlock. Refused with
 Unimplemented: the instruction clock and the host's clock with threads on several vCPUs (each is one vCPU's or one
 run's clock), and vCPU 0 waiting for another vCPU while another process could run (vCPU 0 drives the Machine).
+That refusal reaches the game: it always starts UnityCrashHandler64.exe, so a batch or play run with its threads on
+several vCPUs stops the first time vCPU 0 waits for another vCPU. Step 7 needs the Machine driven from somewhere other
+than vCPU 0's wait before it runs the game. Two rules stand with this: a waiter with no deadline while another vCPU
+runs guest code that never comes to the host waits until that run's timeout (`timeout_ms`), not forever; and the
+deadlock stop is exact only while every host service is synchronous, so any future source of a wake from outside the
+guest's own serves (an asynchronous host completion, a window event) must notify the waiters (`_notify_waiters`), as
+`wake_all` does for a signal from another process.

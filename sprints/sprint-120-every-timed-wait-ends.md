@@ -48,7 +48,9 @@ while fixing the first ones).
   does; and a process whose blocked thread's deadline has passed counts as ready to the Machine (`ready`).
 - **On the instruction clock a process's clock counts only its own instructions,** so a child's sleep stood still
   while its parent ran. A process that runs again after another's turn has its clock moved to the latest of the
-  machine's (`_catch_up`, the warp), and a deadline passes on that clock (`_machine_now`).
+  machine's (`_catch_up`, the warp), at its start and on each resume (the start added after the review of 2026-10-18:
+  a child's first reading came before its parent's), and a deadline passes on that clock (`_machine_now`).
+- **A signal from another process** (kernel.py `wake_all`) now notifies the waiting vCPUs of the process it wakes.
 
 ## prerequisites
 
@@ -74,7 +76,10 @@ while fixing the first ones).
 ### Invariants
 
 - Vocabulary 0.9 unchanged.
-- The instruction clock's runs unchanged: the batch run's 168 lines and instruction count.
+- The batch run conforms: 168 lines, 0 divergences. Its instruction count at the stop is no invariant (the stop is tested
+  on wall-clock progress lines; 80.7 to 83.0 billion over Sprints 114-119). Its calls are expected to move: the crash
+  handler, a second process, now gets turns and a clock that keeps up (the review of 2026-10-18 isolated the two
+  changes that move them).
 
 ## artifact contract
 
@@ -83,7 +88,8 @@ while fixing the first ones).
 
 ## observation contract
 
-- **Judge:** the sleeping probe ends (its two lines, ExitProcess) on one and two vCPUs on the wall clock; two threads
+- **Judge:** the guests in tests/data/timed_waits (the card was written after the first measurement, the sleeping probe on
+  both clocks, and before the first code change, and committed with the code in 0da7f85e); the sleeping probe ends (its two lines, ExitProcess) on one and two vCPUs on the wall clock; two threads
   suspending each other from two vCPUs both end suspended and the run goes on; the families as Emits says; the batch
   run unchanged; 456 of 458 classes, 68 of 68 families.
 - **Plants**, measured before they are trusted: the wall clock's expiry removed (the sleeping probe stops at its
