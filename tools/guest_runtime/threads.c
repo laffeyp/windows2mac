@@ -226,13 +226,14 @@ static u64 nearest_deadline(u64 cur, u64 deadline) {
  * blocks; when a wait leaves no thread ready, on the instruction clock the clock moves to the earliest deadline and
  * that thread runs (warp_to_deadline). 1: the current entry (another's after a switch) holds the registers to go on
  * with, x23 its budget. 0: the host decides, nothing changed: switching is off for this run, a thread's end, the run's
- * limit, one thread, no thread ready and none to warp to. */
+ * limit, one thread, the thread suspended from another vCPU, no thread ready and none to warp to. */
 u64 w2m_switch(u64 schedule, u64 stop) {
     struct w2m_run_table *rt = RUN;
     u64 n = rt->count, cur = *monitor_word(W2M_CURRENT_OFF);
     u64 *count = monitor_word(0), *limit = monitor_word(8);
     if (!rt->in_vm || (schedule & W2M_SCHEDULE_END) || n < 2) return 0;
     struct w2m_run_entry *c = run_entry(cur);
+    if (c->suspend) return 0;          /* suspended from another vCPU: the host puts it down (Sprint 119) */
     int retry = (schedule & W2M_SCHEDULE_RETRY) && c->status == BLOCKED;   /* w2m_block's, unless woken since */
     u64 next = n;
     if (!schedule) {
@@ -348,8 +349,9 @@ u64 k32_ResumeThread(u64 h) {
 
 /* GetThreadContext(hThread, lpContext): the host fills the CONTEXT from the thread's saved state, as its
  * ContextFlags ask; the thread must be another. On one vCPU a thread suspended while it runs was stopped by its
- * time slice at an x86 instruction boundary, so the saved state is its registers there (rows threads.context:
- * a spinner's RIP and RSP; Sprint 066 probes/running_thread_context awaits Windows' rows for every register). */
+ * time slice at an x86 instruction boundary, so the saved state is its registers there (rows threads.context: a
+ * spinner's RIP and RSP; probes/running_thread_context, every register). On several vCPUs SuspendThread returns once
+ * the thread's vCPU has put it down (vm_backend.py _stop_elsewhere, Sprint 119). */
 u64 k32_GetThreadContext(u64 h, u64 context) {
     u32 tid = thread_of(W2M_API_GetThreadContext, h);
     if (tid == (u32)w2m_teb()->client_thread) w2m_unimplemented(W2M_API_GetThreadContext, h);   /* itself */

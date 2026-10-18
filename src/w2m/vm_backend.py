@@ -2401,6 +2401,7 @@ class VM:
         self.lift_pages: dict[int, set[int]] = {}       # page VA -> the cached addresses whose bytes it holds
         self.code_writes = 0                            # writes that dropped blocks
         self.kicks = 0                                  # runs a host thread stopped through Vcpu.kick (Sprint 117)
+        self.remote_suspends = 0                        # SuspendThread of a thread another vCPU ran (Sprint 119)
         self.fault_give_backs = 0                       # guest faults whose unrun instructions were given back (099)
         self.vcpu_count = 1                             # vCPUs the monitor runs (Sprint 104); set before run
         # vCPUs that run this process's threads, each past the first served by a host thread (Sprint 118); set before run
@@ -2445,7 +2446,7 @@ class VM:
         self.block_census: list[tuple[int, list[tuple[str, int]], int]] = []   # BLOCK_CENSUS's blocks
         self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
         self.machine: Any = None                         # the kernel.Machine running this VM among others (Sprint 055)
-        self._idle: tuple[GuestThread, int, bool] | None = None   # where _switch found no thread to run
+        self._idle: tuple[GuestThread, int, bool, bool] | None = None   # where _switch found no thread to run
         self._max_steps = 0
         self._first_tid = tid                            # current_tid until the first thread is in the run table
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
@@ -2695,6 +2696,9 @@ class VM:
         thread or process ready, a deadline the instruction clock cannot place, another process with a deadline);
         the count at which the earliest deadline of a blocked thread falls, on the instruction clock; else ~0."""
         if self.lockstep or forced:
+            return 0
+        cur = self.threads.get(self.current_tid(vcpu))
+        if cur is not None and cur.suspend:              # suspended from another vCPU: it leaves at the slice's end
             return 0
         if self._other_process_due():
             return 0
@@ -3141,7 +3145,9 @@ class VM:
             if t.status == "ended":
                 return M64
             t.suspend += 1
-            return t.suspend - 1
+            previous = t.suspend - 1
+            self._stop_elsewhere(vcpu, t)
+            return previous
         if sub == THREAD_RESUME:
             if t.status == "ended" or t.suspend == 0:
                 return 0
@@ -3171,6 +3177,21 @@ class VM:
             self.mem.write(a1, bytes(buf))
             return 1
         raise Unimplemented(f"thread request {sub}")
+
+    def _stop_elsewhere(self, vcpu: Vcpu, t: GuestThread) -> None:
+        """SuspendThread of a thread another vCPU runs (Sprint 119; docs/design-several-vcpus.md, chain step 6): kick that
+        vCPU and wait, giving the lock back, until it has put the thread down at an instruction boundary (its mark
+        cleared). The kicked vCPU's next run ends its slice for a suspended thread (_slice_until 0, threads.c
+        w2m_switch declining), so its host switches away. Windows' SuspendThread may return before the thread stops
+        (GetThreadContext completes it); here it returns after, which the rows cannot tell from a quick stop."""
+        if not self._held_elsewhere(vcpu, t):
+            return
+        self.remote_suspends += 1
+        self.vcpus[t.vcpu - 1].kick()
+        while self._held_elsewhere(vcpu, t):
+            if self._stopping is not None:
+                raise VcpusStopped(self._stopping)
+            self._wait_for_change(vcpu)
 
     def _set_budget(self, vcpu: Vcpu) -> None:
         """The step budget the block entries check: the run's limit, or with more than one thread a time slice."""
@@ -3333,6 +3354,14 @@ class VM:
         t.monitor = [bytes(self.mm[vcpu.md + a:vcpu.md + b]) for a, b in PER_THREAD_MONITOR]
         t.state = bytes(self.mm[vcpu.st:vcpu.st + STATE_SIZE])
         t.vcpu = 0
+        if self.lock.shared:
+            self._vectors_to_slot(vcpu)
+
+    def _vectors_to_slot(self, vcpu: Vcpu) -> None:
+        """On several vCPUs, a thread put down has its vectors in its slot at once (Sprint 119): the swap waited for
+        the vCPU's next run, and meanwhile another vCPU could load the thread, or GetThreadContext read it, from a
+        slot not yet written."""
+        vcpu.flush_swap()
 
     def _load_thread(self, vcpu: Vcpu, t: GuestThread) -> list[int]:
         if t.vcpu not in (0, vcpu.index + 1):            # one vCPU per thread (Sprint 118): the mark is the witness
@@ -3368,9 +3397,12 @@ class VM:
             return None                                       # the last thread ended: the process ends with it
         return self._switch(vcpu, x, cur, schedule)
 
-    def _switch(self, vcpu: Vcpu, x: list[int], cur: GuestThread, schedule: int) -> list[int] | None:
+    def _switch(self, vcpu: Vcpu, x: list[int], cur: GuestThread, schedule: int,
+                saved: bool = False) -> list[int] | None:
         """The next thread's state after cur's (x): IDLE, in a machine of several VMs, when none of this VM's
-        threads can run (the driver runs another VM and resumes this one when a thread is ready again)."""
+        threads can run (the driver runs another VM and resumes this one when a thread is ready again). `saved`: cur
+        was put down already (vCPU 0 waiting, below, then idle), so x is stale and another vCPU may have run it since;
+        whichever thread goes on, cur included, is loaded from its run table entry."""
         order = sorted(self.threads)
         i = order.index(cur.tid)
         rotation = order[i + 1:] + order[:i + 1]
@@ -3384,27 +3416,36 @@ class VM:
         while nxt is None and self._runs_elsewhere(vcpu):   # vCPU 0 waits while another vCPU runs a thread
             if self._stopping is not None:
                 raise VcpusStopped(self._stopping)
+            if not saved:                                # put down first, so a suspender elsewhere sees it stopped
+                if schedule & SCHEDULE_ANSWER:           # (Sprint 119); SwitchToThread: other threads run meanwhile
+                    x[0] = 1
+                self._save_thread(vcpu, cur, x)
+                saved = True
+                self._notify_waiters()                   # the suspender waits for its mark to clear
             self._wait_for_change(vcpu)
             nxt = first_ready()
         if nxt is None:
             timed = [self.threads[k] for k in rotation if self.threads[k].status == "blocked"
-                     and self.threads[k].suspend == 0 and self.threads[k].deadline != M64]
+                     and self.threads[k].suspend == 0 and self.threads[k].deadline != M64
+                     and not self._held_elsewhere(vcpu, self.threads[k])]
             if self.machine is not None:
-                self._idle = (cur, schedule, bool(timed))
+                self._idle = (cur, schedule, bool(timed), saved)
                 return IDLE
             if not timed:
                 raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
             if self.warp_to_deadline(vcpu):
-                nxt = next(t for t in (self.threads[k] for k in rotation) if t.status == "ready")
+                nxt = next(t for t in (self.threads[k] for k in rotation) if t.status == "ready" and t.suspend == 0
+                           and not self._held_elsewhere(vcpu, t))
             else:
                 time.sleep(0.001)
                 nxt = timed[0]
                 nxt.status = "ready"
-        if schedule & SCHEDULE_ANSWER:
+        if schedule & SCHEDULE_ANSWER and not saved:
             x[0] = int(nxt is not cur)                       # SwitchToThread: nonzero when another thread runs
         if nxt is cur:
-            return x
-        self._save_thread(vcpu, cur, x)
+            return self._load_thread(vcpu, cur) if saved else x
+        if not saved:
+            self._save_thread(vcpu, cur, x)
         self.set_current(vcpu, nxt.tid)
         return self._load_thread(vcpu, nxt)
 
@@ -3435,7 +3476,8 @@ class VM:
     def warp_to_deadline(self, vcpu: Vcpu) -> bool:
         """With the instruction clock and no thread ready: move the clock to the earliest deadline of a blocked thread
         and make that thread ready, as QEMU's -icount sleep=off does; False when no thread waits with a deadline."""
-        timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
+        timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64
+                 and not self._held_elsewhere(vcpu, t)]      # one blocking on another vCPU is still its (Sprint 119)
         if not timed or not self.instruction_clock:
             return False
         first = min(timed, key=lambda t: (t.deadline, t.tid))
@@ -3454,14 +3496,15 @@ class VM:
         """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
         deadline runs to check it."""
         assert self._idle is not None
-        cur, schedule, _ = self._idle
+        cur, schedule, _, saved = self._idle
         self._idle = None
-        if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()) \
-                and not self.warp_to_deadline(vcpu):
-            timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
+        if not any(t.status == "ready" and t.suspend == 0 and not self._held_elsewhere(vcpu, t)
+                   for t in self.threads.values()) and not self.warp_to_deadline(vcpu):
+            timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64
+                     and not self._held_elsewhere(vcpu, t)]
             if timed:
                 timed[0].status = "ready"
-        return self._switch(vcpu, x, cur, schedule)
+        return self._switch(vcpu, x, cur, schedule, saved)
 
     def ready(self) -> bool:
         """Whether a thread of this VM can run now (kernel.Machine): a process not yet started can."""

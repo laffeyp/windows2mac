@@ -164,3 +164,12 @@ the deadlock check. Judged by the wait_handoff family on two vCPUs, not the thre
 spinning thread, which on two vCPUs another vCPU runs, so the threads family judges step 6. The runtime lock is taken
 by compare-and-swap, guest and host: an exchange left the last waiter's value in the word, which the host reads as
 the holder.
+
+**Step 6 as built (Sprint 119).** SuspendThread of a thread another vCPU holds kicks that vCPU and waits, the lock
+given back, until the mark clears (`_stop_elsewhere`); Windows may return first and complete the stop at
+GetThreadContext, and returning after is among the outcomes it allows. A suspended running thread leaves through the
+host: its vCPU's SLICE_UNTIL is 0 and threads.c `w2m_switch` declines it. vCPU 0 puts its thread down before it waits
+for another vCPU, and carries that through an idle turn of the Machine (`saved`); every pick of a thread to load skips
+one another vCPU holds. On several vCPUs a thread put down has its vectors written to its slot at once. Judged by the
+threads and running_thread_context families on two vCPUs. Still open: vCPU 0, waiting, keeps no deadline, and a vCPU
+running with SLICE_UNTIL ~0 does not learn of one made elsewhere (the SGI wake's sibling).

@@ -2283,8 +2283,8 @@ FAMILIES: dict[str, Family] = {
                                       "    code = b\"\".join(_call(fn, base, DLL_THREAD_ATTACH) for base, fn in callbacks)",
                                       ("events.worker_ended", "events.spinner", "events.suspended_ran", "events.exiter"),
                                       host="w2m.scheduler"),
-            "suspend_answers_new_count": Plant("            t.suspend += 1\n            return t.suspend - 1",
-                                               "            t.suspend += 1\n            return t.suspend",
+            "suspend_answers_new_count": Plant("            previous = t.suspend - 1\n",
+                                               "            previous = t.suspend\n",
                                                ("suspend",), host="w2m.vm_backend"),
             "context_cs_32_bit": Plant('        struct.pack_into("<H", buf, 56, CS)', '        struct.pack_into("<H", buf, 56, CS - 0x10)',
                                        ("context",), host="w2m.scheduler"),
@@ -2934,7 +2934,8 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
             vm.thread_vcpus = vcpus                              # the process's threads on that many vCPUs (Sprint 118)
             r = machine.run(vm)                                  # the clock probes spin until time advances
             if vcpus > 1:                                        # each vCPU's share of the run's instructions
-                print(f"{binary}: instructions by vCPU {[v.counts()[0] for v in vm.vcpus]}", file=sys.stderr)
+                print(f"{binary}: instructions by vCPU {[v.counts()[0] for v in vm.vcpus]}, "
+                      f"suspends of a thread another vCPU ran {vm.remote_suspends}", file=sys.stderr)
             foreign = foreign_processes(machine, sources)
             if foreign:
                 r.stop = foreign
