@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 115
-status: active
+status: done
 phase: 5
 pass_kind: architecture
 ---
@@ -80,3 +80,18 @@ No behaviour changes: one vCPU serves every run, as before.
 
 Every handler that reads a vCPU's state takes its `Vcpu`; no `VM` attribute names the served vCPU; behaviour
 unchanged by every judge; CI green.
+
+## observed
+- **Made** (076b3225): `class Vcpu` and `VM.vcpus`; `serve_exit(run, vcpu, exit, cpsr)` and the methods below it
+  take the `Vcpu`; `serve`, `serving`, `_md`, `_st`, `_vswap`, `_channel` and `vcpu_channels` gone (the invariant's
+  grep finds nothing); the oracle's judges take a `Vcpu`; four patched methods in `tests/test_instruction_count.py`
+  given the new signatures (found by the first test run, whose failure a pipe to `tail` reported as exit 0).
+- **Judge:** the batch run (frontier-643a6283510c-1792295964556678000) conforms: the log's 168 lines, 0 divergences;
+  `check_records.py` 0 violations; `run_numbers.py` 107 numbers, 0 that do not add up; its exits the same eight kinds
+  (hvc 1 1,091, 4 8, 8 43,562, 10 258, 11 286, 12 2, 13 13,673, 14 167). 456 of 458 classes (65 s; FCOS and FSIN
+  as before), 68 of 68 families. Before the commit, the 34 VM test files passed (185 tests, the census equalities,
+  the litmus tests and the runtime-lock test among them).
+- **The card's count, amended:** it expected Sprint 114's 80,821,897,382 instructions; this run stopped at
+  82,507,774,218. The batch run stops when the log holds the reference's 168 lines, a point that moves between runs
+  (Sprint 110's run: 81,743,163,703), so the count is not a judge of unchanged behaviour; the lines, the divergences
+  and the exit kinds are.
