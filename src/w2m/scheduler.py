@@ -44,6 +44,7 @@ RT_COUNT, RT_CURRENT, RT_CURRENT_ENTRY, RT_IN_VM, RT_BLOCKED, RT_SLICE_COUNT, RT
 RT_ENTRIES = 0x100
 E_TID, E_STATUS, E_SUSPEND, E_DEADLINE, E_TEB, E_VSLOT, E_INSTRUCTIONS, E_PAUSES = range(0, 0x40, 8)
 E_X, E_MONITOR, E_STATE = 0x40, 0x140, 0x280
+E_VCPU = 0x138                           # the vCPU that has the thread loaded, its index + 1; 0: none (Sprint 118)
 E_MONITOR_AT = (0x00, 0x20, 0x28, 0x30)  # each PER_THREAD_MONITOR range's place in E_MONITOR
 RUN_ENTRY = 0x600
 STATUS_CODES = {"ready": 0, "blocked": 1, "ended": 2}
@@ -67,6 +68,7 @@ class GuestThread:
         self.created_suspended = created_suspended   # CREATE_SUSPENDED
         struct.pack_into("<QQ", mm, self.at + E_TID, tid, 0)
         struct.pack_into("<Q", mm, self.at + E_TEB, teb)
+        struct.pack_into("<Q", mm, self.at + E_VCPU, 0)
 
     def _word(self, off: int) -> int:
         return int(struct.unpack_from("<Q", self.mm, self.at + off)[0])
@@ -125,6 +127,14 @@ class GuestThread:
     @pauses.setter
     def pauses(self, v: int) -> None:
         self._set_word(E_PAUSES, v)
+
+    @property
+    def vcpu(self) -> int:  # the vCPU that has it loaded, its index + 1; 0: none (threads.c sets it in the VM too)
+        return self._word(E_VCPU)
+
+    @vcpu.setter
+    def vcpu(self, v: int) -> None:
+        self._set_word(E_VCPU, v)
 
     @property
     def x(self) -> list[int]:

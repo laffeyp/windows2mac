@@ -38,7 +38,7 @@ u64 w2m_object_thread(u64 api, u32 tid);      /* sync_objects.c: a new handle on
 struct w2m_run_entry {
     u64 tid, status, suspend, deadline, teb, vslot, instructions, pauses;   /* vslot: its vectors' offset in the file */
     u64 x[31];                       /* x0-x30 at an x86 instruction boundary; x17 the RIP, x23 the budget */
-    u64 reserved0;
+    u64 vcpu;                        /* the vCPU that has it loaded, its index + 1; 0: none (Sprint 118) */
     u8 monitor[0x130];               /* the per-thread monitor words (scheduler.py PER_THREAD_MONITOR, E_MONITOR_AT) */
     u8 reserved1[0x10];
     u8 state[W2M_STATE_SIZE];        /* the state block (struct w2m_state) */
@@ -59,6 +59,12 @@ static struct w2m_run_entry *run_entry(u64 i) {
 }
 
 static u64 *monitor_word(u64 off) { return (u64 *)(W2M_MONITOR_DATA_VA + off); }
+
+/* This vCPU's index + 1 (its LOCK_OWNER word, on its private monitor data page). */
+static u64 this_vcpu(void) { return *monitor_word(W2M_LOCK_OWNER_OFF); }
+
+/* Whether another vCPU has the thread loaded (Sprint 118): it runs there, and no other vCPU may take it. */
+static int held_elsewhere(const struct w2m_run_entry *e) { return e->vcpu && e->vcpu != this_vcpu(); }
 
 static struct w2m_thread_scratch *scratch_of(const struct w2m_run_entry *e) {
     return (struct w2m_thread_scratch *)(e->teb + W2M_THREAD_SCRATCH_OFF);
@@ -97,6 +103,15 @@ void w2m_block(u64 deadline, u64 key) {
     if (!sc->wait_deadline) sc->wait_deadline = deadline;
     sc->wait_key = key;
     w2m_state()->schedule |= W2M_SCHEDULE_RETRY;
+    /* Blocked now, under the runtime lock (Sprint 118): the bridge frees the lock before the switch stub or the host
+     * takes the thread off its vCPU, and a signal from another vCPU in between wakes only BLOCKED threads, so a
+     * thread still READY there would miss it and wait forever (the first wait_handoff runs on two vCPUs: 1 in 3
+     * stopped as a deadlock). A wake before the switch leaves it READY, and the switch then does not block it. */
+    if (RUN->count) {
+        struct w2m_run_entry *c = run_entry(*monitor_word(W2M_CURRENT_OFF));
+        set_status(c, BLOCKED);
+        c->deadline = sc->wait_deadline;
+    }
 }
 
 /* The waiters on `key` ready: those whose wait takes it, any signal (their key 0), or every key (`key` 0). A thread
@@ -150,7 +165,7 @@ static u64 slice_until(u64 cur) {
     int timed = 0;
     for (u64 i = 0; i < RUN->count; i++) {
         const struct w2m_run_entry *e = run_entry(i);
-        if (i == cur || e->suspend) continue;
+        if (i == cur || e->suspend || held_elsewhere(e)) continue;
         if (e->status == READY) return 0;
         if (e->status == BLOCKED && e->deadline != ~0ull) {
             timed = 1;
@@ -218,7 +233,7 @@ u64 w2m_switch(u64 schedule, u64 stop) {
     u64 *count = monitor_word(0), *limit = monitor_word(8);
     if (!rt->in_vm || (schedule & W2M_SCHEDULE_END) || n < 2) return 0;
     struct w2m_run_entry *c = run_entry(cur);
-    int retry = (schedule & W2M_SCHEDULE_RETRY) != 0;
+    int retry = (schedule & W2M_SCHEDULE_RETRY) && c->status == BLOCKED;   /* w2m_block's, unless woken since */
     u64 next = n;
     if (!schedule) {
         u64 end = *monitor_word(W2M_RUN_END_OFF);
@@ -231,17 +246,13 @@ u64 w2m_switch(u64 schedule, u64 stop) {
     for (u64 k = 1; k <= n && next == n; k++) {
         u64 i = (cur + k) % n;
         const struct w2m_run_entry *e = run_entry(i);
-        if (!(i == cur && retry) && e->status == READY && !e->suspend) next = i;
+        if (!(i == cur && retry) && e->status == READY && !e->suspend && !held_elsewhere(e)) next = i;
     }
     u64 warped = n;
     if (next == n) {
         if (!retry || *monitor_word(W2M_CLOCK_MODE_OFF) != 2) return 0;
         warped = next = nearest_deadline(cur, scratch_of(c)->wait_deadline);
         if (next == n) return 0;
-    }
-    if (retry) {
-        set_status(c, BLOCKED);
-        c->deadline = scratch_of(c)->wait_deadline;
     }
     if (warped != n) {
         struct w2m_run_entry *w = run_entry(warped);
@@ -264,6 +275,8 @@ u64 w2m_switch(u64 schedule, u64 stop) {
         __builtin_memcpy((void *)W2M_STATE_VA, e->state, W2M_STATE_SIZE);
         *monitor_word(W2M_CURRENT_OFF) = next;
         *monitor_word(W2M_CURRENT_ENTRY_OFF) = (u64)e;
+        c->vcpu = 0;
+        e->vcpu = this_vcpu();
         rt->switches++;
         c = e;
     }

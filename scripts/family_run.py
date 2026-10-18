@@ -2888,7 +2888,7 @@ def contract(f: Family) -> Contract:
 INSTRUCTION_CLOCK = (1_400_000_000, 134362624920000000)
 
 
-def vm_inputs(binary: str, f: Family | None = None, dll: str | None = None) -> dict[str, Any]:
+def vm_inputs(binary: str, f: Family | None = None, dll: str | None = None, vcpus: int = 1) -> dict[str, Any]:
     """What a probe's VM run starts from, as run_in_vm uses it and a discrepancy's initial_state_sha256 hashes it
     (Sprint 112): the program and DLL by their sha256, where the DLL is, the command line, the environment, and how the
     process starts (GUI, the foreground, the instruction clock)."""
@@ -2899,11 +2899,12 @@ def vm_inputs(binary: str, f: Family | None = None, dll: str | None = None) -> d
             "command_line": None if f is None or not f.arguments else f'"C:\\w2m\\app\\probe.exe" {f.arguments}',
             "environment": list(() if f is None else f.environment), "gui": f is not None and f.gui,
             "foreground_held": f is not None and f.foreground_held,
-            "instruction_clock": INSTRUCTION_CLOCK if f is not None and f.instruction_clock else None}
+            "instruction_clock": INSTRUCTION_CLOCK if f is not None and f.instruction_clock else None,
+            **({"vcpus": vcpus} if vcpus > 1 else {})}       # the threads' vCPUs (Sprint 118); one names none
 
 
 def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | None = None,
-              dll: str | None = None) -> tuple[bytes, str, float]:
+              dll: str | None = None, vcpus: int = 1) -> tuple[bytes, str, float]:
     """A runner's probe binary in the managed VM with a fresh file-system root, started as `f` says;
     (its rows' bytes: standard output, or f.output_file; the stop; seconds)."""
     from w2m.vm_backend import VM
@@ -2912,7 +2913,7 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         files = FileBridge(Path(d))
         # the program's own file at its path, as on the runner (Sprint 055: a probe that starts itself reads it)
         (Path(d) / "probe.exe").write_bytes((ROOT / "store" / "binaries" / f"{binary}.exe").read_bytes())
-        inputs = vm_inputs(binary, f, dll)
+        inputs = vm_inputs(binary, f, dll, vcpus)
         line, dll = inputs["command_line"], inputs["dll"]
         dll_bytes = None if dll is None else (ROOT / "store" / "binaries" / f"{dll}.dll").read_bytes()
         if f is not None and f.dll_on_disk and f.dll_name is not None and dll_bytes is not None:
@@ -2930,7 +2931,10 @@ def run_in_vm(binary: str, sources: dict[str, str] | None = None, f: Family | No
         # every probe runs on a kernel.Machine: a probe that starts a process gets it (Sprint 055)
         machine = Machine(spawner(files, dlls, sources, instruction_clock=clock), max_steps=1 << 40, timeout_ms=60_000)
         try:
+            vm.thread_vcpus = vcpus                              # the process's threads on that many vCPUs (Sprint 118)
             r = machine.run(vm)                                  # the clock probes spin until time advances
+            if vcpus > 1:                                        # each vCPU's share of the run's instructions
+                print(f"{binary}: instructions by vCPU {[v.counts()[0] for v in vm.vcpus]}", file=sys.stderr)
             foreign = foreign_processes(machine, sources)
             if foreign:
                 r.stop = foreign
@@ -3112,7 +3116,7 @@ def planted_sources(f: Family, name: str) -> dict[str, str]:
 
 
 def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
-             generator_ref: str = "hand (agent-authored)") -> dict[str, Any]:
+             generator_ref: str = "hand (agent-authored)", vcpus: int = 1) -> dict[str, Any]:
     """Judge the family's guest C (or `sources`) on its own substrate record."""
     from substrate.api import Once, PerEvent, Subscription, TopologyBuilder, read_record, threshold_count
 
@@ -3138,7 +3142,7 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
             r = f.runs[run]
             from w2m.guest_runtime import BuildError
             try:
-                out, stop, _ = run_in_vm(r.binary, sources, f)
+                out, stop, _ = run_in_vm(r.binary, sources, f, vcpus=vcpus)
             except BuildError as e:                       # a candidate that does not build is rejected, on the record
                 out, stop = b"", f"the guest runtime did not build: {str(e)[:400]}"
             cmp = compare_exact_rows(c, derived_output(f, out), f"cmp-{cand}-{run}", f"{r.execution}-1",
@@ -3165,7 +3169,7 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
         yield events.validate(events.DISCREPANCY_REPORTED(
             discrepancy_id=f"{run_id}-d1", contract_id=f.contract_id, contract_version=f.version, mismatch_class="exact",
             minimized_program_sha256="sha256:" + f.runs[first].binary,
-            initial_state_sha256=state_sha256(vm_inputs(f.runs[first].binary, f)),
+            initial_state_sha256=state_sha256(vm_inputs(f.runs[first].binary, f, vcpus=vcpus)),
             first_divergence=f"{f.runs[first].image} binary: {state['divergence'][first]}"[:500],
             reference_profile_id=f"{f.runs[first].image} run {first}", destination_profile_id="w2m-managed_vm",
             comparison_id=f"cmp-{cand}-{first}"))
@@ -3181,7 +3185,7 @@ def item_run(f: Family, runs: Path, sources: dict[str, str] | None = None,
 
     def topology(b: TopologyBuilder) -> None:
         b.baseline(contract_id=f.contract_id, contract_version=f.version, candidate_sha256=sha,
-                   reference_runs=list(f.runs), family=f.name)
+                   reference_runs=list(f.runs), family=f.name, **({"vcpus": vcpus} if vcpus > 1 else {}))
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("implementation_source", schemas=[events.CANDIDATE_GENERATED], schema_version=1,
                         factory=lambda: producer(generator))
@@ -3249,6 +3253,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--run", action="store_true")
     ap.add_argument("--plants", action="store_true")
     ap.add_argument("--runs", type=Path, default=ROOT / "store" / "runs")
+    ap.add_argument("--vcpus", type=int, default=1, help="run the probe's threads on this many vCPUs (Sprint 118)")
     a = ap.parse_args(argv)
     f = FAMILIES[a.family]
     if a.contract:
@@ -3257,17 +3262,18 @@ def main(argv: list[str]) -> int:
         print(f"{f.contract_path.relative_to(ROOT)}: {len(contract(f).acceptance.rows)} rows")  # type: ignore[union-attr]
     failed = False
     if a.run:
-        s = item_run(f, a.runs)
+        s = item_run(f, a.runs, vcpus=a.vcpus)
         # accepted means the record says so (KIT_DIARY #34): every run conforms and CANDIDATE_ACCEPTED was written
         failed |= not (s["verdicts"] and all(v == "conforms" for v in s["verdicts"].values())
                        and s["events"].get("CANDIDATE_ACCEPTED") == 1)
         index = a.runs / "family-runs.json"
         import fcntl
-        with open(a.runs / "family-runs.lock", "w") as lock:   # families run in parallel share the index (Sprint 065:
-            fcntl.flock(lock, fcntl.LOCK_EX)                   # one read it half-written and failed)
-            done = json.loads(index.read_text()) if index.exists() else {}
-            done[f.name] = s
-            index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
+        if a.vcpus == 1:                                       # the index is the one-vCPU sweep's (Sprint 118)
+            with open(a.runs / "family-runs.lock", "w") as lock:   # families run in parallel share the index
+                fcntl.flock(lock, fcntl.LOCK_EX)                   # (Sprint 065: one read it half-written and failed)
+                done = json.loads(index.read_text()) if index.exists() else {}
+                done[f.name] = s
+                index.write_text(json.dumps(done, indent=1, sort_keys=True) + "\n")
         print(json.dumps(s, indent=1))
     if a.plants:
         for name in f.plants:

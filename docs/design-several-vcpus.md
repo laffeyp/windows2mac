@@ -157,3 +157,10 @@ run conforms and its numbers on the record are unchanged in kind); (2) the `Vcpu
 role, one vCPU; (3) `RuntimeLock`; (4) the kick (vm_monitor.c, one thread per vCPU on its kick word); (5) the RUNNING
 mark and the per-vCPU host threads, judged by the threads family on two vCPUs, its record naming the vCPU count;
 (6) a thread suspended on another vCPU. Sprint 107's first part (4d09f7e7) stands under all of them.
+
+**Step 5 as built (Sprint 118).** The RUNNING mark is a run entry's word (0x138), the index + 1 of the vCPU that has
+the thread loaded. vCPUs past the first park when they have no thread; vCPU 0 keeps deadlines, the Machine's idle and
+the deadlock check. Judged by the wait_handoff family on two vCPUs, not the threads family: its probe suspends a
+spinning thread, which on two vCPUs another vCPU runs, so the threads family judges step 6. The runtime lock is taken
+by compare-and-swap, guest and host: an exchange left the last waiter's value in the word, which the host reads as
+the holder.

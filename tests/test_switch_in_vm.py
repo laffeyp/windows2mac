@@ -81,7 +81,8 @@ def test_the_vm_warps_as_the_host_does(name: str, monkeypatch: pytest.MonkeyPatc
 
 
 PLANTS = {
-    "a suspended thread switched to": ("e->status == READY && !e->suspend) next = i;", "e->status == READY) next = i;"),
+    "a suspended thread switched to": ("e->status == READY && !e->suspend && !held_elsewhere(e)) next = i;",
+                                       "e->status == READY && !held_elsewhere(e)) next = i;"),
     "a slice end keeps its block's count": ("        *count -= stop_block_length(stop);",
                                             "        *count -= 0 * stop_block_length(stop);"),
 }
