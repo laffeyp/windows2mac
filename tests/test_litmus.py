@@ -111,7 +111,7 @@ def run_test(test: str, monkeypatch: pytest.MonkeyPatch, entso: bool = True) -> 
 
     def run_thread(v: Any, k: int, n: int, wait_for: int) -> None:
         """Thread k on vCPU k + 1 to its DONE, servicing dispatch misses and slice ends as steps() does."""
-        channel = v.vcpu_channels[k]
+        channel = v.vcpus[k + 1].channel
         x = [0] * 31
         x[1], x[7], x[9], x[17] = n, DATA, wait_for, entries[k]
         x[4] = STACK + 0x8000 - 0x100 * k

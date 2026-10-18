@@ -86,7 +86,7 @@ def run_two(monkeypatch: pytest.MonkeyPatch, locked: bool = True) -> dict[str, A
     lock = threading.Lock()
 
     def run_thread(v: Any, k: int, n: int) -> None:
-        channel = v.vcpu_channels[k]
+        channel = v.vcpus[k + 1].channel
         x = [0] * 31
         x[3], x[6], x[15] = THUNK_BASE + 32, THUNK_BASE, THUNK_BASE + 16          # rbx, rsi, r15
         x[12], x[13], x[14] = n, 0x1111_0000_0000_0000 * (k + 1) | k, DATA + 16 * k   # r12, r13, r14

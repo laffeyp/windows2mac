@@ -372,7 +372,7 @@ def test_native_mxcsr_access_sets_fpcr_and_folds_fpsr() -> None:
     def on_dispatch(v: Any, x: list[int]) -> None:
         if current:
             kind, value, flags = current.pop()
-            _, fpcr, fpsr = v.vectors()
+            _, fpcr, fpsr = v.vcpus[0].vectors()
             stored = int.from_bytes(v.mem.read(slot, 4), "little")
             seen.append((kind, value if kind == "ld" else flags, fpcr if kind == "ld" else stored, fpsr))
         if len(seen) == len(steps):
@@ -385,9 +385,10 @@ def test_native_mxcsr_access_sets_fpcr_and_folds_fpsr() -> None:
         v.mem.write(slot, value.to_bytes(4, "little"))
         x[4], x[17] = slot, sd.CODE_VA
         if kind == "st":
-            v.set_mxcsr(0x1F80, [0] * 16)
-            xmm, fpcr, _ = v.vectors()
-            v.set_vectors(xmm, fpcr, flags)
+            vcpu = v.vcpus[0]
+            vcpu.set_mxcsr(0x1F80, [0] * 16)
+            xmm, fpcr, _ = vcpu.vectors()
+            vcpu.set_vectors(xmm, fpcr, flags)
 
     try:
         r = vm.run(max_steps=1 << 20, timeout_ms=60_000, on_dispatch=on_dispatch)

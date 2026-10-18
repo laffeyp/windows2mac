@@ -341,11 +341,11 @@ def main(argv: list[str]) -> int:
             state["time"] = (vm.run_ns, dict(vm.exit_ns))
             state["pauses"] = vm.pauses_executed()            # the monitor's count, apart from the thread census
             state["vm_compile"] = vm.vm_compile_counts()      # from the monitor's memory: before vm.close()
-            state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid else where(vm, t.x[17]))
+            state["main_threads"] = {t.tid: (t.status, "running" if t.tid == vm.current_tid(vm.vcpus[0]) else where(vm, t.x[17]))
                                      for t in vm.threads.values()}
             state["processes"] = {p.pid: (p.vm.modules.image_name, p.exit_code,
                                           dict(sorted(p.vm.calls_total().items())),
-                                          {t.tid: (t.status, "running" if t.tid == p.vm.current_tid else p.vm.ld.thunks.get(t.x[17], hex(t.x[17])))
+                                          {t.tid: (t.status, "running" if t.tid == p.vm.current_tid(p.vm.vcpus[0]) else p.vm.ld.thunks.get(t.x[17], hex(t.x[17])))
                                            for t in p.vm.threads.values()})
                                   for p in machine.processes.values() if p.vm is not vm}
         finally:

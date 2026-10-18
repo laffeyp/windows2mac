@@ -146,15 +146,15 @@ def test_getprocaddress_while_the_trace_is_closed_answers_an_untraced_thunk() ->
                 image_name="probe.exe", call_trace=("probe.exe",), call_trace_from="threads_dll.dll!threads_dll_count")
         try:
             shared = vm.modules.proc(vm.modules.kernel32, "GetACP")
-            quiet = vm._traced_proc(shared)
+            quiet = vm._traced_proc(vm.vcpus[0], shared)
             assert quiet != shared and vm.ld.thunks[quiet] == vm.ld.thunks[shared]
             assert vm.mm[vm._process(TRACE_OFF) + TRACE_OWNER_OFF + (quiet - THUNK_BASE) // 16] == 0xFF
-            assert vm._traced_proc(shared) == quiet                       # one per name
+            assert vm._traced_proc(vm.vcpus[0], shared) == quiet                       # one per name
             struct.pack_into("<Q", vm.mm, vm._process(TRACE_OFF), 1)       # the trace open
             stack = vm.ld.image.image_base + 0x800                         # a mapped quadword: the header page
             struct.pack_into("<Q", vm.mm, vm._process(STATE_OFF) + 8 * 4, stack)
             vm.mem.write(stack, (0x7000_0000_0000).to_bytes(8, "little"))  # a caller outside the traced images
-            assert vm._traced_proc(shared) == shared
+            assert vm._traced_proc(vm.vcpus[0], shared) == shared
         finally:
             vm.close()
             files.close_all()

@@ -249,7 +249,7 @@ def test_getprocaddress_from_a_traced_image_answers_a_traced_thunk_of_its_own() 
 
         def answer(caller: int) -> int:
             vm.mem.write(stack, caller.to_bytes(8, "little"))
-            return vm._traced_proc(shared)
+            return vm._traced_proc(vm.vcpus[0], shared)
 
         assert answer(hi + 0x1000) == shared                                   # a caller outside the traced images
         hooked = answer(lo + 0x10)

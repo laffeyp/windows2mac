@@ -60,20 +60,21 @@ def test_a_switch_saves_the_outgoing_vectors_and_loads_the_incoming() -> None:
     def swap(v: vm_backend.VM, x: list[int]) -> None:
         if seen:
             return
-        one = v.threads[v.current_tid]
-        v.set_vectors(a, fpcr_a, 0)
-        v._save_thread(one, x)
+        vcpu = v.vcpus[0]
+        one = v.threads[v.current_tid(vcpu)]
+        vcpu.set_vectors(a, fpcr_a, 0)
+        v._save_thread(vcpu, one, x)
         two = v._add_thread(99, one.teb, one.stack)
         two.x, two.monitor, two.state = list(x), one.monitor, one.state
         v._write_vectors(two, b, fpcr_b, 0x10)
-        v.current_tid = 99
-        v._load_thread(two)
-        seen["in two"] = v.vectors()
-        seen["one's slot"] = v.thread_vectors(one)
-        v._save_thread(two, x)
-        v.current_tid = one.tid
-        v._load_thread(one)
-        seen["back in one"] = v.vectors()
+        v.set_current(vcpu, 99)
+        v._load_thread(vcpu, two)
+        seen["in two"] = vcpu.vectors()
+        seen["one's slot"] = v.thread_vectors(vcpu, one)
+        v._save_thread(vcpu, two, x)
+        v.set_current(vcpu, one.tid)
+        v._load_thread(vcpu, one)
+        seen["back in one"] = vcpu.vectors()
         two.status = "ended"
     try:
         vm.run(max_steps=1 << 20, timeout_ms=10_000, on_dispatch=swap)
@@ -98,14 +99,14 @@ def test_the_spin_census_counts_pauses_and_each_threads_instructions(monkeypatch
     vm = vm_backend.VM(Loaded(None, mem, code_va, {}, stack_va + 0x10000))   # type: ignore[arg-type]
     try:
         vm.run(max_steps=1 << 20, timeout_ms=10_000)
-        assert vm._counts()[1] == 3
+        assert vm.vcpus[0].counts()[1] == 3
     finally:
         vm.close()
     seen: list[tuple[dict[int, tuple[int, int]], int]] = []
     close = vm_backend.VM.close
 
     def counted_close(v: vm_backend.VM) -> None:
-        seen.append((v.thread_census(), v._counts()[0]))
+        seen.append((v.thread_census(), v.vcpus[0].counts()[0]))
         close(v)
     monkeypatch.setattr(vm_backend.VM, "close", counted_close)
     f = family_run.FAMILIES["threads"]

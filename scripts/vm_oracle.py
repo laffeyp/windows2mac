@@ -43,7 +43,7 @@ import semantics_differential as sd  # noqa: E402
 
 from w2m.lift import LiftError, lift  # noqa: E402
 from w2m.loader import Loaded, Memory  # noqa: E402
-from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, compile_insn,  # noqa: E402
+from w2m.vm_backend import (FLAG_REG, VM, Assembler, CompileError, StopRun, Vcpu, compile_insn,  # noqa: E402
                             x86_flags)
 from w2m.x86dec import DecodeError  # noqa: E402
 from w2m.x86dec_tables import SPEC_VERSION  # noqa: E402
@@ -93,7 +93,7 @@ def vm_compiles(code: bytes) -> str | None:
     return None
 
 
-def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory, vm: VM | None = None) -> list[tuple[str, str]]:
+def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory, vcpu: Vcpu | None = None) -> list[tuple[str, str]]:
     diffs = []
     if r.marker != 2:
         return [("vm fault, cpu completed", f"vm 0x{exc['code']:x} at 0x{exc['rip']:x}")]
@@ -113,17 +113,17 @@ def judge_fault(c: sd.Case, r: sd.Result, exc: dict[str, int], mem: Memory, vm: 
     for i in range(16):
         if exc[f"xmm{i}"] != r.xmm[i]:
             diffs.append((f"fault xmm{i}", f"vm {exc[f'xmm{i}']:032x}, cpu {r.xmm[i]:032x}"))
-    if r.ymm_hi is not None and vm is not None:                 # format 3: the slots as the fault left them
-        for i, v in enumerate(vm.ymm_hi()):
+    if r.ymm_hi is not None and vcpu is not None:               # format 3: the slots as the fault left them
+        for i, v in enumerate(vcpu.ymm_hi()):
             if v != r.ymm_hi[i]:
                 diffs.append((f"fault ymm{i}.hi", f"vm {v:032x}, cpu {r.ymm_hi[i]:032x}"))
-    if r.x87 is not None and vm is not None:                    # format 4: the x87 state as the fault left it
-        diffs += [(f"fault {k.split(' ', 1)[1]}", d) for k, d in sd.judge_x87(c.label, c, sd.X87State(*vm.x87()), r.x87)]
+    if r.x87 is not None and vcpu is not None:                  # format 4: the x87 state as the fault left it
+        diffs += [(f"fault {k.split(' ', 1)[1]}", d) for k, d in sd.judge_x87(c.label, c, sd.X87State(*vcpu.x87()), r.x87)]
     diffs += windows(mem, r)
     return diffs
 
 
-def judge_done(c: sd.Case, r: sd.Result, vm: VM, x: list[int], mem: Memory) -> list[tuple[str, str]]:
+def judge_done(c: sd.Case, r: sd.Result, vcpu: Vcpu, x: list[int], mem: Memory) -> list[tuple[str, str]]:
     if r.marker == 2:
         return [("vm completed, cpu fault", f"cpu 0x{r.fault:x}")]
     diffs = []
@@ -133,25 +133,25 @@ def judge_done(c: sd.Case, r: sd.Result, vm: VM, x: list[int], mem: Memory) -> l
     for i in range(16):
         if x[i] != r.regs[i]:
             diffs.append((f"r{i}", f"vm 0x{x[i]:x}, cpu 0x{r.regs[i]:x}"))
-    vf = x86_flags(x, vm)
+    vf = x86_flags(x, vcpu)
     for f, b in sd.FLAG_BITS.items():
         if vf[f] is not None and vf[f] != bool(r.rflags >> b & 1):
             diffs.append((f"{f}F", f"vm {int(bool(vf[f]))}, cpu {r.rflags >> b & 1}"))
-    if vm.df() != bool(r.rflags >> sd.DF_BIT & 1):
-        diffs.append(("DF", f"vm {int(vm.df())}, cpu {r.rflags >> sd.DF_BIT & 1}"))
-    xmm, _fpcr, _fpsr = vm.vectors()
-    mx = vm.mxcsr()
+    if vcpu.df() != bool(r.rflags >> sd.DF_BIT & 1):
+        diffs.append(("DF", f"vm {int(vcpu.df())}, cpu {r.rflags >> sd.DF_BIT & 1}"))
+    xmm, _fpcr, _fpsr = vcpu.vectors()
+    mx = vcpu.mxcsr()
     if mx != r.mxcsr:
         diffs.append(("MXCSR", f"vm 0x{mx:x}, cpu 0x{r.mxcsr:x} (in 0x{c.mxcsr:x})"))
     for i in range(16):
         if xmm[i] != r.xmm[i]:
             diffs.append((f"xmm{i}", f"vm {xmm[i]:032x}, cpu {r.xmm[i]:032x}"))
     if r.ymm_hi is not None:                                    # format 3 (Sprint 049)
-        for i, v in enumerate(vm.ymm_hi()):
+        for i, v in enumerate(vcpu.ymm_hi()):
             if v != r.ymm_hi[i]:
                 diffs.append((f"ymm{i}.hi", f"vm {v:032x}, cpu {r.ymm_hi[i]:032x}"))
     if r.x87 is not None:                                       # format 4 (Sprint 065)
-        diffs += [(k.split(" ", 1)[1], d) for k, d in sd.judge_x87(c.label, c, sd.X87State(*vm.x87()), r.x87)]
+        diffs += [(k.split(" ", 1)[1], d) for k, d in sd.judge_x87(c.label, c, sd.X87State(*vcpu.x87()), r.x87)]
     diffs += windows(mem, r)
     return diffs
 
@@ -225,24 +225,25 @@ def run_cases(cases: list[sd.Case], results: list[sd.Result], limit: int | None 
         for f in "CZSOP":
             x[FLAG_REG[f]] = c.rflags >> sd.FLAG_BITS[f] & 1
         x[24] = 0
-        v.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1),
-                    bool(c.rflags >> sd.FLAG_BITS["P"] & 1))
-        v.set_mxcsr(c.mxcsr, list(c.xmm))
-        v.set_ymm_hi(list(c.ymm_hi))
+        vcpu = v.vcpus[0]                                       # the oracle's run: one vCPU
+        vcpu.set_af_df(bool(c.rflags >> sd.FLAG_BITS["A"] & 1), bool(c.rflags >> sd.DF_BIT & 1),
+                       bool(c.rflags >> sd.FLAG_BITS["P"] & 1))
+        vcpu.set_mxcsr(c.mxcsr, list(c.xmm))
+        vcpu.set_ymm_hi(list(c.ymm_hi))
         if c.x87 is not None:
-            v.set_x87(c.x87.cw, c.x87.sw, c.x87.tags, list(c.x87.st))
+            vcpu.set_x87(c.x87.cw, c.x87.sw, c.x87.tags, list(c.x87.st))
 
     def on_dispatch(v: VM, x: list[int]) -> None:
         if state["current"] >= 0:
             i = state["current"]
-            note(i, judge_done(cases[i], results[i], v, x, v.mem))
+            note(i, judge_done(cases[i], results[i], v.vcpus[0], x, v.mem))
             state["current"] = -1
         start_next(v, x)
 
     def on_exception(v: VM, exc: dict[str, int]) -> bool:
         i = state["current"]
         state["faults"] += 1
-        note(i, judge_fault(cases[i], results[i], exc, v.mem, v))
+        note(i, judge_fault(cases[i], results[i], exc, v.mem, v.vcpus[0]))
         state["current"] = -1
         return True
 

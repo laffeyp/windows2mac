@@ -24,10 +24,9 @@ def run(code: bytes, monkeypatch: pytest.MonkeyPatch, refill: bool) -> int:
     from w2m.loader import Loaded, Memory
     from w2m.scheduler import TIME_SLICE
     monkeypatch.setattr(vm_backend, "TRANSLATION_CACHE_DIR", None)
-    monkeypatch.setattr(vm_backend.VM, "_set_budget", lambda self: struct.pack_into(   # a time slice, as with threads
-        "<Q", self.mm, vm_backend.MONITOR_DATA + 8, min(self._max_steps, struct.unpack_from(
-            "<Q", self.mm, vm_backend.MONITOR_DATA)[0] + TIME_SLICE)))
-    monkeypatch.setattr(vm_backend.VM, "_slice_until", lambda self, forced: 0 if forced or not refill else M64)
+    monkeypatch.setattr(vm_backend.VM, "_set_budget", lambda self, vcpu: struct.pack_into(   # a time slice, as with threads
+        "<Q", self.mm, vcpu.md + 8, min(self._max_steps, struct.unpack_from("<Q", self.mm, vcpu.md)[0] + TIME_SLICE)))
+    monkeypatch.setattr(vm_backend.VM, "_slice_until", lambda self, vcpu, forced: 0 if forced or not refill else M64)
     mem = Memory()
     mem.map(CODE, 0x1000, "code").data[:len(code)] = code
     mem.map(STACK, 0x10000, "stack")
@@ -75,10 +74,9 @@ def slice_ends(code: bytes, monkeypatch: pytest.MonkeyPatch, ready: bool) -> tup
     from w2m.loader import Loaded, Memory
     from w2m.scheduler import TIME_SLICE
     monkeypatch.setattr(vm_backend, "TRANSLATION_CACHE_DIR", None)
-    monkeypatch.setattr(vm_backend.VM, "_set_budget", lambda self: struct.pack_into(
-        "<Q", self.mm, vm_backend.MONITOR_DATA + 8, min(self._max_steps, struct.unpack_from(
-            "<Q", self.mm, vm_backend.MONITOR_DATA)[0] + TIME_SLICE)))
-    monkeypatch.setattr(vm_backend.VM, "_slice_until", lambda self, forced: 0 if forced or ready else M64)
+    monkeypatch.setattr(vm_backend.VM, "_set_budget", lambda self, vcpu: struct.pack_into(
+        "<Q", self.mm, vcpu.md + 8, min(self._max_steps, struct.unpack_from("<Q", self.mm, vcpu.md)[0] + TIME_SLICE)))
+    monkeypatch.setattr(vm_backend.VM, "_slice_until", lambda self, vcpu, forced: 0 if forced or ready else M64)
     mem = Memory()
     mem.map(CODE, 0x1000, "code").data[:len(code)] = code
     mem.map(STACK, 0x10000, "stack")

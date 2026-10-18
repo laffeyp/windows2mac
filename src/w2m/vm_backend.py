@@ -1935,6 +1935,116 @@ class Channel:
         del self._ref, self._cmd_word, self._exit_word
 
 
+class Vcpu:
+    """One vCPU as the host serves it (docs/design-several-vcpus.md, the host designed twice; Sprint 115): its index,
+    its channel while a run uses one, the file offsets of its private monitor data page (`md`) and state block (`st`),
+    and the vector swap its next run sends (vm_monitor.c vswap: the outgoing thread's slot, 0 for none, then the
+    incoming one's). vCPU 0's pages are the process's own; each later vCPU's are in its area (Sprint 104). Every
+    handler that reads a vCPU's state takes the Vcpu it serves; vCPU 0 between runs speaks through the monitor's
+    pipe (`pipe`), the others only through their channels."""
+
+    def __init__(self, mm: mmap.mmap, index: int, census: Counter[str],
+                 pipe: Callable[[str], list[str]] | None = None, channel: Channel | None = None) -> None:
+        self.mm, self.index, self.channel = mm, index, channel
+        self._census = census                            # VM.monitor_commands
+        self._pipe = pipe
+        if index == 0:
+            self.md, self.st = MONITOR_DATA, MONITOR_SIZE + STATE_OFF
+        else:
+            area = VCPU_AREA + index * VCPU_STRIDE
+            self.md, self.st = area + VS_MONITOR_DATA, area + VS_STATE
+        self.vswap: tuple[int, int] | None = None
+
+    def counts(self) -> tuple[int, int]:
+        """The instructions this vCPU has run and the PAUSEs among them (its monitor data page's counts)."""
+        executed, = struct.unpack_from("<Q", self.mm, self.md)
+        pauses, = struct.unpack_from("<Q", self.mm, self.md + PAUSE_COUNT)
+        return int(executed), int(pauses)
+
+    def slice_start(self) -> tuple[int, int]:
+        """The counts when the thread it runs got it."""
+        a, b = struct.unpack_from("<QQ", self.mm, self.md + SLICE_COUNT)
+        return int(a), int(b)
+
+    def flush_swap(self) -> None:
+        """A switch's vector swap before any other vector command (the pipe sent vswap ahead of the next command)."""
+        if self.vswap is not None and self.channel is not None:
+            swap, self.vswap = self.vswap, None
+            self.channel.swap(swap)
+            self._census["vswap"] += 1
+
+    def vectors(self) -> tuple[list[int], int, int]:
+        """XMM0-15 (as 128-bit integers), FPCR and FPSR of the stopped vCPU (during a run)."""
+        if self.channel is not None:
+            self.flush_swap()
+            self._census["vget"] += 1
+            return self.channel.vget()
+        assert self._pipe is not None, f"vCPU {self.index} has no channel"
+        r = self._pipe("vget")
+        return [int(q, 16) for q in r[1:17]], int(r[17], 16), int(r[18], 16)
+
+    def set_vectors(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
+        if self.channel is not None:
+            self.flush_swap()
+            self._census["vset"] += 1
+            self.channel.vset(xmm, fpcr, fpsr)
+            return
+        assert self._pipe is not None, f"vCPU {self.index} has no channel"
+        self._pipe("vset " + " ".join(f"{q:032x}" for q in xmm) + f" {fpcr:x} {fpsr:x}")
+
+    def ymm_hi(self) -> list[int]:
+        """YMM0-15 bits 255:128 (the monitor data page's slots; Sprint 049)."""
+        return [int.from_bytes(self.mm[self.md + YMM_HI_OFF + 16 * i:self.md + YMM_HI_OFF + 16 * i + 16],
+                               "little") for i in range(16)]
+
+    def set_ymm_hi(self, values: list[int]) -> None:
+        for i, v in enumerate(values):
+            self.mm[self.md + YMM_HI_OFF + 16 * i:self.md + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
+
+    def x87(self) -> tuple[int, int, int, list[int]]:
+        """FCW, FSW, the abridged tags and ST0-ST7 in stack order (the monitor data page's control word and the state
+        block's x87 fields; Sprint 065)."""
+        st = self.st
+        cw = struct.unpack_from("<H", self.mm, self.md + FCW_OFF)[0]
+        sw, tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
+        regs = [int.from_bytes(self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10], "little") for i in range(8)]
+        return int(cw), int(sw), int(tags), regs
+
+    def set_x87(self, cw: int, sw: int, tags: int, regs: list[int]) -> None:
+        st = self.st
+        struct.pack_into("<H", self.mm, self.md + FCW_OFF, cw)
+        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, sw, tags)
+        for i, v in enumerate(regs):
+            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = v.to_bytes(10, "little")
+
+    def mxcsr(self) -> int:
+        """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
+        stored = struct.unpack_from("<I", self.mm, self.md + MXCSR_OFF)[0]
+        return int(stored) | mxcsr_flags_from_fpsr(self.vectors()[2])
+
+    def set_mxcsr(self, mxcsr: int, xmm: list[int] | None = None) -> None:
+        """Store MXCSR, set FPCR from it and clear FPSR (its flags now live in the stored MXCSR)."""
+        struct.pack_into("<I", self.mm, self.md + MXCSR_OFF, mxcsr & 0xFFFF)
+        self.set_vectors(xmm if xmm is not None else self.vectors()[0], fpcr_for(mxcsr), 0)
+
+    def af(self) -> bool:
+        """AF from the lazy operands: bit 4 of a ^ b ^ r."""
+        a, b, r = struct.unpack_from("<QQQ", self.mm, self.md + AF_OPERANDS)
+        return bool((a ^ b ^ r) & 0x10)
+
+    def df(self) -> bool:
+        return bool(self.mm[self.md + DF_BYTE])
+
+    def pf(self) -> bool:
+        """PF from PF_RESULT."""
+        return parity_even(struct.unpack_from("<Q", self.mm, self.md + PF_RESULT)[0])
+
+    def set_af_df(self, af: bool, df: bool, pf: bool = True) -> None:
+        """Lazy operands that read back as `af` and `pf`, and DF."""
+        struct.pack_into("<QQQ", self.mm, self.md + AF_OPERANDS, 0x10 if af else 0, 0, 0 if pf else 1)
+        self.mm[self.md + DF_BYTE] = int(df)
+
+
 @dataclass
 class VcpuExit:
     kind: str
@@ -2137,10 +2247,6 @@ class VM:
         self.run_ns = 0
         self.exit_ns: Counter[int] = Counter()
         self.monitor_commands: Counter[str] = Counter()   # commands sent to the monitor, by name (Sprint 068)
-        # a thread switch's vector swap, sent with the next `set` (vm_monitor.c vswap): the outgoing thread's slot
-        # (0: none yet) and the incoming one's
-        self._vswap: tuple[int, int] | None = None
-        self._channel: Channel | None = None            # the monitor's channel while a run uses it (TRANSPORT)
         self._final_census: dict[int, tuple[int, int]] | None = None   # thread_census at close
         self._pending_init = 0                         # the DllMain stub of a DLL LoadLibrary just mapped (module.c)
         regions = [r for r in loaded.memory.regions if r.name != "thunks"]
@@ -2162,10 +2268,9 @@ class VM:
         # words other vCPUs may read while the host writes them, each one aligned 64-bit store (Sprint 106): struct's
         # pack_into zero-fills its whole destination before it packs (CPython _struct.c s_pack_internal, memset)
         self._words = view.cast("Q")
-        # the vCPU whose exit the host serves (Sprint 107): the file offsets of its private monitor data page and state
-        # block, which every handler reads and writes; one handler runs at a time, under the runtime lock
-        self.serving = 0
-        self._md, self._st = MONITOR_DATA, self._process(STATE_OFF)
+        # the vCPUs the monitor runs (Sprint 115): vCPU 0 from here, its pages the process's; 1.. from _start_vcpus.
+        # vCPU 0's pipe is the run's (steps sets _cmd)
+        self.vcpus = [Vcpu(self.mm, 0, self.monitor_commands, pipe=lambda c: self._cmd(c))]
         import ctypes
         self._barrier = ctypes.CDLL("/usr/lib/libSystem.B.dylib").OSMemoryBarrier
         self.mem = Memory()
@@ -2205,7 +2310,6 @@ class VM:
         self.code_writes = 0                            # writes that dropped blocks
         self.fault_give_backs = 0                       # guest faults whose unrun instructions were given back (099)
         self.vcpu_count = 1                             # vCPUs the monitor runs (Sprint 104); set before run
-        self.vcpu_channels: list[Channel] = []          # vCPU 1.. by index - 1
         self.vcpu_readback: list[tuple[int, int]] = []  # each vCPU's ACTLR_EL1 and TTBR0_EL1, read by its owner
         self._private_tables: list[dict[object, int]] = []   # per vCPU past the first: shared table -> its copy
         self._private_regions: set[int] = set()         # the 2 MB regions whose leaves differ per vCPU
@@ -2463,20 +2567,20 @@ class VM:
         assert subs & ~(0xFFF << 10) == 0xF1000000 | REG_BUDGET << 5 | REG_BUDGET, hex(subs)
         return int(subs >> 10 & 0xFFF)
 
-    def _give_back(self, after_stop: int) -> None:
+    def _give_back(self, vcpu: Vcpu, after_stop: int) -> None:
         """A thread leaving at a block's stop goes on at the block's entry, whose SUBS counts the block again: take
         its instructions off the count (threads.c w2m_switch does the same in the VM)."""
-        count = struct.unpack_from("<Q", self.mm, self._md)[0]
-        struct.pack_into("<Q", self.mm, self._md, count - self._stop_block_length(after_stop))
+        count = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
+        struct.pack_into("<Q", self.mm, vcpu.md, count - self._stop_block_length(after_stop))
 
-    def _wake_expired(self) -> None:
+    def _wake_expired(self, vcpu: Vcpu) -> None:
         """On the instruction clock, make ready every blocked thread whose deadline has passed, as a timed-out wait on
         Windows runs again whether or not another thread is busy (before, it ran only when no thread was ready, and each
         slice's end left the VM for it)."""
-        if struct.unpack_from("<Q", self.mm, self._md + CLOCK_MODE)[0] != 2:
+        if struct.unpack_from("<Q", self.mm, vcpu.md + CLOCK_MODE)[0] != 2:
             return
-        executed = struct.unpack_from("<Q", self.mm, self._md)[0]
-        rate, warp = struct.unpack_from("<Q", self.mm, self._md + CLOCK_RATE)[0], self._clock_warp()
+        executed = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
+        rate, warp = struct.unpack_from("<Q", self.mm, vcpu.md + CLOCK_RATE)[0], self._clock_warp()
         now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
         for t in self.threads.values():
             if t.status == "blocked" and t.deadline != M64 and t.deadline <= now:
@@ -2488,7 +2592,7 @@ class VM:
         return self.machine is not None and any(o is not self and (o.ready() or o.waits_with_deadline())
                                                 for o in self.machine.vms)
 
-    def _slice_until(self, forced: bool) -> int:
+    def _slice_until(self, vcpu: Vcpu, forced: bool) -> int:
         """SLICE_UNTIL for the next run: 0 when a slice's end must reach the host (lockstep, a forced stop, another
         thread or process ready, a deadline the instruction clock cannot place, another process with a deadline);
         the count at which the earliest deadline of a blocked thread falls, on the instruction clock; else ~0."""
@@ -2496,15 +2600,15 @@ class VM:
             return 0
         if self._other_process_due():
             return 0
-        others = [t for t in self.threads.values() if t.tid != self.current_tid and t.suspend == 0]
+        others = [t for t in self.threads.values() if t.tid != self.current_tid(vcpu) and t.suspend == 0]
         if any(t.status == "ready" for t in others):
             return 0
         deadlines = [t.deadline for t in others if t.status == "blocked" and t.deadline != M64]
         if not deadlines:
             return M64
-        if struct.unpack_from("<Q", self.mm, self._md + CLOCK_MODE)[0] != 2:
+        if struct.unpack_from("<Q", self.mm, vcpu.md + CLOCK_MODE)[0] != 2:
             return 0
-        rate, warp = struct.unpack_from("<Q", self.mm, self._md + CLOCK_RATE)[0], self._clock_warp()
+        rate, warp = struct.unpack_from("<Q", self.mm, vcpu.md + CLOCK_RATE)[0], self._clock_warp()
         ticks = min(deadlines) - warp                # the count whose clock reaches the deadline, rounded down
         return 0 if ticks <= 0 else ticks // 10_000_000 * rate + ticks % 10_000_000 * rate // 10_000_000
 
@@ -2530,15 +2634,16 @@ class VM:
         return MONITOR_SIZE + off
 
     def _init_process(self, tid: int) -> None:
-        """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode."""
-        struct.pack_into("<Q", self.mm, self._md + CLOCK_MODE,
-                         1 if self.clock_from_host else 2 if self.instruction_clock else 0)
+        """TEB and PEB fields at specs/guest_state.json offsets; the service ring's header; the clock mode. Into vCPU
+        0's pages, which each later vCPU's start as (_start_vcpus)."""
+        md = self.vcpus[0].md
+        struct.pack_into("<Q", self.mm, md + CLOCK_MODE, 1 if self.clock_from_host else 2 if self.instruction_clock else 0)
         if self.instruction_clock:
-            struct.pack_into("<Q", self.mm, self._md + CLOCK_RATE, self.instruction_clock[0])
-            struct.pack_into("<Q", self.mm, self._md + CLOCK_EPOCH, self.instruction_clock[1])
+            struct.pack_into("<Q", self.mm, md + CLOCK_RATE, self.instruction_clock[0])
+            struct.pack_into("<Q", self.mm, md + CLOCK_EPOCH, self.instruction_clock[1])
             struct.pack_into("<Q", self.mm, RUN_TABLE + CLOCK_WARP, 0)
-        struct.pack_into("<Q", self.mm, self._md + START_MODE, 1 if self.gui else 0)
-        struct.pack_into("<Q", self.mm, self._md + FOREGROUND_MODE, 1 if self.foreground_held else 0)
+        struct.pack_into("<Q", self.mm, md + START_MODE, 1 if self.gui else 0)
+        struct.pack_into("<Q", self.mm, md + FOREGROUND_MODE, 1 if self.foreground_held else 0)
         line = self.command_line.encode("utf-16-le") + b"\0\0"
         if len(line) > 0x1000:
             raise CompileError(f"command line of {len(line)} bytes: the page holds 4096")
@@ -2579,7 +2684,7 @@ class VM:
             struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x10, self.ld.image.image_base)
         struct.pack_into("<Q", self.mm, self._process(PEB_OFF) + 0x30, HEAP_VA)     # PEB.ProcessHeap (heap.c)
         struct.pack_into("<I", self.mm, self._process(PEB_OFF) + 0xB8, PROCESSORS)  # PEB.NumberOfProcessors (Chappell)
-        st = self._st                   # thread-start defaults (spec, observed on Windows)
+        st = self.vcpus[0].st           # thread-start defaults (spec, observed on Windows)
         struct.pack_into("<I", self.mm, st + 152, 0x1F80)
         struct.pack_into("<H", self.mm, st + 156, 0x27F)
         struct.pack_into("<QQQ", self.mm, st + 176, teb, teb, 0)
@@ -2819,7 +2924,7 @@ class VM:
         m.imports[key] = va
         return va
 
-    def _create_thread(self, start: int, parameter: int, flags: int, stack_size: int) -> int:
+    def _create_thread(self, vcpu: Vcpu, start: int, parameter: int, flags: int, stack_size: int) -> int:
         """CreateThread's host half: a thread id, a TEB, a stack, static TLS, the attach stub and the first state."""
         tid = max(self.threads) + 4
         program = self.ld.images[0].pe if self.ld.images else None
@@ -2869,12 +2974,12 @@ class VM:
         struct.pack_into("<I", state, 152, 0x1F80)
         struct.pack_into("<H", state, 156, 0x27F)
         struct.pack_into("<QQ", state, 176, teb, teb)
-        t = self._add_thread(tid, teb, (dealloc, limit, top), parent=self.current_tid, start=start,
+        t = self._add_thread(tid, teb, (dealloc, limit, top), parent=self.current_tid(vcpu), start=start,
                              created_suspended=bool(flags & 0x4))
         t.x, t.monitor, t.state, t.suspend = x, monitor, bytes(state), 1 if flags & 0x4 else 0
         self._write_vectors(t, [0] * 16, fpcr_for(0x1F80), 0)   # as a Windows thread starts: XMM clear, MXCSR 0x1F80
         self.virtual.stacks.append(t.stack)
-        self._set_budget()                                # two threads: time slices from now on
+        self._set_budget(vcpu)                            # two threads: time slices from now on
         return tid
 
     def _map_pages(self, start: int, end: int, valid: bool) -> None:
@@ -2886,13 +2991,13 @@ class VM:
                 desc = struct.unpack_from("<Q", self.mm, at)[0]
                 self._words[at // 8] = desc | 1 if valid else desc & ~1     # one store: a walker may read it
 
-    def _stack_grow(self, address: int, probe: bool) -> int:
+    def _stack_grow(self, vcpu: Vcpu, address: int, probe: bool) -> int:
         """Commit the current thread's stack down to `address`'s page, as Windows does on a touch of its guard: the
         touched guard page and those above it committed read-write, StackLimit moved to it, three guard pages below
         it (contracts/windows.memory.created_thread_stack rows default.grow, default.grown.*). Only a page in the
         guard grows the stack; `probe` (the runtime placing a frame below StackLimit) grows it page by page as
         successive touches would. 0 when the address is not reached this way: an access violation (row skip)."""
-        cur = self.threads[self.current_tid]
+        cur = self.threads[self.current_tid(vcpu)]
         dealloc, _, top = cur.stack
         r = self.virtual.reservations.get(dealloc)
         if r is None:              # the main thread's stack (the process area's TEB), committed whole: not grown here
@@ -2915,13 +3020,13 @@ class VM:
         cur.stack = (dealloc, limit, top)
         return 1
 
-    def _thread_request(self, sub: int, a0: int, a1: int, a2: int) -> int:
+    def _thread_request(self, vcpu: Vcpu, sub: int, a0: int, a1: int, a2: int) -> int:
         """threads.c's W2M_THREAD_* requests."""
         if sub == THREAD_CREATE:
-            return self._create_thread(a0, a1, a2 & 0xFFFFFFFF, a2 >> 32)
+            return self._create_thread(vcpu, a0, a1, a2 & 0xFFFFFFFF, a2 >> 32)
         if sub == THREAD_STACK_GROW:
-            return self._stack_grow(a0, bool(a1))
-        cur = self.threads[self.current_tid]
+            return self._stack_grow(vcpu, a0, bool(a1))
+        cur = self.threads[self.current_tid(vcpu)]
         if sub == THREAD_EXIT_STUB:
             return self._code_page(detach_stub(self._thread_callbacks(), self._import_thunk("KERNEL32.dll!W2mThreadEnd")))
         if sub == THREAD_END:
@@ -2963,17 +3068,17 @@ class VM:
             # has no SetThreadContext and a thread resumes from its own saved state.
             rip = self.modules.ntdll + 0x800 if t.status == "blocked" and self.modules.ntdll else t.x[17]
             write_context(buf, flags, t.x[:16], rip, eflags, struct.unpack_from("<I", mon[MXCSR_OFF], 0)[0],
-                          struct.unpack_from("<H", mon[FCW_OFF], 0)[0], self.thread_vectors(t)[0])
+                          struct.unpack_from("<H", mon[FCW_OFF], 0)[0], self.thread_vectors(vcpu, t)[0])
             self.mem.write(a1, bytes(buf))
             return 1
         raise Unimplemented(f"thread request {sub}")
 
-    def _set_budget(self) -> None:
+    def _set_budget(self, vcpu: Vcpu) -> None:
         """The step budget the block entries check: the run's limit, or with more than one thread a time slice."""
-        executed = struct.unpack_from("<Q", self.mm, self._md)[0]
+        executed = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
         shared = len(self.threads) > 1 or (self.machine is not None and len(self.machine.vms) > 1)
         limit = min(self._max_steps, executed + TIME_SLICE) if shared else self._max_steps
-        struct.pack_into("<Q", self.mm, self._md + 8, limit)
+        struct.pack_into("<Q", self.mm, vcpu.md + 8, limit)
 
     def _read_guest(self, va: int, n: int) -> bytes:
         """Guest memory, the process area (the first thread's TEB, the PEB) included."""
@@ -3000,18 +3105,17 @@ class VM:
         """Thread switches threads.c w2m_switch made inside the VM (the run table's header)."""
         return int(struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_SWITCHES)[0])
 
-    @property
-    def current_tid(self) -> int:
-        """The id of the thread the serving vCPU runs: its current entry's (threads.c w2m_switch changes it in the VM)."""
+    def current_tid(self, vcpu: Vcpu) -> int:
+        """The id of the thread `vcpu` runs: its current entry's (threads.c w2m_switch changes it in the VM)."""
         if not struct.unpack_from("<Q", self.mm, RUN_TABLE + RT_COUNT)[0]:
             return self._first_tid
-        at = struct.unpack_from("<Q", self.mm, self._md + CURRENT_ENTRY)[0] - MONITOR_VA
+        at = struct.unpack_from("<Q", self.mm, vcpu.md + CURRENT_ENTRY)[0] - MONITOR_VA
         return int(struct.unpack_from("<Q", self.mm, at)[0])
 
-    @current_tid.setter
-    def current_tid(self, tid: int) -> None:
+    def set_current(self, vcpu: Vcpu, tid: int) -> None:
+        """Make thread `tid` the one `vcpu` runs."""
         t = self.threads[tid]
-        struct.pack_into("<QQ", self.mm, self._md + CURRENT, t.index, MONITOR_VA + t.at)
+        struct.pack_into("<QQ", self.mm, vcpu.md + CURRENT, t.index, MONITOR_VA + t.at)
 
     def _add_thread(self, tid: int, teb: int, stack: tuple[int, int, int], parent: int = 0, start: int = 0,
                     created_suspended: bool = False) -> GuestThread:
@@ -3027,7 +3131,7 @@ class VM:
         struct.pack_into("<Q", self.mm, RUN_TABLE + RT_COUNT, n + 1)
         self._vslot(t)
         if n == 0:
-            self.current_tid = tid
+            self.set_current(self.vcpus[0], tid)         # the first thread starts on vCPU 0
         return t
 
     def _vslot(self, t: GuestThread) -> int:
@@ -3042,68 +3146,59 @@ class VM:
             self.mm[at + 16 * i:at + 16 * i + 16] = q.to_bytes(16, "little")
         struct.pack_into("<QQ", self.mm, at + 256, fpcr, fpsr)
 
-    def thread_vectors(self, t: GuestThread) -> tuple[list[int], int, int]:
-        """A thread's XMM0-15, FPCR and FPSR: the vCPU's for the running thread, else its slot (vm_monitor.c vswap
+    def thread_vectors(self, vcpu: Vcpu, t: GuestThread) -> tuple[list[int], int, int]:
+        """A thread's XMM0-15, FPCR and FPSR: `vcpu`'s when it runs the thread, else its slot (vm_monitor.c vswap
         wrote it at the switch's `set`)."""
-        if t.tid == self.current_tid:
-            return self.vectors()
+        if t.tid == self.current_tid(vcpu):
+            return vcpu.vectors()
         at = self._vslot(t)
         xmm = [int.from_bytes(self.mm[at + 16 * i:at + 16 * i + 16], "little") for i in range(16)]
         fpcr, fpsr = struct.unpack_from("<QQ", self.mm, at + 256)
         return xmm, int(fpcr), int(fpsr)
 
-    def _counts(self) -> tuple[int, int]:
-        executed, = struct.unpack_from("<Q", self.mm, self._md)
-        pauses, = struct.unpack_from("<Q", self.mm, self._md + PAUSE_COUNT)
-        return int(executed), int(pauses)
-
     def thread_census(self) -> dict[int, tuple[int, int]]:
         """Each thread's instructions and PAUSEs so far (the spin census, Sprint 068 item J): the totals at its switches,
-        and the running thread's since it last got the vCPU."""
+        and the running thread's since it last got the vCPU. vCPU 0 runs the process's threads (Sprint 115: until the
+        chain's step 5)."""
         if self._final_census is not None:              # closed: the census as it stood at close
             return dict(self._final_census)
-        executed, pauses = self._counts()
+        vcpu = self.vcpus[0]
+        executed, pauses = vcpu.counts()
         out = {tid: (t.instructions, t.pauses) for tid, t in self.threads.items()}
-        if self.current_tid in out:
-            n, p = out[self.current_tid]
-            begun, begun_pauses = self._slice_start()
-            out[self.current_tid] = (n + executed - begun, p + pauses - begun_pauses)
+        running = self.current_tid(vcpu)
+        if running in out:
+            n, p = out[running]
+            begun, begun_pauses = vcpu.slice_start()
+            out[running] = (n + executed - begun, p + pauses - begun_pauses)
         return out
 
-    def _slice_start(self) -> tuple[int, int]:
-        """The counters when the running thread got the vCPU (the run table's header)."""
-        a, b = struct.unpack_from("<QQ", self.mm, self._md + SLICE_COUNT)
-        return int(a), int(b)
-
-    def _save_thread(self, t: GuestThread, x: list[int]) -> None:
-        executed, pauses = self._counts()
-        begun, begun_pauses = self._slice_start()
+    def _save_thread(self, vcpu: Vcpu, t: GuestThread, x: list[int]) -> None:
+        executed, pauses = vcpu.counts()
+        begun, begun_pauses = vcpu.slice_start()
         t.instructions += executed - begun
         t.pauses += pauses - begun_pauses
-        struct.pack_into("<QQ", self.mm, self._md + SLICE_COUNT, executed, pauses)
+        struct.pack_into("<QQ", self.mm, vcpu.md + SLICE_COUNT, executed, pauses)
         t.x = list(x)
-        self._vswap = (self._vslot(t), 0)                # the monitor saves its vectors at the next `set`
-        t.monitor = [bytes(self.mm[self._md + a:self._md + b]) for a, b in PER_THREAD_MONITOR]
-        st = self._st
-        t.state = bytes(self.mm[st:st + STATE_SIZE])
+        vcpu.vswap = (self._vslot(t), 0)                 # the monitor saves its vectors at the next `set`
+        t.monitor = [bytes(self.mm[vcpu.md + a:vcpu.md + b]) for a, b in PER_THREAD_MONITOR]
+        t.state = bytes(self.mm[vcpu.st:vcpu.st + STATE_SIZE])
 
-    def _load_thread(self, t: GuestThread) -> list[int]:
+    def _load_thread(self, vcpu: Vcpu, t: GuestThread) -> list[int]:
         for (a, b), data in zip(PER_THREAD_MONITOR, t.monitor):
-            self.mm[self._md + a:self._md + b] = data
-        st = self._st
-        self.mm[st:st + STATE_SIZE] = t.state
-        struct.pack_into("<QQ", self.mm, self._md + SLICE_COUNT, *self._counts())
-        save = self._vswap[0] if self._vswap is not None else 0
+            self.mm[vcpu.md + a:vcpu.md + b] = data
+        self.mm[vcpu.st:vcpu.st + STATE_SIZE] = t.state
+        struct.pack_into("<QQ", self.mm, vcpu.md + SLICE_COUNT, *vcpu.counts())
+        save = vcpu.vswap[0] if vcpu.vswap is not None else 0
         # the same thread back (another VM ran meanwhile, on its own vCPU): its vectors never left this one
-        self._vswap = None if save == self._vslot(t) else (save, self._vslot(t))
+        vcpu.vswap = None if save == self._vslot(t) else (save, self._vslot(t))
         return list(t.x)
 
-    def _schedule(self, x: list[int], schedule: int) -> list[int] | None:
+    def _schedule(self, vcpu: Vcpu, x: list[int], schedule: int) -> list[int] | None:
         """Hand the vCPU from the current thread (its state in x, at an instruction boundary) to the next that can
         run: round robin over ready, unsuspended threads; when none is ready, a thread blocked with a finite deadline
         runs to check it (after a millisecond's sleep, so the clock moves); with neither, every thread waits
         forever and the run stops. `schedule` is state.schedule's bits (0: the time slice ran out)."""
-        cur = self.threads[self.current_tid]
+        cur = self.threads[self.current_tid(vcpu)]
         if schedule & SCHEDULE_END:
             cur.status = "ended"
             for t in self.threads.values():              # its handle signals: waiters check again
@@ -3118,9 +3213,9 @@ class VM:
                            else "no thread ready"] += 1
         if all(t.status == "ended" for t in self.threads.values()):
             return None                                       # the last thread ended: the process ends with it
-        return self._switch(x, cur, schedule)
+        return self._switch(vcpu, x, cur, schedule)
 
-    def _switch(self, x: list[int], cur: GuestThread, schedule: int) -> list[int] | None:
+    def _switch(self, vcpu: Vcpu, x: list[int], cur: GuestThread, schedule: int) -> list[int] | None:
         """The next thread's state after cur's (x): IDLE, in a machine of several VMs, when none of this VM's
         threads can run (the driver runs another VM and resumes this one when a thread is ready again)."""
         order = sorted(self.threads)
@@ -3136,7 +3231,7 @@ class VM:
                 return IDLE
             if not timed:
                 raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
-            if self.warp_to_deadline():
+            if self.warp_to_deadline(vcpu):
                 nxt = next(t for t in (self.threads[k] for k in rotation) if t.status == "ready")
             else:
                 time.sleep(0.001)
@@ -3146,9 +3241,9 @@ class VM:
             x[0] = int(nxt is not cur)                       # SwitchToThread: nonzero when another thread runs
         if nxt is cur:
             return x
-        self._save_thread(cur, x)
-        self.current_tid = nxt.tid
-        return self._load_thread(nxt)
+        self._save_thread(vcpu, cur, x)
+        self.set_current(vcpu, nxt.tid)
+        return self._load_thread(vcpu, nxt)
 
     def read_bytes(self, va: int, n: int) -> bytes:
         return _GuestView(self).read(va, n) if n else b""
@@ -3174,7 +3269,7 @@ class VM:
             raise Unimplemented("the environment block has no end within its area")
         return tuple(e for e in units[:end].split("\0") if e)
 
-    def warp_to_deadline(self) -> bool:
+    def warp_to_deadline(self, vcpu: Vcpu) -> bool:
         """With the instruction clock and no thread ready: move the clock to the earliest deadline of a blocked thread
         and make that thread ready, as QEMU's -icount sleep=off does; False when no thread waits with a deadline."""
         timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
@@ -3182,7 +3277,7 @@ class VM:
             return False
         first = min(timed, key=lambda t: (t.deadline, t.tid))
         rate = self.instruction_clock[0]
-        executed, warp = struct.unpack_from("<Q", self.mm, self._md)[0], self._clock_warp()
+        executed, warp = struct.unpack_from("<Q", self.mm, vcpu.md)[0], self._clock_warp()
         now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
         if first.deadline > now:
             struct.pack_into("<Q", self.mm, RUN_TABLE + CLOCK_WARP, warp + first.deadline - now)
@@ -3192,18 +3287,18 @@ class VM:
     def _clock_warp(self) -> int:
         return int(struct.unpack_from("<Q", self.mm, RUN_TABLE + CLOCK_WARP)[0])
 
-    def _resume_idle(self, x: list[int]) -> list[int] | None:
+    def _resume_idle(self, vcpu: Vcpu, x: list[int]) -> list[int] | None:
         """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
         deadline runs to check it."""
         assert self._idle is not None
         cur, schedule, _ = self._idle
         self._idle = None
         if not any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()) \
-                and not self.warp_to_deadline():
+                and not self.warp_to_deadline(vcpu):
             timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
             if timed:
                 timed[0].status = "ready"
-        return self._switch(x, cur, schedule)
+        return self._switch(vcpu, x, cur, schedule)
 
     def ready(self) -> bool:
         """Whether a thread of this VM can run now (kernel.Machine): a process not yet started can."""
@@ -3281,19 +3376,19 @@ class VM:
         self._recon_append([(va, 0)])                   # a fault here is the runtime's, not the guest's
         return va
 
-    def _host_request(self, x: list[int]) -> bool:
+    def _host_request(self, vcpu: Vcpu, x: list[int]) -> bool:
         """Service the transport page (hvc #8). False when the guest exited. A request the host cannot serve (an
         API set with no observed host module, a file call with no root) stops the run as an unserved service does,
         with the guest's return address (Sprint 060: the frontier reports it as SERVICE_UNIMPLEMENTED)."""
         try:
-            return self._serve_host_request(x)
+            return self._serve_host_request(vcpu, x)
         except Unimplemented as e:
             if self.unimplemented is None:
-                rsp = struct.unpack_from("<Q", self.mm, self._st + 8 * 4)[0]
+                rsp = struct.unpack_from("<Q", self.mm, vcpu.st + 8 * 4)[0]
                 self.unimplemented = (str(e), int.from_bytes(self.mem.read(rsp, 8), "little"))
             raise
 
-    def _serve_host_request(self, x: list[int]) -> bool:
+    def _serve_host_request(self, vcpu: Vcpu, x: list[int]) -> bool:
         t = self._process(TRANSPORT_OFF)
         op, a0, a1 = struct.unpack_from("<QQQ", self.mm, t)
         self.host_requests[op] = self.host_requests.get(op, 0) + 1
@@ -3325,12 +3420,12 @@ class VM:
             result = time.time_ns() // 100 + FILETIME_UNIX_EPOCH
         elif op == HOST_THREAD:
             a2, a3 = struct.unpack_from("<QQ", self.mm, t + 24)
-            result = self._thread_request(a0, a1, a2, a3) & M64
+            result = self._thread_request(vcpu, a0, a1, a2, a3) & M64
         elif op == HOST_EXCEPTION:
             if a0 == EXCEPTION_STUBS:
                 result = self._guest_stubs()
             elif a0 == EXCEPTION_CAPTURE_XMM:
-                xmm, _, _ = self.vectors()
+                xmm, _, _ = vcpu.vectors()
                 self.mem.write(a1, b"".join(q.to_bytes(16, "little") for q in xmm))
                 result = 0
             else:
@@ -3350,7 +3445,7 @@ class VM:
             return True
         elif op in (HOST_MODULE, HOST_PROC, HOST_MODULE_PATH, HOST_MODULE_AT):
             a2 = struct.unpack_from("<Q", self.mm, t + 24)[0]
-            result = self._module_request(op, a0, a1, a2)
+            result = self._module_request(vcpu, op, a0, a1, a2)
             struct.pack_into("<Q", self.mm, t + 48, self._pending_init)      # a DLL just loaded: its DllMain stub
             self._pending_init = 0
         elif op == HOST_RUNTIME_FAULT:
@@ -3359,7 +3454,7 @@ class VM:
         elif op == HOST_UNIMPLEMENTED:
             name = guest_runtime.api_ids().get(a0, f"api {a0}")
             # the bridge saved the guest's GPRs in the state block; RSP (slot 4) holds the call's return address
-            rsp = struct.unpack_from("<Q", self.mm, self._st + 8 * 4)[0]
+            rsp = struct.unpack_from("<Q", self.mm, vcpu.st + 8 * 4)[0]
             self.unimplemented = (f"{name} argument form 0x{a1:x}", int.from_bytes(self.mem.read(rsp, 8), "little"))
             raise Unimplemented(f"{name} argument form 0x{a1:x}")
         else:
@@ -3367,13 +3462,13 @@ class VM:
         struct.pack_into("<Q", self.mm, t + 56, result)
         return True
 
-    def _module_request(self, op: int, a0: int, a1: int, a2: int) -> int:
+    def _module_request(self, vcpu: Vcpu, op: int, a0: int, a1: int, a2: int) -> int:
         view = _GuestView(self)
         m = self.modules
         if op == HOST_MODULE:
             return m.module(view.read(a0, 2 * a1).decode("utf-16-le"), loading=bool(a2))
         if op == HOST_PROC:
-            return self._traced_proc(m.proc(a0, view.read(a1, a2).decode("latin-1")))
+            return self._traced_proc(vcpu, m.proc(a0, view.read(a1, a2).decode("latin-1")))
         if op == HOST_MODULE_AT:
             return m.containing(a0)
         path = m.file_name(a0)                                  # HOST_MODULE_PATH: buffer a1, a2 characters
@@ -3540,7 +3635,7 @@ class VM:
         count = struct.unpack_from("<Q", self.mm, off)[0]
         return count, [struct.unpack_from("<4Q", self.mm, off + 8 + 32 * i) for i in range(min(count, 64))]
 
-    def _traced_proc(self, va: int) -> int:
+    def _traced_proc(self, vcpu: Vcpu, va: int) -> int:
         """GetProcAddress's answer as the capture's process sees it (Sprint 060): a name resolved while the trace is
         closed (a DLL's start before UnityMain, a traced image's DllMain) is the real function on Windows, resolved
         before tools/jit_capture hooked GetProcAddress, and its calls are never traced; here it is a thunk of its
@@ -3555,7 +3650,7 @@ class VM:
         key = self.ld.thunks[va]
         if struct.unpack_from("<Q", self.mm, self._process(TRACE_OFF))[0]:
             # the bridge saved the guest's GPRs in the state block; RSP (slot 4) holds the call's return address
-            rsp = struct.unpack_from("<Q", self.mm, self._st + 8 * 4)[0]
+            rsp = struct.unpack_from("<Q", self.mm, vcpu.st + 8 * 4)[0]
             caller = int.from_bytes(self.mem.read(rsp, 8), "little")
             t = self._process(TRACE_OFF)
             if not any(lo <= caller < hi for lo, hi in (struct.unpack_from("<QQ", self.mm, t + 40 + 16 * i)
@@ -3604,12 +3699,13 @@ class VM:
                     self.mm[self._process(TRACE_OFF) + TRACE_OWNER_OFF + index] = i + 1
 
     def instructions_executed(self) -> int:
-        """The guest instructions this VM has run (the monitor data's count)."""
-        return int(struct.unpack_from("<Q", self.mm, self._md)[0])
+        """The guest instructions this VM has run (vCPU 0's count: it runs the process's threads until the chain's
+        step 5, Sprint 115)."""
+        return self.vcpus[0].counts()[0]
 
     def pauses_executed(self) -> int:
-        """The PAUSEs among them (the monitor data's PAUSE count, apart from the threads' census)."""
-        return int(struct.unpack_from("<Q", self.mm, self._md + PAUSE_COUNT)[0])
+        """The PAUSEs among them (vCPU 0's PAUSE count, apart from the threads' census)."""
+        return self.vcpus[0].counts()[1]
 
     def traced_calls(self) -> tuple[list[tuple[int, int, str, str, str, tuple[int, ...], int, int]], int]:
         """The calls call_trace.c recorded, in the Windows trace's shape (tools/jit_capture/call_trace.h): (seq, tid,
@@ -3681,88 +3777,12 @@ class VM:
         struct.pack_into("<Q", self.mm, self._process(EXCEPTION_OFF), 0)
         struct.pack_into("<Q", self.mm, self._process(RING_OFF), 0)
 
-    def _flush_swap(self) -> None:
-        """A switch's vector swap before any other vector command (the pipe sent vswap ahead of the next command)."""
-        if self._vswap is not None and self._channel is not None:
-            swap, self._vswap = self._vswap, None
-            self._channel.swap(swap)
-            self.monitor_commands["vswap"] += 1
-
-    def vectors(self) -> tuple[list[int], int, int]:
-        """XMM0-15 (as 128-bit integers), FPCR and FPSR of the stopped vCPU (during `run`)."""
-        if self._channel is not None:
-            self._flush_swap()
-            self.monitor_commands["vget"] += 1
-            return self._channel.vget()
-        r = self._cmd("vget")
-        return [int(q, 16) for q in r[1:17]], int(r[17], 16), int(r[18], 16)
-
-    def set_vectors(self, xmm: list[int], fpcr: int, fpsr: int) -> None:
-        if self._channel is not None:
-            self._flush_swap()
-            self.monitor_commands["vset"] += 1
-            self._channel.vset(xmm, fpcr, fpsr)
-            return
-        self._cmd("vset " + " ".join(f"{q:032x}" for q in xmm) + f" {fpcr:x} {fpsr:x}")
-
-    def ymm_hi(self) -> list[int]:
-        """YMM0-15 bits 255:128 (the monitor data page's slots; Sprint 049)."""
-        return [int.from_bytes(self.mm[self._md + YMM_HI_OFF + 16 * i:self._md + YMM_HI_OFF + 16 * i + 16],
-                               "little") for i in range(16)]
-
-    def set_ymm_hi(self, values: list[int]) -> None:
-        for i, v in enumerate(values):
-            self.mm[self._md + YMM_HI_OFF + 16 * i:self._md + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
-
-    def x87(self) -> tuple[int, int, int, list[int]]:
-        """FCW, FSW, the abridged tags and ST0-ST7 in stack order (the monitor data page's control word and the state
-        block's x87 fields; Sprint 065)."""
-        st = self._st
-        cw = struct.unpack_from("<H", self.mm, self._md + FCW_OFF)[0]
-        sw, tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
-        regs = [int.from_bytes(self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10], "little") for i in range(8)]
-        return int(cw), int(sw), int(tags), regs
-
-    def set_x87(self, cw: int, sw: int, tags: int, regs: list[int]) -> None:
-        st = self._st
-        struct.pack_into("<H", self.mm, self._md + FCW_OFF, cw)
-        struct.pack_into("<HB", self.mm, st + X87_SW_OFF, sw, tags)
-        for i, v in enumerate(regs):
-            self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = v.to_bytes(10, "little")
-
-    def mxcsr(self) -> int:
-        """MXCSR: the stored control bits and flags, with FPSR's cumulative flags folded in."""
-        stored = struct.unpack_from("<I", self.mm, self._md + MXCSR_OFF)[0]
-        return int(stored) | mxcsr_flags_from_fpsr(self.vectors()[2])
-
-    def set_mxcsr(self, mxcsr: int, xmm: list[int] | None = None) -> None:
-        """Store MXCSR, set FPCR from it and clear FPSR (its flags now live in the stored MXCSR)."""
-        struct.pack_into("<I", self.mm, self._md + MXCSR_OFF, mxcsr & 0xFFFF)
-        self.set_vectors(xmm if xmm is not None else self.vectors()[0], fpcr_for(mxcsr), 0)
-
-    def af(self) -> bool:
-        """AF from the lazy operands: bit 4 of a ^ b ^ r."""
-        a, b, r = struct.unpack_from("<QQQ", self.mm, self._md + AF_OPERANDS)
-        return bool((a ^ b ^ r) & 0x10)
-
-    def df(self) -> bool:
-        return bool(self.mm[self._md + DF_BYTE])
-
-    def pf(self) -> bool:
-        """PF from PF_RESULT."""
-        return parity_even(struct.unpack_from("<Q", self.mm, self._md + PF_RESULT)[0])
-
-    def set_af_df(self, af: bool, df: bool, pf: bool = True) -> None:
-        """Lazy operands that read back as `af` and `pf`, and DF."""
-        struct.pack_into("<QQQ", self.mm, self._md + AF_OPERANDS, 0x10 if af else 0, 0, 0 if pf else 1)
-        self.mm[self._md + DF_BYTE] = int(df)
-
     def teb_u32(self, offset: int) -> int:
         return int(struct.unpack_from("<I", self.mm, self._process(TEB_OFF) + offset)[0])
 
     # monitor code ----------------------------------------------------------------------------
     def _write_monitor(self) -> None:
-        struct.pack_into("<QQQ", self.mm, self._md, 0, 0, MONITOR_VA + DISPATCH_TABLE)
+        struct.pack_into("<QQQ", self.mm, self.vcpus[0].md, 0, 0, MONITOR_VA + DISPATCH_TABLE)
         vec = Assembler(MONITOR_VA + VECTORS)
         for slot in range(16):
             if slot == 4:                               # VBAR + 0x200: synchronous, current EL, SP_ELx
@@ -3822,7 +3842,7 @@ class VM:
         self.mm[DISPATCH_TABLE:DISPATCH_TABLE + 16 * DISPATCH_ENTRIES] = empty * DISPATCH_ENTRIES
         self._write_exception_entry()                    # it returns to the guest through the dispatcher
 
-    def _slow_sse(self, x: list[int], rip: int) -> int:
+    def _slow_sse(self, vcpu: Vcpu, x: list[int], rip: int) -> int:
         """Execute the SSE instruction at `rip` with x86fp (MXCSR unmasks an exception): the guest's
         registers, flags, XMM and MXCSR go into the model, one step runs on the VM's memory, and the
         result comes back. A fault the model raises is raised in the guest through the guest
@@ -3835,19 +3855,19 @@ class VM:
         try:                                           # the census: which instruction, under which masks
             from w2m.x86dec import decode
             self.slow_sse_classes[(decode(bytes(self.mem.read(rip, 15))).iclass,
-                                   int(struct.unpack_from("<I", self.mm, self._md + MXCSR_OFF)[0]) >> 7 & 0x3F)] += 1
+                                   int(struct.unpack_from("<I", self.mm, vcpu.md + MXCSR_OFF)[0]) >> 7 & 0x3F)] += 1
         except Exception:                              # noqa: BLE001 - the census never stops a run
             self.slow_sse_classes[("?", 0)] += 1
-        xmm, fpcr, fpsr = self.vectors()
-        mx = int(struct.unpack_from("<I", self.mm, self._md + MXCSR_OFF)[0]) | mxcsr_flags_from_fpsr(fpsr)
+        xmm, fpcr, fpsr = vcpu.vectors()
+        mx = int(struct.unpack_from("<I", self.mm, vcpu.md + MXCSR_OFF)[0]) | mxcsr_flags_from_fpsr(fpsr)
         rt = Runtime(Loaded(None, self.mem, rip, {}, 0))       # type: ignore[arg-type]
         th = rt.th
-        th.regs, th.rip, th.xmm, th.mxcsr, th.df = list(x[:16]), rip, list(xmm), mx, self.df()
-        th.fcw = struct.unpack_from("<H", self.mm, self._md + FCW_OFF)[0]
-        th.ymm_hi = [int.from_bytes(self.mm[self._md + YMM_HI_OFF + 16 * i:self._md + YMM_HI_OFF + 16 * i + 16],
+        th.regs, th.rip, th.xmm, th.mxcsr, th.df = list(x[:16]), rip, list(xmm), mx, vcpu.df()
+        th.fcw = struct.unpack_from("<H", self.mm, vcpu.md + FCW_OFF)[0]
+        th.ymm_hi = [int.from_bytes(self.mm[vcpu.md + YMM_HI_OFF + 16 * i:vcpu.md + YMM_HI_OFF + 16 * i + 16],
                                     "little") for i in range(16)]
-        th.flags = x86_flags(x, self)
-        st = self._st
+        th.flags = x86_flags(x, vcpu)
+        st = vcpu.st
         th.x87_sw, th.x87_tags = struct.unpack_from("<HB", self.mm, st + X87_SW_OFF)
         top = th.x87_sw >> 11 & 7                              # the state block keeps ST(i) as FXSAVE does
         for i in range(8):
@@ -3857,22 +3877,22 @@ class VM:
             rt.step()
         except (fp.SimdFault, GuestFault) as e:
             code = fp.xm_status(th.mxcsr) if isinstance(e, fp.SimdFault) else e.code
-            struct.pack_into("<I", self.mm, self._md + MXCSR_OFF, th.mxcsr)
+            struct.pack_into("<I", self.mm, vcpu.md + MXCSR_OFF, th.mxcsr)
             self._store_x87(st, th)                    # a faulting MMX store has set TOP 0 (set 065b)
-            self.set_vectors(xmm, fpcr, 0)
-            return self._raise_in_guest(x, xmm, code, rip)
+            vcpu.set_vectors(xmm, fpcr, 0)
+            return self._raise_in_guest(vcpu, x, xmm, code, rip)
         x[:16] = th.regs
         for f in "CZSOP":
             if th.flags[f] is not None:
                 x[FLAG_REG[f]] = int(bool(th.flags[f]))
         x[REG_UNDEFINED_FLAGS] = sum(1 << FLAG_BIT[f] for f in "CZSOPA" if th.flags[f] is None)
-        self.set_af_df(bool(th.flags["A"]), th.df, bool(th.flags["P"]))
-        struct.pack_into("<I", self.mm, self._md + MXCSR_OFF, th.mxcsr)
-        struct.pack_into("<H", self.mm, self._md + FCW_OFF, th.fcw)
+        vcpu.set_af_df(bool(th.flags["A"]), th.df, bool(th.flags["P"]))
+        struct.pack_into("<I", self.mm, vcpu.md + MXCSR_OFF, th.mxcsr)
+        struct.pack_into("<H", self.mm, vcpu.md + FCW_OFF, th.fcw)
         self._store_x87(st, th)
         for i, v in enumerate(th.ymm_hi):
-            self.mm[self._md + YMM_HI_OFF + 16 * i:self._md + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
-        self.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
+            self.mm[vcpu.md + YMM_HI_OFF + 16 * i:vcpu.md + YMM_HI_OFF + 16 * i + 16] = v.to_bytes(16, "little")
+        vcpu.set_vectors(th.xmm, fpcr_for(th.mxcsr), 0)          # LDMXCSR may have changed the controls
         x[17] = th.rip
         # on through the dispatcher's table: the next instruction's block is usually there already. Returning to the
         # miss stub cost one hvc #1 per model step (frontier 643a6283510c-1791841443768764000: 207,514 misses at
@@ -3886,10 +3906,10 @@ class VM:
         for i in range(8):
             self.mm[st + X87_ST_OFF + 16 * i:st + X87_ST_OFF + 16 * i + 10] = th.x87_regs[(top + i) & 7].to_bytes(10, "little")
 
-    def _raise_in_guest(self, x: list[int], xmm: list[int], code: int, rip: int) -> int:
+    def _raise_in_guest(self, vcpu: Vcpu, x: list[int], xmm: list[int], code: int, rip: int) -> int:
         """Have the guest runtime raise exception `code` at `rip` with the state in `x` and `xmm`:
         fill the save area as the EL1 vector would, and enter the runtime's exception call."""
-        save = self._md + SAVE_AREA
+        save = vcpu.md + SAVE_AREA
         for i in range(31):
             struct.pack_into("<Q", self.mm, save + 8 * i, x[i])
         struct.pack_into("<QQ", self.mm, save + 0x118, code, rip)
@@ -3969,15 +3989,6 @@ class VM:
             copy = copies.get(table)
             if copy is not None and struct.unpack_from("<Q", self.mm, copy + at - table)[0] == old:
                 self._words[(copy + at - table) // 8] = value
-
-    def serve(self, i: int) -> None:
-        """Make vCPU i the one the host's handlers act for: its monitor data page and state block (Sprint 107)."""
-        self.serving = i
-        if i == 0:
-            self._md, self._st = MONITOR_DATA, self._process(STATE_OFF)
-        else:
-            area = VCPU_AREA + i * VCPU_STRIDE
-            self._md, self._st = area + VS_MONITOR_DATA, area + VS_STATE
 
     def _vcpu_pages(self, i: int) -> list[tuple[int, int]]:
         """(virtual address, memory-file offset) of vCPU i's private pages: the monitor data page, the state block,
@@ -4059,7 +4070,8 @@ class VM:
             ttbrs.append(self._private_chain(i))
         reply = cmd(f"vcpus {n} {VCPU_AREA:x} " + " ".join(f"{t:x}" for t in ttbrs))
         self.vcpu_readback = [(int(reply[1 + 2 * k], 16), int(reply[2 + 2 * k], 16)) for k in range(n)]
-        self.vcpu_channels = [Channel(self.mm, VCPU_AREA + i * VCPU_STRIDE + VS_CHANNEL) for i in range(1, n)]
+        self.vcpus[1:] = [Vcpu(self.mm, i, self.monitor_commands, channel=Channel(self.mm, VCPU_AREA + i * VCPU_STRIDE + VS_CHANNEL))
+                          for i in range(1, n)]
 
     def _page_descriptor(self, va: int) -> int:
         """The offset in the memory file of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB block over it
@@ -4503,12 +4515,13 @@ class VM:
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         assert proc.stdin and proc.stdout
         pin, pout = proc.stdin, proc.stdout
+        vcpu = self.vcpus[0]                              # the one vCPU that serves a run (chain step 5: several)
 
         def cmd(c: str) -> list[str]:
             commands = [c]
-            if self._vswap is not None:                     # a switch's vectors, in the same write as what follows
-                commands.insert(0, "vswap {:x} {:x}".format(*self._vswap))
-                self._vswap = None
+            if vcpu.vswap is not None:                      # a switch's vectors, in the same write as what follows
+                commands.insert(0, "vswap {:x} {:x}".format(*vcpu.vswap))
+                vcpu.vswap = None
             pin.write("".join(k + "\n" for k in commands))
             pin.flush()
             for k in commands:
@@ -4522,7 +4535,7 @@ class VM:
             return reply
 
         self._max_steps = max_steps
-        self._set_budget()
+        self._set_budget(vcpu)
         self._release_runtime_lock()                      # a run before this one may have stopped inside the runtime
         # the compiler inside the VM, where nothing needs every miss to reach the host (Sprint 083)
         struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_ENABLED, int(
@@ -4530,14 +4543,14 @@ class VM:
         runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
         self._cmd = cmd
         if not self.threads:                              # the first thread (scheduler.py; Sprint 051)
-            self._add_thread(self.current_tid, PROCESS_VA + TEB_OFF, self._stack, start=self.ld.entry)
-        if struct.unpack_from("<I", self.mm, self._md + MXCSR_OFF)[0] == 0:
-            struct.pack_into("<I", self.mm, self._md + MXCSR_OFF, 0x1F80)      # SDM Vol 1 10.2.3: reset value
-        struct.pack_into("<Q", self.mm, self._md + LOCK_OWNER, 1)              # vCPU 0's
-        if struct.unpack_from("<H", self.mm, self._md + FCW_OFF)[0] == 0:
-            struct.pack_into("<H", self.mm, self._md + FCW_OFF, 0x27F)        # as a Windows thread starts
+            self._add_thread(self.current_tid(vcpu), PROCESS_VA + TEB_OFF, self._stack, start=self.ld.entry)
+        if struct.unpack_from("<I", self.mm, vcpu.md + MXCSR_OFF)[0] == 0:
+            struct.pack_into("<I", self.mm, vcpu.md + MXCSR_OFF, 0x1F80)       # SDM Vol 1 10.2.3: reset value
+        struct.pack_into("<Q", self.mm, vcpu.md + LOCK_OWNER, vcpu.index + 1)
+        if struct.unpack_from("<H", self.mm, vcpu.md + FCW_OFF)[0] == 0:
+            struct.pack_into("<H", self.mm, vcpu.md + FCW_OFF, 0x27F)         # as a Windows thread starts
         cmd(f"vset {' '.join('0' * 32 for _ in range(16))} "
-            f"{fpcr_for(struct.unpack_from('<I', self.mm, self._md + MXCSR_OFF)[0]):x} 0")
+            f"{fpcr_for(struct.unpack_from('<I', self.mm, vcpu.md + MXCSR_OFF)[0]):x} 0")
         for name, v in (("CPACR_EL1", CPACR_FPEN), ("MAIR_EL1", 0xFF), ("TCR_EL1", TCR), ("TTBR0_EL1", self.ttbr),
                         ("VBAR_EL1", MONITOR_VA + VECTORS), ("SCTLR_EL1", SCTLR), ("ACTLR_EL1", ACTLR_ENTSO)):
             cmd(f"sys {SYS_REG_ID[name]:x} {v:x}")
@@ -4545,7 +4558,7 @@ class VM:
             self._start_vcpus(cmd)
         if TRANSPORT == "channel":
             cmd(f"channel {CHANNEL:x}")
-            self._channel = Channel(self.mm)
+            vcpu.channel = Channel(self.mm)
         x = [0] * 31
         x[4] = self.ld.stack_top - 0x100 - 8                  # as runtime.Runtime: RSP % 16 == 8
         x[17] = self.ld.entry
@@ -4566,7 +4579,7 @@ class VM:
                     stop = machine.stop_requested
                     break
                 if time.monotonic() >= report_at:             # a run that goes quiet says where it is
-                    reported = self._progress(reported, x)
+                    reported = self._progress(vcpu, reported, x)
                     report_at = time.monotonic() + PROGRESS_SECONDS
                 if time.monotonic() >= check_at:              # the stop each second, so a run's time is its own
                     check_at = time.monotonic() + STOP_CHECK_SECONDS     # (Sprint 095; KIT_DIARY #57)
@@ -4577,17 +4590,17 @@ class VM:
                 started = time.perf_counter_ns()
                 self.exit_ns[run.last_kind] += started - marked
                 ms = interrupt_every_ms if interrupt_every_ms is not None else timeout_ms
-                count, limit = struct.unpack_from("<QQ", self.mm, self._md)
-                struct.pack_into("<QQ", self.mm, self._md + SLICE_UNTIL, self._slice_until(run.forced_stop), max_steps)
+                count, limit = struct.unpack_from("<QQ", self.mm, vcpu.md)
+                struct.pack_into("<QQ", self.mm, vcpu.md + SLICE_UNTIL, self._slice_until(vcpu, run.forced_stop), max_steps)
                 # another process ready or waiting with a deadline needs the host at each slice's end (_slice_until); one
                 # becomes ready only by a host request, after which this is computed again
                 struct.pack_into("<Q", self.mm, RUN_TABLE + RT_IN_VM, int(
                     SWITCH_IN_VM and not self.lockstep and not run.forced_stop and not self._other_process_due()))
                 if not runtime_lo <= pc < runtime_hi:           # in the runtime's C, x23 is the C's own
                     x[REG_BUDGET] = (limit - count) & M64       # the budget left, in x23
-                if self._channel is not None:
-                    swap, self._vswap = self._vswap, None
-                    e, cpsr = self._channel.run(pc, cpsr, x, ms, swap)
+                if vcpu.channel is not None:
+                    swap, vcpu.vswap = vcpu.vswap, None
+                    e, cpsr = vcpu.channel.run(pc, cpsr, x, ms, swap)
                     self.monitor_commands["run"] += 1
                     if swap:
                         self.monitor_commands["vswap"] += 1
@@ -4599,22 +4612,22 @@ class VM:
                     cpsr = int(r[4], 16)
                 marked = time.perf_counter_ns()
                 self.run_ns += marked - started
-                out = self.serve_exit(run, e, cpsr)
+                out = self.serve_exit(run, vcpu, e, cpsr)
                 if isinstance(out, Stop):
                     stop = out.reason
                     break
                 if isinstance(out, Slice):
                     yield "slice"                            # another VM's turn; this thread goes on after
-                    x, pc, cpsr = self._load_thread(self.threads[self.current_tid]), self.resume_va, CPSR_EL1H
+                    x, pc, cpsr = self._load_thread(vcpu, self.threads[self.current_tid(vcpu)]), self.resume_va, CPSR_EL1H
                     continue
                 if isinstance(out, Switched):
                     switched = out.switched
                     while switched is IDLE:
                         yield "idle"
-                        switched = self._resume_idle(e.x)
+                        switched = self._resume_idle(vcpu, e.x)
                     if switched is None:
                         assert not out.at_slice
-                        self.exit_code = self.threads[self.current_tid].exit_code
+                        self.exit_code = self.threads[self.current_tid(vcpu)].exit_code
                         stop = "ExitProcess"
                         break
                     x, pc, cpsr = switched, self.resume_va, CPSR_EL1H
@@ -4626,25 +4639,26 @@ class VM:
                 BridgeRequestError) as ex:              # DecodeError: record frontier-...1791800847886016000 crashed
             stop = f"{type(ex).__name__}: {ex}"
         finally:
-            for channel in self.vcpu_channels:                   # each vCPU's thread returns
-                channel.leave()
-            self.vcpu_channels = []
-            if self._channel is not None:
-                self._channel.leave()                            # the monitor is back on its pipe
-                self._channel = None
+            for other in self.vcpus[1:]:                         # each vCPU's thread returns
+                assert other.channel is not None
+                other.channel.leave()
+            del self.vcpus[1:]
+            if vcpu.channel is not None:
+                vcpu.channel.leave()                             # the monitor is back on its pipe
+                vcpu.channel = None
             try:
                 pin.write("quit\n")
                 pin.flush()
             except BrokenPipeError:
                 pass
             proc.wait(timeout=10)
-        executed = struct.unpack_from("<Q", self.mm, self._md)[0]
+        executed = vcpu.counts()[0]
         self.final = x
         return Result(self.exit_code, bytes(self.out), executed, len(self.addrs), self.calls(), stop,
                       self.calls_total(), self.calls_dropped())
 
-    def serve_exit(self, run: RunState, e: VcpuExit, cpsr: int) -> Outcome:
-        """One exit of the vCPU, served (docs/design-several-vcpus.md, the host designed twice: one exit handler): the
+    def serve_exit(self, run: RunState, vcpu: Vcpu, e: VcpuExit, cpsr: int) -> Outcome:
+        """One exit of `vcpu`, served (docs/design-several-vcpus.md, the host designed twice: one exit handler): the
         count kept from x23, then the exit by kind. What the run does next is the answer; the yields to a
         kernel.Machine are the caller's (Slice, Switched). Raises what the handlers raise (Unimplemented, ...)."""
         runtime_lo, runtime_hi = MONITOR_VA + RUNTIME_IMAGE, MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE
@@ -4654,14 +4668,14 @@ class VM:
         if not runtime_lo <= e.pc < runtime_hi:
             # the limit as the slice stub left it: it raises the limit and x23 together (before, the limit
             # read before the run made the count short by each refill, and the guest's clock went back)
-            limit = struct.unpack_from("<Q", self.mm, self._md + 8)[0]
+            limit = struct.unpack_from("<Q", self.mm, vcpu.md + 8)[0]
             left = x[REG_BUDGET] - (1 << 64) if x[REG_BUDGET] >> 63 else x[REG_BUDGET]
             if e.kind == "hvc" and e.syndrome & 0xFFFF in (HVC_SLOW_SSE, HVC_SLOW_STEP):
                 left += self._unrun_after(e.pc - 4)           # the block's instructions after the step
             elif e.kind == "hvc" and e.syndrome & 0xFFFF == HVC_FAULT_GIVE_BACK and self._in_code_cache(x[2]):
                 left += self._unrun_after(x[2]) + 1           # the faulting instruction and those after it
             x[REG_BUDGET] = left & M64
-            struct.pack_into("<Q", self.mm, self._md, (limit - left) & M64)   # the count, from x23
+            struct.pack_into("<Q", self.mm, vcpu.md, (limit - left) & M64)   # the count, from x23
         if e.kind == "cancel" and run.interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
             # the rule specs/guest_state.json forbids: restart the interrupted instruction
             x[17] = self.x86_address_at(e.pc)
@@ -4673,8 +4687,8 @@ class VM:
         if e.kind == "cancel" and run.interrupt_every_ms is not None:
             # an asynchronous stop at an arbitrary host instruction: stop at the next
             # block entry instead (set the stop point below the count) and resume as is
-            executed = struct.unpack_from("<Q", self.mm, self._md)[0]
-            struct.pack_into("<Q", self.mm, self._md + 8, executed)
+            executed = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
+            struct.pack_into("<Q", self.mm, vcpu.md + 8, executed)
             run.forced_stop = True
             return Resume(e.pc, x, cpsr)
         if e.kind == "cancel":
@@ -4698,7 +4712,7 @@ class VM:
             self._dispatch_insert(target, va)
             return Resume(self.miss_va + 4, x, CPSR_EL1H)     # ic iallu; dsb; isb; re-dispatch
         if imm == 8:
-            if not self._host_request(x):
+            if not self._host_request(vcpu, x):
                 exc = self.exception()
                 if exc is not None and run.on_exception is not None and run.on_exception(self, exc):
                     self.exit_code = None
@@ -4725,28 +4739,28 @@ class VM:
                             f"(x86 0x{self.x86_address_at(e.elr):x})")
             return Stop(f"VmExit: EL1 exception EC 0x{ec:x} at x86 0x{self.x86_address_at(e.elr):x}")
         if imm in (HVC_SLOW_SSE, HVC_SLOW_STEP):
-            return Resume(self._slow_sse(x, where), x, CPSR_EL1H)
+            return Resume(self._slow_sse(vcpu, x, where), x, CPSR_EL1H)
         if imm == 4 and run.forced_stop:
             run.forced_stop = False
-            self._set_budget()
+            self._set_budget(vcpu)
             if run.on_boundary:
                 run.on_boundary(self, x, where)
             return Resume(e.pc, x, CPSR_EL1H)                 # on into the block from its entry
         if imm == 4:
-            executed = struct.unpack_from("<Q", self.mm, self._md)[0]
+            executed = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
             if executed >= run.max_steps:
                 return Stop("max_steps")
-            self._set_budget()
-            self._wake_expired()
+            self._set_budget(vcpu)
+            self._wake_expired(vcpu)
             if self.machine is not None and self.machine.others_ready(self):
                 x[17] = where
-                self._give_back(e.pc)
-                self._save_thread(self.threads[self.current_tid], x)
+                self._give_back(vcpu, e.pc)
+                self._save_thread(vcpu, self.threads[self.current_tid(vcpu)], x)
                 return Slice(x)                               # another VM's turn; this thread goes on after
             if len(self.threads) > 1:                         # the time slice ran out: another thread's turn
                 x[17] = where
-                self._give_back(e.pc)
-                return Switched(self._schedule(x, 0), at_slice=True)
+                self._give_back(vcpu, e.pc)
+                return Switched(self._schedule(vcpu, x, 0), at_slice=True)
             return Resume(e.pc, x, CPSR_EL1H)
         if imm == HVC_FAULT_GIVE_BACK:                        # given back above; on to w2m_exception
             self.fault_give_backs += 1
@@ -4755,19 +4769,19 @@ class VM:
             x[17] = 1 if self._code_written(x[17]) else 0
             return Resume(e.pc, x, CPSR_EL1H)
         if imm == HVC_SCHEDULE:                               # a service handed the vCPU over (state.schedule)
-            schedule = struct.unpack_from("<I", self.mm, self._st + STATE_SCHEDULE)[0]
-            struct.pack_into("<I", self.mm, self._st + STATE_SCHEDULE, 0)
-            return Switched(self._schedule(x, schedule), at_slice=False)
+            schedule = struct.unpack_from("<I", self.mm, vcpu.st + STATE_SCHEDULE)[0]
+            struct.pack_into("<I", self.mm, vcpu.st + STATE_SCHEDULE, 0)
+            return Switched(self._schedule(vcpu, x, schedule), at_slice=False)
         if imm & 0x40:
             return Stop(f"UndefinedFlag: {'CZSOP'[imm & 7]} read while undefined at 0x{where:x}")
         return Stop(f"VmExit: hvc #{imm}")
 
-    def _progress(self, before: tuple[int, Counter[int], Counter[tuple[int, int]], int, float],
+    def _progress(self, vcpu: Vcpu, before: tuple[int, Counter[int], Counter[tuple[int, int]], int, float],
                   x: list[int]) -> tuple[int, Counter[int], Counter[tuple[int, int]], int, float]:
         """One progress line on stderr: instructions and their rate since the last line, exits by
         hvc and the busiest exit sites since then, calls made, each thread's status, and the x86
         address the current thread is at."""
-        executed = struct.unpack_from("<Q", self.mm, self._md)[0]
+        executed = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
         calls = sum(self.calls_total().values())
         now = time.monotonic()
         exits = Counter(self.exits)
@@ -4778,7 +4792,7 @@ class VM:
         print(f"progress: {self.modules.image_name}: {executed} instructions ({(executed - before[0]) / max(now - before[4], 1e-6) / 1e6:.2f}M/s); "
               f"calls {calls} (+{calls - before[3]}); exits {dict(+exits)}; sites "
               + ", ".join(f"hvc {imm} at 0x{at:x} {n}" for (imm, at), n in (+sites).most_common(3))
-              + f"; threads {dict(threads)}; switches in the VM {self.switches_in_vm()}; hand-overs in the host {dict(self.handovers)}; thread {self.current_tid}"
+              + f"; threads {dict(threads)}; switches in the VM {self.switches_in_vm()}; hand-overs in the host {dict(self.handovers)}; thread {self.current_tid(vcpu)}"
               + f" at 0x{x[17]:x}", file=sys.stderr, flush=True)
         if self.slow_sse_classes:
             print("slow sse: " + ", ".join(f"{c} masks 0x{m:x} {n}" for (c, m), n in self.slow_sse_classes.most_common(8)),
@@ -4821,13 +4835,13 @@ class VM:
         os.unlink(self.path)
 
 
-def x86_flags(x: list[int], vm: VM | None = None) -> dict[str, bool | None]:
-    """The x86 flags held in a register snapshot, None where undefined; with `vm`, AF and PF too (lazy, from the
-    monitor data page; without it PF reads None)."""
+def x86_flags(x: list[int], vcpu: Vcpu | None = None) -> dict[str, bool | None]:
+    """The x86 flags held in a register snapshot, None where undefined; with the `vcpu` it came from, AF and PF too
+    (lazy, from its monitor data page; without it PF reads None)."""
     out = {f: None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT[f] & 1 else bool(x[FLAG_REG[f]]) for f in "CZSO"}
-    out["P"] = None if vm is None or x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["P"] & 1 else vm.pf()
-    if vm is not None:
-        out["A"] = None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["A"] & 1 else vm.af()
+    out["P"] = None if vcpu is None or x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["P"] & 1 else vcpu.pf()
+    if vcpu is not None:
+        out["A"] = None if x[REG_UNDEFINED_FLAGS] >> FLAG_BIT["A"] & 1 else vcpu.af()
     return out
 
 
@@ -4863,12 +4877,12 @@ def lockstep(data: bytes, max_steps: int = 1_000_000, limit: int = 20) -> Lockst
         for i in range(16):
             if x[i] != th.regs[i]:
                 diffs.append(f"{where}: r{i} vm 0x{x[i]:x} model 0x{th.regs[i]:x}")
-        vf = x86_flags(x, v)
+        vf = x86_flags(x, v.vcpus[0])
         for f in "CZSOPA":
             if vf[f] != th.flags[f]:
                 diffs.append(f"{where}: {f}F vm {vf[f]} model {th.flags[f]}")
-        if v.df() != th.df:
-            diffs.append(f"{where}: DF vm {v.df()} model {th.df}")
+        if v.vcpus[0].df() != th.df:
+            diffs.append(f"{where}: DF vm {v.vcpus[0].df()} model {th.df}")
         if len(diffs) > limit:
             raise CompileError(f"lockstep: more than {limit} differences")
         n[0] += 1
@@ -4982,11 +4996,11 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
             names = ["rip", *(f"r{i}" for i in range(16))]
             diffs.extend(f"{where}: {n} vm 0x{g:x} model 0x{w:x}"
                          for n, g, w in zip(names, got, want, strict=True) if g != w)
-            vf = x86_flags(x, v)
+            vf = x86_flags(x, v.vcpus[0])
             diffs.extend(f"{where}: {f}F vm {vf[f]} model {th.flags[f]}"
                          for f in "CZSOPA" if vf[f] != th.flags[f])
-            if v.df() != th.df:
-                diffs.append(f"{where}: DF vm {v.df()} model {th.df}")
+            if v.vcpus[0].df() != th.df:
+                diffs.append(f"{where}: DF vm {v.vcpus[0].df()} model {th.df}")
             if window(v.mem) != window(model.mem):
                 diffs.append(f"{where}: stack window differs")
             for ea in spans:
@@ -5014,7 +5028,7 @@ def state_differential(data: bytes, seed: int = 2026_10_08, per_instruction: int
         for f in "CZSOP":
             x[FLAG_REG[f]] = int(flags[f])
         x[REG_UNDEFINED_FLAGS] = 0
-        v.set_af_df(flags["A"], df, flags["P"])
+        v.vcpus[0].set_af_df(flags["A"], df, flags["P"])
         pending.append((addr, k))
 
     try:

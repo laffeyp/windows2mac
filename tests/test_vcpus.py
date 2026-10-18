@@ -52,7 +52,7 @@ def run_four(monkeypatch: pytest.MonkeyPatch, shared_monitor_data: bool = False)
         regs[28] = vm_backend.MONITOR_VA + vm_backend.MONITOR_DATA
         regs[27] = vm_backend.PROCESS_VA + vm_backend.STATE_OFF + STATE_SLOT
         regs[26] = heap
-        exits = [c.run(vm_backend.MONITOR_VA + at, vm_backend.CPSR_EL1H, regs, 5_000, None)[0] for c in v.vcpu_channels]
+        exits = [c.run(vm_backend.MONITOR_VA + at, vm_backend.CPSR_EL1H, regs, 5_000, None)[0] for c in (u.channel for u in v.vcpus[1:])]
         seen["exits"] = [(e.kind, e.x[0], e.x[1], e.x[2], e.x[3]) for e in exits]
         seen["pages"] = [struct.unpack_from("<Q", v.mm, vm_backend.VCPU_AREA + i * vm_backend.VCPU_STRIDE
                                             + vm_backend.VS_MONITOR_DATA + SLOT)[0] for i in range(1, 4)]
