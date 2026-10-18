@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 116
-status: active
+status: done
 phase: 5
 pass_kind: architecture
 ---
@@ -79,3 +79,15 @@ No behaviour changes on one vCPU.
 
 The host frees and takes the runtime lock through one object by one rule each; behaviour unchanged on one vCPU; CI
 green.
+
+## observed
+- **Made** (0a0e9314): `RuntimeLock` (`reset`, `holder`, `give`, `enter`, `leave`, `close`) and `build_runtime_lock`;
+  `serve_exit` wrapped by `enter` and `leave` in `steps`; `_release_runtime_lock` and its four call sites gone (the
+  invariant's grep finds nothing); `hosts_count` and its test in `tests/test_runtime_lock.py`.
+- **Judge:** the batch run (frontier-643a6283510c-1792299009808193000) conforms: the log's 168 lines, 0 divergences,
+  80,711,430,985 instructions; `check_records.py` 0 violations; `run_numbers.py` 107 numbers, 0 that do not add up;
+  the same eight exit kinds (hvc 1 1,091, 4 8, 8 39,756, 10 258, 11 286, 12 2, 13 13,645, 14 167). 456 of 458
+  classes in 64 s (FCOS and FSIN as before; each class run's faults resume through on_exception, the path of Sprint
+  106's hang), 68 of 68 families. Before the commit, the 34 VM test files passed (186 tests).
+- **New judge:** the shared lock, two host threads, 2,000 increments each: 4,000 in 5 of 5 runs.
+- **Plant:** unshared, the same threads: 2,000 to 2,119 in 20 of 20 runs (none near 4,000).
