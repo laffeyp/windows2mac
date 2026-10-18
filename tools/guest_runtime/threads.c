@@ -147,9 +147,12 @@ void w2m_ready_thread(u32 tid) {
     }
 }
 
-/* vm_backend.py _wake_expired: on the instruction clock, a blocked thread whose deadline has passed is ready. */
+/* vm_backend.py _wake_expired: a blocked thread whose deadline has passed is ready, on the wall clock as on the
+ * instruction clock (Sprint 120: on the wall clock a 20 ms Sleep beside a spinning thread never ended). The host's
+ * clock (mode 1) is read by a host call, which the switch does not make: the host decides there (lockstep runs do not
+ * switch in the VM). */
 static void wake_expired(void) {
-    if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return;
+    if (*monitor_word(W2M_CLOCK_MODE_OFF) == 1) return;
     u64 now = w2m_counter_now();
     for (u64 i = 0; i < RUN->count; i++) {
         struct w2m_run_entry *e = run_entry(i);
@@ -331,6 +334,12 @@ u64 k32_GetExitCodeThread(u64 h, u64 code) {
 /* For sync_objects.c: a thread's handle signals once the thread has ended. */
 int w2m_thread_ended(u32 tid) { return host(W2M_THREAD_EXIT_CODE, tid, 0, 0) != STILL_ACTIVE; }
 
+/* A thread suspended from another vCPU while it was in a call (vm_backend.py _await_put_down, Sprint 120) runs no
+ * instruction after it: the call returns to the switch, which declines a suspended thread, and the host puts it down. */
+static void put_down_if_suspended(void) {
+    if (RUN->count && run_entry(*monitor_word(W2M_CURRENT_OFF))->suspend) w2m_state()->schedule |= W2M_SCHEDULE_YIELD;
+}
+
 u64 k32_SuspendThread(u64 h) {
     u32 tid = thread_of(W2M_API_SuspendThread, h);
     if (tid == (u32)w2m_teb()->client_thread) w2m_unimplemented(W2M_API_SuspendThread, h);   /* itself: not in the rows */
@@ -339,6 +348,7 @@ u64 k32_SuspendThread(u64 h) {
         set_error(ERROR_ACCESS_DENIED);
         return w2m_logged(W2M_API_SuspendThread, h, 0xFFFFFFFFu);
     }
+    put_down_if_suspended();
     return w2m_logged(W2M_API_SuspendThread, h, previous);
 }
 
@@ -351,11 +361,19 @@ u64 k32_ResumeThread(u64 h) {
  * ContextFlags ask; the thread must be another. On one vCPU a thread suspended while it runs was stopped by its
  * time slice at an x86 instruction boundary, so the saved state is its registers there (rows threads.context: a
  * spinner's RIP and RSP; probes/running_thread_context, every register). On several vCPUs SuspendThread returns once
- * the thread's vCPU has put it down (vm_backend.py _stop_elsewhere, Sprint 119). */
+ * the thread's vCPU has put it down (vm_backend.py _stop_elsewhere, Sprint 119), or sooner when the caller is
+ * suspended meanwhile, and GetThreadContext then waits for it the same way (Sprint 120). */
 u64 k32_GetThreadContext(u64 h, u64 context) {
     u32 tid = thread_of(W2M_API_GetThreadContext, h);
     if (tid == (u32)w2m_teb()->client_thread) w2m_unimplemented(W2M_API_GetThreadContext, h);   /* itself */
-    host(W2M_THREAD_CONTEXT, tid, context, 0);
+    /* This thread suspended while it waited for the other's put-down (Sprint 120): it is put down at the call and calls
+     * again once resumed, so no host waits holding a suspended thread and every such wait ends. Windows instead
+     * completes the call and stops the thread on its return to user mode, so the CONTEXT is written before the
+     * resume there and after it here; no row reads it in between. */
+    if (!host(W2M_THREAD_CONTEXT, tid, context, 0)) {
+        w2m_state()->schedule |= W2M_SCHEDULE_RETRY;
+        return 0;
+    }
     return w2m_logged(W2M_API_GetThreadContext, h, 1);
 }
 

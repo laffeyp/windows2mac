@@ -9,9 +9,10 @@ thread's stale saved state (RIP 0), retired no instruction and went unseen in th
 
 A thread suspended while another vCPU runs it (Sprint 119, chain step 6): the threads and running_thread_context
 families on two vCPUs print Windows' rows, SuspendThread reaching the other vCPU in about 6 runs of 10 (measured), so
-each test runs until it has. The plants: SuspendThread not waiting for the other vCPU to put the thread down (the run
-stops at its limit, the spinner never stopped and vCPU 0, waiting, keeping no deadline), and a thread put down without
-its vectors written to its slot (seen by its witness, not the rows)."""
+each test runs until it has. The plants: SuspendThread not waiting for the other vCPU to put the thread down (the
+spinner counts on after it is suspended: suspend.frozen differs; until Sprint 120 the run instead stopped at its limit,
+vCPU 0's wait keeping no deadline), and a thread put down without its vectors written to its slot (seen by its witness,
+not the rows)."""
 
 from __future__ import annotations
 
@@ -99,7 +100,7 @@ def test_thread_suspended_on_another_vcpu_prints_windows_rows(monkeypatch: pytes
 
 
 @pytest.mark.hvf
-@pytest.mark.timeout(300)                     # the planted run ends at the family's 60 s stop
+@pytest.mark.timeout(300)                     # up to RUNS probe runs
 def test_planted_suspend_not_waiting_lets_the_thread_run_on(monkeypatch: pytest.MonkeyPatch) -> None:
     """SuspendThread returns while the other vCPU still runs the thread: it counts on after it is suspended."""
     from w2m import vm_backend

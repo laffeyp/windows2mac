@@ -377,6 +377,7 @@ ASYNC_STOP_RULE = "forward"     # "backward" exists only so a test can show the 
 
 
 IDLE: list[int] = []                       # _switch: no thread of this VM can run (a kernel.Machine runs another); compared by identity
+DEADLOCK_CHECK_SECONDS = 1.0      # a wait of every vCPU with no deadline and no notify this long is a deadlock (120)
 PARK: list[int] = []                       # _switch on a vCPU past the first: no thread for it; it waits for one (Sprint 118)
 
 
@@ -2409,6 +2410,7 @@ class VM:
         self._stopping: str | None = None               # why a run of several vCPUs stops, from whichever saw it first
         self._changed = threading.Condition()           # notified while a vCPU is parked: a thread may be ready
         self._parked = 0                                # vCPUs waiting for a thread
+        self._changes = 0                               # notifies so far: a wait that saw none saw nothing change
         self.vcpu_readback: list[tuple[int, int]] = []  # each vCPU's ACTLR_EL1 and TTBR0_EL1, read by its owner
         self._private_tables: list[dict[object, int]] = []   # per vCPU past the first: shared table -> its copy
         self._private_regions: set[int] = set()         # the 2 MB regions whose leaves differ per vCPU
@@ -2672,18 +2674,34 @@ class VM:
         count = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
         struct.pack_into("<Q", self.mm, vcpu.md, count - self._stop_block_length(after_stop))
 
-    def _wake_expired(self, vcpu: Vcpu) -> None:
-        """On the instruction clock, make ready every blocked thread whose deadline has passed, as a timed-out wait on
-        Windows runs again whether or not another thread is busy (before, it ran only when no thread was ready, and each
-        slice's end left the VM for it)."""
+    def _counter_now(self, vcpu: Vcpu) -> int:
+        """The guest's 10 MHz counter now, as process.c counter_now reads it: on the instruction clock `vcpu`'s count
+        and the warp; else self.clock(), the host's clock (mode 1) or time.monotonic, which is mach_absolute_time on
+        macOS (time.get_clock_info), the counter the guest reads as CNTVCT_EL0 (Sprint 120, measured)."""
         if struct.unpack_from("<Q", self.mm, vcpu.md + CLOCK_MODE)[0] != 2:
-            return
+            return int(self.clock() & M64)
         executed = struct.unpack_from("<Q", self.mm, vcpu.md)[0]
         rate, warp = struct.unpack_from("<Q", self.mm, vcpu.md + CLOCK_RATE)[0], self._clock_warp()
-        now = executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp
+        return int(executed // rate * 10_000_000 + executed % rate * 10_000_000 // rate + warp)
+
+    def _wake_expired(self, vcpu: Vcpu) -> None:
+        """Make ready every blocked thread whose deadline has passed, as a timed-out wait on Windows runs again whether
+        or not another thread is busy. Before Sprint 120 only the instruction clock did: on the wall clock a thread
+        slept past its deadline for as long as another thread stayed ready (a 20 ms Sleep beside a spinner never
+        ended, on one vCPU or two)."""
+        now = self._counter_now(vcpu)
         for t in self.threads.values():
             if t.status == "blocked" and t.deadline != M64 and t.deadline <= now:
                 t.status = "ready"
+
+    def _seconds_to_deadline(self, vcpu: Vcpu) -> float | None:
+        """How long a host thread may wait before a blocked thread's deadline passes (0 when one has): the earliest
+        finite deadline of a blocked, unsuspended thread no other vCPU holds; None when there is none."""
+        deadlines = [t.deadline for t in self.threads.values() if t.status == "blocked" and t.suspend == 0
+                     and t.deadline != M64 and not self._held_elsewhere(vcpu, t)]
+        if not deadlines:
+            return None
+        return max(0, min(deadlines) - self._counter_now(vcpu)) / 10_000_000
 
     def _other_process_due(self) -> bool:
         """Whether another VM of this machine is ready or waits with a deadline (the game's UnityCrashHandler64.exe
@@ -3154,6 +3172,12 @@ class VM:
             t.suspend -= 1
             return t.suspend + 1
         if sub == THREAD_CONTEXT:
+            if self._held_elsewhere(vcpu, t):            # another vCPU still runs it (Sprint 120)
+                if not t.suspend:
+                    raise Unimplemented(f"GetThreadContext of thread {t.tid}, running unsuspended on another vCPU "
+                                        "(not in the rows)")
+                if not self._await_put_down(vcpu, t):
+                    return 0                             # the caller is suspended: threads.c retries the call
             buf = bytearray(self.mem.read(a1, 1232))
             flags = struct.unpack_from("<I", buf, 48)[0]
             mon = dict(zip((a for a, _ in PER_THREAD_MONITOR), t.monitor))
@@ -3184,14 +3208,28 @@ class VM:
         cleared). The kicked vCPU's next run ends its slice for a suspended thread (_slice_until 0, threads.c
         w2m_switch declining), so its host switches away. Windows' SuspendThread may return before the thread stops
         (GetThreadContext completes it); here it returns after, which the rows cannot tell from a quick stop."""
+        self._notify_waiters()                           # a waiter elsewhere may wait on, or be, this thread
         if not self._held_elsewhere(vcpu, t):
             return
         self.remote_suspends += 1
+        self._await_put_down(vcpu, t)
+
+    def _await_put_down(self, vcpu: Vcpu, t: GuestThread) -> bool:
+        """Kick the vCPU that holds suspended thread `t` and wait, giving the lock back, until it has put `t` down at an
+        instruction boundary (its mark cleared): True. False, at once, when the caller's own thread is suspended
+        meanwhile (Sprint 120): two threads on two vCPUs suspending each other each waited for the other's thread,
+        a hang. Its caller then puts the thread down too (threads.c), so no waiter holds a suspended thread and every
+        wait ends: the thread it waits for is suspended, so its vCPU stops running it within a slice, and a serve of
+        it that waits returns here."""
+        cur = self.threads[self.current_tid(vcpu)]
         self.vcpus[t.vcpu - 1].kick()
         while self._held_elsewhere(vcpu, t):
             if self._stopping is not None:
                 raise VcpusStopped(self._stopping)
+            if cur.suspend:
+                return False
             self._wait_for_change(vcpu)
+        return True
 
     def _set_budget(self, vcpu: Vcpu) -> None:
         """The step budget the block entries check: the run's limit, or with more than one thread a time slice."""
@@ -3298,27 +3336,43 @@ class VM:
         return any(self._held_elsewhere(vcpu, t) and t.status == "ready" for t in self.threads.values())
 
     def _wait_for_change(self, vcpu: Vcpu) -> None:
-        """Give the shared runtime lock back and wait until a serve on another vCPU, or the run's stop, notifies; then
-        take the lock again. The waiter counts itself before it gives the lock, so a change made under the lock after
-        that is notified (_notify_waiters)."""
+        """Give the shared runtime lock back and wait until a serve on another vCPU, or the run's stop, notifies, or the
+        earliest deadline of a blocked thread passes (Sprint 120: before, the wait kept no deadline, and a thread whose
+        timeout passed meanwhile waited on); then take the lock again and make the expired waits ready. The waiter
+        counts itself before it gives the lock, so a change made under the lock after that is notified
+        (_notify_waiters)."""
         assert self.lock.shared
+        timeout = self._seconds_to_deadline(vcpu)
+        if timeout == 0:
+            self._wake_expired(vcpu)
+            return
         with self._changed:
             self._parked += 1
+            changes = self._changes
+            everyone = self._parked == self.thread_vcpus      # no vCPU runs or serves: only a deadline can change
             self.lock.give()
-            self._changed.wait()
+            self._changed.wait(DEADLOCK_CHECK_SECONDS if timeout is None and everyone else timeout)
+            # every vCPU waited a whole check with no deadline and no notify: nothing can wake a thread (Sprint 120:
+            # before, the run hung past its limit, which only a run of the VM keeps)
+            deadlock = timeout is None and self._parked == self.thread_vcpus and self._changes == changes
             self._parked -= 1
         self.lock.enter(vcpu)
+        if deadlock:
+            self._stop_all("Unimplemented: every thread waits with no timeout and nothing can wake one (a deadlock)")
+        self._wake_expired(vcpu)
 
     def _notify_waiters(self) -> None:
         """After a serve, under the lock: a waiting vCPU looks again."""
         if self._parked:
             with self._changed:
+                self._changes += 1
                 self._changed.notify_all()
 
     def _park(self, vcpu: Vcpu) -> list[int] | None:
         """Under the lock, on a vCPU past the first: load the first ready thread no vCPU holds, in thread id order, and
         answer its registers; wait while there is none; None when the run stops."""
         while self._stopping is None:
+            self._wake_expired(vcpu)
             t = next((t for _, t in sorted(self.threads.items())
                       if t.status == "ready" and t.suspend == 0 and not self._held_elsewhere(vcpu, t)), None)
             if t is not None:
@@ -3334,6 +3388,7 @@ class VM:
         with self._changed:
             if self._stopping is None:
                 self._stopping = reason
+            self._changes += 1
             self._changed.notify_all()
         for v in self.vcpus[:self.thread_vcpus]:
             if v.channel is not None:
@@ -3403,6 +3458,8 @@ class VM:
         threads can run (the driver runs another VM and resumes this one when a thread is ready again). `saved`: cur
         was put down already (vCPU 0 waiting, below, then idle), so x is stale and another vCPU may have run it since;
         whichever thread goes on, cur included, is loaded from its run table entry."""
+        if self.lock.shared:                             # a deadline passed while this vCPU served or waited
+            self._wake_expired(vcpu)
         order = sorted(self.threads)
         i = order.index(cur.tid)
         rotation = order[i + 1:] + order[:i + 1]
@@ -3416,6 +3473,10 @@ class VM:
         while nxt is None and self._runs_elsewhere(vcpu):   # vCPU 0 waits while another vCPU runs a thread
             if self._stopping is not None:
                 raise VcpusStopped(self._stopping)
+            if self.machine is not None and len(self.machine.vms) > 1:
+                # vCPU 0 drives the Machine: while it waits here no other process runs (Sprint 120)
+                raise Unimplemented("a thread waiting on vCPU 0 for another vCPU while another process could run "
+                                    "(threads on several vCPUs in a machine of several processes)")
             if not saved:                                # put down first, so a suspender elsewhere sees it stopped
                 if schedule & SCHEDULE_ANSWER:           # (Sprint 119); SwitchToThread: other threads run meanwhile
                     x[0] = 1
@@ -3498,6 +3559,7 @@ class VM:
         assert self._idle is not None
         cur, schedule, _, saved = self._idle
         self._idle = None
+        self._wake_expired(vcpu)                         # resumed for a deadline that passed (ready(), Sprint 120)
         if not any(t.status == "ready" and t.suspend == 0 and not self._held_elsewhere(vcpu, t)
                    for t in self.threads.values()) and not self.warp_to_deadline(vcpu):
             timed = [t for t in self.threads.values() if t.status == "blocked" and t.suspend == 0 and t.deadline != M64
@@ -3507,8 +3569,35 @@ class VM:
         return self._switch(vcpu, x, cur, schedule, saved)
 
     def ready(self) -> bool:
-        """Whether a thread of this VM can run now (kernel.Machine): a process not yet started can."""
-        return not self.threads or any(t.status == "ready" and t.suspend == 0 for t in self.threads.values())
+        """Whether a thread of this VM can run now (kernel.Machine): a process not yet started can, and one whose
+        blocked thread's deadline has passed (Sprint 120: before, a child's 20 ms Sleep never ended while its parent
+        spun, the Machine giving no turn to a process with no thread ready)."""
+        return not self.threads or any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()) \
+            or self._deadline_passed()
+
+    def _deadline_passed(self) -> bool:
+        """Whether a blocked, unsuspended thread's deadline has passed on the machine's clock (_machine_now)."""
+        deadlines = [t.deadline for t in self.threads.values()
+                     if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
+        return bool(deadlines) and min(deadlines) <= self._machine_now()
+
+    def _machine_now(self) -> int:
+        """The machine's clock: on the instruction clock the latest of its processes' clocks, each of which counts
+        only its own instructions (_catch_up brings a process to it when it runs again); else the wall clock, which
+        every process shares."""
+        if not self.instruction_clock or self.machine is None:
+            return self._counter_now(self.vcpus[0])
+        return max(int(o._counter_now(o.vcpus[0])) for o in self.machine.vms if o.threads)
+
+    def _catch_up(self, vcpu: Vcpu) -> None:
+        """On the instruction clock in a machine of several processes, a process that runs again after another's turn
+        has its clock moved to the machine's (the warp), as time passed for it while it waited: before (Sprint 120),
+        a child's 20 ms Sleep never ended while its parent spun, its clock standing still."""
+        if not self.instruction_clock or self.machine is None or len(self.machine.vms) < 2:
+            return
+        lag = self._machine_now() - self._counter_now(vcpu)
+        if lag > 0:
+            struct.pack_into("<Q", self.mm, RUN_TABLE + CLOCK_WARP, self._clock_warp() + lag)
 
     def waits_with_deadline(self) -> bool:
         return any(t.status == "blocked" and t.suspend == 0 and t.deadline != M64 for t in self.threads.values())
@@ -3608,7 +3697,12 @@ class VM:
             if self.machine is None:
                 raise Unimplemented("an object other processes share (a named event, a pipe, a process): this run "
                                     "has no kernel.Machine")
+            alone = len(self.machine.vms) == 1
             result, second = self.machine.request(self, list(struct.unpack_from("<4Q", self.mm, t + 8)))
+            if alone and len(self.machine.vms) > 1 and len(self.threads) == 1:
+                # a second process: time slices from now on, as for a second thread (Sprint 120: before, a process
+                # of one thread kept its whole run's budget, never reached a slice's end, and its child never ran)
+                self._set_budget(vcpu)
             struct.pack_into("<QQ", self.mm, t + 48, second, result)
             return True
         if op == HOST_WRITE:
@@ -4711,6 +4805,10 @@ class VM:
         `on_unimplemented(vm, x, import_name)` sees a call to an import w2m lacks; by returning True it
         has the guest return from the call with the state it left in x (a look-ahead map of what a
         program calls next, scripts/frontier_lookahead.py; never a judged run)."""
+        if self.thread_vcpus > 1 and (self.instruction_clock or self.clock_from_host):
+            # the instruction clock is one vCPU's count, and the host's clock is stepped by one run: neither is one
+            # clock for threads on several vCPUs (Sprint 120)
+            raise Unimplemented("threads on several vCPUs with the instruction clock or the host's clock")
         proc = subprocess.Popen([str(build_monitor()), self.path, f"{IPA_BASE:x}", f"{self.size:x}"],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         assert proc.stdin and proc.stdout
@@ -4834,6 +4932,7 @@ class VM:
                     held = False
                     yield "slice"                            # another VM's turn; this thread goes on after
                     took, held, resumes = self.lock.enter(vcpu), True, True
+                    self._catch_up(vcpu)
                     x, pc, cpsr = self._load_thread(vcpu, self.threads[self.current_tid(vcpu)]), self.resume_va, CPSR_EL1H
                     continue
                 if isinstance(out, Switched):
@@ -4843,6 +4942,7 @@ class VM:
                         held = False
                         yield "idle"
                         took, held, resumes = self.lock.enter(vcpu), True, True
+                        self._catch_up(vcpu)
                         switched = self._resume_idle(vcpu, e.x)
                     if switched is None:
                         assert not out.at_slice

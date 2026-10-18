@@ -173,3 +173,15 @@ for another vCPU, and carries that through an idle turn of the Machine (`saved`)
 one another vCPU holds. On several vCPUs a thread put down has its vectors written to its slot at once. Judged by the
 threads and running_thread_context families on two vCPUs. Still open: vCPU 0, waiting, keeps no deadline, and a vCPU
 running with SLICE_UNTIL ~0 does not learn of one made elsewhere (the SGI wake's sibling).
+
+**Every wait ends (Sprint 120).** The open item above was a hang, and one of a class. Every host wait
+(`_wait_for_change`: vCPU 0 in `_switch`, `_park`, `_await_put_down`) has the earliest deadline of a blocked thread as
+its timeout and makes expired waits ready when it wakes; a vCPU running with SLICE_UNTIL ~0 need not learn of a new
+deadline, since the vCPU that made it either runs on with SLICE_UNTIL recomputed or waits with that timeout. Expired
+waits are made ready on the wall clock too, in the VM and in the host, which read the same counter (time.monotonic is
+mach_absolute_time, the guest's CNTVCT_EL0). A suspend notifies the waiters, and a waiter whose own thread is suspended
+meanwhile stops waiting: SuspendThread returns and puts its thread down, GetThreadContext is retried after the resume.
+So no waiter holds a suspended thread, and each wait is for a suspended thread whose vCPU stops running it within a
+slice. When every vCPU waits a whole second with no deadline and no notify, the run stops as a deadlock. Refused with
+Unimplemented: the instruction clock and the host's clock with threads on several vCPUs (each is one vCPU's or one
+run's clock), and vCPU 0 waiting for another vCPU while another process could run (vCPU 0 drives the Machine).
