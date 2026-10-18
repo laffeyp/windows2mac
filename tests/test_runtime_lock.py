@@ -153,3 +153,48 @@ def test_planted_no_lock_lets_two_vcpus_corrupt_the_heap(monkeypatch: pytest.Mon
     except (KeyError, RuntimeError, AssertionError):            # the host meets the corruption first
         return
     assert found["failures"] or any(found.get("counts", (1,))), found
+
+
+def hosts_count(shared: bool, n: int = 2_000) -> int:
+    """Two host threads serving vCPUs 1 and 2 (Sprint 116): each takes the lock through RuntimeLock.enter, reads a
+    word, yields the GIL, writes the word plus one and leaves, n times. The word's final value."""
+    import mmap
+    import time
+    from collections import Counter
+
+    from w2m import vm_backend
+    mm = mmap.mmap(-1, vm_backend.RUN_TABLE + 0x1000)
+    lock = vm_backend.RuntimeLock(mm, shared=shared)
+    word = vm_backend.RUN_TABLE + 0x800
+    errors: list[BaseException] = []
+
+    def serve(index: int) -> None:
+        vcpu = vm_backend.Vcpu(mm, index, Counter())
+        try:
+            for _ in range(n):
+                took = lock.enter(vcpu)
+                value = struct.unpack_from("<Q", mm, word)[0]
+                time.sleep(0)                              # another host thread's turn, as a handler's I/O gives one
+                struct.pack_into("<Q", mm, word, value + 1)
+                lock.leave(vcpu, took, resumes_where_stopped=True)
+        except BaseException as e:                         # noqa: BLE001 - reported after the join
+            errors.append(e)
+    threads = [threading.Thread(target=serve, args=(i,)) for i in (1, 2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+    assert not errors and not any(t.is_alive() for t in threads), (errors, [t.is_alive() for t in threads])
+    assert lock.holder() == 0
+    total = int(struct.unpack_from("<Q", mm, word)[0])
+    lock.close()
+    mm.close()
+    return total
+
+
+@pytest.mark.hvf
+def test_host_threads_take_the_shared_lock_one_at_a_time() -> None:
+    """Judge: a shared RuntimeLock serialises two host threads (the C helper spins with the GIL released, so the
+    holder goes on); plant: unshared, enter takes nothing and increments are lost."""
+    assert hosts_count(shared=True) == 4_000
+    assert hosts_count(shared=False) < 4_000

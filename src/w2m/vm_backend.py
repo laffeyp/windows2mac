@@ -73,6 +73,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MONITOR_SOURCE = ROOT / "tools" / "vm_monitor" / "vm_monitor.c"
 MONITOR_ENTITLEMENTS = ROOT / "tools" / "vm_monitor" / "entitlements.plist"
 MONITOR_BINARY = ROOT / "build" / "vm_monitor"
+RUNTIME_LOCK_SOURCE = ROOT / "tools" / "runtime_lock" / "runtime_lock.c"
+RUNTIME_LOCK_LIBRARY = ROOT / "build" / "libruntime_lock.dylib"
 
 IPA_BASE = 0x1000_0000
 MONITOR_VA = 0x7F00_0000_0000
@@ -392,6 +394,15 @@ def build_monitor() -> Path:
         subprocess.run(["codesign", "-s", "-", "-f", "--entitlements", str(MONITOR_ENTITLEMENTS), str(MONITOR_BINARY)],
                        check=True, capture_output=True)
     return MONITOR_BINARY
+
+
+def build_runtime_lock() -> Path:
+    """Build build/libruntime_lock.dylib, the host's take of the runtime lock, when its source is newer."""
+    if not RUNTIME_LOCK_LIBRARY.exists() or RUNTIME_LOCK_LIBRARY.stat().st_mtime < RUNTIME_LOCK_SOURCE.stat().st_mtime:
+        RUNTIME_LOCK_LIBRARY.parent.mkdir(exist_ok=True)
+        subprocess.run(["clang", "-O2", "-Wall", "-Werror", "-dynamiclib", "-o", str(RUNTIME_LOCK_LIBRARY),
+                        str(RUNTIME_LOCK_SOURCE)], check=True, capture_output=True)
+    return RUNTIME_LOCK_LIBRARY
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2045,6 +2056,59 @@ class Vcpu:
         self.mm[self.md + DF_BYTE] = int(df)
 
 
+class RuntimeLock:
+    """The guest runtime lock's host side (docs/design-several-vcpus.md, design A; Sprint 116): a 32-bit word at RUN_TABLE +
+    RUNTIME_LOCK, 0 free, else its holder's vCPU index + 1. Guest code holds it only inside a call into the runtime's C
+    (lock_runtime's sites each free it before guest code or a hand-over), so a held lock means the holder stopped in
+    such a call. Freed: at a run's start (`reset`), and after an exit whose answer resumes the holder anywhere but
+    where it stopped, since the frame that took it never returns (`leave`). Taken: around an exit's service when
+    several host threads serve vCPUs at once (`shared`, chain step 5), through tools/runtime_lock's C, which ctypes
+    calls with the GIL released."""
+
+    def __init__(self, mm: mmap.mmap, shared: bool = False) -> None:
+        import ctypes
+        self.shared = shared
+        self._word = ctypes.c_uint32.from_buffer(mm, RUN_TABLE + RUNTIME_LOCK)   # dropped at close, before the map
+        self._barrier = ctypes.CDLL("/usr/lib/libSystem.B.dylib").OSMemoryBarrier
+        self._take: Any = None
+
+    def holder(self) -> int:
+        """The holder's vCPU index + 1; 0 when free."""
+        self._barrier()
+        return int(self._word.value)
+
+    def give(self) -> None:
+        """Free it: every store made under it is seen before the word reads 0 (one 32-bit store after a barrier)."""
+        self._barrier()
+        self._word.value = 0
+
+    def reset(self) -> None:
+        """A run's start: a run before this one may have stopped inside the runtime's C, holding it."""
+        self.give()
+
+    def enter(self, vcpu: Vcpu) -> bool:
+        """Before serving `vcpu`'s exit: take the lock with its value unless it is not shared or `vcpu` holds it
+        already (an exit from inside the runtime's C). True when this call took it."""
+        if not self.shared or self.holder() == vcpu.index + 1:
+            return False
+        import ctypes
+        if self._take is None:
+            self._take = ctypes.CDLL(str(build_runtime_lock())).w2m_runtime_lock_take
+            self._take.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+            self._take.restype = None
+        self._take(ctypes.addressof(self._word), vcpu.index + 1)
+        return True
+
+    def leave(self, vcpu: Vcpu, took: bool, resumes_where_stopped: bool) -> None:
+        """After serving `vcpu`'s exit: give back what `enter` took, and a lock `vcpu` held from the runtime's C
+        unless it resumes where it stopped (on_exception's and on_unimplemented's resumes, a backward cancel's)."""
+        if took or (not resumes_where_stopped and self.holder() == vcpu.index + 1):
+            self.give()
+
+    def close(self) -> None:
+        del self._word
+
+
 @dataclass
 class VcpuExit:
     kind: str
@@ -2271,6 +2335,7 @@ class VM:
         # the vCPUs the monitor runs (Sprint 115): vCPU 0 from here, its pages the process's; 1.. from _start_vcpus.
         # vCPU 0's pipe is the run's (steps sets _cmd)
         self.vcpus = [Vcpu(self.mm, 0, self.monitor_commands, pipe=lambda c: self._cmd(c))]
+        self.lock = RuntimeLock(self.mm)                 # the guest runtime lock's host side (Sprint 116)
         import ctypes
         self._barrier = ctypes.CDLL("/usr/lib/libSystem.B.dylib").OSMemoryBarrier
         self.mem = Memory()
@@ -4393,14 +4458,6 @@ class VM:
             addr, previous = constant[br[2]] & M64, None
         return live | undecided
 
-    def _release_runtime_lock(self) -> None:
-        """Free the runtime lock where the host moves a vCPU off a runtime frame that holds it: a service's or the
-        exception entry's C that exited to the host (hvc 8, hvc 9), which the host then resumes elsewhere, so the
-        frame's unlock never runs (Sprint 106: a class run's fault, taken by on_exception, left it held and the next
-        case's first service spun on it for the run's 600 s). One vCPU runs then: the frame was the holder."""
-        self._barrier()
-        self._words[(RUN_TABLE + RUNTIME_LOCK) // 8] = 0
-
     def _dispatch_insert(self, target: int, va: int) -> None:
         """Put (target, va) in its pair of the dispatch table: in a slot that is empty or holds it, else first, the first
         slot's entry moved to the second (the newest checked first)."""
@@ -4536,7 +4593,7 @@ class VM:
 
         self._max_steps = max_steps
         self._set_budget(vcpu)
-        self._release_runtime_lock()                      # a run before this one may have stopped inside the runtime
+        self.lock.reset()                                 # a run before this one may have stopped inside the runtime
         # the compiler inside the VM, where nothing needs every miss to reach the host (Sprint 083)
         struct.pack_into("<Q", self.mm, VM_COMPILER + VMC_ENABLED, int(
             VM_COMPILE and not self.lockstep and not BLOCK_CENSUS and on_dispatch is None and interrupt_every_ms is None))
@@ -4612,7 +4669,14 @@ class VM:
                     cpsr = int(r[4], 16)
                 marked = time.perf_counter_ns()
                 self.run_ns += marked - started
-                out = self.serve_exit(run, vcpu, e, cpsr)
+                took = self.lock.enter(vcpu)
+                try:
+                    out = self.serve_exit(run, vcpu, e, cpsr)
+                except BaseException:
+                    self.lock.leave(vcpu, took, resumes_where_stopped=False)
+                    raise
+                # a resume anywhere else leaves the runtime frame that took the lock (Sprint 106's hang: on_exception's)
+                self.lock.leave(vcpu, took, resumes_where_stopped=isinstance(out, Resume) and out.pc == e.pc)
                 if isinstance(out, Stop):
                     stop = out.reason
                     break
@@ -4679,8 +4743,6 @@ class VM:
         if e.kind == "cancel" and run.interrupt_every_ms is not None and ASYNC_STOP_RULE == "backward":
             # the rule specs/guest_state.json forbids: restart the interrupted instruction
             x[17] = self.x86_address_at(e.pc)
-            if runtime_lo <= e.pc < runtime_hi:
-                self._release_runtime_lock()                  # stopped in the runtime's C: its frame is left
             if run.on_boundary:
                 run.on_boundary(self, x, x[17])
             return Resume(self.miss_va, x, CPSR_EL1H)
@@ -4717,7 +4779,6 @@ class VM:
                 if exc is not None and run.on_exception is not None and run.on_exception(self, exc):
                     self.exit_code = None
                     self.clear_exception()
-                    self._release_runtime_lock()              # w2m_exception's frame is left, unreturned
                     return Resume(self.miss_va, x, CPSR_EL1H) # hvc #1: the driver sets the next state
                 return Stop("ExitProcess" if exc is None else
                             f"UnhandledException 0x{exc['code']:x} at x86 0x{exc['rip']:x}")
@@ -4728,7 +4789,6 @@ class VM:
             ret = int.from_bytes(self.mem.read(x[4], 8), "little")
             if run.on_unimplemented is not None and run.on_unimplemented(self, x, name):
                 x[17], x[4] = ret, x[4] + 8                   # ret, with x[RAX] as the hook left it
-                self._release_runtime_lock()                  # the service's frame is left, unreturned
                 return Resume(self.miss_va, x, CPSR_EL1H)
             self.unimplemented = (name, ret)
             raise Unimplemented(f"import {name}")
@@ -4829,6 +4889,7 @@ class VM:
             if isinstance(r.data, memoryview):
                 r.data.release()
         self.mem.regions.clear()
+        self.lock.close()
         self._words.release()
         self._view.release()
         self.mm.close()
