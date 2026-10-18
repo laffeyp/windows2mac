@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 117
-status: active
+status: done
 phase: 5
 pass_kind: architecture
 ---
@@ -77,3 +77,16 @@ No behaviour changes for a run nobody kicks.
 ## done criteria
 
 A host thread stops any one vCPU on demand and the run goes on where it stopped; CI green.
+
+## observed
+- **Made** (43d8b323): `CH_KICK`, the kicker thread and kind `kick` (5) in vm_monitor.c; `Channel.kick`, `Vcpu.kick`,
+  `VM.kicks` and serve_exit's answer in vm_backend.py; `tests/test_kick.py` (2 tests).
+- **Judges 1 and 2, and the plant** (5 repeats measured before the commit): the live kick returned kind `kick` at
+  0.202 to 0.205 s (kicked at 0.2 s); the kick between runs at 0.0 s; the unkicked run kind `cancel` at 0.300 to
+  0.304 s (its 300 ms deadline).
+- **Judge 3:** 10 kicks during vCPU 0's `jmp $` run: `VM.kicks` 10, 4,000,000,001 instructions, the same as the
+  unkicked run's; both stop at max_steps in about 1.8 s.
+- **Unchanged:** the batch run (frontier-643a6283510c-1792300672353112000) conforms: 168 lines, 0 divergences,
+  81,053,673,531 instructions; `check_records.py` 0 violations; `run_numbers.py` 107 numbers, 0 that do not add up; the
+  same eight exit kinds (hvc 1 1,091, 4 8, 8 40,479, 10 258, 11 286, 12 2, 13 13,646, 14 167). 456 of 458 classes (85
+  s; FCOS and FSIN as before), 68 of 68 families. The 34 VM test files and test_kick.py: 188 passed.
