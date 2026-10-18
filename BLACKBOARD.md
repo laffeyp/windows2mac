@@ -384,6 +384,14 @@
 
 ## Sprint tail
 
+### Sprint 116 (2026-10-17, closed)
+- **Scope:** step 1, chain step 3: the guest runtime lock's host side as one object, `RuntimeLock`: one rule frees it, a shared lock is taken.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-116-report.md`, 527 records): the batch run (frontier-643a6283510c-1792299009808193000) as Sprint 115's in kind and order, COMPARISON_COMPLETED with 0 divergences; the sweep's 458 class and 68 family runs as Sprint 115's. Emits check: each of the 12 named tags fired; none fired unnamed.
+  - *Observation 1 (a take that would deadlock):* the card's first draft took the lock whenever vcpu_count > 1; the litmus and runtime-lock tests drive vCPUs 1-4 from inside vCPU 0's on_dispatch, which a lock held across the hook would stop. Disposition: resolved-here (taken only when `shared`, chain step 5; Decision 2026-10-17, Sprint 116).
+  - *Observation 2 (a check by place, not by frame):* the old release tested the exit's pc against the runtime image, which misses a bridge's words between `lock_runtime` and its call. Disposition: resolved-here (freed when the answer does not resume the vCPU at its exit pc).
+- **Closed:** CI pending at this entry; Sprint 115's CI run 39096131917 (success on 7b73acb6).
+
 ### Sprint 115 (2026-10-17, closed)
 - **Scope:** step 1, chain step 2: the `Vcpu` object, passed to every handler that reads a vCPU's state; no `VM` attribute names a served vCPU.
 - **Rubber Duck Pass:**
@@ -459,12 +467,4 @@
   - *Observation 3 (a timeout that cannot end its test):* pytest-timeout's signal method raises a BaseException, which substrate's producer task does not catch, so the run waited forever. Disposition: resolved-here for w2m (`timeout_method = "thread"`); deferred to substrate (a BaseException in a producer leaves its run waiting).
 - **Closed:** CI pending at this entry; Sprints 103-105's CI run 39020048181 (success on 2785934a).
 
-### Sprint 105 (2026-10-17, closed)
-- **Scope:** roadmap step 1's gate: the five litmus tests as x86 compiled by w2m, one thread a vCPU.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* no new tag; the tests run inside a VM run's on_dispatch hook, through vCPUs 1-4's channels.
-  - *Observation 1 (a judge with a chance of failing):* SB's relaxed outcome is rare (0 in 3 runs of 100). Disposition: resolved-here (measured, then up to five runs).
-  - *Observation 2 (state copied, not set):* SLICE_UNTIL on a private page came from vCPU 0 as 0. Disposition: deferred to Sprint 106 (the scheduler sets it per vCPU).
-- **Closed:** CI pending at this entry.
-
-Older entries (Sprints 000-035, and 036-104 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-105 moved 2026-10-16 and 2026-10-17): `docs/sprint-tail-archive.md`.

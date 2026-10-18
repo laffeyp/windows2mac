@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 105 (2026-10-17, closed)
+- **Scope:** roadmap step 1's gate: the five litmus tests as x86 compiled by w2m, one thread a vCPU.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* no new tag; the tests run inside a VM run's on_dispatch hook, through vCPUs 1-4's channels.
+  - *Observation 1 (a judge with a chance of failing):* SB's relaxed outcome is rare (0 in 3 runs of 100). Disposition: resolved-here (measured, then up to five runs).
+  - *Observation 2 (state copied, not set):* SLICE_UNTIL on a private page came from vCPU 0 as 0. Disposition: deferred to Sprint 106 (the scheduler sets it per vCPU).
+- **Closed:** CI pending at this entry.
+
 ### Sprint 104 (2026-10-17, closed)
 - **Scope:** N vCPUs on their own threads, each with its private translation chain (design B).
 - **Rubber Duck Pass:**
