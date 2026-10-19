@@ -341,6 +341,16 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 110 (2026-10-17, closed)
+- **Scope:** H2's second half: the frontier's execution placed in time on its record, within a stated bound.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (frontier-643a6283510c-1792269281973223000, by `t` from RunStarted): SESSION_INIT 0.001 s; EXECUTION_STARTED 0.207 s (timeout_seconds 10,800, kill_grace_seconds 60); the 107 MEASUREMENT_RECORDED; EXECUTION_COMPLETED 33.965 s (killed, elapsed_seconds 33.546); TRACE_INGESTED 33.978 s; COMPARISON_COMPLETED (0 divergences); SESSION_COMPLETED 34.265 s. Before, every event of a run carried its end's time.
+  - *Observation 1 (an event loop held by a run):* `machine.run` on the loop's thread kept substrate's writer from stamping anything until the run ended. Disposition: resolved-here (`asyncio.to_thread`).
+  - *Observation 2 (a stop that skipped its completion):* 41 of 43 frontier records with no EXECUTION_COMPLETED stopped at SERVICE_UNIMPLEMENTED. Disposition: resolved-here.
+  - *Observation 3 (a plant that missed by chance):* the EnTSO-off litmus plant missed one time in 600, not one in a billion. Disposition: resolved-here (ten runs).
+  - *Correction:* Sprint 109's table and Deferred entry count T3's 452 unchecked as frontier records; they are 394 laptop probe runs, 46 frontier runs and 12 judge records.
+- **Closed:** CI pending at this entry; Sprint 109's CI run 39067108857 (success on a1060c55).
+
 ### Sprint 109 (2026-10-17, closed)
 - **Scope:** H2 of the SDD hardening order, its first half: every record checked against the vocabulary's rules.
 - **Rubber Duck Pass:**

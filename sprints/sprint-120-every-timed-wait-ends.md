@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 120
-status: active
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -50,7 +50,7 @@ while fixing the first ones).
   while its parent ran. A process that runs again after another's turn has its clock moved to the latest of the
   machine's (`_catch_up`, the warp), at its start and on each resume (the start added after the review of 2026-10-18:
   a child's first reading came before its parent's), and a deadline passes on that clock (`_machine_now`).
-- **A signal from another process** (kernel.py `wake_all`) now notifies the waiting vCPUs of the process it wakes.
+- **A signal from another process** (`VM.wake_all`, which kernel.py calls) now notifies the waiting vCPUs of the process it wakes.
 
 ## prerequisites
 
@@ -69,9 +69,13 @@ while fixing the first ones).
   Sprint 119's: SESSION_INIT (purpose conformance), CANDIDATE_GENERATED, COMPARISON_COMPLETED for each reference run
   (verdict conforms, first_divergence none), CANDIDATE_ACCEPTED, SESSION_COMPLETED (outcome completed), baseline
   `vcpus` 2.
-- On the batch run's record, as on Sprint 119's: SESSION_INIT, EXECUTION_STARTED, MEASUREMENT_RECORDED 107 times,
+- On the batch run's record, as on Sprint 119's: SESSION_INIT, EXECUTION_STARTED, MEASUREMENT_RECORDED 104 times (Sprint 119's 107 less hvc 12's exits and seconds and the
+  "a thread ready" hand-overs, which no longer occur),
   EXECUTION_COMPLETED (exit_status killed), TRACE_INGESTED, COMPARISON_COMPLETED (first_divergence none),
-  SESSION_COMPLETED. Per class run (458) and family run (68), as on Sprint 119's sweep.
+  SESSION_COMPLETED. Per class run (458) and family run (68), as on Sprint 119's sweep: SESSION_INIT,
+  CANDIDATE_GENERATED, COMPARISON_COMPLETED, CANDIDATE_ACCEPTED (456 and 68) or for FCOS and FSIN REDUCTION_COMPLETED,
+  DISCREPANCY_REPORTED and DISCREPANCY_ROUTED, SESSION_COMPLETED. (Amended at the close: the first draft named the
+  sweep's tags by reference, and the Emits check counted the last three as unnamed.)
 
 ### Invariants
 
@@ -99,3 +103,29 @@ while fixing the first ones).
 ## done criteria
 
 No thread with a timeout waits past it for want of a wake; no two hosts wait on each other; CI green.
+
+## observed
+- **Made:** 0da7f85e (the fixes, the card, the guests and tests); 25e57995 (after the review of 2026-10-18: a child takes
+  the machine's clock at its start, `wake_all` notifies, tests for the deadlock stop, the refusal with several
+  processes, the child's sleep on the instruction clock and the counter on vCPU 1); 8838314f and ef33fe1d (two race
+  plants' tests, the no-wait plant's and the lock plant's, run until their race shows).
+- **Before** (each measured on the tree before its fix): a 20 ms Sleep beside a spinner stopped at the 20 s limit on one
+  vCPU and on two on the wall clock; a mutual suspend on two vCPUs hung past its 20 s limit (88 s, killed); a child's
+  sleep while its parent spun hung on one vCPU on both clocks (31 s and 28 s past a 15 s limit, killed); the trace:
+  1,115,464 host requests and no slice's end in 8 s.
+- **Judge:** the eight guests' tests pass (23 tests with the two-vCPU file, three runs in a row 23 of 23). On 8838314f:
+  the batch run (frontier-643a6283510c-1792347897080595000) conforms, 168 lines, 0 divergences, 81,944,304,896
+  instructions, seven exit kinds: hvc 12 (2 in every run of Sprints 110-119) gone and hvc 4 at 10 (8), from the second
+  process's slices (a run with the clock changes planted out kept them so; the review isolated the call-stream change to
+  the slices and the catch-up together); `run_numbers.py` 104 numbers, 0 that do not add up. 456 of 458 classes (FCOS
+  and FSIN as before), 68 of 68 families. On two vCPUs: family-threads-1792348019048745000 (one crossing suspend in
+  each run), family-running_thread_context-1792348019878009000 (two), family-wait_handoff-1792348020413763000 conform.
+- **Plants**, each measured to fail: expiry on the instruction clock only (the sleep never ends: the run's limit);
+  untimed host waits (the limit, once reached: up to 30 runs, a missed run 0.1 s); Sprint 119's waits on a mutual
+  suspend (the deadlock stop, 1.1 s); a whole run's budget (the child never runs); no catch-up at a child's start
+  ("clock behind"); the context retry reached with SuspendThread not waiting (3 of 6 runs), every run reading its 20
+  contexts.
+- **Records moved to build/:** 0da7f85e's sweep (superseded by the follow-up), 25e57995's sweep (BLACKBOARD.md was
+  uncommitted; the batch run refused), and a batch run with the clock changes planted out.
+- **Open, none deferred:** the parked vCPU's wake is Sprint 121 (BLACKBOARD 2026-10-18); the Machine driven from
+  somewhere other than vCPU 0's wait is a prerequisite of step 7 running the game (docs/design-several-vcpus.md).
