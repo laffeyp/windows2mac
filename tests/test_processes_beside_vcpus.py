@@ -13,6 +13,9 @@
   the other vCPU, sets the event and waits for the child's answer, while the parent's main thread waits for the worker.
 - pingpong: the parent's worker, on vCPU 1, and the child's main thread, on the Machine's thread, take turns over two
   named events, 2,000 rounds, each wake reaching the other process from a thread that does not serve it.
+- statsize: the main thread reads its file's size with GetFileAttributesExW, then spins on vCPU 0 while a worker on
+  vCPU 1 reads it again. The stat reaches the host with a buffer on the runtime's stack, which each vCPU has its own
+  of; before, the host wrote vCPU 1's stat to vCPU 0's stack (the batch run on two vCPUs read a 4 GB size).
 
 With its threads on several vCPUs, a process's vCPU 0 hands the Machine on when it has no thread (VM._switch answers
 IDLE); the Machine runs another process or waits for a change. A wake from a host thread into another process is left
@@ -43,7 +46,7 @@ def planted_waiting_vcpu0(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.hvf
 @pytest.mark.timeout(240)
-@pytest.mark.parametrize("name", ["spinchild", "handshake", "busychild", "crosswake", "pingpong"])
+@pytest.mark.parametrize("name", ["spinchild", "handshake", "busychild", "crosswake", "pingpong", "statsize"])
 @pytest.mark.parametrize("vcpus", [1, 2])
 def test_a_process_beside_threads_on_several_vcpus_ends(name: str, vcpus: int) -> None:
     for _ in range(5 if vcpus > 1 else 1):
@@ -110,3 +113,13 @@ def test_planted_kick_into_other_processes_only_leaves_a_new_child_unrun(monkeyp
     while len(seen) < 20 and (not seen or seen[-1] == ("ExitProcess", b"done\n")):
         seen.append(run_guest("handshake", 2))
     assert seen[-1] == ("timeout", b""), seen
+
+
+@pytest.mark.hvf
+@pytest.mark.timeout(60)
+def test_planted_vcpu0_pages_for_every_vcpu_give_the_worker_a_wrong_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The host's view of guest memory as before: vCPU 0's runtime stack for a request from any vCPU (5 runs of 5
+    differ, measured)."""
+    from w2m import vm_backend
+    monkeypatch.setattr(vm_backend.VM, "_private_monitor_pages", lambda self, i: {})
+    assert run_guest("statsize", 2) == ("ExitProcess", b"sizes differ\n")

@@ -185,15 +185,17 @@ class Machine:
             self._changes += 1
             self._changed.notify_all()
 
-    def request(self, vm: Any, a: list[int]) -> tuple[int, int]:
+    def request(self, vm: Any, a: list[int], mem: Any = None) -> tuple[int, int]:
+        """A request of `vm`'s; `mem`, guest memory as the vCPU that asked sees it (its runtime stack is its own;
+        Sprint 122), else the VM's."""
         with self._lock:                                 # several host threads may ask at once (Sprint 122)
-            return self._request(vm, a)
+            return self._request(vm, a, vm if mem is None else mem)
 
-    def _request(self, vm: Any, a: list[int]) -> tuple[int, int]:
+    def _request(self, vm: Any, a: list[int], mem: Any) -> tuple[int, int]:
         sub = a[0]
         held = self.processes[vm.process_id].held
         if sub == EVENT_OPEN:
-            name = vm.read_text(a[1], a[2])
+            name = mem.read_text(a[1], a[2])
             if name in self.names:
                 ev = self.objects[self.names[name]]
                 assert isinstance(ev, Event)
@@ -243,22 +245,22 @@ class Machine:
                 if pipe.readers == 0:
                     raise Unimplemented("a write to a pipe no process reads (ERROR_NO_DATA): not in the rows")
                 n = min(a[3], PIPE_CAPACITY - len(pipe.data))
-                pipe.data += vm.read_bytes(a[2], n)
+                pipe.data += mem.read_bytes(a[2], n)
                 self.wake(vm)
                 return n, 0
             if not pipe.data:
                 return 0, 2 if pipe.writers == 0 else 1
             n = min(a[3], len(pipe.data))
-            vm.write_bytes(a[2], bytes(pipe.data[:n]))
+            mem.write_bytes(a[2], bytes(pipe.data[:n]))
             del pipe.data[:n]
             self.wake(vm)                                # a writer waiting on a full pipe has room now
             return n, 0
         if sub == PROCESS_CREATE:
-            line = vm.read_text(a[1], a[2] & 0xFFFFFFFF)
+            line = mem.read_text(a[1], a[2] & 0xFFFFFFFF)
             count = a[2] >> 32
-            raw = vm.read_bytes(a[3], 24 * count)
+            raw = mem.read_bytes(a[3], 24 * count)
             listed = [tuple(int(x) for x in struct.unpack_from("<QQQ", raw, 24 * i)) for i in range(count)]
-            directories = [vm.read_text(o, h) for h, k, o in listed if k == KIND_DIRECTORY]
+            directories = [mem.read_text(o, h) for h, k, o in listed if k == KIND_DIRECTORY]
             if len(directories) != 1:
                 raise Unimplemented(f"a process start that names {len(directories)} current directories")
             inherited = [(h, k, o) for h, k, o in listed if k != KIND_DIRECTORY]

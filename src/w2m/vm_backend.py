@@ -2247,26 +2247,56 @@ def _round_up(n: int, to: int = PAGE) -> int:
 
 
 class _GuestView:
-    """Guest memory as the file bridge sees it: the image's regions, and the monitor area where the
-    runtime keeps its own buffers (a normalized path)."""
+    """Guest memory as a host request served for `vcpu` sees it: the image's regions, and the monitor area where the
+    runtime keeps its own buffers (a normalized path, a local on the runtime's stack). A vCPU past the first has its
+    own monitor data page and runtime stack at the same addresses (docs/design-several-vcpus.md, design B), and a
+    request it makes names its own (Sprint 122: a FILE_STAT for vCPU 1 was written to vCPU 0's stack, and the game read
+    a size of about 4 GB from its own)."""
 
-    def __init__(self, vm: VM) -> None:
+    def __init__(self, vm: VM, vcpu: Vcpu | None = None) -> None:
         self.vm = vm
+        self.private = vm._private_monitor_pages(vcpu.index) if vcpu is not None and vcpu.index else {}
 
-    def _monitor(self, va: int, n: int) -> int | None:
+    def _spans(self, va: int, n: int) -> list[tuple[int, int]] | None:
+        """The memory-file (offset, length) pieces of [va, va + n) in the monitor area, or None outside it."""
         off = va - MONITOR_VA
-        return off if 0 <= off and off + n <= MONITOR_SIZE else None
+        if not (0 <= off and off + n <= MONITOR_SIZE):
+            return None
+        if not self.private:
+            return [(off, n)]
+        spans = []
+        while n > 0:
+            page, within = off - off % PAGE, off % PAGE
+            k = min(n, PAGE - within)
+            spans.append((self.private.get(page, page) + within, k))
+            off, n = off + k, n - k
+        return spans
 
     def read(self, va: int, n: int) -> bytes:
-        off = self._monitor(va, n)
-        return bytes(self.vm.mm[off:off + n]) if off is not None else self.vm.mem.read(va, n)
+        spans = self._spans(va, n)
+        if spans is None:
+            return self.vm.mem.read(va, n)
+        return b"".join(bytes(self.vm.mm[o:o + k]) for o, k in spans)
 
     def write(self, va: int, data: bytes) -> None:
-        off = self._monitor(va, len(data))
-        if off is not None:
-            self.vm.mm[off:off + len(data)] = data
-        else:
+        spans = self._spans(va, len(data))
+        if spans is None:
             self.vm.mem.write(va, data)
+            return
+        at = 0
+        for o, k in spans:
+            self.vm.mm[o:o + k] = data[at:at + k]
+            at += k
+
+    # what kernel.Machine reads and writes of a requesting process
+    def read_bytes(self, va: int, n: int) -> bytes:
+        return self.read(va, n) if n else b""
+
+    def write_bytes(self, va: int, data: bytes) -> None:
+        self.write(va, data)
+
+    def read_text(self, va: int, chars: int) -> str:
+        return self.read_bytes(va, 2 * chars).decode("utf-16-le", errors="replace")
 
 
 def service_for(dll: str, fn: str) -> tuple[str, bool] | None:
@@ -3782,7 +3812,8 @@ class VM:
         if FILE_LOOKUP <= op <= FILE_UNLINK or op in (FILE_STAT, FILE_MKDIR, FILE_RMDIR, FILE_FSTAT, FILE_DUP, FILE_LIST):
             if self.files is None:
                 raise Unimplemented("a file call in a run with no file-system root")
-            result, second = self.files.request(_GuestView(self), op, list(struct.unpack_from("<6Q", self.mm, t + 8)))
+            result, second = self.files.request(_GuestView(self, vcpu), op,
+                                                list(struct.unpack_from("<6Q", self.mm, t + 8)))
             struct.pack_into("<QQ", self.mm, t + 48, second, result)
             return True
         if op == HOST_KERNEL:
@@ -3790,7 +3821,8 @@ class VM:
                 raise Unimplemented("an object other processes share (a named event, a pipe, a process): this run "
                                     "has no kernel.Machine")
             alone = len(self.machine.vms) == 1
-            result, second = self.machine.request(self, list(struct.unpack_from("<4Q", self.mm, t + 8)))
+            result, second = self.machine.request(self, list(struct.unpack_from("<4Q", self.mm, t + 8)),
+                                                  _GuestView(self, vcpu))
             if alone and len(self.machine.vms) > 1 and len(self.threads) == 1:
                 # a second process: time slices from now on, as for a second thread (Sprint 120: before, a process
                 # of one thread kept its whole run's budget, never reached a slice's end, and its child never ran)
@@ -3855,7 +3887,7 @@ class VM:
         return True
 
     def _module_request(self, vcpu: Vcpu, op: int, a0: int, a1: int, a2: int) -> int:
-        view = _GuestView(self)
+        view = _GuestView(self, vcpu)
         m = self.modules
         if op == HOST_MODULE:
             return m.module(view.read(a0, 2 * a1).decode("utf-16-le"), loading=bool(a2))
@@ -4380,6 +4412,11 @@ class VM:
             copy = copies.get(table)
             if copy is not None and struct.unpack_from("<Q", self.mm, copy + at - table)[0] == old:
                 self._words[(copy + at - table) // 8] = value
+
+    def _private_monitor_pages(self, i: int) -> dict[int, int]:
+        """vCPU i's private pages in the monitor area: its monitor data page and runtime stack, as memory-file offset
+        of the shared page -> offset of vCPU i's (the monitor area's file offset is its offset from MONITOR_VA)."""
+        return {va - MONITOR_VA: off for va, off in self._vcpu_pages(i) if MONITOR_VA <= va < MONITOR_VA + MONITOR_SIZE}
 
     def _vcpu_pages(self, i: int) -> list[tuple[int, int]]:
         """(virtual address, memory-file offset) of vCPU i's private pages: the monitor data page, the state block,
