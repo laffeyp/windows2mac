@@ -245,8 +245,10 @@ def test_the_guest_counter_on_vcpu_1_is_the_hosts_monotonic_count(monkeypatch: p
 @pytest.mark.timeout(120)
 def test_several_vcpus_refuse_to_wait_while_another_process_could_run() -> None:
     stops: list[str] = []
-    while len(stops) < 5 and not any("several processes" in s for s in stops):
-        stops.append(run_guest("spinchild", 2)[0])      # reached in 2 runs of 3 (measured)
+    # reached in 11 runs of 20 on 1953fbfe (measured; the other 9 end with "done"): 5 runs missed it 1 time in 5 test
+    # runs, so 30 (a miss about 4e-11 at that rate)
+    while len(stops) < 30 and not any("several processes" in s for s in stops):
+        stops.append(run_guest("spinchild", 2)[0])
     assert stops[-1].startswith("Unimplemented: a thread waiting on vCPU 0 for another vCPU while another process"), stops
 
 
