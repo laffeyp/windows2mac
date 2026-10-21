@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 122
-status: in progress
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -98,7 +98,8 @@ which this sprint measures and reports (wall clock, `run_frontier.py --vcpus 2 -
 ## observation contract
 
 - **Judge:** on two vCPUs, spinchild, handshake and busychild each end with "done", 10 runs of 10 before the commit
-  and 5 of 5 in the tests; on one vCPU each ends as before; the families as Emits says.
+  and 5 of 5 in the tests; on one vCPU each ends as before; the families as Emits says. (Amended during the sprint,
+  before the tests' commit: crosswake, pingpong and statsize joined the judge as the work found what they test.)
 - **Plants**, measured before they are trusted: vCPU 0 waits in `_switch` as before, the refusal removed: handshake
   spins to its limit (the child that sets the event never runs); no kick: busychild spins to its limit (the child
   keeps the driver); the wake written at once into a process another thread runs: reported as measured, with the
@@ -108,3 +109,48 @@ which this sprint measures and reports (wall clock, `run_frontier.py --vcpus 2 -
 
 A run with its threads on several vCPUs runs other processes while vCPU 0 has no thread; no refusal on that path;
 one vCPU unchanged; CI green.
+
+## observed
+- **Made:** f1838b96 (the hand-on, the Machine's lock and wait, the pending wake and the kick, the slice's round
+  robin, every process's run closed, the card, the guests handshake, busychild, crosswake and pingpong,
+  tests/test_processes_beside_vcpus.py, `run_frontier.py --vcpus`); 37784f1a (a host request reads and writes the
+  asking vCPU's own pages; guest statsize); 4b36b5ad and 31efecd7 (the records on each).
+- **Before** (on 55795fc1, in a worktree): handshake on two vCPUs refused 2 runs of 5 and spun to the limit 3 of 5
+  (one vCPU: 5 of 5 done); busychild on two refused 4 of 5, done 1 of 5, and on one vCPU spun to the limit 5 of 5;
+  spinchild refused 11 of 20 (Sprint 121).
+- **A hang on one vCPU:** busychild's main thread ran 111 instructions in 20 s while the worker and the child ran 6.5
+  billion each, 325,292 slice ends and 1 hand-over: after each "slice" turn the parent ran again the thread sliced
+  out. Since, the next ready thread runs, as at any slice's end; the plant of the old resume spins to the limit.
+- **The kick, three drafts:** a kick when a host thread made its own process ready had no failing plant (busychild
+  ends without it: while the child is ready every vCPU of the parent ends its slices at the host, and vCPU 1's round
+  robin runs the readied thread), so it went. A kick only into another process than the requester's hung handshake
+  30 runs of 60: the spinner on vCPU 0, the child started from vCPU 1, vCPU 0's slice end set before the child
+  existed. The rule kept: a wake made on a host thread kicks the process the Machine's thread runs (60 of 60).
+- **The batch run on two vCPUs found a bug of design B's:** it stopped at 2,603,766 instructions on an OSError in
+  vCPU 1's host thread, a read of 0xfffeefd8 bytes. The main thread, moved to vCPU 1 (vCPU 0 now puts a blocked
+  thread down), stat-ed a file with a buffer on the runtime's stack (0x7f000416ff68), and the host wrote the stat to
+  vCPU 0's copy of that page. 37784f1a gives `_GuestView` the vCPU it serves and `Machine.request` its view; every
+  other host access to the private pages is guest code or set-up before a run.
+- **Judge** (tests on 37784f1a, 10 runs of 10 by hand before): spinchild, handshake, busychild, crosswake, pingpong
+  and statsize end with "done" on two vCPUs 5 of 5 and on one vCPU; crosswake took 1.1 to 3.0 s a run.
+- **Plants**, each measured to fail: vCPU 0 waiting in `_switch` as before: handshake spins to its limit 11 runs of
+  20 (the other 9 place the spinner on vCPU 0, where the child's start kicks it), so its test tries up to 20 runs;
+  no kick: crosswake 10 of 10 (its first version, 2 ended of 3: the child, 0.84 s in starting, found the event set;
+  the worker now polls the child's word without blocking); the kick only into another process: handshake 8 of 20;
+  the old slice resume: busychild on one vCPU 1 of 1; vCPU 0's pages for every vCPU: statsize "sizes differ" 5 of 5.
+  The wake written at once into a process another thread runs was not caught: pingpong 20 runs of 20 ended, 40,000
+  cross-process wakes; the pending wake stands on the reasoning in `wake_later`'s docstring.
+- **A Sprint 120 plant changed meaning:** with no timeout on the host's waits, the sleeper on two vCPUs now ends a
+  second late (the Machine's stop check) instead of spinning to the limit; its test judges the lateness.
+- **Records** on 37784f1a: the batch run (frontier-643a6283510c-1792623423346201000) conforms, 168 lines, 0
+  divergences, 81,456,874,631 instructions in 34.9 s, Sprint 121's seven exit kinds, 104 numbers that add up; 456 of
+  458 classes (FCOS and FSIN as before), 68 of 68 families; on two vCPUs family-threads-1792623545539342000 ([3,793,144,
+  1,001,926]), family-running_thread_context-1792623546363220000 ([5,442,025, 283,116]),
+  family-wait_handoff-1792623546946222000 ([3,806, 6,401]) conform. The same on f1838b96 (4b36b5ad).
+- **The batch run on two vCPUs** (scratch, wall clock): frontier-643a6283510c-1792623570672147000 conforms, 168 lines,
+  0 divergences, 79,643,639,308 instructions in 111.7 s (713 M a second); on one vCPU on the same clock
+  (frontier-643a6283510c-1792623682795890000) 77,777,493,338 in 107.2 s (725 M a second). The run's wall time is the
+  game's own waits on real time, not its work: no faster on two vCPUs. Two vCPUs make 108,530 host requests against
+  40,101 and 33,993 host hand-overs against 39,814.
+- **Open, none deferred:** none from this sprint. Next (plan.md step 1): the batch run on two vCPUs measured where its
+  time goes, now that it runs.

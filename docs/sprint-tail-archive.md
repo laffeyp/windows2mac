@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 112 (2026-10-17, closed)
+- **Scope:** in H4's place: discrepancy reports that name the program and state they failed from, and class runs' reports after a reduction.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-112-report.md`, 526 records of the sweep on b1ad0cfb): per class and family SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED (524) or, for FCOS and FSIN, REDUCTION_COMPLETED then DISCREPANCY_REPORTED then DISCREPANCY_ROUTED (8 each), SESSION_COMPLETED. Emits check: every named tag fired; CANDIDATE_ACCEPTED fired unnamed.
+  - *Observation 1 (a fix the gate turned on old records):* removing the class runs from the known list held today's earlier FCOS and FSIN records. Disposition: resolved-here (a fix's commit time bounds what is known).
+  - *Observation 2 (a reduction no one ran):* a family's probe has no reducer, so no REDUCTION_COMPLETED is claimed for it. Disposition: deferred (Deferred 2026-10-17, Sprint 112).
+- **Closed:** CI pending at this entry; Sprint 111's CI run 39069254531 (success on a285ffc9).
+
 ### Sprint 111 (2026-10-17, closed)
 - **Scope:** H3 of the SDD hardening order: Signal Reports made from the record, each card's Emits checked against what fired.
 - **Rubber Duck Pass:**
