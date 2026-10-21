@@ -17,7 +17,7 @@ with `x86_64-w64-mingw32-gcc -O1 -Wall -Werror -ffreestanding -fno-builtin -fno-
   slice's end, where the Machine gives another process its turn. On the instruction clock each process counted only
   its own instructions, so the child started behind its parent and its sleep stood still while the parent spun.
 - spinchild: a spinner thread, a child process that sleeps, and the main thread sleeping 20 ms: on two vCPUs vCPU 0
-  waits for vCPU 1 while another process exists, which w2m refuses (vCPU 0 drives the Machine).
+  waited for vCPU 1 while another process existed, which w2m refused until Sprint 122 (test_processes_beside_vcpus.py).
 - qpc, qpc2: QueryPerformanceCounter's value, read by the main thread on vCPU 0 and by a worker on vCPU 1, which on the
   wall clock is the host's time.monotonic count (the host reads the guest's clock to wake expired waits).
 
@@ -105,11 +105,14 @@ def test_planted_expiry_on_the_instruction_clock_only_never_ends_the_sleep(monke
 
 @pytest.mark.hvf
 @pytest.mark.timeout(60)
-def test_planted_untimed_host_wait_never_ends_the_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
-    """vCPU 0 waits in the host while vCPU 1 runs the spinner, whose run began before the sleep's deadline existed:
-    only the host wait's timeout wakes the sleeper. A run reaches that wait only when the threads land so (a race), so
-    the plant counts the host waits that had a deadline pending, and the test runs until one did."""
-    from w2m import vm_backend
+def test_planted_untimed_host_wait_ends_the_sleep_late(monkeypatch: pytest.MonkeyPatch) -> None:
+    """vCPU 0 has no thread while vCPU 1 runs the spinner, whose run began before the sleep's deadline existed: only a
+    wait's timeout wakes the sleeper. Before Sprint 122 that wait was vCPU 0's in the host, and with no timeout the run
+    spun to its limit; since, vCPU 0 hands the Machine on, and the Machine looks again at its stop check each second
+    (kernel.STOP_CHECK_SECONDS), so with no timeout the 20 ms sleep ends a second late. A run reaches that wait only when
+    the threads land so (a race), so the plant counts the waits that had a deadline pending, and the test runs until
+    one did."""
+    from w2m import kernel, vm_backend
     seconds = vm_backend.VM._seconds_to_deadline
     reached = [0]
 
@@ -117,10 +120,13 @@ def test_planted_untimed_host_wait_never_ends_the_sleep(monkeypatch: pytest.Monk
         reached[0] += seconds(self, vcpu) is not None
         return None
     monkeypatch.setattr(vm_backend.VM, "_seconds_to_deadline", untimed)
-    seen: list[tuple[str, bytes]] = []
+    seen: list[tuple[str, bytes, float]] = []
     while len(seen) < 30 and not reached[0]:            # a run that misses the wait ends in about 0.1 s
-        seen.append(run_guest("sleeper", 2))
-    assert reached[0] and seen[-1] == ("timeout", b""), (reached, seen)
+        started = time.monotonic()
+        stop, out = run_guest("sleeper", 2)
+        seen.append((stop, out, time.monotonic() - started))
+    assert reached[0] and seen[-1][:2] == ("ExitProcess", b"woke\ndone\n"), (reached, seen)
+    assert seen[-1][2] >= kernel.STOP_CHECK_SECONDS, seen
 
 
 @pytest.mark.hvf
@@ -239,17 +245,6 @@ def test_the_guest_counter_on_vcpu_1_is_the_hosts_monotonic_count(monkeypatch: p
         if (8, 1) in ends:
             break
     assert (8, 1) in ends, ends
-
-
-@pytest.mark.hvf
-@pytest.mark.timeout(120)
-def test_several_vcpus_refuse_to_wait_while_another_process_could_run() -> None:
-    stops: list[str] = []
-    # reached in 11 runs of 20 on 1953fbfe (measured; the other 9 end with "done"): 5 runs missed it 1 time in 5 test
-    # runs, so 30 (a miss about 4e-11 at that rate)
-    while len(stops) < 30 and not any("several processes" in s for s in stops):
-        stops.append(run_guest("spinchild", 2)[0])
-    assert stops[-1].startswith("Unimplemented: a thread waiting on vCPU 0 for another vCPU while another process"), stops
 
 
 @pytest.mark.hvf

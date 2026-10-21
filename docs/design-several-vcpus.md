@@ -200,3 +200,17 @@ the waiters. The host, resuming the readying vCPU, ends its slice only for ready
 (`_slice_until`), so the readying vCPU goes on with its own thread and the waiting one takes the readied thread. An
 SGI through the GIC was the design's first answer and is not needed for this: Hypervisor.framework returns from
 hv_vcpu_run on a guest WFI (QEMU's `hvf_wfi`), so an idle vCPU waits in the host either way and must be told there.
+
+**Processes beside several vCPUs (Sprint 122).** One Python thread drives a kernel.Machine and serves each process's
+vCPU 0; the host threads of a process's other vCPUs run beside it. In a Machine, vCPU 0 never waits for another vCPU:
+with no thread to take it puts its thread down, counts itself in RT_WAITING and answers IDLE, and the Machine runs
+another process or, with none ready, waits on its own condition (notified by every serve on a host thread) until a
+change, the earliest deadline or its stop check. A process is ready for the Machine only when a thread no other vCPU
+holds is ready. The run stops as a deadlock after a whole second with no change, no deadline and no host thread
+running a vCPU. The Machine's tables are under one lock, since any host thread may make a request. A wake from
+another process reaches a process that another thread may be running as a pending wake (`wake_later`), applied
+under that process's runtime lock at an exit from outside the runtime's C, where no thread is between reading a shared
+object and blocking; until it is applied every slice of that process ends at the host, and the process the Machine's
+thread runs is kicked so that it reaches the host. With every process on one vCPU the Machine's thread is the only
+one, and wakes are written at once, as before. A thread sliced out for another process's turn goes to the back of its
+process's round robin (on one vCPU before, a readied thread never ran beside a child that spun).

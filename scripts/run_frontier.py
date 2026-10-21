@@ -221,9 +221,15 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--timeout-seconds", type=float, default=10_800.0)
     # the guest's clock counts instructions at this rate (Sprint 065 item 10); 0: the host's clock
     ap.add_argument("--clock-rate", type=int, default=CLOCK_RATE)
+    # the game's threads on this many vCPUs (Sprint 122); more than one needs the wall clock (--clock-rate 0)
+    ap.add_argument("--vcpus", type=int, default=1)
     ap.add_argument("--no-translation-cache", action="store_true",
                     help="compile every block afresh (build/translation-cache keeps blocks between runs; recentering step 8)")
     a = ap.parse_args(argv)
+    if a.vcpus > 1 and a.clock_rate:
+        print("refused: threads on several vCPUs run on the wall clock (--clock-rate 0); the instruction clock is one "
+              "vCPU's count")
+        return 2
     if not a.no_translation_cache:
         from w2m import vm_backend
         vm_backend.TRANSLATION_CACHE_DIR = ROOT / "build" / "translation-cache"
@@ -268,6 +274,7 @@ def main(argv: list[str]) -> int:
         # a kernel.Machine: the game starts UnityCrashHandler64.exe as a second process (Sprint 055)
         machine = Machine(spawner(files, instruction_clock=(a.clock_rate, REFERENCE_START) if a.clock_rate else None),
                           max_steps=a.max_steps, timeout_ms=60_000)
+        vm.thread_vcpus = a.vcpus
         # the run ends where its reference does: all eight batch-mode game runs (37982448071 to 38275716702) end at
         # the same 168 lines, run 180.3 to 190.0 s and are stopped, so the lines are the game's plateau in batch mode
         # and past them nothing is judged; the 2026-10-12 frontier on 2e547459 went two hours beyond
@@ -437,7 +444,8 @@ def main(argv: list[str]) -> int:
     def topology(b: TopologyBuilder) -> None:
         b.baseline(subject=str(a.exe.name), subject_sha256=sha, backend="managed_vm", scratch=a.scratch,
                    plant=a.plant or "", clock_rate=a.clock_rate, max_steps=a.max_steps,   # both change the calls
-                   reference_set=[run.name for run in reference_runs], load_at_start=load_at_start)
+                   reference_set=[run.name for run in reference_runs], load_at_start=load_at_start,
+                   **({"vcpus": a.vcpus} if a.vcpus > 1 else {}))   # one names none, as family runs (Sprint 118)
         b.producer_kind("harness", schemas=[events.SESSION_INIT], schema_version=1, factory=lambda: producer(harness))
         b.producer_kind("destination_runner", schemas=[events.EXECUTION_STARTED, events.SERVICE_UNIMPLEMENTED,
                         events.MEASUREMENT_RECORDED, events.EXECUTION_COMPLETED], schema_version=1, factory=lambda: producer(runner))

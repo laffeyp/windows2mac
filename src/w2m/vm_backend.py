@@ -1914,6 +1914,9 @@ class Channel:
         self.wake.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint32]
         self.barrier = lib.OSMemoryBarrier
         self.seq = struct.unpack_from("<I", mm, self.base + CH_CMD)[0]
+        # another process's host thread may kick vCPU 0 as its run ends (Sprint 122): a kick after `leave` does nothing
+        self._kick_lock = threading.Lock()
+        self._left = False
 
     def call(self, op: int) -> int:
         """Run `op` with the fields already written; its status."""
@@ -1960,11 +1963,16 @@ class Channel:
     def kick(self) -> None:
         """Stop the vCPU now, or at once when it next runs (vm_monitor.c kicker, hv_vcpus_exit): its run returns kind
         `kick`. From any thread; kicks made before the monitor looks count as one."""
-        self.barrier()
-        self._kick_word.value = (self._kick_word.value + 1) & 0xFFFFFFFF      # one 32-bit store
-        self.wake(self.kick_addr, 4, 1)
+        with self._kick_lock:
+            if self._left:
+                return
+            self.barrier()
+            self._kick_word.value = (self._kick_word.value + 1) & 0xFFFFFFFF      # one 32-bit store
+            self.wake(self.kick_addr, 4, 1)
 
     def leave(self) -> None:
+        with self._kick_lock:
+            self._left = True
         self.call(OP_LEAVE)
         del self._ref, self._cmd_word, self._exit_word, self._kick_word
 
@@ -2413,6 +2421,8 @@ class VM:
         self.wakes = 0                                  # threads.c's requests to wake them (THREAD_WAKE, Sprint 121)
         self._takers = 0                                # vCPUs waiting in the host to take a thread (RT_WAITING)
         self._changes = 0                               # notifies so far: a wait that saw none saw nothing change
+        # a wake from another process while another host thread may run this one (Sprint 122): applied under the lock
+        self._wake_pending = False
         self.vcpu_readback: list[tuple[int, int]] = []  # each vCPU's ACTLR_EL1 and TTBR0_EL1, read by its owner
         self._private_tables: list[dict[object, int]] = []   # per vCPU past the first: shared table -> its copy
         self._private_regions: set[int] = set()         # the 2 MB regions whose leaves differ per vCPU
@@ -2450,7 +2460,9 @@ class VM:
         self.block_census: list[tuple[int, list[tuple[str, int]], int]] = []   # BLOCK_CENSUS's blocks
         self._stub_page = 0                              # guest_stubs.py's page, once written (Sprint 053)
         self.machine: Any = None                         # the kernel.Machine running this VM among others (Sprint 055)
-        self._idle: tuple[GuestThread, int, bool, bool] | None = None   # where _switch found no thread to run
+        # where _switch found no thread to run: the thread, its schedule bits, whether vCPU 0 counts as waiting for a
+        # thread (RT_WAITING), whether the thread was put down
+        self._idle: tuple[GuestThread, int, bool, bool] | None = None
         self._max_steps = 0
         self._first_tid = tid                            # current_tid until the first thread is in the run table
         self.virtual = VirtualMemory(VIRTUAL_VA, VIRTUAL_SIZE, self._zero,
@@ -2715,7 +2727,7 @@ class VM:
         """SLICE_UNTIL for the next run: 0 when a slice's end must reach the host (lockstep, a forced stop, another
         thread or process ready, a deadline the instruction clock cannot place, another process with a deadline);
         the count at which the earliest deadline of a blocked thread falls, on the instruction clock; else ~0."""
-        if self.lockstep or forced:
+        if self.lockstep or forced or self._wake_pending:   # a pending wake is applied at the host (Sprint 122)
             return 0
         cur = self.threads.get(self.current_tid(vcpu))
         if cur is not None and cur.suspend:              # suspended from another vCPU: it leaves at the slice's end
@@ -3382,16 +3394,20 @@ class VM:
         struct.pack_into("<Q", self.mm, RUN_TABLE + RT_WAITING, self._takers)
 
     def _notify_waiters(self) -> None:
-        """After a serve, under the lock: a waiting vCPU looks again."""
+        """After a serve, under the lock: a waiting vCPU looks again, and so does a Machine waiting for a change in a
+        process whose threads run on several vCPUs (Sprint 122)."""
         if self._parked:
             with self._changed:
                 self._changes += 1
                 self._changed.notify_all()
+        if self.machine is not None and self.lock.shared:
+            self.machine.notify(self)
 
     def _park(self, vcpu: Vcpu) -> list[int] | None:
         """Under the lock, on a vCPU past the first: load the first ready thread no vCPU holds, in thread id order, and
         answer its registers; wait while there is none; None when the run stops."""
         while self._stopping is None:
+            self._take_wakes()
             self._wake_expired(vcpu)
             t = next((t for _, t in sorted(self.threads.items())
                       if t.status == "ready" and t.suspend == 0 and not self._held_elsewhere(vcpu, t)), None)
@@ -3474,10 +3490,11 @@ class VM:
 
     def _switch(self, vcpu: Vcpu, x: list[int], cur: GuestThread, schedule: int,
                 saved: bool = False) -> list[int] | None:
-        """The next thread's state after cur's (x): IDLE, in a machine of several VMs, when none of this VM's
-        threads can run (the driver runs another VM and resumes this one when a thread is ready again). `saved`: cur
-        was put down already (vCPU 0 waiting, below, then idle), so x is stale and another vCPU may have run it since;
-        whichever thread goes on, cur included, is loaded from its run table entry."""
+        """The next thread's state after cur's (x): IDLE, in a kernel.Machine, when vCPU 0 has no thread to take (the
+        Machine runs another VM, or waits, and resumes this one when a thread is ready again); PARK on a vCPU past the
+        first. `saved`: cur was put down already (vCPU 0 waiting, below, idle, or sliced out for another VM), so x is
+        stale and another vCPU may have run it since; whichever thread goes on, cur included, is loaded from its run
+        table entry."""
         if self.lock.shared:                             # a deadline passed while this vCPU served or waited
             self._wake_expired(vcpu)
         order = sorted(self.threads)
@@ -3490,13 +3507,23 @@ class VM:
         if nxt is None and vcpu.index:                   # a vCPU past the first waits for a thread (Sprint 118)
             self._save_thread(vcpu, cur, x)
             return PARK
+        if nxt is None and self.machine is not None and self.lock.shared:
+            # vCPU 0 hands the Machine on (Sprint 122: it waited here for another vCPU, and no other process ran
+            # meanwhile, so w2m refused the wait beside a second process). Its thread is put down, so another vCPU
+            # may take it or a suspender see it stopped, and it counts as a waiting vCPU: threads.c asks the host to
+            # wake it for a thread readied in the VM, and the Machine resumes it when one is ready (VM.ready)
+            if not saved:
+                if schedule & SCHEDULE_ANSWER:
+                    x[0] = 1
+                self._save_thread(vcpu, cur, x)
+                saved = True
+            self._count_waiting(1)
+            self._notify_waiters()
+            self._idle = (cur, schedule, True, saved)
+            return IDLE
         while nxt is None and self._runs_elsewhere(vcpu):   # vCPU 0 waits while another vCPU runs a thread
             if self._stopping is not None:
                 raise VcpusStopped(self._stopping)
-            if self.machine is not None and len(self.machine.vms) > 1:
-                # vCPU 0 drives the Machine: while it waits here no other process runs (Sprint 120)
-                raise Unimplemented("a thread waiting on vCPU 0 for another vCPU while another process could run "
-                                    "(threads on several vCPUs in a machine of several processes)")
             if not saved:                                # put down first, so a suspender elsewhere sees it stopped
                 if schedule & SCHEDULE_ANSWER:           # (Sprint 119); SwitchToThread: other threads run meanwhile
                     x[0] = 1
@@ -3510,7 +3537,7 @@ class VM:
                      and self.threads[k].suspend == 0 and self.threads[k].deadline != M64
                      and not self._held_elsewhere(vcpu, self.threads[k])]
             if self.machine is not None:
-                self._idle = (cur, schedule, bool(timed), saved)
+                self._idle = (cur, schedule, False, saved)
                 return IDLE
             if not timed:
                 raise Unimplemented("every thread waits with no timeout and nothing can wake one (a deadlock)")
@@ -3577,8 +3604,13 @@ class VM:
         """After the driver resumed an idle VM: a thread made ready meanwhile runs, or a blocked thread with a
         deadline runs to check it."""
         assert self._idle is not None
-        cur, schedule, _, saved = self._idle
+        cur, schedule, counted, saved = self._idle
         self._idle = None
+        if counted:
+            self._count_waiting(-1)
+        if self._stopping is not None:                   # another vCPU's host thread saw the run's end meanwhile
+            raise VcpusStopped(self._stopping)
+        self._take_wakes()
         self._wake_expired(vcpu)                         # resumed for a deadline that passed (ready(), Sprint 120)
         if not any(t.status == "ready" and t.suspend == 0 and not self._held_elsewhere(vcpu, t)
                    for t in self.threads.values()) and not self.warp_to_deadline(vcpu):
@@ -3589,15 +3621,19 @@ class VM:
         return self._switch(vcpu, x, cur, schedule, saved)
 
     def ready(self) -> bool:
-        """Whether a thread of this VM can run now (kernel.Machine): a process not yet started can, and one whose
-        blocked thread's deadline has passed (Sprint 120: before, a child's 20 ms Sleep never ended while its parent
-        spun, the Machine giving no turn to a process with no thread ready)."""
-        return not self.threads or any(t.status == "ready" and t.suspend == 0 for t in self.threads.values()) \
-            or self._deadline_passed()
+        """Whether vCPU 0 of this VM has a thread to run now (kernel.Machine): a process not yet started has, and one
+        with a ready thread no other vCPU holds, a pending wake of a blocked thread, a blocked thread whose deadline
+        has passed (Sprint 120: before, a child's 20 ms Sleep never ended while its parent spun, the Machine giving no
+        turn to a process with no thread ready), or a run of several vCPUs that is stopping. Read from the Machine's
+        thread while other vCPUs' host threads change the threads (Sprint 122), so over a copy of them."""
+        threads = list(self.threads.values())
+        return not threads or any(t.status == "ready" and t.suspend == 0 and t.vcpu in (0, 1) for t in threads) \
+            or (self._wake_pending and any(t.status == "blocked" for t in threads)) \
+            or self._stopping is not None or self._deadline_passed()
 
     def _deadline_passed(self) -> bool:
         """Whether a blocked, unsuspended thread's deadline has passed on the machine's clock (_machine_now)."""
-        deadlines = [t.deadline for t in self.threads.values()
+        deadlines = [t.deadline for t in list(self.threads.values())
                      if t.status == "blocked" and t.suspend == 0 and t.deadline != M64]
         return bool(deadlines) and min(deadlines) <= self._machine_now()
 
@@ -3620,14 +3656,49 @@ class VM:
             struct.pack_into("<Q", self.mm, RUN_TABLE + CLOCK_WARP, self._clock_warp() + lag)
 
     def waits_with_deadline(self) -> bool:
-        return any(t.status == "blocked" and t.suspend == 0 and t.deadline != M64 for t in self.threads.values())
+        return any(t.status == "blocked" and t.suspend == 0 and t.deadline != M64 for t in list(self.threads.values()))
+
+    def seconds_to_deadline(self) -> float | None:
+        """How long the Machine may wait before a blocked thread of this VM is due (wall clock); None for none."""
+        return self._seconds_to_deadline(self.vcpus[0])
+
+    def host_threads_running(self) -> int:
+        """vCPUs past the first whose host threads run or serve now, not waiting in `_wait_for_change`; the Machine's
+        deadlock check (Sprint 122). vCPU 0 is the Machine's own thread."""
+        return max(0, self.thread_vcpus - 1 - self._parked) if self.lock.shared else 0
 
     def wake_all(self) -> None:
-        """A shared object was signaled (kernel.py): every blocked thread checks its wait again."""
+        """A shared object was signaled (kernel.py), by the thread that serves this VM: every blocked thread checks
+        its wait again."""
         for t in self.threads.values():
             if t.status == "blocked":
                 t.status = "ready"
         self._notify_waiters()                           # a parked vCPU of this process looks again (Sprint 120)
+
+    def wake_later(self) -> None:
+        """A shared object was signaled by a thread that does not serve this VM, while one that does may run it
+        (Sprint 122). Every blocked thread checks its wait again once this VM's runtime lock is held from outside the
+        runtime's C (`_take_wakes`): a thread between reading a shared event as unset and blocking (sync_objects.c
+        `signaled`, then threads.c `w2m_block`) is inside that C, and woken before it blocked it would wait on. Until
+        then each slice of this VM ends at the host (_slice_until, _before_run)."""
+        self._wake_pending = True
+        if self._parked:
+            with self._changed:
+                self._changes += 1
+                self._changed.notify_all()
+
+    def _take_wakes(self) -> None:
+        """Under the runtime lock, outside the runtime's C: apply a wake left by `wake_later`."""
+        if self._wake_pending:
+            self._wake_pending = False
+            self.wake_all()
+
+    def kick_vcpu0(self) -> None:
+        """Stop vCPU 0's run (the Machine's thread runs it), so it reaches the host and looks again: at a wake a
+        host thread left it, and at another process a host thread made ready (Sprint 122; kernel.Machine.wake)."""
+        channel = self.vcpus[0].channel
+        if channel is not None:
+            channel.kick()
 
     def _bridge(self, import_name: str, thunk: int) -> int:
         """AArch64 stub for one import: save the guest GPRs in the state block, pass RCX, RDX, R8,
@@ -4941,7 +5012,10 @@ class VM:
                                  int(r[7], 16), [int(v, 16) for v in r[8:39]])
                     cpsr = int(r[4], 16)
                 marked = time.perf_counter_ns()
+                outside = self._wake_pending and self.lock.holder() != vcpu.index + 1   # read before the host takes it
                 took, held = self.lock.enter(vcpu), True
+                if outside:
+                    self._take_wakes()
                 self.run_ns += marked - started
                 out = self.serve_exit(run, vcpu, e, cpsr)
                 resumes = isinstance(out, Resume) and out.pc == e.pc
@@ -4954,9 +5028,15 @@ class VM:
                     held = False
                     yield "slice"                            # another VM's turn; this thread goes on after
                     took, held, resumes = self.lock.enter(vcpu), True, True
+                    if self._stopping is not None:
+                        raise VcpusStopped(self._stopping)
+                    self._take_wakes()
                     self._catch_up(vcpu)
-                    x, pc, cpsr = self._load_thread(vcpu, self.threads[self.current_tid(vcpu)]), self.resume_va, CPSR_EL1H
-                    continue
+                    # the slice ended: the next ready thread of this process runs, as at any slice's end (Sprint 122:
+                    # the thread sliced out ran again, and beside a child that spins a thread readied meanwhile ran 111
+                    # instructions in 20 s while the one that readied it ran 6.5 billion)
+                    out = Switched(self._switch(vcpu, x, self.threads[self.current_tid(vcpu)], 0, saved=True),
+                                   at_slice=True)
                 if isinstance(out, Switched):
                     switched = out.switched
                     while switched is IDLE:
@@ -4964,6 +5044,8 @@ class VM:
                         held = False
                         yield "idle"
                         took, held, resumes = self.lock.enter(vcpu), True, True
+                        if machine is not None and machine.stop_requested:   # asked while this VM idled (Sprint 122)
+                            raise VcpusStopped(machine.stop_requested)
                         self._catch_up(vcpu)
                         switched = self._resume_idle(vcpu, e.x)
                     if switched is None:
@@ -5015,7 +5097,8 @@ class VM:
         # another process ready or waiting with a deadline needs the host at each slice's end (_slice_until); one
         # becomes ready only by a host request, after which this is computed again
         struct.pack_into("<Q", self.mm, RUN_TABLE + RT_IN_VM, int(
-            SWITCH_IN_VM and not self.lockstep and not run.forced_stop and not self._other_process_due()))
+            SWITCH_IN_VM and not self.lockstep and not run.forced_stop and not self._other_process_due()
+            and not self._wake_pending))
         if not MONITOR_VA + RUNTIME_IMAGE <= pc < MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE:
             x[REG_BUDGET] = (limit - count) & M64           # in the runtime's C, x23 is the C's own
 
@@ -5036,7 +5119,10 @@ class VM:
                 started = time.perf_counter_ns()
                 e, cpsr = vcpu.channel.run(pc, cpsr, x, timeout_ms, swap)
                 ran = time.perf_counter_ns() - started
+                outside = self._wake_pending and self.lock.holder() != vcpu.index + 1   # read before the host takes it
                 took, held = self.lock.enter(vcpu), True
+                if outside:
+                    self._take_wakes()
                 self.run_ns += ran
                 self.monitor_commands["run"] += 1
                 out = self.serve_exit(run, vcpu, e, cpsr)

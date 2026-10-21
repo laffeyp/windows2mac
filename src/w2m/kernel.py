@@ -14,6 +14,15 @@ signaled in one VM makes every blocked thread in every VM check its wait again, 
 (threads.c). When no VM has a ready thread, one with a timed wait runs after a millisecond, or the run stops: every
 thread of every process waits forever.
 
+A process whose threads run on several vCPUs (Sprint 122) has a host thread for each vCPU past the first, and those
+threads run beside the Machine's. Its vCPU 0 never waits for them: with no thread it answers "idle" and the Machine runs
+another process, or waits on its own condition (`notify`, called after every serve of such a process) until a change,
+the earliest deadline or its stop check, and stops the run as a deadlock only after a whole check with no change, no
+deadline and no such host thread running. The Machine's tables are under one lock, since any of those threads may make
+a request; and a wake into a process that another thread may be running is left pending (VM.wake_later), applied by
+that process under its own runtime lock. A wake made on a host thread kicks the process the Machine's thread runs, so
+its vCPU 0 reaches the host and looks again: at a pending wake, and at a process the change made ready. With every process on one vCPU, nothing here changes from before: one thread, wakes written at once.
+
 A process holds handles on the objects here; when it ends, its handles close, as Windows closes an ending process's
 handles: a pipe whose last writer ends is broken for its reader (Sprint 058). Object ids start at OBJECT_IDS, above
 every process id, so a handle's id names one or the other.
@@ -37,6 +46,7 @@ Requests (a0 the sub-operation; the rest by sub-operation):
 from __future__ import annotations
 
 import struct
+import threading
 import time
 from collections import Counter
 from collections.abc import Callable, Generator
@@ -55,6 +65,8 @@ KIND_PROCESS, KIND_SHARED_EVENT, KIND_PIPE_READ, KIND_PIPE_WRITE, KIND_REMOTE_TH
 KIND_STANDARD = 100                       # W2M_INHERIT_STANDARD: a standard handle, not an object
 KIND_ERROR_MODE = 101                     # W2M_INHERIT_ERROR_MODE: the parent's error mode
 KIND_DIRECTORY = 102                      # W2M_INHERIT_DIRECTORY: the parent's current directory (Sprint 058)
+STOP_CHECK_SECONDS = 1.0                  # a waiting Machine asks stop_when this often (vm_backend's own, Sprint 095)
+DEADLOCK_CHECK_SECONDS = 1.0              # no change this long, with nothing to wait for, is a deadlock (vm_backend's)
 OBJECT_IDS = 1 << 32                      # the first object id: above every process id (Sprint 058)
 PIPE_CAPACITY = 4096                      # a pipe made with size 0 (rows pipe.capacity, pipe.large_write; Sprint 058)
 
@@ -106,6 +118,13 @@ class Machine:
         # line (vm_backend.PROGRESS_SECONDS) that names a reason to stop or None; either ends the run with its record
         self.stop_requested: str | None = None
         self.stop_when: Callable[[], str | None] | None = None
+        # Sprint 122: requests from several host threads; the process the Machine's thread runs now (None between
+        # turns); the change count a waiting Machine watches
+        self._lock = threading.RLock()
+        self._running: Process | None = None
+        self._thread: threading.Thread | None = None     # the thread that runs the Machine (run)
+        self._changed = threading.Condition()
+        self._changes = 0
 
     def _new(self, obj: Event | Pipe) -> int:
         oid = self.next_id
@@ -115,10 +134,12 @@ class Machine:
 
     def add(self, vm: Any) -> Process:
         """A VM joins the machine: its process id is the one it was built with (vm.process_id)."""
-        vm.machine = self
-        p = Process(vm.process_id, vm)
-        self.processes[vm.process_id] = p
-        self.vms.append(vm)
+        with self._lock:
+            vm.machine = self
+            p = Process(vm.process_id, vm)
+            self.processes[vm.process_id] = p
+            self.vms.append(vm)
+        self.notify(None)
         return p
 
     def allocate_ids(self) -> tuple[int, int]:
@@ -130,11 +151,45 @@ class Machine:
 
     # ---- the shared objects ----------------------------------------------------------------------------------
 
-    def wake(self) -> None:
-        for vm in self.vms:
-            vm.wake_all()
+    def concurrent(self) -> bool:
+        """Whether a process's threads run on several vCPUs, so host threads run beside the Machine's (Sprint 122)."""
+        return any(getattr(vm, "thread_vcpus", 1) > 1 for vm in list(self.vms))
+
+    def wake(self, by: Any = None) -> None:
+        """Every blocked thread of every process checks its wait again. `by`, the requesting VM, is served by the
+        calling thread and is written at once; so is every VM while each runs on one vCPU, since then the Machine's
+        thread is the only one. Otherwise another thread may be running a VM, which applies the wake under its own
+        lock (VM.wake_later). A wake made on a host thread kicks the process the Machine's thread runs, whichever it is:
+        its vCPU 0 may run with no slice end, computed before this change made a process ready or left it a wake
+        (Sprint 122: a child started from vCPU 1 never ran while vCPU 0 spun, 30 runs of 60)."""
+        concurrent = self.concurrent()
+        for vm in list(self.vms):
+            if vm is by or not concurrent:
+                vm.wake_all()
+            else:
+                vm.wake_later()
+        running = self._running
+        if concurrent and running is not None and threading.current_thread() is not self._thread:
+            running.vm.kick_vcpu0()
+        self.notify(None)
+
+    def notify(self, vm: Any) -> None:
+        """A change a waiting Machine looks at (Sprint 122): a serve of `vm` on a host thread of its own, a process
+        added, a wake. While the Machine's thread runs a process it waits for nothing, and a process that another
+        process's host thread makes ready has its turn at that process's next slice end: a running process with
+        threads ready elsewhere ends every slice at the host (VM._other_process_due)."""
+        running = self._running
+        if vm is not None and running is not None:
+            return
+        with self._changed:
+            self._changes += 1
+            self._changed.notify_all()
 
     def request(self, vm: Any, a: list[int]) -> tuple[int, int]:
+        with self._lock:                                 # several host threads may ask at once (Sprint 122)
+            return self._request(vm, a)
+
+    def _request(self, vm: Any, a: list[int]) -> tuple[int, int]:
         sub = a[0]
         held = self.processes[vm.process_id].held
         if sub == EVENT_OPEN:
@@ -158,7 +213,7 @@ class Machine:
                 ev.signaled = False
             elif sub == EVENT_SET:
                 ev.signaled = True
-                self.wake()
+                self.wake(vm)
             elif sub == EVENT_RESET:
                 ev.signaled = False
             return 0, 0
@@ -189,14 +244,14 @@ class Machine:
                     raise Unimplemented("a write to a pipe no process reads (ERROR_NO_DATA): not in the rows")
                 n = min(a[3], PIPE_CAPACITY - len(pipe.data))
                 pipe.data += vm.read_bytes(a[2], n)
-                self.wake()
+                self.wake(vm)
                 return n, 0
             if not pipe.data:
                 return 0, 2 if pipe.writers == 0 else 1
             n = min(a[3], len(pipe.data))
             vm.write_bytes(a[2], bytes(pipe.data[:n]))
             del pipe.data[:n]
-            self.wake()                                  # a writer waiting on a full pipe has room now
+            self.wake(vm)                                # a writer waiting on a full pipe has room now
             return n, 0
         if sub == PROCESS_CREATE:
             line = vm.read_text(a[1], a[2] & 0xFFFFFFFF)
@@ -216,7 +271,7 @@ class Machine:
                     p.held[oid] += 1                     # the child's handle on it
             p.handles = 1
             held[pid] += 1                               # the parent's handle on the child
-            self.wake()
+            self.wake(vm)
             return pid, tid
         if sub == PROCESS_STATE:
             found = self.processes.get(a[1])
@@ -269,11 +324,12 @@ class Machine:
     # ---- running ----------------------------------------------------------------------------------------------
 
     def others_ready(self, vm: Any) -> bool:
-        return any(o is not vm and o.ready() for o in self.vms)
+        return any(o is not vm and o.ready() for o in list(self.vms))
 
     def run(self, main: Any) -> Any:
         """Run every VM until the main one's process ends or stops; its Result. The others stop with it."""
         self.main = main
+        self._thread = threading.current_thread()
         if main.process_id not in self.processes:
             self.add(main)
         current = self.processes[main.process_id]
@@ -281,33 +337,42 @@ class Machine:
             while True:
                 if current.steps is None:
                     current.steps = current.vm.steps(**self.run_args)
+                self._running = current
                 try:
                     next(current.steps)
                 except StopIteration as done:
+                    self._running = None
                     current.result = done.value
                     current.exit_code = current.vm.exit_code if current.vm.exit_code is not None else 0
-                    self.vms.remove(current.vm)
-                    self._release(current)
+                    with self._lock:
+                        self.vms.remove(current.vm)
+                        self._release(current)
                     self.wake()
                     if current.vm is main:
                         return current.result
                     if not current.result.stop.startswith("ExitProcess"):
                         return self._child_stopped(main, current)
+                self._running = None
                 nxt = self._next(current)
                 if nxt is None:
                     return self._deadlocked(main)
                 current = nxt
         finally:
-            for p in self.processes.values():
-                if p.steps is not None and p.vm is not main:
+            self._running = None
+            # every process's run ends here, the main one's too: a child's stop returns with the main process's run
+            # suspended, and its host threads (several vCPUs) ran on past the VM's close (Sprint 122)
+            for p in list(self.processes.values()):
+                if p.steps is not None:
                     p.steps.close()
 
     def _next(self, current: Process) -> Process | None:
-        live = [self.processes[vm.process_id] for vm in self.vms]
+        live = [self.processes[vm.process_id] for vm in list(self.vms)]
         if not live:
             return None
         i = live.index(current) if current in live else -1
         rotation = live[i + 1:] + live[:i + 1]
+        if self.concurrent():
+            return self._await_change(rotation)
         for p in rotation:
             if p.steps is None or p.vm.ready():
                 return p
@@ -317,6 +382,33 @@ class Machine:
                 time.sleep(0.001)
             return timed[0]
         return None
+
+    def _await_change(self, rotation: list[Process]) -> Process | None:
+        """The next process to run while a process's threads run on several vCPUs (Sprint 122): the first ready one;
+        with none, wait for a change (`notify`), the earliest deadline or the stop check, then look again. The main
+        process runs when the run is asked to stop, and sees it there. None after a whole check with no change, no
+        deadline and no host thread running a vCPU: a deadlock. Several vCPUs refuse the instruction clock, so a
+        deadline here is on the wall clock."""
+        quiet_since = time.monotonic()
+        while True:
+            with self._changed:
+                seen = self._changes
+            for p in rotation:
+                if p.steps is None or p.vm.ready():
+                    return p
+            if self.stop_requested is None and self.stop_when is not None:
+                self.stop_requested = self.stop_when()
+            if self.stop_requested is not None:
+                return self.processes[self.main.process_id]
+            deadlines = [d for d in (p.vm.seconds_to_deadline() for p in rotation) if d is not None]
+            running = sum(p.vm.host_threads_running() for p in rotation)
+            if not deadlines and not running and time.monotonic() - quiet_since >= DEADLOCK_CHECK_SECONDS:
+                return None
+            with self._changed:
+                if self._changes == seen:
+                    self._changed.wait(min([STOP_CHECK_SECONDS, *deadlines]))
+                if self._changes != seen or deadlines or running:
+                    quiet_since = time.monotonic()
 
     def _deadlocked(self, main: Any) -> Any:
         """Every thread of every process waits with no timeout: the main VM's run stops there, as a VM stops on any
