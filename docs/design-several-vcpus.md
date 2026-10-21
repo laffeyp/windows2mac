@@ -192,3 +192,11 @@ runs guest code that never comes to the host waits until that run's timeout (`ti
 deadlock stop is exact only while every host service is synchronous, so any future source of a wake from outside the
 guest's own serves (an asynchronous host completion, a window event) must notify the waiters (`_notify_waiters`), as
 `wake_all` does for a signal from another process.
+
+**A parked vCPU wakes (Sprint 121).** A thread the guest runtime readies inside the VM (threads.c `w2m_signal`,
+`w2m_ready_thread`) is such a source. While a vCPU waits in the host to take a thread (`_park`, vCPU 0 in `_switch`),
+the run table's word RT_WAITING counts it, and the guest asks the host to wake it (W2M_THREAD_WAKE), which notifies
+the waiters. The host, resuming the readying vCPU, ends its slice only for ready threads beyond the waiting vCPUs
+(`_slice_until`), so the readying vCPU goes on with its own thread and the waiting one takes the readied thread. An
+SGI through the GIC was the design's first answer and is not needed for this: Hypervisor.framework returns from
+hv_vcpu_run on a guest WFI (QEMU's `hvf_wfi`), so an idle vCPU waits in the host either way and must be told there.

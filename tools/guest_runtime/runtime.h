@@ -325,7 +325,8 @@ enum { W2M_EXCEPTION_STUBS = 1, W2M_EXCEPTION_CAPTURE_XMM };
 
 /* W2M_HOST_THREAD's first argument (src/w2m/scheduler.py). */
 enum { W2M_THREAD_CREATE = 1, W2M_THREAD_EXIT_STUB, W2M_THREAD_END, W2M_THREAD_SUSPEND, W2M_THREAD_RESUME,
-       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL_RETIRED, W2M_THREAD_STACK_GROW };   /* 8: Sprint 069 */
+       W2M_THREAD_CONTEXT, W2M_THREAD_EXIT_CODE, W2M_THREAD_SIGNAL_RETIRED, W2M_THREAD_STACK_GROW,     /* 8: Sprint 069 */
+       W2M_THREAD_WAKE };                                                           /* 10: Sprint 121 */
 
 /* After a request that mapped or unmapped pages (a thread's stack: THREAD_CREATE, THREAD_STACK_GROW), the stage-1
  * translations cached for them go on every vCPU (Arm ARM D8.13: TLBI VMALLE1IS, then DSB and ISB; Sprint 104). */

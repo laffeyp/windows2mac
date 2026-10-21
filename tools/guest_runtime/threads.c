@@ -48,7 +48,8 @@ _Static_assert(__builtin_offsetof(struct w2m_run_entry, monitor) == W2M_RUN_MONI
 _Static_assert(__builtin_offsetof(struct w2m_run_entry, state) == W2M_RUN_STATE_OFF, "run entry state");
 _Static_assert(sizeof(struct w2m_run_entry) == W2M_RUN_ENTRY, "run entry size");
 struct w2m_run_table {
-    u64 count, unused_current, unused_current_entry, in_vm, blocked, unused_slice_count, unused_slice_pauses, switches;
+    u64 count, unused_current, unused_current_entry, in_vm, blocked, waiting, unused_slice_pauses, switches;
+    /* waiting: vCPUs waiting in the host with no thread to run (vm_backend.py _wait_for_change; Sprint 121) */
     /* the current thread, its entry and the slice's start: on each vCPU's monitor data page since Sprint 107 */
 };
 #define RUN ((struct w2m_run_table *)W2M_RUN_TABLE_VA)
@@ -114,8 +115,18 @@ void w2m_block(u64 deadline, u64 key) {
     }
 }
 
-/* The waiters on `key` ready: those whose wait takes it, any signal (their key 0), or every key (`key` 0). A thread
- * ready besides the running one ends the running one's slice at its next stop (SLICE_UNTIL). */
+/* A thread made ready inside the VM (Sprint 121). A vCPU waiting in the host for a thread learns of it only from the
+ * host, so while one waits (RUN->waiting) the host is asked to wake it, and on resuming this vCPU the host ends its
+ * slice only for threads readied beyond the waiting vCPUs (vm_backend.py _slice_until). With none waiting, the running
+ * thread's slice ends at its next stop (SLICE_UNTIL), and this vCPU switches to the readied thread. Before, the vCPU
+ * that readied a thread always switched to it, and a waiting vCPU learned of it at the next host serve: a worker
+ * readied 20 times ran its rounds on the waiting vCPU in 3 runs of 13 (the readied guest, tests/data/timed_waits). */
+static void readied(void) {
+    if (RUN->waiting) host(W2M_THREAD_WAKE, 0, 0, 0);
+    else *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
+}
+
+/* The waiters on `key` ready: those whose wait takes it, any signal (their key 0), or every key (`key` 0). */
 void w2m_signal(u64 key) {
     if (!RUN->blocked) return;
     int woke = 0;
@@ -129,7 +140,7 @@ void w2m_signal(u64 key) {
             woke = 1;
         }
     }
-    if (woke) *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
+    if (woke) readied();
 }
 
 /* Sprint 095: a release that hands its object to one waiter (sync_objects.c grant) readies that thread alone; the
@@ -142,7 +153,7 @@ void w2m_ready_thread(u32 tid) {
         if (e->tid != tid || e->status != BLOCKED) continue;
         set_status(e, READY);
         w2m_wake_census.readied++;
-        *monitor_word(W2M_SLICE_UNTIL_OFF) = 0;
+        readied();
         return;
     }
 }

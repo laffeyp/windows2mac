@@ -39,7 +39,7 @@ CS, DS, ES, FS, GS, SS = 0x33, 0x2B, 0x2B, 0x53, 0x2B, 0x2B    # x64 user mode (
 # The run table (Sprint 069, recentering step 5): each thread's saved state, status, suspend count, deadline and census
 # counters in the monitor's memory, where the guest runtime's switch (threads.c w2m_switch) reads and writes them as the
 # host does; runtime.h struct w2m_run_table. The header's offsets, then each entry's.
-RT_COUNT, RT_CURRENT, RT_CURRENT_ENTRY, RT_IN_VM, RT_BLOCKED, RT_SLICE_COUNT, RT_SLICE_PAUSES, RT_SWITCHES = \
+RT_COUNT, RT_CURRENT, RT_CURRENT_ENTRY, RT_IN_VM, RT_BLOCKED, RT_WAITING, RT_SLICE_PAUSES, RT_SWITCHES = \
     0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38
 RT_ENTRIES = 0x100
 E_TID, E_STATUS, E_SUSPEND, E_DEADLINE, E_TEB, E_VSLOT, E_INSTRUCTIONS, E_PAUSES = range(0, 0x40, 8)

@@ -67,7 +67,7 @@ from w2m.x86dec import DecodeError
 from w2m.runtime import Result
 from w2m import guest_stubs
 from w2m.scheduler import (E_MONITOR, E_MONITOR_AT, E_STATE, E_X, PER_THREAD_MONITOR, RT_COUNT,
-                            RT_ENTRIES, RT_IN_VM, RT_SWITCHES, RUN_ENTRY, SCRATCH_OFF,
+                            RT_ENTRIES, RT_IN_VM, RT_SWITCHES, RT_WAITING, RUN_ENTRY, SCRATCH_OFF,
                             STATE_SIZE, TIME_SLICE, GuestThread, attach_stub, detach_stub, write_context)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -330,7 +330,7 @@ REQUEST_FILES: dict[str, tuple[str, ...]] = {
                                                    "UNLINK", "STAT", "MKDIR", "RMDIR", "FSTAT", "DUP", "LIST")},
 }
 THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_SUSPEND, THREAD_RESUME, THREAD_CONTEXT, THREAD_EXIT_CODE, \
-    THREAD_SIGNAL_RETIRED, THREAD_STACK_GROW = range(1, 10)     # 8: signals wake waiters in the VM (Sprint 069)
+    THREAD_SIGNAL_RETIRED, THREAD_STACK_GROW, THREAD_WAKE = range(1, 11)   # 8: signals wake waiters in the VM (Sprint 069)
 VIRTUAL_VA = 0x0000_0010_0000_0000  # the VirtualAlloc arena (virtual_memory.py), sparse in the VM's memory file
 VIRTUAL_SIZE = 0x80_0000_0000       # 512 GB of address space (Sprint 047: UnityPlayer reserves 512 MB at a time), mapped
                                     # in 1 GB blocks; the file is sparse, so only pages the guest touches take host memory
@@ -2410,6 +2410,8 @@ class VM:
         self._stopping: str | None = None               # why a run of several vCPUs stops, from whichever saw it first
         self._changed = threading.Condition()           # notified while a vCPU is parked: a thread may be ready
         self._parked = 0                                # vCPUs waiting for a thread
+        self.wakes = 0                                  # threads.c's requests to wake them (THREAD_WAKE, Sprint 121)
+        self._takers = 0                                # vCPUs waiting in the host to take a thread (RT_WAITING)
         self._changes = 0                               # notifies so far: a wait that saw none saw nothing change
         self.vcpu_readback: list[tuple[int, int]] = []  # each vCPU's ACTLR_EL1 and TTBR0_EL1, read by its owner
         self._private_tables: list[dict[object, int]] = []   # per vCPU past the first: shared table -> its copy
@@ -2722,7 +2724,9 @@ class VM:
             return 0
         others = [t for t in self.threads.values()
                   if t.tid != self.current_tid(vcpu) and t.suspend == 0 and not self._held_elsewhere(vcpu, t)]
-        if any(t.status == "ready" for t in others):
+        # a ready thread ends this slice unless a vCPU waiting to take a thread will run it (Sprint 121: before, vCPU 0
+        # switched to a thread it readied while vCPU 1 waited with nothing to run)
+        if sum(t.status == "ready" for t in others) > self._takers:
             return 0
         deadlines = [t.deadline for t in others if t.status == "blocked" and t.deadline != M64]
         if not deadlines:
@@ -3147,6 +3151,10 @@ class VM:
             return self._create_thread(vcpu, a0, a1, a2 & 0xFFFFFFFF, a2 >> 32)
         if sub == THREAD_STACK_GROW:
             return self._stack_grow(vcpu, a0, bool(a1))
+        if sub == THREAD_WAKE:                          # threads.c readied a thread while a vCPU waits (Sprint 121)
+            self.wakes += 1
+            self._notify_waiters()
+            return 0
         cur = self.threads[self.current_tid(vcpu)]
         if sub == THREAD_EXIT_STUB:
             return self._code_page(detach_stub(self._thread_callbacks(), self._import_thunk("KERNEL32.dll!W2mThreadEnd")))
@@ -3228,7 +3236,7 @@ class VM:
                 raise VcpusStopped(self._stopping)
             if cur.suspend:
                 return False
-            self._wait_for_change(vcpu)
+            self._wait_for_change(vcpu, takes_thread=False)
         return True
 
     def _set_budget(self, vcpu: Vcpu) -> None:
@@ -3335,17 +3343,20 @@ class VM:
         """Whether another vCPU than `vcpu` runs a thread (holds one that is ready): it may ready others."""
         return any(self._held_elsewhere(vcpu, t) and t.status == "ready" for t in self.threads.values())
 
-    def _wait_for_change(self, vcpu: Vcpu) -> None:
+    def _wait_for_change(self, vcpu: Vcpu, takes_thread: bool = True) -> None:
         """Give the shared runtime lock back and wait until a serve on another vCPU, or the run's stop, notifies, or the
         earliest deadline of a blocked thread passes (Sprint 120: before, the wait kept no deadline, and a thread whose
         timeout passed meanwhile waited on); then take the lock again and make the expired waits ready. The waiter
         counts itself before it gives the lock, so a change made under the lock after that is notified
-        (_notify_waiters)."""
+        (_notify_waiters). `takes_thread`: the waiter loads the first ready thread when it wakes (`_park`, vCPU 0 in
+        `_switch`), so it counts in the run table's RT_WAITING, which tells threads.c a readied thread will run there."""
         assert self.lock.shared
         timeout = self._seconds_to_deadline(vcpu)
         if timeout == 0:
             self._wake_expired(vcpu)
             return
+        if takes_thread:
+            self._count_waiting(1)
         with self._changed:
             self._parked += 1
             changes = self._changes
@@ -3357,9 +3368,18 @@ class VM:
             deadlock = timeout is None and self._parked == self.thread_vcpus and self._changes == changes
             self._parked -= 1
         self.lock.enter(vcpu)
+        if takes_thread:
+            self._count_waiting(-1)
         if deadlock:
             self._stop_all("Unimplemented: every thread waits with no timeout and nothing can wake one (a deadlock)")
         self._wake_expired(vcpu)
+
+    def _count_waiting(self, delta: int) -> None:
+        """Under the runtime lock: the vCPUs waiting in the host to take a thread (Sprint 121), in the run table, where
+        threads.c `readied` reads it to ask the host to wake them. A waiter counts until it has the lock again, so one
+        woken and on its way still counts: it looks for a ready thread when it comes back."""
+        self._takers += delta
+        struct.pack_into("<Q", self.mm, RUN_TABLE + RT_WAITING, self._takers)
 
     def _notify_waiters(self) -> None:
         """After a serve, under the lock: a waiting vCPU looks again."""
