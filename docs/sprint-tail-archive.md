@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 111 (2026-10-17, closed)
+- **Scope:** H3 of the SDD hardening order: Signal Reports made from the record, each card's Emits checked against what fired.
+- **Rubber Duck Pass:**
+  - *Sequence narration:* `signal-reports/sprint-111-report.md`: the sprint made no record; its card names no tag. Its reports for 108 to 110 narrate their records (108: 527 records; 110: EXECUTION_STARTED 0.207 s, EXECUTION_COMPLETED 33.965 s).
+  - *Observation 1 (cards that name too little):* 108's card named MEASUREMENT_RECORDED alone while its records fired nine other tags; 110's named four of seven. Disposition: resolved-here for cards from 111 on (WORKING_AGREEMENT's rule: Emits name every tag the code fires).
+  - *Observation 2 (a summary that hides one producer):* substrate's narration_summary of 110's batch run counts 5 producers started and 4 completed, with none failed or cancelled. Disposition: deferred (the next sprint that reads lifecycles).
+- **Closed:** CI pending at this entry; Sprint 110's CI run 39068519125 (success on 2be498eb).
+
 ### Sprint 110 (2026-10-17, closed)
 - **Scope:** H2's second half: the frontier's execution placed in time on its record, within a stated bound.
 - **Rubber Duck Pass:**

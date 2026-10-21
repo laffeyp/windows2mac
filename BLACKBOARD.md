@@ -366,6 +366,7 @@
 - **2026-10-18 (Sprint 119)** — vCPU 0, waiting while another vCPU runs a thread, keeps no deadline, and a vCPU whose run began with SLICE_UNTIL ~0 does not learn of a deadline made elsewhere: a thread blocked with a timeout waits until some vCPU next reaches the host (Sprint 119's no-wait plant ran to the 60 s limit). Re-visit with the parked vCPU's wake (Sprint 118's entry): vCPU 0's wait with the nearest deadline as its timeout, or a kick of the running vCPUs when a deadline appears.
 - **2026-10-18 (Sprint 120)** — Resolution of the Sprint 119 entry above: not deferred. It was a hang, fixed in Sprint 120 with the rest of its class (Decision 2026-10-18 user).
 - **2026-10-18 (Sprint 120)** — Sprint 118's entry above, tested against Decision 2026-10-11 user: the project can build the parked vCPU's wake now, and nothing hangs without it (a thread readied in the VM runs on the vCPU that readied it), so it is no deferral but the next sprint's scope, Sprint 121.
+- **2026-10-21 (Sprint 121)** — Resolution of Sprint 118's entry above: built in Sprint 121. A thread readied inside the VM while a vCPU waits to take one asks the host to wake it (W2M_THREAD_WAKE); the readied guest's 20 rounds ran on the waiting vCPU in 3 runs of 13 before, 10 of 10 after.
 
 ## Open questions
 
@@ -393,6 +394,17 @@
 ---
 
 ## Sprint tail
+
+### Sprint 121 (2026-10-21, closed)
+- **Scope:** Sprint 118's Deferred entry, made scope by Sprint 120: a vCPU waiting in the host to take a thread learns of one the guest readies inside the VM.
+- **Rubber Duck Pass:**
+  - *Sequence narration* (`signal-reports/sprint-121-report.md`, 530 records): the batch run (frontier-643a6283510c-1792611641237977000) SESSION_INIT, EXECUTION_STARTED, 104 MEASUREMENT_RECORDED, EXECUTION_COMPLETED (killed), TRACE_INGESTED, COMPARISON_COMPLETED with 0 divergences, SESSION_COMPLETED; the sweep's 458 class and 68 family runs as Sprint 120's; family-threads-1792611776442439000, family-running_thread_context-1792611777227867000 and family-wait_handoff-1792611777811559000, baseline `vcpus` 2, conform. Emits check: each of the 12 named tags fired; none fired unnamed.
+  - *Observation 1 (a decision the host overwrote):* the first draft had the guest claim waiting vCPUs and end the slice itself; a plant removing the claim changed nothing in 10 runs, because the host's resume after every request rewrites SLICE_UNTIL by its own rule. Disposition: resolved-here (the rule moved to the host's `_slice_until`, which counts the waiting vCPUs; the claim removed before the commit).
+  - *Observation 2 (a plant that tested a different path):* a waiting vCPU counted one too many hangs twoready, but before any wake request: it starves a lone ready thread with no vCPU waiting. A doubled count, the case twoready was written for, does not hang it (5 of 5), since a vCPU that loads one worker while the other is ready gets a slice's end. Disposition: resolved-here (the test's docstring says which path its plant tests).
+  - *Observation 3 (a judge the card set before measuring):* the card's draft judged by vCPU 1's total; in one run of the first probe the worker ran on vCPU 0 and the main thread on vCPU 1, and a probe whose worker never blocked between rounds made at most one wake request. Disposition: resolved-here (the main thread waits until the worker blocks; the judge is the worker's exact count on the waiting vCPU and no switch in the VM).
+  - *Observation 4 (a claim not read from the source):* the card's first draft of the observed section said wait_handoff's threads run one at a time by design. Disposition: resolved-here (read from probes/wait_handoff/wait_handoff.c: its waiters run a few instructions between waits, about 10,000 in all).
+  - *Observation 5 (a test that passed by luck, and a failure whose name was lost):* the close's first gate run failed 1 of 2,535 tests, and the command kept only pytest's last line. Five runs of the five files that race vCPUs named it: the several-process refusal's test ran spinchild at most 5 times, and spinchild reaches the refused wait in 11 runs of 20. Disposition: resolved-here (4a0f341b: up to 30 runs, 10 test runs of 10 pass; gate output now kept whole in build/).
+- **Closed:** CI pending at this entry; Sprint 120's CI run 39322513903 (success on 2f16919b).
 
 ### Sprint 120 (2026-10-18, closed)
 - **Scope:** a defect class, not a step: every timed wait ends, and no host thread waits with nothing able to end its wait (Decision 2026-10-18 user).
@@ -472,12 +484,4 @@
   - *Observation 2 (a reduction no one ran):* a family's probe has no reducer, so no REDUCTION_COMPLETED is claimed for it. Disposition: deferred (Deferred 2026-10-17, Sprint 112).
 - **Closed:** CI pending at this entry; Sprint 111's CI run 39069254531 (success on a285ffc9).
 
-### Sprint 111 (2026-10-17, closed)
-- **Scope:** H3 of the SDD hardening order: Signal Reports made from the record, each card's Emits checked against what fired.
-- **Rubber Duck Pass:**
-  - *Sequence narration:* `signal-reports/sprint-111-report.md`: the sprint made no record; its card names no tag. Its reports for 108 to 110 narrate their records (108: 527 records; 110: EXECUTION_STARTED 0.207 s, EXECUTION_COMPLETED 33.965 s).
-  - *Observation 1 (cards that name too little):* 108's card named MEASUREMENT_RECORDED alone while its records fired nine other tags; 110's named four of seven. Disposition: resolved-here for cards from 111 on (WORKING_AGREEMENT's rule: Emits name every tag the code fires).
-  - *Observation 2 (a summary that hides one producer):* substrate's narration_summary of 110's batch run counts 5 producers started and 4 completed, with none failed or cancelled. Disposition: deferred (the next sprint that reads lifecycles).
-- **Closed:** CI pending at this entry; Sprint 110's CI run 39068519125 (success on 2be498eb).
-
-Older entries (Sprints 000-035, and 036-110 moved 2026-10-16 to 2026-10-19): `docs/sprint-tail-archive.md`.
+Older entries (Sprints 000-035, and 036-111 moved 2026-10-16 to 2026-10-21): `docs/sprint-tail-archive.md`.

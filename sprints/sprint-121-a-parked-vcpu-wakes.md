@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 121
-status: active
+status: done
 phase: 5
 pass_kind: functional
 ---
@@ -89,3 +89,35 @@ no later than the earliest deadline (Sprint 120) and readies it itself.
 ## done criteria
 
 A thread readied inside the VM while a vCPU waits with no thread runs on that vCPU; one vCPU unchanged; CI green.
+
+## observed
+- **Made:** 1953fbfe (the wake, the card, the guests readied and twoready, tests/test_parked_vcpu_wake.py); 204c3b42
+  (the records); 4a0f341b (the several-process refusal's test, below).
+- **Before** (on 2f16919b): the readied guest on two vCPUs ran the worker's 20 rounds on the waiting vCPU in 3 runs of
+  13; in the other 10 vCPU 1 ran one round (8,000,032 or 8,000,042 instructions) and vCPU 0 switched between the two
+  threads for the rest.
+- **A first draft, replaced before the commit:** the guest claimed one waiting vCPU per readied thread and ended the
+  slice itself. Removing the claim changed nothing in 10 runs: the host's resume after the wake request rewrites
+  SLICE_UNTIL by its own rule (`_slice_until`, any ready thread ends the slice), so vCPU 0 raced the woken vCPU for
+  the readied thread. The rule moved to the host, which now counts the waiting vCPUs; the claim went.
+- **Judge:** readied, 10 runs of 10 before the commit: vCPU 1 at 160,000,241 instructions (the worker exactly), 0
+  switches in the VM, 19 or 20 wake requests; twoready 10 of 10 ended, 38 requests; one vCPU 0 requests. The five
+  tests pass. On 1953fbfe: the batch run (frontier-643a6283510c-1792611641237977000) conforms, 168 lines, 0
+  divergences, 80,463,443,700 instructions, Sprint 120's seven exit kinds (hvc 8 at 39,198 against 42,315, the stop
+  moving with wall-clock progress), `run_numbers.py` 104 numbers, 0 that do not add up; 456 of 458 classes (FCOS and
+  FSIN as before), 68 of 68 families. On two vCPUs: family-threads-1792611776442439000 (instructions by vCPU [39,469,
+  848,396] and [40,322, 868,669]), family-running_thread_context-1792611777227867000 ([6,365,141, 200,000]) and
+  family-wait_handoff-1792611777811559000 ([9,978, 229], against Sprint 118's [10,063, 144]) conform. wait_handoff's
+  waiters (probes/wait_handoff/wait_handoff.c) each run a few instructions between their waits, about 10,000 in the
+  whole probe, so its second vCPU has little to run whichever vCPU wakes.
+- **Plants**, each measured to fail: no wake request: readied spins to its 10 s limit (5 of 5 and 3 of 3; vCPU 0 at 37
+  to 39 billion instructions); the old slice rule (`> 0`): readied switches in the VM 193 to 218 times and splits the
+  worker (3 of 3); a waiting vCPU counted too many (`> waiting + 1`): twoready spins to its limit (3 of 3, before any
+  wake request). A doubled count does not hang twoready (5 of 5): a vCPU that loads one worker while the other is
+  ready gets a slice's end of its own.
+- **A test that passed by luck:** the close's first gate run failed one test, and its name was lost (the command kept
+  pytest's last line). Five runs of the five files that race vCPUs found it: the refusal with several processes,
+  whose test ran spinchild at most 5 times until vCPU 0 reached the refused wait; on 1953fbfe it reaches that wait in
+  11 runs of 20 (the other 9 end with "done"). 4a0f341b runs it up to 30 times; 10 test runs of 10 passed. Gate runs now
+  keep pytest's whole output in build/.
+- **Open, none deferred:** none from this sprint.
