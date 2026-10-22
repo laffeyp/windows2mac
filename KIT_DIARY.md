@@ -648,3 +648,19 @@ then the reference's own time to the same point.
 
 **Kit change suggested:** a speed sprint's observation contract names what bounds the measured run (work, I/O, the
 program's clock) with the measurement that shows it, before any optimization is judged by it.
+
+### 2026-10-21 — the user's decision to rewrite in Rust: a design never tested against its goal
+
+Sixteen sprints (107 to 122) built a host for several vCPUs in Python: one host thread per vCPU, a runtime lock, kicks
+and wakes. Standard CPython 3.12 runs one thread's Python at a time, and the goal the plan states in its own first
+section is about 37,600 system calls a second. No sprint measured the design against that number before building on
+it. The user asked whether this was being done in Python, then directed a postmortem
+(`docs/postmortem-2026-10-21.md`) and a rewrite in Rust only (BLACKBOARD, Decision 2026-10-21, user). Every
+sprint's gates passed; each judged the sprint in front of it, and none judged the design against the goal.
+
+**Finding (#64):** a gate that judges each sprint's work does not judge the design the sprints share. A design that
+names a goal in numbers needs a feasibility check against that number before the first sprint builds on it, and the
+check names the platform constraints the design depends on (here, one interpreter lock).
+
+**Kit change suggested:** an architecture-band card that opens a chain states the chain's goal as a number and the
+platform constraints it rests on, with a measurement or a cited source for each, before the chain's second card runs.

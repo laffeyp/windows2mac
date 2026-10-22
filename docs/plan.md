@@ -1,5 +1,8 @@
 # w2m roadmap
 
+**From 2026-10-21 the order of work is `docs/rust-port-plan.md`** (user decision 2026-10-21, w2m rewritten in Rust
+only; Decision 2026-10-22). The goal and milestones below stand; the steps below are history from that date.
+
 This file is the plan's one home and the one live direction document (Decision 2026-10-09; full review
 `docs/review-2026-10-16-full.md`, item 6, applied by the user's decision of 2026-10-16). It is edited in place, with
 history in git; `BLACKBOARD.md` Decisions record why it changed. `docs/milestone-playable-slice.md`,
