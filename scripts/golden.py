@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Peter Laffey
 """golden.py — the Python oracle's verdicts as data, and a check of a commit's records against them (Sprint 123).
 
-Step 0 of docs/rust-port-plan.md. `--write` reads the records under store/runs/ whose RunStarted baseline names the
+Step 0 of docs/rust-port-plan-2026-10-21.md. `--write` reads the records under store/runs/ whose RunStarted baseline names the
 golden commit (4b36b5ad, code identical to f2d071af) and writes specs/golden/python-final.json: per class run, per
 family run (keyed by family and vCPU count) and per batch run, the verdict each record states. A batch run's guest
 trace is held by the sha256 of its body, lines 2 on: line 1, GUEST_TRACE_OPENED, names the run (BLACKBOARD Decision

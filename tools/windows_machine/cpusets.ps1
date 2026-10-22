@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-# The logical processors and their core types (docs/windows-reference-machine.md G1), for profile.ps1 and for
+# The logical processors and their core types (docs/windows-reference-machine-2026-10-12.md G1), for profile.ps1 and for
 # run-job.ps1's pinning. GetSystemCpuSetInformation fills SYSTEM_CPU_SET_INFORMATION records: Size (DWORD, offset 0),
 # Type (4), then CpuSet: Id (8), Group (12, WORD), LogicalProcessorIndex (14), CoreIndex (15),
 # LastLevelCacheIndex (16), NumaNodeIndex (17), EfficiencyClass (18), AllFlags (19), SchedulingClass (20).

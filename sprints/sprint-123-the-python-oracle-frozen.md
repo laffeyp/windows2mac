@@ -11,7 +11,7 @@ pass_kind: architecture
 
 ## scope
 
-Step 0 of `docs/rust-port-plan.md`. Every later step of the Rust port is judged by giving the verdicts the Python
+Step 0 of `docs/rust-port-plan-2026-10-21.md`. Every later step of the Rust port is judged by giving the verdicts the Python
 w2m gives today, so those verdicts are written down once, as data, before any Rust exists. `scripts/golden.py --write`
 reads the records under `store/runs/` whose baseline names 4b36b5ad (code identical to f2d071af, Sprint 122's
 close) and writes `specs/golden/python-final.json`: per class run its iclass, case count, contract, comparisons with
@@ -28,7 +28,7 @@ records a commit made and reports each key whose verdict differs from the golden
 ## context_files
 
 - `sdd-kit-3/AGENTS.md`; `BLACKBOARD.md` Decisions 2026-10-21 (user) and 2026-10-22; `WORKING_AGREEMENT.md`
-- `docs/rust-port-plan.md` (step 0)
+- `docs/rust-port-plan-2026-10-21.md` (step 0)
 - `scripts/signal_report.py` (records by baseline commit, `read_first_envelope`)
 - `scripts/call_compare.py` (`guest_trace`: line 1 is GUEST_TRACE_OPENED with `execution_id`)
 - the records: `store/runs/class-*`, `family-*`, `frontier-643a6283510c-1792623423346201000`

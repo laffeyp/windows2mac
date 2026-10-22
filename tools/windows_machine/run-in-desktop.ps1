@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-# Runs run-job.ps1 in w2m's signed-in desktop session (docs/windows-reference-machine.md G7, Q2). An SSH command runs
+# Runs run-job.ps1 in w2m's signed-in desktop session (docs/windows-reference-machine-2026-10-12.md G7, Q2). An SSH command runs
 # in session 0, without a desktop: a child's STARTUPINFO desktop is empty there and `winsta0\default` on the runners
 # (calibration 2026-10-13, family console). A scheduled task whose principal logs on interactively runs in the
 # session of that user's sign-in; w2m signs in automatically at boot. The task is registered, started, waited for

@@ -410,7 +410,7 @@ def main(argv: list[str]) -> int:
             unobserved=f"the guest trace holds the traced images' calls only; the run stopped: {r.stop}"))
 
     async def comparator(_inp: Any) -> AsyncIterator[msgspec.Struct]:
-        # the reference is a set (Sprint 067 item D; docs/windows-reference-machine.md §7): every stored game run of the
+        # the reference is a set (Sprint 067 item D; docs/windows-reference-machine-2026-10-12.md §7): every stored game run of the
         # game's build and capture, each compared with its own thread pairing
         contract = json.loads(call_compare.CONTRACT.read_text())
         references = [call_compare.load_reference(run, contract) for run in reference_runs]

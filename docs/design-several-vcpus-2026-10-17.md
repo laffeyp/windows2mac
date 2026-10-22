@@ -1,6 +1,6 @@
 # Several vCPUs: per-vCPU state, two designs (Sprint 103)
 
-Roadmap step 1 (`docs/plan.md`): the in-VM scheduler runs guest threads on several vCPUs at once (M:N), gated by
+Roadmap step 1 (`docs/plan-2026-10-09.md`): the in-VM scheduler runs guest threads on several vCPUs at once (M:N), gated by
 the litmus tests MP, SB, LB, 2+2W and IRIW. Before any code, the review of 2026-10-17 asks for two designs (Ousterhout,
 A Philosophy of Software Design, ch. 11). This file holds the inventory they rest on, both designs, and the choice.
 

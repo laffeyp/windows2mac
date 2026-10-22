@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-# The laptop's configuration as one script that can run again at any time (docs/windows-reference-machine.md §9;
+# The laptop's configuration as one script that can run again at any time (docs/windows-reference-machine-2026-10-12.md §9;
 # SETUP.md records how the machine first got here). Run as an administrator over SSH:
 #   scp tools/windows_machine/provision.ps1 w2m-laptop:C:/w2m/bin/ && ssh w2m-laptop C:/w2m/bin/provision.ps1
 # With -AutoSignInPassword it also sets w2m's automatic sign-in (the password from the Mac's Keychain, service

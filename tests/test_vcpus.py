@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
 """Several vCPUs, each on its own monitor thread, each with its private translation chain (Sprint 104;
-docs/design-several-vcpus.md, design B). While vCPU 0 runs a small x86 program, vCPUs 1-3 each run seven AArch64
+docs/design-several-vcpus-2026-10-17.md, design B). While vCPU 0 runs a small x86 program, vCPUs 1-3 each run seven AArch64
 words: read MPIDR_EL1, store it at one address on the monitor data page and one in the state block, read both back,
 read a heap page the host mapped after the vCPUs started, and stop. The same address holds each vCPU's own value, in
 its own page of the memory file; the heap page reads the same on all; each vCPU's ACTLR_EL1 has EnTSO and its

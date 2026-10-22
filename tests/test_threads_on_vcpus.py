@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""Guest threads on several vCPUs (Sprint 118; docs/design-several-vcpus.md, chain step 5): the wait_handoff family's
+"""Guest threads on several vCPUs (Sprint 118; docs/design-several-vcpus-2026-10-17.md, chain step 5): the wait_handoff family's
 probe, whose threads block on semaphores, events and mutexes and are released, runs with its threads on two vCPUs
 and prints Windows' rows; vCPU 1 runs some of its instructions. The plant has the host's switch and park ignore the
 RUNNING mark (a run entry's `vcpu` word): vCPU 1 then loads the thread vCPU 0 runs, which _load_thread refuses (the

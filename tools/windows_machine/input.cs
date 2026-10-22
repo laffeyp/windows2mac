@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Gameplay input for play-mode runs (docs/windows-reference-machine.md R5): a Recorder that takes the keyboard and
+// Gameplay input for play-mode runs (docs/windows-reference-machine-2026-10-12.md R5): a Recorder that takes the keyboard and
 // mouse as raw input while the game has the focus, and a Player that sends recorded events with SendInput. An event
 // is (seconds since the game started, kind, values): key (scan code, extended, up), move (dx, dy, relative counts),
 // button (left, right, middle; up), wheel (delta). run-job.ps1 loads this with Add-Type.

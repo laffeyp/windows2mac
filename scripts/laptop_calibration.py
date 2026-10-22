@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""laptop_calibration.py — calibration step 2 on the laptop (Sprint 067 item C; docs/windows-reference-machine.md §6).
+"""laptop_calibration.py — calibration step 2 on the laptop (Sprint 067 item C; docs/windows-reference-machine-2026-10-12.md §6).
 
 `run` sends every family's stored runner binaries to the laptop in one batch job (scripts/windows_machine.py) and
 judges the result; `judge <batch>` judges a batch already back. A laptop execution is judged as w2m is: by

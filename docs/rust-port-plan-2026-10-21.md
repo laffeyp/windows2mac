@@ -22,7 +22,7 @@ sound and Go fit it. w2m's is not:
 - the `VM` class is 3,040 lines (src/w2m/vm_backend.py:2328 to 5367) and holds the compiler, memory, services,
   scheduling, threads and diagnostics;
 - the host for several vCPUs follows a big-kernel-lock design on purpose: one lock held by whoever serves
-  (docs/design-several-vcpus.md; Sprint 113), plus kernel.Machine's RLock over every shared table.
+  (docs/design-several-vcpus-2026-10-17.md; Sprint 113), plus kernel.Machine's RLock over every shared table.
 
 Ported as it stands, that design gives native threads that still queue behind one mutex. So the port keeps the
 behavior and changes the shape. Spolsky's warning that a rewrite loses "all those collected bug fixes" ("Things You
@@ -49,7 +49,7 @@ state is shared, and the lock for each shared part, with sources.
 - **A lock per shared part, held only for the access.** Files, handles, processes, the code cache, the clock. crosvm:
   "Each `BusDevice` is reference counted and wrapped in a mutex, so implementations of `BusDevice` need not worry about
   synchronizing their access across multiple VCPUs and threads" (crosvm book, architecture overview).
-- **One struct per layer:** cpu, memory, nt, host, diagnostics, the five-layer split plan.md step 3 already set. No
+- **One struct per layer:** cpu, memory, nt, host, diagnostics, the five-layer split plan-2026-10-09.md step 3 already set. No
   Rust struct holds all of it.
 
 ## Seams, measured on f2d071af
@@ -88,7 +88,7 @@ The host's translator also compiles every block the in-VM table lacks, so it sit
 6. **The model and slow paths (S4) in Rust.** The forward and the Python host are removed, and from here no Python
    runs during a game.
 7. **Several vCPUs on the Rust host.** The instruction clock is refused on several vCPUs
-   (docs/design-several-vcpus.md), so the gate is its own:
+   (docs/design-several-vcpus-2026-10-17.md), so the gate is its own:
    - the litmus tests MP, SB, LB, 2+2W and IRIW;
    - the 68 families on two vCPUs;
    - the batch run on the wall clock;

@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-PolyForm--NC--1.0.0-blue)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
 
-w2m runs unmodified Windows x86-64 programs on an Apple silicon Mac. The goal is `w2m steam run <appid>`: a Windows game from Steam, started on macOS, with no Windows installation and no change to the game's files. The plan is `windows_to_macos_research_direction_v0_2.md`; the roadmap is `docs/plan.md`.
+w2m runs unmodified Windows x86-64 programs on an Apple silicon Mac. The goal is `w2m steam run <appid>`: a Windows game from Steam, started on macOS, with no Windows installation and no change to the game's files. The plan is `windows_to_macos_research_direction_v0_2.md`; the roadmap is `docs/plan-2026-10-09.md`.
 
 Each Windows program runs in a Hypervisor.framework virtual machine. A translator turns its x86-64 code into AArch64, block by block. A guest runtime written in C serves the Windows functions the program imports. Each instruction class is judged against Intel CPUs, case by case. Each family of Windows functions is judged against rows that a probe records on real Windows. Generation and verification run on [substrate](https://github.com/laffeyp/substrate).
 

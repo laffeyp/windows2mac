@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""The runtime lock (Sprint 106; docs/design-several-vcpus.md, one lock first). Two x86 threads on two vCPUs call
+"""The runtime lock (Sprint 106; docs/design-several-vcpus-2026-10-17.md, one lock first). Two x86 threads on two vCPUs call
 HeapAlloc and HeapFree through their bridges at once, 20,000 times each: each writes its own mark at both ends of its
 48 bytes, spins, and counts a mark that is not its own. heap.c keeps its free lists in file-scope variables and makes no
 host request, so only the lock keeps two vCPUs out of them at once. Each thread runs once alone first, so its blocks

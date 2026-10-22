@@ -56,7 +56,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | Game file and part manifests (`files.json`, `release.json`) | `games/<game>/`, written by `scripts/pack_game.py` |
 | Mono JIT capture: launcher; reader (`parse`, `Capture`, `Region`, `cpu_features`) | `tools/jit_capture/jit_capture.c`; `src/w2m/jit_capture.py` |
 | Game code differential (native and Mono-generated code vs XED; decoder criterion (d)) | `scripts/game_code_differential.py` |
-| The plan: current order of work | `docs/rust-port-plan.md` from 2026-10-21 (Decision 2026-10-22); `docs/plan.md` holds the goal and milestones, and its steps before that date (edited in place; Decisions record why it changed) |
+| The plan: current order of work | `docs/rust-port-plan-2026-10-21.md` from 2026-10-21 (Decision 2026-10-22); `docs/plan-2026-10-09.md` holds the goal and milestones, and its steps before that date (edited in place; Decisions record why it changed) |
 | Guest state spec (state block, host registers, reconstruction, Windows layouts) | `specs/guest_state.json`; checker `scripts/check_guest_state.py` |
 | Semantics oracle (cases, runner harness, judge) | `probes/semantics/`, `scripts/semantics_differential.py` |
 | The oracle in the VM (039 cases judged in the managed VM against Windows) | `scripts/vm_oracle.py` |
@@ -72,7 +72,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | Game runs on Windows runners (call traces, imports, unity.log) | `store/game-runs/<run>/` (`.github/workflows/windows-game.yml`, `tools/jit_capture/`); each on the record as `game-run-<run>` (`scripts/record_game_run.py`) |
 | The frontier and its records | `scripts/run_frontier.py`; `store/runs/frontier-*` from a committed tree; its call streams `store/frontier-calls/`, guest traces `store/traces/` |
 | The game's calls as a judge (comparison, signatures) | `scripts/call_compare.py`; `specs/signatures.json` from `scripts/signatures.py` (win32metadata 71.0.30-preview); contract `windows.game.calls`; guest side `tools/guest_runtime/call_trace.c` |
-| Reviews and specs | `docs/` |
+| Reviews and specs | `docs/`, each file named `<name>-YYYY-MM-DD.md` (user, 2026-10-22; the old names are mapped in that Decision) |
 
 Rows are added as types stabilize.
 
@@ -138,8 +138,8 @@ Host: macOS 26.5.1 (25F80), Apple M5 Max, 128 GB, 16 KB pages, Xcode 26.6 (17F11
 
 - **2026-10-05, Sprint 000** — `scripts/check_vocab.py` was authored outside its card's artifact contract to gate the vocabulary; recorded in that sprint's tail, entered here 2026-10-08 (Sprint 027) after the project review found the log empty.
 - **2026-10-13, Sprint 068 item A** — the native PCMPISTRI (`tools/guest_runtime/string_compare.c`, commits d31f35e6 and 78768984) was authored from the time census before any card named it; its card, `sprints/sprint-068-speed-to-playable.md`, was written after. Bypassed: card-first. Contracts run on the result: the model equal on 25,600 cases, classes PCMPISTRI (1,277) and PCMPISTRI64 (713) accepted on the VM, a planted fault caught, family sweep 68 of 68 (index 1ecc22b2).
-- **2026-10-17, Sprints 049 to 107** — Signal Reports stopped: `signal-reports/` holds 26, the last for Sprint 048, and no Decision or log entry ended them (SDD hardening review, 2026-10-17, item 3). Bypassed: the kit's Signal Report on each close; the BLACKBOARD tail entry and its Rubber Duck Pass stood in, with no signal walked in time order. Entered here when the review found the stop; whether reports resume or a Decision ends them is the hardening order's (docs/plan.md).
-- **2026-10-21, no sprint** — `docs/postmortem-2026-10-21.md` and `docs/rust-port-plan.md` were written in chat at the user's direction, outside any card. Bypassed: card-first and a Signal Report. Contracts run on the result: the postmortem's eight checked items each name the run or file that settled it; the plan's counts were measured on f2d071af and corrected after the review of 2026-10-21 (VM class 3,040 lines, 26 Hypervisor.framework functions).
+- **2026-10-17, Sprints 049 to 107** — Signal Reports stopped: `signal-reports/` holds 26, the last for Sprint 048, and no Decision or log entry ended them (SDD hardening review, 2026-10-17, item 3). Bypassed: the kit's Signal Report on each close; the BLACKBOARD tail entry and its Rubber Duck Pass stood in, with no signal walked in time order. Entered here when the review found the stop; whether reports resume or a Decision ends them is the hardening order's (docs/plan-2026-10-09.md).
+- **2026-10-21, no sprint** — `docs/postmortem-2026-10-21.md` and `docs/rust-port-plan-2026-10-21.md` were written in chat at the user's direction, outside any card. Bypassed: card-first and a Signal Report. Contracts run on the result: the postmortem's eight checked items each name the run or file that settled it; the plan's counts were measured on f2d071af and corrected after the review of 2026-10-21 (VM class 3,040 lines, 26 Hypervisor.framework functions).
 - **2026-10-17, Sprint 111** — Signal Reports resume, made by `scripts/signal_report.py` from the record: Sprints 108, 109 and 110 written at Sprint 111, after their closes; from Sprint 111 on, each at its close. Sprints 049 to 107 have none; their tail entries and records stand.
 
 ---

@@ -7,7 +7,7 @@ book: impact quantified, causes kept apart from the trigger, blameless, each cla
 ## Summary
 
 w2m set out to make Hail to the Rainbow, an x86-64 Windows game, "playable on this Mac, at speed", and then to run
-any game (docs/plan.md, user goal of 2026-10-16). In 15 days and 873 commits it reached milestone A: in batch mode,
+any game (docs/plan-2026-10-09.md, user goal of 2026-10-16). In 15 days and 873 commits it reached milestone A: in batch mode,
 with no graphics, the game starts under w2m and writes the same 168-line `unity.log` it writes on Windows. It never
 reached milestone B, the first frame. The host side of w2m (the scheduler's hand-overs, the Windows services that
 leave the VM, files, processes, and every host thread added for several vCPUs) is CPython 3.12.13 with its global
@@ -27,7 +27,7 @@ work was being done in Python.
 | C, generated | `tools/vm_compiler/stencil_table.h`, most of that directory's 99,927 lines | `wc -l` |
 | Process documents | 17,939 lines of docs, cards and signal reports; 16 reviews or recenterings | `wc -l`, `ls docs` |
 | Milestone A | first held 2026-10-14 (frontier 1791973386975499000, 151.7 s on the instruction clock) | commit d33b5bd7 |
-| Milestone B, C | not reached | plan.md |
+| Milestone B, C | not reached | plan-2026-10-09.md |
 | Several-vCPU work | Sprints 107 to 122, 2026-10-17 to 2026-10-21, on Python host threads | `git log` |
 
 ## What was checked against evidence outside the project's own records

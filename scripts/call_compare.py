@@ -485,7 +485,7 @@ def undetermined(contract: dict[str, Any]) -> frozenset[tuple[str, str]]:
     return frozenset((k.split(" ")[0], k.split(" ")[1]) for k in contract.get("undetermined", {}))
 
 
-# The reference as a set (docs/windows-reference-machine.md §7; Sprint 067 item D). One Windows run judged w2m until
+# The reference as a set (docs/windows-reference-machine-2026-10-12.md §7; Sprint 067 item D). One Windows run judged w2m until
 # Sprint 066, and the stored runs differ from one another where the scheduler and the address space decide (HeapReAlloc
 # 3268: three in-place growths in run 38203364352, four in the others). w2m now answers to every execution of the
 # same question at once.

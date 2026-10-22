@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-# The laptop's executor (docs/windows-reference-machine.md §3): runs one job the controller copied to
+# The laptop's executor (docs/windows-reference-machine-2026-10-12.md §3): runs one job the controller copied to
 # C:\w2m\jobs\<id>\ and leaves the bundle in its out\ folder. A probe is built and run as
 # .github/workflows/windows-probe.yml's build and run steps do, so the two machines' rows differ only in the machine.
 #

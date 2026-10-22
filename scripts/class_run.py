@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""class_run.py — one instruction class judged on its own record (Sprint 041; docs/plan.md Phase 4).
+"""class_run.py — one instruction class judged on its own record (Sprint 041; docs/plan-2026-10-09.md Phase 4).
 
 An item run is one substrate run whose events cause one another:
 

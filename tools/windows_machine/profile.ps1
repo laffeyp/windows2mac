@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-# The reference profile (docs/windows-reference-machine.md R1, §12): what machine a run came from, written as JSON
+# The reference profile (docs/windows-reference-machine-2026-10-12.md R1, §12): what machine a run came from, written as JSON
 # to the path given. run-job.ps1 runs it before each job; it reads, never changes, the machine.
 param([Parameter(Mandatory)] [string] $Out, [string] $Workspace = '')
 $ErrorActionPreference = 'Stop'

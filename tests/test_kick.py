@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""The kick (Sprint 117; docs/design-several-vcpus.md, a kick, not a cut): a host thread stops one running vCPU on
+"""The kick (Sprint 117; docs/design-several-vcpus-2026-10-17.md, a kick, not a cut): a host thread stops one running vCPU on
 demand through its channel's kick word, and vm_monitor.c's kicker calls hv_vcpus_exit for it. vCPU 1 spins on `b .`
 from inside vCPU 0's first dispatch miss (tests/test_vcpus.py's harness); vCPU 0 runs an x86 `jmp $` to max_steps."""
 

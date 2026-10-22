@@ -79,7 +79,7 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Rubber Duck Pass:**
   - *Observation 1 (fuzzing found a defect at once):* one header-byte flip made an import DLL name non-ASCII and `pe.parse` raised `UnicodeDecodeError`, not `PeError`. Fixed in `_Reader.cstr`. The same property, pointed at the pre-023 decoder, found its `IndexError` within 5,000 examples, so the decoder property has power too. Disposition: resolved-here.
   - *Observation 2 (bridge mappings were written after the code):* Hypervisor.framework, Capstone and XED entries now exist; the agreement says they were added late. Disposition: recorded.
-  - *Observation 3 (tail roll):* entries for Sprints 000-017 moved verbatim to `docs/sprint-tail-archive.md`; nothing deleted. Disposition: resolved-here.
+  - *Observation 3 (tail roll):* entries for Sprints 000-017 moved verbatim to `docs/sprint-tail-archive-2026-10-08.md`; nothing deleted. Disposition: resolved-here.
 - **Closed:** clean (CI run 37851288883: 150 passed, 0 skipped).
 
 ### Sprint 026 (2026-10-08, closed)
@@ -418,7 +418,7 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Closed:** CI pending at this entry; Sprints 098-102's CI run 39016421561 (success on ca5cb64b).
 
 ### Sprint 102 (2026-10-17, closed)
-- **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine.md §5).
+- **Scope:** Sprint 067's step E: each laptop game run proves the declared initial state (docs/windows-reference-machine-2026-10-12.md §5).
 - **Rubber Duck Pass:**
   - *Sequence narration:* no new tag; the proof is a file of the run's output beside exec.json; three laptop jobs: one stopped by the check, the judge, the plant.
   - *Observation 1 (the check found a shared folder):* the first run stopped with 4 TEMP entries, one held open by another program in the session (Steam now runs on the laptop). Disposition: resolved-here (the game's TEMP is the job's own).
@@ -428,14 +428,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Scope:** vocabulary 0.8 (P19), the VM compiler's counts as MEASUREMENT_RECORDED.
 - **Rubber Duck Pass:**
   - *Sequence narration:* the batch run's runner emits 23 MEASUREMENT_RECORDED between its stop and EXECUTION_COMPLETED; read back through `read_record`, each equal to the printed count.
-  - *Observation 1 (the vocabulary still holds names nothing emits):* 25 of 62 tags have no emit site (review 2026-10-17). Disposition: deferred to design sprint D1 (plan.md).
+  - *Observation 1 (the vocabulary still holds names nothing emits):* 25 of 62 tags have no emit site (review 2026-10-17). Disposition: deferred to design sprint D1 (plan-2026-10-09.md).
 - **Closed:** CI pending at this entry.
 
 ### Sprint 100 (2026-10-17, closed)
 - **Scope:** the open question of Sprint 089: a 0x67 address through R8D-R15D, 32 bits by the SDM.
 - **Rubber Duck Pass:**
   - *Sequence narration:* no new tag; the address test, the equal-words judges, the 039 and 041 case sets, 456 class runs, 68 family runs, the batch run conforming.
-  - *Observation 1 (one rule, four homes):* the rule lived in lift, symbolic_lift, the stencil table and the case generator's placement; each was found by its own failing judge, not by a search first. Disposition: resolved-here; the review of 2026-10-17 names the same spread (change amplification), plan.md D2.
+  - *Observation 1 (one rule, four homes):* the rule lived in lift, symbolic_lift, the stencil table and the case generator's placement; each was found by its own failing judge, not by a search first. Disposition: resolved-here; the review of 2026-10-17 names the same spread (change amplification), plan-2026-10-09.md D2.
   - *Observation 2 (a re-derivation regressed another sprint):* emptying HOST_LOWERED handed the x87 forms to stencils derived without their runtime symbols. Disposition: resolved in Sprint 098's 1d55c7da, with a judge.
 - **Closed:** CI pending at this entry.
 

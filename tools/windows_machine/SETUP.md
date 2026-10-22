@@ -1,6 +1,6 @@
 # The Windows reference machine: setup record
 
-What was done to the laptop on arrival, 2026-10-13, in order (`docs/windows-reference-machine.md` §9, §12). Commands
+What was done to the laptop on arrival, 2026-10-13, in order (`docs/windows-reference-machine-2026-10-12.md` §9, §12). Commands
 after step 2 ran from the Mac over SSH as `ssh w2m-laptop`, each PowerShell block sent with `-EncodedCommand`.
 
 This file is the history. The configuration itself is `provision.ps1`, which can run again at any time and sets

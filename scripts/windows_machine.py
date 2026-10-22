@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Peter Laffey
 r"""windows_machine.py — run a probe on the Windows reference machine, the laptop (Sprint 067 item B).
 
-The controller's half of docs/windows-reference-machine.md §3. A probe job carries the committed tree
+The controller's half of docs/windows-reference-machine-2026-10-12.md §3. A probe job carries the committed tree
 (`git archive HEAD`, store/ left out) and, for a probe with a `generate` step, substrate at substrate.commit; a
 `binary` job runs a stored binary (store/binaries/<sha256>.exe) unchanged in place of the build (calibration, §6
 step 2) and carries only its probe's folder. Each input is named by sha256 in job.json. The job goes to
