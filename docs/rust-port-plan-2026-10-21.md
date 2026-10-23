@@ -1,20 +1,24 @@
 # w2m in Rust: the port plan
 
-**Date:** 2026-10-21. **Status:** draft, revised after review the same day. **Decision:** all of w2m is rewritten in
-Rust, and Rust only (user, 2026-10-21; BLACKBOARD).
+**Date:** 2026-10-21. **Status:** draft, revised after review the same day; revised 2026-10-23 so that no step runs
+Python. **Decision:** all of w2m is rewritten in Rust, and Rust only (user, 2026-10-21; BLACKBOARD). No step of the
+port runs Python beside Rust, and no new Python is written (user, 2026-10-23).
 
 ## Principle: keep the behavior, change the shape
 
 Practice for moving code to a new language:
 
-- **A working system at every step.** fish moved 57,000 lines of C++ to 75,000 lines of Rust "component by
-  component until no C++ was left", with a working shell throughout and its end-to-end tests guarding the port:
-  first PR 2023-01-28, last C++ removed 2024-01 (fish blog, "Fish 4.0: The Fish Of Theseus").
-- **Strangler fig, not big bang.** Replace parts at their seams, with a transitional architecture that lets old and
-  new run together and is removed at the end (Fowler, "Strangler Fig Application"). Holding out for full feature
-  parity before any cut-over leads to a single big-bang release ("Patterns of Legacy Displacement").
-- **The old tests judge the new code.** typescript-go carries the TypeScript repository as a git submodule
-  (`_submodules/TypeScript`, branch `tsgo-port`, from its `.gitmodules`) and runs its tests against the port.
+- **Component by component, each judged on its own.** fish moved 57,000 lines of C++ to 75,000 lines of Rust
+  "component by component until no C++ was left", its end-to-end tests guarding the port (fish blog, "Fish 4.0: The
+  Fish Of Theseus"). Fowler's strangler fig keeps old and new running together through a transitional architecture
+  ("Strangler Fig Application"); w2m does not take that part, by the user's decision of 2026-10-23: no Rust component
+  calls Python. What w2m keeps of it is the guard against a big-bang release ("Patterns of Legacy Displacement"):
+  each component is judged alone, against data, before the next is built on it.
+- **What judged the old system judges the new code.** typescript-go carries the TypeScript repository as a git
+  submodule (`_submodules/TypeScript`, branch `tsgo-port`, from its `.gitmodules`) and runs its tests against the port.
+  w2m's old system is frozen at `python-final`. What judged it is data and judges the port: the Xeon's results for
+  each instruction class, the Windows runs, the stored verdicts (Sprint 123), and the values its tests assert. No Rust
+  component calls Python, and no Python is written to extract anything from the old code.
 
 typescript-go also kept tsc's structure (Microsoft, "A 10x Faster TypeScript"). It could, because that structure was
 sound and Go fit it. w2m's is not:
@@ -38,7 +42,7 @@ All of that is data and survives the port. A changed behavior shows up as a fail
 
 ## The new shape
 
-Written as a design (docs/design-rust-host.md) before step 2's code. It states which state each vCPU owns, which
+Written as a design (docs/design-rust-host-2026-10-23.md, Sprint 124) before any host code. It states which state each vCPU owns, which
 state is shared, and the lock for each shared part, with sources.
 
 - **No global lock.** Each vCPU is a native thread that creates its vCPU and serves that vCPU's exits itself.
@@ -69,25 +73,34 @@ The host's translator also compiles every block the in-VM table lacks, so it sit
 
 ## Order
 
+No step runs Python beside Rust. Each component is judged alone against data, and the end-to-end gates (the batch
+run, the class sweep, the families) come when the host can run a program.
+
 0. **Freeze the oracle.** Tag f2d071af `python-final`. Store the current verdicts as golden records. The two
    instruction-clock batch runs of Sprint 122 whose trace hashes differed (1d9c4e4b… at f1838b96, 9b1834ee… at 4b36b5ad,
    whose code is f2d071af's) did the same work: the
    traces differ only in line 1, GUEST_TRACE_OPENED's `execution_id`, and lines 2 to 10,535 hash to f927ac28… in both
    (2026-10-22). So a golden trace is compared by its body, lines 2 on, never by `trace_sha256`, which names the run.
-1. **The design** (above), before any host code.
-2. **A Rust host owns the VM**, on one vCPU, with a native thread for it. Transitional architecture: exit kinds not yet
-   ported go to the Python host over the existing request protocol. Gate: the batch run conforms (168 lines, 0
-   divergences, its exit kinds), with 456 of 458 classes and 68 of 68 families.
-3. **Exit kinds move to Rust**, largest host share first, from the records: hvc 8 by request op (41,299 requests,
-   4.69 s on the instruction clock), hvc 12 the scheduler's hand-overs, hvc 13 code writes, then 1, 4 and 14. Each one
-   removes a forward. Same gate.
-4. **The translator (S3) in Rust.** Gate: the same arm64 words as `compile_insn` under scripts/stencil_judge.py's four
-   judges (instructions, blocks, cases, spec), which already compare a second compiler against the Python one; then
-   the class sweep.
-5. **Loading (S2) in Rust.**
-6. **The model and slow paths (S4) in Rust.** The forward and the Python host are removed, and from here no Python
-   runs during a game.
-7. **Several vCPUs on the Rust host.** The instruction clock is refused on several vCPUs
+   (Done: Sprint 123.)
+1. **The design**, before any host code. (Done: Sprint 124, `docs/design-rust-host-2026-10-23.md`.)
+2. **The judges in Rust (S7), before the code they judge.** The workspace, the vocabulary's generated types, and a
+   Rust version of each judge a later step needs: the golden check (`scripts/golden.py` today), the class judge, the
+   family judge, the batch run's call comparison, and the stencil judges. Gate: each gives the stored verdict on every
+   stored record (530 golden keys). Substrate stays the harness under them: the Rust judges write records substrate
+   reads and replays (user, 2026-10-22). From here no Python judge decides a gate.
+3. **The tests' expected values, carried over.** Each Python test of a component asserts values (a PE header's
+   fields, a decoded instruction's length and operands, an encoded arm64 word, a model's result); those values become
+   the expectations of Rust tests, read from the Python test files by hand and cited by file and line. The tests that
+   need a running host wait for step 7.
+4. **Loading (S2) in Rust.** Gate: its carried tests.
+5. **The translator (S3) in Rust.** Gate: its carried tests and the decode spec (`specs/x86_decode.json`), then the
+   class judge against the Xeon's results once step 7 runs code.
+6. **The model and slow paths (S4) in Rust.** Gate: its carried tests, then the Xeon's results at step 7.
+7. **The Rust host on one vCPU (S1)**, by the design: a `w2m-vm` process per guest process, the supervisor, every exit
+   kind served in Rust. Gate: the batch run conforms (168 lines, 0 divergences, its exit kinds), 456 of 458 classes,
+   68 of 68 families, and the guests in tests/data with their stored output. The Python host's code moves under
+   `oracle/` (git mv) and leaves CI.
+8. **Several vCPUs on the Rust host.** The instruction clock is refused on several vCPUs
    (docs/design-several-vcpus-2026-10-17.md), so the gate is its own:
    - the litmus tests MP, SB, LB, 2+2W and IRIW;
    - the 68 families on two vCPUs;
@@ -96,23 +109,22 @@ The host's translator also compiles every block the in-VM table lacks, so it sit
    - Sprint 122's guests (handshake, busychild, crosswake, pingpong, statsize) ending on two vCPUs in many runs, the
      count in the card: crosswake, quarantined in the Python host after reaching its limit once (BLACKBOARD Decision
      2026-10-23), is fixed here.
-   The design (step 1) takes two faults measured in the Python host on 2026-10-22 as requirements: a host thread that
-   serves one vCPU never slows another's (a child's start there took 3.4 to 6.8 s against 0.25 s, its file reads waiting
-   on the GIL behind vCPU 1's 90,000 exits a second), and every VM is closed and its backing file removed when its
-   process ends (a child's never was: 1,846 files, 88 GB).
-8. **Guest runtime (S5) in Rust**, `no_std` for `aarch64-unknown-none`, file by file, C and Rust objects linked into
-   one guest image while both exist.
-9. **Compiler in the VM (S6) in Rust**, `no_std`, with its table generators. Gate: stencil_judge.py.
-10. **Judges and tools (S7) in Rust.** Each Rust judge gives the stored verdict on every stored record before its
-    Python version retires. Substrate stays the harness under them: the Rust judges write records substrate reads
-    and replays (user, 2026-10-22).
+   The design takes two faults measured in the Python host on 2026-10-22 as requirements: a host thread that serves
+   one vCPU never slows another's (a child's start there took 3.4 to 6.8 s against 0.25 s, its file reads waiting on
+   the GIL behind vCPU 1's 90,000 exits a second), and every VM is closed and leaves no file when its process ends (a
+   child's never was: 1,846 files, 88 GB).
+9. **Guest runtime (S5) in Rust**, `no_std` for `aarch64-unknown-none`, file by file, C and Rust objects linked into
+   one guest image while both exist. Gate: the step 7 and 8 gates.
+10. **Compiler in the VM (S6) in Rust**, `no_std`, with its table generators. Gate: the Rust stencil judges.
 
-Steps 8 to 10 port working code that does not set the game's speed. They follow several vCPUs.
+Steps 4 to 6 need no running host and can go in any order. Step 7 is the first end-to-end run, and the step where a
+fault between components shows: the price of building with no forward into Python, met at one step instead of spread
+over six.
 
 ## Set-up
 
 - **Toolchain:** the Mac's rustup install, stable rustc 1.99.1 (2026-10-13), pinned in `rust-toolchain.toml`.
-  `aarch64-unknown-none` is added at step 8.
+  `aarch64-unknown-none` is added at step 9.
 - **Workspace:** one Cargo workspace at the repository root, a crate per layer, `Cargo.lock` committed.
 - **Hypervisor.framework bindings:** written from Apple's headers, for the 26 functions vm_monitor.c calls:
   - the VM and its configuration;
@@ -120,11 +132,12 @@ Steps 8 to 10 port working code that does not set the game's speed. They follow 
   - `hv_vcpus_exit`, for the kick;
   - nine `hv_gic_*` calls for the GICv3.
 - **The vocabulary in Rust:** Rust code emits only through types generated from the version `signals/current.json`
-  names, with a `--check` mode and an emit-site parity check in `scripts/gates.sh`, both in place before step 2's host
-  writes a record (BLACKBOARD Decision 2026-10-22).
+  names, by a generator written in Rust, with a `--check` mode and an emit-site parity check in the gates, both in
+  place before the first Rust judge writes a record (BLACKBOARD Decision 2026-10-22).
 - **Signing:** a cargo runner signs each binary that creates a VM with `com.apple.security.hypervisor`
   (tools/vm_monitor/entitlements.plist).
-- **CI:** builds and tests the workspace beside the Python gates until step 10 ends them.
+- **CI:** builds and tests the workspace from step 2; the Python gates leave CI at step 7, when the Python host
+  moves under `oracle/`.
 
 ## Sources read
 

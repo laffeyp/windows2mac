@@ -51,7 +51,7 @@ def planted_waiting_vcpu0(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_process_beside_threads_on_several_vcpus_ends(name: str, vcpus: int) -> None:
     if name == "crosswake" and vcpus > 1:
         pytest.skip("quarantined: reached the test's limit once in the gates of 2026-10-22; fixed in the Rust host's "
-                    "step 7 (BLACKBOARD Decision 2026-10-23 agent-resolved)")
+                    "step 8 (BLACKBOARD Decision 2026-10-23 agent-resolved)")
     for _ in range(5 if vcpus > 1 else 1):
         assert run_guest(name, vcpus) == ("ExitProcess", b"done\n")
 
