@@ -24,6 +24,15 @@ if [ -d "$win" ]; then
       || { echo "gates: $c does not compile for Windows"; exit 1; }
   done
 fi
+# the Rust workspace (Sprint 125; docs/rust-port-plan-2026-10-21.md set-up): format, lints as errors, tests, and a
+# release build, then the session check under substrate: a Rust binary's events on a record, replayed
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test --quiet
+cargo build --release --quiet
+session=$(mktemp -d)/session-check
+uv run substrate run --file harness/session-check.toml --root "$session" --strict > /dev/null
+uv run substrate replay "$session" --level 2 > /dev/null
 python3 scripts/check_vocab.py
 python3 scripts/gen_events.py --check
 python3 scripts/gen_decoder.py --check

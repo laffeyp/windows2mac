@@ -1,0 +1,9 @@
+[package]
+name = "session_events"
+description = "A w2m harness session's two events, written as substrate's line protocol (Sprint 125)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

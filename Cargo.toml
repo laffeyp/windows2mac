@@ -1,0 +1,13 @@
+# The Rust w2m (docs/rust-port-plan-2026-10-21.md): one crate per layer as the port reaches it.
+[workspace]
+resolver = "3"
+members = ["crates/session_events"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+
+[profile.release]
+debug = 1

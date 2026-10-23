@@ -1,0 +1,18 @@
+# A w2m harness session with no work in it: SESSION_INIT and SESSION_COMPLETED from a Rust binary, on a substrate
+# record (Sprint 125). Run from the repository root after `cargo build --release`:
+#   uv run substrate run --file harness/session-check.toml
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.9"
+
+[[producer]]
+kind = "session_events"
+command = ["../target/release/session_events"]
+schemas = "schemas/session.json"
+
+[[initial]]
+kind = "session_events"
+
+[termination]
+recipe = "all_completed"
