@@ -92,7 +92,14 @@ The host's translator also compiles every block the in-VM table lacks, so it sit
    - the litmus tests MP, SB, LB, 2+2W and IRIW;
    - the 68 families on two vCPUs;
    - the batch run on the wall clock;
-   - instructions a second against one vCPU, on a workload that is not mostly waiting.
+   - instructions a second against one vCPU, on a workload that is not mostly waiting;
+   - Sprint 122's guests (handshake, busychild, crosswake, pingpong, statsize) ending on two vCPUs in many runs, the
+     count in the card: crosswake, quarantined in the Python host after reaching its limit once (BLACKBOARD Decision
+     2026-10-23), is fixed here.
+   The design (step 1) takes two faults measured in the Python host on 2026-10-22 as requirements: a host thread that
+   serves one vCPU never slows another's (a child's start there took 3.4 to 6.8 s against 0.25 s, its file reads waiting
+   on the GIL behind vCPU 1's 90,000 exits a second), and every VM is closed and its backing file removed when its
+   process ends (a child's never was: 1,846 files, 88 GB).
 8. **Guest runtime (S5) in Rust**, `no_std` for `aarch64-unknown-none`, file by file, C and Rust objects linked into
    one guest image while both exist.
 9. **Compiler in the VM (S6) in Rust**, `no_std`, with its table generators. Gate: stencil_judge.py.
