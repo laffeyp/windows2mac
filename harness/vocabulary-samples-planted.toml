@@ -1,0 +1,19 @@
+# The planted fault of Sprint 126: a SESSION_INIT whose vocab_version ends in a newline. The Rust Version refuses it,
+# so substrate's generated schema must too (patterns end in \Z); the gates expect the Producer failed, naming the field.
+# Run from the repository root after `cargo build --release` (the command is the release binary):
+#   uv run substrate run --file harness/vocabulary-samples-planted.toml
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.9"
+
+[[producer]]
+kind = "vocabulary_samples_planted"
+command = ["../target/release/vocabulary_samples", "--root", "..", "--plant-trailing-newline"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "vocabulary_samples_planted"
+
+[termination]
+recipe = "all_completed"

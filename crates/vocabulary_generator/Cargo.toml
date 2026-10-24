@@ -1,0 +1,10 @@
+[package]
+name = "vocabulary_generator"
+description = "Checks w2m's vocabulary and generates its Rust types and substrate's schema file from it (Sprint 126)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true

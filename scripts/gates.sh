@@ -6,6 +6,9 @@
 # through tail (Sprint 026) and gates chained with ';' before a commit (Sprint 028).
 set -eu
 cd "$(dirname "$0")/.."
+# rustup installs cargo in ~/.cargo/bin, which a non-login shell may not have on its PATH (Sprint 126: the gates failed
+# with "cargo: command not found")
+[ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
 # substrate is the clone ./substrate at substrate.commit (user 2026-10-10; review 2026-10-10 D1):
 # CI clones that commit, so a local run judged on another kernel would not be the run CI repeats.
 pin=$(cat substrate.commit)
@@ -30,9 +33,20 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --quiet
 cargo build --release --quiet
+# the vocabulary generated into Rust and substrate's schema file, byte for byte (Sprint 126)
+target/release/vocabulary_generator --check > /dev/null
 session=$(mktemp -d)/session-check
 uv run substrate run --file harness/session-check.toml --root "$session" --strict > /dev/null
 uv run substrate replay "$session" --level 2 > /dev/null
+samples=$(mktemp -d)/vocabulary-samples
+uv run substrate run --file harness/vocabulary-samples.toml --root "$samples" --strict > /dev/null
+uv run substrate replay "$samples" --level 2 > /dev/null
+# the planted sample: a version ending in a newline, refused by substrate as by the Rust type (Sprint 126)
+planted=$(mktemp -d)/vocabulary-samples-planted
+if uv run substrate run --file harness/vocabulary-samples-planted.toml --root "$planted" --strict > /dev/null 2>&1; then
+  echo "gates: the planted sample was accepted"; exit 1
+fi
+uv run substrate tail "$planted" --format jsonl --no-follow | grep -q "vocab_version" || { echo "gates: the planted failure does not name vocab_version"; exit 1; }
 python3 scripts/check_vocab.py
 python3 scripts/gen_events.py --check
 python3 scripts/gen_decoder.py --check

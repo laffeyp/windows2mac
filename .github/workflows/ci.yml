@@ -72,10 +72,17 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test --quiet
           cargo build --release --quiet
+          target/release/vocabulary_generator --check
       - name: session check (a Rust binary's events on a substrate record, Sprint 125)
         run: |
           uv run substrate run --file harness/session-check.toml --root "$RUNNER_TEMP/session-check" --strict
           uv run substrate replay "$RUNNER_TEMP/session-check" --level 2
+      - name: vocabulary samples (every harness-plane tag through its Rust type and substrate's schema, Sprint 126)
+        run: |
+          uv run substrate run --file harness/vocabulary-samples.toml --root "$RUNNER_TEMP/vocabulary-samples" --strict
+          uv run substrate replay "$RUNNER_TEMP/vocabulary-samples" --level 2
+          if uv run substrate run --file harness/vocabulary-samples-planted.toml --root "$RUNNER_TEMP/planted" --strict; then echo "planted sample accepted"; exit 1; fi
+          uv run substrate tail "$RUNNER_TEMP/planted" --format jsonl --no-follow | grep -q vocab_version
       - name: vocabulary
         run: |
           python3 scripts/check_vocab.py

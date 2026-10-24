@@ -1,0 +1,19 @@
+# Every harness-plane tag of the vocabulary at sample values, written by its generated Rust type and checked by
+# substrate against the generated schema file (Sprint 126). Run from the repository root after `cargo build --release`
+# (the command is the release binary):
+#   uv run substrate run --file harness/vocabulary-samples.toml
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.9"
+
+[[producer]]
+kind = "vocabulary_samples"
+command = ["../target/release/vocabulary_samples", "--root", ".."]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "vocabulary_samples"
+
+[termination]
+recipe = "all_completed"

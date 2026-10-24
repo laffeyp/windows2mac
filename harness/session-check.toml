@@ -9,7 +9,7 @@ vocabulary = "0.9"
 [[producer]]
 kind = "session_events"
 command = ["../target/release/session_events"]
-schemas = "schemas/session.json"
+schemas = "schemas/harness-events.json"
 
 [[initial]]
 kind = "session_events"
