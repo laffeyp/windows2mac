@@ -1,7 +1,7 @@
 # The Rust w2m (docs/rust-port-plan-2026-10-21.md): one crate per layer as the port reaches it.
 [workspace]
 resolver = "3"
-members = ["crates/events", "crates/session_events", "crates/vocabulary_generator", "crates/vocabulary_samples"]
+members = ["crates/events", "crates/session_events", "crates/signal_report", "crates/vocabulary_generator", "crates/vocabulary_samples"]
 
 [workspace.package]
 version = "0.1.0"

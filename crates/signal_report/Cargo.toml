@@ -1,0 +1,10 @@
+[package]
+name = "signal_report"
+description = "A sprint's Signal Report from its substrate records, and a check that none is missing (Sprint 127)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true

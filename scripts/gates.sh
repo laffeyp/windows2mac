@@ -35,6 +35,8 @@ cargo test --quiet
 cargo build --release --quiet
 # the vocabulary generated into Rust and substrate's schema file, byte for byte (Sprint 126)
 target/release/vocabulary_generator --check > /dev/null
+# every sprint from 108 marked done has its Signal Report (Sprint 127: the reports stopped unnoticed three times)
+target/release/signal_report --check > /dev/null
 session=$(mktemp -d)/session-check
 uv run substrate run --file harness/session-check.toml --root "$session" --strict > /dev/null
 uv run substrate replay "$session" --level 2 > /dev/null

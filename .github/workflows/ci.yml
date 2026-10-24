@@ -73,6 +73,7 @@ jobs:
           cargo test --quiet
           cargo build --release --quiet
           target/release/vocabulary_generator --check
+          target/release/signal_report --check
       - name: session check (a Rust binary's events on a substrate record, Sprint 125)
         run: |
           uv run substrate run --file harness/session-check.toml --root "$RUNNER_TEMP/session-check" --strict
