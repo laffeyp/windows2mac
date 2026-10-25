@@ -356,6 +356,7 @@
 - **2026-10-25** — Sprint 134 (the runtime runs in a Rust VM; step 3's third link). `crates/w2m_vm` writes stage-1 tables as `vm_backend._write_translation_tables` did, maps the monitor area with the Rust-built runtime image, sets the Python host's system registers and installs vectors that hand every exception to the host. `w2m_cpuid_query`, called with the MMU on, answers all 26 inputs of `tests/test_vm_state.py` as `cpuid.lookup` does. Dual contract: pass; two plants caught (the abort vector with the image unmapped; a wrong expected value named). Closed: CI run 40151168498 (57a0abb0d).
 - **2026-10-25** — Sprint 135 (the A64 encoder in Rust; step 3's fourth link). `crates/a64_encoder` carries every function of `src/w2m/a64_encoder.py`, with the same names and arguments (its `and_` and `str_` as `and` and `str`) and each assert carried as a panic. 258 encodings equal clang's assembly: the Python test's 248 and 10 the monitor code uses. Dual contract: pass; the planted MOVK base named by the clang judge. Closed: CI run 40152164615 (9bd4f7e57).
 - **2026-10-25** — Sprint 136 (the monitor code from Rust; step 3's fifth link). `crates/w2m_vm` writes the Python host's monitor code with `a64_encoder` and an `Assembler` with labels: the 16 vectors, the two-way dispatcher with its in-VM compiler branch, the empty dispatch table, and the exception entry with the code-write path. In one Rust VM, two targets reach their code from either slot of a pair, a third misses to `hvc #1`, a store to a read-only page reaches `hvc #13` then `hvc #14`, and a load from an unmapped address saves its state and reaches `hvc #14`. Dual contract: pass; the planted hash shift named the target it missed. Closed: CI run 40152826904 (12b46b7db).
+- **2026-10-25** — Sprint 137 (the PE reader in Rust; step 3's sixth link). `crates/pe_image` carries `src/w2m/pe.py`: headers, sections, imports and delay imports with each IAT slot named, relocations, exports and forwarders, TLS, `.pdata` and resources, refusing malformed input in the Python's words. All 268 executables under `store/binaries/` agree with llvm-objdump on the entry, the image base and the imports; the rest of `tests/test_pe.py` holds. Dual contract: pass; names read a byte late were named by DLL. Closed: CI run CIRUN-137 (COMMIT-137).
 
 ## Deferred
 
@@ -426,6 +427,12 @@
 ---
 
 ## Sprint tail
+
+### Sprint 137 (2026-10-25, closed)
+- **Scope:** a PE32+ image read from Rust as `pe.py` read it, judged by llvm-objdump.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, 8 tests, the gates); observation pass (268 executables agree with llvm-objdump; the Python test's other seven checks; the plant named "KERNEL32.dll's imports").
+- **Rubber Duck Pass:** *Observation 1 (a promise broken the day it was made):* Sprint 135's tail entry said Sprint 137's card would come before its code; the crate was drafted while Sprint 136's gates ran, and the card came after it and before its tests. Disposition: resolved-here (Sprint 138's card was written before its crate; the order is card, code, tests). *Observation 2 (a plant the judge never saw):* the first plant read the hint's bytes, which the reader's ASCII check refused before llvm-objdump was asked. A plant must reach the judge it tests. Disposition: resolved-here (the card amended to `+ 3`, and the first plant's refusal stated in the result). *Observation 3 (a count taken from a glob that was not run):* the card said 280 executables from a directory listing of all files; 268 are `.exe`. Disposition: resolved-here.
+- **Files:** crates/pe_image/, Cargo.toml, Cargo.lock, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-137-the-pe-reader-in-rust.md, signal-reports/sprint-137-report.md.
 
 ### Sprint 136 (2026-10-25, closed)
 - **Scope:** the monitor code the Python host wrote at a VM's start, written from Rust, dispatching, missing and taking faults as the Python's did.
