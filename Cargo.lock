@@ -167,6 +167,7 @@ dependencies = [
  "a64_encoder",
  "guest_runtime",
  "hypervisor",
+ "pe_loader",
  "serde_json",
 ]
 
