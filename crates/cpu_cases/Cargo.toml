@@ -1,0 +1,11 @@
+[package]
+name = "cpu_cases"
+description = "The single-instruction CPU cases and the results Windows gave them, read and written as scripts/semantics_differential.py did (Sprint 144)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+guest_runtime = { path = "../guest_runtime" }
+x86_decoder = { path = "../x86_decoder" }

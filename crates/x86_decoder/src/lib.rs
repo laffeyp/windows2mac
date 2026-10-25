@@ -7,6 +7,8 @@
 
 use std::fmt;
 
+pub mod operands;
+
 /// An SDM NP or NFx row (gen_decoder 56).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Np {

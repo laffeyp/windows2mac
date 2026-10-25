@@ -7,6 +7,14 @@ name = "a64_encoder"
 version = "0.1.0"
 
 [[package]]
+name = "cpu_cases"
+version = "0.1.0"
+dependencies = [
+ "guest_runtime",
+ "x86_decoder",
+]
+
+[[package]]
 name = "design_check"
 version = "0.1.0"
 

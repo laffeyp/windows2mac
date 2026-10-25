@@ -70,12 +70,85 @@ struct Flags {
     nzcv_out: c_int,
 }
 
+/// x86_decode.h `struct x86_operand`.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct COperand {
+    kind: u8,
+    reg_class: u8,
+    reg: u8,
+    seg: u8,
+    base_class: u8,
+    base: u8,
+    index_class: u8,
+    index: u8,
+    scale: u8,
+    bytes: u8,
+    imm_len: u8,
+    disp: i64,
+    imm: u64,
+}
+
 type Decode = unsafe extern "C" fn(*const u8, c_int, *mut CDecoded) -> c_int;
+type Operands = unsafe extern "C" fn(*const CDecoded, *mut COperand) -> c_int;
+
+/// A register class and number as x86ops names it (x86_decode.h `enum x86_register_class`).
+fn register(class: u8, n: u8) -> String {
+    use x86_decoder::operands::{GPR8_LEGACY, GPR8_REX, GPR16, GPR32, GPR64};
+    let n = usize::from(n);
+    match class {
+        1 => GPR64[n].to_string(),
+        2 => GPR32[n].to_string(),
+        3 => GPR16[n].to_string(),
+        4 => GPR8_REX[n].to_string(),
+        5 => GPR8_LEGACY[n].to_string(),
+        6 => format!("XMM{n}"),
+        7 => format!("YMM{n}"),
+        8 => "RIP".into(),
+        9 => "EIP".into(),
+        _ => "INVALID".into(),
+    }
+}
+
+/// One C operand in x86ops' string format.
+fn render(o: &COperand) -> String {
+    match o.kind {
+        0 => format!("R:{}", register(o.reg_class, o.reg)),
+        1 => {
+            let seg = match o.seg {
+                0x64 => "FS",
+                0x65 => "GS",
+                _ => "INVALID",
+            };
+            format!(
+                "M:{seg}:{}:{}:{}:{}:{}",
+                register(o.base_class, o.base),
+                register(o.index_class, o.index),
+                o.scale,
+                o.disp,
+                o.bytes
+            )
+        }
+        2 => format!(
+            "A:{}:{}:{}:{}",
+            register(o.base_class, o.base),
+            register(o.index_class, o.index),
+            o.scale,
+            o.disp
+        ),
+        3 => format!("I:{}:{:x}", o.imm_len, o.imm),
+        4 => format!("J:{}", o.disp),
+        5 => format!("MM:{}", o.reg),
+        6 => format!("ST:{}", o.reg),
+        k => format!("kind {k}"),
+    }
+}
 type Compile =
     unsafe extern "C" fn(*const u8, c_int, u64, u64, u64, *const Flags, *const u64, *mut u32, c_int) -> c_int;
 
 struct C {
     decode: Decode,
+    operands: Operands,
     compile: Compile,
     iclass_name: *const *const c_char,
     template_name: *const *const c_char,
@@ -112,6 +185,7 @@ fn load() -> Option<C> {
         };
         Some(C {
             decode: std::mem::transmute::<*mut c_void, Decode>(sym("x86_decode")),
+            operands: std::mem::transmute::<*mut c_void, Operands>(sym("x86_operands")),
             compile: std::mem::transmute::<*mut c_void, Compile>(sym("vmc_compile")),
             iclass_name: sym("x86_iclass_name").cast(),
             template_name: sym("x86_template_name").cast(),
@@ -155,11 +229,22 @@ impl C {
                     (f.vvvv >= 0).then_some(f.vvvv as u8),
                     f.vl
                 );
+                // x86_operands: the count, -1 for no template, -2 where x86ops raises otherwise
+                let mut ops = [COperand::default(); 4];
+                let n = unsafe { (self.operands)(&d, ops.as_mut_ptr()) };
+                let operands = match n {
+                    -1 => "operands: no template".to_string(),
+                    n if n < 0 => "operands: unresolved".to_string(),
+                    n => format!(
+                        "operands: {:?}",
+                        ops[..n as usize].iter().map(render).collect::<Vec<_>>()
+                    ),
+                };
                 Ok((
                     usize::from(d.length),
                     C::name(self.iclass_name, d.iclass),
                     usize::from(d.row),
-                    fields,
+                    format!("{fields} {operands}"),
                 ))
             }
             1 => Err("invalid"),
@@ -198,7 +283,12 @@ fn rust(b: &[u8]) -> Result<(usize, String, usize, String), &'static str> {
                 f.vvvv,
                 f.vl
             );
-            Ok((d.length, d.iclass, d.index, fields))
+            let operands = match x86_decoder::operands::operands(&f) {
+                Ok(o) => format!("operands: {o:?}"),
+                Err(x86_decoder::operands::OperandError::NoTemplate) => "operands: no template".to_string(),
+                Err(_) => "operands: unresolved".to_string(),
+            };
+            Ok((d.length, d.iclass, d.index, format!("{fields} {operands}")))
         }
         Err(DecodeError::InvalidEncoding(_)) => Err("invalid"),
         Err(DecodeError::Truncated(_)) => Err("truncated"),
