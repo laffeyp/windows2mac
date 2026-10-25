@@ -1,0 +1,17 @@
+[package]
+name = "x86_decoder"
+description = "The x86-64 decoder, carried from src/w2m/x86dec.py, its tables generated from specs/x86_decode.json at build time (Sprint 143)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[build-dependencies]
+guest_runtime = { path = "../guest_runtime" }
+serde_json.workspace = true
+
+[dev-dependencies]
+pe_image = { path = "../pe_image" }
+serde_json.workspace = true
