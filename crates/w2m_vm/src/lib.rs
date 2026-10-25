@@ -10,6 +10,8 @@ pub mod assembler;
 pub mod guest;
 pub mod monitor_code;
 pub mod process;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod run;
 pub mod tables;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

@@ -42,6 +42,126 @@ pub const HVC_SCHEDULE: u32 = 12;
 pub const HVC_NO_SERVICE: u32 = 9;
 /// The run table's header: the VM may switch threads (scheduler.py 42-43).
 pub const RT_IN_VM: u32 = 0x18;
+/// VM_COMPILER + this: the stencil table's symbols' addresses, in `vmc_symbol_name`'s order (vm_backend 198).
+pub const VMC_SYMBOLS: u64 = 0x40;
+/// VM_COMPILER + this: whether a miss compiles in the VM first (vm_backend 197, 4968-4969).
+pub const VMC_ENABLED: u64 = 0x00;
+/// VM_COMPILER + these: the C compiler's counts by cause, and their names (vm_backend 199-202).
+pub const VMC_COUNTS: u64 = 0x100;
+pub const VMC_COUNT_NAMES: [&str; 23] = [
+    "compiled",
+    "not a code page",
+    "host only",
+    "decode",
+    "no stencil",
+    "no choice",
+    "encoder",
+    "full",
+    "key size",
+    "guarded",
+    "scan pages",
+    "log full",
+    "code cache full",
+    "recon full",
+    "cut by decode",
+    "cut by no stencil",
+    "cut by no choice",
+    "cut by encoder",
+    "cut by key size",
+    "cut by guarded",
+    "page needs a split",
+    "pages protected",
+    "pause",
+];
+
+const DXGI_OBJECT: [&str; 7] = [
+    "QueryInterface",
+    "AddRef",
+    "Release",
+    "SetPrivateData",
+    "SetPrivateDataInterface",
+    "GetPrivateData",
+    "GetParent",
+];
+
+/// vm_backend 293-307: each COM class's vtable in the runtime image: its symbol, its DLL, its methods' name prefix, and
+/// the methods after the DXGI object's seven (when `dxgi`) in vtable order. A slot whose method has no service stops
+/// the run by its name when called (`hvc #9`).
+const COM_VTABLES: [(&str, &str, &str, bool, &[&str]); 5] = [
+    (
+        "w2m_enumerator_vtable",
+        "MMDEVAPI.dll",
+        "W2mEnumerator",
+        false,
+        &[
+            "QueryInterface",
+            "AddRef",
+            "Release",
+            "EnumAudioEndpoints",
+            "GetDefaultAudioEndpoint",
+            "GetDevice",
+            "RegisterEndpointNotificationCallback",
+            "UnregisterEndpointNotificationCallback",
+        ],
+    ),
+    (
+        "w2m_collection_vtable",
+        "MMDEVAPI.dll",
+        "W2mCollection",
+        false,
+        &["QueryInterface", "AddRef", "Release", "GetCount", "Item"],
+    ),
+    (
+        "w2m_dxgi_factory_vtable",
+        "dxgi.dll",
+        "W2mFactory",
+        true,
+        &[
+            "EnumAdapters",
+            "MakeWindowAssociation",
+            "GetWindowAssociation",
+            "CreateSwapChain",
+            "CreateSoftwareAdapter",
+        ],
+    ),
+    (
+        "w2m_dxgi_adapter_vtable",
+        "dxgi.dll",
+        "W2mAdapter",
+        true,
+        &["EnumOutputs", "GetDesc", "CheckInterfaceSupport"],
+    ),
+    (
+        "w2m_dxgi_output_vtable",
+        "dxgi.dll",
+        "W2mOutput",
+        true,
+        &[
+            "GetDesc",
+            "GetDisplayModeList",
+            "FindClosestMatchingMode",
+            "WaitForVBlank",
+            "TakeOwnership",
+            "ReleaseOwnership",
+            "GetGammaControlCapabilities",
+            "SetGammaControl",
+            "GetGammaControl",
+            "SetDisplaySurface",
+            "GetDisplaySurfaceData",
+            "GetFrameStatistics",
+        ],
+    ),
+];
+
+/// `_vm_compiler_symbols` (vm_backend 1068-1072): the quoted names in `stencil_table.h`'s `vmc_symbol_name[]`, in order.
+pub fn vm_compiler_symbols(stencil_table_h: &str) -> Result<Vec<String>, String> {
+    let start = stencil_table_h
+        .find("vmc_symbol_name[")
+        .ok_or("no vmc_symbol_name in the table")?;
+    let body = &stencil_table_h[start..];
+    let body = &body[..body.find("};").ok_or("vmc_symbol_name is not closed")?];
+    Ok(body.split('"').skip(1).step_by(2).map(str::to_string).collect())
+}
 /// vm_backend 291-293: imports by ordinal, as Wine's specs number them.
 const ORDINAL_NAMES: [(&str, &str, &str); 8] = [
     ("OLEAUT32.DLL", "#2", "SysAllocString"),
@@ -354,6 +474,8 @@ pub struct Guest {
     pub process: ProcessArea,
     pub switch_va: u64,
     pub switch_slice_va: u64,
+    /// thunk address -> "DLL!Name": the loader's, then those the COM vtables made
+    pub thunks: BTreeMap<u64, String>,
     /// thunk address -> its bridge's address
     pub bridges: BTreeMap<u64, u64>,
     pub slice_va: u64,
@@ -362,14 +484,15 @@ pub struct Guest {
 
 impl Guest {
     /// `VM.__init__`'s memory and code (vm_backend 2382-2424, 2461, 2472-2475, 2506-2508) for `loaded`, with the
-    /// runtime `image` and its `services`. The COM vtables (2488) and the VM compiler's symbol table (2509-2510) come
-    /// with the run loop.
+    /// runtime `image`, its `services`, and `vm_compiler_symbols`, the stencil table's symbols in its order
+    /// (`vm_compiler_symbols`); with the COM vtables (2488, 3078-3093) and the symbol table (2509-2510).
     pub fn new(
         loaded: &Loaded,
         image: &Image,
         services: &[Service],
         start: &Start,
         system_modules: &BTreeSet<String>,
+        vm_compiler_symbols: &[String],
     ) -> Result<Guest, GuestError> {
         let layout = Layout::new(loaded);
         let mut memory = hypervisor::GuestMemory::new(layout.size as usize).map_err(GuestError::Memory)?;
@@ -397,18 +520,50 @@ impl Guest {
         let mut cache = CodeCache { mem };
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va))?;
+        let mut thunks = loaded.thunks.clone();
         let mut bridges = BTreeMap::new();
-        for (&thunk, name) in &loaded.thunks {
-            let (dll, function) = name.split_once('!').unwrap_or((name.as_str(), ""));
+        let mut bind = |cache: &mut CodeCache<'_>, thunk: u64, name: &str| -> Result<(), GuestError> {
+            let (dll, function) = name.split_once('!').unwrap_or((name, ""));
             let service = service_for(services, dll, function).map(|s| (image.symbols[&s.symbol], s.sets_rax));
             let va = cache.put(|a| bridge(a, service, thunk, code.dispatch_va, switch_va))?;
             bridges.insert(thunk, va);
+            Ok(())
+        };
+        for (&thunk, name) in &loaded.thunks {
+            bind(&mut cache, thunk, name)?;
+        }
+        // `_com_vtables` (3078-3085): each COM class's vtable in the runtime image filled with its methods' thunks, each
+        // an import thunk (`_import_thunk`, 3087-3092) made after the loader's, with its bridge
+        let mut imports: BTreeMap<String, u64> = thunks.iter().map(|(t, n)| (n.to_lowercase(), *t)).collect();
+        for (symbol, dll, prefix, dxgi, methods) in COM_VTABLES {
+            let at = image.symbols[symbol] - MONITOR_VA;
+            let all = if dxgi { &DXGI_OBJECT[..] } else { &[][..] }.iter().chain(methods);
+            for (i, method) in all.enumerate() {
+                let name = format!("{dll}!{prefix}{method}");
+                let thunk = match imports.get(&name.to_lowercase()) {
+                    Some(t) => *t,
+                    None => {
+                        let t = pe_loader::THUNK_BASE + 16 * thunks.len() as u64;
+                        thunks.insert(t, name.clone());
+                        bind(&mut cache, t, &name)?;
+                        imports.insert(name.to_lowercase(), t);
+                        t
+                    }
+                };
+                write_u64(cache.mem, at + 8 * i as u64, thunk);
+            }
         }
         let slice_va = cache.put(|a| slice_stub(a, switch_slice_va))?;
         let entry_va = cache.put(|a| entry_stub(a, code.dispatch_va))?;
         write_u64(cache.mem, VM_COMPILER + VMC_EXIT, code.dispatch_va);
         write_u64(cache.mem, VM_COMPILER + VMC_EXIT + 8, slice_va);
         write_u64(cache.mem, VM_COMPILER + VMC_EXIT + 16, 0); // the trace opens from the start
+        for (i, name) in vm_compiler_symbols.iter().enumerate() {
+            let va = *image.symbols.get(name).ok_or_else(|| {
+                GuestError::Layout(format!("the stencil table names {name}, which the runtime lacks"))
+            })?;
+            write_u64(cache.mem, VM_COMPILER + VMC_SYMBOLS + 8 * i as u64, va);
+        }
         Ok(Guest {
             memory,
             layout,
@@ -417,6 +572,7 @@ impl Guest {
             process: process_area,
             switch_va,
             switch_slice_va,
+            thunks,
             bridges,
             slice_va,
             entry_va,

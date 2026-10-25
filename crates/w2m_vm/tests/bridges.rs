@@ -43,12 +43,15 @@ fn guest() -> (Guest, u64) {
     loaded.thunks.insert(no_such, NO_SUCH.to_string());
     let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
     let services = guest_runtime::services::services(&guest_runtime::texts(&root).unwrap()).unwrap();
+    let table = fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap();
+    let symbols = w2m_vm::guest::vm_compiler_symbols(&table).unwrap();
     let g = Guest::new(
         &loaded,
         &image,
         &services,
         &Start::console("probe.exe"),
         &system_modules(),
+        &symbols,
     )
     .unwrap();
     (g, no_such)
