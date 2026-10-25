@@ -360,6 +360,7 @@
 - **2026-10-25** — Sprint 137 (the PE reader in Rust; step 3's sixth link). `crates/pe_image` carries `src/w2m/pe.py`: headers, sections, imports and delay imports with each IAT slot named, relocations, exports and forwarders, TLS, `.pdata` and resources, refusing malformed input in the Python's words. All 268 executables under `store/binaries/` agree with llvm-objdump on the entry, the image base and the imports; the rest of `tests/test_pe.py` holds. Dual contract: pass; names read a byte late were named by DLL. Closed: CI run 40153490645 (00ef856bf).
 - **2026-10-25** — Sprint 138 (the loader in Rust; step 3's seventh link). `crates/pe_loader` carries `src/w2m/loader.py`: images mapped and relocated, supplied DLLs placed (preferred base, else from `DLL_BASE` up) and bound, host thunks, the loader stub, static TLS. `tests/test_loader_images.py`'s three checks hold; the DLL sits where Windows put it (`dll.base`) and its TLS index and block are Windows' (`tls.index`, `tls.array`); the 73-byte stub equals clang's assembly. Dual contract: pass; a delta off by one named its site. Closed: CI run 40154317363 (99135699c).
 - **2026-10-24** — Sprint 139 (the host's compile path; step 3 amended). `docs/design-host-compile-path-2026-10-24.md`: on the Python host with the C compiler in the VM, each of the 14 `timed_waits` guests needed 2 to 54 host compiles, so the walking skeleton needs a compiler on the host. Decision: the run loop first, stopping `qpc` by name at its first declined block; then the decoder, a case runner, the lifter, and the rules and lowering in groups, each judged in its own sprint by the C emitter's words and by the Windows class cases. The plan's steps 3 and 4 amended. Dual contract: pass; `design_check` named FEX when its sources were removed. Its CI run is recorded in Sprint 140's tail entry; from this entry on, a Built entry carries no placeholder.
+- **2026-10-24** — Sprint 140 (the process area; the run loop's first half). `crates/w2m_vm/src/process.rs` writes the TEB, the PEB, the process parameters, the synthetic system images and the loader's three lists as `vm_backend.py` writes them. Read back for `qpc` and for the loader probe, they meet the rows of `windows.process.parameters` a started program's block shows and `windows.loader.static_import`'s load, memory and init orders; the stack meets `windows.memory.thread_stack`'s layout but not `teb.reserve_is_header` (w2m's fixed 1 MB against mingw's 2 MB header), as in the Python host. Dual contract: pass; the init list linked in load order was named. Its CI run is recorded in Sprint 141's tail entry.
 
 ## Deferred
 
@@ -430,6 +431,13 @@
 ---
 
 ## Sprint tail
+
+### Sprint 140 (2026-10-24, closed)
+- **Scope:** the process area a program and the runtime read at start, written from Rust and held to Windows' rows.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, 5 new tests, the gates); observation pass (the parameters, loader-list and stack rows; one row named as unmet; the plant named `ldr.init_order`).
+- **Rubber Duck Pass:** *Observation 1 (a Windows row the oracle never met):* `teb.reserve_is_header` fails for every guest whose header asks other than 1 MB, in the Python host as here; the probes the row was observed on were MSVC-built and asked 1 MB, so no run saw it. Disposition: recorded (open: the stack reserve follows the header when the stored records are made again; the test pins today's value so the change is seen). *Observation 2 (a plant that planted nothing):* the first planted test reversed `qpc`'s DLL dependency order, which is empty; it was removed before it ran, and the plant was made in the source. Disposition: resolved-here. *Observation 3 (the first link split before code):* reading `VM.__init__` and the process area showed the run loop's first link was two sprints; the split was made on the card before code. Disposition: resolved-here (technique #17).
+- **Closed:** Sprint 139's CI run 40156124131 (success on 050d9aecf).
+- **Files:** crates/w2m_vm/, Cargo.lock, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-140-the-process-area.md, signal-reports/sprint-140-report.md.
 
 ### Sprint 139 (2026-10-24, closed)
 - **Scope:** the miss path the skeleton needs, decided against the goal and the systems that solved it, and the plan amended.
