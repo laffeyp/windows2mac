@@ -353,6 +353,7 @@
 - **2026-10-24** — Sprint 131 (vocabulary 0.10; fix (e) of Decision 2026-10-24 user). P21 deprecates 24 tags no code fires (19 harness, 5 guest); each keeps its entry. The Rust generator gives them no type, no schema entry and no sample, refuses them by name, and fails `--check` on a hand-written crate that names one; Rust reads `signals/rust-current.json` (0.10), the frozen Python `signals/current.json` (0.9). Records: `store/runs/vocabulary-samples-20261025T004412` (33 kinds, 2 each) and `session-check-20261025T004412` (vocab_version 0.10). Dual contract: pass; observation: three plants caught by name. Closed: CI run 40147980735 (56af28c0f).
 - **2026-10-25** — Sprint 132 (a vCPU in Rust; step 3's first link). `crates/hypervisor` binds 16 Hypervisor.framework calls from the macOS 26.5 SDK behind `Vm`, `Vcpu`, `VcpuHandle` and `GuestMemory`; a cargo runner signs with the entitlement. Three tests run arm64 code on one vCPU: an `hvc` exit with its immediate, x0 and the PC after it; a resume; a stop from another thread. An exit and resume: 832 to 873 ns, the C monitor 813 to 852 ns the same day. Dual contract: pass; two plants caught (a `Vcpu` moved across threads does not compile; HV_DENIED without the entitlement). Closed: CI run 40149456660 (5494fe361).
 - **2026-10-25** — Sprint 133 (the guest runtime built from Rust; step 3's second link). `crates/guest_runtime` carries the guest-memory layout from `vm_backend.py` and `scheduler.py` line by line, writes the five generated headers byte for byte, computes the Python's cache key, and builds with clang and `ld -preload`. The image equals the frozen Python build's under the same key, byte for byte (3,169,760 bytes, 706 symbols). Dual contract: pass; three plants caught. Closed: CI run CIRUN-133 (COMMIT-133).
+- **2026-10-25** — Sprint 134 (the runtime runs in a Rust VM; step 3's third link). `crates/w2m_vm` writes stage-1 tables as `vm_backend._write_translation_tables` did, maps the monitor area with the Rust-built runtime image, sets the Python host's system registers and installs vectors that hand every exception to the host. `w2m_cpuid_query`, called with the MMU on, answers all 26 inputs of `tests/test_vm_state.py` as `cpuid.lookup` does. Dual contract: pass; two plants caught (the abort vector with the image unmapped; a wrong expected value named). Closed: CI run CIRUN-134 (COMMIT-134).
 
 ## Deferred
 
@@ -423,6 +424,12 @@
 ---
 
 ## Sprint tail
+
+### Sprint 134 (2026-10-25, closed)
+- **Scope:** a function of the C guest runtime run in a Rust VM at its link address, answering as the Python host's VM answered.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, 6 tests, the gates); observation pass (26 inputs equal to the oracle; the abort vector with ESR 0x21 and ELR at the function; a planted wrong value named).
+- **Rubber Duck Pass:** *Observation 1 (a stub where a dispatcher belongs):* the return stub sits at `DISPATCHER` (0x1800) and the vectors are bare `hvc`s, where the Python host writes its dispatcher and an exception entry into the runtime. Disposition: recorded (Sprint 136 writes the Python host's monitor code from Rust and replaces both). *Observation 2 (no code-cache coherence step yet):* the image and stubs are written by the host before the vCPU's first run, so no instruction cache holds stale code; code written while a vCPU runs will need the invalidation sequence the host design names. Disposition: recorded (design change 3; the sprint that writes code under a running vCPU carries it).
+- **Files:** crates/w2m_vm/, Cargo.toml, Cargo.lock, WORKING_AGREEMENT.md, sprints/sprint-134-the-runtime-runs-in-a-rust-vm.md, signal-reports/sprint-134-report.md.
 
 ### Sprint 133 (2026-10-25, closed)
 - **Scope:** the C guest runtime's image built from Rust, equal to the frozen Python host's, byte for byte.
