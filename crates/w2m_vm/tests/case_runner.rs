@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 //! Sprint 145's judge: the CPU cases run in a Rust VM, one instruction per block, each completed case judged against
-//! the Intel run Windows recorded for its set. The instruction's words come from the VM's C emitter, built for the host
+//! the Intel run Windows recorded for its set; from Sprint 147, each case Windows ended in a fault too, at the VM's
+//! fault through the guest's exception records. The instruction's words come from the VM's C emitter, built for the host
 //! by clang and called through `dlopen` (`vmc_decode`, `vmc_emit`, `vmc_ends`). Runs where clang is found and the result
 //! files were downloaded (`build/probe-runs`, matching their recorded hashes).
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -263,18 +264,20 @@ fn completed_cases_agree_with_windows() {
         };
         let refused: usize = t.refused.values().sum();
         println!(
-            "run {run} ({}): {} cases; judged {}; Windows faults {}; model {}; refused {refused}; undefined memory {}; \
-             {} difference classes; {:.1} s",
+            "run {run} ({}): {} cases; judged {}; Windows faults {} ({} judged at the VM's fault); model {}; refused \
+             {refused}; undefined memory {}; {} difference classes; {:.1} s",
             set.parent().unwrap().file_name().unwrap().to_string_lossy(),
             cases.len(),
             t.judged,
             t.windows_faults,
+            t.faults_judged,
             t.model,
             t.undefined_memory,
             t.differences.len(),
             t.seconds
         );
         println!("    refused by cause: {:?}", t.refused);
+        println!("    host requests by op: {:?}", t.host_requests);
         for (k, (n, example)) in t.differences.iter().take(12) {
             println!("    {n:6} {k}: {example}");
         }

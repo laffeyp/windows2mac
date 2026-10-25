@@ -16,7 +16,8 @@ use guest_runtime::layout::{
     STATE_OFF, TIME_SLICE, VM_COMPILER,
 };
 use guest_runtime::services::Service;
-use pe_loader::Loaded;
+use pe_loader::{Loaded, THUNK_BASE};
+use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualMemory};
 
 use crate::GIGA_BLOCK;
 use crate::assembler::{Assembler, Target};
@@ -480,7 +481,69 @@ pub struct Guest {
     pub bridges: BTreeMap<u64, u64>,
     pub slice_va: u64,
     pub entry_va: u64,
+    /// the services and the runtime's symbols, for a bridge made after construction (`make_thunk`, 2920-2924)
+    pub services: Vec<Service>,
+    pub symbols: BTreeMap<String, u64>,
+    /// the VirtualAlloc arena (vm_backend 2498-2505)
+    pub arena: VirtualMemory,
+    /// guest_stubs.rs's page, once written (vm_backend 2492)
+    pub stub_page: u64,
+    /// the program's image as `Modules` holds it (vm_backend 2958-2959): (base, SizeOfImage)
+    pub image_range: Option<(u64, u64)>,
+    /// the program's DLLs as `Modules.dlls` holds them (2958): (base, SizeOfImage)
+    pub dll_ranges: Vec<(u64, u64)>,
 }
+
+/// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
+pub struct GuestView<'a> {
+    pub mem: &'a mut [u8],
+    pub layout: &'a Layout,
+}
+
+impl GuestView<'_> {
+    fn at(&self, va: u64, n: u64) -> std::ops::Range<usize> {
+        let off = self
+            .layout
+            .offset(va)
+            .unwrap_or_else(|| panic!("guest address 0x{va:x} is not mapped")) as usize;
+        off..off + n as usize
+    }
+}
+
+impl GuestPages for GuestView<'_> {
+    fn zero(&mut self, va: u64, n: u64) {
+        let r = self.at(va, n);
+        self.mem[r].fill(0);
+    }
+
+    fn read(&self, va: u64, n: u64) -> Vec<u8> {
+        self.mem[self.at(va, n)].to_vec()
+    }
+}
+
+/// The last unhandled exception the guest runtime recorded: the EXCEPTION_RECORD and the CONTEXT fields it built
+/// (vm_backend `exception`, 4173-4195; runtime.h `w2m_exception_area`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exception {
+    pub code: u32,
+    pub flags: u32,
+    pub address: u64,
+    pub parameters: u32,
+    pub information: [u64; 2],
+    pub context_flags: u32,
+    pub mxcsr: u32,
+    /// CS, DS, ES, FS, GS, SS
+    pub segments: [u16; 6],
+    pub eflags: u32,
+    pub gpr: [u64; 16],
+    pub rip: u64,
+    pub fltsave_control_word: u16,
+    pub fltsave_mxcsr: u32,
+    pub xmm: [u128; 16],
+}
+
+/// runtime.h 222: "ETIONw2x".
+pub const EXCEPTION_MAGIC: u64 = 0x7832_774E_4F49_5445;
 
 impl Guest {
     /// `VM.__init__`'s memory and code (vm_backend 2382-2424, 2461, 2472-2475, 2506-2508) for `loaded`, with the
@@ -564,6 +627,22 @@ impl Guest {
             })?;
             write_u64(cache.mem, VM_COMPILER + VMC_SYMBOLS + 8 * i as u64, va);
         }
+        // the arena (2498-2505): the program's images, the main stack, the heap, every mapped range and the thunks'
+        // 4 GB, and each writable image page as loaded
+        let images = if loaded.images.is_empty() {
+            loaded.image.iter().map(|p| (p.image_base, p.clone())).collect()
+        } else {
+            loaded.images.iter().map(|i| (i.base, i.pe.clone())).collect()
+        };
+        let mut arena = VirtualMemory::new(VIRTUAL_VA, VIRTUAL_SIZE, images);
+        arena.stack = Some(process_area.stack);
+        arena.heap = Some((guest_runtime::layout::HEAP_VA, HEAP_SIZE));
+        arena.mapped = layout.maps.iter().map(|(va, _, size)| (*va, *size)).collect();
+        arena.mapped.push((THUNK_BASE, 1 << 32));
+        arena.snapshot(&GuestView {
+            mem: memory.as_mut_slice(),
+            layout: &layout,
+        });
         Ok(Guest {
             memory,
             layout,
@@ -576,6 +655,117 @@ impl Guest {
             bridges,
             slice_va,
             entry_va,
+            services: services.to_vec(),
+            symbols: image.symbols.clone(),
+            arena,
+            stub_page: 0,
+            image_range: loaded.image.as_ref().map(|p| (p.image_base, p.size_of_image as u64)),
+            dll_ranges: loaded
+                .images
+                .iter()
+                .skip(1)
+                .map(|d| (d.base, d.pe.size_of_image as u64))
+                .collect(),
         })
+    }
+
+    /// The memory offset of the process area's `off` (`_process`).
+    fn process_off(off: u64) -> usize {
+        (MONITOR_SIZE + off) as usize
+    }
+
+    /// `_import_thunk` (3087-3092) with `make_thunk` (2920-2924): the thunk `name` ("KERNEL32.dll!Name") has, or a new
+    /// one after the others with its bridge.
+    pub fn import_thunk(&mut self, name: &str) -> Result<u64, GuestError> {
+        let key = name.to_lowercase();
+        if let Some((t, _)) = self.thunks.iter().find(|(_, n)| n.to_lowercase() == key) {
+            return Ok(*t);
+        }
+        let thunk = THUNK_BASE + 16 * self.thunks.len() as u64;
+        self.thunks.insert(thunk, name.to_string());
+        let (dll, function) = name.split_once('!').unwrap_or((name, ""));
+        let service = service_for(&self.services, dll, function).map(|s| (self.symbols[&s.symbol], s.sets_rax));
+        let (dispatch_va, switch_va) = (self.code.dispatch_va, self.switch_va);
+        let mut cache = CodeCache {
+            mem: self.memory.as_mut_slice(),
+        };
+        let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va))?;
+        self.bridges.insert(thunk, va);
+        Ok(thunk)
+    }
+
+    /// `_code_page` (vm_backend): x86 code the host writes, on fresh pages of the arena, an address never translated
+    /// before.
+    pub fn code_page(&mut self, code: &[u8]) -> Result<u64, GuestError> {
+        let mut view = GuestView {
+            mem: self.memory.as_mut_slice(),
+            layout: &self.layout,
+        };
+        let (va, err) = self
+            .arena
+            .alloc(
+                &mut view,
+                0,
+                code.len() as u64,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+            .map_err(|e| GuestError::Layout(e.0))?;
+        if err != 0 {
+            return Err(GuestError::Layout(format!(
+                "a host code page: VirtualAlloc error {err}"
+            )));
+        }
+        let r = view.at(va, code.len() as u64);
+        view.mem[r].copy_from_slice(code);
+        Ok(va)
+    }
+
+    /// `_guest_stubs`: the x86 stubs services call guest code and resume contexts through (guest_stubs.rs), on a page
+    /// of the arena written at the first use, so a process that needs none keeps its address space.
+    pub fn guest_stubs(&mut self) -> Result<u64, GuestError> {
+        if self.stub_page == 0 {
+            let thunk = self.import_thunk("KERNEL32.dll!W2mGuestReturn")?;
+            self.stub_page = self.code_page(&crate::guest_stubs::page(thunk))?;
+        }
+        Ok(self.stub_page)
+    }
+
+    /// `exception` (4173-4195): the last unhandled exception the guest runtime recorded, or None.
+    pub fn exception(&self) -> Option<Exception> {
+        let mem = self.memory.as_slice();
+        let e = Self::process_off(guest_runtime::layout::EXCEPTION_OFF);
+        let q = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let d = |at: usize| u32::from_le_bytes(mem[at..at + 4].try_into().unwrap());
+        let h = |at: usize| u16::from_le_bytes(mem[at..at + 2].try_into().unwrap());
+        if q(e) != EXCEPTION_MAGIC {
+            return None;
+        }
+        let (r, c) = (e + 16, e + 0x100);
+        Some(Exception {
+            code: d(r),
+            flags: d(r + 4),
+            address: q(r + 16),
+            parameters: d(r + 24),
+            information: [q(r + 32), q(r + 40)],
+            context_flags: d(c + 48),
+            mxcsr: d(c + 52),
+            segments: std::array::from_fn(|i| h(c + 56 + 2 * i)),
+            eflags: d(c + 68),
+            gpr: std::array::from_fn(|i| q(c + 120 + 8 * i)),
+            rip: q(c + 248),
+            fltsave_control_word: h(c + 256),
+            fltsave_mxcsr: d(c + 256 + 24),
+            xmm: std::array::from_fn(|i| {
+                let at = c + 256 + 160 + 16 * i;
+                u128::from_le_bytes(mem[at..at + 16].try_into().unwrap())
+            }),
+        })
+    }
+
+    /// `clear_exception` (4197-4200): forget the last unhandled exception.
+    pub fn clear_exception(&mut self) {
+        let at = Self::process_off(guest_runtime::layout::EXCEPTION_OFF);
+        self.memory.as_mut_slice()[at..at + 8].fill(0);
     }
 }

@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 //! The CPU cases run in a Rust VM, one instruction per block, and each completed case judged against the result
 //! Windows gave (Sprint 145): `scripts/vm_oracle.py` `run_cases` and `judge_done`. The instruction's words come from a
-//! compiler the caller gives, today the C emitter built for the host, until the Rust lowering takes its place. Faults,
-//! the vector registers and the x87 state are counted here, not judged. Each function cites the lines it carries.
+//! compiler the caller gives, today the C emitter built for the host, until the Rust lowering takes its place. A case
+//! Windows ended in a fault is judged through the guest's exception records (Sprint 147: `judge_fault`). The vector
+//! registers and the x87 state of a completed case are not judged yet. Each function cites the lines it carries.
 
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -14,14 +15,15 @@ use cpu_cases::{
 };
 use guest_runtime::layout::{
     DISPATCH_ENTRIES, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE,
-    STATE_OFF, VECTOR_SLOTS, VM_COMPILER,
+    STATE_OFF, TRANSPORT_OFF, VECTOR_SLOTS, VM_COMPILER,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
 use pe_loader::{Loaded, Memory};
 
 use crate::CPSR_EL1H;
 use crate::assembler::{Assembler, Target};
-use crate::guest::{Guest, VMC_CURSOR, VMC_ENABLED};
+use crate::guest::{Exception, Guest, VMC_CURSOR, VMC_ENABLED};
+use crate::host_request::{self, Served};
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{EMPTY_TARGET, REG_BUDGET};
 use crate::run::{FCW_OFF, LOCK_OWNER, MXCSR_OFF, REG_UNDEFINED_FLAGS, dispatch_insert, fpcr_for};
@@ -42,6 +44,10 @@ pub const X87_ST_OFF: u64 = 768;
 /// The model's exits: an SSE instruction and one instruction run whole (vm_backend 1118, 1125).
 pub const HVC_SLOW_SSE: u16 = 10;
 pub const HVC_SLOW_STEP: u16 = 11;
+/// A guest fault left its block (vm_backend 1128).
+pub const HVC_FAULT_GIVE_BACK: u16 = 14;
+/// `Tally::host_requests`' key for the give-backs: above every transport op.
+pub const HOST_GIVE_BACK: u64 = 1 << 32;
 
 /// A block's words and its marks (host VA, x86 address).
 type Block = (Vec<u32>, Vec<(u64, u64)>);
@@ -82,8 +88,11 @@ fn parity_even(v: u64) -> bool {
 #[derive(Debug, Default)]
 pub struct Tally {
     pub judged: usize,
-    /// cases Windows completed by a fault: counted, not judged here
+    /// cases Windows ended in a fault, and of them those judged at the VM's fault
     pub windows_faults: usize,
+    pub faults_judged: usize,
+    /// the host requests served (`hvc #8`), by op
+    pub host_requests: BTreeMap<u64, usize>,
     /// cases whose instruction the VM ran in the model (hvc #10 or #11): counted, not judged here
     pub model: usize,
     /// refusals of the compiler, by cause
@@ -135,6 +144,80 @@ fn assemble_one(
     a.emit(&[a64_encoder::hvc(4)]);
     a.branch(a64_encoder::b, body);
     Ok((a.finish(), marks))
+}
+
+/// vm_oracle 52: the EFlags bits a fault's CONTEXT is judged on: CF, bit 1, PF, AF, ZF, SF, IF, DF, OF.
+pub const EFLAGS_FAULT_MASK: u64 = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800;
+
+/// `windows` (vm_oracle 159-167): the data, stack and edge windows against Windows's.
+fn windows(guest: &Guest, r: &CaseResult) -> Vec<(String, String)> {
+    let mem = guest.memory.as_slice();
+    let at = |va: u64| guest.layout.offset(va).unwrap() as usize;
+    let mut out = Vec::new();
+    let o = at(DATA_VA + DATA_OFF);
+    if mem[o..o + WINDOW] != r.data[..] {
+        out.push(("data window".into(), "differs".into()));
+    }
+    let s = at(STACK_VA + STACK_OFF);
+    if mem[s..s + WINDOW] != r.stack[..] {
+        out.push(("stack window".into(), "differs".into()));
+    }
+    let e = at(DATA_VA + EDGE_OFF);
+    if mem[e..e + EDGE] != r.edge[..] {
+        out.push(("edge window".into(), "differs (a store before the fault)".into()));
+    }
+    out
+}
+
+/// `judge_fault` (vm_oracle 96-123), without the YMM upper halves and the x87 state: a fault the VM's guest runtime
+/// recorded against the CONTEXT Windows gave its vectored handler.
+fn judge_fault(guest: &Guest, r: &CaseResult, exc: &Exception) -> Vec<(String, String)> {
+    if r.marker != 2 {
+        return vec![(
+            "vm fault, cpu completed".into(),
+            format!("vm 0x{:x} at 0x{:x}", exc.code, exc.rip),
+        )];
+    }
+    let mut diffs: Vec<(String, String)> = Vec::new();
+    if u64::from(exc.code) != r.fault {
+        diffs.push(("fault code".into(), format!("vm 0x{:x}, cpu 0x{:x}", exc.code, r.fault)));
+    }
+    if exc.rip != r.fault_rip {
+        diffs.push((
+            "fault rip".into(),
+            format!("vm 0x{:x}, cpu 0x{:x}", exc.rip, r.fault_rip),
+        ));
+    }
+    if exc.address != exc.rip {
+        diffs.push((
+            "fault address".into(),
+            format!("ExceptionAddress 0x{:x}, Rip 0x{:x}", exc.address, exc.rip),
+        ));
+    }
+    for (k, (vm, cpu)) in exc.gpr.iter().zip(r.regs).enumerate() {
+        if *vm != cpu {
+            diffs.push((format!("fault r{k}"), format!("vm 0x{vm:x}, cpu 0x{cpu:x}")));
+        }
+    }
+    if (u64::from(exc.eflags) ^ r.rflags) & EFLAGS_FAULT_MASK != 0 {
+        diffs.push((
+            "fault eflags".into(),
+            format!("vm 0x{:x}, cpu 0x{:x}", exc.eflags, r.rflags),
+        ));
+    }
+    if u64::from(exc.mxcsr) != r.mxcsr {
+        diffs.push((
+            "fault MXCSR".into(),
+            format!("vm 0x{:x}, cpu 0x{:x}", exc.mxcsr, r.mxcsr),
+        ));
+    }
+    for (k, (vm, cpu)) in exc.xmm.iter().zip(r.xmm).enumerate() {
+        if *vm != cpu {
+            diffs.push((format!("fault xmm{k}"), format!("vm {vm:032x}, cpu {cpu:032x}")));
+        }
+    }
+    diffs.extend(windows(guest, r));
+    diffs
 }
 
 /// Runs `cases` with their Windows `results` in one VM on `vcpu`, judging each completed case the compiler takes
@@ -224,7 +307,6 @@ pub fn run_cases(
         }
         if r.marker == 2 {
             tally.windows_faults += 1;
-            continue;
         }
         // `flush_translations` (2782-2797): the code cache, the reconstruction table and the dispatch table as built
         let block = {
@@ -323,13 +405,65 @@ pub fn run_cases(
         // cache maintenance first)
         vcpu.set_reg(Reg::Pc, vectors_va)?;
         let iclass = d.iclass.as_str();
+        // the run to the case's end; a fault's walk asks the host through `hvc #8` until the process ends
+        // (vm_backend 5246-5256)
         let exit = loop {
-            match vcpu.run()? {
-                Exit::VtimerActivated => vcpu.set_vtimer_mask(true)?,
-                e => break e,
+            let e = match vcpu.run()? {
+                Exit::VtimerActivated => {
+                    vcpu.set_vtimer_mask(true)?;
+                    continue;
+                }
+                e => e,
+            };
+            if e.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK) {
+                // a guest fault left its block (5205-5206, 5294-5296): the faulting instruction and those after it go
+                // back to the budget, then on to w2m_exception. A case's block holds one instruction, so
+                // `_unrun_after` is 0 and one goes back.
+                let left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
+                vcpu.set_reg(Reg::X(REG_BUDGET as u8), left.wrapping_add(1))?;
+                *tally.host_requests.entry(HOST_GIVE_BACK).or_default() += 1;
+                continue;
+            }
+            if e.hvc_immediate() != Some(8) {
+                break Ok(e);
+            }
+            let op = read_u64(guest.memory.as_slice(), MONITOR_SIZE + TRANSPORT_OFF);
+            *tally.host_requests.entry(op).or_default() += 1;
+            match host_request::serve(guest, vcpu) {
+                Ok(Served::Answered) => {}
+                Ok(Served::Exit(code)) => break Err(Ok(code)),
+                Err(e) => break Err(Err(e.to_string())),
             }
         };
         let pc = vcpu.reg(Reg::Pc)?;
+        let exit = match exit {
+            Ok(e) => e,
+            Err(ended) => {
+                // `on_exception` (243-248): the records judged, then forgotten, and the next case
+                let diffs = match (ended, guest.exception()) {
+                    (Ok(_), Some(exc)) => judge_fault(guest, r, &exc),
+                    (Ok(code), None) => vec![("vm exit".into(), format!("ExitProcess({code}) with no exception"))],
+                    (Err(why), _) => vec![("host request".into(), why)],
+                };
+                guest.clear_exception();
+                tally.judged += 1;
+                tally.faults_judged += usize::from(r.marker == 2);
+                for (k, detail) in diffs {
+                    tally.note(iclass, &k, format!("case {i}: {:02x?} {detail}", c.code));
+                }
+                continue;
+            }
+        };
+        if r.marker == 2 && exit.hvc_immediate() == Some(1) {
+            // `judge_done` 127-128
+            tally.judged += 1;
+            tally.note(
+                iclass,
+                "vm completed, cpu fault",
+                format!("case {i}: {:02x?} cpu 0x{:x}", c.code, r.fault),
+            );
+            continue;
+        }
         match exit.hvc_immediate() {
             Some(1) => {}
             Some(HVC_SLOW_SSE | HVC_SLOW_STEP) => {
@@ -398,19 +532,8 @@ pub fn run_cases(
         if df != (r.rflags >> DF_BIT & 1 == 1) {
             tally.note(iclass, "DF", example(format!("vm {}", u8::from(df))));
         }
-        // `windows` (159-167)
-        let (data_at, stack_at) = (offset(guest, DATA_VA), offset(guest, STACK_VA));
-        let o = data_at + DATA_OFF as usize;
-        if mem[o..o + WINDOW] != r.data[..] {
-            tally.note(iclass, "data window", example("differs".into()));
-        }
-        let s = stack_at + STACK_OFF as usize;
-        if mem[s..s + WINDOW] != r.stack[..] {
-            tally.note(iclass, "stack window", example("differs".into()));
-        }
-        let e = data_at + EDGE_OFF as usize;
-        if mem[e..e + EDGE] != r.edge[..] {
-            tally.note(iclass, "edge window", example("differs".into()));
+        for (k, detail) in windows(guest, r) {
+            tally.note(iclass, &k, example(detail));
         }
     }
     let mem = guest.memory.as_mut_slice();
