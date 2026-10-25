@@ -1638,6 +1638,58 @@ fn store(
     Ok(())
 }
 
+/// A block's words and its marks (host VA, x86 address).
+pub type Block = (Vec<u32>, Vec<(u64, u64)>);
+
+/// `assemble_block` (922-970), without the block census: a block's code at `base`, the budget's SUBS and its branch,
+/// each instruction with its flag arguments (the flags live after it, walked backward from `live_out`), the
+/// fall-through exit to `exit_va` with x17 the next address, and the budget's stop (`bl slice_va`, `hvc #4`, back into
+/// the body). Returns the words and the marks: the entry, each instruction, the budget's stop.
+pub fn assemble_block(
+    insns: &[Lifted],
+    base: u64,
+    exit_va: u64,
+    slice_va: u64,
+    state_va: u64,
+    live_out: u32,
+) -> Result<Block, CompileError> {
+    const REG_BUDGET: u32 = 23;
+    let mut a = Assembler::new(base);
+    let start = insns[0].address;
+    let last = &insns[insns.len() - 1];
+    let addr = last.address + last.length;
+    let mut marks = vec![(a.here(), start)]; // the block entry: a guest boundary
+    let (budget_stop, body) = (a.label(), a.label());
+    a.emit(&[0xF100_0000 | (insns.len() as u32) << 10 | REG_BUDGET << 5 | REG_BUDGET]); // SUBS x23, x23, #n
+    a.branch(|off| a64::bcond("mi", off), budget_stop);
+    a.bind(body);
+    let mut ended = false;
+    let mut live = live_out;
+    let mut lives = vec![ALL_FLAGS; insns.len()]; // the flags read after each instruction
+    for k in (0..insns.len()).rev() {
+        lives[k] = live;
+        let setter = if k > 0 { nzcv_setter(&insns[k - 1]) } else { None };
+        let (read, written) = insn_flags(&insns[k], setter);
+        live = live & !written | read;
+    }
+    for (k, ins) in insns.iter().enumerate() {
+        marks.push((a.here(), ins.address));
+        let from = if k > 0 { nzcv_setter(&insns[k - 1]) } else { None };
+        let out = k + 1 < insns.len() && nzcv_branch(ins, &insns[k + 1]);
+        ended = compile_insn(&mut a, ins, exit_va, state_va, from, lives[k], out)?;
+    }
+    if !ended {
+        a.emit(&a64::mov_imm(17, addr));
+        a.branch(a64::b, Target::Va(exit_va));
+    }
+    a.bind(budget_stop); // an exit whose address maps to the block's first instruction, then on in
+    marks.push((a.here(), start));
+    a.branch(a64::bl, Target::Va(slice_va)); // the slice stub returns past the HVC when no exit is due
+    a.emit(&[a64::hvc(4)]);
+    a.branch(a64::b, body);
+    Ok((a.finish(), marks))
+}
+
 /// `tests/test_operand_forms.py`'s four cases (the guards no class run can reach), carried by hand.
 #[cfg(test)]
 mod tests {

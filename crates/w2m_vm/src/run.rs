@@ -9,17 +9,18 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use guest_runtime::layout::{
-    CODE_CACHE, CODE_CACHE_SIZE, CURRENT, CURRENT_ENTRY, DISPATCH_TABLE, MONITOR_DATA, MONITOR_VA, PROCESS_VA,
-    RT_ENTRIES, RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, VECTOR_SLOTS, VM_COMPILER, VMC_LOG,
-    VMC_LOG_ENTRY,
+    CODE_CACHE, CODE_CACHE_SIZE, CURRENT, CURRENT_ENTRY, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA,
+    PROCESS_VA, RT_ENTRIES, RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, TRANSPORT_OFF,
+    VECTOR_SLOTS, VM_COMPILER, VMC_LOG, VMC_LOG_ENTRY,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
 use pe_loader::Loaded;
 
 use crate::CPSR_EL1H;
+use crate::compile::HostCompiler;
 use crate::guest::{Guest, RT_IN_VM, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
 use crate::monitor::set_system_registers;
-use crate::monitor_code::{EMPTY_TARGET, HVC_FAULT_GIVE_BACK, REG_BUDGET, dispatch_slot};
+use crate::monitor_code::{EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, REG_BUDGET, dispatch_slot};
 
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
 pub const MXCSR_OFF: u64 = 0x50;
@@ -125,6 +126,12 @@ pub enum Stop {
     Repeated { target: u64 },
     /// an `hvc` this run does not serve, at `pc`
     Hvc { number: u16, pc: u64 },
+    /// a host request (`hvc #8`) this run does not serve: the transport page's op (Sprint 155)
+    HostRequest { op: u64, pc: u64 },
+    /// the guest ended its process (HOST_EXIT) with `code`
+    ExitProcess { code: u32 },
+    /// a block the host could not compile (Sprint 155): an instruction the Rust rules do not lift, a CompileError
+    Untranslated { target: u64, why: String },
     /// any other exit
     Exit(String),
 }
@@ -208,6 +215,29 @@ pub fn run_to_first_decline(
     vcpu: &Vcpu<'_>,
     max_steps: u64,
 ) -> Result<Outcome, HvError> {
+    run(guest, loaded, vcpu, max_steps, None)
+}
+
+/// As `run_to_first_decline`, with the host compiling the blocks the VM's C declines (Sprint 155: `serve_exit`'s
+/// `_compile`, 5243, and its code-write exit, 5297-5299), until an exit this run does not serve or a block it cannot
+/// compile.
+pub fn run_compiling(
+    guest: &mut Guest,
+    loaded: &Loaded,
+    vcpu: &Vcpu<'_>,
+    max_steps: u64,
+    host: &mut HostCompiler,
+) -> Result<Outcome, HvError> {
+    run(guest, loaded, vcpu, max_steps, Some(host))
+}
+
+fn run(
+    guest: &mut Guest,
+    loaded: &Loaded,
+    vcpu: &Vcpu<'_>,
+    max_steps: u64,
+    mut host: Option<&mut HostCompiler>,
+) -> Result<Outcome, HvError> {
     let md = MONITOR_DATA;
     {
         let mem = guest.memory.as_mut_slice();
@@ -266,14 +296,16 @@ pub fn run_to_first_decline(
         vm_compiled(mem, &mut out.blocks);
         let pc = vcpu.reg(Reg::Pc)?;
         if !runtime.contains(&pc) {
-            // the count, from x23, with a fault's give-back (5199-5208); the blocks here are the VM's own, whose tails
-            // this loop does not note yet (2570), so a give-back counts the faulting instruction alone
+            // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
+            // note yet (2570), the host's compiles' it does
             let give_back = match exit.hvc_immediate().map(u32::from) {
                 Some(HVC_FAULT_GIVE_BACK) => GiveBack::Fault,
                 Some(10 | 11) => GiveBack::Model { pc }, // HVC_SLOW_SSE, HVC_SLOW_STEP
                 _ => GiveBack::None,
             };
-            exit_count(vcpu, mem, &Tails::default(), give_back)?;
+            let none = Tails::default();
+            let tails = host.as_deref().map_or(&none, |h| &h.tails);
+            exit_count(vcpu, mem, tails, give_back)?;
         }
         let Some(number) = exit.hvc_immediate() else {
             if matches!(exit, Exit::VtimerActivated) {
@@ -284,12 +316,36 @@ pub fn run_to_first_decline(
             break Stop::Exit(format!("{exit:?} at pc 0x{pc:x}"));
         };
         *out.exits.entry(number).or_default() += 1;
+        if number == HVC_CODE_WRITE as u16
+            && let Some(h) = host.as_deref_mut()
+        {
+            // a write faulted: behind translated code? (5297-5299)
+            let address = vcpu.reg(Reg::X(17))?;
+            match h.code_written(guest, address) {
+                Ok(written) => vcpu.set_reg(Reg::X(17), u64::from(written))?,
+                Err(why) => break Stop::Untranslated { target: address, why },
+            }
+            continue; // on at the hvc's return
+        }
+        if number == 8 {
+            let op = read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF);
+            if host.is_none() {
+                break Stop::HostRequest { op, pc };
+            }
+            // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end
+            match crate::host_request::serve(guest, vcpu) {
+                Ok(crate::host_request::Served::Answered) => continue,
+                Ok(crate::host_request::Served::Exit(code)) => break Stop::ExitProcess { code },
+                Err(_) => break Stop::HostRequest { op, pc },
+            }
+        }
         if number != 1 {
             break Stop::Hvc { number, pc };
         }
         let target = vcpu.reg(Reg::X(17))?;
-        if out.bridged.contains_key(&target) {
-            // its bridge was inserted at the last miss here: the table should have hit
+        if host.is_none() && out.bridged.contains_key(&target) {
+            // its bridge was inserted at the last miss here: the table should have hit (with the host compiling, a
+            // two-way slot may have let it go, and it is inserted again)
             break Stop::Repeated { target };
         }
         let va = match guest.bridges.get(&target) {
@@ -297,11 +353,19 @@ pub fn run_to_first_decline(
                 *out.bridged.entry(target).or_default() += 1;
                 va
             }
-            None => match out.blocks.get(&target) {
-                Some(&va) => va,
-                None => break Stop::Declined { target },
+            None => match (out.blocks.get(&target), host.as_deref_mut()) {
+                (Some(&va), _) => va,
+                (None, None) => break Stop::Declined { target },
+                (None, Some(h)) => match h.blocks.get(&target) {
+                    Some(&va) => va,
+                    None => match h.compile(guest, target) {
+                        Ok(va) => va,
+                        Err(why) => break Stop::Untranslated { target, why },
+                    },
+                },
             },
         };
+        let mem = guest.memory.as_mut_slice();
         dispatch_insert(mem, target, va);
         vcpu.set_reg(Reg::Pc, guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };

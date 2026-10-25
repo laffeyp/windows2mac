@@ -96,3 +96,24 @@ named stop, compiling the blocks the Python host compiles.
 - [x] One concept: the run loop's compile.
 
 ## result
+
+- **`qpc` runs to its end in the Rust host.** `run_compiling` stops at ExitProcess with code 0, and the guest's standard
+  output is its counter, `00001821dfa2daec\n`, between the host's monotonic count before and after the run
+  (`tests/test_timed_waits.py` 218-223, carried). The C compiler in the VM compiled six blocks; the Rust host two,
+  0x140001055-0x14000105a (`cmp r8, rax; jne`) and 0x140001086-0x14000108c. Together they are the Python host's eight
+  compiles; each host compile's start and end are the Python's; and each Rust block sits at the Python's code address
+  (0x7f00000626c8, 0x7f0000062834) with the Python's words, byte for byte.
+- Amended during the sprint, by measurement: the card had the run stop at a host request it does not serve. The first
+  run with the host compiling stopped at `hvc #8` op 1 (HOST_WRITE), `qpc`'s output; the run loop now serves the host
+  requests `host_request::serve` serves, with HOST_WRITE (the output kept in `Guest.stdout`) beside them, and ends at
+  HOST_EXIT.
+- `crates/w2m_vm/src/compile.rs`: `HostCompiler` (`_compile`, `_flags_live_out`, `_flags_live_in`, `_protect_code`,
+  `_page_descriptor` with the block split, the code page set, `_code_written`); `crates/translator`'s `assemble_block`;
+  `run.rs`'s `run_compiling` with the code-write exit and three stops (`HostRequest`, `ExitProcess`, `Untranslated`);
+  `run_to_first_decline` is unchanged in behavior (Sprint 142's test passes).
+- **Planted faults.** The card's plant, `LIVENESS_SCAN` 0, changed no word of these two blocks (their successors leave
+  every flag live either way), and neither did NZCV fusion turned off (a SUB's flags emit NZCV when ZF is live). Both
+  are recorded as not discriminating for `qpc`. A wrong inverse condition (`ne` inverted to `ne`) failed the test: the
+  run's path changed and the output's check failed. Restored, the test passes.
+- The fixture: `build/run_loop/qpc-python.json`, from the frozen Python host's run of `qpc` (its output then
+  `000018214dff0bdf\n`), its sha256 in `store/run_loop/qpc-python.sha256`, its generator in WORKING_AGREEMENT.

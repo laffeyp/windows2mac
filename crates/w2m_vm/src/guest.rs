@@ -486,6 +486,8 @@ pub struct Guest {
     pub arena: VirtualMemory,
     /// guest_stubs.rs's page, once written (vm_backend 2492)
     pub stub_page: u64,
+    /// the guest's standard output, as HOST_WRITE gives it (vm_backend `self.out`, Sprint 155)
+    pub stdout: Vec<u8>,
     /// the program's image as `Modules` holds it (vm_backend 2958-2959): (base, SizeOfImage)
     pub image_range: Option<(u64, u64)>,
     /// the program's DLLs as `Modules.dlls` holds them (2958): (base, SizeOfImage)
@@ -657,6 +659,7 @@ impl Guest {
             symbols: image.symbols.clone(),
             arena,
             stub_page: 0,
+            stdout: Vec::new(),
             image_range: loaded.image.as_ref().map(|p| (p.image_base, p.size_of_image as u64)),
             dll_ranges: loaded
                 .images

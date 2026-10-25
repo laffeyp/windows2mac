@@ -12,6 +12,7 @@ use hypervisor::{HvError, Vcpu};
 use crate::guest::{Guest, GuestError};
 
 /// runtime.h 69-71, 324; vm_backend 282-316.
+pub const HOST_WRITE: u64 = 1;
 pub const HOST_EXIT: u64 = 2;
 pub const HOST_RUNTIME_FAULT: u64 = 5;
 pub const HOST_MODULE_AT: u64 = 18;
@@ -97,7 +98,7 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
     0
 }
 
-/// `_serve_host_request` (3808-3888) for HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT and HOST_EXCEPTION.
+/// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT and HOST_EXCEPTION.
 pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
     let (op, a0, a1) = {
         let mem = guest.memory.as_slice();
@@ -109,6 +110,17 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
     };
     let result = match op {
         HOST_EXIT => return Ok(Served::Exit((a0 & 0xFFFF_FFFF) as u32)),
+        HOST_WRITE => {
+            // `self.out += self.mem.read(a0, a1)`: a1 bytes of the guest's output at a0 (Sprint 155)
+            let at = guest
+                .layout
+                .offset(a0)
+                .ok_or_else(|| HostError::Unserved(format!("a write from unmapped 0x{a0:x}")))?
+                as usize;
+            let bytes = guest.memory.as_slice()[at..at + a1 as usize].to_vec();
+            guest.stdout.extend(bytes);
+            a1
+        }
         HOST_RUNTIME_FAULT => {
             return Err(HostError::Unserved(format!(
                 "guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} (EC 0x{:x}), not in translated code or not a data abort",
