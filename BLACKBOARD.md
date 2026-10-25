@@ -361,6 +361,7 @@
 - **2026-10-25** — Sprint 138 (the loader in Rust; step 3's seventh link). `crates/pe_loader` carries `src/w2m/loader.py`: images mapped and relocated, supplied DLLs placed (preferred base, else from `DLL_BASE` up) and bound, host thunks, the loader stub, static TLS. `tests/test_loader_images.py`'s three checks hold; the DLL sits where Windows put it (`dll.base`) and its TLS index and block are Windows' (`tls.index`, `tls.array`); the 73-byte stub equals clang's assembly. Dual contract: pass; a delta off by one named its site. Closed: CI run 40154317363 (99135699c).
 - **2026-10-24** — Sprint 139 (the host's compile path; step 3 amended). `docs/design-host-compile-path-2026-10-24.md`: on the Python host with the C compiler in the VM, each of the 14 `timed_waits` guests needed 2 to 54 host compiles, so the walking skeleton needs a compiler on the host. Decision: the run loop first, stopping `qpc` by name at its first declined block; then the decoder, a case runner, the lifter, and the rules and lowering in groups, each judged in its own sprint by the C emitter's words and by the Windows class cases. The plan's steps 3 and 4 amended. Dual contract: pass; `design_check` named FEX when its sources were removed. Its CI run is recorded in Sprint 140's tail entry; from this entry on, a Built entry carries no placeholder.
 - **2026-10-24** — Sprint 140 (the process area; the run loop's first half). `crates/w2m_vm/src/process.rs` writes the TEB, the PEB, the process parameters, the synthetic system images and the loader's three lists as `vm_backend.py` writes them. Read back for `qpc` and for the loader probe, they meet the rows of `windows.process.parameters` a started program's block shows and `windows.loader.static_import`'s load, memory and init orders; the stack meets `windows.memory.thread_stack`'s layout but not `teb.reserve_is_header` (w2m's fixed 1 MB against mingw's 2 MB header), as in the Python host. Dual contract: pass; the init list linked in load order was named. Its CI run is recorded in Sprint 141's tail entry.
+- **2026-10-24** — Sprint 141 (the bridges; the run loop's second piece). `crates/w2m_vm/src/guest.rs` lays a program's memory out as `VM.__init__` does (the monitor and process areas, the regions, the heap, the 512 GB VirtualAlloc arena) and writes the switch, slice and entry stubs and one bridge per import into the code cache. In one VM holding `qpc`, `GetStdHandle(STD_OUTPUT_HANDLE)` returns 0x74, the parameters block's handle (`parent.standard_handles`), through the dispatcher with RET's pop done; `QueryPerformanceCounter` writes a count; an import with no service stops at `hvc #9`. Dual contract: pass; a pop without its RSP add was named. Its CI run is recorded in Sprint 142's tail entry.
 
 ## Deferred
 
@@ -431,6 +432,13 @@
 ---
 
 ## Sprint tail
+
+### Sprint 141 (2026-10-24, closed)
+- **Scope:** an import's call, in the VM, reaches its guest runtime service and returns through the dispatcher by the Microsoft x64 convention.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, one new VM test, the gates); observation pass (the three calls; one value from Windows' rows; the plant named RET's pop).
+- **Rubber Duck Pass:** *Observation 1 (a split that kept the sprints small):* the bridges were split from the run loop when reading `_bridge` showed four pieces behind it; this sprint closed in one pass. Disposition: resolved-here (technique #17). *Observation 2 (pieces deferred, named):* call tracing in the bridge, the COM vtables and the VM compiler's symbol table are not carried; each is named in the card's result for Sprint 142. Disposition: recorded. *Observation 3 (a draft that wrote twice):* the first draft of `Guest::new` called `process::write` twice, a leftover; removed before it compiled. Disposition: resolved-here.
+- **Closed:** Sprint 140's CI run 40157651012 (success on aead79d7b).
+- **Files:** crates/w2m_vm/, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-141-the-bridges.md, signal-reports/sprint-141-report.md.
 
 ### Sprint 140 (2026-10-24, closed)
 - **Scope:** the process area a program and the runtime read at start, written from Rust and held to Windows' rows.
