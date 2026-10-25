@@ -115,9 +115,10 @@ fn judge(use_rust: bool) {
     };
     let expected = expected(&root);
 
-    let (failures, reached, distinct) = with_case_vm(&root, &fixture, |guest, vcpu| {
+    let (failures, reached, distinct, at_fault, to_model) = with_case_vm(&root, &fixture, |guest, vcpu| {
         let mut failures = Vec::new();
         let mut reached: BTreeMap<String, usize> = BTreeMap::new();
+        let (mut at_fault, mut to_model): (BTreeMap<String, usize>, BTreeMap<String, usize>) = Default::default();
         let mut seen_sets = BTreeSet::new();
         let mut distinct = (0, 0);
         for run in &runs {
@@ -171,12 +172,18 @@ fn judge(use_rust: bool) {
             for (class, n) in &t.by_class {
                 *reached.entry(class.clone()).or_default() += n;
             }
+            for (class, n) in &t.faults_by_class {
+                *at_fault.entry(class.clone()).or_default() += n;
+            }
+            for (class, n) in &t.model_by_class {
+                *to_model.entry(class.clone()).or_default() += n;
+            }
             if seen_sets.insert(set_name) {
                 distinct.0 += t.judged;
                 distinct.1 += cases.len();
             }
         }
-        (failures, reached, distinct)
+        (failures, reached, distinct, at_fault, to_model)
     })
     .unwrap();
     let mut failures = failures;
@@ -222,6 +229,15 @@ fn judge(use_rust: bool) {
         for (code, class, d) in unlike.iter().take(12) {
             println!("    {class} {code:02x?}: {d}");
         }
+        // per class the Rust compiled: judged whole, of them judged at a fault, and sent to the model (Sprint 154)
+        let per: Vec<String> = rust
+            .keys()
+            .map(|c| {
+                let n = |m: &BTreeMap<String, usize>| m.get(c).copied().unwrap_or(0);
+                format!("{c} {}/{}/{}", n(&reached), n(&at_fault), n(&to_model))
+            })
+            .collect();
+        println!("    judged / at a fault / to the model, per class: {}", per.join(", "));
         if rust.is_empty() {
             failures.push("the Rust translator compiled no case".into());
         }

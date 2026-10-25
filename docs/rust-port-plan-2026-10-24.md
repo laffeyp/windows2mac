@@ -129,6 +129,10 @@ quotes were copied from the sources on 2026-10-24.
    of 458 classes, 68 of 68 families, the guests in `tests/data` with their stored output. The Python host's code
    moves under `oracle/` (git mv) and leaves CI. Moves: instructions a second on one vCPU, against Sprint 108's
    2,095,145,119.
+   *Amended 2026-10-25 (Sprint 154; review of Sprints 151-152):* two discrepancy ledgers stand until then: the
+   Python's, `store/runs/discrepancy-ledger.json`, over records whose baseline names a `differential`, and the Rust
+   judges', `store/case_runner/discrepancy-ledger.json`, over those naming a `judge`. When the Python moves under
+   `oracle/`, one Rust ledger reads both keys and the Python's file is its derivation.
 5. **The PE images translated ahead of time.** UnityPlayer.dll first: in play it retires 76.9% of the game's
    instructions (Decision 2026-10-14); Mono's run-time code stays with the run-time compiler. Gate: the batch run
    conforms with the cache, and compiles at run time, counted on the record, fall by the share the cache covers.

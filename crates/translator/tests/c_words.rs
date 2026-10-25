@@ -2,9 +2,10 @@
 // Copyright (C) 2026 Peter Laffey
 //! Sprint 151's first judge: for every call of the stencil record (`store/stencil/record.txt.gz`, the batch run's
 //! 1,186,511 compile calls) whose instruction the Rust rules lift, the Rust compiler's words at the record's address,
-//! exit and flag arguments equal the words of the VM's C emitter (`tools/vm_compiler`, built for the host by clang and
-//! called through `dlopen`), where the C gives words. The C stencils were derived from the frozen Python lowering, so
-//! equality is the expectation. Runs where clang is found.
+//! exit and flag arguments equal the words of the VM's C emitter (`tools/vm_compiler`, built for the host and called
+//! through `dlopen`), where the C gives words. The C stencils were derived from the frozen Python lowering, so equality
+//! is the expectation. It needs no VM and no untracked input, so it runs everywhere, CI's Linux included; a missing C
+//! compiler fails it (Sprint 154: it had skipped on CI, reviewer-2's review of Sprints 151-152).
 
 use std::collections::BTreeMap;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
@@ -43,23 +44,30 @@ struct Flags {
 type Compile =
     unsafe extern "C" fn(*const u8, c_int, u64, u64, u64, *const Flags, *const u64, *mut u32, c_int) -> c_int;
 
-fn load() -> Option<Compile> {
-    let clang = Command::new("xcrun").args(["--find", "clang"]).output().ok()?;
-    if !clang.status.success() {
-        return None;
-    }
+/// The C emitter built for the host and loaded (Sprint 154: on CI's Linux too, where it once skipped). The compiler is
+/// `$CC` when set, else `xcrun clang` on macOS (which gives the linker the SDK) and `cc` elsewhere; a compiler that is
+/// missing or fails fails the test.
+fn load() -> Compile {
+    let mut cmd: Vec<String> = match std::env::var("CC") {
+        Ok(cc) => cc.split_whitespace().map(str::to_string).collect(),
+        Err(_) if cfg!(target_os = "macos") => vec!["xcrun".into(), "clang".into()],
+        Err(_) => vec!["cc".into()],
+    };
     let dir = root().join("target/translator_c_words");
     fs::create_dir_all(&dir).unwrap();
-    let lib = dir.join(format!("libvmc-{}.dylib", std::process::id()));
+    let ext = if cfg!(target_os = "macos") { "dylib" } else { "so" };
+    let lib = dir.join(format!("libvmc-{}.{ext}", std::process::id()));
     let vmc = root().join("tools/vm_compiler");
-    let built = Command::new("xcrun")
-        .args(["clang", "-shared", "-O2", "-I"])
+    let program = cmd.remove(0);
+    let built = Command::new(&program)
+        .args(&cmd)
+        .args(["-shared", "-fPIC", "-O2", "-I"])
         .arg(&vmc)
         .args(["x86_decode.c", "vm_compiler.c", "a64_encoder.c"].map(|f| vmc.join(f)))
         .arg("-o")
         .arg(&lib)
         .output()
-        .unwrap();
+        .unwrap_or_else(|e| panic!("the C compiler `{program}` did not run: {e}"));
     assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
     let path = CString::new(lib.to_str().unwrap()).unwrap();
     unsafe {
@@ -67,7 +75,7 @@ fn load() -> Option<Compile> {
         assert!(!h.is_null(), "{:?}", CStr::from_ptr(dlerror()));
         let p = dlsym(h, c"vmc_compile".as_ptr());
         assert!(!p.is_null());
-        Some(std::mem::transmute::<*mut c_void, Compile>(p))
+        std::mem::transmute::<*mut c_void, Compile>(p)
     }
 }
 
@@ -116,10 +124,7 @@ const BASE: u64 = 0x7F00_0006_0000;
 
 #[test]
 fn group_1_s_words_equal_the_c_emitter_s() {
-    let Some(c_compile) = load() else {
-        eprintln!("clang not found: the C words are not compared here");
-        return;
-    };
+    let c_compile = load();
     let (head, calls) = record();
     let table = fs::read_to_string(root().join("tools/vm_compiler/stencil_table.h")).unwrap();
     let body = &table[table.find("vmc_symbol_name[").unwrap()..];

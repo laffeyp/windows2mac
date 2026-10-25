@@ -36,6 +36,8 @@ cargo clippy --all-targets -- -D warnings
 # review of link 3 found it could pass having judged nothing). CI, on Linux, does not compile it.
 W2M_REQUIRE_CASE_RUNS=1 cargo test --quiet
 cargo build --release --quiet
+# the Rust judges' discrepancy ledger is what their records say (Sprint 154; review of Sprints 151-152)
+target/release/case_runs --check-ledger
 # the vocabulary generated into Rust and substrate's schema file, byte for byte (Sprint 126)
 target/release/vocabulary_generator --check > /dev/null
 # every sprint from 108 marked done has its Signal Report (Sprint 127: the reports stopped unnoticed three times)

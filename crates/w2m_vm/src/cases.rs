@@ -107,6 +107,10 @@ pub struct Tally {
     pub by_class: BTreeMap<String, usize>,
     pub ymm_judged: usize,
     pub x87_judged: usize,
+    /// by iclass: the cases judged at the VM's fault, and the cases sent to the model (hvc #10, #11), not judged
+    /// (Sprint 154: a class whose judged set is empty shows)
+    pub faults_by_class: BTreeMap<String, usize>,
+    pub model_by_class: BTreeMap<String, usize>,
 }
 
 impl Tally {
@@ -566,6 +570,7 @@ pub fn run_cases(
                 guest.clear_exception();
                 tally.judged_whole(iclass, r);
                 tally.faults_judged += usize::from(r.marker == 2);
+                *tally.faults_by_class.entry(iclass.to_string()).or_default() += usize::from(r.marker == 2);
                 for (k, detail) in diffs {
                     tally.note(iclass, &k, format!("case {i}: {:02x?} {detail}", c.code));
                 }
@@ -588,6 +593,7 @@ pub fn run_cases(
                 // the model is step 4's: counted, not judged; its exit's give-back and count as the run loop's
                 exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
                 tally.model += 1;
+                *tally.model_by_class.entry(iclass.to_string()).or_default() += 1;
                 continue;
             }
             other => {

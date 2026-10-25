@@ -18,7 +18,8 @@
 //! `--rust-translator` (Sprint 151) compiles the classes link 5's groups carry with the Rust translator, the rest with
 //! the Python words. `--plant-flip-cf` flips CF in every completed case of the session's first run's Windows results:
 //! the record must then hold discrepancies whose first divergence names a CF class. `--write-ledger` (not a Producer)
-//! rebuilds the judges' ledger from the records and writes `store/case_runner/discrepancy-ledger.json`, after a run.
+//! rebuilds the judges' ledger from the records and writes `store/case_runner/discrepancy-ledger.json`, after a run;
+//! `--check-ledger` (the gate) fails when that file is not what the records give.
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 fn main() {
@@ -146,6 +147,18 @@ mod run {
             let ledger = ledger::rebuild(&runs_dir);
             fs::write(&ledger_file, ledger::text(&ledger)).map_err(|e| e.to_string())?;
             eprintln!("case_runs: {} discrepancies in the judges' ledger", ledger.len());
+            return Ok(());
+        }
+        if flag("--check-ledger") {
+            // the gate (Sprint 154, review of Sprints 151-152): the committed ledger is what the records say
+            let want = ledger::text(&ledger::rebuild(&runs_dir));
+            let have = fs::read_to_string(&ledger_file).map_err(|e| format!("{}: {e}", ledger_file.display()))?;
+            if have != want {
+                return Err(format!(
+                    "{} is not the ledger the records give; `case_runs --write-ledger` rebuilds it",
+                    ledger_file.display()
+                ));
+            }
             return Ok(());
         }
         let plant = flag("--plant-flip-cf");

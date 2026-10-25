@@ -97,3 +97,21 @@ unnoticed.
 - [x] One concept: the review's findings.
 
 ## result
+
+- **Medium 1.** Sprint 150's record and its 22 verdict traces were restored from c1c8ee44f and moved with `git mv` to
+  `store/superseded/case-runner-1792916257296645000` and `store/superseded/case-runner-traces/`, with
+  `store/superseded/README-2026-10-25.md` saying what they are and what supersedes them. `scripts/check_replay.py` walks
+  `store/runs/` only; the record replays at level 2 from its new place.
+- **Medium 2.** `c_words.rs` builds the C with `$CC`, else `xcrun clang` on macOS and `cc` elsewhere, as a `.dylib` or
+  a position-independent `.so`; a compiler that is missing or fails fails the test. Unoptimized it compares 1,096,154
+  calls in 10.4 s. Planted: `CC=no-such-cc` fails it with "the C compiler `no-such-cc` did not run". The C includes no
+  system header; CI's run of the closing commit is the measure on Linux.
+- **The ledger.** `case_runs --check-ledger` rebuilds the judges' ledger and fails when the file differs; the gates run
+  it after the release build. Planted: a ledger file with an added entry failed it by name. WORKING_AGREEMENT's ledger
+  row and the plan's step 4 (amended, dated) say which records each ledger covers and that step 4 joins them.
+- **Lows.** Sprint 151's card is `closed-partial`, with a Deferred entry and its resolution. `signals/proposals.json`
+  gains P22 (T4 scoped to executions that make a guest trace; open) and P23 (COMPARISON_COMPLETED's references to a
+  session or an external run; open).
+- **Group 2's counts.** The tally counts, per class, the cases judged at a fault and those sent to the model. With the
+  Rust translator: DIV 90 judged, 47 of them at a fault (Rust-compiled words on the fault path), 237 to the model; IDIV
+  69, 48 and 219; every other class the Rust compiles sends none to the model, and none has an empty judged set.

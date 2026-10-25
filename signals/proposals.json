@@ -357,6 +357,30 @@
     "into": "0.10",
     "grounds": "project — Decision 2026-10-24 user, fix (e); the emit sites and stored occurrences counted 2026-10-24; SDD — PRINCIPLES.md (TAG_DEPRECATION_PROPOSED), TECHNIQUES.md #45 (deprecation entries instead of removals); practice — n/a"
    }
+  },
+  {
+   "id": "P22",
+   "kind": "INVARIANT_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "T4 holds each EXECUTION_COMPLETED whose execution makes a guest trace to one TRACE_INGESTED or TRACE_REJECTED of it; an execution a judge runs and judges by state (the case runner's) makes no guest trace and is marked so on EXECUTION_COMPLETED"
+   ],
+   "source": "reviewer-2's review of Sprints 149-150 (2026-10-25), High 1; sprints/sprint-152-the-judges-records-made-true.md; store/superseded/README-2026-10-25.md",
+   "rationale": "The case runner's runs are executions in the VM judged by their end state, not by guest output, so T4's ingest cannot be met honestly; Sprint 150 met it with TRACE_INGESTED over verdict lines, and Sprint 152 dropped the execution events instead, as differential.py's records carried none. A judge-only execution marked on EXECUTION_COMPLETED would let the records name each run again without a false ingest.",
+   "status": "open",
+   "revisit": "the first sprint whose records need a judged execution named by an event (the skeleton's gate, link 6)"
+  },
+  {
+   "id": "P23",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "COMPARISON_COMPLETED.reference_ref and target_execution_id may name a session or an external run (a GitHub Actions run id), not only an execution on the record"
+   ],
+   "source": "reviewer-2's review of Sprints 151-152 (2026-10-25), concern (c)",
+   "rationale": "The case runner's comparisons name the Windows runs' GitHub ids as their reference and the session as their target; no execution event on the record carries either, as differential.py's records (vm-oracle-<run>) did not. The tag's note says both are execution ids.",
+   "status": "open",
+   "revisit": "with P22"
   }
  ]
 }
