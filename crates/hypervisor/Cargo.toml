@@ -1,0 +1,9 @@
+[package]
+name = "hypervisor"
+description = "Hypervisor.framework from Rust: the VM, a vCPU on its own thread, and guest memory (Sprint 132)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
