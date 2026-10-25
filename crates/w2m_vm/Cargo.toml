@@ -12,7 +12,9 @@ guest_runtime = { path = "../guest_runtime" }
 hypervisor = { path = "../hypervisor" }
 cpu_cases = { path = "../cpu_cases" }
 pe_loader = { path = "../pe_loader" }
+virtual_memory = { path = "../virtual_memory" }
 x86_decoder = { path = "../x86_decoder" }
 
 [dev-dependencies]
+pe_image = { path = "../pe_image" }
 serde_json.workspace = true

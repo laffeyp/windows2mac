@@ -1,7 +1,7 @@
 # The Rust w2m (docs/rust-port-plan-2026-10-21.md): one crate per layer as the port reaches it.
 [workspace]
 resolver = "3"
-members = ["crates/a64_encoder", "crates/design_check", "crates/events", "crates/guest_runtime", "crates/hypervisor", "crates/cpu_cases", "crates/pe_image", "crates/pe_loader", "crates/session_events", "crates/signal_report", "crates/vocabulary_generator", "crates/vocabulary_samples", "crates/w2m_vm", "crates/x86_decoder"]
+members = ["crates/a64_encoder", "crates/design_check", "crates/events", "crates/guest_runtime", "crates/hypervisor", "crates/cpu_cases", "crates/pe_image", "crates/pe_loader", "crates/session_events", "crates/signal_report", "crates/vocabulary_generator", "crates/vocabulary_samples", "crates/w2m_vm", "crates/virtual_memory", "crates/x86_decoder"]
 
 [workspace.package]
 version = "0.1.0"
