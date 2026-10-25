@@ -60,6 +60,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | The Rust host's design | `docs/design-rust-host-2026-10-24.md` (Sprint 130); `docs/design-rust-host-2026-10-23.md` is history |
 | The guest-memory layout the C runtime is compiled against (carried from `vm_backend.py` and `scheduler.py`, line by line); the runtime image's build, cache key, generated headers and services | `crates/guest_runtime/src/layout.rs`, `lib.rs`, `headers.rs`, `services.rs` (Sprint 133); images under `build/guest_runtime_rust/` |
 | The `w2m-vm` process's VM: stage-1 tables (carried from `vm_backend._write_translation_tables`), the system register values, the monitor area with the runtime image, the vectors, a call into the runtime | `crates/w2m_vm/src/tables.rs`, `monitor.rs`, `lib.rs` (Sprint 134) |
+| The AArch64 encoder: every word w2m emits (carried from `src/w2m/a64_encoder.py`, checked against clang) | `crates/a64_encoder/src/lib.rs` (Sprint 135) |
 | Hypervisor.framework from Rust: `Vm`, `Vcpu`, `VcpuHandle`, `GuestMemory`, `Exit`, `Reg`, the bindings | `crates/hypervisor/src/lib.rs` (Sprint 132); the cargo runner that signs with the entitlement, `scripts/sign_and_run.sh` via `.cargo/config.toml` |
 | Guest state spec (state block, host registers, reconstruction, Windows layouts) | `specs/guest_state.json`; checker `scripts/check_guest_state.py` |
 | Semantics oracle (cases, runner harness, judge) | `probes/semantics/`, `scripts/semantics_differential.py` |
