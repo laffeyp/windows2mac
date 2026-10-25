@@ -2,16 +2,15 @@
 // Copyright (C) 2026 Peter Laffey
 //! The host's block compile (Sprint 155): a block the VM's C compiler declines, translated by the Rust translator,
 //! carried from `src/w2m/vm_backend.py` `_compile` (4588-4642, without the translation cache and the block census),
-//! `_flags_live_out` and `_flags_live_in` (4778-4825), `_protect_code` (4535-4551), `_page_descriptor` (4507-4533),
-//! `_page_set_add` and `_page_set_remove` (2527-2552) and `_code_written` (4554-4577). One vCPU: no private tables, so
+//! `_flags_live_out` and `_flags_live_in` (4778-4825), `_protect_code` (4535-4551; `_page_descriptor`, 4507-4533, is
+//! the guest's since Sprint 156), `_page_set_add` and `_page_set_remove` (2527-2552) and `_code_written` (4554-4577). One vCPU: no private tables, so
 //! a descriptor written is written once (`_write_descriptor`'s copies are a several-vCPU matter).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use guest_runtime::layout::{
     AP_READ_ONLY, CODE_CACHE, CODE_CACHE_SIZE, CODE_PAGE_BITS, CODE_PAGE_SET, CODE_PAGE_SLOTS, DISPATCH_TABLE,
-    IPA_BASE, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE, SPLIT_TABLES,
-    SPLIT_TABLES_SIZE, STATE_OFF, TRANSLATION_TABLES, VM_COMPILER,
+    IPA_BASE, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE, STATE_OFF, VM_COMPILER,
 };
 use translator::lift::{LiftError, Lifted, Op, lift};
 use translator::lower::{ALL_FLAGS, assemble_block, insn_flags, nzcv_setter};
@@ -34,7 +33,8 @@ fn write_u64(mem: &mut [u8], off: u64, v: u64) {
 }
 
 /// The host's compiles and the state they keep (vm_backend 2425, 2444-2467): the blocks, the pages behind them, the
-/// tails, the split tables' next free page.
+/// tails. The split tables' next free page is the guest's (`Guest::page_descriptor`, Sprint 156).
+#[derive(Default)]
 pub struct HostCompiler {
     /// x86 start -> code VA
     pub blocks: BTreeMap<u64, u64>,
@@ -44,22 +44,7 @@ pub struct HostCompiler {
     /// (start, end) of each compile, in order (`translations`)
     pub translations: Vec<(u64, u64)>,
     pub blocks_dropped: u64,
-    next_table: u64,
     page_set_removed: u64,
-}
-
-impl Default for HostCompiler {
-    fn default() -> HostCompiler {
-        HostCompiler {
-            blocks: BTreeMap::new(),
-            code_pages: BTreeMap::new(),
-            tails: Tails::default(),
-            translations: Vec::new(),
-            blocks_dropped: 0,
-            next_table: SPLIT_TABLES,
-            page_set_removed: 0,
-        }
-    }
 }
 
 /// Up to 15 bytes of guest code at `va`, as far as its mapping reaches (`Memory.code_at`): None when unmapped.
@@ -217,39 +202,6 @@ impl HostCompiler {
         live | undecided
     }
 
-    /// `_page_descriptor` (4507-4533): the memory offset of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB
-    /// block over it split into the next level's 512 descriptors with the block's attributes; 0 when nothing maps it.
-    fn page_descriptor(&mut self, guest: &mut Guest, va: u64) -> Result<u64, String> {
-        let mem = guest.memory.as_mut_slice();
-        let mut off = TRANSLATION_TABLES;
-        for (level, shift) in [(0u32, 39u32), (1, 30), (2, 21)] {
-            let at = off + 8 * ((va >> shift) & 0x1FF);
-            let mut desc = read_u64(mem, at);
-            if desc & 1 == 0 {
-                return Ok(0);
-            }
-            if desc & 2 == 0 {
-                // a block: split it
-                let size = 1u64 << shift;
-                let base = desc & 0x0000_FFFF_FFFF_F000 & !(size - 1);
-                let attributes = desc & !0x0000_FFFF_FFFF_F000 & !0x3;
-                let new = self.next_table;
-                if new + PAGE > SPLIT_TABLES + SPLIT_TABLES_SIZE {
-                    return Err("stage-1 split table area full".into());
-                }
-                self.next_table += PAGE;
-                let low = if level == 2 { 0x3 } else { 0x1 }; // pages at level 3, blocks at level 2
-                for i in 0..512u64 {
-                    write_u64(mem, new + 8 * i, (base + i * (size >> 9)) | attributes | low);
-                }
-                desc = (IPA_BASE + new) | 0x3;
-                write_u64(mem, at, desc);
-            }
-            off = (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
-        }
-        Ok(off + 8 * ((va >> 12) & 0x1FF))
-    }
-
     /// `_protect_code` (4535-4551): the pages under guest bytes [start, end) read-only, and the block over them noted
     /// (`owner`, when the bytes are not its own). The thunks and the process area stay as they are.
     fn protect_code(&mut self, guest: &mut Guest, start: u64, end: u64, owner: Option<u64>) -> Result<(), String> {
@@ -260,7 +212,7 @@ impl HostCompiler {
         let mut page = start & !(PAGE - 1);
         while page < end {
             if !self.code_pages.contains_key(&page) {
-                let at = self.page_descriptor(guest, page)?;
+                let at = guest.page_descriptor(page)?;
                 if at == 0 {
                     page += PAGE;
                     continue;
@@ -268,10 +220,9 @@ impl HostCompiler {
                 let mem = guest.memory.as_mut_slice();
                 let desc = read_u64(mem, at);
                 write_u64(mem, at, desc | AP_READ_ONLY);
-                self.code_pages.insert(page, BTreeSet::new());
                 self.page_set_add(guest, page);
             }
-            self.code_pages.get_mut(&page).unwrap().insert(owner);
+            self.code_pages.entry(page).or_default().insert(owner);
             page += PAGE;
         }
         Ok(())
@@ -350,7 +301,7 @@ impl HostCompiler {
             }
             self.blocks_dropped += 1;
         }
-        let at = self.page_descriptor(guest, page)?;
+        let at = guest.page_descriptor(page)?;
         let mem = guest.memory.as_mut_slice();
         let desc = read_u64(mem, at);
         write_u64(mem, at, desc & !AP_READ_ONLY);

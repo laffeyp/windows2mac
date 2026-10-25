@@ -24,6 +24,8 @@ pub mod process;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod run;
 pub mod tables;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod threads;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod monitor;

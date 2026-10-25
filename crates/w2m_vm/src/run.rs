@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use guest_runtime::layout::{
-    CODE_CACHE, CODE_CACHE_SIZE, CURRENT, CURRENT_ENTRY, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA,
-    PROCESS_VA, RT_ENTRIES, RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, TRANSPORT_OFF,
-    VECTOR_SLOTS, VM_COMPILER, VMC_LOG, VMC_LOG_ENTRY,
+    CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PROCESS_VA, RUN_ENTRY,
+    RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, TRANSPORT_OFF, VM_COMPILER, VMC_LOG,
+    VMC_LOG_ENTRY,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
 use pe_loader::Loaded;
@@ -21,19 +21,13 @@ use crate::compile::HostCompiler;
 use crate::guest::{Guest, RT_IN_VM, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, REG_BUDGET, dispatch_slot};
+use crate::threads::{FIRST_TID, STILL_ACTIVE, Thread, add_thread, slice_until};
 
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
 pub const MXCSR_OFF: u64 = 0x50;
 pub const FCW_OFF: u64 = 0x70;
 pub const LOCK_OWNER: u64 = 0xB0;
 pub const RUN_END: u64 = 0xC8;
-/// The run table's header and an entry's words (scheduler.py 42-47).
-pub const RT_COUNT: u64 = 0x00;
-pub const E_TID: u64 = 0x00;
-pub const E_STATUS: u64 = 0x08;
-pub const E_TEB: u64 = 0x20;
-pub const E_VSLOT: u64 = 0x28;
-pub const E_VCPU: u64 = 0x138;
 /// x24 holds the flags not yet defined (vm_backend 359); at entry every one.
 pub const REG_UNDEFINED_FLAGS: u8 = 24;
 
@@ -126,8 +120,9 @@ pub enum Stop {
     Repeated { target: u64 },
     /// an `hvc` this run does not serve, at `pc`
     Hvc { number: u16, pc: u64 },
-    /// a host request (`hvc #8`) this run does not serve: the transport page's op (Sprint 155)
-    HostRequest { op: u64, pc: u64 },
+    /// a host request (`hvc #8`) this run does not serve: the transport page's op (Sprint 155), and why: the host's
+    /// refusal, naming the request (Sprint 156)
+    HostRequest { op: u64, pc: u64, why: String },
     /// the guest ended its process (HOST_EXIT) with `code`
     ExitProcess { code: u32 },
     /// a block the host could not compile (Sprint 155): an instruction the Rust rules do not lift, a CompileError
@@ -152,6 +147,18 @@ pub struct Outcome {
     pub run_ns: Vec<u64>,
     /// the exits, by hvc number (0 for a non-hvc exit)
     pub exits: BTreeMap<u16, u64>,
+    /// each thread the guest created, as CreateThread's host half left it (Sprint 156)
+    pub created: Vec<Created>,
+}
+
+/// A created thread at THREAD_CREATE's return: its id, its run table entry and vector slot, and the count and limit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Created {
+    pub tid: u64,
+    pub entry: Vec<u8>,
+    pub vectors: Vec<u8>,
+    pub count: u64,
+    pub limit: u64,
 }
 
 fn read_u64(mem: &[u8], off: u64) -> u64 {
@@ -160,21 +167,6 @@ fn read_u64(mem: &[u8], off: u64) -> u64 {
 
 fn write_u64(mem: &mut [u8], off: u64, v: u64) {
     mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
-}
-
-/// `_add_thread` for the first thread (vm_backend 3328-3344; `GuestThread`, scheduler.py 60-71; `_vslot`, 3346-3350;
-/// `set_current`, 3323-3326): its run-table entry, ready, its vector slot, current on vCPU 0.
-fn add_first_thread(mem: &mut [u8], tid: u64, teb: u64) {
-    let at = RUN_TABLE + RT_ENTRIES; // entry 0
-    write_u64(mem, at + E_TID, tid);
-    write_u64(mem, at + E_STATUS, 0);
-    write_u64(mem, at + E_TEB, teb);
-    write_u64(mem, at + E_VCPU, 0);
-    write_u64(mem, RUN_TABLE + RT_COUNT, 1);
-    write_u64(mem, at + E_VSLOT, VECTOR_SLOTS);
-    write_u64(mem, MONITOR_DATA + CURRENT, 0);
-    write_u64(mem, MONITOR_DATA + CURRENT_ENTRY, MONITOR_VA + at);
-    write_u64(mem, at + E_VCPU, 1); // the first thread starts on vCPU 0
 }
 
 /// `_dispatch_insert` (vm_backend 4827-4849): (target, va) in its pair, in a slot that is empty or holds it, else
@@ -239,11 +231,34 @@ fn run(
     mut host: Option<&mut HostCompiler>,
 ) -> Result<Outcome, HvError> {
     let md = MONITOR_DATA;
+    let first = Thread {
+        tid: FIRST_TID,
+        index: 0,
+        teb: PROCESS_VA + TEB_OFF,
+        stack: guest.process.stack,
+        exit_code: STILL_ACTIVE,
+        parent: 0,
+        start: loaded.entry,
+        created_suspended: false,
+    };
+    let mut out = Outcome {
+        stop: Stop::Exit(String::new()),
+        bridged: BTreeMap::new(),
+        blocks: BTreeMap::new(),
+        counts: BTreeMap::new(),
+        serve_ns: Vec::new(),
+        run_ns: Vec::new(),
+        exits: BTreeMap::new(),
+        created: Vec::new(),
+    };
+    if let Err(why) = add_thread(guest, first) {
+        out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
+        return Ok(out);
+    }
     {
         let mem = guest.memory.as_mut_slice();
         write_u64(mem, md + 8, max_steps); // `_set_budget`: one thread, the run's limit
         write_u64(mem, VM_COMPILER + VMC_ENABLED, 1);
-        add_first_thread(mem, 4, PROCESS_VA + TEB_OFF);
         mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&0x1F80u32.to_le_bytes());
         write_u64(mem, md + LOCK_OWNER, 1);
         mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&0x27Fu16.to_le_bytes());
@@ -260,25 +275,17 @@ fn run(
     vcpu.set_reg(Reg::Pc, guest.entry_va)?;
     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
 
-    let mut out = Outcome {
-        stop: Stop::Exit(String::new()),
-        bridged: BTreeMap::new(),
-        blocks: BTreeMap::new(),
-        counts: BTreeMap::new(),
-        serve_ns: Vec::new(),
-        run_ns: Vec::new(),
-        exits: BTreeMap::new(),
-    };
     let runtime = MONITOR_VA + RUNTIME_IMAGE..MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE;
     let mut marked = None::<Instant>;
     let stop = loop {
-        // `_before_run` (5129-5141): one thread, no other process: the slice never needs the host, and the VM may
-        // switch threads itself; x23 the budget left, outside the runtime's C
+        // `_before_run` (5129-5141): one vCPU, no other process: the slice's end (`_slice_until`), the VM may switch
+        // threads itself; x23 the budget left, outside the runtime's C
         let pc = vcpu.reg(Reg::Pc)?;
         {
+            let slice_until = slice_until(guest);
             let mem = guest.memory.as_mut_slice();
             let (count, limit) = (read_u64(mem, md), read_u64(mem, md + 8));
-            write_u64(mem, md + SLICE_UNTIL, u64::MAX);
+            write_u64(mem, md + SLICE_UNTIL, slice_until);
             write_u64(mem, md + RUN_END, max_steps);
             write_u64(mem, RUN_TABLE + u64::from(RT_IN_VM), 1);
             if !runtime.contains(&pc) {
@@ -330,13 +337,34 @@ fn run(
         if number == 8 {
             let op = read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF);
             if host.is_none() {
-                break Stop::HostRequest { op, pc };
+                let why = "a run without the host's compiler serves no host request".into();
+                break Stop::HostRequest { op, pc, why };
             }
             // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end
-            match crate::host_request::serve(guest, vcpu) {
+            let threads = guest.threads.len();
+            let served = crate::host_request::serve(guest, vcpu);
+            if guest.threads.len() > threads {
+                let t = guest.threads.values().next_back().unwrap();
+                let (at, mem) = (crate::threads::entry(t.index), guest.memory.as_slice());
+                let vslot = read_u64(mem, at + crate::threads::E_VSLOT);
+                out.created.push(Created {
+                    tid: t.tid,
+                    entry: mem[at as usize..(at + RUN_ENTRY) as usize].to_vec(),
+                    vectors: mem[vslot as usize..vslot as usize + 272].to_vec(),
+                    count: read_u64(mem, md),
+                    limit: read_u64(mem, md + 8),
+                });
+            }
+            match served {
                 Ok(crate::host_request::Served::Answered) => continue,
                 Ok(crate::host_request::Served::Exit(code)) => break Stop::ExitProcess { code },
-                Err(_) => break Stop::HostRequest { op, pc },
+                Err(e) => {
+                    break Stop::HostRequest {
+                        op,
+                        pc,
+                        why: e.to_string(),
+                    };
+                }
             }
         }
         if number != 1 {

@@ -18,7 +18,8 @@ pub const HOST_RUNTIME_FAULT: u64 = 5;
 pub const HOST_MODULE_AT: u64 = 18;
 pub const HOST_EXCEPTION: u64 = 31;
 pub const HOST_THREAD: u64 = 30;
-/// threads.c's sub-request (runtime.h 328; vm_backend 332-333)
+/// threads.c's sub-requests (runtime.h 328; vm_backend 332-333)
+pub const THREAD_CREATE: u64 = 1;
 pub const THREAD_STACK_GROW: u64 = 9;
 pub const EXCEPTION_STUBS: u64 = 1;
 pub const EXCEPTION_CAPTURE_XMM: u64 = 2;
@@ -98,14 +99,17 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
     0
 }
 
-/// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT and HOST_EXCEPTION.
+/// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT, HOST_EXCEPTION, and
+/// HOST_THREAD's THREAD_CREATE and THREAD_STACK_GROW (the main thread's).
 pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
-    let (op, a0, a1) = {
+    let (op, a0, a1, a2, a3) = {
         let mem = guest.memory.as_slice();
         (
             read_u64(mem, TRANSPORT),
             read_u64(mem, TRANSPORT + 8),
             read_u64(mem, TRANSPORT + 16),
+            read_u64(mem, TRANSPORT + 24),
+            read_u64(mem, TRANSPORT + 32),
         )
     };
     let result = match op {
@@ -153,15 +157,23 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 "guest runtime: unknown exception request {a0}"
             )));
         }
-        // `_thread_request` (vm_backend 3190-3195) and `_stack_grow` (3161-3188): the one thread the Rust host runs is
-        // the main one, whose stack (the process area's TEB) is committed whole and not held in the arena: not grown
+        // `_thread_request` (vm_backend 3190-3195) and `_stack_grow` (3161-3188): the current thread's stack; the main
+        // one's (the process area's TEB) is committed whole and not held in the arena: not grown. A created thread's
+        // growth is not carried yet.
         HOST_THREAD if a0 == THREAD_STACK_GROW => {
-            if guest.arena.reservations.contains_key(&guest.process.stack.0) {
-                return Err(HostError::Unserved(
-                    "a stack the arena holds grown: a created thread's, which the Rust host does not run yet".into(),
-                ));
+            let current = crate::threads::current_tid(guest);
+            let stack = guest.threads.get(&current).map_or(guest.process.stack, |t| t.stack);
+            if guest.arena.reservations.contains_key(&stack.0) {
+                return Err(HostError::Unserved(format!(
+                    "thread {current}'s stack grown to 0x{a1:x}: a created thread's growth, not carried yet"
+                )));
             }
             0
+        }
+        // `_thread_request` (3190-3192, 3845-3847): the transport's a0 the sub-request, its a1-a3 the request's a0-a2
+        HOST_THREAD if a0 == THREAD_CREATE => {
+            crate::threads::create_thread(guest, a1, a2, (a3 & 0xFFFF_FFFF) as u32, a3 >> 32)
+                .map_err(HostError::Unserved)?
         }
         HOST_THREAD => {
             return Err(HostError::Unserved(format!(

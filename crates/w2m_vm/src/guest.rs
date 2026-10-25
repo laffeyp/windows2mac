@@ -13,7 +13,7 @@ use guest_runtime::Image;
 use guest_runtime::layout::{
     BLOCK, CODE_CACHE, CURRENT_ENTRY, E_X, HEAP_SIZE, IPA_BASE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PAGE,
     PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE, RUNTIME_STACK, RUNTIME_STACK_SIZE, SLICE_UNTIL,
-    STATE_OFF, TIME_SLICE, VM_COMPILER,
+    SPLIT_TABLES, SPLIT_TABLES_SIZE, STATE_OFF, TIME_SLICE, TRANSLATION_TABLES, VM_COMPILER,
 };
 use guest_runtime::services::Service;
 use pe_loader::{Loaded, THUNK_BASE};
@@ -492,6 +492,15 @@ pub struct Guest {
     pub image_range: Option<(u64, u64)>,
     /// the program's DLLs as `Modules.dlls` holds them (2958): (base, SizeOfImage)
     pub dll_ranges: Vec<(u64, u64)>,
+    /// the split tables' next free page (`_next_table`, 2425): `page_descriptor`'s, which thread creation's
+    /// `_map_pages` and the host's compiles share (Sprint 156)
+    pub next_table: u64,
+    /// the threads by id (`self.threads`, Sprint 156): the host's own fields; their run table entries are in memory
+    pub threads: BTreeMap<u64, crate::threads::Thread>,
+    /// the loader's images, the program first, and the DLLs whose entry runs, in order (`self.ld.images`,
+    /// `self.ld.init_order`): what a created thread's stack, static TLS and attach stub read (Sprint 156)
+    pub images: Vec<pe_loader::Image>,
+    pub init_order: Vec<usize>,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -667,7 +676,61 @@ impl Guest {
                 .skip(1)
                 .map(|d| (d.base, d.pe.size_of_image as u64))
                 .collect(),
+            next_table: SPLIT_TABLES,
+            threads: BTreeMap::new(),
+            images: loaded.images.clone(),
+            init_order: loaded.init_order.clone(),
         })
+    }
+
+    /// `_page_descriptor` (4507-4533): the memory offset of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB
+    /// block over it split into the next level's 512 descriptors with the block's attributes; 0 when nothing maps it.
+    /// One vCPU: no private regions.
+    pub fn page_descriptor(&mut self, va: u64) -> Result<u64, String> {
+        let mem = self.memory.as_mut_slice();
+        let mut off = TRANSLATION_TABLES;
+        for (level, shift) in [(0u32, 39u32), (1, 30), (2, 21)] {
+            let at = off + 8 * ((va >> shift) & 0x1FF);
+            let mut desc = read_u64(mem, at);
+            if desc & 1 == 0 {
+                return Ok(0);
+            }
+            if desc & 2 == 0 {
+                // a block: split it
+                let size = 1u64 << shift;
+                let base = desc & 0x0000_FFFF_FFFF_F000 & !(size - 1);
+                let attributes = desc & !0x0000_FFFF_FFFF_F000 & !0x3;
+                let new = self.next_table;
+                if new + PAGE > SPLIT_TABLES + SPLIT_TABLES_SIZE {
+                    return Err("stage-1 split table area full".into());
+                }
+                self.next_table += PAGE;
+                let low = if level == 2 { 0x3 } else { 0x1 }; // pages at level 3, blocks at level 2
+                for i in 0..512u64 {
+                    write_u64(mem, new + 8 * i, (base + i * (size >> 9)) | attributes | low);
+                }
+                desc = (IPA_BASE + new) | 0x3;
+                write_u64(mem, at, desc);
+            }
+            off = (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
+        }
+        Ok(off + 8 * ((va >> 12) & 0x1FF))
+    }
+
+    /// `_map_pages` (3152-3159): the pages [start, end) mapped or unmapped in the stage-1 tables (the descriptor's
+    /// valid bit). The guest runtime flushes the TLB after the request that changed them.
+    pub fn map_pages(&mut self, start: u64, end: u64, valid: bool) -> Result<(), String> {
+        let mut page = start;
+        while page < end {
+            let at = self.page_descriptor(page)?;
+            if at != 0 {
+                let mem = self.memory.as_mut_slice();
+                let desc = read_u64(mem, at);
+                write_u64(mem, at, if valid { desc | 1 } else { desc & !1 });
+            }
+            page += PAGE;
+        }
+        Ok(())
     }
 
     /// The memory offset of the process area's `off` (`_process`).

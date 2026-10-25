@@ -275,7 +275,7 @@ impl VirtualMemory {
     }
 
     /// `_commit` (161-167): pages not yet committed are zeroed; every page takes the protection.
-    fn commit(&mut self, pages: &mut dyn GuestPages, reservation: u64, start: u64, size: u64, protect: u32) {
+    pub fn commit(&mut self, pages: &mut dyn GuestPages, reservation: u64, start: u64, size: u64, protect: u32) {
         let r = self.reservations.get_mut(&reservation).unwrap();
         let first = ((start - r.base) / PAGE) as usize;
         for i in first..first + (size / PAGE) as usize {

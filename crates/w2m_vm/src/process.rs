@@ -150,6 +150,8 @@ pub struct ProcessArea {
     pub kernel32: u64,
     pub kernelbase: u64,
     pub ntdll: u64,
+    /// TEB.ClientId.UniqueProcess (vm_backend 2362), which a created thread's TEB takes too
+    pub process_id: u64,
 }
 
 /// vm_backend 2318-2325: a synthetic module's PE32+ optional header, SizeOfOptionalHeader 0xF0, SizeOfImage 0x1000.
@@ -310,6 +312,7 @@ pub fn write(
         kernel32: PROCESS_VA + KERNEL32_IMAGE_OFF,
         kernelbase: PROCESS_VA + KERNELBASE_IMAGE_OFF,
         ntdll: PROCESS_VA + NTDLL_IMAGE_OFF,
+        process_id,
     };
     if !loaded.images.is_empty() {
         // a program from the loader (vm_backend 2966-2967: tests build bare ones)

@@ -1,0 +1,436 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
+//! Guest threads in the Rust host (Sprint 156): a thread's run table entry (`_add_thread`, `src/w2m/vm_backend.py`
+//! 3328-3350, and `GuestThread`, `src/w2m/scheduler.py` 60-160), CreateThread's host half (`_create_thread`,
+//! 3094-3150, with `_thread_callbacks` 3017-3031, `_thread_static_tls` 3033-3060, `_write_vectors` 3352-3356 and
+//! scheduler.py's `attach_stub`), the step budget (`_set_budget`, 3284-3289) and a run's slice end (`_slice_until`,
+//! 2756-2780) for one vCPU in one process. The switch between threads is the VM's own (threads.c `w2m_switch`).
+
+use guest_runtime::layout::{
+    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, MONITOR_DATA, MONITOR_VA, PAGE, PEB_OFF, PROCESS_VA,
+    RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, STATE_SIZE, TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
+};
+use pe_loader::TLS_SLOTS;
+use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
+
+use crate::guest::{Guest, GuestView};
+use crate::process::{CLOCK_MODE, CLOCK_RATE, CLOCK_WARP};
+use crate::run::{FCW_OFF, MXCSR_OFF, REG_UNDEFINED_FLAGS, RUN_END, fpcr_for};
+
+/// The run table's header and an entry's words (scheduler.py 42-47).
+pub const RT_COUNT: u64 = 0x00;
+pub const RT_BLOCKED: u64 = 0x20;
+pub const E_TID: u64 = 0x00;
+pub const E_STATUS: u64 = 0x08;
+pub const E_SUSPEND: u64 = 0x10;
+pub const E_DEADLINE: u64 = 0x18;
+pub const E_TEB: u64 = 0x20;
+pub const E_VSLOT: u64 = 0x28;
+pub const E_VCPU: u64 = 0x138;
+/// `STATUS_CODES` (scheduler.py 47).
+pub const READY: u64 = 0;
+pub const BLOCKED: u64 = 1;
+/// The monitor data ranges each thread keeps (scheduler.py 31): lazy AF and DF, MXCSR, the x87 control word, the YMM
+/// upper halves.
+pub const PER_THREAD_MONITOR: [(u64, u64); 4] = [(0x20, 0x40), (0x50, 0x58), (0x70, 0x72), (0x400, 0x500)];
+/// scheduler.py 24-26; the first thread's id (vm_backend `_first_tid`).
+pub const STILL_ACTIVE: u32 = 259;
+const DLL_THREAD_ATTACH: u32 = 2;
+const START_LAST_ERROR: u32 = 187;
+pub const FIRST_TID: u64 = 4;
+/// CreateThread's flags (vm_backend 3099-3101, 3135).
+const CREATE_SUSPENDED: u32 = 0x4;
+const STACK_SIZE_PARAM_IS_A_RESERVATION: u32 = 0x10000;
+
+/// A guest thread's host fields (`GuestThread`, scheduler.py 60-71); what the VM's switch reads and writes too is in
+/// its run table entry, at `entry(index)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Thread {
+    pub tid: u64,
+    pub index: u64,
+    pub teb: u64,
+    /// (deallocation base, StackLimit, StackBase)
+    pub stack: (u64, u64, u64),
+    pub exit_code: u32,
+    /// the creating thread's id; 0 for the first
+    pub parent: u64,
+    /// the start routine, or the first thread's entry
+    pub start: u64,
+    pub created_suspended: bool,
+}
+
+/// The memory offset of run table entry `index`.
+pub fn entry(index: u64) -> u64 {
+    RUN_TABLE + RT_ENTRIES + RUN_ENTRY * index
+}
+
+fn read_u64(mem: &[u8], off: u64) -> u64 {
+    u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
+}
+
+fn write_u64(mem: &mut [u8], off: u64, v: u64) {
+    mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
+}
+
+fn put(mem: &mut [u8], off: u64, bytes: &[u8]) {
+    mem[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
+}
+
+/// Guest bytes at `va`, through the layout.
+fn write_guest(guest: &mut Guest, va: u64, bytes: &[u8]) -> Result<(), String> {
+    let at = guest
+        .layout
+        .offset(va)
+        .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))?;
+    put(guest.memory.as_mut_slice(), at, bytes);
+    Ok(())
+}
+
+fn read_guest(guest: &Guest, va: u64, n: u64) -> Result<Vec<u8>, String> {
+    let at = guest
+        .layout
+        .offset(va)
+        .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))? as usize;
+    Ok(guest.memory.as_slice()[at..at + n as usize].to_vec())
+}
+
+/// `VirtualAlloc` in the arena for the host: the base, or the error named.
+fn alloc(guest: &mut Guest, address: u64, size: u64, kind: u32, what: &str) -> Result<u64, String> {
+    let mut view = GuestView {
+        mem: guest.memory.as_mut_slice(),
+        layout: &guest.layout,
+    };
+    let (va, err) = guest
+        .arena
+        .alloc(&mut view, address, size, kind, PAGE_READWRITE)
+        .map_err(|e| e.0)?;
+    if err != 0 {
+        return Err(format!("{what}: VirtualAlloc error {err}"));
+    }
+    Ok(va)
+}
+
+/// `_add_thread` (3328-3344): a new thread's run table entry, after the others (the table's order is the ids', the
+/// switch's rotation), ready, its vector slot given (`_vslot`); the first thread is current on vCPU 0.
+pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
+    let mem = guest.memory.as_mut_slice();
+    let n = read_u64(mem, RUN_TABLE + RT_COUNT);
+    if n == RUN_THREADS {
+        return Err(format!("more than {RUN_THREADS} threads in one process"));
+    }
+    if guest.threads.keys().next_back().is_some_and(|&last| thread.tid <= last) {
+        return Err(format!(
+            "thread id {} below an earlier thread's: the run table's order is the ids'",
+            thread.tid
+        ));
+    }
+    let at = entry(n);
+    write_u64(mem, at + E_TID, thread.tid);
+    write_u64(mem, at + E_STATUS, READY);
+    write_u64(mem, at + E_TEB, thread.teb);
+    write_u64(mem, at + E_VCPU, 0);
+    write_u64(mem, RUN_TABLE + RT_COUNT, n + 1);
+    write_u64(mem, at + E_VSLOT, VECTOR_SLOTS + VECTOR_SLOT * n);
+    if n == 0 {
+        // `set_current` (3323-3326) for vCPU 0
+        write_u64(mem, MONITOR_DATA + CURRENT, 0);
+        write_u64(mem, MONITOR_DATA + CURRENT_ENTRY, MONITOR_VA + at);
+        write_u64(mem, at + E_VCPU, 1);
+    }
+    guest.threads.insert(thread.tid, Thread { index: n, ..thread });
+    Ok(n)
+}
+
+/// `current_tid` (3316-3321): the id of the thread vCPU 0 runs, its current entry's (`w2m_switch` changes it in the
+/// VM).
+pub fn current_tid(guest: &Guest) -> u64 {
+    let mem = guest.memory.as_slice();
+    if read_u64(mem, RUN_TABLE + RT_COUNT) == 0 {
+        return FIRST_TID;
+    }
+    let at = read_u64(mem, MONITOR_DATA + CURRENT_ENTRY) - MONITOR_VA;
+    read_u64(mem, at + E_TID)
+}
+
+/// `_thread_callbacks` (3017-3031): (module base, function) a thread's start and end call, in order: each DLL whose
+/// entry runs (load order, then the DLLs loaded after the start), its TLS callbacks and then its DllMain; the program's
+/// TLS callbacks last.
+pub fn thread_callbacks(guest: &Guest) -> Vec<(u64, u64)> {
+    let images = &guest.images;
+    let mut dlls: Vec<usize> = guest.init_order.clone();
+    dlls.extend((1..images.len()).filter(|i| !guest.init_order.contains(i)));
+    let mut out = Vec::new();
+    for i in dlls {
+        let image = &images[i];
+        out.extend(image.pe.tls_callbacks.iter().map(|rva| (image.base, image.base + rva)));
+        if let Some(entry) = image.entry() {
+            out.push((image.base, entry));
+        }
+    }
+    if let Some(program) = images.first() {
+        out.extend(
+            program
+                .pe
+                .tls_callbacks
+                .iter()
+                .map(|rva| (program.base, program.base + rva)),
+        );
+    }
+    out
+}
+
+/// `_thread_static_tls` (3033-3060): a new thread's ThreadLocalStoragePointer: the pointer array and each module's
+/// block, copied from the templates as the loader lays them out for the first thread; an array even when no module has
+/// static TLS.
+pub fn thread_static_tls(guest: &mut Guest) -> Result<u64, String> {
+    if guest.images.is_empty() {
+        return Ok(0);
+    }
+    let mut blocks: Vec<Option<Vec<u8>>> = Vec::new();
+    let modules: Vec<usize> = std::iter::once(0)
+        .chain((1..guest.images.len()).filter(|&i| guest.images[i].pe.tls.is_some()))
+        .collect();
+    for k in modules {
+        let image = &guest.images[k];
+        let Some(tls) = &image.pe.tls else {
+            blocks.push(None); // the program's slot, when it has no TLS
+            continue;
+        };
+        let relocate = |v: u64| v - image.pe.image_base + image.base;
+        let (start, end) = (relocate(tls.start), relocate(tls.end));
+        let mut block = read_guest(guest, start, end - start)?;
+        block.resize(block.len() + tls.zero_fill as usize, 0);
+        blocks.push(Some(block));
+    }
+    let round = |n: usize| (n as u64 + 15) & !15;
+    let array = 8 * TLS_SLOTS as u64; // room for DLLs loaded later
+    let size = array + blocks.iter().flatten().map(|b| round(b.len())).sum::<u64>();
+    let base = alloc(guest, 0, size, MEM_COMMIT | MEM_RESERVE, "a thread's static TLS")?;
+    let mut at = array;
+    for (index, block) in blocks.iter().enumerate() {
+        let Some(block) = block else { continue };
+        write_guest(guest, base + 8 * index as u64, &(base + at).to_le_bytes())?;
+        write_guest(guest, base + at, block)?;
+        at += round(block.len());
+    }
+    Ok(base)
+}
+
+/// scheduler.py `_call`: sub rsp, 0x28; mov rcx, rcx; mov edx, edx; xor r8d, r8d; mov rax, fn; call rax; add rsp, 0x28.
+fn call(code: &mut Vec<u8>, function: u64, rcx: u64, edx: u32) {
+    code.extend([0x48, 0x83, 0xec, 0x28, 0x48, 0xb9]);
+    code.extend(rcx.to_le_bytes());
+    code.push(0xba);
+    code.extend(edx.to_le_bytes());
+    code.extend([0x45, 0x31, 0xc0, 0x48, 0xb8]);
+    code.extend(function.to_le_bytes());
+    code.extend([0xff, 0xd0, 0x48, 0x83, 0xc4, 0x28]);
+}
+
+/// scheduler.py `attach_stub`: a new thread's first code: each (module base, function) with DLL_THREAD_ATTACH, the last
+/// error 187, the start routine with its parameter, then ExitThread with the routine's return. Entered with RSP = 8
+/// mod 16, as a function is.
+pub fn attach_stub(callbacks: &[(u64, u64)], start: u64, parameter: u64, exit_thread: u64) -> Vec<u8> {
+    let mut code = Vec::new();
+    for &(base, function) in callbacks {
+        call(&mut code, function, base, DLL_THREAD_ATTACH);
+    }
+    code.extend([0x65, 0xc7, 0x04, 0x25, 0x68, 0x00, 0x00, 0x00]); // mov dword gs:[0x68], 187
+    code.extend(START_LAST_ERROR.to_le_bytes());
+    code.extend([0x48, 0x83, 0xec, 0x28, 0x48, 0xb9]);
+    code.extend(parameter.to_le_bytes());
+    code.extend([0x48, 0xb8]);
+    code.extend(start.to_le_bytes());
+    code.extend([0xff, 0xd0, 0x89, 0xc1, 0x48, 0xb8]); // call, then ExitThread(eax): never returns
+    code.extend(exit_thread.to_le_bytes());
+    code.extend([0xff, 0xd0, 0xcc]);
+    code
+}
+
+/// `_create_thread` (3094-3150): CreateThread's host half: a thread id, a stack, a TEB, static TLS, the attach stub and
+/// the first state. Returns the thread id.
+pub fn create_thread(
+    guest: &mut Guest,
+    start: u64,
+    parameter: u64,
+    flags: u32,
+    stack_size: u64,
+) -> Result<u64, String> {
+    let tid = guest.threads.keys().next_back().copied().unwrap_or(0) + 4;
+    let program = guest.images.first().map(|i| (i.pe.stack_reserve, i.pe.stack_commit));
+    // STACK_SIZE_PARAM_IS_A_RESERVATION: the size asked for, smaller than the image's or not; otherwise the image's
+    // SizeOfStackReserve
+    let reserve = if flags & STACK_SIZE_PARAM_IS_A_RESERVATION != 0 && stack_size != 0 {
+        stack_size
+    } else {
+        program.map_or(0x10_0000, |p| p.0)
+    };
+    let reserve = (reserve.max(0x1_0000) + 0xFFFF) & !0xFFFF;
+    let dealloc = alloc(
+        guest,
+        0,
+        reserve,
+        MEM_RESERVE,
+        &format!("a thread's stack of 0x{reserve:x} bytes"),
+    )?;
+    // a created thread's stack as Windows lays it out (contracts/windows.memory.created_thread_stack): the initial
+    // commit at the top, three PAGE_GUARD pages below StackLimit, the rest reserved; the guard and reserved pages
+    // unmapped
+    let top = dealloc + reserve;
+    let commit = if stack_size != 0 && flags & STACK_SIZE_PARAM_IS_A_RESERVATION == 0 {
+        stack_size
+    } else {
+        program.map_or(0x1000, |p| p.1)
+    };
+    let commit = ((commit + 0xFFF) & !0xFFF)
+        .max(0x1000)
+        .min(reserve - (2 + STACK_GUARD_PAGES) * PAGE);
+    let limit = top - commit;
+    alloc(guest, limit, commit, MEM_COMMIT, "a thread's stack commit")?;
+    {
+        let mut view = GuestView {
+            mem: guest.memory.as_mut_slice(),
+            layout: &guest.layout,
+        };
+        guest.arena.commit(
+            &mut view as &mut dyn GuestPages,
+            dealloc,
+            limit - STACK_GUARD_PAGES * PAGE,
+            STACK_GUARD_PAGES * PAGE,
+            PAGE_READWRITE | PAGE_GUARD,
+        );
+    }
+    guest.map_pages(dealloc, limit, false)?;
+    let teb = alloc(guest, 0, 0x4000, MEM_COMMIT | MEM_RESERVE, "a thread's TEB")?; // TEB, then TlsExpansionSlots
+    let static_tls = thread_static_tls(guest)?;
+    let peb = PROCESS_VA + PEB_OFF;
+    let process_id = guest.process.process_id;
+    for (off, value) in [
+        (0x08, top),
+        (0x10, limit),
+        (0x30, teb),
+        (0x40, process_id),
+        (0x48, tid),
+        (0x58, static_tls),
+        (0x60, peb),
+        (0x1478, dealloc),
+        (0x1780, teb + 0x2000),
+    ] {
+        write_guest(guest, teb + off, &u64::to_le_bytes(value))?;
+    }
+    let callbacks = thread_callbacks(guest);
+    let exit_thread = guest
+        .import_thunk("KERNEL32.dll!ExitThread")
+        .map_err(|e| format!("{e:?}"))?;
+    let stub = guest
+        .code_page(&attach_stub(&callbacks, start, parameter, exit_thread))
+        .map_err(|e| format!("{e:?}"))?;
+    let mut x = [0u64; 31];
+    x[4] = top - 0x48; // RSP = 8 mod 16, as at a function's entry
+    x[17] = stub;
+    x[REG_UNDEFINED_FLAGS as usize] = 0x3F;
+    x[28] = MONITOR_VA + MONITOR_DATA;
+    let parent = current_tid(guest);
+    let index = add_thread(
+        guest,
+        Thread {
+            tid,
+            index: 0,
+            teb,
+            stack: (dealloc, limit, top),
+            exit_code: STILL_ACTIVE,
+            parent,
+            start,
+            created_suspended: flags & CREATE_SUSPENDED != 0,
+        },
+    )?;
+    let at = entry(index);
+    let mem = guest.memory.as_mut_slice();
+    for (i, r) in x.iter().enumerate() {
+        write_u64(mem, at + E_X + 8 * i as u64, *r);
+    }
+    // the per-thread monitor words: MXCSR 0x1F80 and the x87 control word 0x27F, the rest zero
+    for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
+        let mut data = vec![0u8; (b - a) as usize];
+        if a == MXCSR_OFF {
+            data[0..4].copy_from_slice(&0x1F80u32.to_le_bytes());
+        }
+        if a == FCW_OFF {
+            data[0..2].copy_from_slice(&0x27Fu16.to_le_bytes());
+        }
+        put(mem, at + E_MONITOR + p, &data);
+    }
+    let mut state = vec![0u8; STATE_SIZE as usize];
+    state[152..156].copy_from_slice(&0x1F80u32.to_le_bytes());
+    state[156..158].copy_from_slice(&0x27Fu16.to_le_bytes());
+    state[176..184].copy_from_slice(&teb.to_le_bytes());
+    state[184..192].copy_from_slice(&teb.to_le_bytes());
+    put(mem, at + E_STATE, &state);
+    write_u64(mem, at + E_SUSPEND, u64::from(flags & CREATE_SUSPENDED != 0));
+    // `_write_vectors` (3352-3356): as a Windows thread starts, XMM clear, MXCSR 0x1F80
+    let vslot = read_u64(mem, at + E_VSLOT);
+    put(mem, vslot, &[0u8; 256]);
+    write_u64(mem, vslot + 256, fpcr_for(0x1F80));
+    write_u64(mem, vslot + 264, 0);
+    guest.arena.stacks.push((dealloc, limit, top));
+    set_budget(guest); // two threads: time slices from now on
+    Ok(tid)
+}
+
+/// `_set_budget` (3284-3289): the step budget the block entries check: the run's limit, or with more than one thread a
+/// time slice.
+pub fn set_budget(guest: &mut Guest) {
+    let shared = guest.threads.len() > 1;
+    let mem = guest.memory.as_mut_slice();
+    let (executed, max_steps) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + RUN_END));
+    let limit = if shared {
+        max_steps.min(executed + TIME_SLICE)
+    } else {
+        max_steps
+    };
+    write_u64(mem, MONITOR_DATA + 8, limit);
+}
+
+/// `_slice_until` (2756-2780) for one vCPU, one process, no lockstep, forced stop or pending wake: 0 when the current
+/// thread is suspended or another is ready; the count at which the earliest deadline of a blocked thread falls, on the
+/// instruction clock (0 on another clock); else ~0.
+pub fn slice_until(guest: &Guest) -> u64 {
+    let mem = guest.memory.as_slice();
+    let current = current_tid(guest);
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    if let Some(cur) = guest.threads.get(&current)
+        && word(cur, E_SUSPEND) != 0
+    {
+        return 0;
+    }
+    let others: Vec<&Thread> = guest
+        .threads
+        .values()
+        .filter(|t| t.tid != current && word(t, E_SUSPEND) == 0)
+        .collect();
+    if others.iter().any(|t| word(t, E_STATUS) == READY) {
+        return 0;
+    }
+    let deadline = others
+        .iter()
+        .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_DEADLINE) != u64::MAX)
+        .map(|t| word(t, E_DEADLINE))
+        .min();
+    let Some(deadline) = deadline else {
+        return u64::MAX;
+    };
+    if read_u64(mem, MONITOR_DATA + CLOCK_MODE) != 2 {
+        return 0;
+    }
+    let (rate, warp) = (
+        read_u64(mem, MONITOR_DATA + CLOCK_RATE),
+        read_u64(mem, RUN_TABLE + CLOCK_WARP),
+    );
+    // the count whose clock reaches the deadline, rounded down
+    let ticks = deadline as i128 - warp as i128;
+    if ticks <= 0 {
+        return 0;
+    }
+    let (ticks, rate) = (ticks as u128, u128::from(rate));
+    (ticks / 10_000_000 * rate + ticks % 10_000_000 * rate / 10_000_000) as u64
+}

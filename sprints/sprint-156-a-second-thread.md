@@ -103,3 +103,33 @@ with two threads to a named stop.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: the Python host's created thread as reference, and a planted fault.
 - [x] One concept: a second thread in the Rust host.
+
+## result
+
+- **`sleeper`'s second thread is the Python host's, field for field.** At THREAD_CREATE's return the Rust host's thread
+  8 (parent 4, start 0x140001000) equals the frozen Python host's: the TEB at 0x1000200000 and its nine words, the stack
+  (0x1000000000, 0x10001ff000, 0x1000200000), the arena's four reservations (the 2 MB stack with one committed page and
+  three PAGE_GUARD pages, the TEB, the static TLS array, the attach stub's page) page by page, the static TLS and stub
+  bytes, the run table entry (all 0x600 bytes: ids, registers, vCPU mark, monitor words, state block), the vector slot,
+  and the count and limit (12 and 20012: a time slice from then on). The stack's reserved and guard pages are unmapped
+  in the stage-1 tables and its committed page mapped, as `_map_pages` leaves them.
+- **`sleeper` runs on with two threads.** The VM's own switch moves between the main thread and the spinner; the spinner
+  counts, the main thread sleeps 20 ms and wakes, and the run prints `woke\n` (the Python run's output begins so). It
+  stops at `hvc #8` op 30, thread request 7 (THREAD_EXIT_CODE: `WaitForSingleObject` on the spinner's handle), which
+  the Rust host does not serve yet; the stop now carries the host's refusal (`Stop::HostRequest`'s `why`). The C
+  compiled eight blocks and the Rust host five, among them the attach stub's (0x1000220000-0x1000220026); each start is
+  a Python host compile's, and each host compile's (start, end) is the Python's.
+- `crates/w2m_vm/src/threads.rs`: `add_thread` (any thread; `run.rs`'s first-thread code folded in), `current_tid`,
+  `thread_callbacks`, `thread_static_tls`, `attach_stub`, `create_thread`, `set_budget`, `slice_until`.
+  `_page_descriptor` moved from `HostCompiler` to `Guest` with its split-table cursor, beside `map_pages`; `Guest`
+  keeps the threads and the loader's images; `ProcessArea` keeps the process id; `virtual_memory`'s `commit` is public;
+  THREAD_STACK_GROW now looks at the current thread's stack, not the main thread's.
+- **Planted faults.** The stack's reserved and guard pages left mapped (`map_pages(..., true)`): the judge failed at
+  "the stack page 0x1000000000's mapping". RSP at `top - 0x40`: it failed at "the run table entry's registers".
+  Restored, it passes.
+- The fixture: `build/run_loop/sleeper-python.json`, its sha256 in `store/run_loop/sleeper-python.sha256`, its
+  generator in WORKING_AGREEMENT; two runs gave the same bytes. The Python run with one vCPU ends at ExitProcess with
+  `woke\ndone\n` after 19 compiles.
+- Rule breach, recorded: one two-line insertion into `crates/w2m_vm/src/process.rs` was made with perl, not the Edit
+  tool; its diff was read and holds only the two lines.
+- Also found: Sprint 155 added no WORKING_AGREEMENT row for `compile.rs`; it has one now.
