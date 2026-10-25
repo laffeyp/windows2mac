@@ -1,5 +1,8 @@
 # The Rust host: who owns each piece of state, and which lock guards it (Sprint 124)
 
+**History from 2026-10-24.** The host's design is `docs/design-rust-host-2026-10-24.md` (BLACKBOARD Decision 2026-10-24
+user: this one kept the guest's runtime word across every service, a global lock).
+
 Step 1 of `docs/rust-port-plan-2026-10-21.md`, written before any host code. The Python host, frozen at
 `python-final`, keeps 202 pieces of state in the classes `VM`, `Vcpu`, `Channel`, `Machine`, `Process`, `Event`,
 `Pipe`, `GuestThread`, `FileBridge`, `VirtualMemory` and `Reservation`: each attribute assigned on `self`, and each
