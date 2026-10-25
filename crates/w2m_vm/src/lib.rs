@@ -6,6 +6,8 @@
 //! `src/w2m/vm_backend.py`; each value cites its line.
 
 pub mod assembler;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod guest;
 pub mod monitor_code;
 pub mod process;
 pub mod tables;
