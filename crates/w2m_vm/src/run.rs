@@ -72,19 +72,37 @@ pub fn in_code_cache(pc: u64) -> bool {
     (MONITOR_VA + CODE_CACHE..MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE).contains(&pc)
 }
 
-/// An exit outside the runtime (5198-5208): the budget left in x23, with a fault's give-back (`hvc #14` with x2 the
-/// faulting host address in the code cache: the faulting instruction and those after it go back), then the count
-/// (limit - left) written to the monitor data.
-pub fn exit_count(vcpu: &Vcpu<'_>, mem: &mut [u8], tails: &Tails, give_back: bool) -> Result<(), HvError> {
+/// What an exit gives back to the budget (vm_backend 5202-5206).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GiveBack {
+    None,
+    /// `hvc #14` (`HVC_FAULT_GIVE_BACK`): x2 the faulting host address; the faulting instruction and those after it
+    Fault,
+    /// `hvc #10` or `#11`, a model step at host address `pc`: the block's instructions after the step
+    Model {
+        pc: u64,
+    },
+}
+
+/// An exit outside the runtime (5198-5208): the budget left in x23, with the exit's give-back, then the count (limit -
+/// left) written to the monitor data.
+pub fn exit_count(vcpu: &Vcpu<'_>, mem: &mut [u8], tails: &Tails, give_back: GiveBack) -> Result<(), HvError> {
     let md = MONITOR_DATA;
     let limit = read_u64(mem, md + 8);
     let mut left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
-    if give_back {
-        let x2 = vcpu.reg(Reg::X(2))?;
-        if in_code_cache(x2) {
-            left = left.wrapping_add(tails.unrun_after(x2) + 1);
+    match give_back {
+        GiveBack::None => {}
+        GiveBack::Model { pc } => {
+            left = left.wrapping_add(tails.unrun_after(pc - 4)); // the block's instructions after the step
+            vcpu.set_reg(Reg::X(REG_BUDGET as u8), left)?;
         }
-        vcpu.set_reg(Reg::X(REG_BUDGET as u8), left)?;
+        GiveBack::Fault => {
+            let x2 = vcpu.reg(Reg::X(2))?;
+            if in_code_cache(x2) {
+                left = left.wrapping_add(tails.unrun_after(x2) + 1); // the faulting instruction and those after it
+            }
+            vcpu.set_reg(Reg::X(REG_BUDGET as u8), left)?;
+        }
     }
     write_u64(mem, md, limit.wrapping_sub(left));
     Ok(())
@@ -250,7 +268,11 @@ pub fn run_to_first_decline(
         if !runtime.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the blocks here are the VM's own, whose tails
             // this loop does not note yet (2570), so a give-back counts the faulting instruction alone
-            let give_back = exit.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK as u16);
+            let give_back = match exit.hvc_immediate().map(u32::from) {
+                Some(HVC_FAULT_GIVE_BACK) => GiveBack::Fault,
+                Some(10 | 11) => GiveBack::Model { pc }, // HVC_SLOW_SSE, HVC_SLOW_STEP
+                _ => GiveBack::None,
+            };
             exit_count(vcpu, mem, &Tails::default(), give_back)?;
         }
         let Some(number) = exit.hvc_immediate() else {

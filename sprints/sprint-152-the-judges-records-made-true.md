@@ -119,3 +119,32 @@ that a later run resolves.
 - [x] One concept: the judges' records.
 
 ## result
+
+- **High 1.** `case_runs` writes no EXECUTION_*, TRACE_* event, as `differential.run` wrote none; Sprint 150's record
+  and its 22 verdict traces are removed (`git rm`). Amended from the card: the runs' counts do not go in the baseline,
+  which a run file fixes before the Producer starts; they stay in `store/case_runner/expected.tsv`, asserted by the
+  test, and each comparison's `rule_ref` names its class's judged count and the session's profile.
+- **High 2.** `crates/w2m_vm/src/ledger.rs` carries `rebuild_ledger` and `open_on` for records whose baseline names a
+  `judge`, and writes the ledger as `json.dumps(indent=1, sort_keys=True)` does (a unit test holds the text to the
+  frozen Python's for one map). Amended from the card: a Producer cannot read its own record before substrate
+  finalises it, so `case_runs` rebuilds the ledger at its start and `case_runs --write-ledger` writes the file after
+  a run. The chain, run in the scratchpad: the CF flip on the 8573C runs reported 107 discrepancies, the ledger opened
+  107 entries (the first "case-runner-…-ADD", "ADD: ADD CF: 1212 cases; run 38011862284 …", repair path
+  `implementation_repair`); the plain session of the same judge and profile accepted 371 classes and resolved all 107
+  (DISCREPANCY_RESOLVED 107, each resolving_ref the accepted candidate), and the ledger held 0 open. A unit test carries
+  `test_differential.py`'s report-to-resolution check on two synthetic records.
+- **Medium 1.** Measured, and the card was short: a reference profile is the CPU and the Windows image, and the 8573C
+  runs span two images (9 on Server 2022, 10 on Server 2025). `W2M_CASE_PROFILE` selects `<cpu>; <profile>`; four
+  profiles, eight sessions. Classes accepted per session, each judge: 205 (8573C, 2022), 174 (8573C, 2025), 107
+  (8370C), 26 (6973P-C); together 387. Every session replays at level 2 and the vocabulary's rules hold none of it; the
+  store's judges' ledger is `{}`.
+- **Medium 2.** BLACKBOARD Deferred, 2026-10-25 (Sprint 152): the race hit, its load and its counts. Sprint 150's
+  second full gates run exited 0, which its tail entry did not state.
+- **Low.** The fixture's header gains `layout` (the sha256 of `runtime_defines()`, 049a5a85…, equal in the Rust guest)
+  and its `src` is checked against `git log -1 -- src/w2m`; the words are unchanged, the fixture's sha256 is now
+  a20dc6ef…. A header naming src 0000… was refused: "the fixture was made at src/w2m 0000…, and src/w2m is now at
+  37784f1a…". The reach line gives the fewest cases a reached module has. `exit_count` takes a `GiveBack` (none, a
+  fault's, a model step's `_unrun_after(pc - 4)`), used by `run_cases` and `run_to_first_decline`. The review's count of
+  248 modules is not borne out: `store/rules/registry.tsv` holds 460 lines mapping to 249 distinct modules.
+- **The third judge.** With no VM, the Rust words equal the Python words for all 4,103 of the 25,919 case codes the
+  Rust rules lift (38 classes), in 0.06 s.

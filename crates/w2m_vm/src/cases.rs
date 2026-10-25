@@ -27,7 +27,9 @@ use crate::guest::{Exception, Guest, VMC_CURSOR, VMC_ENABLED};
 use crate::host_request::{self, Served};
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{EMPTY_TARGET, HVC_FAULT_GIVE_BACK, REG_BUDGET};
-use crate::run::{FCW_OFF, LOCK_OWNER, MXCSR_OFF, REG_UNDEFINED_FLAGS, Tails, dispatch_insert, exit_count, fpcr_for};
+use crate::run::{
+    FCW_OFF, GiveBack, LOCK_OWNER, MXCSR_OFF, REG_UNDEFINED_FLAGS, Tails, dispatch_insert, exit_count, fpcr_for,
+};
 
 /// x19-x23 hold CF, ZF, SF, OF and PF (vm_backend 358, 371).
 pub const FLAG_REG: [(char, u8); 5] = [('C', 19), ('Z', 20), ('S', 21), ('O', 22), ('P', 23)];
@@ -536,7 +538,7 @@ pub fn run_cases(
             if e.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK as u16) {
                 // a guest fault left its block (5205-5208, 5294-5296): the faulting instruction and those after it go
                 // back to the budget and the count is written, then on to w2m_exception
-                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, true)?;
+                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Fault)?;
                 *tally.host_requests.entry(HOST_GIVE_BACK).or_default() += 1;
                 continue;
             }
@@ -583,7 +585,9 @@ pub fn run_cases(
         match exit.hvc_immediate() {
             Some(1) => {}
             Some(HVC_SLOW_SSE | HVC_SLOW_STEP) => {
-                tally.model += 1; // the model is step 4's: counted, not judged
+                // the model is step 4's: counted, not judged; its exit's give-back and count as the run loop's
+                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
+                tally.model += 1;
                 continue;
             }
             other => {

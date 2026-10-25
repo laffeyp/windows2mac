@@ -16,6 +16,7 @@ pub mod guest;
 pub mod guest_stubs;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod host_request;
+pub mod ledger;
 pub mod monitor_code;
 pub mod process;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

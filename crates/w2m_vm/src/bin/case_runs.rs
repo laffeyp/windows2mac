@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The case runner's verdicts on a substrate record (Sprint 150), as `scripts/vm_oracle.py --record` put them there
-//! through `src/w2m/differential.py`: one unit per instruction class, the Intel CPU under Windows the reference.
+//! The case runner's verdicts on a substrate record (Sprint 150; Sprint 152's form), as `scripts/vm_oracle.py --record`
+//! put them there through `src/w2m/differential.py`: one unit per instruction class, one reference CPU under Windows a
+//! session.
 //!
-//! Substrate runs this binary as a Producer (`harness/case-runs.toml`; substrate `docs/process-producer.md`). It runs
-//! every downloaded Intel run through `w2m_vm::cases::run_cases` with the pinned Python words fixture, and writes
-//! `differential.run`'s sequence (its docstring, 9-19) in the vocabulary's types: SESSION_INIT; per run
-//! EXECUTION_STARTED and EXECUTION_COMPLETED; per class CANDIDATE_GENERATED, COMPARISON_COMPLETED, then
-//! CANDIDATE_ACCEPTED, or CANDIDATE_REJECTED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED; DISCREPANCY_RESOLVED for
-//! each discrepancy the ledger holds open on an accepted class; SESSION_COMPLETED. The Python started each step from the
-//! event before it with predicate triggers; a run file's triggers take no predicate, so one Producer writes the
-//! sequence in order.
+//! Substrate runs this binary as a Producer (`harness/case-runs.toml`, `harness/case-runs-rust.toml`; substrate
+//! `docs/process-producer.md`). It runs the downloaded Intel runs of the reference profile `W2M_CASE_PROFILE` names
+//! (`<cpu>; <profile>`, as `store/probe-runs/<run>/cpu.txt` and `profile.txt` spell them) through
+//! `w2m_vm::cases::run_cases`, and writes `differential.run`'s sequence (its docstring, 9-19) in the vocabulary's
+//! types: SESSION_INIT; per class CANDIDATE_GENERATED,
+//! COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED, or CANDIDATE_REJECTED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED;
+//! DISCREPANCY_RESOLVED for each discrepancy the judges' ledger (`w2m_vm::ledger`) holds open on an accepted class;
+//! SESSION_COMPLETED. As in the Python, no execution or trace event: the runs are judged by state, and no guest trace is
+//! made. The Python started each step from the event before it with predicate triggers; a run file's triggers take no
+//! predicate, so one Producer writes the sequence in order.
 //!
-//! `--plant-flip-cf` flips CF in every completed case of the first run's Windows results before judging: the record
-//! must then hold discrepancies whose first divergence names a CF class.
+//! `--rust-translator` (Sprint 151) compiles the classes link 5's groups carry with the Rust translator, the rest with
+//! the Python words. `--plant-flip-cf` flips CF in every completed case of the session's first run's Windows results:
+//! the record must then hold discrepancies whose first divergence names a CF class. `--write-ledger` (not a Producer)
+//! rebuilds the judges' ledger from the records and writes `store/case_runner/discrepancy-ledger.json`, after a run.
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 fn main() {
@@ -34,7 +39,7 @@ fn main() -> std::process::ExitCode {
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod run {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
     use std::fs;
     use std::io::{self, BufRead, Write};
     use std::path::{Path, PathBuf};
@@ -43,16 +48,17 @@ mod run {
     use cpu_cases::{read_cases, read_results, sha256};
     use events::{
         CandidateAccepted, CandidateGenerated, CandidateRejected, ComparisonCompleted, ContractId, DiscrepancyReported,
-        DiscrepancyResolution, DiscrepancyResolved, DiscrepancyRouted, Event, ExecutionCompleted, ExecutionStarted,
-        ExitStatus, FiniteF64, HarnessU64, Id, Map, ProfileKind, Relation, RepairPath, SessionCompleted, SessionInit,
-        SessionOutcome, SessionPurpose, Sha256, SubjectKind, TraceIngested, VOCAB_VERSION, Value, Verdict, Version,
-        harness_line,
+        DiscrepancyResolution, DiscrepancyResolved, DiscrepancyRouted, Event, FiniteF64, HarnessU64, Id, Relation,
+        RepairPath, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose, Sha256, VOCAB_VERSION, Verdict,
+        Version, harness_line,
     };
     use w2m_vm::case_inputs::{Fixture, Hybrid, runs, with_case_vm};
     use w2m_vm::cases::run_cases;
+    use w2m_vm::ledger;
 
-    /// The differential's name: the record's baseline and the ledger's key (differential.py 64).
-    const DIFFERENTIAL: &str = "case-runner";
+    /// The judge's name: the record's baseline and the ledger's key.
+    const JUDGE: &str = "case-runner";
+    const JUDGE_RUST: &str = "case-runner-rust";
     /// vm_oracle's record (325): the guest state at a fault and after an instruction.
     const CONTRACT_ID: &str = "w2m.guest_state.fault_context";
     const CONTRACT_VERSION: &str = "0.2.0";
@@ -96,46 +102,78 @@ mod run {
         writeln!(out, "{}", harness_line(e))
     }
 
-    /// One class's verdict over every run: its cases judged whole, and its difference lines, most frequent first, as
-    /// `by_unit` (82-88) writes them.
+    /// One class's verdict over the session's runs: its cases judged whole, and its difference lines, most frequent
+    /// first, as `by_unit` (82-88) writes them.
     #[derive(Default)]
     struct Unit {
         judged: usize,
         differences: Vec<(usize, String)>,
     }
 
-    /// differential.py `open_on` (137-139) over the ledger file `rebuild_ledger` writes: the discrepancies this
-    /// differential reported on `unit` that no record has resolved.
-    fn open_on(ledger: &Value, judge: &str, unit: &str) -> Vec<String> {
-        let mut out: Vec<String> = ledger
-            .as_object()
-            .map(|m| {
-                m.iter()
-                    .filter(|(_, v)| v["differential"] == judge && v["unit"] == unit && v["resolved_in"].is_null())
-                    .map(|(k, _)| k.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
-        out.sort();
-        out
+    /// The translator's identity: its sources, in name order.
+    fn translator_sha(root: &Path) -> Result<String, String> {
+        let dir = root.join("crates/translator/src");
+        let mut names: Vec<PathBuf> = fs::read_dir(&dir)
+            .map_err(|e| e.to_string())?
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+            .collect();
+        names.sort();
+        let mut all = Vec::new();
+        for p in names {
+            all.extend(p.file_name().unwrap().to_string_lossy().as_bytes());
+            all.push(0);
+            all.extend(fs::read(&p).map_err(|e| e.to_string())?);
+            all.push(0);
+        }
+        Ok(sha256(&all))
     }
 
     pub fn main() -> Result<(), String> {
         let started = Instant::now();
-        let plant = std::env::args().skip(1).any(|a| a == "--plant-flip-cf");
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let flag = |f: &str| args.iter().any(|a| a == f);
+        let root = root();
+        // the records the ledger is rebuilt from and the file it is written to: the store's, or a scratch pair for the
+        // ledger chain's demonstration (`W2M_RUNS`, `W2M_LEDGER`), where a planted record may stand
+        let runs_dir = std::env::var("W2M_RUNS").map_or_else(|_| root.join("store/runs"), PathBuf::from);
+        let ledger_file = std::env::var("W2M_LEDGER").map_or_else(
+            |_| root.join("store/case_runner/discrepancy-ledger.json"),
+            PathBuf::from,
+        );
+        if flag("--write-ledger") {
+            // differential.run 281-282: the ledger rebuilt from every record, written after a run
+            let ledger = ledger::rebuild(&runs_dir);
+            fs::write(&ledger_file, ledger::text(&ledger)).map_err(|e| e.to_string())?;
+            eprintln!("case_runs: {} discrepancies in the judges' ledger", ledger.len());
+            return Ok(());
+        }
+        let plant = flag("--plant-flip-cf");
+        let use_rust = flag("--rust-translator");
+        let judge = if use_rust { JUDGE_RUST } else { JUDGE };
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
-        let root = root();
-        let runs = runs(&root);
+        // the reference profile: the CPU and the Windows image, as each run's cpu.txt and profile.txt name them
+        // (`<cpu>; <profile>`); one session a profile (review of Sprints 149-150, Medium 1)
+        let profile = std::env::var("W2M_CASE_PROFILE")
+            .map_err(|_| "W2M_CASE_PROFILE names no reference profile (`<cpu>; <profile>`)".to_string())?;
+        let profile_of = |run: &str| {
+            let read = |f: &str| {
+                fs::read_to_string(root.join("store/probe-runs").join(run).join(f))
+                    .map(|t| t.trim().to_string())
+                    .unwrap_or_default()
+            };
+            format!("{}; {}", read("cpu.txt"), read("profile.txt"))
+        };
+        let runs: Vec<_> = runs(&root)
+            .into_iter()
+            .filter(|r| profile_of(&r.id) == profile)
+            .collect();
         if runs.is_empty() {
-            return Err("no downloaded Intel results in build/probe-runs".into());
+            return Err(format!("no downloaded Intel result of a run on {profile}"));
         }
         let fixture = Fixture::load(&root).ok_or("no Python words fixture (build/case_runner/python-words.txt)")??;
-        // `--rust-translator` (Sprint 151): the Rust translator for the classes link 5's groups carry, the Python words
-        // for the rest; the judge's name then says so
-        let use_rust = std::env::args().skip(1).any(|a| a == "--rust-translator");
-        let judge = if use_rust { "case-runner-rust" } else { DIFFERENTIAL };
         let hybrid = Hybrid::new(&fixture);
         let compile = |code: &[u8], a: u64, base: u64, exit: u64| {
             if use_rust {
@@ -144,33 +182,11 @@ mod run {
                 fixture.compile(code, a, base, exit)
             }
         };
-        // the translator's identity: its sources, in name order
-        let translator_sha = {
-            let dir = root.join("crates/translator/src");
-            let mut names: Vec<PathBuf> = fs::read_dir(&dir)
-                .map_err(|e| e.to_string())?
-                .map(|e| e.unwrap().path())
-                .filter(|p| p.extension().is_some_and(|x| x == "rs"))
-                .collect();
-            names.sort();
-            let mut all = Vec::new();
-            for p in names {
-                all.extend(p.file_name().unwrap().to_string_lossy().as_bytes());
-                all.push(0);
-                all.extend(fs::read(&p).map_err(|e| e.to_string())?);
-                all.push(0);
-            }
-            sha256(&all)
-        };
-        let store = root.join("store/probe-runs").join(&runs[0].id);
-        let cpu = fs::read_to_string(store.join("cpu.txt")).map_err(|e| e.to_string())?;
-        let profile_txt = fs::read_to_string(store.join("profile.txt")).unwrap_or_default();
-        let profile = format!("{}; {}", cpu.trim(), profile_txt.trim());
-        let ledger: Value = fs::read_to_string(root.join("store/runs/discrepancy-ledger.json"))
-            .ok()
-            .and_then(|t| t.parse().ok())
-            .unwrap_or(Value::Null);
-        let session = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let translator_sha = translator_sha(&root)?;
+        // the judges' ledger as the records say (differential.run 144)
+        let ledger = ledger::rebuild(&runs_dir);
+        let session_ns = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let session = format!("{judge}-{session_ns}");
         let mut out = io::stdout().lock();
         let w = |e: io::Error| e.to_string();
 
@@ -186,97 +202,22 @@ mod run {
         )
         .map_err(w)?;
 
-        // every run through the runner: per run EXECUTION_STARTED and EXECUTION_COMPLETED, the verdicts gathered by
-        // class
+        // the session's runs through the runner, the verdicts gathered by class
         let mut units: BTreeMap<String, Unit> = BTreeMap::new();
+        let mut per_run = Vec::new();
         let runs_ref = &runs;
         let outcome = with_case_vm(&root, &fixture, |guest, vcpu| -> Result<(), String> {
             for (k, run) in runs_ref.iter().enumerate() {
-                let set_bytes = fs::read(&run.set).map_err(|e| e.to_string())?;
-                let (fmt, cases) = read_cases(&set_bytes).map_err(|e| format!("{e:?}"))?;
+                let (fmt, cases) =
+                    read_cases(&fs::read(&run.set).map_err(|e| e.to_string())?).map_err(|e| format!("{e:?}"))?;
                 let mut results = read_results(&run.result, fmt).map_err(|e| format!("{e:?}"))?;
                 if plant && k == 0 {
                     for r in results.iter_mut().filter(|r| r.marker != 2) {
                         r.rflags ^= 1;
                     }
                 }
-                let execution = format!("case-run-{}", run.id);
-                let t0 = Instant::now();
-                emit(
-                    &mut out,
-                    &ExecutionStarted {
-                        execution_id: id(execution.clone()),
-                        subject_kind: SubjectKind::CandidateRuntime,
-                        subject_sha256: sha(&sha256(&set_bytes)),
-                        profile_kind: ProfileKind::ManagedVm,
-                        profile_id: id("w2m-case-runner"),
-                        initial_state_sha256: sha(&fixture.sha256),
-                        injected_inputs_sha256: sha(&sha256(&run.result)),
-                        timeout_seconds: None,
-                        kill_grace_seconds: None,
-                        unobserved: None,
-                    },
-                )
-                .map_err(w)?;
                 let t = run_cases(guest, vcpu, &cases, &results, &compile).map_err(|e| format!("{e:?}"))?;
-                // the run's trace: one JSON line per class judged, its count and its difference classes, kept in
-                // store/case_runner/traces by its sha256 (store/traces holds guest traces only), then ingested (rule T4: each EXECUTION_COMPLETED's trace ingested once)
-                let mut trace = String::new();
-                for (class, n) in &t.by_class {
-                    let diffs: Vec<Value> = t
-                        .differences
-                        .iter()
-                        .filter(|(k, _)| k.split(' ').next() == Some(class.as_str()))
-                        .map(|(k, (m, example))| Value::from(format!("{k}: {m} cases; {example}")))
-                        .collect();
-                    let line = Value::Object(Map::from_iter([
-                        ("run".to_string(), Value::from(run.id.as_str())),
-                        ("class".to_string(), Value::from(class.as_str())),
-                        ("judged".to_string(), Value::from(*n)),
-                        ("differences".to_string(), Value::Array(diffs)),
-                    ]));
-                    trace.push_str(&line.to_string());
-                    trace.push('\n');
-                }
-                let trace_hex = sha256(trace.as_bytes());
-                let lines = t.by_class.len();
-                fs::write(
-                    root.join("store/case_runner/traces").join(format!("{trace_hex}.jsonl")),
-                    &trace,
-                )
-                .map_err(|e| e.to_string())?;
-                emit(
-                    &mut out,
-                    &ExecutionCompleted {
-                        execution_id: id(execution.clone()),
-                        exit_status: ExitStatus::Exited,
-                        trace_sha256: sha(&trace_hex),
-                        guest_line_count: u(lines),
-                        exit_code: None,
-                        elapsed_seconds: Some(FiniteF64::new(t0.elapsed().as_secs_f64()).unwrap()),
-                        unobserved: Some(format!(
-                            "the trace is the runner's verdict per class, not guest output: {} of {} cases judged by \
-                             state against run {}; {} ran in the model, not judged; {} refused",
-                            t.judged,
-                            cases.len(),
-                            run.id,
-                            t.model,
-                            t.refused.values().sum::<usize>()
-                        )),
-                    },
-                )
-                .map_err(w)?;
-                emit(
-                    &mut out,
-                    &TraceIngested {
-                        trace_sha256: sha(&trace_hex),
-                        execution_id: id(execution),
-                        line_count: u(lines),
-                        thread_count: u(1),
-                        vocab_version: Version::new(VOCAB_VERSION).unwrap(),
-                    },
-                )
-                .map_err(w)?;
+                per_run.push(format!("{} {}/{}", run.id, t.judged, cases.len()));
                 for (class, n) in &t.by_class {
                     units.entry(class.clone()).or_default().judged += n;
                 }
@@ -289,8 +230,9 @@ mod run {
             Ok(())
         })?;
         outcome?;
+        eprintln!("case_runs: {judge} on {profile}: cases judged per run {per_run:?}");
 
-        // per class (differential.py 156-209): the candidate, its comparison, its decision
+        // per class (differential.py 156-226): the candidate, its comparison, its decision
         let contract = ContractId::new(CONTRACT_ID).expect("a dotted id");
         let version = Version::new(CONTRACT_VERSION).unwrap();
         let reference = runs.iter().map(|r| r.id.as_str()).collect::<Vec<_>>().join("+");
@@ -311,7 +253,7 @@ mod run {
                 )
             };
             let cid = format!("{judge}:{}@{}", safe(unit), &candidate[..12]);
-            let repairing = open_on(&ledger, judge, unit);
+            let repairing = ledger::open_on(&ledger, judge, unit);
             emit(
                 &mut out,
                 &CandidateGenerated {
@@ -327,7 +269,11 @@ mod run {
             )
             .map_err(w)?;
             let comparison = format!("cmp-{cid}");
-            let rule = format!("{} cases of {unit} judged whole in {} Intel runs", v.judged, runs.len());
+            let rule = format!(
+                "{} cases of {unit} judged whole in {} Intel runs on {profile}",
+                v.judged,
+                runs.len()
+            );
             let first = v.differences.first().map(|(_, l)| {
                 let more = v.differences.len() - 1;
                 let s = if more > 0 {
@@ -350,7 +296,7 @@ mod run {
                     contract_version: version.clone(),
                     relation: Relation::Exact,
                     reference_ref: id(reference.clone()),
-                    target_execution_id: id("case-runs"),
+                    target_execution_id: id(session.clone()),
                     verdict,
                     rule_ref: Some(rule),
                     first_divergence: first.clone(),
@@ -383,7 +329,7 @@ mod run {
                 }
             } else {
                 reported += 1;
-                let did = format!("{judge}-{session}-{}", safe(unit));
+                let did = format!("{session}-{}", safe(unit));
                 emit(
                     &mut out,
                     &CandidateRejected {
@@ -407,7 +353,7 @@ mod run {
                         initial_state_sha256: Sha256::new(EMPTY).unwrap(),
                         first_divergence: first_line.chars().take(500).collect(),
                         reference_profile_id: id(profile.clone()),
-                        destination_profile_id: id("w2m the Rust case runner on the frozen Python lowering's words"),
+                        destination_profile_id: id(format!("w2m {generator}")),
                         comparison_id: id(comparison),
                     },
                 )
@@ -426,10 +372,9 @@ mod run {
                 .map_err(w)?;
             }
         }
-        let classes: BTreeSet<&String> = units.keys().collect();
         eprintln!(
             "case_runs: {} classes, {accepted} accepted, {reported} with discrepancies",
-            classes.len()
+            units.len()
         );
         emit(
             &mut out,

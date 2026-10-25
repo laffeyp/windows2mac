@@ -1,8 +1,0 @@
-{"class":"REP_MOVSB","differences":[],"judged":68,"run":"38039726462"}
-{"class":"REP_MOVSD","differences":[],"judged":60,"run":"38039726462"}
-{"class":"REP_MOVSQ","differences":[],"judged":28,"run":"38039726462"}
-{"class":"REP_MOVSW","differences":[],"judged":24,"run":"38039726462"}
-{"class":"REP_STOSB","differences":[],"judged":56,"run":"38039726462"}
-{"class":"REP_STOSD","differences":[],"judged":36,"run":"38039726462"}
-{"class":"REP_STOSQ","differences":[],"judged":24,"run":"38039726462"}
-{"class":"REP_STOSW","differences":[],"judged":24,"run":"38039726462"}

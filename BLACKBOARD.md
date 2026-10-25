@@ -415,6 +415,7 @@
 - **2026-10-18 (Sprint 120)** — Resolution of the Sprint 119 entry above: not deferred. It was a hang, fixed in Sprint 120 with the rest of its class (Decision 2026-10-18 user).
 - **2026-10-18 (Sprint 120)** — Sprint 118's entry above, tested against Decision 2026-10-11 user: the project can build the parked vCPU's wake now, and nothing hangs without it (a thread readied in the VM runs on the vCPU that readied it), so it is no deferral but the next sprint's scope, Sprint 121.
 - **2026-10-21 (Sprint 121)** — Resolution of Sprint 118's entry above: built in Sprint 121. A thread readied inside the VM while a vCPU waits to take one asks the host to wake it (W2M_THREAD_WAKE); the readied guest's 20 rounds ran on the waiting vCPU in 3 runs of 13 before, 10 of 10 after.
+- **2026-10-25 (Sprint 152)** — A race hit under load: `tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried` failed once in Sprint 150's first full gates run (its 40 runs of `mutual_context` found no retried context read while pytest ran 2,545 other tests), then passed alone in 0.23 s and in Sprint 150's second full gates run, which exited 0. Its own comment records 3 hits in 6 runs alone and 0 in 10 under the gates before: this is the first failure seen. The test hunts a race in the frozen Python host's scheduler, which no Rust code changes; re-visit when the Rust host's scheduler carries `_stop_elsewhere` and the retried context read, and judge the race there with a count of runs and hits.
 
 ## Open questions
 

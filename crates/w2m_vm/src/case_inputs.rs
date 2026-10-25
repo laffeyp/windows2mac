@@ -84,11 +84,14 @@ pub fn runs(root: &Path) -> Vec<Run> {
     out
 }
 
-/// The fixture's header: `# base 0x.. exit 0x.. symbols <sha256> src <commit>`.
+/// The fixture's header: `# base 0x.. exit 0x.. symbols <sha256> layout <sha256> src <commit>` (layout from Sprint 152).
 pub struct Header {
     pub base: u64,
     pub exit: u64,
     pub symbols: String,
+    /// the sha256 of the guest layout constants the runtime is compiled against (`runtime_defines`), as `symbols`'
+    /// lines: the words may embed them (a load of the process area's 0x7ffe_0000_3000)
+    pub layout: String,
     pub src: String,
 }
 
@@ -117,9 +120,10 @@ impl Fixture {
         let mut lines = text.lines();
         let first = lines.next().ok_or("an empty fixture")?;
         let p: Vec<&str> = first.split_whitespace().collect();
-        if !(p.len() == 9 && p[0] == "#" && p[1] == "base" && p[3] == "exit" && p[5] == "symbols" && p[7] == "src") {
+        let named = ["#", "base", "", "exit", "", "symbols", "", "layout", "", "src", ""];
+        if p.len() != named.len() || named.iter().zip(&p).any(|(n, v)| !n.is_empty() && n != v) {
             return Err(format!(
-                "the fixture's header is not `# base .. exit .. symbols .. src ..`: {first}"
+                "the fixture's header is not `# base .. exit .. symbols .. layout .. src ..`: {first}"
             ));
         }
         let hex = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).map_err(|e| e.to_string());
@@ -127,8 +131,23 @@ impl Fixture {
             base: hex(p[2])?,
             exit: hex(p[4])?,
             symbols: p[6].to_string(),
-            src: p[8].to_string(),
+            layout: p[8].to_string(),
+            src: p[10].to_string(),
         };
+        // the words are the frozen Python's at this commit of src/w2m, the last that touched it
+        let at = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["log", "-1", "--format=%H", "--", "src/w2m"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let src_now = String::from_utf8_lossy(&at.stdout).trim().to_string();
+        if src_now != header.src {
+            return Err(format!(
+                "the fixture was made at src/w2m {}, and src/w2m is now at {src_now}",
+                header.src
+            ));
+        }
         let words = lines
             .map(|l| {
                 let p: Vec<&str> = l.split_whitespace().collect();
@@ -299,6 +318,15 @@ pub fn with_case_vm<T>(
         return Err(format!(
             "the fixture's words were made for another runtime symbol table ({have} here, {} in the fixture)",
             fixture.header.symbols
+        ));
+    }
+    // and the layout constants: the fixture was made with these
+    let layout: BTreeMap<String, u64> = runtime_defines().into_iter().collect();
+    let have = symbols_sha256(&layout);
+    if have != fixture.header.layout {
+        return Err(format!(
+            "the fixture's words were made for another guest layout ({have} here, {} in the fixture)",
+            fixture.header.layout
         ));
     }
     let texts = guest_runtime::texts(root).map_err(|e| format!("{e:?}"))?;

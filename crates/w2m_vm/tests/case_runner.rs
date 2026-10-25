@@ -12,7 +12,7 @@
 //! same verdicts go on a record through `case_runs` (Sprint 150).
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +46,41 @@ fn every_judged_case_agrees_with_windows() {
 #[test]
 fn every_judged_case_agrees_with_windows_with_the_rust_translator() {
     judge(true);
+}
+
+/// Sprint 152 (the review of Sprints 149-150 suggested it): with no VM, the Rust words equal the fixture's Python words
+/// for every case code the Rust rules lift, all 25,919 codes walked at the fixture's layout, the classes the C does not
+/// stencil among them.
+#[test]
+fn the_rust_words_equal_the_python_words_on_every_case_code() {
+    let root = root();
+    let Some(fixture) = Fixture::load(&root) else {
+        return missing("no Python words fixture (build/case_runner/python-words.txt)");
+    };
+    let fixture = fixture.unwrap();
+    let hybrid = Hybrid::new(&fixture);
+    for code in fixture.words.keys() {
+        hybrid
+            .compile(code, cpu_cases::CODE_VA, fixture.header.base, fixture.header.exit)
+            .unwrap_or_else(|e| panic!("{code:02x?}: {e}"));
+    }
+    let rust = hybrid.rust.borrow();
+    let unlike = hybrid.unlike.borrow();
+    println!(
+        "{} case codes; the Rust translator compiled {} of them in {} classes",
+        fixture.words.len(),
+        rust.values().sum::<usize>(),
+        rust.len()
+    );
+    for (code, class, d) in unlike.iter().take(12) {
+        println!("    {class} {code:02x?}: {d}");
+    }
+    assert!(!rust.is_empty(), "the Rust translator compiled no case code");
+    assert!(
+        unlike.is_empty(),
+        "{} case codes whose Rust words differ from the Python's",
+        unlike.len()
+    );
 }
 
 /// One VM a process (`hv_vm_create`): the two tests run on parallel threads, so each holds this while its VM lives
@@ -82,7 +117,7 @@ fn judge(use_rust: bool) {
 
     let (failures, reached, distinct) = with_case_vm(&root, &fixture, |guest, vcpu| {
         let mut failures = Vec::new();
-        let mut reached: BTreeSet<String> = BTreeSet::new();
+        let mut reached: BTreeMap<String, usize> = BTreeMap::new();
         let mut seen_sets = BTreeSet::new();
         let mut distinct = (0, 0);
         for run in &runs {
@@ -133,7 +168,9 @@ fn judge(use_rust: bool) {
                 Some(want) => failures.push(format!("run {}: counts {got:?}, expected {want:?}", run.id)),
                 None => failures.push(format!("run {}: not in store/case_runner/expected.tsv", run.id)),
             }
-            reached.extend(t.by_class.keys().cloned());
+            for (class, n) in &t.by_class {
+                *reached.entry(class.clone()).or_default() += n;
+            }
             if seen_sets.insert(set_name) {
                 distinct.0 += t.judged;
                 distinct.1 += cases.len();
@@ -157,11 +194,20 @@ fn judge(use_rust: bool) {
     // registry's map (store/rules/registry.tsv)
     let registry = registry(&root);
     let modules: BTreeSet<&String> = registry.values().collect();
-    let hit: BTreeSet<&String> = reached.iter().filter_map(|ic| registry.get(ic)).collect();
-    let unmapped: Vec<&String> = reached.iter().filter(|ic| !registry.contains_key(*ic)).collect();
+    // each module's judged cases, summed over its iclasses (a module counts as reached on one case: its smallest count
+    // goes beside the reach; review of Sprints 149-150)
+    let mut per_module: BTreeMap<&String, usize> = BTreeMap::new();
+    for (ic, n) in &reached {
+        if let Some(m) = registry.get(ic) {
+            *per_module.entry(m).or_default() += n;
+        }
+    }
+    let unmapped: Vec<&String> = reached.keys().filter(|ic| !registry.contains_key(*ic)).collect();
+    let fewest = per_module.iter().min_by_key(|(_, n)| **n);
     println!(
-        "rule modules reached by the judged cases: {} of {} ({} iclasses judged; without a rule module: {unmapped:?})",
-        hit.len(),
+        "rule modules reached by the judged cases: {} of {} ({} iclasses judged; without a rule module: {unmapped:?}); \
+         the fewest cases a reached module has: {fewest:?}",
+        per_module.len(),
         modules.len(),
         reached.len()
     );
