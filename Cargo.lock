@@ -150,6 +150,7 @@ dependencies = [
 name = "w2m_vm"
 version = "0.1.0"
 dependencies = [
+ "a64_encoder",
  "guest_runtime",
  "hypervisor",
  "serde_json",

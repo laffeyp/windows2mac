@@ -77,6 +77,24 @@ pub fn write_translation_tables(mem: &mut [u8], maps: &[(u64, u64, u64)]) -> Res
     Ok((IPA_BASE + TRANSLATION_TABLES, nxt))
 }
 
+/// A descriptor's AP[2]: no writes at EL1 (vm_backend 1129; Arm ARM D8.4.1).
+pub const AP_READ_ONLY: u64 = 1 << 7;
+
+/// The offset in `mem` of the level-3 descriptor that maps page `va`: `_page_descriptor` (vm_backend 4507-4530)
+/// without its block split, so `None` when a block or nothing maps it.
+pub fn page_descriptor(mem: &[u8], va: u64) -> Option<u64> {
+    let mut off = TRANSLATION_TABLES;
+    for shift in [39, 30, 21] {
+        let desc = read(mem, off + 8 * ((va >> shift) & 0x1FF));
+        if desc & 3 != 3 {
+            return None;
+        }
+        off = (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
+    }
+    let at = off + 8 * ((va >> 12) & 0x1FF);
+    (read(mem, at) & 3 == 3).then_some(at)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

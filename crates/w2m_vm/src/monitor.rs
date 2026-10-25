@@ -8,9 +8,10 @@ use guest_runtime::Image;
 use guest_runtime::layout::{IPA_BASE, MONITOR_SIZE, MONITOR_VA, RUNTIME_IMAGE, RUNTIME_STACK, RUNTIME_STACK_SIZE};
 use hypervisor::{Exit, GuestMemory, HvError, Reg, Vcpu, Vm, memory, sys_reg};
 
+use crate::monitor_code::{self, MonitorCode};
 use crate::tables::{TableError, write_translation_tables};
 use crate::{
-    ACTLR_ENTSO, CPACR_FPEN, CPSR_EL1H, DISPATCHER, MAIR, RETURN_HVC, SCTLR, TCR, VECTOR_HVC_BASE, VECTORS, hvc,
+    ACTLR_ENTSO, CPACR_FPEN, CPSR_EL1H, MAIR, RETURN_HVC, RETURN_STUB, SCTLR, TCR, VECTOR_HVC_BASE, VECTORS, hvc,
 };
 
 /// Why the monitor could not be set up or a call failed.
@@ -47,6 +48,28 @@ impl MonitorMemory {
     /// The area with `image` copied where it was linked, the vectors and the return stub written, and stage-1 tables
     /// for the area at `MONITOR_VA`; `omit` leaves those maps' VA ranges out of the tables (the planted fault).
     pub fn new(image: &Image, omit: &[(u64, u64)]) -> Result<MonitorMemory, MonitorError> {
+        let mut memory = Self::with_image(image)?;
+        let mem = memory.as_mut_slice();
+        for slot in 0..16u16 {
+            let at = (VECTORS + 0x80 * u64::from(slot)) as usize;
+            mem[at..at + 4].copy_from_slice(&hvc(VECTOR_HVC_BASE + slot).to_le_bytes());
+        }
+        Self::finish(memory, omit, &[])
+    }
+
+    /// The area with `image` copied where it was linked and the Python host's monitor code written (Sprint 136):
+    /// the vectors, the dispatcher, the empty dispatch table and the exception entry; tables for the area and for
+    /// `extra` maps `(va, ipa, size)`.
+    pub fn with_monitor_code(
+        image: &Image,
+        extra: &[(u64, u64, u64)],
+    ) -> Result<(MonitorMemory, MonitorCode), MonitorError> {
+        let mut memory = Self::with_image(image)?;
+        let code = monitor_code::write(memory.as_mut_slice(), &image.symbols);
+        Ok((Self::finish(memory, &[], extra)?, code))
+    }
+
+    fn with_image(image: &Image) -> Result<GuestMemory, MonitorError> {
         let mut memory = GuestMemory::new(MONITOR_SIZE as usize).map_err(MonitorError::Memory)?;
         let mem = memory.as_mut_slice();
         for (va, data) in &image.segments {
@@ -59,13 +82,19 @@ impl MonitorMemory {
                 .ok_or_else(|| MonitorError::Image(format!("a segment at {va:#x} past the monitor area")))?
                 .copy_from_slice(data);
         }
-        for slot in 0..16u16 {
-            let at = (VECTORS + 0x80 * u64::from(slot)) as usize;
-            mem[at..at + 4].copy_from_slice(&hvc(VECTOR_HVC_BASE + slot).to_le_bytes());
-        }
-        let stub = DISPATCHER as usize;
+        Ok(memory)
+    }
+
+    /// The return stub, then the tables: the area (less `omit`'s ranges) and `extra`.
+    fn finish(
+        mut memory: GuestMemory,
+        omit: &[(u64, u64)],
+        extra: &[(u64, u64, u64)],
+    ) -> Result<MonitorMemory, MonitorError> {
+        let mem = memory.as_mut_slice();
+        let stub = RETURN_STUB as usize;
         mem[stub..stub + 4].copy_from_slice(&hvc(RETURN_HVC).to_le_bytes());
-        let maps: Vec<(u64, u64, u64)> = if omit.is_empty() {
+        let mut maps: Vec<(u64, u64, u64)> = if omit.is_empty() {
             vec![(MONITOR_VA, IPA_BASE, MONITOR_SIZE)]
         } else {
             // the area in 2 MB pieces, those `omit` covers left out
@@ -75,6 +104,7 @@ impl MonitorMemory {
                 .filter(|(va, _, size)| !omit.iter().any(|(s, e)| va < e && va + size > *s))
                 .collect()
         };
+        maps.extend_from_slice(extra);
         let (ttbr, _) = write_translation_tables(mem, &maps).map_err(MonitorError::Tables)?;
         Ok(MonitorMemory { memory, ttbr })
     }
@@ -82,6 +112,11 @@ impl MonitorMemory {
     pub fn read_u32(&self, monitor_offset: u64) -> u32 {
         let o = monitor_offset as usize;
         u32::from_le_bytes(self.memory.as_slice()[o..o + 4].try_into().unwrap())
+    }
+
+    pub fn read_u64(&self, monitor_offset: u64) -> u64 {
+        let o = monitor_offset as usize;
+        u64::from_le_bytes(self.memory.as_slice()[o..o + 8].try_into().unwrap())
     }
 }
 
@@ -112,7 +147,7 @@ pub fn call(vcpu: &Vcpu<'_>, address: u64, args: &[u64]) -> Result<u64, MonitorE
     for (i, a) in args.iter().enumerate() {
         vcpu.set_reg(Reg::X(i as u8), *a)?;
     }
-    vcpu.set_reg(Reg::X(30), MONITOR_VA + DISPATCHER)?;
+    vcpu.set_reg(Reg::X(30), MONITOR_VA + RETURN_STUB)?;
     vcpu.set_sys_reg(sys_reg::SP_EL1, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE)?;
     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
     vcpu.set_reg(Reg::Pc, address)?;

@@ -5,6 +5,8 @@
 //! system registers the Python host set, and vectors that hand every exception to the host. Carried from
 //! `src/w2m/vm_backend.py`; each value cites its line.
 
+pub mod assembler;
+pub mod monitor_code;
 pub mod tables;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -14,8 +16,11 @@ pub mod monitor;
 pub const GIGA_BLOCK: u64 = 0x4000_0000;
 /// The exception vectors, 16 slots of 0x80 (vm_backend 127).
 pub const VECTORS: u64 = 0x01000;
-/// The dispatcher's place (vm_backend 128); until the dispatcher is carried, the skeleton's return stub.
+/// The dispatcher's place (vm_backend 128).
 pub const DISPATCHER: u64 = 0x01800;
+/// The skeleton's return stub: `hvc #1` in the free area just past the exception entry (vm_backend 130), a Rust
+/// test aid the Python host did not have.
+pub const RETURN_STUB: u64 = 0x02000;
 /// The native helper operands (vm_backend 126): 32 bytes the skeleton's calls write their results to.
 pub const NATIVE_OPERANDS: u64 = 0x300;
 /// AttrIndx 0 (MAIR byte 0 = 0xFF, Normal write-back), inner shareable, the access flag (vm_backend 352).
