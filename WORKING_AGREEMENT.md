@@ -58,6 +58,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | Game code differential (native and Mono-generated code vs XED; decoder criterion (d)) | `scripts/game_code_differential.py` |
 | The plan: current order of work | `docs/rust-port-plan-2026-10-24.md` from 2026-10-24 (Decision 2026-10-24, Sprint 129); `docs/rust-port-plan-2026-10-21.md` from 2026-10-21 to 2026-10-23; `docs/plan-2026-10-09.md` holds the goal and milestones, and its steps before 2026-10-21 (edited in place; Decisions record why it changed) |
 | The Rust host's design | `docs/design-rust-host-2026-10-24.md` (Sprint 130); `docs/design-rust-host-2026-10-23.md` is history |
+| The guest-memory layout the C runtime is compiled against (carried from `vm_backend.py` and `scheduler.py`, line by line); the runtime image's build, cache key, generated headers and services | `crates/guest_runtime/src/layout.rs`, `lib.rs`, `headers.rs`, `services.rs` (Sprint 133); images under `build/guest_runtime_rust/` |
 | Hypervisor.framework from Rust: `Vm`, `Vcpu`, `VcpuHandle`, `GuestMemory`, `Exit`, `Reg`, the bindings | `crates/hypervisor/src/lib.rs` (Sprint 132); the cargo runner that signs with the entitlement, `scripts/sign_and_run.sh` via `.cargo/config.toml` |
 | Guest state spec (state block, host registers, reconstruction, Windows layouts) | `specs/guest_state.json`; checker `scripts/check_guest_state.py` |
 | Semantics oracle (cases, runner harness, judge) | `probes/semantics/`, `scripts/semantics_differential.py` |

@@ -1,0 +1,10 @@
+[package]
+name = "guest_runtime"
+description = "The C guest runtime's image built from Rust, equal to the frozen Python host's, byte for byte (Sprint 133)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
