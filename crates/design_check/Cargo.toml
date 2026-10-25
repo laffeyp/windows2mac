@@ -1,0 +1,9 @@
+[package]
+name = "design_check"
+description = "Every plan and design from 2026-10-24 on states the goal's figures and names the systems that solved the same problem, with sources (Sprint 128)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

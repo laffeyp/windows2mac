@@ -37,6 +37,9 @@ cargo build --release --quiet
 target/release/vocabulary_generator --check > /dev/null
 # every sprint from 108 marked done has its Signal Report (Sprint 127: the reports stopped unnoticed three times)
 target/release/signal_report --check > /dev/null
+# every plan and design from 2026-10-24 on states the goal's figures and names the systems that solved the same
+# problem, with sources (Sprint 128; Decision 2026-10-24 user, fix (a))
+target/release/design_check > /dev/null
 session=$(mktemp -d)/session-check
 uv run substrate run --file harness/session-check.toml --root "$session" --strict > /dev/null
 uv run substrate replay "$session" --level 2 > /dev/null
