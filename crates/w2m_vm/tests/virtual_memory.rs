@@ -4,7 +4,6 @@
 //! The probes' calls are replayed in their order against the arena, each row derived as the probe prints it
 //! (`probes/virtual_memory/virtual_memory.c`, `probes/thread_stack/thread_stack.c`) and as `scripts/family_run.py`
 //! derives it, then compared with the contract's row. And `tests/test_virtual_arena.py`'s values.
-#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -18,8 +17,8 @@ use virtual_memory::{
     GuestPages, Info, MEM_COMMIT, MEM_DECOMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_NOACCESS,
     PAGE_READONLY, PAGE_READWRITE, VirtualMemory,
 };
-use w2m_vm::guest::{VIRTUAL_SIZE, VIRTUAL_VA};
 use w2m_vm::process::{Areas, PARAMETERS_ROOM, Start, TRACE_SIZE, write};
+use w2m_vm::{VIRTUAL_SIZE, VIRTUAL_VA};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use guest_runtime::layout::{
-    CURRENT, CURRENT_ENTRY, DISPATCH_TABLE, MONITOR_DATA, MONITOR_VA, PROCESS_VA, RT_ENTRIES, RUN_TABLE, RUNTIME_IMAGE,
-    RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, VECTOR_SLOTS, VM_COMPILER, VMC_LOG, VMC_LOG_ENTRY,
+    CODE_CACHE, CODE_CACHE_SIZE, CURRENT, CURRENT_ENTRY, DISPATCH_TABLE, MONITOR_DATA, MONITOR_VA, PROCESS_VA,
+    RT_ENTRIES, RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, VECTOR_SLOTS, VM_COMPILER, VMC_LOG,
+    VMC_LOG_ENTRY,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
 use pe_loader::Loaded;
@@ -18,7 +19,7 @@ use pe_loader::Loaded;
 use crate::CPSR_EL1H;
 use crate::guest::{Guest, RT_IN_VM, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
 use crate::monitor::set_system_registers;
-use crate::monitor_code::{EMPTY_TARGET, REG_BUDGET, dispatch_slot};
+use crate::monitor_code::{EMPTY_TARGET, HVC_FAULT_GIVE_BACK, REG_BUDGET, dispatch_slot};
 
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
 pub const MXCSR_OFF: u64 = 0x50;
@@ -34,6 +35,60 @@ pub const E_VSLOT: u64 = 0x28;
 pub const E_VCPU: u64 = 0x138;
 /// x24 holds the flags not yet defined (vm_backend 359); at entry every one.
 pub const REG_UNDEFINED_FLAGS: u8 = 24;
+
+/// The blocks' instructions in the code cache (vm_backend `tail_hosts`, `tail_left`, 2466-2467): each instruction's
+/// first host address, in the order the cache grows, and the instructions after it in its block.
+#[derive(Debug, Default, Clone)]
+pub struct Tails {
+    hosts: Vec<u64>,
+    left: Vec<u64>,
+}
+
+impl Tails {
+    /// `_note_tails` (4644-4647): a new block's instruction marks.
+    pub fn note(&mut self, marks: &[u64]) {
+        self.hosts.extend(marks);
+        self.left.extend((0..marks.len() as u64).rev());
+    }
+
+    /// `flush_translations` (2789-2790).
+    pub fn clear(&mut self) {
+        self.hosts.clear();
+        self.left.clear();
+    }
+
+    /// `_unrun_after` (4652-4659): the instructions after the one whose code holds host address `pc` in its block.
+    pub fn unrun_after(&self, pc: u64) -> u64 {
+        if !in_code_cache(pc) {
+            return 0;
+        }
+        let i = self.hosts.partition_point(|h| *h <= pc);
+        if i > 0 { self.left[i - 1] } else { 0 }
+    }
+}
+
+/// `_in_code_cache` (4649-4650).
+pub fn in_code_cache(pc: u64) -> bool {
+    (MONITOR_VA + CODE_CACHE..MONITOR_VA + CODE_CACHE + CODE_CACHE_SIZE).contains(&pc)
+}
+
+/// An exit outside the runtime (5198-5208): the budget left in x23, with a fault's give-back (`hvc #14` with x2 the
+/// faulting host address in the code cache: the faulting instruction and those after it go back), then the count
+/// (limit - left) written to the monitor data.
+pub fn exit_count(vcpu: &Vcpu<'_>, mem: &mut [u8], tails: &Tails, give_back: bool) -> Result<(), HvError> {
+    let md = MONITOR_DATA;
+    let limit = read_u64(mem, md + 8);
+    let mut left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
+    if give_back {
+        let x2 = vcpu.reg(Reg::X(2))?;
+        if in_code_cache(x2) {
+            left = left.wrapping_add(tails.unrun_after(x2) + 1);
+        }
+        vcpu.set_reg(Reg::X(REG_BUDGET as u8), left)?;
+    }
+    write_u64(mem, md, limit.wrapping_sub(left));
+    Ok(())
+}
 /// VM_COMPILER + this: the log's entry count (vm_backend 197).
 pub const VMC_LOG_COUNT: u64 = 0x10;
 
@@ -193,10 +248,10 @@ pub fn run_to_first_decline(
         vm_compiled(mem, &mut out.blocks);
         let pc = vcpu.reg(Reg::Pc)?;
         if !runtime.contains(&pc) {
-            // the count, from x23 (5199-5208)
-            let limit = read_u64(mem, md + 8);
-            let left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
-            write_u64(mem, md, limit.wrapping_sub(left));
+            // the count, from x23, with a fault's give-back (5199-5208); the blocks here are the VM's own, whose tails
+            // this loop does not note yet (2570), so a give-back counts the faulting instruction alone
+            let give_back = exit.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK as u16);
+            exit_count(vcpu, mem, &Tails::default(), give_back)?;
         }
         let Some(number) = exit.hvc_immediate() else {
             if matches!(exit, Exit::VtimerActivated) {

@@ -31,7 +31,10 @@ fi
 # release build, then the session check under substrate: a Rust binary's events on a record, replayed
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
-cargo test --quiet
+# the case runner (crates/w2m_vm/tests/case_runner.rs) fails rather than skips when its inputs are missing: the
+# downloaded Windows results (build/probe-runs) and the Python words fixture (build/case_runner) (Sprint 149; the
+# review of link 3 found it could pass having judged nothing). CI, on Linux, does not compile it.
+W2M_REQUIRE_CASE_RUNS=1 cargo test --quiet
 cargo build --release --quiet
 # the vocabulary generated into Rust and substrate's schema file, byte for byte (Sprint 126)
 target/release/vocabulary_generator --check > /dev/null

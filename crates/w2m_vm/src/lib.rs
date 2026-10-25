@@ -22,6 +22,9 @@ pub mod tables;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod monitor;
 
+/// vm_backend 334-335: the VirtualAlloc arena, sparse (here, ungated, so the arena's replay runs on CI; Sprint 149).
+pub const VIRTUAL_VA: u64 = 0x0000_0010_0000_0000;
+pub const VIRTUAL_SIZE: u64 = 0x80_0000_0000;
 /// A level-1 block in the 4 KB granule, 1 GB (vm_backend 84).
 pub const GIGA_BLOCK: u64 = 0x4000_0000;
 /// The exception vectors, 16 slots of 0x80 (vm_backend 127).

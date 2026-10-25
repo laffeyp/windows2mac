@@ -27,9 +27,7 @@ use crate::monitor_code::{
 use crate::process::{self, Areas, PARAMETERS_ROOM, ProcessArea, ProcessError, Start, TRACE_SIZE};
 use crate::tables::{TableError, write_translation_tables};
 
-/// vm_backend 334-335: the VirtualAlloc arena, sparse.
-pub const VIRTUAL_VA: u64 = 0x0000_0010_0000_0000;
-pub const VIRTUAL_SIZE: u64 = 0x80_0000_0000;
+pub use crate::{VIRTUAL_SIZE, VIRTUAL_VA};
 /// vm_backend 261: the process area's size.
 pub const PROCESS_SIZE: u64 = guest_runtime::layout::TRACE_OFF + TRACE_SIZE;
 /// VM_COMPILER + this: the code cache's next free offset from MONITOR_VA (vm_backend 197, 2514-2520).

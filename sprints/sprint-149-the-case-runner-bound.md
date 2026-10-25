@@ -116,3 +116,30 @@ was made for, and link 3's revisit condition is measured and applied.
 - [x] One concept: the case runner's judges made binding.
 
 ## result
+
+- **Blocking 1.** `tests/case_runner.rs` no longer loads the C emitter; a missing fixture, missing results, a refusal,
+  a run absent from `expected.tsv`, or a count that differs fails under `W2M_REQUIRE_CASE_RUNS=1`, which
+  `scripts/gates.sh` sets. Planted faults, each caught by name: the fixture moved aside ("no Python words fixture …,
+  and W2M_REQUIRE_CASE_RUNS=1 requires the case runs"); set 046's expected judged count 3,173 changed to 3,174 ("run
+  38048998709: counts … expected …"); the header's exit changed to 0x7f0000001930 with the sha256 re-pinned for the
+  plant ("the fixture's words were made for another layout"). The fixture and header plants were first run through a
+  zsh variable that does not word-split, which ran nothing (exit 127); they were rerun with the command written out.
+  CI does not run the case runner (Linux; no Hypervisor.framework, no downloaded results): each close says so.
+- **Blocking 2, the revisit.** The cases judged whole reach 387 iclasses and 235 of the registry's 249 public rule
+  modules (`store/rules/registry.tsv`, 460 iclasses; no judged iclass without a module). The condition's half is 125:
+  it is not met, so the rules are ported in groups as the design orders, link 4 next.
+- **Medium 1.** The fixture was regenerated with its header (base 0x7f0000062170, exit 0x7f0000001928, symbols
+  8da213a3…, `src/w2m` at 37784f1a7); its words equal the Sprint 145 fixture's on all 25,919 codes (only a trailing
+  space on zero-word lines differed), with no refusal. Its sha256 `bacab947…` is committed; the Rust runtime's symbol
+  table hashes to the header's value. The slice stub the card named is not in the header: the Rust runner assembles
+  the budget's stop itself (`assemble_one`), so the fixture's words do not embed it.
+- **Medium 2.** `VIRTUAL_VA` and `VIRTUAL_SIZE` are at the crate root; `tests/virtual_memory.rs` has no gate.
+- **Medium 3.** Distinct cases, each set once: 136,153 judged of 250,840 (set 039 runs twice). Judged share by set:
+  039 95%, 041 96%, 042 95%, 044 95%, 044b-e 99-100%, 046 100%, 046b 48%, 046c-e 100%, 047 and 048 100%, 049 81%,
+  049b 52%, 050 55%, 065 2%, 065b 10%, 065c 32%. The rest leave to the model and are not judged: Sprint 148's "the
+  case runner judges everything `scripts/vm_oracle.py` judges" was wrong, since vm_oracle judges the model's cases too.
+- **Medium 4.** `run.rs` gains `Tails` (`_note_tails`, `_unrun_after`), `in_code_cache` and `exit_count` (the
+  give-back with its code-cache guard and the count's write); `run_cases` notes each block's instruction mark and uses
+  it; `run_to_first_decline` uses `exit_count` with no tails yet (its blocks are the VM's own).
+- **Low.** KIT_DIARY #65-#68. This card was committed alone (9c10938b5) before its code.
+- Unchanged: zero difference classes in all 22 runs; each run's counts equal Sprint 148's.

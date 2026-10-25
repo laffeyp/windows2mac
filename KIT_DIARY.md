@@ -664,3 +664,29 @@ check names the platform constraints the design depends on (here, one interprete
 
 **Kit change suggested:** an architecture-band card that opens a chain states the chain's goal as a number and the
 platform constraints it rests on, with a measurement or a cited source for each, before the chain's second card runs.
+
+### 2026-10-25 — Sprints 145-149: a judge that passed on nothing, and a revisit that fell due unread
+
+Sprint 145's case runner first passed with 0 cases judged: every compile was refused, and the only assertion was zero
+difference classes. The sprint printed the counts and called the observation resolved, but the test still returned
+passing when its fixture, its results or clang were missing, and fell back to a compiler measured to compile none of
+the cases. CI, on Linux, never compiled the test, and every close recorded "CI run success" without saying so. The
+link-3 review (reviewer-2, 2026-10-25) found it, with a second fault: the design's revisit condition for link 3 fell
+due at Sprint 148's close and no sprint measured it. Sprint 149 measured it (235 of 249 rule modules reached).
+
+**Finding (#65):** a differential test's zero is evidence only beside its denominator. A judge that can skip, refuse
+or fall back must fail on each of those in the gates, and must assert the counts it judged, not only the differences
+it found.
+
+**Finding (#66):** the stencil table's key carries the code address's value class, so a compiler fed addresses from
+one range (the cases at 0x2000_0000) can refuse everything another range (the game's, above 4 GB) taught it. A
+design's assumption about a component's coverage is a number to measure at the design's own inputs.
+
+**Finding (#67):** an unoptimized test build turned a per-case reset of 1,048,576 entries, one call a word, into over
+an hour of gates; a release run took 33 s. A per-case loop over a large table is measured in the build the gates use.
+
+**Finding (#68):** a design's revisit conditions fall due at named points; the close of the sprint at that point
+states each condition's measure and the verdict, or the link does not close.
+
+**Kit change suggested:** the close of a sprint that ends a design's link lists that link's revisit conditions with
+their measured values.

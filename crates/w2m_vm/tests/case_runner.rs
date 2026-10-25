@@ -2,16 +2,18 @@
 // Copyright (C) 2026 Peter Laffey
 //! Sprint 145's judge: the CPU cases run in a Rust VM, one instruction per block, each completed case judged against
 //! the Intel run Windows recorded for its set; from Sprint 147, each case Windows ended in a fault too, at the VM's
-//! fault through the guest's exception records. The instruction's words come from the VM's C emitter, built for the host
-//! by clang and called through `dlopen` (`vmc_decode`, `vmc_emit`, `vmc_ends`). Runs where clang is found and the result
-//! files were downloaded (`build/probe-runs`, matching their recorded hashes).
+//! fault through the guest's exception records; from Sprint 148, on the whole recorded state.
+//!
+//! Sprint 149 binds it (reviewer-2's link-3 review): the instruction's words come only from the frozen Python
+//! lowering's fixture, pinned by its header and its committed sha256; a refusal fails; each run's counts equal
+//! `store/case_runner/expected.tsv`; and with `W2M_REQUIRE_CASE_RUNS=1` (`scripts/gates.sh`) a missing input fails
+//! rather than skips. CI (Linux) does not compile this test: it needs Hypervisor.framework and the downloaded results.
+//! The test also reports the rule modules the judged cases reach, link 3's revisit measure.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use cpu_cases::{read_cases, read_results, recorded_sha256, sha256};
 use guest_runtime::layout::{IPA_BASE, RUNTIME_IMAGE_VA, runtime_defines};
@@ -27,73 +29,12 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-unsafe extern "C" {
-    fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void;
-    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
-    fn dlerror() -> *const c_char;
-}
-
-/// vm_compiler.h `struct vmc_insn`.
-#[repr(C)]
-struct Insn {
-    form: *const c_void,
-    address: u64,
-    values: [u64; 24],
-    nvalues: c_int,
-    length: c_int,
-}
-
-/// vm_compiler.h `struct vmc_flags`.
-#[repr(C)]
-struct Flags {
-    nzcv_from: c_int,
-    live_after: c_int,
-    nzcv_out: c_int,
-}
-
-type Decode = unsafe extern "C" fn(*const u8, c_int, u64, *mut Insn) -> c_int;
-type Emit = unsafe extern "C" fn(*const Insn, *const Flags, u64, u64, *const u64, *mut u32, c_int) -> c_int;
-type Ends = unsafe extern "C" fn(*const Insn) -> c_int;
-
-struct C {
-    decode: Decode,
-    emit: Emit,
-    ends: Ends,
-}
-
-fn load_c() -> Option<C> {
-    let found = Command::new("xcrun").args(["--find", "clang"]).output().ok()?;
-    if !found.status.success() {
-        return None;
+/// A missing input: a failure under `W2M_REQUIRE_CASE_RUNS=1`, else a skip said on stderr.
+fn missing(what: &str) {
+    if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
+        panic!("{what}, and W2M_REQUIRE_CASE_RUNS=1 requires the case runs");
     }
-    let dir = root().join("target/case_runner");
-    fs::create_dir_all(&dir).unwrap();
-    let lib = dir.join(format!("libvmc-{}.dylib", std::process::id()));
-    let vmc = root().join("tools/vm_compiler");
-    let built = Command::new("xcrun")
-        .args(["clang", "-shared", "-O2", "-I"])
-        .arg(&vmc)
-        .args(["x86_decode.c", "vm_compiler.c", "a64_encoder.c"].map(|f| vmc.join(f)))
-        .arg("-o")
-        .arg(&lib)
-        .output()
-        .unwrap();
-    assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
-    let path = CString::new(lib.to_str().unwrap()).unwrap();
-    unsafe {
-        let h = dlopen(path.as_ptr(), 2);
-        assert!(!h.is_null(), "{:?}", CStr::from_ptr(dlerror()));
-        let sym = |n: &str| {
-            let p = dlsym(h, CString::new(n).unwrap().as_ptr());
-            assert!(!p.is_null(), "{n}");
-            p
-        };
-        Some(C {
-            decode: std::mem::transmute::<*mut c_void, Decode>(sym("vmc_decode")),
-            emit: std::mem::transmute::<*mut c_void, Emit>(sym("vmc_emit")),
-            ends: std::mem::transmute::<*mut c_void, Ends>(sym("vmc_ends")),
-        })
-    }
+    eprintln!("{what}: the case runner is not run here");
 }
 
 /// The case files by their SHA-256, and each downloaded Intel result whose hash and set are recorded: (run, set file,
@@ -140,23 +81,117 @@ fn runs() -> Vec<(String, PathBuf, Vec<u8>)> {
     out
 }
 
+/// The fixture's header: `# base 0x.. exit 0x.. symbols <sha256> src <commit>`.
+struct Header {
+    base: u64,
+    exit: u64,
+    symbols: String,
+    src: String,
+}
+
+fn parse_header(line: &str) -> Header {
+    let p: Vec<&str> = line.split_whitespace().collect();
+    assert!(
+        p.len() == 9 && p[0] == "#" && p[1] == "base" && p[3] == "exit" && p[5] == "symbols" && p[7] == "src",
+        "the fixture's header is not `# base .. exit .. symbols .. src ..`: {line}"
+    );
+    let hex = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+    Header {
+        base: hex(p[2]),
+        exit: hex(p[4]),
+        symbols: p[6].to_string(),
+        src: p[8].to_string(),
+    }
+}
+
+/// The sha256 of a symbol table as the fixture's generator writes it: `name=0x<address>` lines, sorted by name.
+fn symbols_sha256(symbols: &BTreeMap<String, u64>) -> String {
+    let text: String = symbols.iter().map(|(n, v)| format!("{n}=0x{v:x}\n")).collect();
+    sha256(text.as_bytes())
+}
+
+/// One run's committed counts (`store/case_runner/expected.tsv`).
+#[derive(Debug, PartialEq, Eq)]
+struct Counts {
+    set: String,
+    cases: usize,
+    judged: usize,
+    windows_faults: usize,
+    faults_judged: usize,
+    model: usize,
+    undefined_memory: usize,
+}
+
+fn expected() -> BTreeMap<String, Counts> {
+    let text = fs::read_to_string(root().join("store/case_runner/expected.tsv")).unwrap();
+    text.lines()
+        .skip(1)
+        .map(|l| {
+            let p: Vec<&str> = l.split('\t').collect();
+            let n = |i: usize| p[i].parse::<usize>().unwrap();
+            (
+                p[0].to_string(),
+                Counts {
+                    set: p[1].to_string(),
+                    cases: n(2),
+                    judged: n(3),
+                    windows_faults: n(4),
+                    faults_judged: n(5),
+                    model: n(6),
+                    undefined_memory: n(7),
+                },
+            )
+        })
+        .collect()
+}
+
 #[test]
-fn completed_cases_agree_with_windows() {
-    let Some(c) = load_c() else {
-        eprintln!("clang not found: the case runner is not run here");
-        return;
-    };
+fn every_judged_case_agrees_with_windows() {
+    let root = root();
     let runs = runs();
     if runs.is_empty() {
-        eprintln!("no downloaded Intel results: the case runner is not run here");
-        return;
+        return missing("no downloaded Intel results in build/probe-runs");
     }
-    let root = root();
+    let fixture_path = root.join("build/case_runner/python-words.txt");
+    let Ok(text) = fs::read_to_string(&fixture_path) else {
+        return missing("no Python words fixture (build/case_runner/python-words.txt)");
+    };
+    let pinned = fs::read_to_string(root.join("store/case_runner/python-words.sha256")).unwrap();
+    assert_eq!(
+        sha256(text.as_bytes()),
+        pinned.trim(),
+        "the fixture is not the one committed by its sha256"
+    );
+    let mut lines = text.lines();
+    let header = parse_header(lines.next().unwrap());
+    // code -> (ends, words), or None where the Python refused
+    let fixture: BTreeMap<Vec<u8>, Option<(bool, Vec<u32>)>> = lines
+        .map(|l| {
+            let p: Vec<&str> = l.split_whitespace().collect();
+            let code = (0..p[0].len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&p[0][i..i + 2], 16).unwrap())
+                .collect();
+            let words = (p[1] == "ok").then(|| {
+                (
+                    p[2] == "1",
+                    p[3..].iter().map(|w| u32::from_str_radix(w, 16).unwrap()).collect(),
+                )
+            });
+            (code, words)
+        })
+        .collect();
+
     let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+    // the words call the runtime's symbols: the fixture was made with this symbol table
+    assert_eq!(
+        symbols_sha256(&image.symbols),
+        header.symbols,
+        "the fixture's words were made for another runtime symbol table"
+    );
     let services = guest_runtime::services::services(&guest_runtime::texts(&root).unwrap()).unwrap();
     let table = fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap();
     let names = vm_compiler_symbols(&table).unwrap();
-    let symbols: Vec<u64> = names.iter().map(|n| image.symbols[n]).collect();
     let loaded = case_memory();
     let mut guest = Guest::new(
         &loaded,
@@ -171,39 +206,21 @@ fn completed_cases_agree_with_windows() {
     vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
         .unwrap();
     let vcpu = Vcpu::new(&vm).unwrap();
+    println!(
+        "fixture: {} codes, made at src {} (base 0x{:x}, exit 0x{:x})",
+        fixture.len(),
+        header.src,
+        header.base,
+        header.exit
+    );
 
-    // The frozen Python lowering's words for every case instruction (`build/case_runner/python-words.txt`, made by
-    // running `compile_insn(Assembler(BODY), lift(code + bytes(16), CODE_VA), EXIT, symbols, None, ALL_FLAGS,
-    // False)` as the Python's lockstep compile does, vm_backend 4611-4618): the compiler that judges the runner itself,
-    // until the Rust lowering takes its place. The C emitter below compiles none of the cases at their own address: the
-    // stencil key carries the code address's value class, and the table's keys are the game's, above 4 GB.
-    // the body of every case's block (its base plus the SUBS and the B.MI) and the miss stub
-    const FIXTURE_BASE: u64 = 0x7f00_0006_2170;
-    const FIXTURE_EXIT: u64 = 0x7f00_0000_1928;
-    let fixture: BTreeMap<Vec<u8>, Option<(bool, Vec<u32>)>> =
-        match fs::read_to_string(root.join("build/case_runner/python-words.txt")) {
-            Ok(text) => text
-                .lines()
-                .map(|l| {
-                    let p: Vec<&str> = l.split_whitespace().collect();
-                    let code = (0..p[0].len())
-                        .step_by(2)
-                        .map(|i| u8::from_str_radix(&p[0][i..i + 2], 16).unwrap());
-                    let words = (p[1] == "ok").then(|| {
-                        (
-                            p[2] == "1",
-                            p[3..].iter().map(|w| u32::from_str_radix(w, 16).unwrap()).collect(),
-                        )
-                    });
-                    (code.collect(), words)
-                })
-                .collect(),
-            Err(_) => BTreeMap::new(),
-        };
+    // The frozen Python lowering's words for every case instruction, compiled for the block body and the miss stub the
+    // header names (vm_backend 4611-4618): the compiler that judges the runner itself, until the Rust lowering takes
+    // its place.
     let python = |code: &[u8], _address: u64, base: u64, exit_va: u64| -> Result<Compiled, String> {
         assert_eq!(
             (base, exit_va),
-            (FIXTURE_BASE, FIXTURE_EXIT),
+            (header.base, header.exit),
             "the fixture's words were made for another layout"
         );
         match fixture.get(code) {
@@ -215,60 +232,24 @@ fn completed_cases_agree_with_windows() {
             None => Err("not in the fixture".into()),
         }
     };
-    if fixture.is_empty() {
-        eprintln!("no Python words fixture (build/case_runner/python-words.txt): the C emitter compiles");
-    }
 
-    // the C emitter for a lone instruction: no NZCV source, every flag live after, no NZCV out
-    let compile = |code: &[u8], address: u64, base: u64, exit_va: u64| -> Result<Compiled, String> {
-        let mut insn = std::mem::MaybeUninit::<Insn>::zeroed();
-        let r = unsafe { (c.decode)(code.as_ptr(), code.len() as c_int, address, insn.as_mut_ptr()) };
-        if r < 0 {
-            return Err(format!("C decode status {r}"));
-        }
-        let insn = unsafe { insn.assume_init() };
-        let flags = Flags {
-            nzcv_from: 0,
-            live_after: 63,
-            nzcv_out: 0,
-        };
-        let mut words = [0u32; 512];
-        let n = unsafe {
-            (c.emit)(
-                &insn,
-                &flags,
-                base,
-                exit_va,
-                symbols.as_ptr(),
-                words.as_mut_ptr(),
-                words.len() as c_int,
-            )
-        };
-        if n < 0 {
-            return Err(format!("C emit status {n}"));
-        }
-        Ok(Compiled {
-            words: words[..n as usize].to_vec(),
-            ends: unsafe { (c.ends)(&insn) } != 0,
-        })
-    };
-
-    let mut differences = 0;
+    let expected = expected();
+    let mut failures = Vec::new();
+    let mut reached: BTreeSet<String> = BTreeSet::new();
+    let mut seen_sets = BTreeSet::new();
+    let (mut distinct_judged, mut distinct_cases) = (0, 0);
     for (run, set, raw) in &runs {
         let (fmt, cases) = read_cases(&fs::read(set).unwrap()).unwrap();
         let results = read_results(raw, fmt).unwrap();
-        let t = if fixture.is_empty() {
-            run_cases(&mut guest, &vcpu, &cases, &results, &compile).unwrap()
-        } else {
-            run_cases(&mut guest, &vcpu, &cases, &results, &python).unwrap()
-        };
+        let t = run_cases(&mut guest, &vcpu, &cases, &results, &python).unwrap();
+        let set_name = set.parent().unwrap().file_name().unwrap().to_string_lossy().to_string();
         let refused: usize = t.refused.values().sum();
         println!(
-            "run {run} ({}): {} cases; judged {}; Windows faults {} ({} judged at the VM's fault); model {}; refused \
-             {refused}; undefined memory {}; {} difference classes; {:.1} s",
-            set.parent().unwrap().file_name().unwrap().to_string_lossy(),
+            "run {run} ({set_name}): {} cases; judged {} ({:.0}%); Windows faults {} ({} judged at the VM's fault); \
+             model {}; refused {refused}; undefined memory {}; {} difference classes; {:.1} s",
             cases.len(),
             t.judged,
+            100.0 * t.judged as f64 / cases.len() as f64,
             t.windows_faults,
             t.faults_judged,
             t.model,
@@ -276,20 +257,65 @@ fn completed_cases_agree_with_windows() {
             t.differences.len(),
             t.seconds
         );
-        println!("    refused by cause: {:?}", t.refused);
         println!("    host requests by op: {:?}", t.host_requests);
-        let reach = |n: &str| t.by_class.get(n).copied().unwrap_or(0);
         println!(
-            "    judged with YMM upper halves {}, with x87 state {}; FCOS {}, FSIN {}",
-            t.ymm_judged,
-            t.x87_judged,
-            reach("FCOS"),
-            reach("FSIN")
+            "    judged with YMM upper halves {}, with x87 state {}",
+            t.ymm_judged, t.x87_judged
         );
         for (k, (n, example)) in t.differences.iter().take(12) {
             println!("    {n:6} {k}: {example}");
         }
-        differences += t.differences.len();
+        if !t.differences.is_empty() {
+            failures.push(format!("run {run}: {} difference classes", t.differences.len()));
+        }
+        if refused != 0 {
+            failures.push(format!("run {run}: {refused} refused: {:?}", t.refused));
+        }
+        let got = Counts {
+            set: set_name.clone(),
+            cases: cases.len(),
+            judged: t.judged,
+            windows_faults: t.windows_faults,
+            faults_judged: t.faults_judged,
+            model: t.model,
+            undefined_memory: t.undefined_memory,
+        };
+        match expected.get(run) {
+            Some(want) if *want == got => {}
+            Some(want) => failures.push(format!("run {run}: counts {got:?}, expected {want:?}")),
+            None => failures.push(format!("run {run}: not in store/case_runner/expected.tsv")),
+        }
+        reached.extend(t.by_class.keys().cloned());
+        if seen_sets.insert(set_name) {
+            distinct_judged += t.judged;
+            distinct_cases += cases.len();
+        }
     }
-    assert_eq!(differences, 0, "difference classes across the runs");
+    for run in expected.keys() {
+        if !runs.iter().any(|(r, _, _)| r == run) {
+            failures.push(format!("run {run}: expected, but its result is not downloaded"));
+        }
+    }
+    println!("distinct cases (each set once): {distinct_judged} judged of {distinct_cases}");
+
+    // link 3's revisit measure: the rule modules the iclasses of the cases judged whole reach, through the frozen
+    // registry's map (store/rules/registry.tsv)
+    let registry: BTreeMap<String, String> = fs::read_to_string(root.join("store/rules/registry.tsv"))
+        .unwrap()
+        .lines()
+        .map(|l| {
+            let (ic, m) = l.split_once('\t').unwrap();
+            (ic.to_string(), m.to_string())
+        })
+        .collect();
+    let modules: BTreeSet<&String> = registry.values().collect();
+    let hit: BTreeSet<&String> = reached.iter().filter_map(|ic| registry.get(ic)).collect();
+    let unmapped: Vec<&String> = reached.iter().filter(|ic| !registry.contains_key(*ic)).collect();
+    println!(
+        "rule modules reached by the judged cases: {} of {} ({} iclasses judged; without a rule module: {unmapped:?})",
+        hit.len(),
+        modules.len(),
+        reached.len()
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

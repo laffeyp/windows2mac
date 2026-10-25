@@ -26,8 +26,8 @@ use crate::assembler::{Assembler, Target};
 use crate::guest::{Exception, Guest, VMC_CURSOR, VMC_ENABLED};
 use crate::host_request::{self, Served};
 use crate::monitor::set_system_registers;
-use crate::monitor_code::{EMPTY_TARGET, REG_BUDGET};
-use crate::run::{FCW_OFF, LOCK_OWNER, MXCSR_OFF, REG_UNDEFINED_FLAGS, dispatch_insert, fpcr_for};
+use crate::monitor_code::{EMPTY_TARGET, HVC_FAULT_GIVE_BACK, REG_BUDGET};
+use crate::run::{FCW_OFF, LOCK_OWNER, MXCSR_OFF, REG_UNDEFINED_FLAGS, Tails, dispatch_insert, exit_count, fpcr_for};
 
 /// x19-x23 hold CF, ZF, SF, OF and PF (vm_backend 358, 371).
 pub const FLAG_REG: [(char, u8); 5] = [('C', 19), ('Z', 20), ('S', 21), ('O', 22), ('P', 23)];
@@ -45,8 +45,6 @@ pub const X87_ST_OFF: u64 = 768;
 /// The model's exits: an SSE instruction and one instruction run whole (vm_backend 1118, 1125).
 pub const HVC_SLOW_SSE: u16 = 10;
 pub const HVC_SLOW_STEP: u16 = 11;
-/// A guest fault left its block (vm_backend 1128).
-pub const HVC_FAULT_GIVE_BACK: u16 = 14;
 /// `Tally::host_requests`' key for the give-backs: above every transport op.
 pub const HOST_GIVE_BACK: u64 = 1 << 32;
 
@@ -401,6 +399,7 @@ pub fn run_cases(
     let offset = |g: &Guest, va: u64| g.layout.offset(va).unwrap() as usize;
     // the empty dispatch table (2795-2796), built once and copied whole per case: written entry by entry, an
     // unoptimized build took over an hour for the cases a release build runs in 33 s
+    let mut tails = Tails::default();
     let empty_table: Vec<u8> = (0..DISPATCH_ENTRIES)
         .flat_map(|_| {
             let mut e = [0u8; 16];
@@ -473,6 +472,9 @@ pub fn run_cases(
             }
             write_u64(mem, RUN_TABLE + RECON_COUNT, recon0 + marks.len() as u64);
             dispatch_insert(mem, CODE_VA, MONITOR_VA + cursor0);
+            // `flush_translations` dropped the tails; `_note_tails` (4630) the block's one instruction mark
+            tails.clear();
+            tails.note(&[marks[1].0]);
             // set_af_df (2089-2092): lazy operands that read back as AF and PF, and DF
             let bit = |f: char| c.rflags >> FLAG_BITS.iter().find(|(k, _)| *k == f).unwrap().1 & 1;
             write_u64(mem, md + AF_OPERANDS, if bit('A') == 1 { 0x10 } else { 0 });
@@ -531,12 +533,10 @@ pub fn run_cases(
                 }
                 e => e,
             };
-            if e.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK) {
-                // a guest fault left its block (5205-5206, 5294-5296): the faulting instruction and those after it go
-                // back to the budget, then on to w2m_exception. A case's block holds one instruction, so
-                // `_unrun_after` is 0 and one goes back.
-                let left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
-                vcpu.set_reg(Reg::X(REG_BUDGET as u8), left.wrapping_add(1))?;
+            if e.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK as u16) {
+                // a guest fault left its block (5205-5208, 5294-5296): the faulting instruction and those after it go
+                // back to the budget and the count is written, then on to w2m_exception
+                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, true)?;
                 *tally.host_requests.entry(HOST_GIVE_BACK).or_default() += 1;
                 continue;
             }
