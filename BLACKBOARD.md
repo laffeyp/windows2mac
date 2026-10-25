@@ -369,6 +369,7 @@
 - **2026-10-24** — Sprint 146 (the virtual memory arena in Rust). `crates/virtual_memory` carries `src/w2m/virtual_memory.py` whole: reservations, commits, protections and VirtualQuery over the arena, the images, the main stack and the heap. Replaying the `virtual_memory` probe's calls gives 38 rows equal to Windows's on both runners' images, and the `thread_stack` probe's six query rows equal Windows's with the stack the Rust process area writes; two image rows wait for the probe's run in the VM. Dual contract: pass; the plant named `protect.reserved_page`. Its CI run is recorded in Sprint 147's tail entry.
 - **2026-10-25** — Sprint 147 (the fault path). The Rust host serves the requests a fault's walk through the C guest runtime makes (the give-back of `hvc #14`, the main stack's grow, module lookup, the x86 stubs' page on an arena page with its thunk and bridge, the process's end), reads the exception area, and judges each fault as `judge_fault` does. In the 22 Intel runs, 173,776 cases agree with Windows with zero difference classes: 148,614 completed and 25,162 faults. Dual contract: pass; RIP read 8 bytes off gave 168 classes. Its CI run is recorded in Sprint 148's tail entry.
 - **2026-10-25** — Sprint 148 (the vector and x87 state). The case runner judges every case on its whole recorded state: MXCSR with FPSR's flags folded in and XMM0-15 on all 173,776 judged cases, the YMM upper halves on 43,919, the x87 registers on 5,960, at completion and at a fault, as `judge_done`, `judge_fault` and `judge_x87` do. Zero difference classes in the 22 Intel runs; no FCOS or FSIN case reaches the judge (both leave to the model). Dual contract: pass; IDC folded into the wrong MXCSR bit was named. Its CI run is recorded in Sprint 149's tail entry.
+- **2026-10-25** — Sprint 149 (the case runner bound; reviewer-2's link-3 review). The case runner can no longer pass on nothing: in the gates a missing fixture or result, a refusal or a count unlike `store/case_runner/expected.tsv` fails; the Python words fixture is pinned by a header (layout and the runtime symbol table's sha256) and a committed sha256. Link 3's revisit measured: the judged cases reach 235 of 249 rule modules, above the condition's 125, so the rules port in groups. The give-back is one function with the Python's guard and count; the arena's replay runs on CI. Three plants named. Its CI run is recorded in Sprint 150's tail entry.
 
 ## Deferred
 
@@ -439,6 +440,15 @@
 ---
 
 ## Sprint tail
+
+### Sprint 149 (2026-10-25, closed)
+- **Scope:** the large review of link 3 (reviewer-2, 2026-10-25): two blocking findings (a vacuous pass; the revisit unmeasured) and Mediums 1-4, fixed before link 4.
+- **Dual contract:** signal — none fired; Sprint 150 binds the runner's verdicts to records (Medium 5); artifact pass (fmt, clippy, the gates with `W2M_REQUIRE_CASE_RUNS=1`); observation pass (counts equal per run, zero differences, three plants named, the revisit measured at 235 of 249).
+- **CI does not run:** the case runner (`crates/w2m_vm/tests/case_runner.rs`: macOS only, downloaded results, the fixture). The arena's replay now does.
+- **Corrections:** Sprint 148's observation 3 said the runner judges everything `scripts/vm_oracle.py` judges; it does not judge the 116,718 cases the model runs. Sprints 147 and 148 gave 173,776 judged; set 039 runs twice, and 136,153 distinct cases are judged of 250,840. Sprint 145's observation 1 was marked resolved-here while the vacuous path stayed in the code.
+- **Rubber Duck Pass:** *Observation 1 (two plants that ran nothing):* the first runs of two plants passed a command through a zsh variable, which does not word-split, and exited 127 without running; the empty grep was nearly read as a pass. Disposition: resolved-here (rerun with the command written out; both named). *Observation 2 (the fixture's generator is inline Python):* regenerating the fixture runs the frozen Python inline, which the user's ruling allows as running; it is named in WORKING_AGREEMENT. Disposition: recorded.
+- **Closed:** Sprint 148's CI run 40172473690 (success on 90d5b84b6).
+- **Files:** crates/w2m_vm/, scripts/gates.sh, store/case_runner/, store/rules/registry.tsv, WORKING_AGREEMENT.md, KIT_DIARY.md, BLACKBOARD.md, sprints/sprint-149-the-case-runner-bound.md, signal-reports/sprint-149-report.md.
 
 ### Sprint 148 (2026-10-25, closed)
 - **Scope:** the case runner's last judged fields: MXCSR, XMM, the YMM upper halves and the x87 state, at completion and at a fault.
