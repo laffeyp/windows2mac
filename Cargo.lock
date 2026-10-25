@@ -148,6 +148,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "translator"
+version = "0.1.0"
+dependencies = [
+ "a64_encoder",
+ "guest_runtime",
+ "serde_json",
+ "x86_decoder",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -188,6 +198,7 @@ dependencies = [
  "pe_image",
  "pe_loader",
  "serde_json",
+ "translator",
  "virtual_memory",
  "x86_decoder",
 ]

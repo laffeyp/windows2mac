@@ -12,6 +12,7 @@ guest_runtime = { path = "../guest_runtime" }
 hypervisor = { path = "../hypervisor" }
 cpu_cases = { path = "../cpu_cases" }
 events = { path = "../events" }
+translator = { path = "../translator" }
 pe_loader = { path = "../pe_loader" }
 virtual_memory = { path = "../virtual_memory" }
 x86_decoder = { path = "../x86_decoder" }

@@ -48,7 +48,7 @@ mod run {
         SessionOutcome, SessionPurpose, Sha256, SubjectKind, TraceIngested, VOCAB_VERSION, Value, Verdict, Version,
         harness_line,
     };
-    use w2m_vm::case_inputs::{Fixture, runs, with_case_vm};
+    use w2m_vm::case_inputs::{Fixture, Hybrid, runs, with_case_vm};
     use w2m_vm::cases::run_cases;
 
     /// The differential's name: the record's baseline and the ledger's key (differential.py 64).
@@ -106,14 +106,12 @@ mod run {
 
     /// differential.py `open_on` (137-139) over the ledger file `rebuild_ledger` writes: the discrepancies this
     /// differential reported on `unit` that no record has resolved.
-    fn open_on(ledger: &Value, unit: &str) -> Vec<String> {
+    fn open_on(ledger: &Value, judge: &str, unit: &str) -> Vec<String> {
         let mut out: Vec<String> = ledger
             .as_object()
             .map(|m| {
                 m.iter()
-                    .filter(|(_, v)| {
-                        v["differential"] == DIFFERENTIAL && v["unit"] == unit && v["resolved_in"].is_null()
-                    })
+                    .filter(|(_, v)| v["differential"] == judge && v["unit"] == unit && v["resolved_in"].is_null())
                     .map(|(k, _)| k.clone())
                     .collect()
             })
@@ -134,7 +132,36 @@ mod run {
             return Err("no downloaded Intel results in build/probe-runs".into());
         }
         let fixture = Fixture::load(&root).ok_or("no Python words fixture (build/case_runner/python-words.txt)")??;
-        let compile = |code: &[u8], a: u64, base: u64, exit: u64| fixture.compile(code, a, base, exit);
+        // `--rust-translator` (Sprint 151): the Rust translator for the classes link 5's groups carry, the Python words
+        // for the rest; the judge's name then says so
+        let use_rust = std::env::args().skip(1).any(|a| a == "--rust-translator");
+        let judge = if use_rust { "case-runner-rust" } else { DIFFERENTIAL };
+        let hybrid = Hybrid::new(&fixture);
+        let compile = |code: &[u8], a: u64, base: u64, exit: u64| {
+            if use_rust {
+                hybrid.compile(code, a, base, exit)
+            } else {
+                fixture.compile(code, a, base, exit)
+            }
+        };
+        // the translator's identity: its sources, in name order
+        let translator_sha = {
+            let dir = root.join("crates/translator/src");
+            let mut names: Vec<PathBuf> = fs::read_dir(&dir)
+                .map_err(|e| e.to_string())?
+                .map(|e| e.unwrap().path())
+                .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+                .collect();
+            names.sort();
+            let mut all = Vec::new();
+            for p in names {
+                all.extend(p.file_name().unwrap().to_string_lossy().as_bytes());
+                all.push(0);
+                all.extend(fs::read(&p).map_err(|e| e.to_string())?);
+                all.push(0);
+            }
+            sha256(&all)
+        };
         let store = root.join("store/probe-runs").join(&runs[0].id);
         let cpu = fs::read_to_string(store.join("cpu.txt")).map_err(|e| e.to_string())?;
         let profile_txt = fs::read_to_string(store.join("profile.txt")).unwrap_or_default();
@@ -270,19 +297,30 @@ mod run {
         let (mut accepted, mut reported) = (0, 0);
         for (unit, v) in units.iter_mut() {
             v.differences.sort_by_key(|a| std::cmp::Reverse(a.0));
-            let cid = format!("{DIFFERENTIAL}:{}@{}", safe(unit), &fixture.sha256[..12]);
-            let repairing = open_on(&ledger, unit);
+            // a class the Rust translator compiled is its candidate; any other, the Python words' (Sprint 151)
+            let by_rust = hybrid.rust.borrow().contains_key(unit);
+            let (generator, candidate) = if by_rust {
+                (
+                    "the Rust translator (crates/translator), run by the Rust case runner",
+                    translator_sha.as_str(),
+                )
+            } else {
+                (
+                    "the frozen Python lowering's words (build/case_runner/python-words.txt), run by the Rust case runner",
+                    fixture.sha256.as_str(),
+                )
+            };
+            let cid = format!("{judge}:{}@{}", safe(unit), &candidate[..12]);
+            let repairing = open_on(&ledger, judge, unit);
             emit(
                 &mut out,
                 &CandidateGenerated {
                     candidate_id: id(cid.clone()),
                     contract_id: contract.clone(),
                     contract_version: version.clone(),
-                    generator_ref: "the frozen Python lowering's words (build/case_runner/python-words.txt), run \
-                                    by the Rust case runner"
-                        .into(),
+                    generator_ref: generator.into(),
                     attempt: u(1),
-                    candidate_sha256: sha(&fixture.sha256),
+                    candidate_sha256: sha(candidate),
                     parent_candidate_id: None,
                     discrepancy_id: repairing.first().map(|d| id(d.clone())),
                 },
@@ -345,7 +383,7 @@ mod run {
                 }
             } else {
                 reported += 1;
-                let did = format!("{DIFFERENTIAL}-{session}-{}", safe(unit));
+                let did = format!("{judge}-{session}-{}", safe(unit));
                 emit(
                     &mut out,
                     &CandidateRejected {

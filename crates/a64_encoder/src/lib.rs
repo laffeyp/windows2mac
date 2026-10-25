@@ -6,6 +6,9 @@
 //! `tests/test_a64_encoder.py` and the fixed words the monitor code uses. Registers are 0 to 31; 31 is XZR or SP as
 //! the instruction defines it. A register or immediate out of range panics, as the Python's asserts raised.
 
+/// A word list with labels (`vm_backend.Assembler`; Sprint 136, moved here in Sprint 151).
+pub mod assembler;
+
 /// The condition codes (`COND`).
 pub fn cond(name: &str) -> u32 {
     match name {

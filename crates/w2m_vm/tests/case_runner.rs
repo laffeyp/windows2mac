@@ -17,7 +17,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cpu_cases::{read_cases, read_results};
-use w2m_vm::case_inputs::{Counts, Fixture, expected, registry, runs, with_case_vm};
+use w2m_vm::case_inputs::{Counts, Fixture, Hybrid, expected, registry, runs, with_case_vm};
 use w2m_vm::cases::run_cases;
 
 fn root() -> PathBuf {
@@ -35,8 +35,25 @@ fn missing(what: &str) {
     eprintln!("{what}: the case runner is not run here");
 }
 
+/// The Python words for every case.
 #[test]
 fn every_judged_case_agrees_with_windows() {
+    judge(false);
+}
+
+/// Sprint 151: the Rust translator for the classes link 5's groups have carried, the Python words for the rest. The
+/// same counts and zero differences, and the Rust words equal the Python's for every code the Rust compiled.
+#[test]
+fn every_judged_case_agrees_with_windows_with_the_rust_translator() {
+    judge(true);
+}
+
+/// One VM a process (`hv_vm_create`): the two tests run on parallel threads, so each holds this while its VM lives
+/// (the first gates run of Sprint 151 failed the second with HV_BUSY, -85377016).
+static ONE_VM: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn judge(use_rust: bool) {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
     let runs = runs(&root);
     if runs.is_empty() {
@@ -53,7 +70,14 @@ fn every_judged_case_agrees_with_windows() {
         fixture.header.base,
         fixture.header.exit
     );
-    let compile = |code: &[u8], address: u64, base: u64, exit_va: u64| fixture.compile(code, address, base, exit_va);
+    let hybrid = Hybrid::new(&fixture);
+    let compile = |code: &[u8], address: u64, base: u64, exit_va: u64| {
+        if use_rust {
+            hybrid.compile(code, address, base, exit_va)
+        } else {
+            fixture.compile(code, address, base, exit_va)
+        }
+    };
     let expected = expected(&root);
 
     let (failures, reached, distinct) = with_case_vm(&root, &fixture, |guest, vcpu| {
@@ -141,5 +165,26 @@ fn every_judged_case_agrees_with_windows() {
         modules.len(),
         reached.len()
     );
+    if use_rust {
+        let rust = hybrid.rust.borrow();
+        let unlike = hybrid.unlike.borrow();
+        println!(
+            "the Rust translator compiled {} cases in {} classes: {rust:?}",
+            rust.values().sum::<usize>(),
+            rust.len()
+        );
+        for (code, class, d) in unlike.iter().take(12) {
+            println!("    {class} {code:02x?}: {d}");
+        }
+        if rust.is_empty() {
+            failures.push("the Rust translator compiled no case".into());
+        }
+        if !unlike.is_empty() {
+            failures.push(format!(
+                "{} cases whose Rust words differ from the Python's",
+                unlike.len()
+            ));
+        }
+    }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

@@ -1,0 +1,25 @@
+# The case runner's verdicts with the Rust translator (Sprint 151; harness/case-runs.toml is Sprint 150's): the Rust
+# translator for the classes link 5's groups carry, the frozen Python lowering's words for the rest. Run from the
+# repository root after `cargo build --release`, on this Mac (Hypervisor.framework, build/probe-runs, the fixture):
+#   uv run substrate run --file harness/case-runs-rust.toml --root store/runs/case-runner-rust-<ns> --strict
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.10"
+# not `differential`: that key marks the causal records differential.py writes, which tests/test_differential.py holds
+# to their chain; this record's events come from one Producer
+judge = "case-runner-rust"
+implementation = "the Rust translator for link 5's carried groups, the frozen Python lowering's words for the rest, run by the Rust case runner"
+reference = "the Intel runs of store/case_runner/expected.tsv"
+
+[[producer]]
+kind = "case_runs"
+# hv_vm_create refuses an unsigned process: the binary is signed with the Hypervisor entitlement first
+command = ["../scripts/sign_and_run.sh", "../target/release/case_runs", "--rust-translator"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "case_runs"
+
+[termination]
+recipe = "all_completed"

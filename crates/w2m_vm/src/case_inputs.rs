@@ -171,6 +171,67 @@ impl Fixture {
     }
 }
 
+/// The Rust translator for the classes its rules lift, the fixture's Python words for the rest (Sprint 151): the
+/// compiler that judges link 5's groups against Windows while the others are still the Python's. Each class the Rust
+/// compiled is counted, and its words are compared with the fixture's, which were made for the same layout with the
+/// same flag arguments (no NZCV source, every flag live after, no NZCV out).
+pub struct Hybrid<'a> {
+    pub fixture: &'a Fixture,
+    /// iclass -> cases the Rust compiled
+    pub rust: std::cell::RefCell<BTreeMap<String, usize>>,
+    /// a code whose Rust words differ from the Python's: (code, its class, the difference)
+    pub unlike: std::cell::RefCell<Vec<(Vec<u8>, String, String)>>,
+}
+
+impl<'a> Hybrid<'a> {
+    pub fn new(fixture: &'a Fixture) -> Hybrid<'a> {
+        Hybrid {
+            fixture,
+            rust: Default::default(),
+            unlike: Default::default(),
+        }
+    }
+
+    /// `cases::Compile` (the Python's lockstep compile, vm_backend 4611-4618: `lift(code + bytes(16), CODE_VA)`).
+    pub fn compile(&self, code: &[u8], address: u64, base: u64, exit_va: u64) -> Result<Compiled, String> {
+        let mut padded = code.to_vec();
+        padded.extend([0u8; 16]);
+        let Ok(ins) = translator::lift::lift(&padded, address) else {
+            return self.fixture.compile(code, address, base, exit_va);
+        };
+        let state_va = guest_runtime::layout::PROCESS_VA + guest_runtime::layout::STATE_OFF;
+        let mut a = a64_encoder::assembler::Assembler::new(base);
+        let ends = translator::lower::compile_insn(
+            &mut a,
+            &ins,
+            exit_va,
+            state_va,
+            None,
+            translator::lower::ALL_FLAGS,
+            false,
+        )
+        .map_err(|e| format!("the Rust compiler: {e}"))?;
+        let words = a.finish();
+        *self.rust.borrow_mut().entry(ins.iclass.clone()).or_default() += 1;
+        if let Ok(python) = self.fixture.compile(code, address, base, exit_va)
+            && (python.words != words || python.ends != ends)
+        {
+            let shown = |w: &[u32]| w.iter().map(|x| format!("{x:08x}")).collect::<Vec<_>>().join(" ");
+            self.unlike.borrow_mut().push((
+                code.to_vec(),
+                ins.iclass.clone(),
+                format!(
+                    "rust [{}] {ends}, python [{}] {}",
+                    shown(&words),
+                    shown(&python.words),
+                    python.ends
+                ),
+            ));
+        }
+        Ok(Compiled { words, ends })
+    }
+}
+
 /// The sha256 of a symbol table as the fixture's generator writes it: `name=0x<address>` lines, sorted by name.
 pub fn symbols_sha256(symbols: &BTreeMap<String, u64>) -> String {
     let text: String = symbols.iter().map(|(n, v)| format!("{n}=0x{v:x}\n")).collect();

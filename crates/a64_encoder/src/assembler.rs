@@ -72,7 +72,7 @@ impl Assembler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use a64_encoder as a64;
+    use crate as a64;
 
     #[test]
     fn branches_resolve_forward_and_backward() {

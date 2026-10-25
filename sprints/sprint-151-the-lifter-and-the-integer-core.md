@@ -106,3 +106,28 @@ emitter, and its cases agree with Windows.
 - [x] One concept: the first group, with the lifter it needs.
 
 ## result
+
+- `crates/translator`: `lift.rs` (the op type for the group's ops, `Builder`, `operand`, `val`, `push`, `pop`,
+  `commit_order`, `lift`), `rules.rs` (the registry and group 1's eight rules over 38 classes), `lower.rs`
+  (`compile_insn` with the flag setters, liveness, NZCV conditions, condition reads, temporaries, operand forms,
+  address folding and fused moves). `vm_backend.Assembler` moved from `w2m_vm` to `a64_encoder` (`git mv`), so the
+  translator reaches it without a cycle; `w2m_vm` re-exports it.
+- **The C emitter (`tests/c_words.rs`).** Of the record's 1,186,511 calls the Rust rules lift 1,060,796; the C emitter
+  refuses 5 of them (status -7: JNZ 1, LEA 3, NOP 1); the other 1,060,791, in 35 classes (three of the 38 are not in the
+  record), are compared, and the Rust words equal the C's on every one. The Rust compiler refused none. 2.4 s in
+  release.
+- **Windows (`tests/case_runner.rs`, the hybrid compiler).** The Rust translator compiled 36,939 case instructions in
+  all 38 classes and the Python words the rest; each of the 22 runs' counts equals `expected.tsv`, with zero difference
+  classes, and for every code the Rust compiled its words equal the fixture's Python words.
+- **Carried:** `tests/test_operand_forms.py`'s four cases, as unit tests of `operand_forms`. `tests/test_symbolic_lift.py`
+  judges `symbolic_lift.py`'s templates, which this group does not carry.
+- **The record, withheld.** `harness/case-runs-rust.toml` (judge `case-runner-rust`) made a record holding 387 classes
+  accepted, 38 of them the Rust translator's candidates. reviewer-2's review of Sprints 149-150 (2026-10-25) then found
+  that the record form Sprint 150 built states a validation that never happened (TRACE_INGESTED over verdict lines, High
+  1), keeps its discrepancies out of the ledger (High 2) and merges three reference CPUs into one profile (Medium 1).
+  This record has the same form, so it is not committed; Sprint 152 fixes the form and makes both judges' records
+  again. The card's Emits are therefore not met in this sprint: the signal contract is deferred to Sprint 152.
+- **Planted faults:** `_set_flags`'s CF after `sub` set on `hs` in place of `lo`: the C judge named "CMP flags [0, 1,
+  0]: … rust [eb070012 9a9f37f3 …] c [eb070012 9a9f27f3 …]" first, and the case runner named "CMP CF: case 4622 … vm
+  0, cpu 1" and "SUB CF: case 2842 … vm 1, cpu 0". The lifter's immediate sign extension removed: the C judge named
+  "ADD flags [0, 0, 0]: … rust [9103c108] c [d29ffe12 f2bffff2 f2dffff2 f2fffff2 8b120108]" first. Restored, all pass.
