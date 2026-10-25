@@ -368,6 +368,7 @@
 - **2026-10-24** — Sprint 145 (the case runner; link 3's judge). `crates/w2m_vm/src/cases.rs` runs CPU cases in lockstep in a Rust VM, each instruction framed in a one-instruction block by a compiler the caller gives, and judges every completed case against Windows on GPRs, path, defined flags, DF and windows. The C emitter compiles none of the cases at their own address (its stencil keys carry the game's address class), so the design is amended: the runner judges whatever lowering it is given. On the frozen Python lowering's words, 148,614 completed cases from 22 Intel runs agree with Windows, with zero difference classes. Dual contract: pass; swapped flag registers gave 85 difference classes. Its CI run is recorded in Sprint 146's tail entry.
 - **2026-10-24** — Sprint 146 (the virtual memory arena in Rust). `crates/virtual_memory` carries `src/w2m/virtual_memory.py` whole: reservations, commits, protections and VirtualQuery over the arena, the images, the main stack and the heap. Replaying the `virtual_memory` probe's calls gives 38 rows equal to Windows's on both runners' images, and the `thread_stack` probe's six query rows equal Windows's with the stack the Rust process area writes; two image rows wait for the probe's run in the VM. Dual contract: pass; the plant named `protect.reserved_page`. Its CI run is recorded in Sprint 147's tail entry.
 - **2026-10-25** — Sprint 147 (the fault path). The Rust host serves the requests a fault's walk through the C guest runtime makes (the give-back of `hvc #14`, the main stack's grow, module lookup, the x86 stubs' page on an arena page with its thunk and bridge, the process's end), reads the exception area, and judges each fault as `judge_fault` does. In the 22 Intel runs, 173,776 cases agree with Windows with zero difference classes: 148,614 completed and 25,162 faults. Dual contract: pass; RIP read 8 bytes off gave 168 classes. Its CI run is recorded in Sprint 148's tail entry.
+- **2026-10-25** — Sprint 148 (the vector and x87 state). The case runner judges every case on its whole recorded state: MXCSR with FPSR's flags folded in and XMM0-15 on all 173,776 judged cases, the YMM upper halves on 43,919, the x87 registers on 5,960, at completion and at a fault, as `judge_done`, `judge_fault` and `judge_x87` do. Zero difference classes in the 22 Intel runs; no FCOS or FSIN case reaches the judge (both leave to the model). Dual contract: pass; IDC folded into the wrong MXCSR bit was named. Its CI run is recorded in Sprint 149's tail entry.
 
 ## Deferred
 
@@ -438,6 +439,13 @@
 ---
 
 ## Sprint tail
+
+### Sprint 148 (2026-10-25, closed)
+- **Scope:** the case runner's last judged fields: MXCSR, XMM, the YMM upper halves and the x87 state, at completion and at a fault.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, the gates); observation pass (zero differences; the fields' reach counted; the plant named).
+- **Rubber Duck Pass:** *Observation 1 (a zero needs its denominator):* the first run showed zero differences with no count of the cases that carried YMM or x87 state; the tally now counts them (43,919 and 5,960), so a zero over an empty set would show. Disposition: resolved-here. *Observation 2 (FCOS and FSIN untested here):* the two classes the Python's class runs did not accept never reach the runner's judge; they leave to the model. Disposition: deferred to the model's port. *Observation 3 (link 3 complete):* with this sprint the case runner judges everything `scripts/vm_oracle.py` judges; the next link is the lifter. Disposition: recorded.
+- **Closed:** Sprint 147's CI run 40171349437 (success on 926723fde).
+- **Files:** crates/w2m_vm/, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-148-the-vector-and-x87-state.md, signal-reports/sprint-148-report.md.
 
 ### Sprint 147 (2026-10-25, closed)
 - **Scope:** cases Windows ended in a fault run to the same fault in the Rust VM, judged on code, RIP, registers, flags, MXCSR, XMM and memory through the guest's exception records.
