@@ -352,6 +352,7 @@
 - **2026-10-24** — Sprint 130 (the host redesigned, no lock across a service; fix (b) of Decision 2026-10-24 user). `docs/design-rust-host-2026-10-24.md` replaces the design of 2026-10-23: each runtime service takes the lock of what it touches or none; a transport page per vCPU and no guest lock across `hvc #8`; translation into per-vCPU regions, atomic dispatch slots, tombstones, page locks, epochs; one process's waits in its VM; three-state lock words that stop spinning. One shared lock kept on purpose, the run-table word for scheduling, with a revisit condition at step 6. Dual contract: pass; observation: `design_check` passes it, and the planted design without QEMU's sources fails by name. Closed: CI run 40146813471 (84e1ef1f5).
 - **2026-10-24** — Sprint 131 (vocabulary 0.10; fix (e) of Decision 2026-10-24 user). P21 deprecates 24 tags no code fires (19 harness, 5 guest); each keeps its entry. The Rust generator gives them no type, no schema entry and no sample, refuses them by name, and fails `--check` on a hand-written crate that names one; Rust reads `signals/rust-current.json` (0.10), the frozen Python `signals/current.json` (0.9). Records: `store/runs/vocabulary-samples-20261025T004412` (33 kinds, 2 each) and `session-check-20261025T004412` (vocab_version 0.10). Dual contract: pass; observation: three plants caught by name. Closed: CI run 40147980735 (56af28c0f).
 - **2026-10-25** — Sprint 132 (a vCPU in Rust; step 3's first link). `crates/hypervisor` binds 16 Hypervisor.framework calls from the macOS 26.5 SDK behind `Vm`, `Vcpu`, `VcpuHandle` and `GuestMemory`; a cargo runner signs with the entitlement. Three tests run arm64 code on one vCPU: an `hvc` exit with its immediate, x0 and the PC after it; a resume; a stop from another thread. An exit and resume: 832 to 873 ns, the C monitor 813 to 852 ns the same day. Dual contract: pass; two plants caught (a `Vcpu` moved across threads does not compile; HV_DENIED without the entitlement). Closed: CI run 40149456660 (5494fe361).
+- **2026-10-25** — Sprint 133 (the guest runtime built from Rust; step 3's second link). `crates/guest_runtime` carries the guest-memory layout from `vm_backend.py` and `scheduler.py` line by line, writes the five generated headers byte for byte, computes the Python's cache key, and builds with clang and `ld -preload`. The image equals the frozen Python build's under the same key, byte for byte (3,169,760 bytes, 706 symbols). Dual contract: pass; three plants caught. Closed: CI run CIRUN-133 (COMMIT-133).
 
 ## Deferred
 
@@ -422,6 +423,12 @@
 ---
 
 ## Sprint tail
+
+### Sprint 133 (2026-10-25, closed)
+- **Scope:** the C guest runtime's image built from Rust, equal to the frozen Python host's, byte for byte.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, 9 tests, the gates); observation pass (the key names a Python image; the images equal; every service present; three plants caught).
+- **Rubber Duck Pass:** *Observation 1 (a judge that leans on a local cache):* the byte-for-byte reference is the Python build's file under `build/guest_runtime/`, which is untracked and absent on CI's Linux runner (the test is macOS-only), and which step 4 retires with the Python host. Disposition: recorded (when the Python host moves under `oracle/`, the image's SHA-256 for the sources of that commit is written into the test as the reference, and a change to the C runtime updates it in the sprint that makes the change). *Observation 2 (a plant changed from the card):* the card named a header byte; a source byte tests the same key path. Disposition: resolved-here (named in the result).
+- **Files:** crates/guest_runtime/, Cargo.toml, Cargo.lock, WORKING_AGREEMENT.md, sprints/sprint-133-the-guest-runtime-built-from-rust.md, signal-reports/sprint-133-report.md.
 
 ### Sprint 132 (2026-10-25, closed)
 - **Scope:** a VM and one vCPU created, run and served from Rust, with no C monitor between.
