@@ -3,15 +3,16 @@
 //! The CPU cases run in a Rust VM, one instruction per block, and each completed case judged against the result
 //! Windows gave (Sprint 145): `scripts/vm_oracle.py` `run_cases` and `judge_done`. The instruction's words come from a
 //! compiler the caller gives, today the C emitter built for the host, until the Rust lowering takes its place. A case
-//! Windows ended in a fault is judged through the guest's exception records (Sprint 147: `judge_fault`). The vector
-//! registers and the x87 state of a completed case are not judged yet. Each function cites the lines it carries.
+//! Windows ended in a fault is judged through the guest's exception records (Sprint 147: `judge_fault`). Every judged
+//! case is judged on its whole recorded state, MXCSR, XMM, the YMM upper halves and the x87 registers with it (Sprint
+//! 148). Each function cites the lines it carries.
 
 use std::collections::BTreeMap;
 use std::time::Instant;
 
 use cpu_cases::{
     CODE_VA, Case, CaseResult, DATA_OFF, DATA_VA, DF_BIT, EDGE, EDGE_OFF, FLAG_BITS, RET_TARGET, STACK_OFF, STACK_SIZE,
-    STACK_VA, WINDOW,
+    STACK_VA, WINDOW, X87State,
 };
 use guest_runtime::layout::{
     DISPATCH_ENTRIES, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE,
@@ -101,9 +102,22 @@ pub struct Tally {
     /// difference -> (count, an example)
     pub differences: BTreeMap<String, (usize, String)>,
     pub seconds: f64,
+    /// cases judged on their whole state, by iclass, and of them those with YMM upper halves (format 3) and with x87
+    /// state (format 4) in the Windows result
+    pub by_class: BTreeMap<String, usize>,
+    pub ymm_judged: usize,
+    pub x87_judged: usize,
 }
 
 impl Tally {
+    /// A case judged on its whole recorded state (at completion or at a fault).
+    fn judged_whole(&mut self, iclass: &str, r: &CaseResult) {
+        self.judged += 1;
+        *self.by_class.entry(iclass.to_string()).or_default() += 1;
+        self.ymm_judged += usize::from(r.ymm_hi.is_some());
+        self.x87_judged += usize::from(r.x87.is_some());
+    }
+
     fn note(&mut self, iclass: &str, key: &str, example: String) {
         let e = self
             .differences
@@ -169,9 +183,110 @@ fn windows(guest: &Guest, r: &CaseResult) -> Vec<(String, String)> {
     out
 }
 
-/// `judge_fault` (vm_oracle 96-123), without the YMM upper halves and the x87 state: a fault the VM's guest runtime
-/// recorded against the CONTEXT Windows gave its vectored handler.
-fn judge_fault(guest: &Guest, r: &CaseResult, exc: &Exception) -> Vec<(String, String)> {
+/// vm_backend 1117: (FPSR bit, MXCSR bit): IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE.
+const FPSR_TO_MXCSR: [(u32, u32); 6] = [(0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1)];
+
+/// `mxcsr_flags_from_fpsr` (vm_backend 1146-1147).
+fn mxcsr_flags_from_fpsr(fpsr: u64) -> u64 {
+    FPSR_TO_MXCSR
+        .iter()
+        .filter(|(f, _)| fpsr >> f & 1 == 1)
+        .map(|(_, m)| 1u64 << m)
+        .sum()
+}
+
+/// `Vcpu.ymm_hi`: YMM0-15 bits 255:128, the monitor data page's slots (Sprint 049).
+fn vm_ymm_hi(guest: &Guest) -> [u128; 16] {
+    let mem = guest.memory.as_slice();
+    std::array::from_fn(|i| {
+        let at = (MONITOR_DATA + YMM_HI_OFF) as usize + 16 * i;
+        u128::from_le_bytes(mem[at..at + 16].try_into().unwrap())
+    })
+}
+
+/// `Vcpu.x87`: FCW from the monitor data page, FSW, the abridged tags and ST0-ST7 in stack order from the state block
+/// (Sprint 065).
+fn vm_x87(guest: &Guest) -> X87State {
+    let mem = guest.memory.as_slice();
+    let md = (MONITOR_DATA + FCW_OFF) as usize;
+    let st = (MONITOR_SIZE + STATE_OFF) as usize;
+    let sw = st + X87_SW_OFF as usize;
+    X87State {
+        cw: u16::from_le_bytes([mem[md], mem[md + 1]]),
+        sw: u16::from_le_bytes([mem[sw], mem[sw + 1]]),
+        tags: mem[sw + 2],
+        st: std::array::from_fn(|i| {
+            let at = st + X87_ST_OFF as usize + 16 * i;
+            let mut b = [0u8; 16];
+            b[..10].copy_from_slice(&mem[at..at + 10]);
+            u128::from_le_bytes(b)
+        }),
+    }
+}
+
+/// semantics_differential 997-1001: FSW's condition codes each class leaves undefined.
+const C0: u16 = 1 << 8;
+const C1: u16 = 1 << 9;
+const C2: u16 = 1 << 10;
+const C3: u16 = 1 << 14;
+
+fn x87_undefined(label: &str) -> u16 {
+    match label {
+        "FLD" | "FSTP" | "FMUL" | "FADD" | "FIADD" | "FIDIVR" | "FSQRT" | "FISTP" | "FISTTP" => C0 | C2 | C3,
+        "FSIN" | "FCOS" => C0 | C3,
+        "FLDCW" | "FNCLEX" => C0 | C1 | C2 | C3,
+        _ => 0,
+    }
+}
+
+/// `judge_x87` (semantics_differential 1009-1024): FCW, FSW without the condition codes the class leaves undefined,
+/// the abridged tags, and ST0-ST7 (an empty register too). Keys without the label, as `judge_done` uses them.
+fn judge_x87(label: &str, c: &Case, m: &X87State, r: &X87State) -> Vec<(String, String)> {
+    let mut diffs = Vec::new();
+    if m.cw != r.cw {
+        diffs.push(("FCW".into(), format!("model 0x{:x}, cpu 0x{:x}", m.cw, r.cw)));
+    }
+    let keep = !x87_undefined(label);
+    if m.sw & keep != r.sw & keep {
+        let before = c.x87.map(|x| format!(" (in 0x{:x})", x.sw)).unwrap_or_default();
+        diffs.push(("FSW".into(), format!("model 0x{:x}, cpu 0x{:x}{before}", m.sw, r.sw)));
+    }
+    if m.tags != r.tags {
+        diffs.push(("FTW".into(), format!("model 0x{:02x}, cpu 0x{:02x}", m.tags, r.tags)));
+    }
+    for i in 0..8 {
+        if m.st[i] != r.st[i] {
+            diffs.push((
+                format!("st{i}"),
+                format!("model {:020x}, cpu {:020x}", m.st[i], r.st[i]),
+            ));
+        }
+    }
+    diffs
+}
+
+/// `judge_done`'s and `judge_fault`'s format 3 and 4 parts (vm_oracle 150-155, 116-121): the YMM upper halves and the
+/// x87 state, each key with `prefix`.
+fn judge_ymm_x87(guest: &Guest, label: &str, c: &Case, r: &CaseResult, prefix: &str) -> Vec<(String, String)> {
+    let mut diffs = Vec::new();
+    if let Some(want) = r.ymm_hi {
+        for (i, (vm, cpu)) in vm_ymm_hi(guest).iter().zip(want).enumerate() {
+            if *vm != cpu {
+                diffs.push((format!("{prefix}ymm{i}.hi"), format!("vm {vm:032x}, cpu {cpu:032x}")));
+            }
+        }
+    }
+    if let Some(want) = &r.x87 {
+        for (k, d) in judge_x87(label, c, &vm_x87(guest), want) {
+            diffs.push((format!("{prefix}{k}"), d));
+        }
+    }
+    diffs
+}
+
+/// `judge_fault` (vm_oracle 96-123): a fault the VM's guest runtime recorded against the CONTEXT Windows gave its
+/// vectored handler, and the YMM upper halves and x87 state as the fault left them.
+fn judge_fault(guest: &Guest, label: &str, c: &Case, r: &CaseResult, exc: &Exception) -> Vec<(String, String)> {
     if r.marker != 2 {
         return vec![(
             "vm fault, cpu completed".into(),
@@ -216,6 +331,7 @@ fn judge_fault(guest: &Guest, r: &CaseResult, exc: &Exception) -> Vec<(String, S
             diffs.push((format!("fault xmm{k}"), format!("vm {vm:032x}, cpu {cpu:032x}")));
         }
     }
+    diffs.extend(judge_ymm_x87(guest, label, c, r, "fault "));
     diffs.extend(windows(guest, r));
     diffs
 }
@@ -441,12 +557,12 @@ pub fn run_cases(
             Err(ended) => {
                 // `on_exception` (243-248): the records judged, then forgotten, and the next case
                 let diffs = match (ended, guest.exception()) {
-                    (Ok(_), Some(exc)) => judge_fault(guest, r, &exc),
+                    (Ok(_), Some(exc)) => judge_fault(guest, iclass, c, r, &exc),
                     (Ok(code), None) => vec![("vm exit".into(), format!("ExitProcess({code}) with no exception"))],
                     (Err(why), _) => vec![("host request".into(), why)],
                 };
                 guest.clear_exception();
-                tally.judged += 1;
+                tally.judged_whole(iclass, r);
                 tally.faults_judged += usize::from(r.marker == 2);
                 for (k, detail) in diffs {
                     tally.note(iclass, &k, format!("case {i}: {:02x?} {detail}", c.code));
@@ -481,8 +597,8 @@ pub fn run_cases(
                 continue;
             }
         }
-        // `judge_done` (126-156), without XMM, MXCSR, the YMM halves and the x87 state
-        tally.judged += 1;
+        // `judge_done` (126-156)
+        tally.judged_whole(iclass, r);
         let x17 = vcpu.reg(Reg::X(17))?;
         let path = match x17 {
             v if v == CODE_VA + c.code.len() as u64 => Some(0),
@@ -531,6 +647,30 @@ pub fn run_cases(
         let df = mem[(md + DF_BYTE) as usize] != 0;
         if df != (r.rflags >> DF_BIT & 1 == 1) {
             tally.note(iclass, "DF", example(format!("vm {}", u8::from(df))));
+        }
+        // MXCSR (the stored word with FPSR's flags folded in) and XMM0-15 (judge_done 143-149)
+        let stored = u64::from(u32::from_le_bytes(
+            mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4]
+                .try_into()
+                .unwrap(),
+        ));
+        let mx = stored | mxcsr_flags_from_fpsr(vcpu.reg(Reg::Fpsr)?);
+        if mx != r.mxcsr {
+            let detail = format!("vm 0x{mx:x}, cpu 0x{:x} (in 0x{:x})", r.mxcsr, c.mxcsr);
+            tally.note(iclass, "MXCSR", example(detail));
+        }
+        for k in 0..16u8 {
+            let (vm, cpu) = (vcpu.simd(k)?, r.xmm[usize::from(k)]);
+            if vm != cpu {
+                tally.note(
+                    iclass,
+                    &format!("xmm{k}"),
+                    example(format!("vm {vm:032x}, cpu {cpu:032x}")),
+                );
+            }
+        }
+        for (k, detail) in judge_ymm_x87(guest, iclass, c, r, "") {
+            tally.note(iclass, &k, example(detail));
         }
         for (k, detail) in windows(guest, r) {
             tally.note(iclass, &k, example(detail));

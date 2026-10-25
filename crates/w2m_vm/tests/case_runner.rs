@@ -278,6 +278,14 @@ fn completed_cases_agree_with_windows() {
         );
         println!("    refused by cause: {:?}", t.refused);
         println!("    host requests by op: {:?}", t.host_requests);
+        let reach = |n: &str| t.by_class.get(n).copied().unwrap_or(0);
+        println!(
+            "    judged with YMM upper halves {}, with x87 state {}; FCOS {}, FSIN {}",
+            t.ymm_judged,
+            t.x87_judged,
+            reach("FCOS"),
+            reach("FSIN")
+        );
         for (k, (n, example)) in t.differences.iter().take(12) {
             println!("    {n:6} {k}: {example}");
         }
