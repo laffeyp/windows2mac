@@ -117,13 +117,18 @@ quotes were copied from the sources on 2026-10-24.
    the guest's stored output. The judge it needs, the golden check of that record, is written in Rust in the same
    sprint, and so on for every judge: each moves to Rust in the sprint whose code it judges, never ahead of it. It
    measures what the design left to measurement: an exit's time, the runtime word's hold times, whether a guest WFE
-   exits. Gate: the guest's output and record equal the stored ones.
+   exits. It carries the translator (S3; amended 2026-10-24 by `docs/design-host-compile-path-2026-10-24.md`): every
+   guest there needs at least 2 host compiles the C compiler in the VM declines, so the run loop comes first and stops
+   by name at the first declined block, then the decoder, a case runner, the lifter, and the rules and lowering in
+   groups follow, each judged by the C emitter's words where it has a stencil and by its classes' cases run through
+   the case runner against Windows. Gate: the guest's output and record equal the stored ones.
 4. **One vCPU to the batch run.** The skeleton grows by component, each with the Python tests' values carried into
-   Rust tests by hand and cited by file and line, and with its judge: loading (S2); the translator (S3) with the
-   class judge; the model and slow paths (S4); every exit kind, with the family judge and the batch run's call
-   comparison. Gate: the batch run conforms (168 lines, 0 divergences), 456 of 458 classes, 68 of 68 families, the
-   guests in `tests/data` with their stored output. The Python host's code moves under `oracle/` (git mv) and leaves
-   CI. Moves: instructions a second on one vCPU, against Sprint 108's 2,095,145,119.
+   Rust tests by hand and cited by file and line, and with its judge: loading's remainder (S2); the class judge over
+   every class (S3; each rule group's classes judged at step 3); the model and slow paths (S4); every exit kind, with
+   the family judge and the batch run's call comparison. Gate: the batch run conforms (168 lines, 0 divergences), 456
+   of 458 classes, 68 of 68 families, the guests in `tests/data` with their stored output. The Python host's code
+   moves under `oracle/` (git mv) and leaves CI. Moves: instructions a second on one vCPU, against Sprint 108's
+   2,095,145,119.
 5. **The PE images translated ahead of time.** UnityPlayer.dll first: in play it retires 76.9% of the game's
    instructions (Decision 2026-10-14); Mono's run-time code stays with the run-time compiler. Gate: the batch run
    conforms with the cache, and compiles at run time, counted on the record, fall by the share the cache covers.
