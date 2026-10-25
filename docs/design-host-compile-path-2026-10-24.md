@@ -166,6 +166,11 @@ F. The links that follow the loader (Sprint 138):
    record and context, carried from `scripts/vm_oracle.py`. Judged on the cases whose classes the C stencils, each
    case's instruction compiled by the C emitter built for the host (link 2), against the Windows results; it counts
    the cases that can run at step 3 (no model exit) and the rule files they reach.
+   *Amended 2026-10-24 (Sprint 145), by measurement:* the C emitter compiles none of the cases at their own address
+   (0x2000_0000), because the stencil key carries the code address's value class and the table's keys are the game's,
+   above 4 GB. The runner takes its compiler as an argument. Its first run used the frozen Python lowering's words,
+   compiled for the runner's fixed block address: 148,614 completed cases from 22 Intel runs agreed with Windows. When
+   the Rust lowering exists, it is the compiler the runner judges against Windows, and no second compiler is needed.
 4. **The lifter and the operand forms.**
 5. **The rules and the lowering, in groups**, each group judged by the C emitter's words on its covered calls and by
    its classes' cases run through the run loop against Windows; each lets `qpc`, then `sleeper`, run further.

@@ -187,10 +187,11 @@ impl Image {
     }
 }
 
-/// loader.py 120-131. `init_order` and `dependency_order` index `images`.
+/// loader.py 120-131. `init_order` and `dependency_order` index `images`. `image` is `None` for a bare memory with no
+/// program, as the CPU cases' runner builds (`scripts/vm_oracle.py` 183: `Loaded(None, mem, ...)`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Loaded {
-    pub image: PeImage,
+    pub image: Option<PeImage>,
     pub memory: Memory,
     /// where the thread starts: the program's entry, or the loader stub
     pub entry: u64,
@@ -207,6 +208,25 @@ pub struct Loaded {
     pub dependency_order: Vec<usize>,
     /// TEB.ThreadLocalStoragePointer, set on Windows even when no image has static TLS
     pub tls_array: u64,
+}
+
+impl Loaded {
+    /// A memory with no program: the dataclass's defaults (loader.py 127-131) beside the fields given, as
+    /// `scripts/vm_oracle.py` 183 builds it for the CPU cases.
+    pub fn bare(memory: Memory, entry: u64, stack_top: u64) -> Loaded {
+        Loaded {
+            image: None,
+            memory,
+            entry,
+            thunks: BTreeMap::new(),
+            stack_top,
+            images: Vec::new(),
+            image_entry: 0,
+            init_order: Vec::new(),
+            dependency_order: Vec::new(),
+            tls_array: 0,
+        }
+    }
 }
 
 /// loader.py 134-151: headers, sections, and the base relocations for `base`.
@@ -431,7 +451,7 @@ pub fn load(data: &[u8], dlls: Option<DllSupply<'_>>, name: &str) -> Result<Load
     mem.map(THUNK_BASE, 16 * thunks.len().max(1) as u64, "thunks");
     mem.map(STACK_TOP - STACK_SIZE, STACK_SIZE, "stack");
     Ok(Loaded {
-        image: img,
+        image: Some(img),
         memory: mem,
         entry,
         thunks,

@@ -227,7 +227,11 @@ fn the_loader_lists_are_windows() {
         ["ntdll.dll", "KERNELBASE.dll", "KERNEL32.DLL"],
         "ldr.init_order"
     );
-    assert_eq!(load[0].1, g.loaded.image.image_base, "ldr.first_is_exe");
+    assert_eq!(
+        load[0].1,
+        g.loaded.image.as_ref().unwrap().image_base,
+        "ldr.first_is_exe"
+    );
     assert_eq!(
         [load[1].1, load[2].1, load[3].1],
         [g.area.ntdll, g.area.kernel32, g.area.kernelbase]
@@ -261,7 +265,7 @@ fn the_first_threads_stack_is_windows() {
     // (qpc, built by mingw, asks 0x200000), and loader.py reserves a fixed STACK_SIZE (0x100000), which equals the
     // MSVC-built probes' header that the row was observed on. Kept until the stored records are made again
     // (BLACKBOARD, Sprint 140's tail entry); the assertion pins what w2m does so the change is seen.
-    assert_eq!(g.loaded.image.stack_reserve, 0x20_0000);
+    assert_eq!(g.loaded.image.as_ref().unwrap().stack_reserve, 0x20_0000);
     assert_eq!(
         base - dealloc,
         pe_loader::STACK_SIZE,

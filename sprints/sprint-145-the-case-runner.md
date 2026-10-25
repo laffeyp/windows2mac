@@ -1,0 +1,142 @@
+# Sprint 145 — The case runner: completed cases judged against Windows in a Rust VM
+
+```yaml
+---
+id: 145
+status: active
+phase: 6
+pass_kind: functional
+---
+```
+
+## scope
+
+The case runner's second half (`docs/design-host-compile-path-2026-10-24.md`, link 3; the formats were Sprint 144).
+The Rust host runs CPU cases in a VM in lockstep and judges each completed case against the Windows result, as
+`scripts/vm_oracle.py` `run_cases` and `judge_done` (175-258, 126-167) do. One instruction runs per block. A dispatch
+miss swaps the next case in, and the next miss reads the case's state out.
+
+- **The guest.** Three regions with no PE image: code, data and stack (`run_cases` 179-183), laid out as `Guest`
+  (Sprint 141) lays out a program. `Guest` gains a constructor for a bare `Loaded`.
+- **The block.** `assemble_block` (`vm_backend.py` 922-970) for one instruction, framed in Rust: the budget's SUBS
+  and branch, the instruction's words, the fall-through exit, and the budget's stop. The instruction's words come from
+  the C emitter built for the host (`vmc_decode`, `vmc_emit`, `vmc_ends`), with the flag arguments of a lone
+  instruction (no NZCV source, all flags live after, no NZCV out), as the design's case runner names. Each block's
+  marks go into the reconstruction table.
+- **The case in.** Code, data, edge and stack written; the 16 GPRs; x17 the code address; CF, ZF, SF, OF and PF in
+  x19-x23; x24 0; AF, PF and DF through the monitor data's lazy operands and DF byte (`start_next` 208-234,
+  `set_af_df` 2089-2092).
+- **The case out.** GPRs, x17's path (`judge_done` 130-132), each defined flag (`x86_flags` 5368-5374), DF, and the
+  data, stack and edge windows (159-167).
+
+Out of scope, and counted rather than judged:
+
+- cases Windows completed by a fault, and cases the VM faults on; the fault path through the guest runtime's
+  EXCEPTION_RECORD and CONTEXT comes next;
+- XMM, MXCSR, the YMM upper halves and the x87 state;
+- cases whose instruction the C emitter refuses;
+- `undefined_memory`'s cases.
+
+## prerequisites
+
+- 144 (closed)
+
+## context_files
+
+- `scripts/vm_oracle.py` (read in full); `src/w2m/vm_backend.py` 355-372, 922-970, 2060-2092, 2782-2797,
+  5368-5374
+- `crates/w2m_vm` (`guest.rs`, `run.rs`), `crates/cpu_cases`, `crates/x86_decoder`; `tools/vm_compiler/vm_compiler.h`
+
+## signal contract
+
+### Emits
+
+None yet: the record comes at the skeleton's gate.
+
+### Consumes
+
+The case files and the downloaded Windows results (Sprint 144).
+
+### Invariants
+
+- No Python file added or changed.
+
+## artifact contract
+
+### Files created
+
+- `crates/w2m_vm/src/cases.rs` (the runner), `crates/w2m_vm/tests/case_runner.rs`
+
+### Files modified
+
+- `crates/w2m_vm/` (`guest.rs`: the bare guest), `Cargo.lock`, `WORKING_AGREEMENT.md`, `BLACKBOARD.md` (Sprint 144's CI
+  run, in the tail entry)
+
+### Content assertions
+
+- Each function cites the Python lines it carries.
+
+### Command exit codes
+
+- `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release` return 0
+- `scripts/gates.sh` returns 0
+
+## observation contract
+
+- **Expected values:** for each case set with a downloaded result file that matches its recorded hash, every
+  completed case the C emitter compiles is judged on GPRs, path, defined flags, DF and windows, with zero
+  differences. The Python class runs of 2026-10-21 accepted every class but FCOS and FSIN, the x87 classes this
+  sprint does not judge. The run reports cases judged, faults counted, refusals by cause, and its time.
+- **Planted fault:** the flag registers written in the wrong order (ZF into x19): the run names the first case whose
+  CF differs.
+
+## done criteria
+
+The Rust host runs Windows-recorded CPU cases one instruction at a time in its own VM, and every completed case it
+judges agrees with Windows.
+
+## self-review checklist
+
+- [x] Scope names one verifiable property: completed cases agree with Windows in the Rust VM.
+- [x] context_files cite the Python carried.
+- [x] Emits: none yet, said so.
+- [x] Artifact contract gradable by command.
+- [x] Observation contract: expected values from Windows, and a planted fault.
+- [x] One concept: the case runner for completed cases.
+
+## result
+
+- Amended during the sprint, by measurement. The card had the C emitter compile each case's instruction. Run, it
+  compiled none: every case returned `VMC_NO_STENCIL`, and the first test passed with 0 cases judged. An experiment
+  that decoded the same cases at an address above 4 GB compiled thousands (5,543 judged in set 039). The stencil key
+  carries the code address's value class, and the table's keys are the game's, above 4 GB. So the runner takes its
+  compiler as an argument. Its test compiles with the frozen Python lowering's words, made once by running
+  `compile_insn` for each of the 25,919 distinct case instructions at the runner's fixed block address
+  (`build/case_runner/python-words.txt`, untracked, regenerated by the command the test cites). The test refuses to run
+  if the runner's block address or exit address differs from the fixture's. The design records the finding; when the
+  Rust lowering exists, it is the compiler the runner judges.
+- `crates/w2m_vm/src/cases.rs`: `case_memory` (the bare code, data and stack regions; `pe_loader::Loaded::bare`, with
+  `Loaded.image` now an `Option`); `assemble_one` (`assemble_block` for one instruction); `run_cases` (the flush, the
+  case in, the run, `judge_done`'s comparisons, the counts). Each case's XMM registers and FPCR are loaded by a stub in
+  the VM: Hypervisor.framework sets a vector register only through a by-value SIMD argument, which stable Rust refuses
+  in FFI. `hypervisor` gains `Vcpu::simd`, which reads one through a pointer. MXCSR, the YMM upper halves and the x87
+  state are written where the Python wrote them.
+- Expected values (`tests/case_runner.rs`): 22 Intel runs with downloaded results that match their recorded hashes.
+  148,614 completed cases were judged (115,675 distinct; set 039 has two runs) on GPRs, path, defined flags, DF and the
+  three windows, with zero difference classes, in 33 s. Counted, not judged:
+  - Windows faults: 5,485 in set 039 and 2,195 in set 041, among others;
+  - cases the VM ran in the model (`hvc #10` or `#11`): 52,700 in set 065, 19,347 in 049b and 19,611 in 065b, among
+    others;
+  - undefined memory: 43 and 11.
+
+  No case was refused.
+- Planted fault: CF and ZF swapped in the case's flag registers. Set 039 then showed 85 difference classes, the first
+  "ADD CF: case 0: [66, 4e, 00, b5, 72, 79, 92, e6] vm 0, cpu 1". Restored, the test passes.
+- Found on the way:
+  - the fixture's first version was compiled 8 bytes off, because the printed address was already the block's body;
+    the test's layout check refused it before a case ran;
+  - `run_cases` wrote its vector stub on every call, moving later calls' blocks, so it now puts the code cache back as
+    it found it;
+  - the first gates run stopped after 72 minutes in the case runner's test. The unoptimized test build reset the
+    1,048,576 dispatch entries one `write_u64` at a time for every case. The empty table is now built once and copied
+    whole per case, and the test passes in 79 s unoptimized.

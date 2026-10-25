@@ -51,8 +51,15 @@ fn qpc_runs_to_its_first_declined_block() {
     let vcpu = Vcpu::new(&vm).unwrap();
     let out = run_to_first_decline(&mut guest, &loaded, &vcpu, 1 << 40).unwrap();
 
-    let text = loaded.image.sections.iter().find(|s| s.name == ".text").unwrap();
-    let base = loaded.image.image_base;
+    let text = loaded
+        .image
+        .as_ref()
+        .unwrap()
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .unwrap();
+    let base = loaded.image.as_ref().unwrap().image_base;
     let (lo, hi) = (
         base + u64::from(text.virtual_address),
         base + u64::from(text.virtual_address + text.virtual_size),

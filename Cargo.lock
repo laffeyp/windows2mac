@@ -173,10 +173,12 @@ name = "w2m_vm"
 version = "0.1.0"
 dependencies = [
  "a64_encoder",
+ "cpu_cases",
  "guest_runtime",
  "hypervisor",
  "pe_loader",
  "serde_json",
+ "x86_decoder",
 ]
 
 [[package]]

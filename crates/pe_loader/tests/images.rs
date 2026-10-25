@@ -86,6 +86,8 @@ fn the_program_binds_the_dll_exports_and_starts_the_dll_first() {
     for export in ["loader_dll_call", "loader_dll_count"] {
         let (slot, _) = ld
             .image
+            .as_ref()
+            .unwrap()
             .iat
             .iter()
             .find(|(_, n)| **n == format!("loader_dll.dll!{export}"))

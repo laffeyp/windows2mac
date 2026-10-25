@@ -284,7 +284,9 @@ pub fn write(
     ] {
         q(areas.process, TEB_OFF + field, value);
     }
-    q(areas.process, PEB_OFF + 0x10, loaded.image.image_base);
+    if let Some(image) = &loaded.image {
+        q(areas.process, PEB_OFF + 0x10, image.image_base); // PEB.ImageBaseAddress (2850-2851)
+    }
     q(areas.process, PEB_OFF + 0x30, HEAP_VA); // PEB.ProcessHeap (heap.c)
     d(areas.process, PEB_OFF + 0xB8, PROCESSORS); // PEB.NumberOfProcessors (Chappell)
     let st = STATE_OFF; // thread-start defaults (spec, observed on Windows)
@@ -309,7 +311,10 @@ pub fn write(
         kernelbase: PROCESS_VA + KERNELBASE_IMAGE_OFF,
         ntdll: PROCESS_VA + NTDLL_IMAGE_OFF,
     };
-    write_loader_data(areas, loaded, start, &area)?;
+    if !loaded.images.is_empty() {
+        // a program from the loader (vm_backend 2966-2967: tests build bare ones)
+        write_loader_data(areas, loaded, start, &area)?;
+    }
     Ok(area)
 }
 
@@ -410,7 +415,7 @@ fn system_images(
     for off in [KERNEL32_IMAGE_OFF, KERNELBASE_IMAGE_OFF, NTDLL_IMAGE_OFF] {
         synthetic_image(areas.process, off);
     }
-    let own: BTreeSet<String> = loaded.images[1..].iter().map(|d| d.name.to_lowercase()).collect();
+    let own: BTreeSet<String> = loaded.images.iter().skip(1).map(|d| d.name.to_lowercase()).collect();
     let mut spellings: BTreeMap<String, String> = BTreeMap::new();
     for name in loaded.thunks.values() {
         let dll = name.split_once('!').map_or(name.as_str(), |(d, _)| d);
@@ -459,7 +464,7 @@ fn write_loader_data(
     let program: Entry = (
         loaded.images[0].base,
         loaded.image_entry,
-        u64::from(loaded.image.size_of_image),
+        loaded.image.as_ref().map_or(0, |i| u64::from(i.size_of_image)),
         format!("{APP_DIRECTORY}{}", start.image_name),
         start.image_name.clone(),
     );

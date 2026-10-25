@@ -10,7 +10,9 @@ publish.workspace = true
 a64_encoder = { path = "../a64_encoder" }
 guest_runtime = { path = "../guest_runtime" }
 hypervisor = { path = "../hypervisor" }
+cpu_cases = { path = "../cpu_cases" }
 pe_loader = { path = "../pe_loader" }
+x86_decoder = { path = "../x86_decoder" }
 
 [dev-dependencies]
 serde_json.workspace = true

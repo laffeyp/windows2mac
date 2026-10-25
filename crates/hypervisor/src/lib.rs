@@ -61,6 +61,7 @@ mod ffi {
         pub fn hv_vcpu_get_sys_reg(vcpu: HvVcpu, reg: u16, value: *mut u64) -> HvReturn;
         pub fn hv_vcpu_set_sys_reg(vcpu: HvVcpu, reg: u16, value: u64) -> HvReturn;
         pub fn hv_vcpu_set_vtimer_mask(vcpu: HvVcpu, vtimer_is_masked: bool) -> HvReturn;
+        pub fn hv_vcpu_get_simd_fp_reg(vcpu: HvVcpu, reg: u32, value: *mut c_void) -> HvReturn;
     }
 
     unsafe extern "C" {
@@ -426,6 +427,15 @@ impl<'vm> Vcpu<'vm> {
         check("hv_vcpu_set_vtimer_mask", unsafe {
             ffi::hv_vcpu_set_vtimer_mask(self.id, masked)
         })
+    }
+
+    /// SIMD and floating-point register Q`n` (hv_vcpu.h `hv_vcpu_get_simd_fp_reg`), little-endian.
+    pub fn simd(&self, n: u8) -> Result<u128, HvError> {
+        let mut v = [0u8; 16];
+        check("hv_vcpu_get_simd_fp_reg", unsafe {
+            ffi::hv_vcpu_get_simd_fp_reg(self.id, u32::from(n), v.as_mut_ptr().cast())
+        })?;
+        Ok(u128::from_le_bytes(v))
     }
 }
 
