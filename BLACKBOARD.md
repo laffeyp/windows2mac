@@ -354,6 +354,7 @@
 - **2026-10-25** — Sprint 132 (a vCPU in Rust; step 3's first link). `crates/hypervisor` binds 16 Hypervisor.framework calls from the macOS 26.5 SDK behind `Vm`, `Vcpu`, `VcpuHandle` and `GuestMemory`; a cargo runner signs with the entitlement. Three tests run arm64 code on one vCPU: an `hvc` exit with its immediate, x0 and the PC after it; a resume; a stop from another thread. An exit and resume: 832 to 873 ns, the C monitor 813 to 852 ns the same day. Dual contract: pass; two plants caught (a `Vcpu` moved across threads does not compile; HV_DENIED without the entitlement). Closed: CI run 40149456660 (5494fe361).
 - **2026-10-25** — Sprint 133 (the guest runtime built from Rust; step 3's second link). `crates/guest_runtime` carries the guest-memory layout from `vm_backend.py` and `scheduler.py` line by line, writes the five generated headers byte for byte, computes the Python's cache key, and builds with clang and `ld -preload`. The image equals the frozen Python build's under the same key, byte for byte (3,169,760 bytes, 706 symbols). Dual contract: pass; three plants caught. Closed: CI run 40150452492 (0a570ea7b).
 - **2026-10-25** — Sprint 134 (the runtime runs in a Rust VM; step 3's third link). `crates/w2m_vm` writes stage-1 tables as `vm_backend._write_translation_tables` did, maps the monitor area with the Rust-built runtime image, sets the Python host's system registers and installs vectors that hand every exception to the host. `w2m_cpuid_query`, called with the MMU on, answers all 26 inputs of `tests/test_vm_state.py` as `cpuid.lookup` does. Dual contract: pass; two plants caught (the abort vector with the image unmapped; a wrong expected value named). Closed: CI run 40151168498 (57a0abb0d).
+- **2026-10-25** — Sprint 135 (the A64 encoder in Rust; step 3's fourth link). `crates/a64_encoder` carries every function of `src/w2m/a64_encoder.py`, with the same names and arguments (its `and_` and `str_` as `and` and `str`) and each assert carried as a panic. 258 encodings equal clang's assembly: the Python test's 248 and 10 the monitor code uses. Dual contract: pass; the planted MOVK base named by the clang judge. Closed: CI run CIRUN-135 (COMMIT-135).
 
 ## Deferred
 
@@ -424,6 +425,12 @@
 ---
 
 ## Sprint tail
+
+### Sprint 135 (2026-10-25, closed)
+- **Scope:** every AArch64 word w2m emits, encoded in Rust as `src/w2m/a64_encoder.py` encodes it, checked against clang.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, 2 tests, the gates); observation pass (258 words equal clang's; the planted MOVK base named as "ours f2cfffc1, clang f2cfffc0").
+- **Rubber Duck Pass:** *Observation 1 (a card written after its code):* the crate was ported and judged before `sprints/sprint-135-the-a64-encoder-in-rust.md` existed; the card says so in its result. The audit trail shows the work, but the card did not fix the judge ahead of it. Disposition: resolved-here (Sprint 136's card was written before its code, and so is Sprint 137's). *Observation 2 (defaults written in by pattern):* the Python test's calls leaned on default arguments Rust lacks; they were written in by pattern and the compiler named each call that lacked one, so no case passed with a value the Python did not give. Disposition: recorded.
+- **Files:** crates/a64_encoder/, Cargo.toml, Cargo.lock, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-135-the-a64-encoder-in-rust.md, signal-reports/sprint-135-report.md.
 
 ### Sprint 134 (2026-10-25, closed)
 - **Scope:** a function of the C guest runtime run in a Rust VM at its link address, answering as the Python host's VM answered.
