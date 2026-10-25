@@ -1,0 +1,14 @@
+[package]
+name = "w2m_vm"
+description = "The w2m-vm process's VM: the monitor area, its stage-1 tables, the guest runtime loaded and called (Sprint 134)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+guest_runtime = { path = "../guest_runtime" }
+hypervisor = { path = "../hypervisor" }
+
+[dev-dependencies]
+serde_json.workspace = true
