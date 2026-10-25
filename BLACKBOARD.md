@@ -357,6 +357,7 @@
 - **2026-10-25** — Sprint 135 (the A64 encoder in Rust; step 3's fourth link). `crates/a64_encoder` carries every function of `src/w2m/a64_encoder.py`, with the same names and arguments (its `and_` and `str_` as `and` and `str`) and each assert carried as a panic. 258 encodings equal clang's assembly: the Python test's 248 and 10 the monitor code uses. Dual contract: pass; the planted MOVK base named by the clang judge. Closed: CI run 40152164615 (9bd4f7e57).
 - **2026-10-25** — Sprint 136 (the monitor code from Rust; step 3's fifth link). `crates/w2m_vm` writes the Python host's monitor code with `a64_encoder` and an `Assembler` with labels: the 16 vectors, the two-way dispatcher with its in-VM compiler branch, the empty dispatch table, and the exception entry with the code-write path. In one Rust VM, two targets reach their code from either slot of a pair, a third misses to `hvc #1`, a store to a read-only page reaches `hvc #13` then `hvc #14`, and a load from an unmapped address saves its state and reaches `hvc #14`. Dual contract: pass; the planted hash shift named the target it missed. Closed: CI run 40152826904 (12b46b7db).
 - **2026-10-25** — Sprint 137 (the PE reader in Rust; step 3's sixth link). `crates/pe_image` carries `src/w2m/pe.py`: headers, sections, imports and delay imports with each IAT slot named, relocations, exports and forwarders, TLS, `.pdata` and resources, refusing malformed input in the Python's words. All 268 executables under `store/binaries/` agree with llvm-objdump on the entry, the image base and the imports; the rest of `tests/test_pe.py` holds. Dual contract: pass; names read a byte late were named by DLL. Closed: CI run 40153490645 (00ef856bf).
+- **2026-10-25** — Sprint 138 (the loader in Rust; step 3's seventh link). `crates/pe_loader` carries `src/w2m/loader.py`: images mapped and relocated, supplied DLLs placed (preferred base, else from `DLL_BASE` up) and bound, host thunks, the loader stub, static TLS. `tests/test_loader_images.py`'s three checks hold; the DLL sits where Windows put it (`dll.base`) and its TLS index and block are Windows' (`tls.index`, `tls.array`); the 73-byte stub equals clang's assembly. Dual contract: pass; a delta off by one named its site. Closed: CI run CIRUN-138 (COMMIT-138).
 
 ## Deferred
 
@@ -427,6 +428,12 @@
 ---
 
 ## Sprint tail
+
+### Sprint 138 (2026-10-25, closed)
+- **Scope:** the program and its DLLs placed, relocated, bound and started from Rust as `loader.py` placed them.
+- **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, 6 tests, the gates); observation pass (the Python test's three checks; three Windows contract rows; the stub equal to clang's; the plant named RVA 0xe258).
+- **Rubber Duck Pass:** *Observation 1 (the next link cannot run on what exists):* measured after this sprint's code, the Python host compiled 5 of `sleeper`'s blocks, 2 of `qpc`'s and 10 of `twoready`'s that the C in-VM compiler declined ("not a code page" 9, 4, 9; "no stencil" 4, 2, 10). The skeleton serves `hvc #1`, so it needs a host compile path, which the plan's step 4 ports after the skeleton. Disposition: recorded (Sprint 139 designs the miss path against the goal and the systems that solved it, before any code). *Observation 2 (a judge from Windows, not the Python):* the TLS and placement checks are Windows contract rows, so the Rust loader is held to what Windows did, not only to what the Python did. Disposition: recorded.
+- **Files:** crates/pe_loader/, Cargo.toml, Cargo.lock, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-138-the-loader-in-rust.md, signal-reports/sprint-138-report.md.
 
 ### Sprint 137 (2026-10-25, closed)
 - **Scope:** a PE32+ image read from Rust as `pe.py` read it, judged by llvm-objdump.
