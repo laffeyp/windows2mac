@@ -1,5 +1,8 @@
 # w2m in Rust: the port plan
 
+**History from 2026-10-24.** The order of work is `docs/rust-port-plan-2026-10-24.md` (BLACKBOARD Decision 2026-10-24
+user: this plan reached no frame, and its design kept the big lock).
+
 **Date:** 2026-10-21. **Status:** draft, revised after review the same day; revised 2026-10-23 so that no step runs
 Python. **Decision:** all of w2m is rewritten in Rust, and Rust only (user, 2026-10-21; BLACKBOARD). No step of the
 port runs Python beside Rust, and no new Python is written (user, 2026-10-23).

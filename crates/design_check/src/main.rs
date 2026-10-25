@@ -100,6 +100,32 @@ fn items(lines: &[&str]) -> Vec<String> {
     out
 }
 
+/// Whether a source (`http`) follows a whole-word mention of `system` in `item` before the next mention of another
+/// system: an item that names two systems must source each (Sprint 129: Rosetta 2's URL removed passed on FEX's).
+fn sourced(item: &str, system: &str) -> bool {
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    let mentions = |name: &str| -> Vec<usize> {
+        item.match_indices(name)
+            .filter(|(i, _)| !word(item[..*i].chars().next_back()) && !word(item[i + name.len()..].chars().next()))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let others: Vec<usize> = SYSTEMS
+        .iter()
+        .filter(|s| **s != system)
+        .flat_map(|s| mentions(s))
+        .collect();
+    mentions(system).into_iter().any(|start| {
+        let end = others
+            .iter()
+            .filter(|o| **o > start)
+            .min()
+            .copied()
+            .unwrap_or(item.len());
+        item[start..end].contains("http")
+    })
+}
+
 /// What one document lacks, one line each; empty when it passes.
 fn faults(file: &str, text: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -122,7 +148,7 @@ fn faults(file: &str, text: &str) -> Vec<String> {
                 let named: Vec<&String> = items.iter().filter(|i| names_whole(i, system)).collect();
                 if named.is_empty() {
                     out.push(format!("{file}: \"{SYSTEMS_SECTION}\" does not name {system}"));
-                } else if !named.iter().any(|i| i.contains("http")) {
+                } else if !named.iter().any(|i| sourced(i, system)) {
                     out.push(format!("{file}: \"{SYSTEMS_SECTION}\" names {system} with no source"));
                 }
             }
@@ -270,6 +296,15 @@ mod tests {
                 "1. A numbered entry.",
             ]
         );
+    }
+
+    #[test]
+    fn each_system_in_a_shared_item_needs_its_own_source() {
+        let item = "- Rosetta 2 translates ahead of time (WWDC20). FEX caches code (https://fex-emu.com/FEX-2609/).";
+        assert!(!sourced(item, "Rosetta 2"));
+        assert!(sourced(item, "FEX"));
+        let both = "- Rosetta 2 (https://a) and FEX (https://b).";
+        assert!(sourced(both, "Rosetta 2") && sourced(both, "FEX"));
     }
 
     #[test]
