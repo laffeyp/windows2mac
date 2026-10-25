@@ -63,6 +63,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | The AArch64 encoder: every word w2m emits (carried from `src/w2m/a64_encoder.py`, checked against clang) | `crates/a64_encoder/src/lib.rs` (Sprint 135) |
 | The monitor code (carried from `vm_backend._write_monitor` and `_write_exception_entry`): the vectors, the dispatcher, the empty dispatch table, the exception entry, the lock and budget helpers; the `Assembler` with labels | `crates/w2m_vm/src/monitor_code.rs`, `assembler.rs` (Sprint 136) |
 | The PE32+ image reader: headers, sections, imports and delay imports, relocations, exports and forwarders, TLS, `.pdata`, resources (carried from `src/w2m/pe.py`, checked against llvm-objdump) | `crates/pe_image/src/lib.rs` (Sprint 137) |
+| The loader: images mapped, relocated and bound, DLLs placed and started, the loader stub, static TLS (carried from `src/w2m/loader.py`) | `crates/pe_loader/src/lib.rs` (Sprint 138) |
 | Hypervisor.framework from Rust: `Vm`, `Vcpu`, `VcpuHandle`, `GuestMemory`, `Exit`, `Reg`, the bindings | `crates/hypervisor/src/lib.rs` (Sprint 132); the cargo runner that signs with the entitlement, `scripts/sign_and_run.sh` via `.cargo/config.toml` |
 | Guest state spec (state block, host registers, reconstruction, Windows layouts) | `specs/guest_state.json`; checker `scripts/check_guest_state.py` |
 | Semantics oracle (cases, runner harness, judge) | `probes/semantics/`, `scripts/semantics_differential.py` |
