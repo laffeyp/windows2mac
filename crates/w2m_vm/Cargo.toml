@@ -11,6 +11,7 @@ a64_encoder = { path = "../a64_encoder" }
 guest_runtime = { path = "../guest_runtime" }
 hypervisor = { path = "../hypervisor" }
 cpu_cases = { path = "../cpu_cases" }
+events = { path = "../events" }
 pe_loader = { path = "../pe_loader" }
 virtual_memory = { path = "../virtual_memory" }
 x86_decoder = { path = "../x86_decoder" }

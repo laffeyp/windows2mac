@@ -73,7 +73,8 @@ The case files, the downloaded Windows results, the fixture (Sprint 149's inputs
 
 ### Files created
 
-- `crates/w2m_vm/src/bin/case_runs.rs`, `harness/case-runs.toml`, a record under `store/runs/`
+- `crates/w2m_vm/src/bin/case_runs.rs`, `crates/w2m_vm/src/case_inputs.rs`, `harness/case-runs.toml`, a record under
+  `store/runs/`, its 22 traces under `store/case_runner/traces/`
 
 ### Files modified
 
@@ -111,3 +112,31 @@ The case runner's verdicts stand on a substrate record in the vocabulary's event
 - [x] One concept: the runner's record.
 
 ## result
+
+- `crates/w2m_vm/src/bin/case_runs.rs` writes the sequence; `crates/w2m_vm/src/case_inputs.rs` holds the inputs the
+  test and the binary share (the runs, the pinned fixture, the expected counts, the registry map, the case VM);
+  `harness/case-runs.toml` runs it. The run file calls the binary through `scripts/sign_and_run.sh`: the first run
+  failed at `hv_vm_create` (-85377017, HV_DENIED), since substrate starts the binary unsigned.
+- Amended during the sprint, by the record check: rule T4 holds every `EXECUTION_COMPLETED` to exactly one
+  `TRACE_INGESTED` or `TRACE_REJECTED` of its `trace_sha256` before the session ends. The first record named the empty
+  hash for all 22 runs and ingested none, so all 22 were held. Each run now has a trace: one JSON line per class judged
+  (the run, the class, its count, its difference lines), kept as `store/case_runner/traces/<sha256>.jsonl`; its
+  `EXECUTION_COMPLETED` names it, says in `unobserved` that it is the runner's verdict and not guest output, and one
+  `TRACE_INGESTED` follows.
+- The record (`store/runs/case-runner-<ns>`): SESSION_INIT 1, EXECUTION_STARTED 22, EXECUTION_COMPLETED 22,
+  TRACE_INGESTED 22, CANDIDATE_GENERATED 387, COMPARISON_COMPLETED 387 (conforms), CANDIDATE_ACCEPTED 387,
+  SESSION_COMPLETED 1 (completed; accepted 387, discrepancies 0; 64.8 s). `substrate replay --level 2` exits 0;
+  `scripts/check_records.py --since 2026-10-25` holds none of its events.
+- Planted fault, changed from the card: in place of swapping the VM's flag registers (which needs a hook in the
+  runner), `--plant-flip-cf` flips CF in every completed case of the first run's Windows results, so the real judge
+  finds real differences. The planted record (in the scratchpad, not committed) holds 107 classes rejected, reported
+  and routed, the first divergence "ADD: ADD CF: 1212 cases; run 38011858047: case 0: … vm 1, cpu 0", and
+  SESSION_COMPLETED `completed_with_discrepancies` (accepted 280, discrepancies 107). Its one trace written to the
+  store was removed.
+- Amended during the sprint, by the gates: the first gates run failed five pytest tests. Three read every
+  `store/traces/*.jsonl` as a guest trace (`KeyError: 'execution_id'`), where the runner's traces then lived; they
+  moved to `store/case_runner/traces/`. One, `tests/test_differential.py`, holds every record whose baseline names
+  `differential` to `differential.py`'s causal chain (`KeyError: 'units'`); the run file's baseline now names
+  `judge = "case-runner"`, and the record was made again. The fifth, `test_timed_waits`'s retried context read, hunts
+  a race its own comment records as 0 hits in 10 runs under the gates' load; it passed alone in 0.23 s.
+- CI does not run `case_runs` (Linux: it prints that it needs Hypervisor.framework and exits 2); it builds it.

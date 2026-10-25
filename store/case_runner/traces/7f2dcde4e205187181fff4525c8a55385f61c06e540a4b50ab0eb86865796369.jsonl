@@ -1,0 +1,2 @@
+{"class":"CMPXCHG16B","differences":[],"judged":60,"run":"38051555152"}
+{"class":"CMPXCHG16B_LOCK","differences":[],"judged":70,"run":"38051555152"}

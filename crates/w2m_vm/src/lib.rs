@@ -7,6 +7,8 @@
 
 pub mod assembler;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod case_inputs;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod cases;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod guest;
