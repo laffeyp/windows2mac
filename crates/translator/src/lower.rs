@@ -36,6 +36,8 @@ pub const ALL_FLAGS: u32 = U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF;
 /// MONITOR_DATA + these, reached through x28 (vm_backend 89, 93, 94).
 const AF_OPERANDS: u32 = 0x20;
 const PF_RESULT: u32 = AF_OPERANDS + 16;
+/// vm_backend 1125: one instruction run whole by the model.
+pub const HVC_SLOW_STEP: u32 = 11;
 /// vm_backend 97: the state block's gs_base (the TEB).
 const STATE_GS_BASE: u64 = 0xb0;
 /// vm_backend 1124: the NZCV kinds by `vmc_flags.nzcv_from`'s index (vm_compiler.h 25): [none, NZCV_CONDITIONS...].
@@ -140,9 +142,171 @@ fn pf_into_x16(a: &mut Assembler) {
     ]);
 }
 
-/// `_set_flags` (583-709) for the kinds group 1 emits, with FLAGS_FROM_NZCV on: ADD, SUB (and INC, DEC, which share
-/// the branch) through NZCV, and the logic ops. `live` holds the flags a later instruction reads; `nzcv_out` asks for
-/// NZCV as well (the next instruction's Jcc branches on it).
+/// `_mark_defined` (489-490).
+fn mark_defined(a: &mut Assembler, bits: u32) {
+    a.emit(&[
+        a64::movz(16, u64::from(bits), 0),
+        a64::bic(REG_UNDEFINED_FLAGS, REG_UNDEFINED_FLAGS, 16),
+    ]);
+}
+
+/// `_mark_undefined` (493-494).
+fn mark_undefined(a: &mut Assembler, bits: u32) {
+    a.emit(&[
+        a64::movz(16, u64::from(bits), 0),
+        a64::orr(REG_UNDEFINED_FLAGS, REG_UNDEFINED_FLAGS, 16),
+    ]);
+}
+
+/// `_set_zf_sf_pf` (578-580).
+fn set_zf_sf_pf(a: &mut Assembler, r: u32, bits: u32) {
+    a.emit(&[
+        a64::cmpi(r, 0),
+        a64::cset(REG_ZF, "eq"),
+        a64::ubfx(REG_SF, r, bits - 1, 1),
+    ]);
+    set_pf(a, r);
+}
+
+/// `_shift_flags` (712-770): SHR SHL SAR ROL ROR's flags (SDM SAL/SAR/SHL/SHR, RCL/RCR/ROL/ROR): a zero masked count
+/// changes nothing; CF is the last bit out (undefined for SHL and SHR when the count >= the size); OF only for a 1-bit
+/// count; shifts set ZF SF PF and leave AF undefined; rotates touch only CF and OF.
+fn shift_flags(a: &mut Assembler, kind: &str, ra: u32, rb: u32, rr: u32, bits: u32) {
+    let (done, of_undef, after_of) = (a.label(), a.label(), a.label());
+    let width = if bits == 64 { 6 } else { 5 };
+    a.emit(&[a64::ubfx(16, rb, 0, width)]);
+    a.branch(|off| a64::cbz(16, off), done);
+    if kind == "rol" || kind == "ror" {
+        a.emit(&[if kind == "rol" {
+            a64::ubfx(REG_CF, rr, 0, 1)
+        } else {
+            a64::ubfx(REG_CF, rr, bits - 1, 1)
+        }]);
+        mark_defined(a, U_CF); // (uses x16: re-read the count below)
+        a.emit(&[a64::ubfx(16, rb, 0, width), a64::cmpi(16, 1)]);
+        a.branch(|off| a64::bcond("ne", off), of_undef);
+        a.emit(&[a64::ubfx(16, rr, bits - 1, 1)]);
+        a.emit(&[if kind == "rol" {
+            a64::eor(REG_OF, 16, REG_CF, LSL, 0)
+        } else {
+            a64::ubfx(17, rr, bits - 2, 1)
+        }]);
+        if kind == "ror" {
+            a.emit(&[a64::eor(REG_OF, 16, 17, LSL, 0)]);
+        }
+        mark_defined(a, U_OF);
+        a.branch(a64::b, done);
+        a.bind(of_undef);
+        mark_undefined(a, U_OF);
+        a.bind(done);
+        return;
+    }
+    let cf_undef = a.label();
+    if kind == "sar" {
+        // CF from the sign-extended value, any count
+        a.emit(&[
+            a64::sbfx(17, ra, 0, bits),
+            a64::subi(16, 16, 1),
+            a64::asrv(17, 17, 16),
+            a64::addi(16, 16, 1),
+            a64::ubfx(REG_CF, 17, 0, 1),
+        ]);
+        mark_defined(a, U_CF);
+    } else {
+        a.emit(&[a64::cmpi(16, bits)]);
+        a.branch(|off| a64::bcond("hs", off), cf_undef); // count >= size: CF undefined (SHL, SHR)
+        if kind == "shr" {
+            a.emit(&[a64::subi(17, 16, 1), a64::lsrv(17, ra, 17)]);
+        } else {
+            // SHL: bit (size - count) of the operand
+            a.emit(&[a64::sub(17, ZR, 16), a64::addi(17, 17, bits), a64::lsrv(17, ra, 17)]);
+        }
+        a.emit(&[a64::ubfx(REG_CF, 17, 0, 1)]);
+        mark_defined(a, U_CF);
+    }
+    a.emit(&[a64::ubfx(16, rb, 0, width), a64::cmpi(16, 1)]); // _mark_defined used x16
+    a.branch(|off| a64::bcond("ne", off), of_undef);
+    if kind == "shr" {
+        a.emit(&[a64::ubfx(REG_OF, ra, bits - 1, 1)]);
+    } else if kind == "shl" {
+        a.emit(&[a64::ubfx(17, rr, bits - 1, 1), a64::eor(REG_OF, 17, REG_CF, LSL, 0)]);
+    } else {
+        a.emit(&[a64::mov(REG_OF, ZR)]); // SAR: OF cleared for a 1-bit shift
+    }
+    mark_defined(a, U_OF);
+    a.branch(a64::b, after_of);
+    a.bind(cf_undef);
+    mark_undefined(a, U_CF);
+    a.bind(of_undef);
+    mark_undefined(a, U_OF);
+    a.bind(after_of);
+    mark_defined(a, U_ZF | U_SF | U_PF);
+    mark_undefined(a, U_AF);
+    set_zf_sf_pf(a, rr, bits);
+    a.bind(done);
+}
+
+/// `_shift_flags_const` (773-812): `_shift_flags` for a count known when compiling: the same rules, decided here, and
+/// the undefined-flag mask set in one instruction where every flag's state is known.
+fn shift_flags_const(a: &mut Assembler, kind: &str, ra: u32, count: u64, rr: u32, bits: u32) {
+    let m = (count & if bits == 64 { 63 } else { 31 }) as u32;
+    if m == 0 {
+        return; // a zero masked count changes nothing
+    }
+    if kind == "rol" || kind == "ror" {
+        // rotates touch only CF and OF
+        a.emit(&[if kind == "rol" {
+            a64::ubfx(REG_CF, rr, 0, 1)
+        } else {
+            a64::ubfx(REG_CF, rr, bits - 1, 1)
+        }]);
+        if m == 1 {
+            a.emit(&[a64::ubfx(16, rr, bits - 1, 1)]);
+            a.emit(&[if kind == "rol" {
+                a64::eor(REG_OF, 16, REG_CF, LSL, 0)
+            } else {
+                a64::ubfx(17, rr, bits - 2, 1)
+            }]);
+            if kind == "ror" {
+                a.emit(&[a64::eor(REG_OF, 16, 17, LSL, 0)]);
+            }
+            mark_defined(a, U_CF | U_OF);
+        } else {
+            mark_defined(a, U_CF);
+            mark_undefined(a, U_OF);
+        }
+        return;
+    }
+    let mut undefined = U_AF | if m == 1 { 0 } else { U_OF };
+    if kind == "sar" {
+        // CF from the sign-extended value, any count
+        if bits < 64 {
+            a.emit(&[a64::sbfx(17, ra, 0, bits), a64::ubfx(REG_CF, 17, (m - 1).min(63), 1)]);
+        } else {
+            a.emit(&[a64::ubfx(REG_CF, ra, m - 1, 1)]);
+        }
+    } else if m >= bits {
+        undefined |= U_CF; // SHL, SHR: count >= size, CF undefined
+    } else if kind == "shr" {
+        a.emit(&[a64::ubfx(REG_CF, ra, m - 1, 1)]);
+    } else {
+        a.emit(&[a64::ubfx(REG_CF, ra, bits - m, 1)]); // SHL: bit (size - count) of the operand
+    }
+    if m == 1 {
+        if kind == "shr" {
+            a.emit(&[a64::ubfx(REG_OF, ra, bits - 1, 1)]);
+        } else if kind == "shl" {
+            a.emit(&[a64::ubfx(16, rr, bits - 1, 1), a64::eor(REG_OF, 16, REG_CF, LSL, 0)]);
+        } else {
+            a.emit(&[a64::mov(REG_OF, ZR)]); // SAR: OF cleared for a 1-bit shift
+        }
+    }
+    a.emit(&[a64::movz(REG_UNDEFINED_FLAGS, u64::from(undefined), 0)]);
+    set_zf_sf_pf(a, rr, bits);
+}
+
+/// `_set_flags` (583-709), with FLAGS_FROM_NZCV on: every kind the rules emit. `live` holds the flags a later
+/// instruction reads; `nzcv_out` asks for NZCV as well (the next instruction's Jcc branches on it).
 #[allow(clippy::too_many_arguments)]
 fn set_flags(
     a: &mut Assembler,
@@ -155,6 +319,127 @@ fn set_flags(
     live: u32,
     nzcv_out: bool,
 ) -> Result<(), CompileError> {
+    match kind {
+        "mul" => {
+            // SDM MUL: SF ZF AF PF undefined
+            a.emit(&[a64::cmpi(rr, 0), a64::cset(REG_CF, "ne"), a64::mov(REG_OF, REG_CF)]);
+            mark_defined(a, U_CF | U_OF);
+            mark_undefined(a, U_ZF | U_SF | U_PF | U_AF);
+            return Ok(());
+        }
+        "shr" | "shl" | "sar" | "rol" | "ror" => {
+            shift_flags(a, kind, ra, rb, rr, bits);
+            return Ok(());
+        }
+        "bt" => {
+            // SDM BT: CF the bit; OF SF AF PF undefined; ZF kept
+            a.emit(&[a64::ubfx(REG_CF, rr, 0, 1)]);
+            mark_defined(a, U_CF);
+            mark_undefined(a, U_OF | U_SF | U_AF | U_PF);
+            return Ok(());
+        }
+        "popcnt" => {
+            // SDM POPCNT: ZF the source was 0; CF OF SF AF PF 0
+            a.emit(&[
+                if bits < 64 {
+                    a64::ubfx(16, ra, 0, bits)
+                } else {
+                    a64::mov(16, ra)
+                },
+                a64::cmpi(16, 0),
+                a64::cset(REG_ZF, "eq"),
+                a64::mov(REG_CF, ZR),
+                a64::mov(REG_OF, ZR),
+                a64::mov(REG_SF, ZR),
+                a64::movz(16, 1, 0),
+                a64::stp(ZR, ZR, 28, i64::from(AF_OPERANDS)),
+                a64::str(8, 16, 28, PF_RESULT), // PF_RESULT 1: PF clear
+                a64::movz(REG_UNDEFINED_FLAGS, 0, 0),
+            ]);
+            return Ok(());
+        }
+        "bsf" => {
+            // SDM BSF/BSR: ZF the source was 0; the rest undefined
+            a.emit(&[
+                if bits < 64 {
+                    a64::ubfx(16, ra, 0, bits)
+                } else {
+                    a64::mov(16, ra)
+                },
+                a64::cmpi(16, 0),
+                a64::cset(REG_ZF, "eq"),
+            ]);
+            mark_defined(a, U_ZF);
+            mark_undefined(a, U_CF | U_OF | U_SF | U_AF | U_PF);
+            return Ok(());
+        }
+        "adc" | "sbb" => {
+            // SDM ADC, SBB: carry (borrow) and overflow from a, b, r
+            if kind == "adc" {
+                a.emit(&[
+                    a64::eor(16, ra, rb, LSL, 0),
+                    a64::eor(17, ra, rr, LSL, 0),
+                    a64::bic(17, 17, 16),
+                    a64::ubfx(REG_OF, 17, bits - 1, 1),
+                ]);
+                a.emit(&[
+                    a64::and(16, ra, rb),
+                    a64::orr(17, ra, rb),
+                    a64::bic(17, 17, rr),
+                    a64::orr(16, 16, 17),
+                    a64::ubfx(REG_CF, 16, bits - 1, 1),
+                ]);
+            } else {
+                a.emit(&[
+                    a64::eor(16, ra, rb, LSL, 0),
+                    a64::eor(17, ra, rr, LSL, 0),
+                    a64::and(17, 17, 16),
+                    a64::ubfx(REG_OF, 17, bits - 1, 1),
+                ]);
+                a.emit(&[
+                    a64::bic(16, rb, ra),
+                    a64::eor(17, ra, rb, LSL, 0),
+                    a64::bic(17, rr, 17),
+                    a64::orr(16, 16, 17),
+                    a64::ubfx(REG_CF, 16, bits - 1, 1),
+                ]);
+            }
+            mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF);
+            a.emit(&[
+                a64::stp(ra, rb, 28, i64::from(AF_OPERANDS)),
+                a64::str(8, rr, 28, AF_OPERANDS + 16),
+            ]);
+            mark_defined(a, U_AF);
+            set_zf_sf_pf(a, rr, bits);
+            return Ok(());
+        }
+        "imul" => {
+            // SDM IMUL: CF=OF on truncation; SF ZF AF PF undefined
+            if bits < 64 {
+                a.emit(&[
+                    a64::sbfx(16, ra, 0, bits),
+                    a64::sbfx(17, rb, 0, bits),
+                    a64::mul(16, 16, 17),
+                    a64::sbfx(17, 16, 0, bits),
+                ]);
+            } else {
+                a.emit(&[a64::smulh(16, ra, rb), a64::sbfx(17, rr, 63, 1)]);
+            }
+            a.emit(&[a64::cmp(16, 17), a64::cset(REG_CF, "ne"), a64::mov(REG_OF, REG_CF)]);
+            mark_defined(a, U_CF | U_OF);
+            mark_undefined(a, U_ZF | U_SF | U_PF | U_AF);
+            return Ok(());
+        }
+        "andn" => {
+            // SDM ANDN: SF ZF by the result, CF OF 0, AF PF undefined
+            a.emit(&[a64::mov(REG_CF, ZR), a64::mov(REG_OF, ZR)]);
+            set_zf_sf_pf(a, rr, bits);
+            mark_defined(a, U_CF | U_ZF | U_SF | U_OF);
+            mark_undefined(a, U_AF | U_PF);
+            return Ok(());
+        }
+        _ => {}
+    }
     if matches!(kind, "add" | "inc" | "sub" | "dec") {
         // NZCV from one ADDS or SUBS gives CF ZF SF OF; INC and DEC keep CF (SDM INC, DEC)
         if !nzcv_ready && (live & (U_CF | U_ZF | U_SF | U_OF) != 0 || nzcv_out) {
@@ -344,7 +629,16 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> (u32, u32) {
         }
         Op::Alu { op, .. } => (if matches!(*op, "adc" | "sbb") { U_CF } else { 0 }, 0),
         Op::Br { cond, .. } => (if *cond == "always" { 0 } else { cond_flags(cond) }, 0),
-        Op::Imm { .. } | Op::Addr { .. } | Op::Ld { .. } | Op::St { .. } => (0, 0),
+        Op::Set { cond, .. } | Op::Cmov { cond, .. } => (cond_flags(cond), 0),
+        Op::Div { .. } => (ALL_FLAGS, ALL_FLAGS), // #DE before any write; every flag undefined after
+        Op::Ud => (ALL_FLAGS, 0),                 // FLAGS_ALL_READ: the model's step reads the whole state
+        Op::Imm { .. }
+        | Op::Addr { .. }
+        | Op::Ld { .. }
+        | Op::St { .. }
+        | Op::Sel { .. }
+        | Op::Cst { .. }
+        | Op::Cstz { .. } => (0, 0),
     }
 }
 
@@ -454,14 +748,28 @@ fn temps_read(op: &Op) -> Vec<Temp> {
         Op::Alu { a, b, .. } => vec![*a, *b],
         Op::Flags { a, b, r, .. } => vec![*a, *b, *r],
         Op::Br { t, .. } => vec![*t],
-        Op::Imm { .. } | Op::Addr { .. } => vec![],
+        Op::Div { t, .. } => vec![*t],
+        Op::Set { loc, .. } => match loc {
+            Loc::M { addr, .. } => vec![*addr],
+            Loc::R { .. } => vec![],
+        },
+        Op::Sel { c, x, y, .. } => vec![*c, *x, *y],
+        Op::Cst { c, loc, t } | Op::Cstz { c, loc, t } => match loc {
+            Loc::M { addr, .. } => vec![*c, *t, *addr],
+            Loc::R { .. } => vec![*c, *t],
+        },
+        Op::Cmov { loc, t, .. } => match loc {
+            Loc::M { addr, .. } => vec![*t, *addr],
+            Loc::R { .. } => vec![*t],
+        },
+        Op::Imm { .. } | Op::Addr { .. } | Op::Ud => vec![],
     }
 }
 
 /// `_temps_written` (1058-1059).
 fn temps_written(op: &Op) -> Vec<Temp> {
     match op {
-        Op::Imm { t, .. } | Op::Addr { t, .. } | Op::Ld { t, .. } | Op::Alu { t, .. } => vec![*t],
+        Op::Imm { t, .. } | Op::Addr { t, .. } | Op::Ld { t, .. } | Op::Alu { t, .. } | Op::Sel { t, .. } => vec![*t],
         _ => vec![],
     }
 }
@@ -490,7 +798,11 @@ fn reads_low32(o: &Op, t: Temp) -> bool {
 /// What an op writes as a location (`_operand_forms`' `writes`).
 fn writes(o: &Op) -> Option<Loc> {
     match o {
-        Op::St { loc, .. } => Some(*loc),
+        Op::St { loc, .. }
+        | Op::Set { loc, .. }
+        | Op::Cmov { loc, .. }
+        | Op::Cst { loc, .. }
+        | Op::Cstz { loc, .. } => Some(*loc),
         _ => None,
     }
 }
@@ -499,7 +811,16 @@ fn writes(o: &Op) -> Option<Loc> {
 fn forward_after(o: &Op) -> bool {
     matches!(
         o,
-        Op::Alu { .. } | Op::Flags { .. } | Op::Imm { .. } | Op::Br { .. } | Op::St { .. }
+        Op::Alu { .. }
+            | Op::Flags { .. }
+            | Op::Imm { .. }
+            | Op::Br { .. }
+            | Op::St { .. }
+            | Op::Sel { .. }
+            | Op::Set { .. }
+            | Op::Cmov { .. }
+            | Op::Cst { .. }
+            | Op::Cstz { .. }
     )
 }
 
@@ -827,7 +1148,14 @@ pub fn compile_insn(
     let mut fused_store = false; // a load fused with the store that follows
     let mut constant: BTreeMap<Temp, u64> = BTreeMap::new(); // temporaries an `imm` of this instruction set
     let folded = folded_addresses(ops);
-    let (alias, quiet, forward) = operand_forms(ops, &last, &dead);
+    // 1469-1471: an instruction with an op outside OPERAND_SAFE (DIV, a model step, #UD) keeps every temporary in a
+    // register
+    let safe = !ops.iter().any(|op| matches!(op, Op::Div { .. } | Op::Ud));
+    let (alias, quiet, forward) = if safe {
+        operand_forms(ops, &last, &dead)
+    } else {
+        Default::default()
+    };
     let mut pinned = alias.clone(); // temporaries that are guest registers, never freed
     pinned.extend(forward.iter().map(|(k, v)| (*k, *v)));
     let at = |t: Temp, reg: &BTreeMap<Temp, u32>| -> Result<u32, CompileError> {
@@ -1005,10 +1333,116 @@ pub fn compile_insn(
                     } else {
                         a.emit(&[w]);
                     }
-                } else if *o == "sext32" {
-                    a.emit(&[a64::sxtw(rd, rx)]);
                 } else {
-                    return Err(CompileError(format!("alu {o}: a later group")));
+                    let ry = || ry.ok_or_else(|| CompileError(format!("alu {o}: no register for its operand")));
+                    let count_width = if bits == 64 { 6 } else { 5 };
+                    match *o {
+                        "shr" => {
+                            a.emit(&[a64::ubfx(16, ry()?, 0, count_width)]);
+                            if bits < 64 {
+                                a.emit(&[if bits != 32 {
+                                    a64::ubfx(17, rx, 0, bits)
+                                } else {
+                                    a64::mov32(17, rx)
+                                }]);
+                                a.emit(&[a64::lsrv(rd, 17, 16)]);
+                            } else {
+                                a.emit(&[a64::lsrv(rd, rx, 16)]);
+                            }
+                        }
+                        "mul_lo" => a.emit(&[a64::mul(rd, rx, ry()?)]),
+                        "mul_hi" => a.emit(&[a64::umulh(rd, rx, ry()?)]),
+                        "sext32" => a.emit(&[a64::sxtw(rd, rx)]),
+                        "sext8" | "sext16" => a.emit(&[a64::sbfx(rd, rx, 0, if *o == "sext8" { 8 } else { 16 })]),
+                        "bswap" => a.emit(&[a64::rev(rd, rx, bits)]),
+                        "popcnt" => {
+                            // V31 is scratch (the SSE lowerings' too)
+                            a.emit(&[
+                                if bits < 64 {
+                                    a64::ubfx(16, rx, 0, bits)
+                                } else {
+                                    a64::mov(16, rx)
+                                },
+                                a64::fmov_to_v(8, 31, 16),
+                                a64::cnt_8b(31, 31),
+                                a64::addv_8b(31, 31),
+                                a64::fmov_from_v(4, rd, 31),
+                            ]);
+                        }
+                        "adc" | "sbb" => {
+                            // a + b + CF, a - b - CF; CF must be defined
+                            exit_if_undefined(a, 'C');
+                            if *o == "adc" {
+                                a.emit(&[a64::add(rd, rx, ry()?, LSL, 0), a64::add(rd, rd, REG_CF, LSL, 0)]);
+                            } else {
+                                a.emit(&[a64::sub(rd, rx, ry()?), a64::sub(rd, rd, REG_CF)]);
+                            }
+                        }
+                        "bsf" | "bsr" => {
+                            // the result is stored only for a nonzero source
+                            a.emit(&[if bits < 64 {
+                                a64::ubfx(16, rx, 0, bits)
+                            } else {
+                                a64::mov(16, rx)
+                            }]);
+                            if *o == "bsf" {
+                                a.emit(&[a64::rbit(16, 16), a64::clz(rd, 16)]);
+                            } else {
+                                a.emit(&[a64::clz(16, 16), a64::movz(17, 63, 0), a64::sub(rd, 17, 16)]);
+                            }
+                        }
+                        "shl" | "sar" => {
+                            a.emit(&[a64::ubfx(16, ry()?, 0, count_width)]);
+                            if *o == "shl" {
+                                a.emit(&[a64::lslv(rd, rx, 16)]);
+                            } else {
+                                a.emit(&[a64::sbfx(17, rx, 0, bits), a64::asrv(rd, 17, 16)]);
+                            }
+                        }
+                        "rol" | "ror" => {
+                            a.emit(&[a64::ubfx(16, ry()?, 0, count_width), a64::ubfx(16, 16, 0, bits.ilog2())]);
+                            if bits == 32 || bits == 64 {
+                                if *o == "rol" {
+                                    a.emit(&[a64::sub(16, ZR, 16)]); // rotate left by k = right by -k
+                                }
+                                a.emit(&[a64::rorv(rd, rx, 16, bits)]);
+                            } else {
+                                // 8 and 16 bits: two shifts and an OR
+                                a.emit(&[a64::ubfx(17, rx, 0, bits)]);
+                                a.emit(&[if *o == "rol" {
+                                    a64::lslv(rd, 17, 16)
+                                } else {
+                                    a64::lsrv(rd, 17, 16)
+                                }]);
+                                a.emit(&[a64::sub(16, ZR, 16), a64::addi(16, 16, bits)]);
+                                a.emit(&[if *o == "rol" {
+                                    a64::lsrv(17, 17, 16)
+                                } else {
+                                    a64::lslv(17, 17, 16)
+                                }]);
+                                a.emit(&[a64::orr(rd, rd, 17)]);
+                            }
+                        }
+                        "smul_lo" | "smul_hi" => {
+                            if bits == 64 {
+                                a.emit(&[if *o == "smul_lo" {
+                                    a64::mul(rd, rx, ry()?)
+                                } else {
+                                    a64::smulh(rd, rx, ry()?)
+                                }]);
+                            } else {
+                                a.emit(&[
+                                    a64::sbfx(16, rx, 0, bits),
+                                    a64::sbfx(17, ry()?, 0, bits),
+                                    a64::mul(rd, 16, 17),
+                                ]);
+                                if *o == "smul_hi" {
+                                    a.emit(&[a64::ubfx(rd, rd, bits, bits)]);
+                                }
+                            }
+                        }
+                        _ => return Err(CompileError(format!("alu {o}"))),
+                    }
                 }
                 mask(a, rd, bits);
             }
@@ -1022,8 +1456,11 @@ pub fn compile_insn(
                 let (live, nzcv) = (flags_live[&i], nzcv_out && Some(i) == last_flags);
                 if live == 0 && !nzcv {
                     // no later instruction reads them (flag liveness)
-                } else if matches!(*kind, "shr" | "shl" | "sar" | "rol" | "ror") {
-                    return Err(CompileError(format!("flags kind {kind}: a later group")));
+                } else if matches!(*kind, "shr" | "shl" | "sar" | "rol" | "ror")
+                    && let Some(count) = constant.get(y)
+                {
+                    let (rx, rr) = (at(*x, &reg)?, at(*r, &reg)?);
+                    shift_flags_const(a, kind, rx, *count, rr, *bits);
                 } else {
                     let (rx, ry, rr) = (at(*x, &reg)?, at(*y, &reg)?, at(*r, &reg)?);
                     set_flags(a, kind, rx, ry, rr, *bits, nzcv_ready, live, nzcv)?;
@@ -1057,6 +1494,103 @@ pub fn compile_insn(
                     a.bind(skip);
                 }
             }
+            Op::Set { cond, loc } => {
+                eval_condition(a, cond)?;
+                store(a, loc, 16, &folded, &reg)?;
+            }
+            Op::Sel { t, c, x, y } => {
+                // t = x if c is nonzero, else y
+                let (rd, end) = (at(*t, &reg)?, a.label());
+                a.emit(&[a64::mov(rd, at(*y, &reg)?)]);
+                let rc = at(*c, &reg)?;
+                a.branch(move |off| a64::cbz(rc, off), end);
+                a.emit(&[a64::mov(rd, at(*x, &reg)?)]);
+                a.bind(end);
+            }
+            Op::Cst { c, loc, t } | Op::Cstz { c, loc, t } => {
+                // store when c is nonzero (cst) or zero (cstz)
+                let end = a.label();
+                let rc = at(*c, &reg)?;
+                if matches!(op, Op::Cst { .. }) {
+                    a.branch(move |off| a64::cbz(rc, off), end);
+                } else {
+                    a.branch(move |off| a64::cbnz(rc, off), end);
+                }
+                store(a, loc, at(*t, &reg)?, &folded, &reg)?;
+                a.bind(end);
+            }
+            Op::Cmov { cond, loc, t } => {
+                // SDM CMOVcc: a 32-bit destination is zero-extended whether or not the condition holds
+                let (other, end) = (a.label(), a.label());
+                eval_condition(a, cond)?;
+                a.branch(|off| a64::cbz(16, off), other);
+                store(a, loc, at(*t, &reg)?, &folded, &reg)?;
+                a.branch(a64::b, end);
+                a.bind(other);
+                if let Loc::R { idx, bits: 32, .. } = loc {
+                    a.emit(&[a64::mov32(u32::from(*idx), u32::from(*idx))]);
+                }
+                a.bind(end);
+            }
+            Op::Div { bits, t, signed } => {
+                // DIV: the quotient overflows exactly when the dividend's high half >= the divisor, which includes a
+                // zero divisor; those, a 64-bit dividend with RDX != 0 and the 8- and 16-bit forms run in the model
+                // (hvc #11), which raises #DE as Windows does. Every check comes before any write. Flags: all undefined.
+                let (rs, fast, done) = (at(*t, &reg)?, a.label(), a.label());
+                const RAX: u32 = 0;
+                const RDX: u32 = 2;
+                if *signed {
+                    if *bits == 64 {
+                        // IDIV: fast only for a dividend that is RAX sign-extended and a divisor neither 0 nor -1
+                        a.emit(&[a64::sbfx(16, RAX, 63, 1), a64::cmp(16, RDX)]);
+                        a.branch(|off| a64::bcond("ne", off), done);
+                        a.branch(move |off| a64::cbz(rs, off), done);
+                        a.emit(&[a64::addi(16, rs, 1)]);
+                        a.branch(|off| a64::cbz(16, off), done);
+                        a.emit(&[a64::sdiv(16, RAX, rs), a64::msub(RDX, 16, rs, RAX), a64::mov(RAX, 16)]);
+                        a.branch(a64::b, fast);
+                    } else if *bits == 32 {
+                        // EDX:EAX as a signed 64-bit dividend over the sign-extended divisor; a zero divisor or a
+                        // quotient past 32 bits still runs in the model
+                        a.emit(&[
+                            a64::mov32(16, RDX),
+                            a64::eor(16, ZR, 16, LSL, 32),
+                            a64::bfi(16, RAX, 0, 32),
+                            a64::sbfx(17, rs, 0, 32),
+                        ]);
+                        a.branch(|off| a64::cbz(17, off), done);
+                        a.emit(&[
+                            a64::sdiv(18, 16, 17),
+                            a64::msub(16, 18, 17, 16),
+                            a64::sbfx(17, 18, 0, 32),
+                            a64::cmp(17, 18),
+                        ]);
+                        a.branch(|off| a64::bcond("ne", off), done);
+                        a.emit(&[a64::mov32(RAX, 18), a64::mov32(RDX, 16)]);
+                        a.branch(a64::b, fast);
+                    }
+                } else if *bits == 64 {
+                    a.branch(|off| a64::cbnz(RDX, off), done);
+                    a.branch(move |off| a64::cbz(rs, off), done);
+                    a.emit(&[a64::udiv(16, RAX, rs), a64::msub(RDX, 16, rs, RAX), a64::mov(RAX, 16)]);
+                    a.branch(a64::b, fast);
+                } else if *bits == 32 {
+                    a.emit(&[a64::mov32(16, RDX), a64::mov32(17, rs), a64::cmp(16, 17)]);
+                    a.branch(|off| a64::bcond("hs", off), done);
+                    a.emit(&[
+                        a64::eor(16, ZR, 16, LSL, 32),
+                        a64::bfi(16, RAX, 0, 32),
+                        a64::udiv(RAX, 16, 17),
+                        a64::msub(RDX, RAX, 17, 16),
+                    ]);
+                    a.branch(a64::b, fast);
+                }
+                a.bind(done);
+                a.emit(&[a64::hvc(HVC_SLOW_STEP)]);
+                a.bind(fast);
+                mark_undefined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF);
+            }
+            Op::Ud => a.emit(&[a64::hvc(HVC_SLOW_STEP)]), // run by the model (hvc #11): the profile's #UD
         }
         for t in temps_read(op).into_iter().chain(temps_written(op)) {
             if reg.contains_key(&t) && last.get(&t).is_none_or(|&l| l <= i) {

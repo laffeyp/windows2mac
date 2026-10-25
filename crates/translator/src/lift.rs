@@ -79,6 +79,44 @@ pub enum Op {
         cond: &'static str,
         t: Temp,
     },
+    /// ("set", cond, loc): SETcc
+    Set {
+        cond: &'static str,
+        loc: Loc,
+    },
+    /// ("sel", t, c, x, y): t = x if temporary c is nonzero, else y
+    Sel {
+        t: Temp,
+        c: Temp,
+        x: Temp,
+        y: Temp,
+    },
+    /// ("cst", c, loc, t): store t to loc when temporary c is nonzero
+    Cst {
+        c: Temp,
+        loc: Loc,
+        t: Temp,
+    },
+    /// ("cstz", c, loc, t): store t to loc when temporary c is zero
+    Cstz {
+        c: Temp,
+        loc: Loc,
+        t: Temp,
+    },
+    /// ("cmov", cond, loc, t): CMOVcc; a 32-bit register destination is zero-extended either way
+    Cmov {
+        cond: &'static str,
+        loc: Loc,
+        t: Temp,
+    },
+    /// ("div", bits, t[, signed]): DIV r/m, IDIV with signed
+    Div {
+        bits: u32,
+        t: Temp,
+        signed: bool,
+    },
+    /// ("ud",): an instruction the guest profile makes undefined (#UD)
+    Ud,
 }
 
 /// lift.py 154-159.
@@ -367,10 +405,24 @@ pub fn pop(b: &mut Builder) -> Temp {
 pub fn commit_order(ins: &Lifted) -> Option<String> {
     let memory_access = |op: &Op| match op {
         Op::Ld { loc: Loc::M { .. }, .. } => Some("load"),
-        Op::St { loc: Loc::M { .. }, .. } => Some("store"),
+        Op::St { loc: Loc::M { .. }, .. }
+        | Op::Set { loc: Loc::M { .. }, .. }
+        | Op::Cst { loc: Loc::M { .. }, .. }
+        | Op::Cstz { loc: Loc::M { .. }, .. } => Some("store"),
         _ => None,
     };
-    let effect = |op: &Op| matches!(op, Op::St { loc: Loc::R { .. }, .. } | Op::Flags { .. });
+    let effect = |op: &Op| {
+        matches!(
+            op,
+            Op::St { loc: Loc::R { .. }, .. }
+                | Op::Flags { .. }
+                | Op::Cmov { .. }
+                | Op::Div { .. }
+                | Op::Set { loc: Loc::R { .. }, .. }
+                | Op::Cst { loc: Loc::R { .. }, .. }
+                | Op::Cstz { loc: Loc::R { .. }, .. }
+        )
+    };
     let last_access = ins.ops.iter().rposition(|op| memory_access(op).is_some())?;
     let stores: Vec<usize> = (0..ins.ops.len())
         .filter(|&i| memory_access(&ins.ops[i]) == Some("store"))
@@ -391,7 +443,15 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
     }
     for (i, op) in ins.ops[..last_access].iter().enumerate() {
         if effect(op) {
-            let kind = if matches!(op, Op::Flags { .. }) { "flags" } else { "st" };
+            let kind = match op {
+                Op::Flags { .. } => "flags",
+                Op::Cmov { .. } => "cmov",
+                Op::Div { .. } => "div",
+                Op::Set { .. } => "set",
+                Op::Cst { .. } => "cst",
+                Op::Cstz { .. } => "cstz",
+                _ => "st",
+            };
             return Some(format!(
                 "{} at 0x{:x}: {kind} at operation {i} before memory access {last_access}",
                 ins.iclass, ins.address
