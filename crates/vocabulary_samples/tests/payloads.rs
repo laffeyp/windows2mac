@@ -62,19 +62,41 @@ fn bad_value(ty: &str, guest: bool, field: &str, v: &Vocabulary) -> (Value, Stri
 #[test]
 fn every_tag_reads_back_what_it_writes_with_and_without_its_optional_fields() {
     let v = vocabulary();
-    for tag in &v.tags {
+    for tag in v.tags.iter().filter(|t| t.is_live()) {
         for with_optional in [true, false] {
             read(tag, &sample_payload(tag, with_optional, &v)).unwrap_or_else(|e| panic!("{}: {e}", tag.name));
         }
     }
     assert_eq!(v.tags.len(), 62);
+    assert_eq!(v.tags.iter().filter(|t| t.is_live()).count(), 38);
+}
+
+#[test]
+fn every_deprecated_tag_is_refused_by_name_on_both_planes() {
+    let v = vocabulary();
+    let deprecated: Vec<&Tag> = v.deprecated_tags().collect();
+    assert_eq!(deprecated.len(), 24);
+    for tag in deprecated {
+        let refused = if tag.is_guest() {
+            GuestLine::parse(&format!("{{\"tag\": \"{}\"}}", tag.name)).unwrap_err()
+        } else {
+            HarnessEvent::parse(&format!("{{\"kind\": \"{}\", \"payload\": {{}}}}", tag.name)).unwrap_err()
+        };
+        assert_eq!(
+            (refused.path.as_str(), refused.reason.as_str()),
+            (
+                if tag.is_guest() { "tag" } else { "kind" },
+                format!("{:?} is deprecated in vocabulary 0.10", tag.name).as_str()
+            )
+        );
+    }
 }
 
 #[test]
 fn every_required_field_left_out_is_refused_by_name() {
     let v = vocabulary();
     let mut reach = 0;
-    for tag in &v.tags {
+    for tag in v.tags.iter().filter(|t| t.is_live()) {
         for field in &tag.required {
             let mut payload = sample_payload(tag, true, &v);
             payload.remove(field);
@@ -92,7 +114,7 @@ fn every_required_field_left_out_is_refused_by_name() {
 #[test]
 fn an_unknown_field_is_refused_on_every_tag() {
     let v = vocabulary();
-    for tag in &v.tags {
+    for tag in v.tags.iter().filter(|t| t.is_live()) {
         let mut payload = sample_payload(tag, true, &v);
         payload.insert("not_a_field".to_string(), Value::from(1));
         let refused = read(tag, &payload).expect_err(&format!("{} took an unknown field", tag.name));
@@ -104,7 +126,7 @@ fn an_unknown_field_is_refused_on_every_tag() {
 fn every_field_refuses_a_value_outside_its_type_by_name() {
     let v = vocabulary();
     let mut reach = 0;
-    for tag in &v.tags {
+    for tag in v.tags.iter().filter(|t| t.is_live()) {
         for (field, _) in tag.fields() {
             let (bad, path) = bad_value(&tag.types[field], tag.is_guest(), field, &v);
             let mut payload = sample_payload(tag, true, &v);
@@ -114,7 +136,12 @@ fn every_field_refuses_a_value_outside_its_type_by_name() {
             reach += 1;
         }
     }
-    let fields: usize = v.tags.iter().map(|t| t.required.len() + t.optional.len()).sum();
+    let fields: usize = v
+        .tags
+        .iter()
+        .filter(|t| t.is_live())
+        .map(|t| t.required.len() + t.optional.len())
+        .sum();
     assert_eq!(reach, fields);
 }
 

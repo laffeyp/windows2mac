@@ -317,6 +317,46 @@
     "into": "0.9",
     "grounds": "project \u2014 Decision 2026-10-17 (SDD hardening first), plan step 1's measure (instructions a second), v0.2 \u00a73.1 (performance numbers kept apart from acceptance); SDD \u2014 PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2, the signal contract (every value emitted); practice \u2014 a measure's dimension in a label, not its name (Prometheus naming practice), as P19"
    }
+  },
+  {
+   "id": "P21",
+   "kind": "TAG_DEPRECATION_PROPOSED",
+   "layer": 1,
+   "candidate": [
+    "EVIDENCE_SUPERSEDED is deprecated: no code emits it",
+    "HYPOTHESIS_RESOLVED is deprecated: no code emits it",
+    "CONTRACT_REJECTED is deprecated: no code emits it",
+    "MODEL_CHECK_STARTED is deprecated: no code emits it",
+    "MODEL_CHECK_COMPLETED is deprecated: no code emits it",
+    "TRANSLATION_INVALIDATED is deprecated: no code emits it",
+    "STALE_TRANSLATION_ENTERED is deprecated: no code emits it",
+    "ARTIFACT_BUILT is deprecated: no code emits it",
+    "ARTIFACT_INVALIDATED is deprecated: no code emits it",
+    "APPLICATION_PREPARED is deprecated: no code emits it",
+    "STEAM_SESSION_ESTABLISHED is deprecated: no code emits it",
+    "STEAM_SESSION_FAILED is deprecated: no code emits it",
+    "BRIDGE_CALL_UNMAPPED is deprecated: no code emits it",
+    "APPLICATION_LAUNCHED is deprecated: no code emits it",
+    "APPLICATION_EXITED is deprecated: no code emits it",
+    "SAVE_STATE_VERIFIED is deprecated: no code emits it",
+    "APPLICATION_UPDATED is deprecated: no code emits it",
+    "APPLICATION_REMOVED is deprecated: no code emits it",
+    "PRODUCT_LIFECYCLE_QUALIFIED is deprecated: no code emits it",
+    "GUEST_THREAD_EXITED is deprecated: no code emits it",
+    "GUEST_MEMORY_OBSERVED is deprecated: no code emits it",
+    "GUEST_FAULT_RAISED is deprecated: no code emits it",
+    "GUEST_CALLBACK_ENTERED is deprecated: no code emits it",
+    "GUEST_CLOCK_READ is deprecated: no code emits it"
+   ],
+   "source": "BLACKBOARD Decision 2026-10-24 user (the re-review, fix (e)); docs/review-2026-10-17-sdd-hardening.md item 1 (tags with no emit site given one or deprecated); sprints/sprint-131-vocabulary-0-10.md",
+   "rationale": "0.9 carries 24 tags that no code fires: 21 named only in generated code (src/w2m/events.py), and GUEST_CLOCK_READ, GUEST_MEMORY_OBSERVED and GUEST_THREAD_EXITED named only in tests. The 19 harness tags occur 1,080 times each under store/runs/, all in the schema each baseline embeds and in Sprint 126's samples run; the 5 guest tags occur in no stored trace. Each keeps its entry, marked deprecated, so records that carry it still replay; Rust code gets no type for it and the harness schema file no entry. TRANSLATION_INVALIDATED and GUEST_FAULT_RAISED, which the hardening review of 2026-10-17 asked to give emit sites, are deprecated with the rest: the code path that needs one proposes it again with the code.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-24",
+    "by": "agent-resolved",
+    "into": "0.10",
+    "grounds": "project — Decision 2026-10-24 user, fix (e); the emit sites and stored occurrences counted 2026-10-24; SDD — PRINCIPLES.md (TAG_DEPRECATION_PROPOSED), TECHNIQUES.md #45 (deprecation entries instead of removals); practice — n/a"
+   }
   }
  ]
 }

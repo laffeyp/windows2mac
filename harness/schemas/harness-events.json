@@ -22,16 +22,6 @@
       "applicability": {"type": "str"},
       "distinguishing_check": {"type": "str", "optional": true}
     },
-    "EVIDENCE_SUPERSEDED": {
-      "evidence_id": {"type": "str", "min_length": 1},
-      "superseded_by": {"type": "str", "min_length": 1},
-      "reason": {"type": "str"}
-    },
-    "HYPOTHESIS_RESOLVED": {
-      "evidence_id": {"type": "str", "min_length": 1},
-      "resolution": {"type": "str", "enum": ["supported", "refuted", "inconclusive"]},
-      "deciding_evidence_ids": {"type": "list", "items": {"type": "str", "min_length": 1}}
-    },
     "CONTRACT_PROPOSED": {
       "contract_id": {"type": "str", "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+\\Z"},
       "version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
@@ -52,11 +42,6 @@
       "rationale_ref": {"type": "str"},
       "evidence_ids": {"type": "list", "items": {"type": "str", "min_length": 1}},
       "triggering_discrepancy_id": {"type": "str", "min_length": 1, "optional": true}
-    },
-    "CONTRACT_REJECTED": {
-      "contract_id": {"type": "str", "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+\\Z"},
-      "version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
-      "reason": {"type": "str"}
     },
     "DEPENDENTS_INVALIDATED": {
       "contract_id": {"type": "str", "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+\\Z"},
@@ -111,20 +96,6 @@
       "execution_id": {"type": "str", "min_length": 1},
       "first_invalid_line": {"type": "int", "ge": 0, "le": 9007199254740991},
       "reason": {"type": "str"}
-    },
-    "MODEL_CHECK_STARTED": {
-      "model_check_id": {"type": "str", "min_length": 1},
-      "contract_id": {"type": "str", "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+\\Z"},
-      "contract_version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
-      "program_sha256": {"type": "str", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
-      "state_bound": {"type": "int", "ge": 0, "le": 9007199254740991}
-    },
-    "MODEL_CHECK_COMPLETED": {
-      "model_check_id": {"type": "str", "min_length": 1},
-      "permitted_outcome_count": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "states_explored": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "exhaustive": {"type": "bool"},
-      "outcome_set_sha256": {"type": "str", "pattern": "^sha256:[0-9a-f]{64}\\Z"}
     },
     "COMPARISON_COMPLETED": {
       "comparison_id": {"type": "str", "min_length": 1},
@@ -214,33 +185,9 @@
       "contract_version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
       "artifact_id": {"type": "str", "min_length": 1}
     },
-    "TRANSLATION_INVALIDATED": {
-      "translation_id": {"type": "str", "min_length": 1},
-      "cause": {"type": "str", "enum": ["code_modified", "unmapped", "remapped", "address_reused", "contract_revised", "assumption_failed"]}
-    },
-    "STALE_TRANSLATION_ENTERED": {
-      "translation_id": {"type": "str", "min_length": 1},
-      "guest_address": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "expected_code_version": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "actual_code_version": {"type": "int", "ge": 0, "le": 9007199254740991}
-    },
-    "ARTIFACT_BUILT": {
-      "artifact_id": {"type": "str", "min_length": 1},
-      "artifact_kind": {"type": "str", "enum": ["translation_unit", "native_module", "runtime_component", "bridge_adapter", "metal_library", "pipeline_archive", "bundle"]},
-      "source_sha256": {"type": "str", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
-      "source_contract_version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
-      "target_contract_version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
-      "compiler_version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
-      "stage": {"type": "str", "enum": ["install", "update", "execution"]},
-      "application_profile_id": {"type": "str", "min_length": 1, "optional": true}
-    },
     "ARTIFACT_ACCEPTED": {
       "artifact_id": {"type": "str", "min_length": 1},
       "comparison_ids": {"type": "list", "items": {"type": "str", "min_length": 1}}
-    },
-    "ARTIFACT_INVALIDATED": {
-      "artifact_id": {"type": "str", "min_length": 1},
-      "cause": {"type": "str", "enum": ["source_changed", "contract_revised", "compiler_changed", "capability_changed", "validity_condition_failed"]}
     },
     "CAPABILITY_PROBED": {
       "capability": {"type": "str", "enum": ["ipa_granule_4k", "guest_tsoen", "guest_tsoen_context_switch", "native_process_tso", "host_page_16k", "metal_device_family", "native_mprotect_4k", "native_page_check_4k", "guest_page_protection_4k", "guest_fp_alternate_handling", "guest_fp_minmax_x86", "guest_fp_nan_x86", "guest_fp_tininess_x86", "guest_fp_denormal_x86", "guest_fp_to_int_x86"]},
@@ -295,62 +242,6 @@
       "app_id": {"type": "int", "ge": 0, "le": 9007199254740991},
       "reason": {"type": "str", "enum": ["auth_required", "auth_failed", "not_licensed", "network", "tool_error"]},
       "diagnostic": {"type": "str"}
-    },
-    "APPLICATION_PREPARED": {
-      "application_profile_id": {"type": "str", "min_length": 1},
-      "bundle_id": {"type": "str", "min_length": 1},
-      "backend": {"type": "str", "enum": ["native_process", "managed_vm"]},
-      "artifact_count": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "elapsed_seconds": {"type": "float"}
-    },
-    "STEAM_SESSION_ESTABLISHED": {
-      "app_id": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "bridge_contract_version": {"type": "str", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?\\Z"},
-      "user_context_present": {"type": "bool"}
-    },
-    "STEAM_SESSION_FAILED": {
-      "app_id": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "reason": {"type": "str", "enum": ["client_unavailable", "not_licensed", "interface_unmapped", "bridge_error"]},
-      "diagnostic": {"type": "str"}
-    },
-    "BRIDGE_CALL_UNMAPPED": {
-      "interface_name": {"type": "str"},
-      "interface_version": {"type": "str"},
-      "method": {"type": "str"}
-    },
-    "APPLICATION_LAUNCHED": {
-      "application_profile_id": {"type": "str", "min_length": 1},
-      "bundle_id": {"type": "str", "min_length": 1},
-      "backend": {"type": "str", "enum": ["native_process", "managed_vm"]},
-      "launch_kind": {"type": "str", "enum": ["cold", "warm"]}
-    },
-    "APPLICATION_EXITED": {
-      "application_profile_id": {"type": "str", "min_length": 1},
-      "exit_kind": {"type": "str", "enum": ["normal", "crash", "killed"]},
-      "exit_code": {"type": "int", "ge": -9007199254740991, "le": 9007199254740991}
-    },
-    "SAVE_STATE_VERIFIED": {
-      "application_profile_id": {"type": "str", "min_length": 1},
-      "state_sha256": {"type": "str", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
-      "verified": {"type": "bool"}
-    },
-    "APPLICATION_UPDATED": {
-      "app_id": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "from_build_id": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "to_build_id": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "artifacts_invalidated": {"type": "int", "ge": 0, "le": 9007199254740991}
-    },
-    "APPLICATION_REMOVED": {
-      "app_id": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "bytes_removed": {"type": "int", "ge": 0, "le": 9007199254740991},
-      "state_retained": {"type": "bool"}
-    },
-    "PRODUCT_LIFECYCLE_QUALIFIED": {
-      "application_profile_id": {"type": "str", "min_length": 1},
-      "profile_scope": {"type": "str"},
-      "passed": {"type": "bool"},
-      "steps_passed": {"type": "list", "items": {"type": "str", "enum": ["resolve", "acquire", "prepare", "session", "launch", "state", "close", "relaunch", "update", "remove"]}},
-      "failed_step": {"type": "str", "enum": ["resolve", "acquire", "prepare", "session", "launch", "state", "close", "relaunch", "update", "remove"], "optional": true}
     },
     "SERVICE_UNIMPLEMENTED": {
       "execution_id": {"type": "str", "min_length": 1},

@@ -11,7 +11,7 @@ use serde_json::Value;
 use vocabulary_generator::{Vocabulary, check, current_vocabulary_path};
 
 const COPIED: [&str; 3] = [
-    "signals/current.json",
+    "signals/rust-current.json",
     "crates/events/src/generated.rs",
     "harness/schemas/harness-events.json",
 ];
@@ -76,6 +76,36 @@ fn one_character_changed_in_either_generated_file_fails_check_naming_it() {
         assert_eq!(out.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&out.stderr).contains(&format!("stale: {rel}")));
     }
+}
+
+#[test]
+fn a_hand_written_crate_naming_a_deprecated_tag_fails_check_naming_both() {
+    let scratch = Scratch::new("deprecated-emit-site");
+    let src = scratch.0.join("crates/planted/src");
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("lib.rs"), "pub const TAG: &str = \"GUEST_THREAD_EXITED\";\n").unwrap();
+    fs::write(
+        src.join("other.rs"),
+        "// GUEST_THREAD_EXITEDX is a longer word, not the tag\n",
+    )
+    .unwrap();
+    let out = scratch.generator(&["--check"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).trim(),
+        "crates/planted/src/lib.rs: names GUEST_THREAD_EXITED, deprecated in vocabulary 0.10"
+    );
+}
+
+#[test]
+fn a_deprecation_without_its_proposal_is_refused_by_name() {
+    let errs = planted(|raw| {
+        tag_mut(raw, "GUEST_THREAD_EXITED")["deprecated"]["proposal"] = Value::from("twenty-one");
+    });
+    assert_eq!(
+        errs,
+        ["GUEST_THREAD_EXITED: a deprecation names its date (YYYY-MM-DD), its proposal (Pn) and a reason"]
+    );
 }
 
 /// The current vocabulary with one edit, checked.

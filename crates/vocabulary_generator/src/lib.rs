@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-/// The harness plane's integer limit, 2^53 - 1 (RFC 8785; `signals/0.9.json` `types.u64`).
+/// The harness plane's integer limit, 2^53 - 1 (RFC 8785; `signals/0.10.json` `types.u64`).
 const HARNESS_INTEGER_LIMIT: u64 = 9_007_199_254_740_991;
 
 /// Verbs that are past tense without ending in ED (`check_vocab.py`; INIT is the SESSION_INIT pattern, TECHNIQUES.md
@@ -93,11 +93,26 @@ pub struct Tag {
     pub optional: Vec<String>,
     pub types: BTreeMap<String, String>,
     pub note: String,
+    /// Set when a ratified TAG_DEPRECATION_PROPOSED retires the tag (0.10, P21): it keeps its entry, so records that
+    /// carry it still read, and Rust gets no type for it.
+    pub deprecated: Option<Deprecation>,
+}
+
+/// A tag's `deprecated` mark: when, by which proposal, and why.
+#[derive(Debug, Clone)]
+pub struct Deprecation {
+    pub date: String,
+    pub proposal: String,
+    pub reason: String,
 }
 
 impl Tag {
     pub fn is_guest(&self) -> bool {
         self.category == "guest"
+    }
+
+    pub fn is_live(&self) -> bool {
+        self.deprecated.is_none()
     }
 
     /// Required fields, then optional ones, each with whether it is optional.
@@ -190,6 +205,18 @@ impl Vocabulary {
                 }
                 None => errors.push(format!("{at}: missing types")),
             }
+            let deprecated = match t.get("deprecated") {
+                None => None,
+                Some(d) => {
+                    let at = format!("{at}.deprecated");
+                    let mut part = |k: &str| string(d, k, &at).map_err(|e| errors.push(e)).unwrap_or_default();
+                    Some(Deprecation {
+                        date: part("date"),
+                        proposal: part("proposal"),
+                        reason: part("reason"),
+                    })
+                }
+            };
             tags.push(Tag {
                 name,
                 category,
@@ -198,6 +225,7 @@ impl Vocabulary {
                 optional,
                 types,
                 note,
+                deprecated,
             });
         }
         if raw.get("tags").and_then(Value::as_array).is_none() {
@@ -246,12 +274,19 @@ impl Vocabulary {
         self.tags.len()
     }
 
+    /// The live harness-plane tags: a deprecated tag has no Rust type, no schema entry and no sample.
     pub fn harness_tags(&self) -> impl Iterator<Item = &Tag> {
-        self.tags.iter().filter(|t| !t.is_guest())
+        self.tags.iter().filter(|t| !t.is_guest() && t.is_live())
     }
 
+    /// The live guest-plane tags.
     pub fn guest_tags(&self) -> impl Iterator<Item = &Tag> {
-        self.tags.iter().filter(|t| t.is_guest())
+        self.tags.iter().filter(|t| t.is_guest() && t.is_live())
+    }
+
+    /// The deprecated tags, both planes, in the vocabulary's order.
+    pub fn deprecated_tags(&self) -> impl Iterator<Item = &Tag> {
+        self.tags.iter().filter(|t| !t.is_live())
     }
 }
 
@@ -355,6 +390,22 @@ pub fn check(v: &Vocabulary) -> (Vec<String>, String) {
         }
         if !is_upper_snake_with_two_words(n) {
             errs.push(format!("{n}: name is not UPPER_SNAKE with an entity and a verb"));
+        }
+        if let Some(d) = &t.deprecated {
+            let date_ok = d.date.len() == 10
+                && d.date.bytes().enumerate().all(|(i, b)| match i {
+                    4 | 7 => b == b'-',
+                    _ => b.is_ascii_digit(),
+                });
+            let proposal_ok = d
+                .proposal
+                .strip_prefix('P')
+                .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+            if !date_ok || !proposal_ok || d.reason.trim().is_empty() {
+                errs.push(format!(
+                    "{n}: a deprecation names its date (YYYY-MM-DD), its proposal (Pn) and a reason"
+                ));
+            }
         }
         let last = n.rsplit('_').next().unwrap_or_default();
         if !(last.ends_with("ED") || IRREGULAR_PAST.contains(&last)) {
@@ -616,10 +667,11 @@ pub fn render_rust(v: &Vocabulary) -> String {
     line(
         &mut o,
         &format!(
-            "//! The {} tags and {} enums of vocabulary {}.",
-            v.tags.len(),
+            "//! The {} live tags and {} enums of vocabulary {}; its {} deprecated tags have no type.",
+            v.tags.iter().filter(|t| t.is_live()).count(),
             v.enums.len(),
-            v.version
+            v.version,
+            v.deprecated_tags().count()
         ),
     );
     line(&mut o, "");
@@ -649,6 +701,17 @@ pub fn render_rust(v: &Vocabulary) -> String {
         &format!(
             "pub const GUEST_TAGS: &[&str] = &[{}];",
             list(v.guest_tags().map(|t| t.name.as_str()).collect())
+        ),
+    );
+    line(
+        &mut o,
+        "/// Tags the vocabulary keeps but retired: a record may carry one, and no Rust code builds or reads one.",
+    );
+    line(
+        &mut o,
+        &format!(
+            "pub const DEPRECATED_TAGS: &[&str] = &[{}];",
+            list(v.deprecated_tags().map(|t| t.name.as_str()).collect())
         ),
     );
 
@@ -720,7 +783,7 @@ pub fn render_rust(v: &Vocabulary) -> String {
         line(&mut o, "}");
     }
 
-    for t in &v.tags {
+    for t in v.tags.iter().filter(|t| t.is_live()) {
         let ty = camel(&t.name);
         let plane = if t.is_guest() { "Guest" } else { "Harness" };
         line(&mut o, "");
@@ -821,6 +884,10 @@ pub fn render_rust(v: &Vocabulary) -> String {
             }
             line(
                 &mut o,
+                "            _ if DEPRECATED_TAGS.contains(&tag) => Err(FieldError::new(\"tag\", format!(\"{tag:?} is deprecated in vocabulary {VOCAB_VERSION}\"))),",
+            );
+            line(
+                &mut o,
                 "            _ => Err(FieldError::new(\"tag\", format!(\"{tag:?} is not a guest-plane tag\"))),",
             );
         } else {
@@ -840,6 +907,10 @@ pub fn render_rust(v: &Vocabulary) -> String {
                     ),
                 );
             }
+            line(
+                &mut o,
+                "            _ if DEPRECATED_TAGS.contains(&kind) => Err(FieldError::new(\"kind\", format!(\"{kind:?} is deprecated in vocabulary {VOCAB_VERSION}\"))),",
+            );
             line(
                 &mut o,
                 "            _ => Err(FieldError::new(\"kind\", format!(\"{kind:?} is not a harness-plane tag\"))),",
@@ -965,9 +1036,11 @@ pub fn sample_payload(tag: &Tag, with_optional: bool, v: &Vocabulary) -> serde_j
         .collect()
 }
 
-/// The vocabulary file `signals/current.json` names, under the repository `root`.
+/// The vocabulary file Rust code speaks, under the repository `root`: the version `signals/rust-current.json` names.
+/// `signals/current.json` names the frozen Python host's (0.9), which `src/w2m/__init__.py` pins; the two pointers
+/// become one when the Python host moves under `oracle/` (vocabulary 0.10's rationale; Sprint 131).
 pub fn current_vocabulary_path(root: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let current = root.join("signals/current.json");
+    let current = root.join("signals/rust-current.json");
     let text = std::fs::read_to_string(&current).map_err(|e| format!("{}: {e}", current.display()))?;
     let value: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", current.display()))?;
     let version = value

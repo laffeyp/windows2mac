@@ -208,9 +208,9 @@ fn vocabulary_tags(root: &Path) -> Result<BTreeSet<String>, String> {
         serde_json::from_str(&fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?)
             .map_err(|e| format!("{}: {e}", p.display()))
     };
-    let version = read(root.join("signals/current.json"))?["version"]
+    let version = read(root.join("signals/rust-current.json"))?["version"]
         .as_str()
-        .ok_or("signals/current.json: no version")?
+        .ok_or("signals/rust-current.json: no version")?
         .to_string();
     let vocab = read(root.join(format!("signals/{version}.json")))?;
     Ok(vocab["tags"]

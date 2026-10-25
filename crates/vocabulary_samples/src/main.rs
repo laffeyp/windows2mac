@@ -37,7 +37,7 @@ fn run() -> Result<(), String> {
             .find(|t| t.name == "SESSION_INIT")
             .ok_or("no SESSION_INIT")?;
         let mut payload = sample_payload(tag, true, &vocab);
-        payload.insert("vocab_version".to_string(), Value::from("0.9\n"));
+        payload.insert("vocab_version".to_string(), Value::from("0.10\n"));
         let line = format!(
             "{{\"kind\": \"SESSION_INIT\", \"payload\": {}}}",
             Value::Object(payload)

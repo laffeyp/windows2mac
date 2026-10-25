@@ -9,7 +9,7 @@
 //!
 //! A harness-plane event is written as substrate's line protocol, `{"kind": TAG, "payload": {...}}`
 //! (substrate `docs/process-producer.md`); a guest-plane event as one JSONL trace line, `{"tag": TAG, ...}`
-//! (`signals/0.9.json` `transport`). Reading refuses a missing field, an unknown field and a value outside its type,
+//! (`signals/0.10.json` `transport`). Reading refuses a missing field, an unknown field and a value outside its type,
 //! and names the field.
 
 use std::fmt;
@@ -23,7 +23,7 @@ pub use generated::*;
 /// The largest integer RFC 8785 admits, 2^53 - 1; substrate refuses a payload with a larger one.
 pub const HARNESS_INTEGER_LIMIT: u64 = 9_007_199_254_740_991;
 
-/// Which plane a tag travels on (`signals/0.9.json` `transport`).
+/// Which plane a tag travels on (`signals/0.10.json` `transport`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Plane {
     /// A substrate application event.

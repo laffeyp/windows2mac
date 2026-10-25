@@ -5,7 +5,7 @@
 
 [baseline]
 harness = "w2m"
-vocabulary = "0.9"
+vocabulary = "0.10"
 
 [[producer]]
 kind = "vocabulary_samples"

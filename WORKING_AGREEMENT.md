@@ -27,7 +27,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 
 | Type / module | Canonical home |
 |---|---|
-| Signal vocabulary | `signals/current.json` names the version in force (0.7 since 2026-10-09, proposal P17; 0.6 P15–P16, 0.5 P14); `signals/<version>.json` + `<version>-rationale.md`; proposals in `signals/proposals.json` |
+| Signal vocabulary | `signals/rust-current.json` names the version Rust code speaks (0.10 since 2026-10-24, P21); `signals/current.json` names the frozen Python host's (0.9, P20), until the Python host moves under `oracle/` (Decision 2026-10-24, Sprint 131); `signals/<version>.json` + `<version>-rationale.md`; proposals in `signals/proposals.json` |
 | Vocabulary rationale | `signals/<version>-rationale.md`, one per version (0.1-0.7) |
 | Vocabulary proposals | `signals/proposals.json` |
 | Vocabulary structure gate | `scripts/check_vocab.py` |
@@ -102,8 +102,8 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 ## Vocabulary discipline overrides
 
 - **Validator-extras posture:** strict (default), unless Sprint 0 records a reason.
-- **Vocabulary location:** `signals/current.json` → `signals/0.7.json` (0.1-0.6 kept unchanged).
-- **Vocabulary CI gate command:** `python3 scripts/check_vocab.py` (structure of the version `signals/current.json` names; added Sprint 000). An emit-site parity check joins it with the first implementation language.
+- **Vocabulary location:** `signals/rust-current.json` → `signals/0.10.json` for Rust; `signals/current.json` → `signals/0.9.json` for the frozen Python host (0.1-0.9 kept unchanged).
+- **Vocabulary CI gate command:** `python3 scripts/check_vocab.py` (structure of the version `signals/current.json` names; added Sprint 000) for the Python host's 0.9; `target/release/vocabulary_generator --check` for Rust's 0.10, which also fails a hand-written crate that names a deprecated tag (Sprint 131).
 
 ---
 
@@ -122,7 +122,7 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 - `uv run substrate run --file harness/session-check.toml --strict`, then `uv run substrate replay <root> --level 2` — expected exit 0 (a Rust binary's events on a substrate record, Sprint 125).
 - `target/release/signal_report --check` — expected exit 0 (every sprint from 108 whose card says `status: done` has `signal-reports/sprint-NNN-report.md`; Sprint 127). A report is written with `target/release/signal_report NNN --write` at the close; `scripts/signal_report.py` is retired with the Python gates.
 - `target/release/design_check` — expected exit 0 (every plan and design under `docs/` (a name beginning `design-`, `solution-`, `recentering-` or `architecture-`, or holding `plan-`), except the seven written before the check, has `## Against the goal`, stating 37,600, 41 million, six threads and the first scene, and `## Against the systems that solved it`, naming QEMU, crosvm, Firecracker, Wine, Rosetta 2 and FEX each with a source; Sprint 128, Decision 2026-10-24 user, fix (a)). Every `## Decisions` entry from 2026-10-24 that sets the system's shape carries the marker `Architecture:` and names such a document under `docs/`; the binary fails a marked entry that names none. The binary checks that the figures and sources are written; the reviewer judges the argument.
-- `target/release/vocabulary_generator --check` — expected exit 0 (`crates/events/src/generated.rs` and `harness/schemas/harness-events.json` are the generator's output from the current vocabulary, byte for byte; Sprint 126). Regenerate with `cargo run --release -p vocabulary_generator`.
+- `target/release/vocabulary_generator --check` — expected exit 0 (`crates/events/src/generated.rs` and `harness/schemas/harness-events.json` are the generator's output from the vocabulary `signals/rust-current.json` names, byte for byte, Sprint 126; no hand-written crate names a deprecated tag, Sprint 131). Regenerate with `cargo run --release -p vocabulary_generator`.
 - `uv run substrate run --file harness/vocabulary-samples.toml --strict`, then `uv run substrate replay <root> --level 2` — expected exit 0 (every harness-plane tag at sample values through its Rust type and the generated schema, Sprint 126).
 - `scripts/gates.sh` — runs every gate above fail-fast; expected last line `gates: all passed`. A sprint closes and commits only after it exits 0 (added Sprint 028).
 - **CI on the closing commit** (added 2026-10-10, review 2026-10-10 D1). A sprint is closed when the `ci` workflow run of its closing commit concludes `success` (`gh run watch <id> --exit-status`), not when the local gate passes: six pushes went red while every local gate passed (KIT_DIARY #28). The local gate first checks that `./substrate` is at `substrate.commit`, the commit CI clones.
