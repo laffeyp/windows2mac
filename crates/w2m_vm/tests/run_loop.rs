@@ -6,7 +6,9 @@
 //! made by running it, its sha256 in `store/run_loop/qpc-python.sha256`). Sprint 156: `sleeper.exe` creates a second
 //! thread, which the Rust host makes as the frozen Python host does, field for field
 //! (`build/run_loop/sleeper-python.json`, its sha256 in `store/run_loop/sleeper-python.sha256`), and runs on with two
-//! threads to a named stop. The fixtures' generators are named in WORKING_AGREEMENT.
+//! threads to a named stop. Sprint 157: the spinner ends, and `sleeper` runs to ExitProcess with the Python host's
+//! output, thread requests and hand-over (`build/run_loop/sleeper-end-python.json`, its sha256 in
+//! `store/run_loop/sleeper-end-python.sha256`). The fixtures' generators are named in WORKING_AGREEMENT.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 use std::collections::BTreeSet;
@@ -178,12 +180,13 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
 }
 
 #[test]
-fn sleeper_creates_its_thread_as_the_python_host_and_runs_on() {
+fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
     let Some(python) = fixture(&root, "sleeper") else {
         return;
     };
+    let end = fixture(&root, "sleeper-end");
     let python_compiles = python_compiles(&python);
     let (loaded, mut guest) = guest_for(&root, "sleeper");
     let mut host = HostCompiler::default();
@@ -293,8 +296,75 @@ fn sleeper_creates_its_thread_as_the_python_host_and_runs_on() {
     let stub_hex = want["stub"].as_str().unwrap();
     assert_eq!(hex(&read(stub, stub_hex.len() as u64 / 2)), stub_hex, "the attach stub");
 
-    // the run went on to a named stop, its output so far the Python run's, and every block compiled is a Python host
-    // compile
+    // Sprint 157: the spinner ends; its thread requests and the hand-over at its end are the Python host's
+    if let Some(end) = &end {
+        let requests: Vec<(u64, u64, u64, u64)> = end["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    number(&r["sub"]),
+                    number(&r["a0"]),
+                    number(&r["answer"]),
+                    number(&r["current"]),
+                )
+            })
+            .collect();
+        let ours: Vec<(u64, u64, u64, u64)> = out
+            .thread_requests
+            .iter()
+            .map(|r| (r.sub, r.a0, r.answer, r.current))
+            .collect();
+        assert_eq!(
+            ours, requests,
+            "the thread requests (sub, argument, answer, current thread)"
+        );
+        for r in end["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| number(&r["sub"]) == 2)
+        {
+            let (va, hex_bytes) = (number(&r["answer"]), r["stub"].as_str().unwrap());
+            assert_eq!(hex(&read(va, hex_bytes.len() as u64 / 2)), hex_bytes, "the detach stub");
+        }
+        let handovers: Vec<(u64, u64, u64)> = end["handovers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| {
+                let to = if h["ended"].as_bool().unwrap() {
+                    0
+                } else {
+                    number(&h["to"])
+                };
+                (number(&h["schedule"]), number(&h["from"]), to)
+            })
+            .collect();
+        let ours: Vec<(u64, u64, u64)> = out
+            .handovers
+            .iter()
+            .map(|h| (u64::from(h.schedule), h.from, h.to))
+            .collect();
+        assert_eq!(ours, handovers, "the hand-overs (schedule bits, from, to)");
+        assert_eq!(
+            out.stop,
+            Stop::ExitProcess {
+                code: number(&end["exit_code"]) as u32
+            },
+            "the run's stop"
+        );
+        assert_eq!(python["stop"], "ExitProcess");
+        assert_eq!(
+            String::from_utf8_lossy(&guest.stdout),
+            python["stdout"].as_str().unwrap(),
+            "the run's output"
+        );
+    }
+
+    // the run's output (so far, without the second fixture) is the Python run's, and every block compiled is a Python
+    // host compile
     assert!(
         !matches!(out.stop, Stop::Exit(_)),
         "the run stopped at an exit it does not name: {:?}",

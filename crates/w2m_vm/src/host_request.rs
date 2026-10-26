@@ -20,6 +20,9 @@ pub const HOST_EXCEPTION: u64 = 31;
 pub const HOST_THREAD: u64 = 30;
 /// threads.c's sub-requests (runtime.h 328; vm_backend 332-333)
 pub const THREAD_CREATE: u64 = 1;
+pub const THREAD_EXIT_STUB: u64 = 2;
+pub const THREAD_END: u64 = 3;
+pub const THREAD_EXIT_CODE: u64 = 7;
 pub const THREAD_STACK_GROW: u64 = 9;
 pub const EXCEPTION_STUBS: u64 = 1;
 pub const EXCEPTION_CAPTURE_XMM: u64 = 2;
@@ -100,7 +103,8 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
 }
 
 /// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT, HOST_EXCEPTION, and
-/// HOST_THREAD's THREAD_CREATE and THREAD_STACK_GROW (the main thread's).
+/// HOST_THREAD's THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_EXIT_CODE and THREAD_STACK_GROW (the main
+/// thread's).
 pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
     let (op, a0, a1, a2, a3) = {
         let mem = guest.memory.as_slice();
@@ -174,6 +178,16 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         HOST_THREAD if a0 == THREAD_CREATE => {
             crate::threads::create_thread(guest, a1, a2, (a3 & 0xFFFF_FFFF) as u32, a3 >> 32)
                 .map_err(HostError::Unserved)?
+        }
+        // `_thread_request` (3200-3211, Sprint 157): ExitThread's detach stub, W2mThreadEnd's exit code, a thread's
+        // exit code by id
+        HOST_THREAD if a0 == THREAD_EXIT_STUB => crate::threads::exit_stub(guest).map_err(HostError::Unserved)?,
+        HOST_THREAD if a0 == THREAD_END => {
+            crate::threads::end_thread(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Unserved)?;
+            0
+        }
+        HOST_THREAD if a0 == THREAD_EXIT_CODE => {
+            u64::from(crate::threads::exit_code(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Unserved)?)
         }
         HOST_THREAD => {
             return Err(HostError::Unserved(format!(

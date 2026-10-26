@@ -62,6 +62,11 @@ mod ffi {
         pub fn hv_vcpu_set_sys_reg(vcpu: HvVcpu, reg: u16, value: u64) -> HvReturn;
         pub fn hv_vcpu_set_vtimer_mask(vcpu: HvVcpu, vtimer_is_masked: bool) -> HvReturn;
         pub fn hv_vcpu_get_simd_fp_reg(vcpu: HvVcpu, reg: u32, value: *mut c_void) -> HvReturn;
+        /// `hv_return_t hv_vcpu_set_simd_fp_reg(hv_vcpu_t vcpu, hv_simd_fp_reg_t reg, hv_simd_fp_uchar16_t value)`.
+        /// The value is `ext_vector_type(16) uint8_t` by value, a 128-bit short vector, which AAPCS64 passes in v0;
+        /// stable Rust takes no SIMD type in an `extern "C"` signature (`simd_ffi`), so `Vcpu::set_simd` calls it from
+        /// assembly and the declaration only names the symbol.
+        pub fn hv_vcpu_set_simd_fp_reg();
     }
 
     unsafe extern "C" {
@@ -436,6 +441,26 @@ impl<'vm> Vcpu<'vm> {
             ffi::hv_vcpu_get_simd_fp_reg(self.id, u32::from(n), v.as_mut_ptr().cast())
         })?;
         Ok(u128::from_le_bytes(v))
+    }
+
+    /// Sets Q`n` (hv_vcpu.h `hv_vcpu_set_simd_fp_reg`) from its little-endian value.
+    pub fn set_simd(&self, n: u8, value: u128) -> Result<(), HvError> {
+        let bytes = value.to_le_bytes();
+        let ret: u64;
+        // SAFETY: the call as the header declares it, by AAPCS64: x0 the vCPU, w1 the register, v0 the 16 bytes read
+        // from `bytes`; the answer in w0. clobber_abi("C") gives the callee the caller-saved registers, x30 among them.
+        unsafe {
+            std::arch::asm!(
+                "ldr q0, [{bytes}]",
+                "blr {function}",
+                bytes = in(reg) bytes.as_ptr(),
+                function = in(reg) ffi::hv_vcpu_set_simd_fp_reg as *const (),
+                inlateout("x0") self.id => ret,
+                in("x1") u64::from(n),
+                clobber_abi("C"),
+            );
+        }
+        check("hv_vcpu_set_simd_fp_reg", ret as u32 as i32)
     }
 }
 

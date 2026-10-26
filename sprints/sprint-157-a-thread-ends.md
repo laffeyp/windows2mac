@@ -104,3 +104,35 @@ schedule bits and the thread current after it, and the process's exit code.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: the Python host's run as reference, and a planted fault.
 - [x] One concept: a thread's end in the Rust host.
+
+## result
+
+- **`sleeper` runs to ExitProcess in the Rust host.** The run stops at ExitProcess(0) with stdout `woke\ndone\n`, the
+  frozen Python host's. Its thread requests are the Python's, in order: THREAD_EXIT_CODE for thread 8 from thread 4,
+  answered 259 (STILL_ACTIVE); THREAD_EXIT_STUB from thread 8, answered 0x1000230000, the detach stub, whose bytes are
+  the Python's; THREAD_END from thread 8 with code 0; THREAD_EXIT_CODE for thread 8 from thread 4, answered 0. Its one
+  `hvc #12` hand-over is the Python's: schedule bits 4 (SCHEDULE_END), from thread 8 to thread 4. Exits: 14 misses, 8
+  host requests, 1 hand-over. The C compiled 14 blocks and the Rust host 5; each start is a Python host compile's, and
+  each host compile's (start, end) is the Python's.
+- `crates/w2m_vm/src/threads.rs`: `detach_stub`, `exit_stub`, `end_thread`, `exit_code`, `set_status` (with the run
+  table's blocked count), `schedule` and `switch` (`_save_thread`, `set_current`, `_load_thread` for vCPU 0), and
+  `Switch`. `run.rs` serves `hvc #12` when the host compiles, swaps the vectors as the monitor's `vswap` does, and
+  records each thread request 2, 3 and 7 and each hand-over in `Outcome`; a hand-over it cannot serve stops as
+  `Stop::Handover` with the reason. With no thread ready the switch refuses by name; the warp to a deadline and the 1 ms
+  sleep are not carried.
+- **A declaration stable Rust refuses.** `hv_vcpu_set_simd_fp_reg` takes its value as `ext_vector_type(16) uint8_t` by
+  value, which AAPCS64 passes in v0. Stable Rust rejects `uint8x16_t` in an `extern "C"` signature (the `simd_ffi`
+  feature is nightly-only), so `Vcpu::set_simd` loads q0 and calls the function from inline assembly.
+  `crates/hypervisor/tests/vector_register.rs` sets Q1 from the host, has the guest copy it to Q0, and reads Q0 back.
+- **Planted faults.** The ended thread's waiters left blocked: the run stopped at `Stop::Handover` ("every thread waits
+  with no timeout and nothing can wake one (a deadlock)"), and the judge failed at the thread requests, the fourth
+  missing. THREAD_END's code taken from the sub-request word (3) and not its argument: the judge failed at the thread
+  requests, the last answered 3 where the Python answered 0. Restored, it passes.
+- The second fixture: `build/run_loop/sleeper-end-python.json`, its sha256 in
+  `store/run_loop/sleeper-end-python.sha256`, its generator in WORKING_AGREEMENT; two runs gave the same bytes.
+- Rule breach, recorded: WORKING_AGREEMENT's three changed lines were written by an inline script, not the Edit tool;
+  its diff was read and holds only those lines.
+- The first gates run failed at `cargo fmt --check` (`run.rs`, `threads.rs`, `run_loop.rs`); `cargo fmt` made the
+  changes. The second failed at clippy's `large_enum_variant`: `Switch::Go` carried 31 registers beside `Ended`'s
+  u32. `schedule` now leaves the next thread's registers in the `x` it is handed, and `Go` keeps only the vector
+  slots. The gates ran a third time from the start.

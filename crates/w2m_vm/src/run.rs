@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use guest_runtime::layout::{
     CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PROCESS_VA, RUN_ENTRY,
-    RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, TRANSPORT_OFF, VM_COMPILER, VMC_LOG,
+    RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, STATE_OFF, TEB_OFF, TRANSPORT_OFF, VM_COMPILER, VMC_LOG,
     VMC_LOG_ENTRY,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
@@ -18,10 +18,11 @@ use pe_loader::Loaded;
 
 use crate::CPSR_EL1H;
 use crate::compile::HostCompiler;
-use crate::guest::{Guest, RT_IN_VM, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
+use crate::guest::{Guest, HVC_SCHEDULE, RT_IN_VM, STATE_SCHEDULE, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
+use crate::host_request::{HOST_THREAD, THREAD_END, THREAD_EXIT_CODE, THREAD_EXIT_STUB};
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, REG_BUDGET, dispatch_slot};
-use crate::threads::{FIRST_TID, STILL_ACTIVE, Thread, add_thread, slice_until};
+use crate::threads::{FIRST_TID, STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
 
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
 pub const MXCSR_OFF: u64 = 0x50;
@@ -127,6 +128,8 @@ pub enum Stop {
     ExitProcess { code: u32 },
     /// a block the host could not compile (Sprint 155): an instruction the Rust rules do not lift, a CompileError
     Untranslated { target: u64, why: String },
+    /// an `hvc #12` hand-over the host could not serve (Sprint 157), and why
+    Handover { pc: u64, why: String },
     /// any other exit
     Exit(String),
 }
@@ -149,6 +152,28 @@ pub struct Outcome {
     pub exits: BTreeMap<u16, u64>,
     /// each thread the guest created, as CreateThread's host half left it (Sprint 156)
     pub created: Vec<Created>,
+    /// each thread request THREAD_EXIT_STUB, THREAD_END and THREAD_EXIT_CODE the host served, in order (Sprint 157)
+    pub thread_requests: Vec<ThreadRequest>,
+    /// each `hvc #12` hand-over the host served, in order (Sprint 157)
+    pub handovers: Vec<Handover>,
+}
+
+/// A thread request the host served: the sub-request, its first argument, the answer and the thread current at it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThreadRequest {
+    pub sub: u64,
+    pub a0: u64,
+    pub answer: u64,
+    pub current: u64,
+}
+
+/// A hand-over: state.schedule's bits, the thread that handed vCPU 0 over and the one current after; 0 when the
+/// process ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Handover {
+    pub schedule: u32,
+    pub from: u64,
+    pub to: u64,
 }
 
 /// A created thread at THREAD_CREATE's return: its id, its run table entry and vector slot, and the count and limit.
@@ -159,6 +184,23 @@ pub struct Created {
     pub vectors: Vec<u8>,
     pub count: u64,
     pub limit: u64,
+}
+
+/// vm_monitor.c `vswap` (440-482): Q0-Q15, FPCR and FPSR to the outgoing thread's slot at memory offset `save`, then
+/// from the incoming thread's slot at `load`. A slot is 16 registers of 16 bytes, then FPCR and FPSR of 8 each.
+fn swap_vectors(vcpu: &Vcpu<'_>, mem: &mut [u8], save: u64, load: u64) -> Result<(), HvError> {
+    for n in 0..16u8 {
+        let at = (save + 16 * u64::from(n)) as usize;
+        mem[at..at + 16].copy_from_slice(&vcpu.simd(n)?.to_le_bytes());
+    }
+    write_u64(mem, save + 256, vcpu.reg(Reg::Fpcr)?);
+    write_u64(mem, save + 264, vcpu.reg(Reg::Fpsr)?);
+    for n in 0..16u8 {
+        let at = (load + 16 * u64::from(n)) as usize;
+        vcpu.set_simd(n, u128::from_le_bytes(mem[at..at + 16].try_into().unwrap()))?;
+    }
+    vcpu.set_reg(Reg::Fpcr, read_u64(mem, load + 256))?;
+    vcpu.set_reg(Reg::Fpsr, read_u64(mem, load + 264))
 }
 
 fn read_u64(mem: &[u8], off: u64) -> u64 {
@@ -250,6 +292,8 @@ fn run(
         run_ns: Vec::new(),
         exits: BTreeMap::new(),
         created: Vec::new(),
+        thread_requests: Vec::new(),
+        handovers: Vec::new(),
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -342,7 +386,21 @@ fn run(
             }
             // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end
             let threads = guest.threads.len();
+            let (sub, a0, current) = (
+                read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF + 8),
+                read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF + 16),
+                crate::threads::current_tid(guest),
+            );
             let served = crate::host_request::serve(guest, vcpu);
+            if op == HOST_THREAD && matches!(sub, THREAD_EXIT_STUB | THREAD_END | THREAD_EXIT_CODE) && served.is_ok() {
+                let answer = read_u64(guest.memory.as_slice(), MONITOR_SIZE + TRANSPORT_OFF + 56);
+                out.thread_requests.push(ThreadRequest {
+                    sub,
+                    a0,
+                    answer,
+                    current,
+                });
+            }
             if guest.threads.len() > threads {
                 let t = guest.threads.values().next_back().unwrap();
                 let (at, mem) = (crate::threads::entry(t.index), guest.memory.as_slice());
@@ -364,6 +422,46 @@ fn run(
                         pc,
                         why: e.to_string(),
                     };
+                }
+            }
+        }
+        if u32::from(number) == HVC_SCHEDULE && host.is_some() {
+            // a service handed the vCPU over, and threads.c `w2m_switch` left it to the host (5300-5303): `_schedule`,
+            // then the next thread's registers at the dispatcher (5077-5094), its vectors swapped as the monitor's
+            // `vswap` swaps them
+            let at = (MONITOR_SIZE + STATE_OFF) as usize + STATE_SCHEDULE as usize;
+            let bits = u32::from_le_bytes(mem[at..at + 4].try_into().unwrap());
+            mem[at..at + 4].fill(0);
+            let mut x = [0u64; 31];
+            for (r, v) in x.iter_mut().enumerate() {
+                *v = vcpu.reg(Reg::X(r as u8))?;
+            }
+            let from = crate::threads::current_tid(guest);
+            match crate::threads::schedule(guest, &mut x, bits) {
+                Err(why) => break Stop::Handover { pc, why },
+                Ok(Switch::Ended(code)) => {
+                    out.handovers.push(Handover {
+                        schedule: bits,
+                        from,
+                        to: 0,
+                    });
+                    break Stop::ExitProcess { code };
+                }
+                Ok(Switch::Go { vectors }) => {
+                    out.handovers.push(Handover {
+                        schedule: bits,
+                        from,
+                        to: crate::threads::current_tid(guest),
+                    });
+                    if let Some((save, load)) = vectors {
+                        swap_vectors(vcpu, guest.memory.as_mut_slice(), save, load)?;
+                    }
+                    for (r, v) in x.iter().enumerate() {
+                        vcpu.set_reg(Reg::X(r as u8), *v)?;
+                    }
+                    vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;
+                    vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
+                    continue;
                 }
             }
         }

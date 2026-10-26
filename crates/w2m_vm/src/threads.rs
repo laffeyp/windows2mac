@@ -4,11 +4,14 @@
 //! 3328-3350, and `GuestThread`, `src/w2m/scheduler.py` 60-160), CreateThread's host half (`_create_thread`,
 //! 3094-3150, with `_thread_callbacks` 3017-3031, `_thread_static_tls` 3033-3060, `_write_vectors` 3352-3356 and
 //! scheduler.py's `attach_stub`), the step budget (`_set_budget`, 3284-3289) and a run's slice end (`_slice_until`,
-//! 2756-2780) for one vCPU in one process. The switch between threads is the VM's own (threads.c `w2m_switch`).
+//! 2756-2780) for one vCPU in one process. The switch between threads is the VM's own (threads.c `w2m_switch`), but
+//! for what it leaves to the host (Sprint 157): a thread's end, ExitThread's detach stub and exit code, and the
+//! hand-over `hvc #12` makes (`_schedule`, `_switch`, `_save_thread`, `_load_thread`, 3463-3580).
 
 use guest_runtime::layout::{
-    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, MONITOR_DATA, MONITOR_VA, PAGE, PEB_OFF, PROCESS_VA,
-    RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, STATE_SIZE, TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
+    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PAGE,
+    PAUSE_COUNT, PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES,
+    STATE_OFF, STATE_SIZE, TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
 };
 use pe_loader::TLS_SLOTS;
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
@@ -26,16 +29,26 @@ pub const E_SUSPEND: u64 = 0x10;
 pub const E_DEADLINE: u64 = 0x18;
 pub const E_TEB: u64 = 0x20;
 pub const E_VSLOT: u64 = 0x28;
+pub const E_INSTRUCTIONS: u64 = 0x30;
+pub const E_PAUSES: u64 = 0x38;
 pub const E_VCPU: u64 = 0x138;
-/// `STATUS_CODES` (scheduler.py 47).
+/// `STATUS_CODES` (scheduler.py 50).
 pub const READY: u64 = 0;
 pub const BLOCKED: u64 = 1;
+pub const ENDED: u64 = 2;
+/// state.schedule's bits (vm_backend 1134; runtime.h).
+pub const SCHEDULE_RETRY: u32 = 2;
+pub const SCHEDULE_END: u32 = 4;
+pub const SCHEDULE_ANSWER: u32 = 8;
+/// runtime.h W2M_THREAD_SCRATCH_OFF (scheduler.py 32): a thread's scratch in its TEB; its first word a wait's deadline.
+const SCRATCH_OFF: u64 = 0x1900;
 /// The monitor data ranges each thread keeps (scheduler.py 31): lazy AF and DF, MXCSR, the x87 control word, the YMM
 /// upper halves.
 pub const PER_THREAD_MONITOR: [(u64, u64); 4] = [(0x20, 0x40), (0x50, 0x58), (0x70, 0x72), (0x400, 0x500)];
 /// scheduler.py 24-26; the first thread's id (vm_backend `_first_tid`).
 pub const STILL_ACTIVE: u32 = 259;
 const DLL_THREAD_ATTACH: u32 = 2;
+const DLL_THREAD_DETACH: u32 = 3;
 const START_LAST_ERROR: u32 = 187;
 pub const FIRST_TID: u64 = 4;
 /// CreateThread's flags (vm_backend 3099-3101, 3135).
@@ -245,6 +258,197 @@ pub fn attach_stub(callbacks: &[(u64, u64)], start: u64, parameter: u64, exit_th
     code.extend(exit_thread.to_le_bytes());
     code.extend([0xff, 0xd0, 0xcc]);
     code
+}
+
+/// scheduler.py `detach_stub`: a thread's last code, from ExitThread: each (module base, function) with
+/// DLL_THREAD_DETACH, then W2mThreadEnd.
+pub fn detach_stub(callbacks: &[(u64, u64)], thread_end: u64) -> Vec<u8> {
+    let mut code = Vec::new();
+    for &(base, function) in callbacks {
+        call(&mut code, function, base, DLL_THREAD_DETACH);
+    }
+    code.extend([0x48, 0x83, 0xec, 0x28, 0x48, 0xb8]);
+    code.extend(thread_end.to_le_bytes());
+    code.extend([0xff, 0xd0, 0xcc]);
+    code
+}
+
+/// `_thread_request`'s THREAD_EXIT_STUB (3201-3202): ExitThread's detach stub in a code page; its address.
+pub fn exit_stub(guest: &mut Guest) -> Result<u64, String> {
+    let callbacks = thread_callbacks(guest);
+    let thread_end = guest
+        .import_thunk("KERNEL32.dll!W2mThreadEnd")
+        .map_err(|e| format!("{e:?}"))?;
+    guest
+        .code_page(&detach_stub(&callbacks, thread_end))
+        .map_err(|e| format!("{e:?}"))
+}
+
+/// `_thread_request`'s THREAD_END (3203-3205): the current thread's final exit code.
+pub fn end_thread(guest: &mut Guest, code: u32) -> Result<(), String> {
+    let current = current_tid(guest);
+    let t = guest
+        .threads
+        .get_mut(&current)
+        .ok_or_else(|| format!("thread {current} ends, and the host holds no such thread"))?;
+    t.exit_code = code;
+    Ok(())
+}
+
+/// `_thread_request`'s THREAD_EXIT_CODE (3206-3211): thread `tid`'s exit code, STILL_ACTIVE while it runs.
+pub fn exit_code(guest: &Guest, tid: u32) -> Result<u32, String> {
+    guest
+        .threads
+        .get(&u64::from(tid))
+        .map(|t| t.exit_code)
+        .ok_or_else(|| format!("a thread request (7) for thread id {tid}, which w2m did not create"))
+}
+
+/// `GuestThread.status`'s setter (scheduler.py 83-89): the entry's status, and the header's count of blocked threads,
+/// which threads.c `w2m_signal` reads.
+pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
+    let mem = guest.memory.as_mut_slice();
+    let at = entry(index);
+    let was = read_u64(mem, at + E_STATUS);
+    if (was == BLOCKED) != (status == BLOCKED) {
+        let blocked = read_u64(mem, RUN_TABLE + RT_BLOCKED);
+        let blocked = if status == BLOCKED { blocked + 1 } else { blocked - 1 };
+        write_u64(mem, RUN_TABLE + RT_BLOCKED, blocked);
+    }
+    write_u64(mem, at + E_STATUS, status);
+}
+
+/// What a hand-over leaves to run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Switch {
+    /// every thread has ended: the process ends with the last one's exit code
+    Ended(u32),
+    /// a thread goes on at the dispatcher with the registers `schedule` left in its `x`; the vector slots to swap,
+    /// (outgoing, incoming), when it is another thread
+    Go { vectors: Option<(u64, u64)> },
+}
+
+/// `_schedule` (3500-3519) for `hvc #12`: the current thread (its registers in `x`, at an instruction boundary) hands
+/// vCPU 0 over with state.schedule's `bits`. SCHEDULE_END: it has ended, and every blocked thread is made ready (its
+/// handle signals; waiters check again). SCHEDULE_RETRY: a thread `w2m_block` blocked keeps its wait's deadline. Then
+/// `_switch`, unless every thread has ended, which leaves in `x` the registers of the thread that goes on.
+pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switch, String> {
+    let current = current_tid(guest);
+    let cur = guest
+        .threads
+        .get(&current)
+        .ok_or_else(|| format!("thread {current} hands over, and the host holds no such thread"))?
+        .clone();
+    let word = |guest: &Guest, t: &Thread, off: u64| read_u64(guest.memory.as_slice(), entry(t.index) + off);
+    if bits & SCHEDULE_END != 0 {
+        set_status(guest, cur.index, ENDED);
+        let blocked: Vec<u64> = guest
+            .threads
+            .values()
+            .filter(|t| word(guest, t, E_STATUS) == BLOCKED)
+            .map(|t| t.index)
+            .collect();
+        for index in blocked {
+            set_status(guest, index, READY);
+        }
+    } else if bits & SCHEDULE_RETRY != 0 && word(guest, &cur, E_STATUS) == BLOCKED {
+        let deadline = u64::from_le_bytes(read_guest(guest, cur.teb + SCRATCH_OFF, 8)?.try_into().unwrap());
+        write_u64(guest.memory.as_mut_slice(), entry(cur.index) + E_DEADLINE, deadline);
+    }
+    if guest.threads.values().all(|t| word(guest, t, E_STATUS) == ENDED) {
+        return Ok(Switch::Ended(cur.exit_code)); // the last thread ended: the process ends with it
+    }
+    switch(guest, x, &cur, bits)
+}
+
+/// `_switch` (3521-3580) for vCPU 0 of one process, the thread not yet put down: the next ready, unsuspended thread
+/// after `cur` in id order, round robin, `cur` last. With none ready the host would warp the instruction clock to a
+/// deadline or sleep 1 ms for a timed wait; neither is carried yet, and the switch refuses by name.
+fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Result<Switch, String> {
+    let mem = guest.memory.as_slice();
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    let order: Vec<&Thread> = guest.threads.values().collect();
+    let i = order.iter().position(|t| t.tid == cur.tid).unwrap();
+    let rotation = order[i + 1..].iter().chain(order[..=i].iter());
+    let next = rotation
+        .clone()
+        .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0)
+        .map(|t| (*t).clone());
+    let Some(next) = next else {
+        let timed = rotation
+            .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
+            .count();
+        return Err(if timed == 0 {
+            "every thread waits with no timeout and nothing can wake one (a deadlock)".into()
+        } else {
+            format!(
+                "no thread ready after thread {}'s hand-over and {timed} waiting with a deadline: the warp to a \
+                 deadline is not served by the Rust host yet",
+                cur.tid
+            )
+        });
+    };
+    if bits & SCHEDULE_ANSWER != 0 {
+        x[0] = u64::from(next.tid != cur.tid); // SwitchToThread: nonzero when another thread runs
+    }
+    if next.tid == cur.tid {
+        return Ok(Switch::Go { vectors: None });
+    }
+    // `_save_thread` (3467-3479)
+    let mem = guest.memory.as_mut_slice();
+    let (from, to) = (entry(cur.index), entry(next.index));
+    let (executed, pauses) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + PAUSE_COUNT));
+    let (begun, begun_pauses) = (
+        read_u64(mem, MONITOR_DATA + SLICE_COUNT),
+        read_u64(mem, MONITOR_DATA + SLICE_PAUSES),
+    );
+    write_u64(
+        mem,
+        from + E_INSTRUCTIONS,
+        read_u64(mem, from + E_INSTRUCTIONS) + executed - begun,
+    );
+    write_u64(
+        mem,
+        from + E_PAUSES,
+        read_u64(mem, from + E_PAUSES) + pauses - begun_pauses,
+    );
+    write_u64(mem, MONITOR_DATA + SLICE_COUNT, executed);
+    write_u64(mem, MONITOR_DATA + SLICE_PAUSES, pauses);
+    for (i, r) in x.iter().enumerate() {
+        write_u64(mem, from + E_X + 8 * i as u64, *r);
+    }
+    let state = MONITOR_SIZE + STATE_OFF;
+    for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
+        let data = mem[(MONITOR_DATA + a) as usize..(MONITOR_DATA + b) as usize].to_vec();
+        put(mem, from + E_MONITOR + p, &data);
+    }
+    let data = mem[state as usize..(state + STATE_SIZE) as usize].to_vec();
+    put(mem, from + E_STATE, &data);
+    write_u64(mem, from + E_VCPU, 0);
+    // `set_current` (3323-3326)
+    write_u64(mem, MONITOR_DATA + CURRENT, next.index);
+    write_u64(mem, MONITOR_DATA + CURRENT_ENTRY, MONITOR_VA + to);
+    // `_load_thread` (3487-3498)
+    if !matches!(read_u64(mem, to + E_VCPU), 0 | 1) {
+        return Err(format!(
+            "thread {} loaded on vCPU 0 while another vCPU has it",
+            next.tid
+        ));
+    }
+    for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
+        let data = mem[(to + E_MONITOR + p) as usize..(to + E_MONITOR + p + b - a) as usize].to_vec();
+        put(mem, MONITOR_DATA + a, &data);
+    }
+    let data = mem[(to + E_STATE) as usize..(to + E_STATE + STATE_SIZE) as usize].to_vec();
+    put(mem, state, &data);
+    write_u64(mem, MONITOR_DATA + SLICE_COUNT, executed);
+    write_u64(mem, MONITOR_DATA + SLICE_PAUSES, pauses);
+    write_u64(mem, to + E_VCPU, 1);
+    for (i, r) in x.iter_mut().enumerate() {
+        *r = read_u64(mem, to + E_X + 8 * i as u64);
+    }
+    let vectors = (read_u64(mem, from + E_VSLOT), read_u64(mem, to + E_VSLOT));
+    Ok(Switch::Go { vectors: Some(vectors) })
 }
 
 /// `_create_thread` (3094-3150): CreateThread's host half: a thread id, a stack, a TEB, static TLS, the attach stub and
