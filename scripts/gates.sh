@@ -22,14 +22,15 @@ gates_diff=$(git diff HEAD | shasum -a 256 | cut -c1-64)
 # written and never read): the work tree staged into a temporary index, `store/gates/` left out (the pass line lands
 # there after the run), and each directory's tree id, which `signal_report --check` compares with the sprint's work
 # commit
+# (Sprint 192, reviewer-2's Medium 3 of its review of 185-189: the six directories left out Cargo.toml, Cargo.lock,
+# rust-toolchain.toml, .cargo/, specs/, signals/, schemas/ and harness/; the run now keeps one tree, the whole work tree
+# less the bookkeeping paths a close commit may change, and the session's own .claude/)
 gates_index=$(mktemp)
 rm -f "$gates_index"
-GIT_INDEX_FILE=$gates_index git add -A -- crates scripts tests tools src store
-GIT_INDEX_FILE=$gates_index git rm -r -q --cached --ignore-unmatch store/gates
-gates_trees=""
-for d in crates scripts tests tools src store; do
-  gates_trees="$gates_trees${gates_trees:+ }$d=$(GIT_INDEX_FILE=$gates_index git write-tree --prefix=$d/)"
-done
+GIT_INDEX_FILE=$gates_index git add -A -- . ':!.claude'
+GIT_INDEX_FILE=$gates_index git rm -r -q -f --cached --ignore-unmatch BLACKBOARD.md KIT_DIARY.md WORKING_AGREEMENT.md \
+  sprints signal-reports docs store/gates
+gates_trees="root=$(GIT_INDEX_FILE=$gates_index git write-tree)"
 rm -f "$gates_index"
 # rustup installs cargo in ~/.cargo/bin, which a non-login shell may not have on its PATH (Sprint 126: the gates failed
 # with "cargo: command not found")
@@ -215,7 +216,7 @@ if [ $python = 1 ]; then
   # three frozen-host tests on two vCPUs whose counts or races vary under the suite's load, each failing once in a full
   # run and passing alone (Deferred 2026-10-28, Sprints 152, 173 and 184; Decision "Sequence after Sprint 185", reviewer-2's
   # Medium 4 of its review of 182-184): out of the main run, run once in their own stage, each outcome kept in
-  # build/gates-multi-vcpu.txt with the run's sprint; a failure there is reported, not retried, and does not stop the
+  # store/gates/multi-vcpu.tsv (Sprint 192: tracked, and matched by `--check`) with the run's sprint; a failure there is reported, not retried, and does not stop the
   # gates; their fix is step 6's (plan 2026-10-24)
   multi_vcpu="tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried
 tests/test_parked_vcpu_wake.py::test_a_thread_readied_in_the_vm_runs_on_the_waiting_vcpu
@@ -228,9 +229,9 @@ tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wak
   rm "$kept"
   for t in $multi_vcpu; do
     if uv run pytest -q "$t" > build/gates-multi-vcpu-last.txt 2>&1; then outcome=passed; else outcome=failed; fi
-    printf '%s\t%s\tsprint %s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$outcome" "$gates_sprint" "$t" >> build/gates-multi-vcpu.txt
+    printf '%s\t%s\tsprint %s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$outcome" "$gates_sprint" "$t" >> store/gates/multi-vcpu.tsv
     echo "gates: multi-vCPU stage: $outcome $t"
-    [ $outcome = passed ] || { tail -5 build/gates-multi-vcpu-last.txt; echo "gates: reported, not retried (build/gates-multi-vcpu.txt)"; }
+    [ $outcome = passed ] || { tail -5 build/gates-multi-vcpu-last.txt; echo "gates: reported, not retried (store/gates/multi-vcpu.tsv)"; }
   done
 fi
 if [ $all = 1 ]; then

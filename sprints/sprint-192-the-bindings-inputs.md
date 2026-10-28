@@ -79,3 +79,25 @@ results are on the record.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the bindings' inputs.
+
+## result
+
+- **The gated tree:** `gates.sh` stages `.` less `.claude/`, removes the bookkeeping paths, and keeps `root=<tree>`;
+  `trees_moved` reads the work commit the same way (`BOOKKEEPING`), compares the root whole and names the first
+  top-level path that differs; older `dir=` lines compare as before. `close_moved` fails a "Sprint N closed:" commit
+  that changes a path outside the bookkeeping ones, from Sprint 192.
+- **The build's digest:** `build.rs` and `built_from` stage `INPUTS` (crates/, Cargo.toml, Cargo.lock,
+  rust-toolchain.toml, .cargo/) and take the index's tree.
+- **The multi-vCPU results tracked:** the stage appends to `store/gates/multi-vcpu.tsv` (its 24 earlier lines moved
+  from build/), and `multi_vcpu_claim` holds a closed entry's "multi-vCPU tests passed" to its sprint's last three lines.
+- **Halfword 3:** `layout.rs` asserts `RUNTIME_IMAGE_VA >> 48 == 0`.
+- **The VEX store's reach:** `vex_to_model` names `_vex.py`'s route; `vex_store_reach.rs` lifts nine VEX.256 store
+  encodings, five lift, and none is routed to `hvc #10`.
+- **Plant 1** (the root form skipped): `the_root_tree_and_the_close_commit_are_held` failed, "left:
+  \"signal_report: git write-tree --prefix=root/: fatal: git-write-tree: prefix root/ not found\"". Restored byte for
+  byte.
+- **Plant 2** (the close commit not found): the same test failed, "left: Some(0)". Restored byte for byte.
+- **Plant 3** (MOVUPS out of `VEX_NATIVE_256`): `no_vex_256_store_is_routed_to_the_model` failed, "vmovups (base
+  MOVUPS) at 256 bits goes to the model's 256-bit store branch". Restored byte for byte.
+- **Departures:** plant 1 failed by git's error, not a named mismatch; plant 3 targeted the native list rather than a
+  class's lifting. Every multi-line edit used the Edit tool.

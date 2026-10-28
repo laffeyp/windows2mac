@@ -715,6 +715,12 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                             {
                                 wrong.push(w);
                             }
+                            // from Sprint 192 its close commit changes bookkeeping only, and its claim of the
+                            // multi-vCPU stage is the stage's record
+                            if n >= FIRST_CLOSE_BOUND_SPRINT {
+                                wrong.extend(close_moved(root, n)?);
+                                wrong.extend(multi_vcpu_claim(root, n, body));
+                            }
                         }
                         Some(run) if n >= FIRST_GATES_BOUND_SPRINT && kept_any(passes, &run) => wrong.push(format!(
                             "sprint {n:03}: its tail entry names \"{run}\", which {PASSES} holds for another sprint"
@@ -762,15 +768,82 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
     Ok(wrong)
 }
 
+/// The first sprint whose close commit is held to bookkeeping paths and whose multi-vCPU claim to the stage's record
+/// (Sprint 192; reviewer-2's Medium 3 and Low 2 of its review of 185-189).
+const FIRST_CLOSE_BOUND_SPRINT: u32 = 192;
+
+/// The multi-vCPU stage's results, tracked from Sprint 192 (date, outcome, "sprint NNN", test).
+const MULTI_VCPU: &str = "store/gates/multi-vcpu.tsv";
+
+/// A path of sprint `n`'s close commit ("Sprint N closed: ...") outside `BOOKKEEPING`, named; None when it changes
+/// bookkeeping only, or has not been made yet (a tail entry is headed closed in the close commit itself).
+fn close_moved(root: &Path, n: u32) -> Result<Option<String>, String> {
+    let subject = format!("Sprint {n} closed:");
+    let log = git(root, &["log", "--format=%H%x09%s"])?;
+    let Some(commit) = log
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .find(|(_, s)| s.starts_with(&subject))
+        .map(|(h, _)| h.to_string())
+    else {
+        return Ok(None);
+    };
+    let changed = git(root, &["diff-tree", "--no-commit-id", "--name-only", "-r", &commit])?;
+    Ok(changed
+        .lines()
+        .find(|p| !BOOKKEEPING.iter().any(|b| *p == *b || p.starts_with(&format!("{b}/"))))
+        .map(|p| {
+            format!(
+                "sprint {n:03}: its close commit {} changes {p}, outside the bookkeeping paths",
+                &commit[..9]
+            )
+        }))
+}
+
+/// A closed entry that says the multi-vCPU tests passed, held to the stage's last three lines for its sprint.
+fn multi_vcpu_claim(root: &Path, n: u32, body: &str) -> Option<String> {
+    if !body.contains("multi-vCPU tests passed") {
+        return None;
+    }
+    let text = fs::read_to_string(root.join(MULTI_VCPU)).unwrap_or_default();
+    let sprint = format!("sprint {n:03}");
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|l| l.split('\t').nth(2) == Some(sprint.as_str()))
+        .collect();
+    let last = &lines[lines.len().saturating_sub(3)..];
+    if last.len() == 3 && last.iter().all(|l| l.split('\t').nth(1) == Some("passed")) {
+        return None;
+    }
+    Some(format!(
+        "sprint {n:03}: its tail entry says the multi-vCPU tests passed, and {MULTI_VCPU} holds {} of 3 passed",
+        last.iter().filter(|l| l.split('\t').nth(1) == Some("passed")).count()
+    ))
+}
+
 /// Whether the passes file holds a run of these seconds for any sprint.
 fn kept_any(passes: &str, run: &str) -> bool {
     passes.lines().any(|l| l.split('\t').next() == Some(run))
 }
 
-/// The first tree a gates run tested that sprint `n`'s work commit (the first commit whose subject begins "Sprint NNN:
-/// ") does not hold, or None when every one matches (Sprint 187; reviewer-2's Medium 2 of its review of 182-184: a pass
-/// line's HEAD and diff were written and never read). The pass line's seventh column is `gates.sh`'s "dir=tree" list,
-/// each tree taken with `store/gates/` left out; the commit's are taken the same way, from a temporary index.
+/// The paths a close commit may change and the gates' tree leaves out (Sprint 192): the board, the diary, the agreement,
+/// the cards, the reports, the docs and the passes themselves.
+const BOOKKEEPING: [&str; 7] = [
+    "BLACKBOARD.md",
+    "KIT_DIARY.md",
+    "WORKING_AGREEMENT.md",
+    "sprints",
+    "signal-reports",
+    "docs",
+    "store/gates",
+];
+
+/// The first tree a gates run tested that sprint `n`'s work commit (the newest commit, in `git log`'s order, whose
+/// subject begins "Sprint NNN: ") does not hold, or None when every one matches (Sprint 187; reviewer-2's Medium 2 of
+/// its review of 182-184: a pass line's HEAD and diff were written and never read). The pass line's seventh column is
+/// `gates.sh`'s list: from Sprint 192 "root=tree", the whole work tree less `BOOKKEEPING` (reviewer-2's Medium 3 of its
+/// review of 185-189), before it "dir=tree" for six directories; the commit's trees are taken the same way, from a
+/// temporary index, and a root that differs is named by its first differing top-level path.
 fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String> {
     let Some(trees) = line.split('\t').nth(6).filter(|t| !t.is_empty()) else {
         return Ok(Some(format!(
@@ -809,12 +882,29 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
     with_index(&["read-tree", &commit])?;
-    with_index(&["rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch", "store/gates"])?;
+    let mut remove = vec!["rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch"];
+    remove.extend(BOOKKEEPING);
+    with_index(&remove)?;
     let mut moved = None;
     for pair in trees.split(' ') {
         let Some((dir, ran)) = pair.split_once('=') else {
             continue;
         };
+        if dir == "root" {
+            let held = with_index(&["write-tree"])?;
+            if held != ran {
+                let first = git(root, &["diff-tree", "--name-only", ran, &held])
+                    .ok()
+                    .and_then(|d| d.lines().next().map(str::to_string))
+                    .unwrap_or_else(|| "a path".into());
+                moved = Some(format!(
+                    "sprint {n:03}: its gates ran on a tree whose {first} its work commit {} does not hold",
+                    &commit[..9]
+                ));
+                break;
+            }
+            continue;
+        }
         let held = with_index(&["write-tree", &format!("--prefix={dir}/")])?;
         if held != ran {
             moved = Some(format!(

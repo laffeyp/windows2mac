@@ -2654,6 +2654,12 @@ fn clear_upper(a: &mut Assembler, reg: u32) {
     ]);
 }
 
+/// `_vex.py` 146-152: a VEX op goes to the model (`hvc #10`) when its base is `SLOW`, or at 256 bits when its base has no
+/// native 256-bit lowering (Sprint 192: named, so a test can hold which stores reach the model's 256-bit branch).
+pub fn vex_to_model(base: &str, vl: bool) -> bool {
+    VEX_SLOW.contains(&base) || (vl && !VEX_NATIVE_256.contains(&base))
+}
+
 /// `lower` (_vex.py 149-207) for a ("vex", base, d, s1, s2, L, align, imm): the base's lowering on the low half, and at
 /// VEX.256 on the upper halves staged from the monitor data page.
 #[allow(clippy::too_many_arguments)]
@@ -2670,7 +2676,7 @@ fn lower_vex(
     folded: &BTreeMap<Temp, AddressForm>,
 ) -> Result<(), CompileError> {
     let vl = vl != 0;
-    if VEX_SLOW.contains(&base) || (vl && !VEX_NATIVE_256.contains(&base)) {
+    if vex_to_model(base, vl) {
         a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
         return Ok(());
     }

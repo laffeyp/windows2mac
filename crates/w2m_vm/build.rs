@@ -8,9 +8,16 @@
 use std::path::Path;
 use std::process::Command;
 
+/// What the digest stages (Sprint 192), as `w2m_vm::built_from::INPUTS` stages it.
+const INPUTS: [&str; 5] = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo"];
+
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    println!("cargo:rerun-if-changed=../../crates");
+    // the build's inputs (Sprint 192; reviewer-2's Medium 3 of its review of 185-189): the crates, the workspace's
+    // manifest and lockfile (its release profile sets overflow-checks), the pinned toolchain and cargo's config
+    for input in INPUTS {
+        println!("cargo:rerun-if-changed=../../{input}");
+    }
     let index = Path::new(&std::env::var("OUT_DIR").unwrap()).join("crates-index");
     let _ = std::fs::remove_file(&index);
     let git = |args: &[&str]| {
@@ -24,8 +31,10 @@ fn main() {
             .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
     };
-    let tree = git(&["add", "-A", "--", "crates"])
-        .and_then(|_| git(&["write-tree", "--prefix=crates/"]))
+    let mut add = vec!["add", "-A", "--"];
+    add.extend(INPUTS);
+    let tree = git(&add)
+        .and_then(|_| git(&["write-tree"]))
         .unwrap_or_else(|| "unknown".to_string());
     let _ = std::fs::remove_file(&index);
     println!("cargo:rustc-env=W2M_CRATES_TREE={tree}");

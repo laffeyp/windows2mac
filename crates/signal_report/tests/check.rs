@@ -284,3 +284,117 @@ fn a_partial_close_needs_its_cards_status() {
          sprint 172: a Deferred entry names it partial and its card is not closed-partial"
     );
 }
+
+/// A commit in `dir` with `message`, every change staged.
+fn commit(dir: &Path, message: &str) {
+    git(dir, &["add", "-A"]);
+    git(
+        dir,
+        &[
+            "-c",
+            "user.name=w2m",
+            "-c",
+            "user.email=w2m@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            message,
+        ],
+    );
+}
+
+/// `gates.sh`'s root tree (Sprint 192): the work tree less the bookkeeping paths, from a temporary index.
+fn gates_root_tree(dir: &Path) -> String {
+    let index = dir.join(".git/gates-index");
+    let run = |args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .env("GIT_INDEX_FILE", &index)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    run(&["add", "-A", "--", "."]);
+    run(&[
+        "rm",
+        "-r",
+        "-q",
+        "-f",
+        "--cached",
+        "--ignore-unmatch",
+        "BLACKBOARD.md",
+        "KIT_DIARY.md",
+        "WORKING_AGREEMENT.md",
+        "sprints",
+        "signal-reports",
+        "docs",
+        "store/gates",
+    ]);
+    let tree = run(&["write-tree"]);
+    let _ = fs::remove_file(&index);
+    tree
+}
+
+/// Sprint 192's plants 1 and 2 (reviewer-2's Medium 3 of its review of 185-189): from Sprint 192 the gates' tree is
+/// the whole work tree less the bookkeeping paths, so a `Cargo.toml` changed after the pass fails, named; and a close
+/// commit that changes a path outside the bookkeeping ones fails, named.
+#[test]
+fn the_root_tree_and_the_close_commit_are_held() {
+    let tail =
+        "\n### Sprint 195 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 905 s).\n";
+    let root = scratch_with_tail("root", &[("sprint-195-x.md", "done")], &["sprint-195-report.md"], tail);
+    fs::create_dir_all(root.join("crates/a")).unwrap();
+    fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
+    fs::write(root.join("Cargo.toml"), "[profile.release]\noverflow-checks = true\n").unwrap();
+    git(&root, &["init", "-q"]);
+    commit(&root, "Sprint 195's card");
+    let ran = gates_root_tree(&root);
+    fs::create_dir_all(root.join("store/gates")).unwrap();
+    fs::write(
+        root.join("store/gates/passes.tsv"),
+        format!("exit 0 in 905 s\tdefault\t2026-10-28T07:00:00Z\tsprint 195\tabc\tdef\troot={ran}\n"),
+    )
+    .unwrap();
+    // the work, with Cargo.toml changed after the pass
+    fs::write(root.join("Cargo.toml"), "[profile.release]\noverflow-checks = false\n").unwrap();
+    commit(&root, "Sprint 195: the work");
+    let work = git(&root, &["rev-parse", "--short=9", "HEAD"]);
+    let root_copy = root.clone();
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!("sprint 195: its gates ran on a tree whose Cargo.toml its work commit {work} does not hold")
+    );
+    let _ = root_copy;
+
+    // the same pass held, and a close commit that changes a crate file
+    let root = scratch_with_tail("close", &[("sprint-195-x.md", "done")], &["sprint-195-report.md"], tail);
+    fs::create_dir_all(root.join("crates/a")).unwrap();
+    fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
+    git(&root, &["init", "-q"]);
+    let ran = gates_root_tree(&root);
+    fs::create_dir_all(root.join("store/gates")).unwrap();
+    fs::write(
+        root.join("store/gates/passes.tsv"),
+        format!("exit 0 in 905 s\tdefault\t2026-10-28T07:00:00Z\tsprint 195\tabc\tdef\troot={ran}\n"),
+    )
+    .unwrap();
+    commit(&root, "Sprint 195: the work");
+    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 2; }\n").unwrap();
+    commit(&root, "Sprint 195 closed: its Signal Report");
+    let close = git(&root, &["rev-parse", "--short=9", "HEAD"]);
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!("sprint 195: its close commit {close} changes crates/a/lib.rs, outside the bookkeeping paths")
+    );
+}

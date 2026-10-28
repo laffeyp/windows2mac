@@ -7,10 +7,14 @@
 use std::path::Path;
 use std::process::Command;
 
-/// The `crates/` tree id this build compiled (`build.rs`), "unknown" outside a git work tree.
+/// The tree id of the build's inputs this build compiled (`build.rs`), "unknown" outside a git work tree.
 pub const BUILT_FROM: &str = env!("W2M_CRATES_TREE");
 
-/// The work tree's `crates/` tree id, taken as `build.rs` and `scripts/gates.sh` take it.
+/// The build's inputs (Sprint 192; reviewer-2's Medium 3 of its review of 185-189): the crates, the workspace's manifest
+/// and lockfile, the pinned toolchain and cargo's config, as `build.rs` stages them.
+pub const INPUTS: [&str; 5] = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo"];
+
+/// The work tree's tree id of `INPUTS`, taken as `build.rs` takes it.
 pub fn crates_tree(root: &Path) -> Result<String, String> {
     let index = std::env::temp_dir().join(format!("w2m-built-from-{}", std::process::id()));
     let _ = std::fs::remove_file(&index);
@@ -31,7 +35,9 @@ pub fn crates_tree(root: &Path) -> Result<String, String> {
         }
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
-    let tree = git(&["add", "-A", "--", "crates"]).and_then(|_| git(&["write-tree", "--prefix=crates/"]));
+    let mut add = vec!["add", "-A", "--"];
+    add.extend(INPUTS);
+    let tree = git(&add).and_then(|_| git(&["write-tree"]));
     let _ = std::fs::remove_file(&index);
     tree
 }
@@ -41,7 +47,7 @@ pub fn check(root: &Path, program: &str) -> Result<(), String> {
     let now = crates_tree(root)?;
     if now != BUILT_FROM {
         return Err(format!(
-            "{program} was built from crates/ {BUILT_FROM} and the work tree's is {now}: a record is written only by a \
+            "{program} was built from the inputs {BUILT_FROM} and the work tree's are {now}: a record is written only by a \
              binary built from the sources it stands for (`cargo run --release --bin {program}` rebuilds it)"
         ));
     }
