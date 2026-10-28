@@ -135,6 +135,8 @@ fn group_1_s_words_equal_the_c_emitter_s() {
         .collect();
     let exit_va = head["exit_va"].as_u64().unwrap();
     let state_va = PROCESS_VA + STATE_OFF;
+    // CPUID's words call the runtime's w2m_cpuid: the address the C emitter is given in its symbol table
+    let cpuid_va = head["symbols"]["w2m_cpuid"].as_u64().unwrap_or(0);
 
     let mut lifted = 0usize;
     let mut compared: BTreeMap<String, usize> = BTreeMap::new();
@@ -176,6 +178,7 @@ fn group_1_s_words_equal_the_c_emitter_s() {
             &ins,
             exit_va,
             state_va,
+            cpuid_va,
             nzcv_from,
             flags[1] as u32,
             flags[2] != 0,
@@ -207,6 +210,7 @@ fn group_1_s_words_equal_the_c_emitter_s() {
         calls.len(),
         compared.len()
     );
+    println!("compared by class: {compared:?}");
     println!("C refusals of lifted calls: {c_refused:?}");
     println!("Rust refusals: {rust_refused:?}");
     for (k, (n, example)) in differ.iter().take(30) {

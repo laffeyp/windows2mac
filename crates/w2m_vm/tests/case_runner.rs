@@ -17,7 +17,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cpu_cases::{read_cases, read_results};
-use w2m_vm::case_inputs::{Counts, Fixture, Hybrid, expected, registry, runs, with_case_vm};
+use w2m_vm::case_inputs::{Counts, Fixture, Hybrid, case_cpuid_va, expected, registry, runs, with_case_vm};
 use w2m_vm::cases::run_cases;
 
 fn root() -> PathBuf {
@@ -58,7 +58,7 @@ fn the_rust_words_equal_the_python_words_on_every_case_code() {
         return missing("no Python words fixture (build/case_runner/python-words.txt)");
     };
     let fixture = fixture.unwrap();
-    let hybrid = Hybrid::new(&fixture);
+    let hybrid = Hybrid::new(&fixture, case_cpuid_va(&root).unwrap());
     for code in fixture.words.keys() {
         hybrid
             .compile(code, cpu_cases::CODE_VA, fixture.header.base, fixture.header.exit)
@@ -105,7 +105,7 @@ fn judge(use_rust: bool) {
         fixture.header.base,
         fixture.header.exit
     );
-    let hybrid = Hybrid::new(&fixture);
+    let hybrid = Hybrid::new(&fixture, case_cpuid_va(&root).unwrap());
     let compile = |code: &[u8], address: u64, base: u64, exit_va: u64| {
         if use_rust {
             hybrid.compile(code, address, base, exit_va)

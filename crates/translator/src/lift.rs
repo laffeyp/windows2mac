@@ -117,6 +117,49 @@ pub enum Op {
     },
     /// ("ud",): an instruction the guest profile makes undefined (#UD)
     Ud,
+    /// ("df", 0|1): CLD, STD
+    Df {
+        set: u32,
+    },
+    /// ("cpuid",): EAX, EBX, ECX, EDX from specs/guest_cpuid.json for EAX, ECX
+    Cpuid,
+    /// ("rep", kind, size): REP STOS / REP MOVS (SDM; Vol 1 7.3.9): while RCX != 0, store AL/AX/EAX/RAX (stos) or the
+    /// element at [RSI] (movs) to [RDI], step RDI (and RSI) by size, down when DF is set, and decrement RCX;
+    /// interruptible, so a fault leaves the registers at the faulting iteration (the one exception to the commit rule)
+    Rep {
+        kind: &'static str,
+        size: u32,
+    },
+    /// ("mxcsr", "st"|"ld", loc): STMXCSR / LDMXCSR, MXCSR to or from 4 bytes of memory; LDMXCSR with a reserved bit
+    /// (16-31) set faults before any write
+    Mxcsr {
+        store: bool,
+        loc: Loc,
+    },
+    /// ("fence", kind): SFENCE "st", LFENCE "ld", MFENCE "full"
+    Fence {
+        kind: &'static str,
+    },
+    /// ("fcw", "st", loc): FNSTCW, the x87 control word to 2 bytes of memory
+    Fcw {
+        loc: Loc,
+    },
+    /// ("pause",): no architectural effect; the VM counts it
+    Pause,
+    /// ("xgetbv",): EDX:EAX = XCR0 (7) for ECX 0, #GP otherwise
+    Xgetbv,
+    /// ("cx16", t): CMPXCHG16B at the address in temporary t, one atomic read-and-write
+    Cx16 {
+        addr: Temp,
+    },
+    /// ("x86", ic, dst, srcs, bits): one integer instruction the model computes whole (Sprint 050; integer_model.py):
+    /// dst a loc or None, srcs the temporaries it reads; implicit operands are read by the model, as one model step
+    X86 {
+        ic: String,
+        dst: Option<Loc>,
+        srcs: Vec<Temp>,
+        bits: u32,
+    },
 }
 
 /// lift.py 154-159.
@@ -404,11 +447,18 @@ pub fn pop(b: &mut Builder) -> Temp {
 /// load. Otherwise the first violation, named. The kinds the Rust rules do not emit yet are not in `Op`.
 pub fn commit_order(ins: &Lifted) -> Option<String> {
     let memory_access = |op: &Op| match op {
-        Op::Ld { loc: Loc::M { .. }, .. } => Some("load"),
+        Op::Ld { loc: Loc::M { .. }, .. } | Op::Mxcsr { store: false, .. } => Some("load"),
         Op::St { loc: Loc::M { .. }, .. }
         | Op::Set { loc: Loc::M { .. }, .. }
         | Op::Cst { loc: Loc::M { .. }, .. }
-        | Op::Cstz { loc: Loc::M { .. }, .. } => Some("store"),
+        | Op::Cstz { loc: Loc::M { .. }, .. }
+        | Op::Mxcsr { store: true, .. }
+        | Op::Fcw { .. }
+        | Op::Cx16 { .. }
+        | Op::X86 {
+            dst: Some(Loc::M { .. }),
+            ..
+        } => Some("store"),
         _ => None,
     };
     let effect = |op: &Op| {
@@ -416,11 +466,15 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
             op,
             Op::St { loc: Loc::R { .. }, .. }
                 | Op::Flags { .. }
+                | Op::Df { .. }
                 | Op::Cmov { .. }
+                | Op::Cpuid
                 | Op::Div { .. }
                 | Op::Set { loc: Loc::R { .. }, .. }
                 | Op::Cst { loc: Loc::R { .. }, .. }
                 | Op::Cstz { loc: Loc::R { .. }, .. }
+                | Op::Mxcsr { store: false, .. }
+                | Op::X86 { .. }
         )
     };
     let last_access = ins.ops.iter().rposition(|op| memory_access(op).is_some())?;
@@ -445,6 +499,10 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
         if effect(op) {
             let kind = match op {
                 Op::Flags { .. } => "flags",
+                Op::Df { .. } => "df",
+                Op::Cpuid => "cpuid",
+                Op::Mxcsr { .. } => "mxcsr",
+                Op::X86 { .. } => "x86",
                 Op::Cmov { .. } => "cmov",
                 Op::Div { .. } => "div",
                 Op::Set { .. } => "set",

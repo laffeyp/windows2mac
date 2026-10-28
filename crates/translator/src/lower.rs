@@ -40,6 +40,26 @@ const PF_RESULT: u32 = AF_OPERANDS + 16;
 pub const HVC_SLOW_STEP: u32 = 11;
 /// vm_backend 97: the state block's gs_base (the TEB).
 const STATE_GS_BASE: u64 = 0xb0;
+// MONITOR_DATA (x28) + these (vm_backend 94-119): DF, MXCSR's saved value, the x87 control word, the register a lowering
+// borrows, the PAUSE count, the slice's limit
+const DF_BYTE: u32 = 0x38;
+const MXCSR_OFF: u32 = 0x50;
+const FCW_OFF: u32 = 0x70;
+const SPILL: u32 = 0x78;
+const PAUSE_COUNT: u32 = 0xA8;
+const SLICE_UNTIL: u32 = 0xC0;
+/// MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE (vm_backend 81, 136-143): the top of the runtime's AArch64 stack,
+/// where CPUID's call into the guest runtime runs.
+pub const RUNTIME_STACK_TOP: u64 = 0x7F00_0000_0000 + 0x60000 + 0x400_0000 + 0x100000 + 0x10000;
+/// The guest's registers in the A64 registers of the same index (vm_backend's reconstruction): RAX, RCX, RDX, RBX,
+/// RSI, RDI.
+const RAX: u32 = 0;
+const RCX: u32 = 1;
+const RDX: u32 = 2;
+const RSI: u32 = 6;
+const RDI: u32 = 7;
+/// REG_BUDGET (vm_backend 368): the instructions left in the slice (x23, PF's until PF went lazy).
+const REG_BUDGET: u32 = 23;
 /// vm_backend 1124: the NZCV kinds by `vmc_flags.nzcv_from`'s index (vm_compiler.h 25): [none, NZCV_CONDITIONS...].
 pub const NZCV_KINDS: [&str; 5] = ["sub", "add", "inc", "logic", "dec"];
 
@@ -630,15 +650,25 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> (u32, u32) {
         Op::Alu { op, .. } => (if matches!(*op, "adc" | "sbb") { U_CF } else { 0 }, 0),
         Op::Br { cond, .. } => (if *cond == "always" { 0 } else { cond_flags(cond) }, 0),
         Op::Set { cond, .. } | Op::Cmov { cond, .. } => (cond_flags(cond), 0),
+        Op::Cx16 { .. } => (0, U_ZF),
         Op::Div { .. } => (ALL_FLAGS, ALL_FLAGS), // #DE before any write; every flag undefined after
-        Op::Ud => (ALL_FLAGS, 0),                 // FLAGS_ALL_READ: the model's step reads the whole state
+        // FLAGS_ALL_READ (859): the model's steps read the whole state
+        Op::Ud | Op::Xgetbv | Op::X86 { .. } => (ALL_FLAGS, 0),
+        // FLAGS_NONE (857-858)
         Op::Imm { .. }
         | Op::Addr { .. }
         | Op::Ld { .. }
         | Op::St { .. }
         | Op::Sel { .. }
         | Op::Cst { .. }
-        | Op::Cstz { .. } => (0, 0),
+        | Op::Cstz { .. }
+        | Op::Mxcsr { .. }
+        | Op::Fence { .. }
+        | Op::Rep { .. }
+        | Op::Cpuid
+        | Op::Df { .. }
+        | Op::Pause
+        | Op::Fcw { .. } => (0, 0),
     }
 }
 
@@ -762,7 +792,33 @@ fn temps_read(op: &Op) -> Vec<Temp> {
             Loc::M { addr, .. } => vec![*t, *addr],
             Loc::R { .. } => vec![*t],
         },
-        Op::Imm { .. } | Op::Addr { .. } | Op::Ud => vec![],
+        Op::Cx16 { addr } => vec![*addr],
+        // ("mxcsr", "st"|"ld", m32) and ("fcw", "st", m16): lowered in A64
+        Op::Mxcsr {
+            loc: Loc::M { addr, .. },
+            ..
+        }
+        | Op::Fcw {
+            loc: Loc::M { addr, .. },
+        } => vec![*addr],
+        Op::X86 { dst, srcs, .. } => {
+            let mut v = srcs.clone();
+            if let Some(Loc::M { addr, .. }) = dst {
+                v.push(*addr);
+            }
+            v
+        }
+        Op::Imm { .. }
+        | Op::Addr { .. }
+        | Op::Ud
+        | Op::Mxcsr { .. }
+        | Op::Fcw { .. }
+        | Op::Df { .. }
+        | Op::Cpuid
+        | Op::Rep { .. }
+        | Op::Fence { .. }
+        | Op::Pause
+        | Op::Xgetbv => vec![],
     }
 }
 
@@ -1104,12 +1160,16 @@ fn fused_move(
 /// `compile_insn` (1417-1885): append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`.
 /// `nzcv_from`: the flags kind of the previous instruction's NZCV; `live_after`: the flags a later instruction reads;
 /// `nzcv_out`: the next instruction's Jcc branches on this one's NZCV. Returns true when control never falls through.
-/// `state_va` is the process area's state block (PROCESS_VA + STATE_OFF), for a GS-relative address.
+/// `state_va` is the process area's state block (PROCESS_VA + STATE_OFF), for a GS-relative address and CPUID's saved
+/// registers. `cpuid_va` is the compiling VM's runtime image's `w2m_cpuid`, which CPUID calls; 0 without a runtime
+/// image, as the Python's `symbols` absent.
+#[allow(clippy::too_many_arguments)]
 pub fn compile_insn(
     a: &mut Assembler,
     ins: &Lifted,
     exit_va: u64,
     state_va: u64,
+    cpuid_va: u64,
     nzcv_from: Option<&str>,
     live_after: u32,
     nzcv_out: bool,
@@ -1147,10 +1207,32 @@ pub fn compile_insn(
     let mut nzcv_ready = false; // an ALU op fused with the flags op that follows
     let mut fused_store = false; // a load fused with the store that follows
     let mut constant: BTreeMap<Temp, u64> = BTreeMap::new(); // temporaries an `imm` of this instruction set
-    let folded = folded_addresses(ops);
-    // 1469-1471: an instruction with an op outside OPERAND_SAFE (DIV, a model step, #UD) keeps every temporary in a
-    // register
-    let safe = !ops.iter().any(|op| matches!(op, Op::Div { .. } | Op::Ud));
+    // 1466-1468: a locked form folds no address and fuses no move: its loads and stores are the exclusive pair
+    let locked = ins.iclass.ends_with("_LOCK");
+    let folded = if locked { BTreeMap::new() } else { folded_addresses(ops) };
+    let mut lock_retry: Vec<Target> = Vec::new();
+    // 1469-1471: a locked form, or an instruction with an op outside OPERAND_SAFE (1198: model steps, REP, DIV, CPUID,
+    // the SSE and VEX lowerings), keeps every temporary in a register
+    let safe = !locked
+        && ops.iter().all(|op| {
+            matches!(
+                op,
+                Op::Imm { .. }
+                    | Op::Addr { .. }
+                    | Op::Ld { .. }
+                    | Op::St { .. }
+                    | Op::Alu { .. }
+                    | Op::Flags { .. }
+                    | Op::Br { .. }
+                    | Op::Set { .. }
+                    | Op::Cmov { .. }
+                    | Op::Sel { .. }
+                    | Op::Cst { .. }
+                    | Op::Cstz { .. }
+                    | Op::Fence { .. }
+                    | Op::Pause
+            )
+        });
     let (alias, quiet, forward) = if safe {
         operand_forms(ops, &last, &dead)
     } else {
@@ -1237,7 +1319,7 @@ pub fn compile_insn(
                     a.emit(&[a64::ldr(8, 16, 16, 0), a64::add(rd, rd, 16, LSL, 0)]);
                 }
             }
-            Op::Ld { .. } if fused_move(a, ops, i, &last, &reg, &folded) => {
+            Op::Ld { .. } if !locked && fused_move(a, ops, i, &last, &reg, &folded) => {
                 fused_store = true; // the store that follows is done
             }
             Op::Ld { t, .. } if alias.contains_key(t) => {} // read as the guest register itself
@@ -1256,11 +1338,39 @@ pub fn compile_insn(
                             a64::ubfx(rt, idx, 0, *bits)
                         }]);
                     }
+                    Loc::M { addr, bytes } if locked => {
+                        // LOCK (1531-1545): a load-exclusive / store-exclusive loop. The commit rule leaves no guest
+                        // effect between the load and the store, so a failed store-exclusive repeats only temporaries.
+                        // Exclusives need natural alignment; a misaligned operand runs in the model (hvc #11).
+                        let (size, addr_reg) = (*bytes, at(*addr, &reg)?);
+                        if size > 1 {
+                            let aligned = a.label();
+                            a.emit(&[a64::ubfx(16, addr_reg, 0, size.ilog2())]);
+                            a.branch(|off| a64::cbz(16, off), aligned);
+                            a.emit(&[a64::hvc(HVC_SLOW_STEP)]);
+                            a.bind(aligned);
+                        }
+                        let retry = a.label();
+                        a.bind(retry);
+                        lock_retry.push(retry);
+                        a.emit(&[a64::ldaxr(size, rt, addr_reg)]);
+                    }
                     Loc::M { addr, bytes } => match folded.get(addr) {
                         Some(f) => a.emit(&[mem(true, *bytes, rt, *f)]),
                         None => a.emit(&[a64::ldr(*bytes, rt, at(*addr, &reg)?, 0)]),
                     },
                 }
+            }
+            Op::St {
+                loc: Loc::M { addr, bytes },
+                t,
+            } if locked => {
+                // 1550-1552: the store-exclusive, retried from the load-exclusive while it fails
+                let retry = *lock_retry
+                    .last()
+                    .ok_or_else(|| CompileError(format!("a locked store with no load at 0x{:x}", ins.address)))?;
+                a.emit(&[a64::stlxr(*bytes, 16, at(*t, &reg)?, at(*addr, &reg)?)]);
+                a.branch(|off| a64::cbnz(16, off), retry);
             }
             Op::St { .. } if fused_store => fused_store = false,
             Op::St {
@@ -1590,7 +1700,118 @@ pub fn compile_insn(
                 a.bind(fast);
                 mark_undefined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF);
             }
-            Op::Ud => a.emit(&[a64::hvc(HVC_SLOW_STEP)]), // run by the model (hvc #11): the profile's #UD
+            // run by the model (hvc #11, 1665 and 1785): the profile's #UD, XGETBV, and the model's whole steps
+            Op::Ud | Op::Xgetbv | Op::X86 { .. } => a.emit(&[a64::hvc(HVC_SLOW_STEP)]),
+            Op::Mxcsr { store: st, loc } => {
+                let Loc::M { addr, .. } = loc else {
+                    return Err(CompileError(format!("MXCSR to a register at 0x{:x}", ins.address)));
+                };
+                lower_mxcsr(a, *st, at(*addr, &reg)?);
+            }
+            Op::Fcw { loc } => {
+                // FNSTCW (1660-1662): the control word to memory
+                a.emit(&[a64::ldr(2, 16, 28, FCW_OFF)]);
+                store(a, loc, 16, &folded, &reg)?;
+            }
+            Op::Fence { kind } => a.emit(&[match *kind {
+                "st" => a64::dmb_ishst(),
+                "ld" => a64::dmb_ishld(),
+                _ => a64::dmb_ish(),
+            }]),
+            Op::Rep { kind, size } => {
+                // REP STOS / MOVS (1669-1686): the guest's RCX, RSI, RDI live in x1, x6, x7 and change once per
+                // element, so a fault on an element leaves them at that iteration and the reconstruction table gives
+                // the instruction's address (SDM Vol 1 7.3.9: the instruction is interruptible).
+                let (lp, end) = (a.label(), a.label());
+                a.emit(&[a64::ldr(1, 16, 28, DF_BYTE), a64::movz(17, u64::from(*size), 0)]);
+                a.branch(|off| a64::cbz(16, off), lp);
+                a.emit(&[a64::sub(17, ZR, 17)]); // DF: step down
+                a.bind(lp);
+                a.branch(|off| a64::cbz(RCX, off), end);
+                if *kind == "movs" {
+                    a.emit(&[
+                        a64::ldr(*size, 16, RSI, 0),
+                        a64::str(*size, 16, RDI, 0),
+                        a64::add(RSI, RSI, 17, LSL, 0),
+                    ]);
+                } else {
+                    a.emit(&[a64::str(*size, RAX, RDI, 0)]);
+                }
+                a.emit(&[a64::add(RDI, RDI, 17, LSL, 0), a64::subi(RCX, RCX, 1)]);
+                a.branch(a64::b, lp);
+                a.bind(end);
+            }
+            Op::Cx16 { addr } => {
+                // CMPXCHG16B (1732-1760): #GP unless 16-byte aligned, raised as SSE's alignment check raises it (a load
+                // from 0 before anything is written); then an exclusive pair loop. Equal: RCX:RBX stored, ZF 1; else
+                // the old value written back (x86 always writes), RDX:RAX loaded, ZF 0. The status register is
+                // borrowed and kept in SPILL.
+                const RBX: u32 = 3;
+                let rn = at(*addr, &reg)?;
+                let status = if rn != 30 { 30 } else { 29 };
+                let (aligned, retry, differ, done) = (a.label(), a.label(), a.label(), a.label());
+                a.emit(&[a64::ubfx(16, rn, 0, 4)]);
+                a.branch(|off| a64::cbz(16, off), aligned);
+                a.emit(&[a64::movz(16, 0, 0), a64::ldr(8, 16, 16, 0)]);
+                a.bind(aligned);
+                a.emit(&[a64::str(8, status, 28, SPILL)]);
+                a.bind(retry);
+                a.emit(&[a64::ldaxp(16, 17, rn), a64::cmp(16, RAX)]);
+                a.branch(|off| a64::bcond("ne", off), differ);
+                a.emit(&[a64::cmp(17, RDX)]);
+                a.branch(|off| a64::bcond("ne", off), differ);
+                a.emit(&[a64::stlxp(status, RBX, RCX, rn)]); // RBX low, RCX high
+                a.branch(move |off| a64::cbnz(status, off), retry);
+                a.emit(&[a64::movz(REG_ZF, 1, 0)]);
+                a.branch(a64::b, done);
+                a.bind(differ);
+                a.emit(&[a64::stlxp(status, 16, 17, rn)]);
+                a.branch(move |off| a64::cbnz(status, off), retry);
+                a.emit(&[a64::mov(RAX, 16), a64::mov(RDX, 17), a64::movz(REG_ZF, 0, 0)]);
+                a.bind(done);
+                a.emit(&[a64::ldr(8, status, 28, SPILL)]);
+                mark_defined(a, U_ZF);
+            }
+            Op::Cpuid => {
+                // 1840-1848: the guest runtime answers from the profile, called on the runtime's stack with the guest's
+                // x0-x15 saved in the state block and loaded back after
+                a.emit(&a64::mov_imm(16, state_va));
+                for r in (0..16).step_by(2) {
+                    a.emit(&[a64::stp(r, r + 1, 16, 8 * i64::from(r))]);
+                }
+                a.emit(&a64::mov_imm(16, RUNTIME_STACK_TOP));
+                a.emit(&[a64::addi(31, 16, 0)]);
+                a.emit(&a64::mov_imm(16, cpuid_va));
+                a.emit(&[a64::blr(16)]);
+                a.emit(&a64::mov_imm(16, state_va));
+                for r in (0..16).step_by(2) {
+                    a.emit(&[a64::ldp(r, r + 1, 16, 8 * i64::from(r))]);
+                }
+            }
+            Op::Df { set } => {
+                // CLD, STD (1849-1850)
+                a.emit(&[a64::movz(16, u64::from(*set), 0), a64::str(1, 16, 28, DF_BYTE)]);
+            }
+            Op::Pause => {
+                // PAUSE counted (1851-1859): the spin census; and a yield when another thread is ready (SLICE_UNTIL 0;
+                // Sprint 096, KVM's directed yield): the limit becomes the count (limit - x23) and x23 0, so the next
+                // block's entry ends the slice with the count exact
+                a.emit(&[
+                    a64::ldr(8, 16, 28, PAUSE_COUNT),
+                    a64::addi(16, 16, 1),
+                    a64::str(8, 16, 28, PAUSE_COUNT),
+                ]);
+                let stay = a.label();
+                a.emit(&[a64::ldr(8, 16, 28, SLICE_UNTIL)]);
+                a.branch(|off| a64::cbnz(16, off), stay);
+                a.emit(&[
+                    a64::ldr(8, 16, 28, 8),
+                    a64::sub(16, 16, REG_BUDGET),
+                    a64::str(8, 16, 28, 8),
+                    a64::movz(REG_BUDGET, 0, 0),
+                ]);
+                a.bind(stay);
+            }
         }
         for t in temps_read(op).into_iter().chain(temps_written(op)) {
             if reg.contains_key(&t) && last.get(&t).is_none_or(|&l| l <= i) {
@@ -1638,6 +1859,45 @@ fn store(
     Ok(())
 }
 
+/// `_lower_mxcsr` (1150-1182): STMXCSR and LDMXCSR in A64, as `_slow_sse` leaves the state; x16 and x17 only (TEMP_REGS
+/// holds x18, and the operand's address may be in it). STMXCSR stores the saved MXCSR with FPSR's cumulative flags
+/// folded in. LDMXCSR with a reserved bit (31:16) set leaves to the model, which raises #GP before any write; otherwise
+/// it saves the value, clears FPSR and sets FPCR as `fpcr_for` does.
+fn lower_mxcsr(a: &mut Assembler, store: bool, addr: u32) {
+    if store {
+        a.emit(&[
+            a64::mrs(17, a64::FPSR),
+            a64::lsri(16, 17, 7),   // x16 bit 0: IDC
+            a64::bfi(17, 17, 1, 5), // bits 5:1: IOC DZC OFC UFC IXC
+            a64::bfi(17, 16, 1, 1), // bit 1: IDC -> DE; bit 0 stays IOC -> IE
+            a64::ubfx(17, 17, 0, 6),
+            a64::ldr(4, 16, 28, MXCSR_OFF),
+            a64::orr(16, 16, 17),
+            a64::str(4, 16, addr, 0),
+        ]);
+        return;
+    }
+    let ok = a.label();
+    a.emit(&[a64::ldr(4, 16, addr, 0), a64::lsri(17, 16, 16)]);
+    a.branch(|off| a64::cbz(17, off), ok);
+    a.emit(&[a64::hvc(HVC_SLOW_STEP)]);
+    a.bind(ok);
+    a.emit(&[
+        a64::str(4, 16, 28, MXCSR_OFF),
+        a64::msr(a64::FPSR, ZR),
+        a64::ubfx(17, 16, 6, 1), // FIZ = DAZ
+        a64::lsri(16, 16, 13),
+        a64::bfi(17, 16, 23, 1), // RMode bit 23 = RC bit 0 (MXCSR 13)
+        a64::lsri(16, 16, 1),
+        a64::bfi(17, 16, 22, 1), // RMode bit 22 = RC bit 1 (MXCSR 14)
+        a64::lsri(16, 16, 1),
+        a64::bfi(17, 16, 24, 1), // FZ = FTZ (MXCSR 15)
+        a64::movz(16, 1, 0),
+        a64::bfi(17, 16, 1, 1), // AH
+        a64::msr(a64::FPCR, 17),
+    ]);
+}
+
 /// A block's words and its marks (host VA, x86 address).
 pub type Block = (Vec<u32>, Vec<(u64, u64)>);
 
@@ -1651,9 +1911,9 @@ pub fn assemble_block(
     exit_va: u64,
     slice_va: u64,
     state_va: u64,
+    cpuid_va: u64,
     live_out: u32,
 ) -> Result<Block, CompileError> {
-    const REG_BUDGET: u32 = 23;
     let mut a = Assembler::new(base);
     let start = insns[0].address;
     let last = &insns[insns.len() - 1];
@@ -1676,7 +1936,7 @@ pub fn assemble_block(
         marks.push((a.here(), ins.address));
         let from = if k > 0 { nzcv_setter(&insns[k - 1]) } else { None };
         let out = k + 1 < insns.len() && nzcv_branch(ins, &insns[k + 1]);
-        ended = compile_insn(&mut a, ins, exit_va, state_va, from, lives[k], out)?;
+        ended = compile_insn(&mut a, ins, exit_va, state_va, cpuid_va, from, lives[k], out)?;
     }
     if !ended {
         a.emit(&a64::mov_imm(17, addr));
@@ -1768,6 +2028,21 @@ mod tests {
         let ops = add_then_store(64, 32, 64, 64, RBX, false);
         let (alias, _, _) = operand_forms(&ops, &last_reads(&ops), &BTreeSet::new());
         assert!(!alias.contains_key(&1)); // the add would read RAX's upper half
+    }
+
+    /// The offsets the group 3 lowerings use (Sprint 159) equal the guest layout the runtime is compiled against;
+    /// DF_BYTE and SPILL have no twin there and stand on vm_backend 94 and 110.
+    #[test]
+    fn the_lowerings_offsets_are_the_guest_layout_s() {
+        use guest_runtime::layout as l;
+        assert_eq!(u64::from(MXCSR_OFF), l::MXCSR_OFF);
+        assert_eq!(u64::from(FCW_OFF), l::FCW_OFF);
+        assert_eq!(u64::from(PAUSE_COUNT), l::PAUSE_COUNT);
+        assert_eq!(u64::from(SLICE_UNTIL), l::SLICE_UNTIL);
+        assert_eq!(
+            RUNTIME_STACK_TOP,
+            l::MONITOR_VA + l::RUNTIME_STACK + l::RUNTIME_STACK_SIZE
+        );
     }
 
     #[test]

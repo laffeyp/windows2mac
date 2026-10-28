@@ -75,6 +75,23 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         "MULX" => mulx,
         ic if ic.starts_with("SET") && cc(&ic[3..]).is_some() => setcc,
         ic if ic.starts_with("CMOV") && cc(&ic[4..]).is_some() => cmov,
+        // group 3 (Sprint 159)
+        "ADD_LOCK" | "AND_LOCK" | "OR_LOCK" | "XOR_LOCK" | "SUB_LOCK" | "INC_LOCK" | "DEC_LOCK" | "NEG_LOCK"
+        | "XADD_LOCK" | "CMPXCHG_LOCK" => locked,
+        "CMPXCHG16B" | "CMPXCHG16B_LOCK" => cmpxchg16b,
+        "CLD" | "STD" => df,
+        "CPUID" => cpuid,
+        "SFENCE" | "LFENCE" | "MFENCE" => fence,
+        "PAUSE" => pause,
+        "STMXCSR" | "LDMXCSR" | "VSTMXCSR" | "VLDMXCSR" => mxcsr,
+        "FNSTCW" => fpu_control,
+        "XGETBV" => xgetbv,
+        ic if REP_STRING.contains(&ic) => rep_string,
+        "SHLD" | "SHRD" => double_shift,
+        "RCR" => rcr,
+        "STC" | "CLC" | "CMC" | "SAHF" | "PUSHFQ" | "POPFQ" | "LODSB" | "SCASB" | "SCASD" | "STOSB" | "MOVSB"
+        | "MOVSD" | "CMPSB" | "CMPSD" => implicit,
+        "LOOP" | "LOOPE" | "LOOPNE" | "JRCXZ" => loop_,
         _ => return None,
     })
 }
@@ -1397,5 +1414,156 @@ fn mulx(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
     }
     b.emit(Op::St { loc: lo_dst, t: lo });
     b.emit(Op::St { loc: hi_dst, t: hi });
+    Ok(())
+}
+
+// group 3 (Sprint 159): the locked forms, CMPXCHG16B, the system ops and the model's steps
+
+/// `locked` (_int.py 590-596): a LOCK-prefixed form (iclass X_LOCK), the base rule's operations under the base iclass;
+/// the lowering makes the locked forms atomic. The instruction keeps its own iclass (`lift` takes it from the decode).
+fn locked(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let base = ctx.ic.trim_end_matches("_LOCK").to_string();
+    let rule = rule(&base).ok_or_else(|| LiftError(format!("no lifting rule for {base}")))?;
+    ctx.ic = base;
+    rule(ctx)
+}
+
+/// `cmpxchg16b` (_int.py 578-587): RDX:RAX against the 16 bytes at m128; one op, atomic in the VM with or without LOCK.
+/// CMPXCHG8B (no REX.W) is not lifted.
+fn cmpxchg16b(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let (d, bits) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
+    match (d, bits) {
+        (Operand::Loc(Loc::M { addr, .. }), 128) => {
+            ctx.b.emit(Op::Cx16 { addr });
+            Ok(())
+        }
+        _ => Err(LiftError(format!("CMPXCHG8B at 0x{:x}", ctx.address))),
+    }
+}
+
+/// `df` (_int.py 24-25): CLD, STD.
+fn df(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let set = u32::from(ctx.ic == "STD");
+    ctx.b.emit(Op::Df { set });
+    Ok(())
+}
+
+/// `cpuid` (_int.py 28-29): EAX, EBX, ECX, EDX from the guest profile.
+fn cpuid(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    ctx.b.emit(Op::Cpuid);
+    Ok(())
+}
+
+/// `sfence` (_int.py 346-348): SFENCE, LFENCE, MFENCE, the ordering each gives, as one fence kind.
+fn fence(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let kind = match ctx.ic.as_str() {
+        "SFENCE" => "st",
+        "LFENCE" => "ld",
+        _ => "full",
+    };
+    ctx.b.emit(Op::Fence { kind });
+    Ok(())
+}
+
+/// `pause` (_int.py 20-21): no architectural effect; the VM counts it.
+fn pause(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    ctx.b.emit(Op::Pause);
+    Ok(())
+}
+
+/// `mxcsr` (_int.py 275-278): STMXCSR, LDMXCSR m32, and their VEX forms VSTMXCSR, VLDMXCSR.
+fn mxcsr(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let (d, _) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
+    let loc = loc(d, ctx)?;
+    let store = ctx.ic.ends_with("STMXCSR");
+    ctx.b.emit(Op::Mxcsr { store, loc });
+    Ok(())
+}
+
+/// `fpu_control` (_int.py 339-343): FNSTCW m2byte, the x87 control word to memory.
+fn fpu_control(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let (d, _) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
+    let loc = loc(d, ctx)?;
+    ctx.b.emit(Op::Fcw { loc });
+    Ok(())
+}
+
+/// `xgetbv` (_int.py 356-359): EDX:EAX = XCR[ECX], XCR0 = 7; any ECX but 0 is #GP. The model runs it.
+fn xgetbv(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    ctx.b.emit(Op::Xgetbv);
+    Ok(())
+}
+
+/// `rep_string` (_int.py 266-272): REP STOS and REP MOVS with 64-bit addresses.
+fn rep_string(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    if ctx.f.prefixes.contains(&0x67) {
+        return Err(LiftError(format!(
+            "{} with 32-bit addresses at 0x{:x}",
+            ctx.ic, ctx.address
+        )));
+    }
+    // lift.py 94: REP_{STOS,MOVS}{B,W,D,Q} -> (stos|movs, 1|2|4|8)
+    let kind = if ctx.ic.starts_with("REP_STOS") { "stos" } else { "movs" };
+    let size = match ctx.ic.as_bytes()[ctx.ic.len() - 1] {
+        b'B' => 1,
+        b'W' => 2,
+        b'D' => 4,
+        _ => 8,
+    };
+    ctx.b.emit(Op::Rep { kind, size });
+    Ok(())
+}
+
+/// `_model` (_int.py 599-601): one instruction the model computes whole; the VM runs it as a model step.
+fn model(ctx: &mut Ctx<'_>, dst: Option<Loc>, srcs: Vec<crate::lift::Temp>, bits: u32) {
+    let ic = ctx.ic.clone();
+    ctx.b.emit(Op::X86 { ic, dst, srcs, bits });
+}
+
+/// `double_shift` (_int.py 604-610): SHLD, SHRD r/m, r, imm8 or CL.
+fn double_shift(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let (d, bits) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
+    let (s, _) = operand(ctx.b, &ctx.ops[1], ctx.nxt, Some(bits))?;
+    let (c, _) = operand(ctx.b, &ctx.ops[2], ctx.nxt, None)?;
+    let srcs = vec![val(ctx.b, d), val(ctx.b, s), val(ctx.b, c)];
+    let dst = loc(d, ctx)?;
+    model(ctx, Some(dst), srcs, bits);
+    Ok(())
+}
+
+/// `rcr` (_int.py 613-618): RCR r/m, 1, CL or imm8, rotate right through CF.
+fn rcr(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let (d, bits) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
+    let c = count(ctx)?;
+    let srcs = vec![val(ctx.b, d), val(ctx.b, c)];
+    let dst = loc(d, ctx)?;
+    model(ctx, Some(dst), srcs, bits);
+    Ok(())
+}
+
+/// `implicit` (_int.py 621-629): STC, CLC, CMC, SAHF, PUSHFQ, POPFQ, and the single string forms, every operand
+/// implicit. A 0x67 prefix on a string form or a 66 prefix on PUSHF and POPF is not lifted.
+fn implicit(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let ic = ctx.ic.as_str();
+    let strings = !matches!(ic, "STC" | "CLC" | "CMC" | "SAHF" | "PUSHFQ" | "POPFQ");
+    let p = &ctx.f.prefixes;
+    if (p.contains(&0x67) && strings) || (p.contains(&0x66) && matches!(ic, "PUSHFQ" | "POPFQ")) {
+        return Err(LiftError(format!(
+            "{} with a 66 or 67 prefix at 0x{:x}",
+            ctx.ic, ctx.address
+        )));
+    }
+    model(ctx, None, vec![], 64);
+    Ok(())
+}
+
+/// `loop` (_int.py 645-651): LOOP, LOOPE, LOOPNE, JRCXZ rel8, on RCX; ECX (a 0x67 prefix) is not lifted.
+fn loop_(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    if ctx.f.prefixes.contains(&0x67) {
+        return Err(LiftError(format!("{} on ECX at 0x{:x}", ctx.ic, ctx.address)));
+    }
+    let (target, _) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
+    let srcs = vec![val(ctx.b, target)];
+    model(ctx, None, srcs, 64);
     Ok(())
 }

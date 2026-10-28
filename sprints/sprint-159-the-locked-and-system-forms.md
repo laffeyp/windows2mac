@@ -98,3 +98,36 @@ the cases reach it.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: three judges and two planted faults, each reaching the judge it tests.
 - [x] One concept: the third group, the last of `_int.py`.
+
+## result
+
+- `crates/translator`: `lift.rs`'s `Op` gains `Df`, `Cpuid`, `Rep`, `Mxcsr`, `Fence`, `Fcw`, `Pause`, `Xgetbv`, `Cx16`
+  and `X86`, with `commit_order`'s accesses and effects for them; `rules.rs` gains the 54 classes' rules (`locked`
+  takes the base rule under the base iclass); `lower.rs` gains the locked load-exclusive and store-exclusive with its
+  retry, the locked form's exclusion from folded addresses, fused moves and operand forms, `OPERAND_SAFE` as a list,
+  the new ops' places in the flag table and the temporaries, `lower_mxcsr`, and the new ops' branches.
+- **CPUID's address.** The lowering calls the runtime's `w2m_cpuid`, which the Python reaches through `symbols`;
+  `compile_insn` and `assemble_block` take it as `cpuid_va`. The run loop passes the guest runtime's (a missing one is
+  an error), the case runner the address of the runtime it builds for the cases (`case_cpuid_va`), the C judge the
+  record header's. A unit test holds the lowering's monitor-data offsets and the runtime stack's top to
+  `guest_runtime::layout`; `DF_BYTE` and `SPILL` have no twin there and stand on `vm_backend.py` 94 and 110.
+- **The C emitter:** the Rust rules lift 1,096,927 of the record's 1,186,511 calls (1,096,159 before); the C refuses
+  the same 5; the other 1,096,922, in 115 classes (89 before), equal the C's words. Group 3's are 768 calls in 26
+  classes, XADD_LOCK 201, OR_LOCK 147, CMPXCHG_LOCK 85, INC_LOCK 81, REP_STOSQ 40, CPUID 36 the most. No Rust refusal.
+  The judge now prints its compared calls by class.
+- **Windows:** the case runner with the Rust translator compiled 75,713 case instructions in 160 classes (65,624 in
+  108 before); each run's counts equal `expected.tsv`, zero difference classes. The model's 21 classes compile to
+  `hvc #11` and their cases go to the model (CLC 116, SAHF 116, PUSHFQ 116, RCR 784 of 926, and the rest), as the
+  card said; the locked classes' misaligned cases go there too (ADD_LOCK 91 of 740).
+- **The Python words:** the Rust words equal the fixture's for all 11,041 case codes the Rust rules lift (9,264
+  before), of 25,919.
+- **The records:** four `case-runner-rust` sessions, one a reference profile, `store/runs/case-runner-rust-
+  1793160290000000000`, `-1793160338000000000`, `-1793160362000000000`, `-1793160377000000000`: 205, 174, 107 and 26
+  classes accepted, as before; the Rust translator the candidate for 65, 77, 55 and 0 of them (49, 59, 53 and 0
+  before); no discrepancy; each session completed.
+- **Planted faults.** (1) The locked store-exclusive storing the loaded value: the C judge named ADD_LOCK and
+  AND_LOCK by the store-exclusive's word, and the case runner nine locked classes by their data window ("574 ADD_LOCK
+  data window: case 0 … differs", NEG_LOCK in run 38031723882). (2) LFENCE's and SFENCE's barriers swapped: the C
+  judge named "LFENCE … rust [d5033abf] c [d50339bf]" and SFENCE the other way. Restored, every judge passes.
+- The four records were made one second apart, so that each record's name, counted in whole seconds, is unique; no
+  wait polls anything.

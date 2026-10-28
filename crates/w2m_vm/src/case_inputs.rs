@@ -196,6 +196,8 @@ impl Fixture {
 /// same flag arguments (no NZCV source, every flag live after, no NZCV out).
 pub struct Hybrid<'a> {
     pub fixture: &'a Fixture,
+    /// the cases' runtime image's `w2m_cpuid`, which CPUID's words call (Sprint 159)
+    pub cpuid_va: u64,
     /// iclass -> cases the Rust compiled
     pub rust: std::cell::RefCell<BTreeMap<String, usize>>,
     /// a code whose Rust words differ from the Python's: (code, its class, the difference)
@@ -203,9 +205,10 @@ pub struct Hybrid<'a> {
 }
 
 impl<'a> Hybrid<'a> {
-    pub fn new(fixture: &'a Fixture) -> Hybrid<'a> {
+    pub fn new(fixture: &'a Fixture, cpuid_va: u64) -> Hybrid<'a> {
         Hybrid {
             fixture,
+            cpuid_va,
             rust: Default::default(),
             unlike: Default::default(),
         }
@@ -225,6 +228,7 @@ impl<'a> Hybrid<'a> {
             &ins,
             exit_va,
             state_va,
+            self.cpuid_va,
             None,
             translator::lower::ALL_FLAGS,
             false,
@@ -302,6 +306,17 @@ pub fn registry(root: &Path) -> BTreeMap<String, String> {
             (ic.to_string(), m.to_string())
         })
         .collect()
+}
+
+/// The `w2m_cpuid` of the runtime the cases run on, built for the host as `with_case_vm` builds it; the address CPUID's
+/// words call.
+pub fn case_cpuid_va(root: &Path) -> Result<u64, String> {
+    let (_, image) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA).map_err(|e| format!("{e:?}"))?;
+    image
+        .symbols
+        .get("w2m_cpuid")
+        .copied()
+        .ok_or_else(|| "the guest runtime defines no w2m_cpuid".to_string())
 }
 
 /// The guest the cases run in (`case_memory`, the runtime built for the host, the services, the stencil symbols),
