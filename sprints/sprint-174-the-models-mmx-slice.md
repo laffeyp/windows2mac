@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 174
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -82,3 +82,23 @@ The MMX classes' model cases are judged against Windows through the Rust model.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: counts and two plants, each a fault on a path the judge reads (Sprint 173's lesson).
 - [x] One concept: the MMX slice.
+
+## result
+
+- **The slice:** `crates/w2m_vm/src/model.rs` gains `lift_mmx` (lift.py 304-324, the model's own, since the translator
+  refuses MMX forms and the C words judge allows no Rust refusal of a lifted class), `mmx_compute` and the MMX step
+  (`mmx.py` whole, `runtime.py` `_mmx` 165-191) on the thread's x87 state (FSW, the abridged tags, R0-R7 at 80 bits),
+  and `step_mmx`, whose guest fault restores what `_exec` restores and keeps the x87 state. The case runner carries the
+  x87 state in from the state block and out after a step or a fault, as `_slow_sse` and `_store_x87` do
+  (vm_backend 4293-4298, 4325-4330), and XMM in for MOVDQ2Q.
+- **Judged against Windows:** 21,245 MMX cases the case runner had counted and not judged, with 0 difference classes:
+  set 065b's 19,833 in 23 classes (MOVQ 2,600, MOVDQ2Q 1,584, PSRAW 1,416, PSRAD 1,362, PSRLQ 1,159, MOVD 1,039, EMMS
+  861, the PUNPCK, PADD, PSUB and PMUL classes, PACKUSWB 628, PEXTRW 604, PMADDUBSW 513), every model case of that set;
+  and set 065c's 1,412 (PSHUFW 810, PSADBW 602). With Sprint 173's slice the Rust model has stepped 24,766 cases.
+  `store/case_runner/expected.tsv`'s two runs moved by exactly those counts.
+- **Plant 1** (PSRAW and PSRAD saturating at `bits - 2`): the case runner failed, "40 PSRAW st0: case 14792: [0f, 71,
+  e0, fe] model fffffffe000000000000, cpu ffffffff000000000000", and "18 PSRAD st0: case 13489". Restored.
+- **Plant 2** (TOP left unchanged by an MMX instruction): the case runner failed, "861 EMMS FSW: case 0: [2e, 0f, 77]
+  model 0x685e, cpu 0x405e (in 0x685e)", and "1023 MOVD FSW". Restored.
+- **Left:** set 065's 53,349 model cases are x87 classes, and the scalar SSE classes with exceptions unmasked stay
+  counted (the next slices); the translator's A64 lowering of MMX forms (`rules/_mmx.py`) is not ported.
