@@ -81,3 +81,29 @@ conform stops by a name that is held.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the module families' judge.
+
+## result
+
+- **The judge:** `crates/w2m_vm/tests/family_runs.rs` reads each module contract's runner binaries from its evidence
+  ("probe sha256:"), 12 in all, not the card's 24; `gates.sh` runs each as probe.exe under build/family_runs/. A run that
+  ends is held to the contract's rows by key `s`, derived as `Family.rows` derives them (names_ansi drops `w_len` and
+  `ret`); a run that stops is held to `store/family_runs/module-stops-2026-10-28.tsv`.
+- **The result:** 10 of 12 conform: windows.module.queries 6 of 6 (18 rows), .system 2 of 2 (14 rows), .names_ansi 2 of
+  2 (10 rows); windows.module.search's 2 stop at FILE_MKDIR 25, held.
+- **The modules' answers:** `module_in` resolves a LoadLibrary name as file_bridge.py's `host_file` does, a full C:\
+  path or one relative to C:\w2m\app, against `Start::app_root` (the depot for the batch run; for a probe run a
+  directory holding only the program); a DLL file found stops by name (no file bridge), a System32 name stops by name,
+  a name found nowhere is 0. Unit test `a_load_of_a_name_found_nowhere_is_0`, with mono's full and relative paths
+  (reviewer-2's High 2 of its review of 193-196: the first version checked only the top level).
+- **The batch run:** its stream (rows 0-15 and row 16 in flight) and the guests' stops unchanged.
+- **Plant 1** (names_ansi's derivation dropping nothing): the judge failed, "windows.module.names_ansi binary
+  101395b5…: row file.image differs from the contract's". Restored byte for byte.
+- **Plant 2** (a name found nowhere answered with kernel32's handle): the judge failed, "windows.module.queries binary
+  dc5dc179…: row load.missing differs from the contract's". Restored byte for byte, rebuilt, the six queries binaries
+  run again, the judge passes.
+- **Plant 3** (the system contract's row `first` with `non_null` 2): the judge failed, "windows.module.system binary
+  202f2b6b…: row first differs from the contract's". Restored byte for byte.
+- **Plant 4** (the lookup held to the top level): the modules test failed, "called `Result::unwrap_err()` on an `Ok`
+  value: 0". Restored byte for byte, rebuilt.
+- **Departures:** 12 binaries where the card said 24; the first gates run stopped in its Python stage to take High 2; `load_dll` stops by name for a DLL file beside the program, since
+  the Rust host has no file bridge.

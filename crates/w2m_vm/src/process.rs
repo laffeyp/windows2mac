@@ -77,6 +77,10 @@ pub struct Start {
     /// the runtime word's takings timed in the monitor code (Sprint 164, step 3's measure); false writes the Python's
     /// words
     pub time_runtime_word: bool,
+    /// the host directory that is C:\w2m\app, the Python's file bridge root (`host_file`, `in_app_directory`;
+    /// Sprint 196): the batch run's depot; None for a probe run, whose directory holds only the program (family_run.py
+    /// `run_in_vm` writes probe.exe alone)
+    pub app_root: Option<std::path::PathBuf>,
 }
 
 impl Start {
@@ -98,6 +102,7 @@ impl Start {
             call_trace: Vec::new(),
             call_trace_from: None,
             time_runtime_word: false,
+            app_root: None,
         }
     }
 

@@ -580,6 +580,8 @@ pub struct Guest {
     pub init_order: Vec<usize>,
     /// the images whose calls call_trace.c records (`Start::call_trace`; Sprint 191)
     pub call_trace: Vec<String>,
+    /// the host directory that is C:\w2m\app (`Start::app_root`; Sprint 196)
+    pub app_root: Option<std::path::PathBuf>,
     /// the block whose first compile opens the trace (`_trace_from`, vm_backend 2483-2487), 0 for from the start
     pub trace_from: u64,
     /// GetProcAddress's thunks: untraced ones given while the trace was closed, traced ones its hook gave after
@@ -773,6 +775,7 @@ impl Guest {
             images: loaded.images.clone(),
             init_order: loaded.init_order.clone(),
             call_trace: start.call_trace.clone(),
+            app_root: start.app_root.clone(),
             trace_from: 0,
             trace_quiet: BTreeMap::new(),
             trace_dynamic: BTreeMap::new(),

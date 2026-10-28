@@ -136,6 +136,18 @@ if [ $rust != none ]; then
       --stop "build/batch_run/guest-$n.stop" > /dev/null 2> "build/batch_run/guest-$n.stderr" || true
     printf '%s\t%s\n' "$n" "$(cat "build/batch_run/guest-$n.stop" 2>/dev/null)" >> build/batch_run/guests.tsv
   done
+  # the module families on the Rust host (Sprint 196; census row 6): each runner binary a contract's evidence names,
+  # run as probe.exe, its printed rows and stop under build/family_runs/, which crates/w2m_vm/tests/family_runs.rs
+  # holds to the contract's rows or to store/family_runs/module-stops-2026-10-28.tsv
+  mkdir -p build/family_runs
+  for c in queries system names_ansi search; do
+    for b in $(grep -o 'probe sha256:[0-9a-f]*' "contracts/windows.module.$c/0.1.0.json" | cut -d: -f2 | sort -u); do
+      rm -f "build/family_runs/$c-$b.stop"
+      echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "store/binaries/$b.exe" \
+        --output "build/family_runs/$c-$b.txt" --stop "build/family_runs/$c-$b.stop" > /dev/null \
+        2> "build/family_runs/$c-$b.stderr" || true
+    done
+  done
 fi
 if [ $rust = all ]; then
   W2M_REQUIRE_CASE_RUNS=1 cargo test --quiet

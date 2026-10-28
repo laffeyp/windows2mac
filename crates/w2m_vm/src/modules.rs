@@ -14,6 +14,7 @@
 //! imports from KERNELBASE.dll or ntdll.dll by name, which the batch run's images do not).
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use crate::guest::Guest;
@@ -93,8 +94,83 @@ pub fn module(guest: &Guest, name: &str, loading: bool) -> Result<u64, String> {
         image: guest.images.first().map(|i| (i.name.to_lowercase(), i.base)),
         dlls: dlls(guest).map(|(n, base, ..)| (n, base)).collect(),
         system: p.system.iter().map(|(c, (h, _))| (c.clone(), *h)).collect(),
+        app: AppDirectory {
+            root: guest.app_root.clone(),
+            program: guest.images.first().map_or(String::new(), |i| i.name.clone()),
+        },
     };
     module_in(&handles, name, loading)
+}
+
+/// C:\w2m\app on the host (Sprint 196; reviewer-2's High 2 of its review of 193-196): the directory w2m-vm was given,
+/// or for a probe run a directory holding only the program, as family_run.py's `run_in_vm` makes it.
+struct AppDirectory {
+    root: Option<PathBuf>,
+    program: String,
+}
+
+impl AppDirectory {
+    /// `host_file` (file_bridge.py 202-240): whether a file is where the guest name points, a full C:\ path or a path
+    /// relative to C:\w2m\app, each component matched case-folded; a path the bridge refuses is Err, as it raises. A
+    /// full path outside C:\w2m\app finds no file: the bridge's drive holds only empty system folders.
+    fn host_file(&self, name: &str) -> Result<bool, String> {
+        let name = name.strip_prefix("\\\\?\\").unwrap_or(name);
+        let b = name.as_bytes();
+        let parts: Vec<&str> = if b.len() > 1 && b[1] == b':' {
+            if !matches!(b[0], b'c' | b'C') || (b.len() > 2 && !matches!(b[2], b'\\' | b'/')) {
+                return Err(format!(
+                    "file path on a drive other than C: or drive-relative: {name:?}"
+                ));
+            }
+            let parts = split(name.get(3..).unwrap_or(""));
+            match parts.as_slice() {
+                [w, a, rest @ ..] if w.eq_ignore_ascii_case("w2m") && a.eq_ignore_ascii_case("app") => rest.to_vec(),
+                _ => return Ok(false),
+            }
+        } else if name.starts_with(['\\', '/']) {
+            return Err(format!("file path rooted without a drive, or UNC: {name:?}"));
+        } else {
+            split(name)
+        };
+        if parts.contains(&"..") {
+            return Err(format!("file path with '..': {name:?}"));
+        }
+        let Some(root) = &self.root else {
+            return Ok(matches!(parts.as_slice(), [p] if p.eq_ignore_ascii_case(&self.program)));
+        };
+        let mut here = root.clone();
+        for part in parts {
+            let Ok(entries) = std::fs::read_dir(&here) else {
+                return Ok(false);
+            };
+            let found = entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .find(|e| e.eq_ignore_ascii_case(part));
+            let Some(found) = found else {
+                return Ok(false);
+            };
+            here.push(found);
+        }
+        Ok(here.is_file())
+    }
+
+    /// `in_app_directory` (vm_backend 2926-2927): a top-level entry of C:\w2m\app named `c` (canonical, lowercase).
+    fn contains(&self, c: &str) -> bool {
+        match &self.root {
+            Some(root) => std::fs::read_dir(root).is_ok_and(|entries| {
+                entries
+                    .flatten()
+                    .any(|e| e.file_name().to_string_lossy().to_lowercase() == c)
+            }),
+            None => self.program.to_lowercase() == c,
+        }
+    }
+}
+
+/// A path's components, "\" or "/" separated, empty ones and "." dropped (`_parts`).
+fn split(path: &str) -> Vec<&str> {
+    path.split(['\\', '/']).filter(|p| !p.is_empty() && *p != ".").collect()
 }
 
 /// What `module` reads: the handles w2m hands out, by canonical name.
@@ -105,6 +181,7 @@ struct Handles {
     image: Option<(String, u64)>,
     dlls: Vec<(String, u64)>,
     system: BTreeMap<String, u64>,
+    app: AppDirectory,
 }
 
 /// `module` over the handles alone, in modules.py 97-132's order.
@@ -145,14 +222,22 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
     if !loading {
         return Ok(0);
     }
+    // `_load_dll` (vm_backend 3906-3918): a file the name finds, full or relative to C:\w2m\app, would be mapped
+    if h.app.host_file(name)? {
+        return Err(format!(
+            "LoadLibrary {name}: a DLL file after the start, not served by the Rust host yet (it has no file bridge)"
+        ));
+    }
     if spec().system32.contains_key(&c) {
         return Err(format!(
             "LoadLibrary {name}: a system DLL not imported at the start, not served by the Rust host yet"
         ));
     }
-    Err(format!(
-        "LoadLibrary {name}: a DLL file after the start, not served by the Rust host yet (it has no file bridge)"
-    ))
+    if h.app.contains(&c) {
+        return Err(format!("LoadLibrary {name}: a Windows DLL w2m does not model"));
+    }
+    // modules.py 132: a name found nowhere (Sprint 196; reviewer-2's Medium 1 of its review of 185-189)
+    Ok(0)
 }
 
 /// `file_name` (134-147): the module's path, None for a handle w2m did not hand out.
@@ -237,7 +322,7 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Handles, canonical, module_in};
+    use super::{AppDirectory, Handles, canonical, module_in};
 
     /// A process of the program, one DLL beside it and one system image; the synthetic pages at 0x1000 steps.
     fn handles() -> Handles {
@@ -248,7 +333,59 @@ mod tests {
             image: Some(("game.exe".into(), 0x1_4000_0000)),
             dlls: vec![("unityplayer.dll".into(), 0x1_8000_0000)],
             system: [("user32.dll".to_string(), 0x4000)].into_iter().collect(),
+            app: AppDirectory {
+                root: Some(app_root()),
+                program: "Game.exe".into(),
+            },
         }
+    }
+
+    /// C:\w2m\app on the host: the program, a DLL beside it, and mono's DLL two directories down, as the batch run's
+    /// depot holds MonoBleedingEdge/EmbedRuntime/mono-2.0-bdwgc.dll.
+    fn app_root() -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("w2m-modules-{}", std::process::id()));
+        let deep = root.join("MonoBleedingEdge").join("EmbedRuntime");
+        std::fs::create_dir_all(&deep).unwrap();
+        for file in [
+            root.join("Game.exe"),
+            root.join("Plugin.dll"),
+            deep.join("mono-2.0-bdwgc.dll"),
+        ] {
+            std::fs::write(file, b"MZ").unwrap();
+        }
+        root
+    }
+
+    /// LoadLibrary of a name not in the process (modules.py 117-132, file_bridge.py 202-240): a DLL file the name finds,
+    /// beside the program or below it by a full or relative path, stops by name (no file bridge yet); a system DLL not
+    /// imported stops by name; and a name found nowhere is 0 (Sprint 196; reviewer-2's High 2 of its review of 193-196).
+    #[test]
+    fn a_load_of_a_name_found_nowhere_is_0() {
+        let h = handles();
+        for found in [
+            "C:\\w2m\\app\\MonoBleedingEdge\\EmbedRuntime\\mono-2.0-bdwgc.dll",
+            "monobleedingedge/embedruntime/MONO-2.0-BDWGC.DLL",
+        ] {
+            assert!(
+                module_in(&h, found, true)
+                    .unwrap_err()
+                    .contains("a DLL file after the start"),
+                "{found}"
+            );
+        }
+        assert_eq!(module_in(&h, "C:\\Windows\\System32\\w2m-none.dll", true), Ok(0));
+        assert!(module_in(&h, "D:\\x.dll", true).unwrap_err().contains("other than C:"));
+        assert_eq!(module_in(&h, "w2m-no-such-module.dll", true), Ok(0));
+        assert!(
+            module_in(&h, "Plugin.dll", true)
+                .unwrap_err()
+                .contains("a DLL file after the start")
+        );
+        assert!(
+            module_in(&h, "dbghelp.dll", true)
+                .unwrap_err()
+                .contains("a system DLL not imported")
+        );
     }
 
     /// modules.py's docstring, row by row: kernel32, kernelbase, the program, its DLLs, the system images, ntdll, an

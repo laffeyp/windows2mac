@@ -309,6 +309,8 @@ mod run {
         // UnityMain
         start.call_trace = vec!["UnityPlayer.dll".into(), "mono-2.0-bdwgc.dll".into()];
         start.call_trace_from = Some("UnityPlayer.dll!UnityMain".into());
+        // the depot is C:\w2m\app, the Python's file bridge root (`host_file`, `in_app_directory`; Sprint 196)
+        start.app_root = Some(directory.to_path_buf());
         let mut guest = guest_of(&root, &loaded, &start)?;
         let out = on_one_vcpu(&mut guest, &loaded)?;
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
