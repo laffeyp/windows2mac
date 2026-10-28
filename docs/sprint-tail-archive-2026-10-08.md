@@ -341,6 +341,15 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 158 (2026-10-27, closed)
+- **Scope:** link 6, the skeleton's gate: `sleeper`'s output and record from the Rust host equal the stored ones, the frozen Python host's.
+- **Dual contract:** signal — SESSION_INIT, CODE_TARGET_DISCOVERED, TRANSLATION_PUBLISHED, SESSION_COMPLETED from `w2m-vm` on `store/runs/w2m-vm-sleeper-1793149355000000000`, read back by the golden check; artifact pass (substrate run 0, fmt, clippy, the gates); observation pass (40 events equal to the Python's record, the output equal to the stored one; two planted faults, a swapped block and a dropped byte, each failed it at the event or the output named).
+- **CI does not run:** `w2m-vm` and the run loop's tests (macOS only), and the output's check (its file is under `build/`); CI runs the record's check over the two committed records.
+- **Rubber Duck Pass:** *Observation 1 (three fields each host sets):* `vocab_version` differs, 0.9 in the frozen Python and 0.10 in Rust, beside `harness_version` and `elapsed_seconds`; the check names the three in `EXEMPT` and compares every other field. Disposition: resolved-here. *Observation 2 (a baseline key with a meaning):* `judge` marks the records the judges' ledger reads; the skeleton's record names `host` instead. Disposition: resolved-here. *Observation 3 (edits outside the Edit tool):* six one-line `sed` changes and an `awk`-built planted record, each read back. Disposition: recorded.
+- **Closed:** Sprint 157's CI run 40253743671 (success on f2693f415).
+- **This close's CI:** run 40614424475, success on 591c43034 (read 2026-10-27 from `gh run watch --exit-status`, exit 0; written here at the BLACKBOARD update of 2026-10-27, since no Sprint 159 entry exists to carry it).
+- **Files:** crates/w2m_vm/, harness/w2m-vm-sleeper.toml, store/runs/w2m-vm-sleeper-1793149355000000000, store/runs/translations-1793149239949363000, store/skeleton/sleeper-stdout.txt, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-158-the-skeletons-gate.md, signal-reports/sprint-158-report.md.
+
 ### Sprint 157 (2026-10-25, closed)
 - **Scope:** link 5's run-loop judge, `sleeper` to its end: THREAD_EXIT_CODE, THREAD_EXIT_STUB, THREAD_END and the `hvc #12` hand-over at a thread's end served by the Rust host.
 - **Dual contract:** signal — none, as the card says (the skeleton's record comes at link 6); artifact pass (fmt, clippy, the gates); observation pass (ExitProcess(0) with the Python's output; the thread requests, the detach stub's bytes and the hand-over equal to the Python host's; two planted faults each failed it, one at the stop and the requests, one at the exit code read back).

@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 168
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -95,3 +95,24 @@ The gates run what a change can affect, say what they ran, and `--all` keeps the
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: times and three plants.
 - [x] One concept: selecting gates.
+
+## result
+
+- **Installed:** cargo-nextest 0.9.150, from its prebuilt binary (`curl -LsSf https://get.nexte.st/latest/mac | tar
+  zxf - -C ~/.cargo/bin`, the command nexte.st gives).
+- **The default gates on this sprint's change** (the card, `scripts/gates.sh`, `scripts/sign_and_run.sh`): 6 s,
+  printing "Rust tests: none (no crate changed)", "substrate samples: not run", "Python gates: not run", "records:
+  none new". Sprint 167's full gates took 13 min 42 s, 424 s of it pytest and 176 s the case runner.
+- **Plant 1** (`design_check`'s test asserting the opposite): the default run chose `rdeps(design_check)`, ran its 14
+  tests and failed at the planted one, in 4 s.
+- **Plant 2** (a crate no change reaches): the same run ran no other crate's tests; the selection is nextest's
+  `rdeps()` over the changed crates, whose listing names 14 tests, all `design_check`'s, of the workspace's 126.
+- **Plant 3** changed from the card. The card asked for a Python test made to fail; editing the frozen Python, even
+  for a plant, is not done. A file under `tests/` made the default run choose and run the Python gates (511 s while
+  `--all` ran beside it); that a failing Python test fails them is pytest's, unchanged.
+- **A fault nextest found:** its first run failed before any test, "creating test list failed": nextest lists a test
+  binary twice at once and runs a process a test, and `scripts/sign_and_run.sh` ran `codesign -f` on the same file
+  from each; 11 of 20 concurrent runs failed. The runner now signs only a binary without the Hypervisor entitlement,
+  under a lock directory per binary: 20 of 20 passed from an unsigned binary.
+- **The card's invariant** "CI runs it": CI does not call `scripts/gates.sh`; it runs its own steps
+  (`.github/workflows/`), which this sprint leaves unchanged. `--all` runs every gate as the script did before.
