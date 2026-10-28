@@ -77,3 +77,30 @@ Sets 049 and 049b's VEX model cases are judged against Windows through the Rust 
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: counts and two plants.
 - [x] One concept: the model's VEX step.
+
+## result
+
+- **The state:** `Thread` gains `ymm_hi` and two more XMM slots, 16 and 17, `_vex`'s scratch, zeroed after every
+  step; `model_step` reads YMM bits 255:128 from MONITOR_DATA + 0x400 and writes them back after a step, leaving the
+  page as it was on a fault (vm_backend 4282-4283, 4315-4316); `step` restores `ymm_hi` with the rest of the thread.
+- **The step:** `Step::vex`, `vex_cross` and `fma` port `_vex` (732-786), `_vex_cross` (668-730) and `_fma` (788-827);
+  `defer_fp` and `deferred_flags` carry `_defer_fp`, which `fp_check` and the FP arm's `execute_unchecked` honour;
+  VZEROUPPER clears `ymm_hi`. `_sse`'s CMPSD_XMM_VEX arm (predicate imm8[4:0]) was missing from `sse` and was added.
+- **The arithmetic:** `x86fp.rs` gains `fma`, `fma_lane` (419-467) and `execute_unchecked` (`execute`'s
+  `check=False`), which `execute` now calls.
+- **The case runner:** set 049's model count fell from 4,655 to 367 and set 049b's from 22,445 to 1,258, 25,475 VEX
+  model cases judged against Windows with 0 difference classes; the model steps 111,604 cases in all. Still counted,
+  not judged, by class: CMPSD_XMM 367 (set 049; the Rust rules do not lift it), VRCPPS 648 and VRSQRTPS 610 (set
+  049b; the model refuses RCPPS and RSQRTPS until `approximate.py` is ported), and set 050's 15 classes and
+  MPSADBW as before. The first run panicked in `xread` on a 32-byte VEX.256 memory source; it now reads all 32 bytes
+  and keeps the low 16, as `_xread` and the 128-bit step do.
+- **Plant 1** (`hi[d] = 0` dropped after a VEX.128 register write): the case runner failed, "7 VADDSD ymm0.hi: case
+  2155: [c4, a1, 27, 58, 83, a1, b9, 9f, 0d] vm 3ef99a0a0e4d21480000000000000000, cpu
+  00000000000000000000000000000000". Restored byte for byte.
+- **Plant 2** (213's operands taken as 231's): the case runner failed, "6 VFMADD213SD xmm0: case 10994: [c4, a2, f9,
+  a9, 85, 02, d3, 79, 47] vm cc08bf99007fffffbd96503cb31fffff, cpu cc08bf99007fffff4004000000000001". Restored byte
+  for byte.
+- **Records:** four `case-runner-rust` records (1793203177000000000, -030000000, -060000000, -090000000), 0
+  violations each; the ledger holds 14 entries. A first set of four was written by a `case_runs` binary that plant 2's
+  test build had relinked; those records were removed before any commit and the ledger restored.
+- **Departures:** `sse`'s CMPSD_XMM_VEX arm and `xread`'s 32-byte read; every multi-line edit used the Edit tool.

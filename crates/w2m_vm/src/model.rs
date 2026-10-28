@@ -77,8 +77,10 @@ pub struct Thread {
     pub mxcsr: u32,
     pub fcw: u16,
     pub rip: u64,
-    /// XMM0-15 (Sprint 174: MOVDQ2Q reads one)
-    pub xmm: [u128; 16],
+    /// XMM0-15 (Sprint 174: MOVDQ2Q reads one); 16 and 17 are `_vex`'s scratch, zero between steps (Sprint 183)
+    pub xmm: [u128; 18],
+    /// YMM0-15 bits 255:128 (`Thread.ymm_hi`; Sprint 183)
+    pub ymm_hi: [u128; 16],
     /// the x87 status word, its abridged tags (bit p: physical register p in use) and the physical registers R0-R7,
     /// 80 bits each (`x87.Fpu`; Sprint 174: MMn is bits 63:0 of Rn)
     pub x87_sw: u16,
@@ -104,6 +106,9 @@ struct Step<'a, M: Memory> {
     mem: &'a mut M,
     t: std::collections::BTreeMap<Temp, u64>,
     code: &'a [u8],
+    /// `_defer_fp` and `_deferred_flags` (runtime.py 980-981): VEX.256's halves collect their flags for one check
+    defer_fp: bool,
+    deferred_flags: u32,
 }
 
 impl<M: Memory> Step<'_, M> {
@@ -621,14 +626,19 @@ impl<M: Memory> Step<'_, M> {
                     align,
                     imm,
                 } => self.sse(ic, *dst, *src, *align, *imm)?,
-                // VEX: the model's VEX step (runtime.py `_vex`, `_vex_cross`, `_fma`) is the next slice (Sprint 182)
-                Op::Vex { base, .. } => {
-                    return Err(Fault::Refused(format!("vex {base}: the model's VEX slice comes later")));
-                }
-                Op::Vexs { ic, .. } | Op::Fma { ic, .. } => {
-                    return Err(Fault::Refused(format!("{ic}: the model's VEX slice comes later")));
-                }
-                Op::Vzeroupper => return Err(Fault::Refused("VZEROUPPER: the model's VEX slice comes later".into())),
+                // VEX: `_vex`, `_vex_cross`, `_fma` (runtime.py 668-827, 1044-1051; Sprint 183)
+                Op::Vex {
+                    base,
+                    d,
+                    s1,
+                    s2,
+                    vl,
+                    align,
+                    imm,
+                } => self.vex(base, *d, *s1, *s2, *vl != 0, *align, *imm)?,
+                Op::Vexs { ic, d, s1, s2, vl, imm } => self.vex_cross(ic, *d, *s1, *s2, *vl != 0, *imm)?,
+                Op::Fma { ic, d, s2, s3, vl } => self.fma(ic, *d, *s2, *s3, *vl != 0)?,
+                Op::Vzeroupper => self.th.ymm_hi = [0; 16],
                 // `_mmx` and `_x87` (runtime.py 140-191), from the one lifter's ops (Sprint 177)
                 Op::Mmx { ic, dst, src, imm } => self.mmx(ic, *dst, *src, *imm)?,
                 Op::X87 {
@@ -1229,6 +1239,21 @@ impl<M: Memory> Step<'_, M> {
 }
 
 /// `SSE_049B` (runtime.py 32-33): the set-049b legacy forms.
+/// `SHIFT_BY_COUNT` (runtime.py 34): at VEX.256 one count shifts both halves.
+const SHIFT_BY_COUNT: [&str; 7] = ["PSRLQ", "PSLLQ", "PSRLD", "PSLLD", "PSRAD", "PSRLW", "PSRAW"];
+
+/// `VEX_FP` (runtime.py 35): FP bases beyond ADD..MAX, whose two VEX.256 halves are checked once.
+const VEX_FP: [&str; 8] = [
+    "HADDPD",
+    "CVTTPD2DQ",
+    "CVTPD2DQ",
+    "CMPPS_VEX",
+    "CVTDQ2PS",
+    "CVTTPS2DQ",
+    "CVTPS2PD",
+    "ROUNDSD",
+];
+
 const SSE_049B: [&str; 14] = [
     "PSHUFB",
     "PALIGNR",
@@ -1419,9 +1444,12 @@ impl<M: Memory> Step<'_, M> {
             SseLoc::X(n) => Ok(self.th.xmm[usize::from(n)] & mask128(8 * nbytes)),
             SseLoc::Loc(Loc::R { idx, bits, hi }) => Ok(u128::from(self.rd(idx, bits, hi))),
             SseLoc::Loc(Loc::M { addr, .. }) => {
+                // a VEX.256 operand's 32 bytes are read whole (a fault in bytes 16-31 stands); a 128-bit step uses
+                // the low 16
                 let b = self.mem.read(self.temp(addr)?, nbytes as usize)?;
+                let n = (nbytes as usize).min(16);
                 let mut w = [0u8; 16];
-                w[..nbytes as usize].copy_from_slice(&b[..nbytes as usize]);
+                w[..n].copy_from_slice(&b[..n]);
                 Ok(u128::from_le_bytes(w))
             }
         }
@@ -1448,6 +1476,10 @@ impl<M: Memory> Step<'_, M> {
     /// `_fp_check` (runtime.py 983-992) with `_slow_sse`'s fault code (vm_backend 4301-4302): an unmasked exception
     /// merges its flags into MXCSR and is the guest's #XM with the code `xm_status` picks; otherwise every flag merges
     fn fp_check(&mut self, env: &crate::x86fp::Env) -> Result<(), Fault> {
+        if self.defer_fp {
+            self.deferred_flags |= env.flags;
+            return Ok(());
+        }
         match env.check() {
             Ok(()) => {
                 self.th.mxcsr |= env.flags;
@@ -1568,12 +1600,13 @@ impl<M: Memory> Step<'_, M> {
                 self.fp_check(&env)?;
                 self.th.xmm[d] = fp::join(&words, 32);
             }
-            "CMPSD_XMM" => {
-                // predicate imm8[2:0] on the low doubles; all ones or 0
+            "CMPSD_XMM" | "CMPSD_XMM_VEX" => {
+                // predicate on the low doubles; all ones or 0; legacy: imm8[2:0]; VEX: imm8[4:0] (SDM CMPSD)
                 let d = self.xmm(dst)?;
                 let mut env = Env::new(self.th.mxcsr);
                 let b = self.xread(src, 8)? as u64;
-                let hit = fp::cmp_predicate(F64, self.th.xmm[d] as u64, b, imm_of()? & 7, &mut env);
+                let pred = imm_of()? & if ic.ends_with("VEX") { 31 } else { 7 };
+                let hit = fp::cmp_predicate(F64, self.th.xmm[d] as u64, b, pred, &mut env);
                 self.fp_check(&env)?;
                 self.th.xmm[d] = self.th.xmm[d] & !mask128(64) | if hit { mask128(64) } else { 0 };
             }
@@ -1607,6 +1640,13 @@ impl<M: Memory> Step<'_, M> {
                         16
                     },
                 )?;
+                if self.defer_fp {
+                    // VEX.256: flags of both halves, one check
+                    let (out, flags) = fp::execute_unchecked(ic, self.th.xmm[d], v, self.th.mxcsr);
+                    self.deferred_flags |= flags;
+                    self.th.xmm[d] = out;
+                    return Ok(());
+                }
                 match fp::execute(ic, self.th.xmm[d], v, self.th.mxcsr) {
                     Ok((out, mxcsr)) => {
                         self.th.mxcsr = mxcsr;
@@ -1672,6 +1712,325 @@ impl<M: Memory> Step<'_, M> {
             }
             _ => return Err(Fault::Refused(format!("sse {ic}"))),
         }
+        Ok(())
+    }
+
+    /// `n` bytes at a memory operand's address plus `offset`, little-endian, up to 32
+    fn read_bytes(&self, loc: SseLoc, offset: u64, n: usize) -> Result<[u128; 2], Fault> {
+        let Some(addr) = loc.addr() else {
+            return Err(Fault::Refused("a memory operand expected".into()));
+        };
+        let b = self.mem.read(self.temp(addr)? + offset, n)?;
+        let mut w = [0u8; 32];
+        w[..n].copy_from_slice(&b[..n]);
+        Ok([
+            u128::from_le_bytes(w[..16].try_into().unwrap()),
+            u128::from_le_bytes(w[16..].try_into().unwrap()),
+        ])
+    }
+
+    /// `_vex_cross` (runtime.py 668-730): VEX instructions that move data between the 128-bit halves, on whole
+    /// 256-bit values (low, high): VPERMQ, VPERMD, the broadcasts, VINSERT/VEXTRACT F/I128, VCVTPS2PD and VPMOVSXDQ
+    /// at 256 bits, VZEROALL.
+    fn vex_cross(
+        &mut self,
+        ic: &str,
+        d: SseLoc,
+        s1: Option<SseLoc>,
+        s2: SseLoc,
+        vl: bool,
+        imm: Option<u64>,
+    ) -> Result<(), Fault> {
+        use crate::x86fp::{self as fp, Env, F32, F64};
+        if ic == "VZEROALL" {
+            self.th.xmm[..16].fill(0);
+            self.th.ymm_hi = [0; 16];
+            return Ok(());
+        }
+        let read = |s: &Self, loc: SseLoc, nbytes: u32| -> Result<[u128; 2], Fault> {
+            match loc {
+                SseLoc::X(n) => {
+                    let (lo, hi) = (s.th.xmm[usize::from(n)], s.th.ymm_hi[usize::from(n)]);
+                    Ok(if nbytes > 16 {
+                        [lo, hi & mask128(8 * (nbytes - 16))]
+                    } else {
+                        [lo & mask128(8 * nbytes), 0]
+                    })
+                }
+                _ => s.read_bytes(loc, 0, nbytes as usize),
+            }
+        };
+        let lanes256 = |v: [u128; 2], w: u32| -> Vec<u64> { [lanes128(v[0], w), lanes128(v[1], w)].concat() };
+        let pack256 = |ls: &[u64], w: u32| -> [u128; 2] {
+            let per = (128 / w) as usize;
+            let half = |part: &[u64]| fp::join(part, w);
+            [half(&ls[..per.min(ls.len())]), half(&ls[per.min(ls.len())..])]
+        };
+        let imm_of = || imm.ok_or_else(|| Fault::Refused(format!("{ic} without its immediate")));
+        let mut width = if vl { 32 } else { 16 };
+        let out = match ic {
+            "VPERMQ" => {
+                let (q, imm) = (lanes256(read(self, s2, 32)?, 64), imm_of()?);
+                pack256(
+                    &(0..4).map(|i| q[(imm >> (2 * i) & 3) as usize]).collect::<Vec<_>>(),
+                    64,
+                )
+            }
+            "VPERMD" => {
+                let s1 = s1.ok_or_else(|| Fault::Refused("VPERMD without its index operand".into()))?;
+                let (idx, src) = (lanes256(read(self, s1, 32)?, 32), lanes256(read(self, s2, 32)?, 32));
+                pack256(&idx.iter().map(|i| src[(i & 7) as usize]).collect::<Vec<_>>(), 32)
+            }
+            "VPBROADCASTD" | "VBROADCASTSS" => {
+                let v = read(self, s2, 4)?[0] as u64;
+                pack256(&vec![v; width / 4], 32)
+            }
+            "VPBROADCASTQ" => {
+                let v = read(self, s2, 8)?[0] as u64;
+                pack256(&vec![v; width / 8], 64)
+            }
+            "VBROADCASTF128" => {
+                let v = read(self, s2, 16)?[0];
+                [v, v]
+            }
+            "VINSERTF128" | "VINSERTI128" => {
+                let s1 = s1.ok_or_else(|| Fault::Refused(format!("{ic} without its base operand")))?;
+                let (mut base, part) = (read(self, s1, 32)?, read(self, s2, 16)?[0]);
+                base[(imm_of()? & 1) as usize] = part;
+                base
+            }
+            "VEXTRACTF128" | "VEXTRACTI128" => {
+                width = 16;
+                [read(self, s2, 32)?[(imm_of()? & 1) as usize], 0]
+            }
+            "VCVTPS2PD" => {
+                let v = read(self, s2, 16)?[0];
+                let mut env = Env::new(self.th.mxcsr);
+                let mut flags = 0;
+                let mut res = Vec::new();
+                for f32 in lanes128(v, 32) {
+                    env.flags = 0;
+                    res.push(fp::convert(F32, F64, f32, &mut env));
+                    flags |= env.flags;
+                }
+                env.flags = flags;
+                self.fp_check(&env)?;
+                pack256(&res, 64)
+            }
+            "VPMOVSXDQ" => {
+                let ls: Vec<u64> = lanes128(read(self, s2, 16)?[0], 32)
+                    .iter()
+                    .map(|w| i64::from(*w as u32 as i32) as u64)
+                    .collect();
+                pack256(&ls, 64)
+            }
+            _ => return Err(Fault::Refused(format!("vex {ic}"))),
+        };
+        match d {
+            SseLoc::X(n) => {
+                let n = usize::from(n);
+                self.th.xmm[n] = out[0];
+                self.th.ymm_hi[n] = if width == 32 { out[1] } else { 0 };
+                Ok(())
+            }
+            _ => {
+                let Some(addr) = d.addr() else {
+                    return Err(Fault::Refused(format!(
+                        "{ic}: a register or memory destination expected"
+                    )));
+                };
+                let va = self.temp(addr)?;
+                let bytes = [out[0].to_le_bytes(), out[1].to_le_bytes()].concat();
+                self.mem.write(va, &bytes[..width])
+            }
+        }
+    }
+
+    /// `_vex` (runtime.py 732-786): one VEX instruction as its legacy-SSE base: d = BASE(s1, s2) on the low 128 bits,
+    /// the same on bits 255:128 for VEX.256; a VEX.128 write to a register zeroes its bits 255:128 (SDM Vol 1 14.1.1).
+    /// XMM 16 and 17 are the scratch (an operand that aliases the destination, the high halves). A memory operand of
+    /// 32 bytes is read whole before any write.
+    #[allow(clippy::too_many_arguments)]
+    fn vex(
+        &mut self,
+        base: &str,
+        d: SseLoc,
+        s1: Option<SseLoc>,
+        s2: SseLoc,
+        vl: bool,
+        align: u32,
+        imm: Option<u64>,
+    ) -> Result<(), Fault> {
+        for loc in [d, s2] {
+            if let Some(addr) = loc.addr() {
+                let va = self.temp(addr)?;
+                if align != 0 && va % u64::from(align) != 0 {
+                    return Err(guest(format!(
+                        "#GP: V{base} memory operand at 0x{va:x} not {align}-byte aligned"
+                    )));
+                }
+            }
+        }
+        let mut src_hi = 0u128;
+        if vl {
+            src_hi = match s2 {
+                SseLoc::X(n) => self.th.ymm_hi[usize::from(n)],
+                SseLoc::Loc(Loc::M { .. }) => self.read_bytes(s2, 16, 16)?[0],
+                SseLoc::Loc(_) => 0,
+            };
+        }
+        if vl && SHIFT_BY_COUNT.contains(&base) && imm.is_none() {
+            // the count is s2's low quadword, both halves
+            src_hi = match s2 {
+                SseLoc::X(n) => self.th.xmm[usize::from(n)],
+                _ => self.read_bytes(s2, 0, 16)?[0],
+            };
+        }
+        let first_hi = match (vl, s1, d) {
+            (true, Some(SseLoc::X(n)), _) | (true, _, SseLoc::X(n)) => self.th.ymm_hi[usize::from(n)],
+            _ => 0,
+        };
+        if vl && let Some(addr) = d.addr() {
+            // a 256-bit store: all 32 bytes or none
+            let SseLoc::X(s) = s2 else {
+                return Err(Fault::Refused(format!(
+                    "V{base}: a 256-bit store from a register expected"
+                )));
+            };
+            let s = usize::from(s);
+            let va = self.temp(addr)?;
+            let bytes = [self.th.xmm[s].to_le_bytes(), self.th.ymm_hi[s].to_le_bytes()].concat();
+            return self.mem.write(va, &bytes);
+        }
+        let fp_both = vl
+            && (base.len() > 2
+                && matches!(
+                    &base[..base.len() - 2],
+                    "ADD" | "SUB" | "MUL" | "DIV" | "SQRT" | "MIN" | "MAX"
+                )
+                || VEX_FP.contains(&base));
+        let mxcsr_in = self.th.mxcsr;
+        if fp_both {
+            // both halves with the real MXCSR, their flags collected, then one check (an unmasked exception faults
+            // with no lane committed)
+            self.defer_fp = true;
+            self.deferred_flags = 0;
+        }
+        let mut low_src = s2;
+        if let (Some(SseLoc::X(a)), SseLoc::X(dd)) = (s1, d)
+            && a != dd
+        {
+            if s2 == SseLoc::X(dd) {
+                self.th.xmm[16] = self.th.xmm[usize::from(dd)];
+                low_src = SseLoc::X(16);
+            }
+            self.th.xmm[usize::from(dd)] = self.th.xmm[usize::from(a)];
+        }
+        self.sse(base, d, low_src, 0, imm)?;
+        match d {
+            SseLoc::Loc(Loc::R { idx, bits, .. }) if base == "PMOVMSKB" && vl => {
+                // 32 sign bits: the upper half's 16 above
+                let upper = (0..16).fold(0u64, |acc, i| acc | ((src_hi >> (8 * i + 7)) as u64 & 1) << (16 + i));
+                let v = self.rd(idx, bits, false) | upper;
+                self.wr(idx, bits, false, v);
+            }
+            SseLoc::X(_) if matches!(base, "COMISD" | "UCOMISD" | "COMISS" | "UCOMISS") => {} // flags only: d is a source
+            SseLoc::X(dd) => {
+                let dd = usize::from(dd);
+                if vl {
+                    self.th.xmm[16] = first_hi;
+                    self.th.xmm[17] = src_hi;
+                    let imm = if base == "PBLENDD" { imm.map(|i| i >> 4) } else { imm };
+                    self.sse(base, SseLoc::X(16), SseLoc::X(17), 0, imm)?;
+                    self.th.ymm_hi[dd] = self.th.xmm[16];
+                } else {
+                    self.th.ymm_hi[dd] = 0;
+                }
+            }
+            _ => {}
+        }
+        if fp_both {
+            // this instruction's flags, both halves
+            let env = crate::x86fp::Env {
+                mxcsr: mxcsr_in,
+                flags: self.deferred_flags,
+            };
+            self.defer_fp = false;
+            self.th.mxcsr = mxcsr_in;
+            self.fp_check(&env)?;
+        }
+        Ok(())
+    }
+
+    /// `_fma` (runtime.py 788-827): VFMADD/VFMSUB/VFNMADD/VFNMSUB 132/213/231 in SS/SD/PS/PD, one rounding. Operand 1
+    /// is the destination, 2 VEX.vvvv, 3 r/m; 132 is o1*o3 + o2, 213 o2*o1 + o3, 231 o2*o3 + o1.
+    fn fma(&mut self, ic: &str, d: SseLoc, s2: SseLoc, s3: SseLoc, vl: bool) -> Result<(), Fault> {
+        use crate::x86fp::{self as fp, Env, F32, F64};
+        let refused = || Fault::Refused(format!("fma {ic}"));
+        let rest = ic.strip_prefix('V').ok_or_else(refused)?;
+        let (kind, rest) = ["FNMADD", "FNMSUB", "FMADD", "FMSUB"]
+            .iter()
+            .find_map(|k| rest.strip_prefix(k).map(|r| (*k, r)))
+            .ok_or_else(refused)?;
+        if rest.len() != 5 {
+            return Err(refused());
+        }
+        let (order, form) = rest.split_at(3);
+        let (neg_p, neg_a) = match kind {
+            "FMADD" => (false, false),
+            "FMSUB" => (false, true),
+            "FNMADD" => (true, false),
+            _ => (true, true),
+        };
+        let (mul, add) = match order {
+            "132" => ((0, 2), 1),
+            "213" => ((1, 0), 2),
+            "231" => ((1, 2), 0),
+            _ => return Err(refused()),
+        };
+        let f = if form.as_bytes()[1] == b'S' { F32 } else { F64 };
+        let scalar = form.as_bytes()[0] == b'S';
+        let nbytes = if scalar { f.bits / 8 } else { 16 };
+        let (d, s2) = (self.xmm(d)?, self.xmm(s2)?);
+        let (o1, o2, o3) = (self.th.xmm[d], self.th.xmm[s2], self.xread(s3, nbytes)?);
+        let mut env = Env::new(self.th.mxcsr);
+        let count = if scalar { 1 } else { (128 / f.bits) as usize };
+        let n = 128 / f.bits;
+        let (a1, a2, a3) = (
+            fp::lanes(o1, f.bits, n),
+            fp::lanes(o2, f.bits, n),
+            fp::lanes(o3, f.bits, n),
+        );
+        let mut out = a1.clone();
+        let mut flags = 0;
+        // each lane's flags, then all of them (as execute)
+        let mut lane = |ops: [u64; 3], env: &mut Env| {
+            env.flags = 0;
+            let r = fp::fma_lane(f, ops, mul, add, neg_p, neg_a, env);
+            flags |= env.flags;
+            r
+        };
+        for i in 0..count {
+            out[i] = lane([a1[i], a2[i], a3[i]], &mut env);
+        }
+        let mut new_hi = 0;
+        if vl && !scalar {
+            let h3 = match s3 {
+                SseLoc::X(k) => self.th.ymm_hi[usize::from(k)],
+                _ => self.read_bytes(s3, 16, 16)?[0],
+            };
+            let (b1, b2, b3) = (
+                fp::lanes(self.th.ymm_hi[d], f.bits, n),
+                fp::lanes(self.th.ymm_hi[s2], f.bits, n),
+                fp::lanes(h3, f.bits, n),
+            );
+            let hi: Vec<u64> = (0..count).map(|i| lane([b1[i], b2[i], b3[i]], &mut env)).collect();
+            new_hi = fp::join(&hi, f.bits);
+        }
+        env.flags = flags;
+        self.fp_check(&env)?;
+        self.th.xmm[d] = fp::join(&out, f.bits);
+        self.th.ymm_hi[d] = new_hi;
         Ok(())
     }
 
@@ -2238,8 +2597,11 @@ pub fn step<M: Memory>(th: &mut Thread, mem: &mut M, ins: &Lifted, code: &[u8]) 
         mem,
         t: Default::default(),
         code,
+        defer_fp: false,
+        deferred_flags: 0,
     };
     let r = s.exec_ops(ins);
+    s.th.xmm[16..].fill(0); // `_vex`'s `del x[16:]`: the scratch registers go
     if let Err(Fault::Guest { .. }) = &r {
         let interrupted = s.th.regs;
         let mxcsr = s.th.mxcsr;
@@ -2292,7 +2654,8 @@ mod tests {
             mxcsr: 0x1F80,
             fcw: 0x27F,
             rip: 0x1000,
-            xmm: [0; 16],
+            xmm: [0; 18],
+            ymm_hi: [0; 16],
             x87_sw: 0,
             x87_tags: 0,
             x87_regs: [0; 8],
@@ -2313,6 +2676,8 @@ mod tests {
             mem: &mut region(),
             t: Default::default(),
             code: &[],
+            defer_fp: false,
+            deferred_flags: 0,
         };
         assert_eq!(
             s.alu("mul_hi", 1234567890, 0xcccc_cccc_cccc_cccd, 64).unwrap(),

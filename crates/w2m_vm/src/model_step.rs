@@ -8,7 +8,7 @@
 use guest_runtime::layout::{MONITOR_DATA, MONITOR_SIZE, SAVE_AREA, STATE_OFF};
 use hypervisor::{HvError, Reg, Vcpu};
 
-use crate::cases::{AF_OPERANDS, DF_BYTE, FLAG_BIT, FLAG_REG, PF_RESULT, X87_ST_OFF, X87_SW_OFF};
+use crate::cases::{AF_OPERANDS, DF_BYTE, FLAG_BIT, FLAG_REG, PF_RESULT, X87_ST_OFF, X87_SW_OFF, YMM_HI_OFF};
 use crate::guest::Guest;
 use crate::monitor_code::SAVE_VECTORS;
 use crate::run::{FCW_OFF, MXCSR_OFF, REG_UNDEFINED_FLAGS, fpcr_for};
@@ -124,13 +124,19 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
                 .unwrap(),
         ),
         rip,
-        xmm: [0; 16],
+        xmm: [0; 18],
+        ymm_hi: [0; 16],
         x87_sw: 0,
         x87_tags: 0,
         x87_regs: [0; 8],
     };
     for k in 0..16u8 {
         th.xmm[usize::from(k)] = vcpu.simd(k)?;
+    }
+    // YMM0-15 bits 255:128 from the monitor data page (4282-4283)
+    let ymm_hi = (md + YMM_HI_OFF) as usize;
+    for (i, v) in th.ymm_hi.iter_mut().enumerate() {
+        *v = u128::from_le_bytes(mem[ymm_hi + 16 * i..ymm_hi + 16 * i + 16].try_into().unwrap());
     }
     // the x87 state as `_slow_sse` reads it (4293-4298): FSW and the abridged tags from the state block, ST(i) in FXSAVE
     // order, physical register (TOP + i) & 7
@@ -184,6 +190,10 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
             write_u64(mem, md + PF_RESULT, if f.p == Some(true) { 0 } else { 1 });
             mem[(md + DF_BYTE) as usize] = u8::from(th.df);
             mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&th.fcw.to_le_bytes());
+            // YMM0-15 bits 255:128 back (4315-4316); a fault leaves the page's halves as they were
+            for (i, v) in th.ymm_hi.iter().enumerate() {
+                mem[ymm_hi + 16 * i..ymm_hi + 16 * i + 16].copy_from_slice(&v.to_le_bytes());
+            }
             // the vectors with FPCR from MXCSR, FPSR's flags now in the stored word (4318)
             vcpu.set_reg(Reg::Fpcr, fpcr_for(th.mxcsr))?;
             // XMM0-15 back, as `_slow_sse` sets the vectors after a step (Sprint 178: the SSE slice writes them)

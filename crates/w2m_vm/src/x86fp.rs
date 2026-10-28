@@ -538,6 +538,107 @@ pub fn convert(src: Fmt, dst: Fmt, b: u64, env: &mut Env) -> u64 {
     env.round(dst, &value(src, b))
 }
 
+/// `fma` (419-449): (+-a*b) +- c with one rounding; NaN operands are resolved by `fma_lane` first (Sprint 183).
+#[allow(clippy::too_many_arguments)]
+pub fn fma(f: Fmt, a: u64, b: u64, c: u64, negate_product: bool, negate_addend: bool, env: &mut Env) -> u64 {
+    let (a, b, c) = (env.src(f, a, true), env.src(f, b, true), env.src(f, c, true));
+    let sp = (a & f.sign() != 0) ^ (b & f.sign() != 0) ^ negate_product;
+    let sc = (c & f.sign() != 0) != negate_addend;
+    let (ia, ib, ic) = (is_inf(f, a), is_inf(f, b), is_inf(f, c));
+    let (za, zb) = (is_zero(f, a), is_zero(f, b));
+    let inf = |neg: bool| (if neg { f.sign() } else { 0 }) | f.emask() << f.mbits;
+    if (ia && zb) || (ib && za) {
+        env.flags = env.flags & !DE | IE;
+        return f.indefinite();
+    }
+    if ia || ib {
+        if ic && sc != sp {
+            env.flags = env.flags & !DE | IE;
+            return f.indefinite();
+        }
+        return inf(sp);
+    }
+    if ic {
+        return inf(sc);
+    }
+    let product = value(f, a) * value(f, b);
+    let product = if negate_product { -product } else { product };
+    let addend = if negate_addend { -value(f, c) } else { value(f, c) };
+    let v = &product + addend;
+    if v.is_zero() {
+        if product.is_zero() && is_zero(f, c) && sp == sc {
+            return if sp { f.sign() } else { 0 };
+        }
+        // exact zero sum: -0 only rounding down
+        return if env.rc() == 1 { f.sign() } else { 0 };
+    }
+    env.round(f, &v)
+}
+
+/// `fma_lane` (452-467): one lane of an FMA form, `ops` the instruction's operands 1, 2 and 3, `mul` and `add`
+/// indexing them; a NaN operand gives the first of the multiplicands, then the addend, quieted, an SNaN not outranking
+/// a QNaN; an SNaN sets IE.
+#[allow(clippy::too_many_arguments)]
+pub fn fma_lane(
+    f: Fmt,
+    ops: [u64; 3],
+    mul: (usize, usize),
+    add: usize,
+    negate_product: bool,
+    negate_addend: bool,
+    env: &mut Env,
+) -> u64 {
+    let srcs = ops.map(|x| env.src(f, x, true));
+    let nans: Vec<u64> = [mul.0, mul.1, add]
+        .iter()
+        .map(|i| srcs[*i])
+        .filter(|x| is_nan(f, *x))
+        .collect();
+    if let Some(first) = nans.first() {
+        if nans.iter().any(|x| is_snan(f, *x)) {
+            env.flags |= IE;
+        }
+        // inf * 0 plus a QNaN addend is not Invalid (Xeon 8573C, set 049b cases 25743, 27363)
+        env.flags &= !DE;
+        return quiet(f, *first);
+    }
+    fma(
+        f,
+        srcs[mul.0],
+        srcs[mul.1],
+        srcs[add],
+        negate_product,
+        negate_addend,
+        env,
+    )
+}
+
+/// `execute` (533-560) with `check=False`: the new destination and the lanes' flags, for VEX.256's one check over both
+/// halves (Sprint 183).
+pub fn execute_unchecked(name: &str, dst: u128, src: u128, mxcsr: u32) -> (u128, u32) {
+    let (base, kind) = name.split_at(name.len() - 2);
+    let f = if kind.as_bytes()[1] == b'S' { F32 } else { F64 };
+    let count = if kind.as_bytes()[0] == b'S' { 1 } else { 128 / f.bits };
+    let mut env = Env::new(mxcsr);
+    let (da, sb) = (lanes(dst, f.bits, 128 / f.bits), lanes(src, f.bits, 128 / f.bits));
+    let mut out = da.clone();
+    let mut lane_flags = 0;
+    for i in 0..count as usize {
+        env.flags = 0;
+        out[i] = match base {
+            "ADD" => arith("add", f, da[i], sb[i], &mut env),
+            "SUB" => arith("sub", f, da[i], sb[i], &mut env),
+            "MUL" => arith("mul", f, da[i], sb[i], &mut env),
+            "DIV" => arith("div", f, da[i], sb[i], &mut env),
+            "SQRT" => sqrt(f, sb[i], &mut env),
+            "MIN" => minmax("min", f, da[i], sb[i], &mut env),
+            _ => minmax("max", f, da[i], sb[i], &mut env),
+        };
+        lane_flags |= env.flags;
+    }
+    (join(&out, f.bits), lane_flags)
+}
+
 /// `CMP_PREDICATES` (471-478): predicates 0-31, (relation, true when unordered, signals on QNaN); None is UNORD/ORD
 const CMP_PREDICATES: [(Option<&str>, bool, bool); 32] = [
     (Some("eq"), false, false),
@@ -657,29 +758,13 @@ fn mask(w: u32) -> u64 {
 /// `execute` (533-560): one legacy-SSE arithmetic instruction (ADD/SUB/MUL/DIV/SQRT/MIN/MAX in SS/SD/PS/PD) on a
 /// 128-bit destination and a source: the new destination and MXCSR, or the fault (its flags merged into `.flags`).
 pub fn execute(name: &str, dst: u128, src: u128, mxcsr: u32) -> Result<(u128, u32), SimdFault> {
-    let (base, kind) = name.split_at(name.len() - 2);
-    let f = if kind.as_bytes()[1] == b'S' { F32 } else { F64 };
-    let count = if kind.as_bytes()[0] == b'S' { 1 } else { 128 / f.bits };
-    let mut env = Env::new(mxcsr);
-    let (da, sb) = (lanes(dst, f.bits, 128 / f.bits), lanes(src, f.bits, 128 / f.bits));
-    let mut out = da.clone();
-    let mut lane_flags = 0;
-    for i in 0..count as usize {
-        env.flags = 0;
-        out[i] = match base {
-            "ADD" => arith("add", f, da[i], sb[i], &mut env),
-            "SUB" => arith("sub", f, da[i], sb[i], &mut env),
-            "MUL" => arith("mul", f, da[i], sb[i], &mut env),
-            "DIV" => arith("div", f, da[i], sb[i], &mut env),
-            "SQRT" => sqrt(f, sb[i], &mut env),
-            "MIN" => minmax("min", f, da[i], sb[i], &mut env),
-            _ => minmax("max", f, da[i], sb[i], &mut env),
-        };
-        lane_flags |= env.flags;
+    let (out, lane_flags) = execute_unchecked(name, dst, src, mxcsr);
+    Env {
+        mxcsr,
+        flags: lane_flags,
     }
-    env.flags = lane_flags;
-    env.check()?;
-    Ok((join(&out, f.bits), mxcsr | lane_flags))
+    .check()?;
+    Ok((out, mxcsr | lane_flags))
 }
 
 #[cfg(test)]
