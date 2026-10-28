@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 178
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -90,3 +90,36 @@ The legacy-encoded SSE model cases are judged against Windows through the Rust m
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: counts and two plants on paths the judge reads.
 - [x] One concept: the legacy SSE slice.
+
+## result
+
+- **The routes:** read from `rules/_sse.py` before the code (the scope's note): every legacy route to the model is
+  `hvc #10`, a lowered class leaving its fast path while MXCSR unmasks an exception, or a class the lowering always
+  sends there.
+- **The slice:** `crates/w2m_vm/src/x86fp.rs` carries `x86fp.py` function for function on `BigRational` (`fma` and
+  `fma_lane` come with the VEX slice); two unit tests hold 1/3 in binary32 (0x3EAAAAAB, PE) and DAZ to the values
+  `x86fp.py` prints. `model.rs` steps `Op::Sse` as `_sse` does, with `_sse_049b`, `_sse_050` and `_sse2_int`, the
+  Python's `SSE2_INT` (62 classes), `SSE_049B`, `SSE_050_NEW`, `LANE_ARITH` and `INTERLEAVE`; an unmasked exception
+  merges its flags into MXCSR and is the guest's #XM with the code `xm_status` picks (`vm_backend.py` 4301-4302).
+  PCMPISTRI and the RCP and RSQRT approximations are refused by name. `model_step` no longer refuses an `sse` op and
+  writes XMM back after a step, as `_slow_sse` sets the vectors (4318).
+- **Judged against Windows:** set `semantics`' model cases, 2,085 in 40 classes in each of its two runs, 4,170 in all,
+  with 0 difference classes; both runs now judge all 39,708 cases, their 5,485 Windows faults all at the VM's fault.
+  `expected.tsv`'s two rows fell from 2,085 to 0 model cases; `expected-by-class.tsv` changed in those 80 rows.
+- **Not reached, against the card:** the card said the translator lifts these classes to `Op::Sse`; it lifts group
+  4's 52 classes (`SSE_FLOAT_CORE`) and group 5's integer block, not the other 27 of the card's 67: CMPSD_XMM 367,
+  CMPSS 372, MOVHPD 636, MPSADBW 822, PSLLW 328, PINSRD 220 and 21 more, 4,760 cases over sets 049, 050 and 065c. They
+  do not lift, so the model never sees them. Lifting them means porting their lowering too, which the C words judge
+  compares: they are the batch run's 848 SSE calls the census holds unlifted.
+- **Plant 1** (DAZ ignored, `Env::src`): the case runner failed, "2 ADDPS fault code: case 26004: [2e, 44, 0f, 58,
+  be, 16, 60, 7c, 6b] vm 0xc0000090, cpu 0xc000008f", with ADDPS's fault MXCSR and ADDSS. Restored byte for byte.
+- **Plant 2** as the card wrote it (CMPSS's LT for LE) reached no judge: CMPSS does not lift, so no CMPSS case reaches
+  the model. Replaced by UCOMISS and UCOMISD signalling on a QNaN as COMISS does: the case runner failed, "3 UCOMISS vm
+  fault, cpu completed: case 21671: [67, 4c, 0f, 2e, 65, 35] vm 0xc0000090", with "1 UCOMISS MXCSR". Restored byte
+  for byte.
+- **Records:** four `case-runner-rust` records (1793193981524123000, -557203000, -584542000, -614746000), the
+  verdicts Sprint 177's held (235, 177, 107, 26; FCOS and FSIN rejected on the first), `check_records` 0 violations
+  each; the ledger holds 6 open entries, two for each record that reports the pair.
+- **Departures:** the 27 classes above; `crates/w2m_vm/src/lib.rs`, `cases.rs` and `store/case_runner/discrepancy-
+  ledger.json` changed, files the card did not name; a `sed` inserted three lines (`LaneFn` and its comment), a
+  multi-line edit outside the Edit tool.
