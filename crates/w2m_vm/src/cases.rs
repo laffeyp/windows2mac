@@ -252,11 +252,7 @@ fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Resu
     let Ok(ins) = translator::lift::lift(code, rip) else {
         return Ok(ModelStep::Refused);
     };
-    if ins
-        .ops
-        .iter()
-        .any(|op| matches!(op, translator::lift::Op::Sse { .. } | translator::lift::Op::Cpuid))
-    {
+    if ins.ops.iter().any(|op| matches!(op, translator::lift::Op::Cpuid)) {
         return Ok(ModelStep::Refused);
     }
     let md = MONITOR_DATA;
@@ -360,6 +356,10 @@ fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Resu
             mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&th.fcw.to_le_bytes());
             // the vectors with FPCR from MXCSR, FPSR's flags now in the stored word (4318)
             vcpu.set_reg(Reg::Fpcr, fpcr_for(th.mxcsr))?;
+            // XMM0-15 back, as `_slow_sse` sets the vectors after a step (Sprint 178: the SSE slice writes them)
+            for k in 0..16u8 {
+                vcpu.set_simd(k, th.xmm[usize::from(k)])?;
+            }
             vcpu.set_reg(Reg::Fpsr, 0)?;
             vcpu.set_reg(Reg::X(17), th.rip)?;
             vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;

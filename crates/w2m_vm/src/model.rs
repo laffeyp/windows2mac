@@ -8,7 +8,7 @@
 //! This slice holds the core's integer and control operations and the integer classes. An `sse` operation is refused
 //! by name: the SSE, MMX, VEX and x87 slices follow.
 
-use translator::lift::{Lifted, Loc, MmxArg, Op, RAX, RBX, RCX, RDI, RDX, RSI, RSP, Temp};
+use translator::lift::{Lifted, Loc, MmxArg, Op, RAX, RBX, RCX, RDI, RDX, RSI, RSP, SseLoc, Temp};
 
 const M64: u64 = u64::MAX;
 /// ntstatus.h (runtime.py 26-28)
@@ -613,9 +613,14 @@ impl<M: Memory> Step<'_, M> {
                         "cpuid: the model's CPUID table comes with a later slice".into(),
                     ));
                 }
-                Op::Sse { ic, .. } => {
-                    return Err(Fault::Refused(format!("sse {ic}: the model's SSE slice comes later")));
-                }
+                // `_sse` (runtime.py 398-496; Sprint 178)
+                Op::Sse {
+                    ic,
+                    dst,
+                    src,
+                    align,
+                    imm,
+                } => self.sse(ic, *dst, *src, *align, *imm)?,
                 // `_mmx` and `_x87` (runtime.py 140-191), from the one lifter's ops (Sprint 177)
                 Op::Mmx { ic, dst, src, imm } => self.mmx(ic, *dst, *src, *imm)?,
                 Op::X87 {
@@ -1211,6 +1216,1004 @@ impl<M: Memory> Step<'_, M> {
         if ic == "FNSTSW" && mem.is_none() {
             th.regs[0] = th.regs[0] & !0xFFFF | u64::from(ax);
         }
+        Ok(())
+    }
+}
+
+/// `SSE_049B` (runtime.py 32-33): the set-049b legacy forms.
+const SSE_049B: [&str; 14] = [
+    "PSHUFB",
+    "PALIGNR",
+    "PINSRD",
+    "PINSRQ",
+    "PEXTRQ",
+    "PMOVSXDQ",
+    "ANDNPD",
+    "CVTDQ2PS",
+    "CVTTPS2DQ",
+    "CVTPS2PD",
+    "CMPPS_VEX",
+    "ROUNDSD",
+    "PERMILPS_VAR",
+    "PBLENDD",
+];
+
+/// `SSE_050_NEW` (runtime.py 95-96): the set-050 legacy classes.
+const SSE_050_NEW: [&str; 19] = [
+    "CVTPS2DQ",
+    "CVTPD2PS",
+    "CMPPS",
+    "CMPPD",
+    "CMPSS",
+    "SHUFPD",
+    "MOVLPS",
+    "MOVHPD",
+    "MOVNTDQ",
+    "PSADBW",
+    "PACKSSWB",
+    "PACKSSDW",
+    "PMADDUBSW",
+    "PMADDWD",
+    "PEXTRW",
+    "PINSRB",
+    "PMOVZXWD",
+    "PSLLW",
+    "MPSADBW",
+];
+
+/// `SSE2_INT` (lift.py 108-125): the classes `_sse` sends to `_sse2_int`, as the Python's set holds them (62).
+const SSE2_INT: [&str; 62] = [
+    "ANDNPS",
+    "CVTDQ2PD",
+    "MOVDQA",
+    "MOVDQU",
+    "MOVHLPS",
+    "MOVHPS",
+    "MOVLHPS",
+    "MOVMSKPS",
+    "MOVNTPS",
+    "ORPS",
+    "PACKUSWB",
+    "PADDD",
+    "PADDQ",
+    "PADDSB",
+    "PADDSW",
+    "PADDW",
+    "PAND",
+    "PANDN",
+    "PCMPEQB",
+    "PCMPEQD",
+    "PCMPGTD",
+    "PCMPISTRI",
+    "PCMPISTRI64",
+    "PINSRW",
+    "PMAXUB",
+    "PMOVMSKB",
+    "PMULLW",
+    "POR",
+    "PSHUFD",
+    "PSHUFHW",
+    "PSHUFLW",
+    "PSLLD",
+    "PSLLDQ",
+    "PSLLQ",
+    "PSRAD",
+    "PSRAW",
+    "PSRLD",
+    "PSRLDQ",
+    "PSRLQ",
+    "PSRLW",
+    "PSUBD",
+    "PSUBQ",
+    "PSUBSB",
+    "PSUBUSB",
+    "PSUBW",
+    "PUNPCKHBW",
+    "PUNPCKHDQ",
+    "PUNPCKHWD",
+    "PUNPCKLBW",
+    "PUNPCKLDQ",
+    "PUNPCKLQDQ",
+    "PUNPCKLWD",
+    "PXOR",
+    "RCPPS",
+    "RCPSS",
+    "RSQRTPS",
+    "RSQRTSS",
+    "SHUFPS",
+    "UNPCKHPD",
+    "UNPCKHPS",
+    "UNPCKLPD",
+    "UNPCKLPS",
+];
+
+/// A lane of dest p and source q at width w (`LANE_ARITH`'s lambdas).
+type LaneFn = fn(u64, u64, u32) -> i128;
+
+/// `LANE_ARITH` (runtime.py 69-94): lane by lane, (lane bits, the lane of dest p and source q).
+fn lane_arith(ic: &str) -> Option<(u32, LaneFn)> {
+    Some(match ic {
+        "PADDW" => (16, |p, q, _| i128::from(p) + i128::from(q)),
+        "PADDQ" => (64, |p, q, _| i128::from(p) + i128::from(q)),
+        "PSUBW" => (16, |p, q, _| i128::from(p) - i128::from(q)),
+        "PCMPEQD" => (32, |p, q, w| if p == q { i128::from(mask(w)) } else { 0 }),
+        "PCMPGTD" | "PCMPGTB" | "PCMPGTW" => (
+            match ic {
+                "PCMPGTD" => 32,
+                "PCMPGTB" => 8,
+                _ => 16,
+            },
+            |p, q, w| {
+                if signed(p, w) > signed(q, w) {
+                    i128::from(mask(w))
+                } else {
+                    0
+                }
+            },
+        ),
+        "PSUBUSB" => (8, |p, q, _| (i128::from(p) - i128::from(q)).max(0)),
+        "PMAXUB" => (8, |p, q, _| i128::from(p.max(q))),
+        "PADDSB" => (8, |p, q, w| {
+            (signed(p, w) + signed(q, w)).clamp(-(1i128 << (w - 1)), (1i128 << (w - 1)) - 1)
+        }),
+        "PADDSW" => (16, |p, q, w| {
+            (signed(p, w) + signed(q, w)).clamp(-(1i128 << (w - 1)), (1i128 << (w - 1)) - 1)
+        }),
+        "PSUBSB" => (8, |p, q, w| {
+            (signed(p, w) - signed(q, w)).clamp(-(1i128 << (w - 1)), (1i128 << (w - 1)) - 1)
+        }),
+        "PMULLW" => (16, |p, q, _| i128::from(p) * i128::from(q)),
+        "PADDB" => (8, |p, q, _| i128::from(p) + i128::from(q)),
+        "PCMPEQQ" => (64, |p, q, w| if p == q { i128::from(mask(w)) } else { 0 }),
+        "PMULUDQ" => (64, |p, q, _| i128::from(p & 0xFFFF_FFFF) * i128::from(q & 0xFFFF_FFFF)),
+        "PADDUSB" => (8, |p, q, _| (i128::from(p) + i128::from(q)).min(0xFF)),
+        "PAVGB" => (8, |p, q, _| (i128::from(p) + i128::from(q) + 1) >> 1),
+        "PMAXUD" => (32, |p, q, _| i128::from(p.max(q))),
+        "PMAXUW" => (16, |p, q, _| i128::from(p.max(q))),
+        "PMAXSW" => (16, |p, q, w| signed(p, w).max(signed(q, w))),
+        "PMINSD" => (32, |p, q, w| signed(p, w).min(signed(q, w))),
+        "PMULHW" => (16, |p, q, w| (signed(p, w) * signed(q, w)) >> 16),
+        "PMULLD" => (32, |p, q, _| i128::from(p) * i128::from(q)),
+        "PABSW" => (16, |_, q, w| signed(q, w).abs()),
+        _ => return None,
+    })
+}
+
+/// `INTERLEAVE` (runtime.py 97-98): (lane bits, from the high half).
+fn interleave(ic: &str) -> Option<(u32, bool)> {
+    Some(match ic {
+        "PUNPCKHQDQ" | "UNPCKHPD" => (64, true),
+        "PUNPCKLQDQ" | "UNPCKLPD" => (64, false),
+        "PUNPCKHBW" => (8, true),
+        "PUNPCKHDQ" => (32, true),
+        "PUNPCKHWD" => (16, true),
+        "PUNPCKLWD" => (16, false),
+        _ => return None,
+    })
+}
+
+/// lanes of a 128-bit value, `w` bits each (runtime.py's local `lanes`)
+fn lanes128(v: u128, w: u32) -> Vec<u64> {
+    crate::x86fp::lanes(v, w, 128 / w)
+}
+
+/// `pack`: lanes of `w` bits, each masked to `w`, from a list of possibly negative or wide values
+fn pack(ls: &[i128], w: u32) -> u128 {
+    ls.iter()
+        .enumerate()
+        .fold(0u128, |acc, (i, n)| acc | ((*n as u128) & mask128(w)) << (w * i as u32))
+}
+
+impl<M: Memory> Step<'_, M> {
+    /// `_xread` (runtime.py 391-396)
+    fn xread(&self, loc: SseLoc, nbytes: u32) -> Result<u128, Fault> {
+        match loc {
+            SseLoc::X(n) => Ok(self.th.xmm[usize::from(n)] & mask128(8 * nbytes)),
+            SseLoc::Loc(Loc::R { idx, bits, hi }) => Ok(u128::from(self.rd(idx, bits, hi))),
+            SseLoc::Loc(Loc::M { addr, .. }) => {
+                let b = self.mem.read(self.temp(addr)?, nbytes as usize)?;
+                let mut w = [0u8; 16];
+                w[..nbytes as usize].copy_from_slice(&b[..nbytes as usize]);
+                Ok(u128::from_le_bytes(w))
+            }
+        }
+    }
+
+    /// `_xwrite` (runtime.py 965-971): an XMM write zeroes what `nbytes` does not cover
+    fn xwrite(&mut self, loc: SseLoc, v: u128, nbytes: u32) -> Result<(), Fault> {
+        match loc {
+            SseLoc::X(n) => {
+                self.th.xmm[usize::from(n)] = v & mask128(8 * nbytes);
+                Ok(())
+            }
+            SseLoc::Loc(Loc::R { idx, bits, hi }) => {
+                self.wr(idx, bits, hi, v as u64);
+                Ok(())
+            }
+            SseLoc::Loc(Loc::M { addr, .. }) => {
+                let va = self.temp(addr)?;
+                self.mem.write(va, &v.to_le_bytes()[..nbytes as usize])
+            }
+        }
+    }
+
+    /// `_fp_check` (runtime.py 983-992) with `_slow_sse`'s fault code (vm_backend 4301-4302): an unmasked exception
+    /// merges its flags into MXCSR and is the guest's #XM with the code `xm_status` picks; otherwise every flag merges
+    fn fp_check(&mut self, env: &crate::x86fp::Env) -> Result<(), Fault> {
+        match env.check() {
+            Ok(()) => {
+                self.th.mxcsr |= env.flags;
+                Ok(())
+            }
+            Err(e) => {
+                self.th.mxcsr |= e.flags;
+                Err(self.xm_fault())
+            }
+        }
+    }
+
+    fn xm_fault(&self) -> Fault {
+        match crate::x86fp::xm_status(self.th.mxcsr) {
+            Some(code) => Fault::Guest {
+                code,
+                why: format!("#XM: MXCSR 0x{:x}", self.th.mxcsr),
+            },
+            None => Fault::Refused(format!("#XM with no unmasked flag in MXCSR 0x{:x}", self.th.mxcsr)),
+        }
+    }
+
+    fn xmm(&self, loc: SseLoc) -> Result<usize, Fault> {
+        match loc {
+            SseLoc::X(n) => Ok(usize::from(n)),
+            _ => Err(Fault::Refused("an XMM register operand expected".into())),
+        }
+    }
+
+    /// `_sse` (runtime.py 398-496): one legacy-SSE instruction, every read and every fault check before any write.
+    fn sse(&mut self, ic: &str, dst: SseLoc, src: SseLoc, align: u32, imm: Option<u64>) -> Result<(), Fault> {
+        use crate::x86fp::{self as fp, Env, F32, F64};
+        for loc in [dst, src] {
+            if let SseLoc::Loc(Loc::M { addr, .. }) = loc {
+                let va = self.temp(addr)?;
+                if align != 0 && va % u64::from(align) != 0 {
+                    return Err(guest(format!(
+                        "#GP: {ic} memory operand at 0x{va:x} not {align}-byte aligned"
+                    )));
+                }
+            }
+        }
+        let msize = [dst, src]
+            .iter()
+            .find_map(|l| match l {
+                SseLoc::Loc(Loc::M { bytes, .. }) => Some(*bytes),
+                _ => None,
+            })
+            .unwrap_or(16);
+        let imm_of = || imm.ok_or_else(|| Fault::Refused(format!("{ic} without its immediate")));
+        if matches!(
+            ic,
+            "MOVAPS" | "MOVAPD" | "MOVUPS" | "MOVUPD" | "MOVDQA" | "MOVDQU" | "MOVNTPS" | "LDDQU"
+        ) {
+            let v = self.xread(src, 16)?;
+            return self.xwrite(dst, v, 16);
+        }
+        if SSE_049B.contains(&ic) {
+            return self.sse_049b(ic, dst, src, imm);
+        }
+        if SSE_050_NEW.contains(&ic) {
+            return self.sse_050(ic, dst, src, imm);
+        }
+        if SSE2_INT.contains(&ic) || lane_arith(ic).is_some() || interleave(ic).is_some() {
+            return self.sse2_int(ic, dst, src, imm);
+        }
+        match ic {
+            "MOVSS" | "MOVSD_XMM" => {
+                let n = if ic == "MOVSS" { 4 } else { 8 };
+                let v = self.xread(src, n)?;
+                if let (SseLoc::X(d), SseLoc::X(_)) = (dst, src) {
+                    let d = usize::from(d);
+                    self.th.xmm[d] = self.th.xmm[d] & !mask128(8 * n) | v; // register form merges
+                } else {
+                    self.xwrite(dst, v, n)?; // load zeroes the rest
+                }
+            }
+            "MOVD" | "MOVQ" => {
+                let mut n = if ic == "MOVD" { 4 } else { 8 };
+                if let SseLoc::Loc(Loc::R { bits, .. }) = src {
+                    n = bits / 8;
+                } else if let SseLoc::Loc(Loc::R { bits, .. }) = dst {
+                    n = bits / 8;
+                }
+                let v = self.xread(src, n)?;
+                self.xwrite(dst, v, n)?; // to XMM: zero-extended
+            }
+            "XORPS" | "XORPD" | "ANDPS" | "ANDPD" | "ORPD" => {
+                let d = self.xmm(dst)?;
+                let (a, c) = (self.th.xmm[d], self.xread(src, 16)?);
+                self.th.xmm[d] = if ic.starts_with("XOR") {
+                    a ^ c
+                } else if ic == "ORPD" {
+                    a | c
+                } else {
+                    a & c
+                };
+            }
+            "PCMPEQW" => {
+                let d = self.xmm(dst)?;
+                let (a, c) = (self.th.xmm[d], self.xread(src, 16)?);
+                let ls: Vec<i128> = lanes128(a, 16)
+                    .iter()
+                    .zip(lanes128(c, 16))
+                    .map(|(p, q)| if *p == q { 0xFFFF } else { 0 })
+                    .collect();
+                self.th.xmm[d] = pack(&ls, 16);
+            }
+            "CVTTPD2DQ" | "CVTPD2DQ" => {
+                // two doubles to two int32; bits 127:64 zeroed
+                let d = self.xmm(dst)?;
+                let v = self.xread(src, 16)?;
+                let mut env = Env::new(self.th.mxcsr);
+                let words: Vec<u64> = fp::lanes(v, 64, 2)
+                    .iter()
+                    .map(|x| fp::to_int(F64, *x, 32, ic == "CVTTPD2DQ", &mut env))
+                    .collect();
+                self.fp_check(&env)?;
+                self.th.xmm[d] = fp::join(&words, 32);
+            }
+            "CMPSD_XMM" => {
+                // predicate imm8[2:0] on the low doubles; all ones or 0
+                let d = self.xmm(dst)?;
+                let mut env = Env::new(self.th.mxcsr);
+                let b = self.xread(src, 8)? as u64;
+                let hit = fp::cmp_predicate(F64, self.th.xmm[d] as u64, b, imm_of()? & 7, &mut env);
+                self.fp_check(&env)?;
+                self.th.xmm[d] = self.th.xmm[d] & !mask128(64) | if hit { mask128(64) } else { 0 };
+            }
+            "HADDPD" => {
+                let d = self.xmm(dst)?;
+                let (a, c) = (self.th.xmm[d], self.xread(src, 16)?);
+                let mut env = Env::new(self.th.mxcsr);
+                let mut flags = 0;
+                let mut sums = Vec::new();
+                for (p, q) in [(a as u64, (a >> 64) as u64), (c as u64, (c >> 64) as u64)] {
+                    env.flags = 0; // each lane's flags, then all of them (as execute)
+                    sums.push(fp::arith("add", F64, p, q, &mut env));
+                    flags |= env.flags;
+                }
+                env.flags = flags;
+                self.fp_check(&env)?;
+                self.th.xmm[d] = u128::from(sums[0]) | u128::from(sums[1]) << 64;
+            }
+            _ if ic.len() > 2
+                && matches!(
+                    &ic[..ic.len() - 2],
+                    "ADD" | "SUB" | "MUL" | "DIV" | "SQRT" | "MIN" | "MAX"
+                ) =>
+            {
+                let d = self.xmm(dst)?;
+                let v = self.xread(
+                    src,
+                    if matches!(src, SseLoc::Loc(Loc::M { .. })) {
+                        msize
+                    } else {
+                        16
+                    },
+                )?;
+                match fp::execute(ic, self.th.xmm[d], v, self.th.mxcsr) {
+                    Ok((out, mxcsr)) => {
+                        self.th.mxcsr = mxcsr;
+                        self.th.xmm[d] = out;
+                    }
+                    Err(e) => {
+                        // `_fp`: the flags at an unmasked fault (oracle)
+                        self.th.mxcsr |= e.flags;
+                        return Err(self.xm_fault());
+                    }
+                }
+            }
+            "CVTTSS2SI" | "CVTTSD2SI" | "CVTSS2SI" | "CVTSD2SI" => {
+                let f = if ic.contains("SS") { F32 } else { F64 };
+                let v = self.xread(src, f.bits / 8)? as u64;
+                let SseLoc::Loc(Loc::R { idx, bits, .. }) = dst else {
+                    return Err(Fault::Refused(format!("{ic}: a general register destination expected")));
+                };
+                let mut env = Env::new(self.th.mxcsr);
+                let r = fp::to_int(f, v, bits, ic.starts_with("CVTT"), &mut env);
+                self.fp_check(&env)?;
+                self.wr(idx, bits, false, r);
+            }
+            "CVTSI2SS" | "CVTSI2SD" => {
+                let f = if ic.ends_with("SS") { F32 } else { F64 };
+                let d = self.xmm(dst)?;
+                let bits = match src {
+                    SseLoc::Loc(Loc::R { bits, .. }) => bits,
+                    SseLoc::Loc(Loc::M { bytes, .. }) => 8 * bytes,
+                    SseLoc::X(_) => return Err(Fault::Refused(format!("{ic}: an integer source expected"))),
+                };
+                let v = self.xread(src, bits / 8)? as u64;
+                let mut env = Env::new(self.th.mxcsr);
+                let r = fp::from_int(f, v, bits, &mut env);
+                self.fp_check(&env)?;
+                self.th.xmm[d] = self.th.xmm[d] & !mask128(f.bits) | u128::from(r);
+            }
+            "CVTSS2SD" | "CVTSD2SS" => {
+                let (s_f, d_f) = if ic == "CVTSS2SD" { (F32, F64) } else { (F64, F32) };
+                let d = self.xmm(dst)?;
+                let v = self.xread(src, s_f.bits / 8)? as u64;
+                let mut env = Env::new(self.th.mxcsr);
+                let r = fp::convert(s_f, d_f, v, &mut env);
+                self.fp_check(&env)?;
+                self.th.xmm[d] = self.th.xmm[d] & !mask128(d_f.bits) | u128::from(r);
+            }
+            "UCOMISS" | "UCOMISD" | "COMISS" | "COMISD" => {
+                let f = if ic.ends_with("SS") { F32 } else { F64 };
+                let d = self.xmm(dst)?;
+                let a = self.th.xmm[d] as u64 & f.mask();
+                let c = self.xread(src, f.bits / 8)? as u64;
+                let mut env = Env::new(self.th.mxcsr);
+                let (z, p, cf) = fp::compare(f, a, c, &mut env, ic.starts_with("COMI"));
+                self.fp_check(&env)?;
+                self.th.flags = Flags {
+                    z: Some(z),
+                    p: Some(p),
+                    c: Some(cf),
+                    o: Some(false),
+                    s: Some(false),
+                    a: Some(false),
+                };
+            }
+            _ => return Err(Fault::Refused(format!("sse {ic}"))),
+        }
+        Ok(())
+    }
+
+    /// `_sse_049b` (runtime.py 498-572): the set-049b legacy forms, on 128 bits
+    fn sse_049b(&mut self, ic: &str, dst: SseLoc, src: SseLoc, imm: Option<u64>) -> Result<(), Fault> {
+        use crate::x86fp::{self as fp, Env, F32, F64};
+        let imm_of = || imm.ok_or_else(|| Fault::Refused(format!("{ic} without its immediate")));
+        if ic == "PEXTRQ" {
+            let s = self.xmm(src)?;
+            let v = self.th.xmm[s] >> (64 * (imm_of()? & 1)) & mask128(64);
+            return self.xwrite(dst, v, 8);
+        }
+        let d = self.xmm(dst)?;
+        let a = self.th.xmm[d];
+        match ic {
+            "PINSRD" | "PINSRQ" => {
+                let w = if ic == "PINSRD" { 32 } else { 64 };
+                let lane = (imm_of()? & if w == 32 { 3 } else { 1 }) as u32;
+                let v = self.xread(src, w / 8)? & mask128(w);
+                self.th.xmm[d] = a & !(mask128(w) << (w * lane)) | v << (w * lane);
+                return Ok(());
+            }
+            "PMOVSXDQ" => {
+                let v = self.xread(src, 8)? as u64;
+                let ls = [signed(v & 0xFFFF_FFFF, 32), signed(v >> 32, 32)];
+                self.th.xmm[d] = pack(&ls, 64);
+                return Ok(());
+            }
+            "CVTPS2PD" => {
+                let v = self.xread(src, 8)? as u64;
+                let mut env = Env::new(self.th.mxcsr);
+                let (mut flags, mut out) = (0, Vec::new());
+                for f32 in [v & 0xFFFF_FFFF, v >> 32] {
+                    env.flags = 0;
+                    out.push(fp::convert(F32, F64, f32, &mut env));
+                    flags |= env.flags;
+                }
+                env.flags = flags;
+                self.fp_check(&env)?;
+                self.th.xmm[d] = fp::join(&out, 64);
+                return Ok(());
+            }
+            "ROUNDSD" => {
+                let v = self.xread(src, 8)? as u64;
+                let mut env = Env::new(self.th.mxcsr);
+                self.th.xmm[d] = a & !mask128(64) | u128::from(fp::round_to_integer(F64, v, imm_of()?, &mut env));
+                return self.fp_check(&env);
+            }
+            _ => {}
+        }
+        let v = self.xread(src, 16)?;
+        self.th.xmm[d] = match ic {
+            "PSHUFB" => {
+                // byte i: 0 if index bit 7, else a[index & 15]
+                let ab = lanes128(a, 8);
+                let ls: Vec<i128> = lanes128(v, 8)
+                    .iter()
+                    .map(|i| {
+                        if i & 0x80 != 0 {
+                            0
+                        } else {
+                            i128::from(ab[(i & 15) as usize])
+                        }
+                    })
+                    .collect();
+                pack(&ls, 8)
+            }
+            "PALIGNR" => {
+                // (dst:src) >> 8*imm, the low 16 bytes
+                let n = imm_of()?;
+                if n < 32 {
+                    let wide = (a, v); // a << 128 | v, as two halves
+                    let shift = 8 * n as u32;
+                    if shift == 0 {
+                        wide.1
+                    } else if shift < 128 {
+                        wide.1 >> shift | wide.0 << (128 - shift)
+                    } else {
+                        wide.0 >> (shift - 128)
+                    }
+                } else {
+                    0
+                }
+            }
+            "ANDNPD" => !a & v,
+            "PERMILPS_VAR" => {
+                let aw = lanes128(a, 32);
+                let ls: Vec<i128> = lanes128(v, 32)
+                    .iter()
+                    .map(|c| i128::from(aw[(c & 3) as usize]))
+                    .collect();
+                pack(&ls, 32)
+            }
+            "PBLENDD" => {
+                let n = imm_of()?;
+                let (aw, vw) = (lanes128(a, 32), lanes128(v, 32));
+                let ls: Vec<i128> = (0..4)
+                    .map(|i| i128::from(if n >> i & 1 != 0 { vw[i] } else { aw[i] }))
+                    .collect();
+                pack(&ls, 32)
+            }
+            "CVTDQ2PS" | "CVTTPS2DQ" | "CMPPS_VEX" => {
+                let mut env = Env::new(self.th.mxcsr);
+                let (mut flags, mut out) = (0, Vec::new());
+                for (p, q) in lanes128(a, 32).into_iter().zip(lanes128(v, 32)) {
+                    env.flags = 0;
+                    out.push(match ic {
+                        "CVTDQ2PS" => fp::from_int(F32, q, 32, &mut env),
+                        "CVTTPS2DQ" => fp::to_int(F32, q, 32, true, &mut env),
+                        _ => {
+                            if fp::cmp_predicate(F32, p, q, imm_of()? & 31, &mut env) {
+                                0xFFFF_FFFF
+                            } else {
+                                0
+                            }
+                        }
+                    });
+                    flags |= env.flags;
+                }
+                env.flags = flags;
+                self.fp_check(&env)?;
+                fp::join(&out, 32)
+            }
+            _ => return Err(Fault::Refused(format!("sse {ic}"))),
+        };
+        Ok(())
+    }
+
+    /// `_sse_050` (runtime.py 574-666): the set-050 legacy classes, on 128 bits
+    fn sse_050(&mut self, ic: &str, dst: SseLoc, src: SseLoc, imm: Option<u64>) -> Result<(), Fault> {
+        use crate::x86fp::{self as fp, Env, F32, F64};
+        let imm_of = || imm.ok_or_else(|| Fault::Refused(format!("{ic} without its immediate")));
+        let sat = |v: i128, w: u32| v.clamp(-(1i128 << (w - 1)), (1i128 << (w - 1)) - 1);
+        if matches!(ic, "MOVLPS" | "MOVHPD") {
+            // one quadword, memory to or from a register's half
+            let shift = if ic == "MOVLPS" { 0 } else { 64 };
+            if let SseLoc::X(d) = dst {
+                let q = self.xread(src, 8)?;
+                let d = usize::from(d);
+                self.th.xmm[d] = self.th.xmm[d] & !(mask128(64) << shift) | q << shift;
+                return Ok(());
+            }
+            let s = self.xmm(src)?;
+            let v = self.th.xmm[s] >> shift & mask128(64);
+            return self.xwrite(dst, v, 8);
+        }
+        if ic == "MOVNTDQ" {
+            let s = self.xmm(src)?;
+            let v = self.th.xmm[s];
+            return self.xwrite(dst, v, 16);
+        }
+        if ic == "PEXTRW" {
+            // word imm & 7, zero-extended to the register
+            let s = self.xmm(src)?;
+            let SseLoc::Loc(Loc::R { idx, .. }) = dst else {
+                return Err(Fault::Refused("PEXTRW: a general register destination expected".into()));
+            };
+            let v = (self.th.xmm[s] >> (16 * (imm_of()? & 7)) & 0xFFFF) as u64;
+            self.wr(idx, 32, false, v);
+            return Ok(());
+        }
+        let d = self.xmm(dst)?;
+        let a = self.th.xmm[d];
+        match ic {
+            "PINSRB" => {
+                let byte = self.xread(src, 1)? & 0xFF;
+                let lane = (imm_of()? & 15) as u32;
+                self.th.xmm[d] = a & !(0xFFu128 << (8 * lane)) | byte << (8 * lane);
+                return Ok(());
+            }
+            "PMOVZXWD" => {
+                let ls: Vec<i128> = lanes128(self.xread(src, 8)?, 16)[..4]
+                    .iter()
+                    .map(|w| i128::from(*w))
+                    .collect();
+                self.th.xmm[d] = pack(&ls, 32);
+                return Ok(());
+            }
+            "CMPSS" => {
+                let mut env = Env::new(self.th.mxcsr);
+                let b = self.xread(src, 4)? as u64 & 0xFFFF_FFFF;
+                let hit = fp::cmp_predicate(F32, a as u64 & 0xFFFF_FFFF, b, imm_of()? & 7, &mut env);
+                self.fp_check(&env)?;
+                self.th.xmm[d] = a & !mask128(32) | if hit { mask128(32) } else { 0 };
+                return Ok(());
+            }
+            _ => {}
+        }
+        let v = self.xread(src, 16)?;
+        let (al8, vl8) = (lanes128(a, 8), lanes128(v, 8));
+        self.th.xmm[d] = match ic {
+            "PSLLW" => {
+                // by imm8 or the source's low quadword
+                let count = match imm {
+                    Some(n) => n,
+                    None => v as u64,
+                };
+                if count > 15 {
+                    0
+                } else {
+                    let ls: Vec<i128> = lanes128(a, 16).iter().map(|w| i128::from(*w) << count).collect();
+                    pack(&ls, 16)
+                }
+            }
+            "SHUFPD" => {
+                let n = imm_of()?;
+                (a >> (64 * (n & 1)) & mask128(64)) | (v >> (64 * (n >> 1 & 1)) & mask128(64)) << 64
+            }
+            "MPSADBW" => {
+                // eight sums of |a - v| over 4 bytes, the destination's block sliding a byte each (SDM MPSADBW)
+                let n = imm_of()?;
+                let (d0, s0) = (4 * (n >> 2 & 1) as usize, 4 * (n & 3) as usize);
+                let ls: Vec<i128> = (0..8)
+                    .map(|i| {
+                        (0..4)
+                            .map(|j| (i128::from(al8[d0 + i + j]) - i128::from(vl8[s0 + j])).abs())
+                            .sum()
+                    })
+                    .collect();
+                pack(&ls, 16)
+            }
+            "PSADBW" => {
+                // per quadword: the sum of |a - v| over its bytes
+                let ls: Vec<i128> = [0, 8]
+                    .iter()
+                    .map(|h| {
+                        (*h..h + 8)
+                            .map(|i| (i128::from(al8[i]) - i128::from(vl8[i])).abs())
+                            .sum()
+                    })
+                    .collect();
+                pack(&ls, 64)
+            }
+            "PACKSSWB" | "PACKSSDW" => {
+                // signed, saturated: the destination's half first
+                let w = if ic == "PACKSSWB" { 16 } else { 32 };
+                let ls: Vec<i128> = lanes128(a, w)
+                    .into_iter()
+                    .chain(lanes128(v, w))
+                    .map(|n| sat(signed(n, w), w / 2))
+                    .collect();
+                pack(&ls, w / 2)
+            }
+            "PMADDWD" => {
+                // signed word products, adjacent pairs added
+                let aw: Vec<i128> = lanes128(a, 16).iter().map(|n| signed(*n, 16)).collect();
+                let vw: Vec<i128> = lanes128(v, 16).iter().map(|n| signed(*n, 16)).collect();
+                let ls: Vec<i128> = (0..4)
+                    .map(|i| aw[2 * i] * vw[2 * i] + aw[2 * i + 1] * vw[2 * i + 1])
+                    .collect();
+                pack(&ls, 32)
+            }
+            "PMADDUBSW" => {
+                // unsigned dst bytes by signed src bytes, saturated
+                let vb: Vec<i128> = vl8.iter().map(|n| signed(*n, 8)).collect();
+                let ls: Vec<i128> = (0..8)
+                    .map(|i| {
+                        sat(
+                            i128::from(al8[2 * i]) * vb[2 * i] + i128::from(al8[2 * i + 1]) * vb[2 * i + 1],
+                            16,
+                        )
+                    })
+                    .collect();
+                pack(&ls, 16)
+            }
+            "CVTPS2DQ" | "CVTPD2PS" | "CMPPS" | "CMPPD" => {
+                let mut env = Env::new(self.th.mxcsr);
+                let (mut flags, mut out) = (0, Vec::new());
+                let w;
+                if ic == "CVTPD2PS" {
+                    // two doubles to two floats; bits 127:64 zeroed
+                    for x in lanes128(v, 64) {
+                        env.flags = 0;
+                        out.push(fp::convert(F64, F32, x, &mut env));
+                        flags |= env.flags;
+                    }
+                    w = 32;
+                } else {
+                    let f = if ic == "CMPPD" { F64 } else { F32 };
+                    w = f.bits;
+                    for (p, q) in lanes128(a, w).into_iter().zip(lanes128(v, w)) {
+                        env.flags = 0;
+                        out.push(if ic == "CVTPS2DQ" {
+                            fp::to_int(F32, q, 32, false, &mut env)
+                        } else if fp::cmp_predicate(f, p, q, imm_of()? & 7, &mut env) {
+                            mask(w)
+                        } else {
+                            0
+                        });
+                        flags |= env.flags;
+                    }
+                }
+                env.flags = flags;
+                self.fp_check(&env)?;
+                fp::join(&out, w)
+            }
+            _ => return Err(Fault::Refused(format!("sse {ic}"))),
+        };
+        Ok(())
+    }
+
+    /// `_sse2_int` (runtime.py 829-963): the SSE2 integer block, no MXCSR flags
+    fn sse2_int(&mut self, ic: &str, dst: SseLoc, src: SseLoc, imm: Option<u64>) -> Result<(), Fault> {
+        let imm_of = || imm.ok_or_else(|| Fault::Refused(format!("{ic} without its immediate")));
+        match ic {
+            "PINSRW" => {
+                let d = self.xmm(dst)?;
+                let word = self.xread(src, 2)? & 0xFFFF;
+                let lane = (imm_of()? & 7) as u32;
+                self.th.xmm[d] = self.th.xmm[d] & !(0xFFFFu128 << (16 * lane)) | word << (16 * lane);
+                return Ok(());
+            }
+            "MOVHPS" => {
+                if let SseLoc::X(d) = dst {
+                    let d = usize::from(d);
+                    self.th.xmm[d] = self.th.xmm[d] & mask128(64) | self.xread(src, 8)? << 64;
+                    return Ok(());
+                }
+                let s = self.xmm(src)?;
+                let v = self.th.xmm[s] >> 64;
+                return self.xwrite(dst, v, 8);
+            }
+            // string_compare.py and approximate.py: a later slice, refused by name
+            "PCMPISTRI" | "PCMPISTRI64" | "RCPPS" | "RSQRTPS" | "RCPSS" | "RSQRTSS" => {
+                return Err(Fault::Refused(format!("sse {ic}: its model comes with a later slice")));
+            }
+            "MOVMSKPS" | "PMOVMSKB" => {
+                let s = self.xmm(src)?;
+                let v = self.th.xmm[s];
+                let SseLoc::Loc(Loc::R { idx, bits, .. }) = dst else {
+                    return Err(Fault::Refused(format!("{ic}: a general register destination expected")));
+                };
+                let r: u64 = if ic == "MOVMSKPS" {
+                    (0..4).map(|i| ((v >> (32 * i + 31)) as u64 & 1) << i).sum()
+                } else {
+                    (0..16).map(|i| ((v >> (8 * i + 7)) as u64 & 1) << i).sum()
+                };
+                self.wr(idx, bits, false, r);
+                return Ok(());
+            }
+            "CVTDQ2PD" => {
+                // exact: every int32 is a double
+                let d = self.xmm(dst)?;
+                let v = self.xread(src, 8)? as u64;
+                let ls: Vec<i128> = [v as u32, (v >> 32) as u32]
+                    .iter()
+                    .map(|w| i128::from(f64::from(*w as i32).to_bits()))
+                    .collect();
+                self.th.xmm[d] = pack(&ls, 64);
+                return Ok(());
+            }
+            _ => {}
+        }
+        let d = self.xmm(dst)?;
+        let a = self.th.xmm[d];
+        let count_of = |s: &Self| -> Result<u64, Fault> {
+            match imm {
+                Some(n) => Ok(n),
+                None => Ok(s.xread(src, 16)? as u64),
+            }
+        };
+        match ic {
+            "PSRLDQ" | "PSLLDQ" => {
+                let n = imm_of()?.min(16) as u32;
+                self.th.xmm[d] = if n == 16 {
+                    0
+                } else if ic == "PSRLDQ" {
+                    a >> (8 * n)
+                } else {
+                    a << (8 * n)
+                };
+                return Ok(());
+            }
+            "PSRLW" | "PSRAW" | "PSLLQ" => {
+                let count = count_of(self)?;
+                let w = if ic == "PSLLQ" { 64 } else { 16 };
+                self.th.xmm[d] = if ic == "PSRAW" {
+                    let ls: Vec<i128> = lanes128(a, 16)
+                        .iter()
+                        .map(|v| signed(*v, 16) >> count.min(15))
+                        .collect();
+                    pack(&ls, 16)
+                } else if count >= w {
+                    0
+                } else {
+                    let ls: Vec<i128> = lanes128(a, w as u32)
+                        .iter()
+                        .map(|v| {
+                            if ic == "PSRLW" {
+                                i128::from(v >> count)
+                            } else {
+                                i128::from(*v) << count
+                            }
+                        })
+                        .collect();
+                    pack(&ls, w as u32)
+                };
+                return Ok(());
+            }
+            "PSRLD" | "PSLLD" | "PSRAD" => {
+                let count = count_of(self)?;
+                self.th.xmm[d] = if ic == "PSRAD" {
+                    let ls: Vec<i128> = lanes128(a, 32)
+                        .iter()
+                        .map(|v| signed(*v, 32) >> count.min(31))
+                        .collect();
+                    pack(&ls, 32)
+                } else if count > 31 {
+                    0
+                } else {
+                    let ls: Vec<i128> = lanes128(a, 32)
+                        .iter()
+                        .map(|v| {
+                            if ic == "PSRLD" {
+                                i128::from(v >> count)
+                            } else {
+                                i128::from(*v) << count
+                            }
+                        })
+                        .collect();
+                    pack(&ls, 32)
+                };
+                return Ok(());
+            }
+            "MOVHLPS" | "MOVLHPS" => {
+                let s = self.xmm(src)?;
+                let v = self.th.xmm[s];
+                self.th.xmm[d] = if ic == "MOVHLPS" {
+                    a & !mask128(64) | v >> 64
+                } else {
+                    a & mask128(64) | (v & mask128(64)) << 64
+                };
+                return Ok(());
+            }
+            "PSRLQ" => {
+                let count = count_of(self)?;
+                self.th.xmm[d] = if count > 63 {
+                    0
+                } else {
+                    let ls: Vec<i128> = lanes128(a, 64).iter().map(|l| i128::from(l >> count)).collect();
+                    pack(&ls, 64)
+                };
+                return Ok(());
+            }
+            _ => {}
+        }
+        let v = self.xread(src, 16)?;
+        let words = |x: u128| lanes128(x, 32);
+        self.th.xmm[d] = match ic {
+            "PSHUFD" => {
+                let n = imm_of()?;
+                let ws = words(v);
+                let ls: Vec<i128> = (0..4).map(|i| i128::from(ws[(n >> (2 * i) & 3) as usize])).collect();
+                pack(&ls, 32)
+            }
+            "PAND" => a & v,
+            "POR" | "ORPS" => a | v,
+            "PSUBD" | "PSUBQ" => {
+                let w = if ic == "PSUBD" { 32 } else { 64 };
+                let ls: Vec<i128> = lanes128(a, w)
+                    .iter()
+                    .zip(lanes128(v, w))
+                    .map(|(p, q)| i128::from(*p) - i128::from(q))
+                    .collect();
+                pack(&ls, w)
+            }
+            "PUNPCKLBW" => {
+                let (ab, vb) = (lanes128(a, 8), lanes128(v, 8));
+                let ls: Vec<i128> = (0..8).flat_map(|i| [i128::from(ab[i]), i128::from(vb[i])]).collect();
+                pack(&ls, 8)
+            }
+            "PCMPEQB" => {
+                let ls: Vec<i128> = lanes128(a, 8)
+                    .iter()
+                    .zip(lanes128(v, 8))
+                    .map(|(p, q)| if *p == q { 0xFF } else { 0 })
+                    .collect();
+                pack(&ls, 8)
+            }
+            "SHUFPS" => {
+                let n = imm_of()?;
+                let (aw, vw) = (words(a), words(v));
+                let ls = [
+                    aw[(n & 3) as usize],
+                    aw[(n >> 2 & 3) as usize],
+                    vw[(n >> 4 & 3) as usize],
+                    vw[(n >> 6 & 3) as usize],
+                ]
+                .map(i128::from);
+                pack(&ls, 32)
+            }
+            "PXOR" => a ^ v,
+            "ANDNPS" | "PANDN" => !a & v,
+            "UNPCKLPS" | "PUNPCKLDQ" | "UNPCKHPS" => {
+                let (aw, vw) = (words(a), words(v));
+                let base = if ic == "UNPCKHPS" { 2 } else { 0 };
+                let ls = [aw[base], vw[base], aw[base + 1], vw[base + 1]].map(i128::from);
+                pack(&ls, 32)
+            }
+            "PADDD" => {
+                let ls: Vec<i128> = words(a)
+                    .iter()
+                    .zip(words(v))
+                    .map(|(p, q)| i128::from(*p) + i128::from(q))
+                    .collect();
+                pack(&ls, 32)
+            }
+            "PACKUSWB" => {
+                // signed words to unsigned bytes, saturated
+                let ls: Vec<i128> = lanes128(a, 16)
+                    .into_iter()
+                    .chain(lanes128(v, 16))
+                    .map(|word| signed(word, 16).clamp(0, 255))
+                    .collect();
+                pack(&ls, 8)
+            }
+            "PSHUFLW" | "PSHUFHW" => {
+                let n = imm_of()?;
+                let ws = lanes128(v, 16);
+                let base = if ic == "PSHUFLW" { 0 } else { 4 };
+                let moved: Vec<u64> = (0..4).map(|i| ws[base + (n >> (2 * i) & 3) as usize]).collect();
+                let all: Vec<u64> = if ic == "PSHUFLW" {
+                    moved.iter().chain(&ws[4..]).copied().collect()
+                } else {
+                    ws[..4].iter().chain(&moved).copied().collect()
+                };
+                let ls: Vec<i128> = all.iter().map(|w| i128::from(*w)).collect();
+                pack(&ls, 16)
+            }
+            _ => {
+                if let Some((w, f)) = lane_arith(ic) {
+                    let ls: Vec<i128> = lanes128(a, w)
+                        .iter()
+                        .zip(lanes128(v, w))
+                        .map(|(p, q)| f(*p, q, w))
+                        .collect();
+                    pack(&ls, w)
+                } else if let Some((w, high)) = interleave(ic) {
+                    let (al, vl) = (lanes128(a, w), lanes128(v, w));
+                    let half = (64 / w) as usize;
+                    let base = if high { half } else { 0 };
+                    let ls: Vec<i128> = (0..half)
+                        .flat_map(|i| [i128::from(al[base + i]), i128::from(vl[base + i])])
+                        .collect();
+                    pack(&ls, w)
+                } else {
+                    return Err(Fault::Refused(format!("sse {ic}")));
+                }
+            }
+        };
         Ok(())
     }
 }

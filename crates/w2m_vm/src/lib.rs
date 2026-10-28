@@ -28,6 +28,7 @@ pub mod run;
 pub mod tables;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod threads;
+pub mod x86fp;
 pub mod x87;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
