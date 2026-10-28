@@ -607,7 +607,7 @@
 
 ## Sprint tail
 
-### Sprint 192 (2026-10-28, gates running)
+### Sprint 192 (2026-10-28, closed)
 - **Scope:** reviewer-2's Medium 3 and Lows 2, 3 and 4 of its review of Sprints 185-189: the judges' bindings take every input that changes what is judged
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 917 s, kept in `store/gates/passes.tsv` as "sprint 192" at HEAD 00852a8f8 with its root tree: the batch run with its trace and the guests, Rust tests all, the planted chain 34, the Python gates, the three multi-vCPU tests passed in their stage, `store/gates/multi-vcpu.tsv`); observation pass (the gates keep one root tree, the work tree less the bookkeeping paths; `--check` holds a close commit to bookkeeping paths and a multi-vCPU claim to `store/gates/multi-vcpu.tsv`; `built_from` digests `crates/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo/`; halfword 3 asserted; five VEX.256 stores lifted, none routed to the model; plant 1 named "git write-tree --prefix=root/"; plant 2 named "left: Some(0)"; plant 3 named "vmovups (base MOVUPS) at 256 bits goes to the model's 256-bit store branch").
 - **CI does not run:** the gates themselves (macOS); CI runs `signal_report`'s tests, the root-tree and close-commit test among them, and the translator's `vex_store_reach`.
