@@ -376,6 +376,46 @@ pub fn sha256(data: &[u8]) -> String {
     guest_runtime::sha256::hex(data)
 }
 
+/// `class_run.case_hashes` (`scripts/class_run.py` 118-125, Sprint 112; Sprint 167): a case's program, the sha256 of its
+/// instruction bytes, and its initial state, the sha256 of `w2m.record.state_sha256`'s canonical JSON of every other
+/// field the Python's `Case` holds but `label` (sorted keys, no spaces, bytes as lowercase hex, integers of any size as
+/// decimal digits, as `json.dumps` writes Python's), each as `sha256:<hex>`.
+pub fn case_hashes(c: &Case) -> (String, String) {
+    fn hex(b: &[u8]) -> String {
+        b.iter().map(|x| format!("{x:02x}")).collect()
+    }
+    fn ints<T: ToString>(v: &[T]) -> String {
+        v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")
+    }
+    let x87 = match &c.x87 {
+        None => "null".to_string(),
+        Some(x) => format!(
+            "{{\"cw\":{},\"st\":[{}],\"sw\":{},\"tags\":{}}}",
+            x.cw,
+            ints(&x.st),
+            x.sw,
+            x.tags
+        ),
+    };
+    let state = format!(
+        "{{\"data\":\"{}\",\"edge\":\"{}\",\"kind\":{},\"mxcsr\":{},\"regs\":[{}],\"rflags\":{},\"stack\":\"{}\",\
+         \"x87\":{x87},\"xmm\":[{}],\"ymm_hi\":[{}]}}",
+        hex(&c.data),
+        hex(&c.edge),
+        c.kind,
+        c.mxcsr,
+        ints(&c.regs),
+        c.rflags,
+        hex(&c.stack),
+        ints(&c.xmm),
+        ints(&c.ymm_hi)
+    );
+    (
+        format!("sha256:{}", sha256(&c.code)),
+        format!("sha256:{}", sha256(state.as_bytes())),
+    )
+}
+
 /// x86ops' register name -> (index, bits, high byte): `lift.REG` (lift.py 79-89).
 fn register(name: &str) -> Option<(usize, u32)> {
     use x86_decoder::operands::{GPR8_LEGACY, GPR8_REX, GPR16, GPR32, GPR64};

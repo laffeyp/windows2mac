@@ -111,6 +111,11 @@ pub struct Tally {
     /// (Sprint 154: a class whose judged set is empty shows)
     pub faults_by_class: BTreeMap<String, usize>,
     pub model_by_class: BTreeMap<String, usize>,
+    /// difference -> the index of the first case that showed it (Sprint 167: its program and initial state name the
+    /// discrepancy, as `scripts/class_run.py`'s `first_case` does)
+    pub first_case: BTreeMap<String, usize>,
+    /// the case being judged
+    case: usize,
 }
 
 impl Tally {
@@ -123,10 +128,9 @@ impl Tally {
     }
 
     fn note(&mut self, iclass: &str, key: &str, example: String) {
-        let e = self
-            .differences
-            .entry(format!("{iclass} {key}"))
-            .or_insert((0, example));
+        let key = format!("{iclass} {key}");
+        self.first_case.entry(key.clone()).or_insert(self.case);
+        let e = self.differences.entry(key).or_insert((0, example));
         e.0 += 1;
     }
 }
@@ -415,6 +419,7 @@ pub fn run_cases(
         })
         .collect();
     for (i, (c, r)) in cases.iter().zip(results).enumerate() {
+        tally.case = i;
         let d = match x86_decoder::decode(&c.code, None) {
             Ok(d) => d,
             Err(e) => {

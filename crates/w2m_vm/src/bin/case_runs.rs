@@ -9,7 +9,9 @@
 //! (`<cpu>; <profile>`, as `store/probe-runs/<run>/cpu.txt` and `profile.txt` spell them) through
 //! `w2m_vm::cases::run_cases`, and writes `differential.run`'s sequence (its docstring, 9-19) in the vocabulary's
 //! types: SESSION_INIT; per class CANDIDATE_GENERATED,
-//! COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED, or CANDIDATE_REJECTED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED;
+//! COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED, or CANDIDATE_REJECTED, REDUCTION_COMPLETED (steps 0: one instruction,
+//! nothing to cut; Sprint 167), DISCREPANCY_REPORTED naming the first failing case's program and initial state, and
+//! DISCREPANCY_ROUTED;
 //! DISCREPANCY_RESOLVED for each discrepancy the judges' ledger (`w2m_vm::ledger`) holds open on an accepted class;
 //! SESSION_COMPLETED. As in the Python, no execution or trace event: the runs are judged by state, and no guest trace is
 //! made. The Python started each step from the event before it with predicate triggers; a run file's triggers take no
@@ -46,12 +48,12 @@ mod run {
     use std::path::{Path, PathBuf};
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-    use cpu_cases::{read_cases, read_results, sha256};
+    use cpu_cases::{case_hashes, read_cases, read_results, sha256};
     use events::{
         CandidateAccepted, CandidateGenerated, CandidateRejected, ComparisonCompleted, ContractId, DiscrepancyReported,
-        DiscrepancyResolution, DiscrepancyResolved, DiscrepancyRouted, Event, FiniteF64, HarnessU64, Id, Relation,
-        RepairPath, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose, Sha256, VOCAB_VERSION, Verdict,
-        Version, harness_line,
+        DiscrepancyResolution, DiscrepancyResolved, DiscrepancyRouted, Event, FiniteF64, HarnessU64, Id,
+        ReductionCompleted, Relation, RepairPath, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose,
+        Sha256, VOCAB_VERSION, Verdict, Version, harness_line,
     };
     use w2m_vm::case_inputs::{Fixture, Hybrid, case_runtime_calls, runs, with_case_vm};
     use w2m_vm::cases::run_cases;
@@ -64,8 +66,6 @@ mod run {
     const CONTRACT_ID: &str = "w2m.guest_state.fault_context";
     const CONTRACT_VERSION: &str = "0.2.0";
     const HARNESS_VERSION: &str = env!("CARGO_PKG_VERSION");
-    /// differential.py 43: the sha256 of nothing.
-    const EMPTY: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     fn root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -104,11 +104,12 @@ mod run {
     }
 
     /// One class's verdict over the session's runs: its cases judged whole, and its difference lines, most frequent
-    /// first, as `by_unit` (82-88) writes them.
+    /// first, as `by_unit` (82-88) writes them, each with the program and initial state of the first case that showed
+    /// it (`cpu_cases::case_hashes`; Sprint 167).
     #[derive(Default)]
     struct Unit {
         judged: usize,
-        differences: Vec<(usize, String)>,
+        differences: Vec<(usize, String, (String, String))>,
     }
 
     /// The translator's identity: its sources, in name order.
@@ -237,7 +238,8 @@ mod run {
                 for (key, (n, example)) in &t.differences {
                     let class = key.split(' ').next().unwrap_or(key).to_string();
                     let line = format!("{key}: {n} cases; run {}: {example}", run.id);
-                    units.entry(class).or_default().differences.push((*n, line));
+                    let hashes = case_hashes(&cases[t.first_case[key]]);
+                    units.entry(class).or_default().differences.push((*n, line, hashes));
                 }
             }
             Ok(())
@@ -287,7 +289,7 @@ mod run {
                 v.judged,
                 runs.len()
             );
-            let first = v.differences.first().map(|(_, l)| {
+            let first = v.differences.first().map(|(_, l, _)| {
                 let more = v.differences.len() - 1;
                 let s = if more > 0 {
                     format!("{unit}: {l} (+{more} more)")
@@ -355,6 +357,22 @@ mod run {
                 )
                 .map_err(w)?;
                 let first_line = format!("{unit}: {}", v.differences[0].1);
+                // the class's most frequent difference's first case: one instruction, so nothing can be cut from it
+                // (REDUCTION_COMPLETED's note: "If nothing could be removed, minimized equals source and steps=0"), as
+                // `scripts/class_run.py` 195-205 reports since Sprint 112 (Sprint 167)
+                let (program, initial) = &v.differences[0].2;
+                emit(
+                    &mut out,
+                    &ReductionCompleted {
+                        reduction_id: id(format!("{did}-reduction")),
+                        comparison_id: id(comparison.clone()),
+                        source_program_sha256: Sha256::new(program).unwrap(),
+                        minimized_program_sha256: Sha256::new(program).unwrap(),
+                        steps: u(0),
+                        preserved_mismatch: true,
+                    },
+                )
+                .map_err(w)?;
                 emit(
                     &mut out,
                     &DiscrepancyReported {
@@ -362,8 +380,8 @@ mod run {
                         contract_id: contract.clone(),
                         contract_version: version.clone(),
                         mismatch_class: Relation::Exact,
-                        minimized_program_sha256: Sha256::new(EMPTY).unwrap(),
-                        initial_state_sha256: Sha256::new(EMPTY).unwrap(),
+                        minimized_program_sha256: Sha256::new(program).unwrap(),
+                        initial_state_sha256: Sha256::new(initial).unwrap(),
                         first_divergence: first_line.chars().take(500).collect(),
                         reference_profile_id: id(profile.clone()),
                         destination_profile_id: id(format!("w2m {generator}")),
