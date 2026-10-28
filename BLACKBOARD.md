@@ -594,7 +594,7 @@
 
 ## Sprint tail
 
-### Sprint 188 (2026-10-28, gates running)
+### Sprint 188 (2026-10-28, closed)
 - **Scope:** reviewer-2's Mediums 1 and 5 and Low 4 of its review of Sprints 182-184: checks whose input could not produce the defect they named, and a lookup a guest could crash
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 912 s, kept in `store/gates/passes.tsv` as "sprint 188" at HEAD c9c4d54bf with its six trees, the run after the tree check's fix (the first, exit 0 in 920 s at c054ac0d3, tested the tree before it, Observation 4): the batch run and guests, Rust tests all, the planted chain 34, the Python gates, the three multi-vCPU tests passed in their stage); observation pass (the layout assertion holds for the image at 0x7f0004170000; `c_words` 10 of 24 as before; plant 1 failed the build, "evaluation panicked: a runtime image address with a zero halfword 1 or 2"; the `defer_fp` plant failed the case runner in 27 difference classes, "259 VHADDPD MXCSR: case 20306"; the 256-bit store plant passed the case runner and failed the new model test, bytes 16-31 zero; plant 3 panicked the new lookup test, "panicked at crates/w2m_vm/src/run.rs:170:27").
 - **CI does not run:** the case runner (Hypervisor.framework); CI runs the model's and `run.rs`'s unit tests, `c_words`, and builds `guest_runtime`, where the layout assertion is checked.
