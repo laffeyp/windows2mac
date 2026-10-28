@@ -116,13 +116,14 @@ cargo build --release --quiet
 target/release/case_runs --check-ledger
 # the planted discrepancy chain (Sprint 171; reviewer-2's Low 1): the Rust case runner with the first run's CF flipped
 # writes 32 discrepancies, each after its REDUCTION_COMPLETED and naming its case's hashes, which `check_records` holds
-# to rules S5 and E1 (Sprint 167)
+# to rules S5 and E1 (Sprint 167); from Sprint 175 also FCOS's and FSIN's, the open pair this profile reports unplanted
+# (tests/test_class_runs.py 33), so 34
 if [ $rust != none ] && [ -d build/probe-runs ]; then
   chain=$(mktemp -d)/case-runs-planted-$(date +%s)000000000
   W2M_CASE_PROFILE="INTEL(R) XEON(R) PLATINUM 8573C; gha-windows-2022-x64-10.0.20348.5622-Server" \
     uv run substrate run --file harness/case-runs-planted.toml --root "$chain" --strict > /dev/null
   reports=$(cat "$chain"/events-*.jsonl | grep -c '"kind":"DISCREPANCY_REPORTED"' || true)
-  [ "$reports" = 32 ] || { echo "gates: the planted chain holds $reports DISCREPANCY_REPORTED, not 32"; exit 1; }
+  [ "$reports" = 34 ] || { echo "gates: the planted chain holds $reports DISCREPANCY_REPORTED, not 34"; exit 1; }
   target/release/check_records --since 2026-10-17 --show 3 "$chain" > /dev/null || { echo "gates: the planted chain breaks S5 or E1"; target/release/check_records --since 2026-10-17 --show 3 "$chain"; exit 1; }
 fi
 # the vocabulary generated into Rust and substrate's schema file, byte for byte (Sprint 126)

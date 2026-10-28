@@ -20,6 +20,9 @@ use cpu_cases::{read_cases, read_results};
 use w2m_vm::case_inputs::{Counts, Fixture, Hybrid, case_runtime_calls, expected, registry, runs, with_case_vm};
 use w2m_vm::cases::run_cases;
 
+/// `OPEN` (tests/test_class_runs.py 33): the open discrepancies' differences, by class and judged part (Sprint 175).
+const OPEN: [(&str, usize); 4] = [("FCOS FSW", 4), ("FCOS st0", 10), ("FSIN FSW", 4), ("FSIN st0", 8)];
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -148,6 +151,13 @@ fn judge(use_rust: bool) {
                 t.modelled_by_class.values().sum::<usize>(),
                 t.modelled_by_class
             );
+            // Sprint 175: every class's cases counted to the model and not judged, the classes the Rust did not
+            // compile among them
+            println!(
+                "    to the model, not judged: {} ({:?})",
+                t.model_by_class.values().sum::<usize>(),
+                t.model_by_class
+            );
             println!(
                 "    judged with YMM upper halves {}, with x87 state {}",
                 t.ymm_judged, t.x87_judged
@@ -155,8 +165,26 @@ fn judge(use_rust: bool) {
             for (k, (n, example)) in t.differences.iter().take(12) {
                 println!("    {n:6} {k}: {example}");
             }
-            if !t.differences.is_empty() {
-                failures.push(format!("run {}: {} difference classes", run.id, t.differences.len()));
+            // the open discrepancies, pinned to their counts (tests/test_class_runs.py 28-33, Sprint 065): FSIN and
+            // FCOS differ from the Xeon in the last bit of 18 results; a class the run stepped holds its pin exactly
+            let pinned_here: Vec<(&str, usize)> = OPEN
+                .iter()
+                .filter(|(k, _)| t.modelled_by_class.contains_key(k.split(' ').next().unwrap()))
+                .copied()
+                .collect();
+            let unpinned = t
+                .differences
+                .keys()
+                .filter(|k| !pinned_here.iter().any(|(p, _)| p == k))
+                .count();
+            for (k, n) in &pinned_here {
+                let got = t.differences.get(*k).map_or(0, |(n, _)| *n);
+                if got != *n {
+                    failures.push(format!("run {}: {k} {got} differences, pinned at {n}", run.id));
+                }
+            }
+            if unpinned != 0 {
+                failures.push(format!("run {}: {unpinned} difference classes", run.id));
             }
             if refused != 0 {
                 failures.push(format!("run {}: {refused} refused: {:?}", run.id, t.refused));

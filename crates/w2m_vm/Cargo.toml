@@ -17,6 +17,11 @@ serde_json.workspace = true
 pe_loader = { path = "../pe_loader" }
 virtual_memory = { path = "../virtual_memory" }
 x86_decoder = { path = "../x86_decoder" }
+# the x87 model's exact arithmetic, x87.py's Fraction (Sprint 175)
+num-bigint = "0.4"
+num-integer = "0.1"
+num-rational = "0.4.2"
+num-traits = "0.2"
 
 [dev-dependencies]
 pe_image = { path = "../pe_image" }

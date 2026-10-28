@@ -1269,6 +1269,126 @@ pub fn step_mmx<M: Memory>(th: &mut Thread, mem: &mut M, m: &MmxStep, code: &[u8
     r
 }
 
+/// `ICLASSES` (rules/x87.py 15-16): the x87 classes the game reaches.
+const X87_ICLASSES: [&str; 17] = [
+    "FLD", "FSTP", "FMUL", "FSQRT", "FSIN", "FCOS", "FADD", "FWAIT", "FISTTP", "FIADD", "FISTP", "FIDIVR", "FLDCW",
+    "FNCLEX", "FNSTSW", "FDIVR", "FIMUL",
+];
+
+/// One x87 instruction lifted as `rules/x87.py` lifts it (Sprint 175): ("x87", iclass, opcode, ModRM.reg, ST(i) or
+/// None, the memory operand or None), with the address operations before it.
+#[derive(Debug, Clone)]
+pub struct X87Step {
+    pub address: u64,
+    pub length: u64,
+    pub ic: String,
+    pub pre: Vec<Op>,
+    pub opcode: u8,
+    pub reg: u8,
+    pub st: Option<u8>,
+    pub mem: Option<Loc>,
+}
+
+/// `rules/x87.py` `rule` (19-30), for an x87 class the translator does not lift; None for any other class. The last
+/// `ST:` operand is ST(i), any other operand the memory one.
+pub fn lift_x87(code: &[u8], address: u64) -> Result<Option<X87Step>, translator::lift::LiftError> {
+    use translator::lift::{Builder, LiftError, Operand, operand};
+    let Ok(d) = x86_decoder::decode(code, None) else {
+        return Ok(None);
+    };
+    if !X87_ICLASSES.contains(&d.iclass.as_str()) {
+        return Ok(None);
+    }
+    let ops = x86_decoder::operands::operands(&d.fields).unwrap_or_default();
+    let nxt = address + d.length as u64;
+    let mut b = Builder::default();
+    let (mut st, mut mem) = (None, None);
+    for o in &ops {
+        if let Some(n) = o.strip_prefix("ST:") {
+            st = Some(n.parse().map_err(|_| LiftError(format!("operand {o}")))?);
+        } else {
+            match operand(&mut b, o, nxt, None)?.0 {
+                Operand::Loc(loc @ Loc::M { .. }) => mem = Some(loc),
+                _ => return Err(LiftError(format!("{} at 0x{address:x}: operand {o}", d.iclass))),
+            }
+        }
+    }
+    Ok(Some(X87Step {
+        address,
+        length: d.length as u64,
+        ic: d.iclass.clone(),
+        pre: b.ops,
+        opcode: d.fields.opcode,
+        reg: d.fields.modrm.map_or(0, |m| m >> 3 & 7),
+        st,
+        mem,
+    }))
+}
+
+/// The memory operand of an x87 step: `_x87`'s `read` and `write` (runtime.py 149-153).
+struct X87Operand<'a, M: Memory> {
+    mem: &'a mut M,
+    address: u64,
+}
+
+impl<M: Memory> crate::x87::X87Memory for X87Operand<'_, M> {
+    fn read(&mut self, n: usize) -> Result<u128, Fault> {
+        let b = self.mem.read(self.address, n)?;
+        let mut w = [0u8; 16];
+        w[..n].copy_from_slice(&b[..n]);
+        Ok(u128::from_le_bytes(w))
+    }
+
+    fn write(&mut self, n: usize, v: u128, offset: u64) -> Result<(), Fault> {
+        self.mem.write(self.address.wrapping_add(offset), &v.to_le_bytes()[..n])
+    }
+}
+
+/// `_x87` (runtime.py 140-163) under `_exec`: the register stack from the thread, one instruction, and the stack back
+/// on success. On a guest fault the x87 state is as before, since `_x87` writes it back only after `execute` returns,
+/// and the rest is restored as `step` restores it. An exception the control word does not mask is refused by name.
+pub fn step_x87<M: Memory>(th: &mut Thread, mem: &mut M, x: &X87Step, code: &[u8]) -> Result<(), Fault> {
+    let saved = th.clone();
+    let mut s = Step {
+        th,
+        mem,
+        t: Default::default(),
+        code,
+    };
+    let ins = Lifted {
+        address: x.address,
+        length: x.length,
+        iclass: x.ic.clone(),
+        ops: x.pre.clone(),
+    };
+    let r = s.exec_ops(&ins).and_then(|()| {
+        let address = match x.mem {
+            Some(Loc::M { addr, .. }) => s.temp(addr)?,
+            _ => 0,
+        };
+        let th = &mut *s.th;
+        let mut fpu = crate::x87::Fpu::new(th.fcw, th.x87_sw, th.x87_regs, th.x87_tags);
+        let mut ax = th.regs[0] as u16;
+        let mut operand = X87Operand { mem: s.mem, address };
+        crate::x87::execute(&mut fpu, &x.ic, x.opcode, x.reg, x.st, &mut operand, &mut ax).map_err(|e| match e {
+            Fault::Refused(why) => Fault::Refused(format!("{} at 0x{:x}: {why}", x.ic, x.address)),
+            e => e,
+        })?;
+        (th.fcw, th.x87_sw, th.x87_regs, th.x87_tags) = (fpu.cw, fpu.sw, fpu.regs, fpu.abridged_tags());
+        if x.ic == "FNSTSW" && x.mem.is_none() {
+            th.regs[0] = th.regs[0] & !0xFFFF | u64::from(ax);
+        }
+        Ok(())
+    });
+    if let Err(Fault::Guest { .. }) = &r {
+        let mxcsr = s.th.mxcsr;
+        *s.th = saved;
+        s.th.mxcsr = mxcsr;
+        s.th.rip = x.address;
+    }
+    r
+}
+
 /// `_exec` (995-1013): one instruction. On a guest fault every register, flag, MXCSR and DF returns to its value
 /// before it, but REP's completed iterations stay (SDM Vol 1 7.3.9), MXCSR's flags a fault set survive, and RIP is the
 /// instruction's. `code` is the instruction's bytes, which `_windows_divide_status` decodes again.
