@@ -1,14 +1,6 @@
 class	calls	stage
-CMPPS	393	not lifted
-CVTDQ2PS	283	not lifted
-CVTPD2DQ	1	not lifted
-CVTPD2PS	63	not lifted
-CVTPS2DQ	31	not lifted
-CVTPS2PD	64	not lifted
-CVTTPS2DQ	11	not lifted
 EMMS	1	lowering refused
 MOVD	33	lowering refused
-MOVHPD	2	not lifted
 MOVQ	176	lowering refused
 PACKUSWB	13	lowering refused
 PADDSW	13	lowering refused
@@ -16,7 +8,6 @@ PADDW	22	lowering refused
 PEXTRW	1	lowering refused
 PEXTRW	1	not lifted
 PMADDUBSW	5	lowering refused
-PMOVSXDQ	4	not lifted
 PMULHW	8	lowering refused
 PMULLW	8	lowering refused
 PSADBW	2	lowering refused

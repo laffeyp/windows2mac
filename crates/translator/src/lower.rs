@@ -2181,6 +2181,9 @@ fn fp_class(ic: &str) -> bool {
                 | "UCOMISD"
                 | "COMISS"
                 | "COMISD"
+                // `CMP_LOWERED` (_sse.py 113, 330; Sprint 180): its fast path only while MXCSR masks all six
+                | "CMPPS"
+                | "CMPPD"
         )
 }
 
@@ -2268,6 +2271,15 @@ fn lower_sse(
         a.branch(|off| a64::bcond("eq", off), fast);
         a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
         a.bind(fast);
+    }
+    if ic == "PMOVSXDQ" {
+        // 336-339: two dwords sign-extended (SSHLL #0; Sprint 180)
+        let SseLoc::X(d) = dst else {
+            return Err(CompileError::Refused(format!("sse {ic}: an XMM destination expected")));
+        };
+        let v = sse_src(a, src, if src.addr().is_some() { 8 } else { 16 }, reg, 31)?;
+        a.emit(&[a64::sxtl_2d(u32::from(*d), v)]);
+        return Ok(());
     }
     if crate::rules::SSE2_INT_BLOCK.contains(&ic) {
         // 340-342
@@ -2415,6 +2427,55 @@ fn lower_sse(
             a.emit(&[a64::fcmp(n, xmm(dst)?, v, ic.starts_with("COMI"))]);
             set_flags_from_fcmp(a);
         }
+        "CMPPS" | "CMPPD" => {
+            // `CMP_LOWERED` (343-360; Sprint 180): imm8[2:0]; FCMEQ is quiet and FCMGE / FCMGT signal on any NaN, as
+            // the x86 predicates 0 3 4 7 and 1 2 5 6 do
+            let imm = imm.ok_or_else(|| CompileError::Refused(format!("sse {ic} without its immediate")))?;
+            let (d, dbl, p) = (xmm(dst)?, ic == "CMPPD", imm & 7);
+            let s = sse_src(a, src, 16, reg, 31)?;
+            match p {
+                0 | 4 => a.emit(&[a64::fcm("eq", dbl, d, d, s)]),
+                1 | 5 => a.emit(&[a64::fcm("gt", dbl, d, s, d)]), // a < b: b > a
+                2 | 6 => a.emit(&[a64::fcm("ge", dbl, d, s, d)]),
+                // ordered: neither lane a NaN
+                _ => a.emit(&[
+                    a64::fcm("eq", dbl, 30, d, d),
+                    a64::fcm("eq", dbl, 31, s, s),
+                    a64::and_v(d, 30, 31),
+                ]),
+            }
+            if (3..=6).contains(&p) {
+                a.emit(&[a64::not_16b(d, d)]);
+            }
+        }
+        "CVTDQ2PS" => {
+            // 400-406: SCVTF in FPCR's mode, MXCSR's RC; an unmasked exception to the model
+            unmasked_to_model(a);
+            let v = sse_src(a, src, 16, reg, 31)?;
+            a.emit(&[a64::scvtf_4s(xmm(dst)?, v)]);
+        }
+        "CVTPS2PD" => {
+            // 407-413: FCVTL widens the low two singles exactly; the memory form reads 8 bytes
+            unmasked_to_model(a);
+            let v = sse_src(a, src, if src.addr().is_some() { 8 } else { 16 }, reg, 31)?;
+            a.emit(&[a64::fcvtl_2d(xmm(dst)?, v)]);
+        }
+        "CVTPD2PS" => {
+            // 414-421: FCVTN narrows each double in FPCR's mode and clears the high half
+            unmasked_to_model(a);
+            let v = sse_src(a, src, 16, reg, 31)?;
+            a.emit(&[a64::fcvtn_2s(xmm(dst)?, v)]);
+        }
+        "CVTPD2DQ" | "CVTPS2DQ" | "CVTTPD2DQ" | "CVTTPS2DQ" => {
+            // 422-424
+            unmasked_to_model(a);
+            let v = sse_src(a, src, 16, reg, 31)?;
+            to_dwords(a, xmm(dst)?, v, ic.ends_with("PD2DQ"), ic.starts_with("CVTT"));
+        }
+        // 425-426: in the model (x86fp), whole
+        _ if matches!(ic, "CMPSD_XMM" | "HADDPD" | "MPSADBW") || SSE_050.contains(&ic) => {
+            a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
+        }
         _ => {
             // 427-439: ADD SUB MUL DIV MIN MAX SQRT in SS SD PS PD
             let (kind, form) = ic.split_at(ic.len() - 2);
@@ -2443,6 +2504,128 @@ fn lower_sse(
         }
     }
     Ok(())
+}
+
+/// `SSE_050` (lift.py 130-133): the set-050 classes; those `lower` does not lower before 425 go to the model.
+const SSE_050: [&str; 39] = [
+    "CVTDQ2PS",
+    "CVTPS2DQ",
+    "CVTTPS2DQ",
+    "CVTPS2PD",
+    "CVTPD2PS",
+    "CMPPS",
+    "CMPPD",
+    "CMPSS",
+    "SHUFPD",
+    "MOVLPS",
+    "MOVHPD",
+    "PSHUFB",
+    "PALIGNR",
+    "PSADBW",
+    "PACKSSWB",
+    "PACKSSDW",
+    "PMADDUBSW",
+    "PMADDWD",
+    "PEXTRW",
+    "PINSRB",
+    "PINSRD",
+    "PUNPCKHQDQ",
+    "PMULHW",
+    "PMULLD",
+    "PADDUSB",
+    "PADDB",
+    "PAVGB",
+    "PABSW",
+    "PCMPGTB",
+    "PCMPGTW",
+    "PCMPEQQ",
+    "PMAXUD",
+    "PMAXUW",
+    "PMAXSW",
+    "PMINSD",
+    "PMOVSXDQ",
+    "PMOVZXWD",
+    "PSLLW",
+    "MOVNTDQ",
+];
+
+/// `_unmasked_to_model` (_sse.py 23-29): the model runs the instruction when MXCSR unmasks any exception, since only
+/// the model raises the SIMD fault.
+fn unmasked_to_model(a: &mut Assembler) {
+    let fast = a.label();
+    a.emit(&[
+        a64::ldr(4, 16, 28, MXCSR_OFF),
+        a64::ubfx(16, 16, 7, 6),
+        a64::cmpi(16, 0x3F),
+    ]);
+    a.branch(|off| a64::bcond("eq", off), fast);
+    a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
+    a.bind(fast);
+}
+
+/// `_to_dwords` (_sse.py 491-528): CVTPD2DQ, CVTPS2DQ, CVTTPD2DQ, CVTTPS2DQ, each lane as CVT(T)S*2SI converts it into
+/// dwords, a double form's upper half zeroed; NaN or a value outside int32 gives 0x80000000 and IE with the lane's other
+/// flags dropped; in range, the lane keeps PE and FPSR's IDC as it was. x18 holds FPSR before the lane; the source goes
+/// to V30, V29 holds a bound, the results gather in V28.
+fn to_dwords(a: &mut Assembler, d: u32, v: u32, double: bool, truncate: bool) {
+    if v != 30 {
+        a.emit(&[a64::mov_v(30, v)]);
+    }
+    let (n, lanes) = if double { (8, 2) } else { (4, 4) };
+    let upper: u64 = if double { 0x41E0_0000_0000_0000 } else { 0x4F00_0000 };
+    let (lower, holds) = if double {
+        if truncate {
+            (0xC1E0_0000_0020_0000u64, "gt")
+        } else {
+            (0xC1E0_0000_0000_0000, "ge")
+        }
+    } else {
+        (0xCF00_0000, "ge")
+    };
+    if double {
+        a.emit(&[a64::movi_zero(28)]);
+    }
+    for lane in 0..lanes {
+        let (ok, low, done, indefinite) = (a.label(), a.label(), a.label(), a.label());
+        a.emit(&[
+            a64::mrs(18, a64::FPSR),
+            if double {
+                a64::umov_d(17, 30, lane)
+            } else {
+                a64::umov_s(17, 30, lane)
+            },
+            a64::fmov_to_v(n, 31, 17),
+        ]);
+        if !truncate {
+            a.emit(&[a64::frintx(n, 31, 31)]);
+        }
+        a.emit(&[a64::fcvtzs(32, n, 16, 31)]);
+        a.emit(&a64::mov_imm(17, upper));
+        a.emit(&[a64::fmov_to_v(n, 29, 17), a64::fcmp(n, 31, 29, false)]);
+        // NaN is unordered, so not below the upper bound; below the lower one FCVTZS gives 0x80000000 too, but the
+        // flags differ (set 050 case 227: the Xeon reports IE alone)
+        a.branch(|off| a64::bcond("mi", off), low); // CVT_INDEFINITE (vm_backend 1135) is True
+        a.branch(a64::b, indefinite);
+        a.bind(low);
+        a.emit(&a64::mov_imm(17, lower));
+        a.emit(&[a64::fmov_to_v(n, 29, 17), a64::fcmp(n, 31, 29, false)]);
+        a.branch(move |off| a64::bcond(holds, off), ok); // CVT_INDEFINITE is True
+        a.bind(indefinite);
+        a.emit(&a64::mov_imm(16, 0x8000_0000));
+        a.emit(&[a64::movz(17, 1, 0), a64::orr(18, 18, 17), a64::msr(a64::FPSR, 18)]);
+        a.branch(a64::b, done);
+        a.bind(ok);
+        // in range: IDC as it was before the lane
+        a.emit(&[
+            a64::mrs(17, a64::FPSR),
+            a64::ubfx(18, 18, 7, 1),
+            a64::bfi(17, 18, 7, 1),
+            a64::msr(a64::FPSR, 17),
+        ]);
+        a.bind(done);
+        a.emit(&[a64::ins_s(28, lane, 16)]);
+    }
+    a.emit(&[a64::mov_v(d, 28)]);
 }
 
 /// `LANE_LOWERED` (_sse.py 103-111): one NEON three-same instruction each, d = op(d, source): (name, lane size).

@@ -58,5 +58,25 @@
   "resolved_in": null,
   "resolving_ref": null,
   "unit": "FSIN"
+ },
+ "case-runner-rust-1793197274566942000-FCOS": {
+  "contract_id": "w2m.guest_state.fault_context",
+  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+  "judge": "case-runner-rust",
+  "repair_path": "implementation_repair",
+  "reported_in": "case-runner-rust-1793197269611612000",
+  "resolved_in": null,
+  "resolving_ref": null,
+  "unit": "FCOS"
+ },
+ "case-runner-rust-1793197274566942000-FSIN": {
+  "contract_id": "w2m.guest_state.fault_context",
+  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+  "judge": "case-runner-rust",
+  "repair_path": "implementation_repair",
+  "reported_in": "case-runner-rust-1793197269611612000",
+  "resolved_in": null,
+  "resolving_ref": null,
+  "unit": "FSIN"
  }
 }

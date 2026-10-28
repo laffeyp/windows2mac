@@ -98,6 +98,10 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         ic if SSE_FLOAT_CORE.contains(&ic) => sse,
         // group 5 (Sprint 161): `int_rule`'s classes `_lower_int` lowers; MOVLPS and MOVNTDQ through `memory_only_rule`
         "MOVLPS" | "MOVNTDQ" => sse_memory_only,
+        // Sprint 180: the batch run's SSE classes, `int_rule` and `memory_only_rule` as the registry maps them
+        "MOVHPD" => sse_memory_only,
+        "CMPPS" | "CMPPD" | "CVTDQ2PS" | "CVTPS2PD" | "CVTPD2PS" | "CVTPS2DQ" | "CVTTPS2DQ" | "CVTPD2DQ"
+        | "CVTTPD2DQ" | "PMOVSXDQ" => sse_int,
         ic if SSE2_INT_BLOCK.contains(&ic) => sse_int,
         _ => return None,
     })
