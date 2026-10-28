@@ -1,0 +1,25 @@
+# The skeleton's gate (Sprint 158): the Rust host, w2m-vm, runs tests/data/timed_waits/sleeper.exe and writes its record,
+# record_translations' events, on a substrate record; the guest's output goes to build/skeleton/sleeper-stdout.txt.
+# crates/w2m_vm/tests/skeleton_gate.rs holds both to the frozen Python host's. Run from the repository root after
+# `cargo build --release`, on this Mac (Hypervisor.framework):
+#   mkdir -p build/skeleton
+#   uv run substrate run --file harness/w2m-vm-sleeper.toml --root store/runs/w2m-vm-sleeper-<ns> --strict
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.10"
+host = "w2m-vm"
+implementation = "the Rust host, w2m-vm, on one vCPU with the Rust translator for the blocks the VM's C declines"
+reference = "the frozen Python host's record_translations of sleeper, store/runs/translations-1793149239949363000"
+
+[[producer]]
+kind = "w2m_vm"
+# hv_vm_create refuses an unsigned process: the binary is signed with the Hypervisor entitlement first
+command = ["../scripts/sign_and_run.sh", "../target/release/w2m-vm", "tests/data/timed_waits/sleeper.exe", "--output", "build/skeleton/sleeper-stdout.txt"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "w2m_vm"
+
+[termination]
+recipe = "all_completed"

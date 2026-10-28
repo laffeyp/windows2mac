@@ -104,3 +104,32 @@ Sprint 156's fixture (`build/run_loop/sleeper-python.json`, its translations in 
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: the Python host's record as reference, and a planted fault.
 - [x] One concept: the skeleton's gate.
+
+## result
+
+- **The skeleton's gate is met for `sleeper`.** `uv run substrate run --file harness/w2m-vm-sleeper.toml --root
+  store/runs/w2m-vm-sleeper-1793149355000000000 --strict` returned 0. `w2m-vm` loaded `sleeper.exe`, ran it on one
+  vCPU to ExitProcess, wrote `woke\ndone\n` to `build/skeleton/sleeper-stdout.txt`, and wrote 40 w2m events:
+  SESSION_INIT, 19 blocks of CODE_TARGET_DISCOVERED and TRANSLATION_PUBLISHED, and SESSION_COMPLETED.
+  `crates/w2m_vm/tests/skeleton_gate.rs` holds them equal, in order and field for field, to the frozen Python host's
+  `record_translations` of the same guest (`store/runs/translations-1793149239949363000`): the same 19 guest ranges,
+  discoveries and code addresses (`vm-code-cache:7f0000062920` first). The output equals the stored output,
+  `store/skeleton/sleeper-stdout.txt`.
+- Three fields are not compared, each named in `w2m_vm::record::EXEMPT`: `elapsed_seconds`; `harness_version` (the
+  Python's 0.0.1, the crate's 0.1.0); `vocab_version` (the frozen Python writes 0.9, the Rust vocabulary is 0.10). The
+  four tags' fields are the same in both.
+- **The translations in compile order.** `Outcome.translations` keeps the C's blocks as its log gives them at each exit
+  and the host's at each compile, as `vm.translations` does. `qpc`'s 8 and `sleeper`'s 19 equal the Python's in
+  order, (start, end, discovery); both run-loop tests now check it.
+- The record's check runs everywhere, CI included: both records are committed and `record.rs` needs no
+  Hypervisor.framework. The output's check needs the run's file under `build/`, which the gates require.
+- The record's baseline names `host = "w2m-vm"`, not `judge`: the judges' ledger reads records whose baseline names a
+  judge, and this one holds no verdict.
+- **Planted faults.** A copy of the Rust record with its first two blocks' events swapped: the gate failed at "event 1
+  (CODE_TARGET_DISCOVERED): discovery is "runtime_transfer" where the stored record has "static"". The output file
+  without its last newline: the gate failed at "the output", `"woke\ndone"` against `"woke\ndone\n"`. Restored, both
+  checks pass.
+- Edits outside the Edit tool, recorded: `sed` made six one-line changes (two in `run.rs`, two calls added in
+  `run_loop.rs`, the `pub mod` line in `lib.rs`, the topology's baseline key) and set and restored the test's record
+  name for the plant, and the planted record was built with
+  `awk`; each result was read back.

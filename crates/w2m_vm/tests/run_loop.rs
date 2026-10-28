@@ -103,6 +103,32 @@ fn python_compiles(python: &serde_json::Value) -> Vec<(u64, u64)> {
         .collect()
 }
 
+/// Sprint 158: the run's translations, the C's and the host's, are the Python's `vm.translations` in order: (start, end,
+/// discovery), `static` for the entry.
+fn translations_in_order(python: &serde_json::Value, out: &Outcome, entry: u64) {
+    let want: Vec<(u64, u64, String)> = python["translations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| {
+            (
+                t[0].as_u64().unwrap(),
+                t[1].as_u64().unwrap(),
+                t[2].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    let ours: Vec<(u64, u64, String)> = out
+        .translations
+        .iter()
+        .map(|t| {
+            let discovery = if t.start == entry { "static" } else { "runtime_transfer" };
+            (t.start, t.end, discovery.to_string())
+        })
+        .collect();
+    assert_eq!(ours, want, "the translations in compile order (start, end, discovery)");
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -124,6 +150,7 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
     let mut host = HostCompiler::default();
     let before = monotonic_count();
     let out = run(&mut guest, &loaded, &mut host);
+    translations_in_order(&python, &out, loaded.entry);
     let after = monotonic_count();
 
     println!("stop: {:?}", out.stop);
@@ -191,6 +218,7 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     let (loaded, mut guest) = guest_for(&root, "sleeper");
     let mut host = HostCompiler::default();
     let out = run(&mut guest, &loaded, &mut host);
+    translations_in_order(&python, &out, loaded.entry);
 
     println!("stop: {:?}", out.stop);
     println!("blocks the C compiled: {:x?}", out.blocks.keys().collect::<Vec<_>>());

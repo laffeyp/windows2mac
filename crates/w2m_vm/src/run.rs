@@ -156,6 +156,17 @@ pub struct Outcome {
     pub thread_requests: Vec<ThreadRequest>,
     /// each `hvc #12` hand-over the host served, in order (Sprint 157)
     pub handovers: Vec<Handover>,
+    /// every block translated, the C's and the host's, in the order the Python's `vm.translations` keeps (Sprint 158):
+    /// the C's log at each exit (`_vm_compiled` 2577), the host's at its compile (`_compile` 4638)
+    pub translations: Vec<Translation>,
+}
+
+/// A translated block: its guest range [start, end) and its code address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Translation {
+    pub start: u64,
+    pub end: u64,
+    pub code: u64,
 }
 
 /// A thread request the host served: the sub-request, its first argument, the answer and the thread current at it.
@@ -232,11 +243,13 @@ pub fn dispatch_insert(mem: &mut [u8], target: u64, va: u64) {
 
 /// `_vm_compiled` (vm_backend 2559-2580), the blocks only: each log entry's start and code address, then the log
 /// emptied.
-fn vm_compiled(mem: &mut [u8], blocks: &mut BTreeMap<u64, u64>) {
+fn vm_compiled(mem: &mut [u8], blocks: &mut BTreeMap<u64, u64>, translations: &mut Vec<Translation>) {
     let n = read_u64(mem, VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
-        blocks.insert(read_u64(mem, at), read_u64(mem, at + 16));
+        let (start, end, code) = (read_u64(mem, at), read_u64(mem, at + 8), read_u64(mem, at + 16));
+        blocks.insert(start, code);
+        translations.push(Translation { start, end, code });
     }
     write_u64(mem, VM_COMPILER + VMC_LOG_COUNT, 0);
 }
@@ -294,6 +307,7 @@ fn run(
         created: Vec::new(),
         thread_requests: Vec::new(),
         handovers: Vec::new(),
+        translations: Vec::new(),
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -344,7 +358,7 @@ fn run(
         out.run_ns.push(started.elapsed().as_nanos() as u64);
         marked = Some(Instant::now());
         let mem = guest.memory.as_mut_slice();
-        vm_compiled(mem, &mut out.blocks);
+        vm_compiled(mem, &mut out.blocks, &mut out.translations);
         let pc = vcpu.reg(Reg::Pc)?;
         if !runtime.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
@@ -485,7 +499,11 @@ fn run(
                 (None, Some(h)) => match h.blocks.get(&target) {
                     Some(&va) => va,
                     None => match h.compile(guest, target) {
-                        Ok(va) => va,
+                        Ok(va) => {
+                            let (start, end) = *h.translations.last().unwrap();
+                            out.translations.push(Translation { start, end, code: va });
+                            va
+                        }
                         Err(why) => break Stop::Untranslated { target, why },
                     },
                 },

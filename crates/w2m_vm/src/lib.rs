@@ -21,6 +21,7 @@ pub mod host_request;
 pub mod ledger;
 pub mod monitor_code;
 pub mod process;
+pub mod record;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod run;
 pub mod tables;
