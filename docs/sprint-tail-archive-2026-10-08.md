@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 155 (2026-10-25, closed)
+- **Scope:** link 5's run-loop judge: the blocks the VM's C declines compiled in Rust inside the skeleton's run loop, so `qpc` runs past its first decline.
+- **Dual contract:** signal — none, as the card says (the skeleton's record comes at link 6); artifact pass (fmt, clippy, the gates); observation pass (`qpc` to ExitProcess(0) with its counter in range; the blocks and the host's words equal the Python host's; a planted inverse condition failed it).
+- **CI does not run:** the run loop's test (macOS only, the Python fixture); `c_words` runs on CI from Sprint 154.
+- **Rubber Duck Pass:** *Observation 1 (two plants that did not plant):* `LIVENESS_SCAN` 0 and NZCV fusion off left these two blocks' words unchanged; a plant must change what the judged blocks use, measured, before it counts. Disposition: resolved-here (a wrong inverse condition). *Observation 2 (a card's stop overtaken):* the card expected a named stop short of the end; the first stop was `qpc`'s output, and two host requests more ran it to its end. Disposition: resolved-here, recorded as an amendment. *Observation 3 (the skeleton's guest finished):* `qpc` is the first guest the Rust host runs from entry to exit; its output varies with the clock, so its judge is the Python test's range, not a stored byte string. Disposition: recorded.
+- **Closed:** Sprint 154's CI run 40185155755 (success on 89760257a); one single-test run in its log took 32.39 s, `c_words` on Linux, where it had skipped.
+- **Files:** crates/w2m_vm/, crates/translator/, store/run_loop/qpc-python.sha256, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-155-the-run-loop-compiles.md, signal-reports/sprint-155-report.md.
+
 ### Sprint 154 (2026-10-25, closed)
 - **Scope:** reviewer-2's review of Sprints 151-152: Medium 1 (a committed record deleted), Medium 2 (the C words judge skipping on CI), the ledger's three conditions, the lows, group 2's counts.
 - **Dual contract:** signal — none: no producer's events change, the records stand as Sprint 153 made them; artifact pass (fmt, clippy, the gates with the ledger check); observation pass (the restored record replays; the two plants named; DIV 47 and IDIV 48 judged at a fault through Rust words). The CI run of the closing commit is the measure of `c_words` on Linux.
