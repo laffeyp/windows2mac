@@ -581,7 +581,7 @@
 
 ## Sprint tail
 
-### Sprint 184 (2026-10-28, gates running)
+### Sprint 184 (2026-10-28, closed)
 - **Scope:** reviewer-2's Mediums 1-4 of its review of Sprints 178-181: checks that held less than their names said
 - **Dual contract:** signal — none, as the card says (no producer runs; the judges are tests and checks); artifact pass (`scripts/gates.sh` exit 0 in 894 s on the second run, kept in `build/gates-passes.txt` as "sprint 184" at HEAD fa5d58ea7: Rust tests all, the planted chain 34, Python gates 2,550 passed and 1 skipped; the first run failed one frozen-host test, Observation 4); observation pass (the image's zero-halfword symbols held, `a64_movz` at 0x7f0004170000; `--check` passes over Sprints 175-183 with Sprint 178 closed-partial; the lookup's three unit tests pass; plant 1 named `a64_movz`; plant 2's test saw `--check` exit 0; plant 3 returned 0x1004 for 0x1007).
 - **CI does not run:** `c_words` (its C emitter is macOS only) and the run-loop judges; CI runs `signal_report`'s tests, where `CI=true` skips the gates-run rule and says so, and `run.rs`'s lookup tests.
