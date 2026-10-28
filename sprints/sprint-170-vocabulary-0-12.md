@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 170
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -87,3 +87,28 @@ P22 and P23 are in the vocabulary in force for Rust, and the records check honor
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: the vocabulary's two proposals.
+
+## result
+
+- **Vocabulary 0.12** (`signals/0.12.json`, `signals/0.12-rationale.md`): keys sorted, it differs from 0.11 in the
+  version fields, EXECUTION_COMPLETED's optional `guest_trace` (`bool`) and its note, COMPARISON_COMPLETED's note and
+  T4's rule text. P22 and P23 are ratified into it (`signals/proposals.json`); no proposal is left open.
+  `signals/rust-current.json` names 0.12; `current.json` stays 0.9. The generator wrote
+  `crates/events/src/generated.rs` (`ExecutionCompleted::guest_trace: Option<bool>`, `VOCAB_VERSION` "0.12") and
+  `harness/schemas/harness-events.json` (`guest_trace`: bool, optional); its check passes.
+- **The pinned literals:** one search before the change found them all: the generated code, eight `harness/*.toml`
+  baselines (set to 0.12) and three test literals, which now take the version from `events::VOCAB_VERSION` or, in the
+  generator's test, from `signals/rust-current.json`, so the next vocabulary changes none of them.
+- **The samples:** one EXECUTION_COMPLETED with `guest_trace` false, which the samples' bools (true) never wrote; the
+  record replays at level 2. Of its three EXECUTION_COMPLETED the Rust check applies T4 to two.
+- **The records check:** the Rust T4 leaves out an execution with `guest_trace` false; over the store its lines equal
+  the Python's, since no stored record carries the field.
+- **Plant 1** (the exemption reversed): T4 applied to the one it should leave out, applied 1, violations 1.
+- **Plant 2** (`guest_trace` as the string "false"): the Rust type refused it, "guest_trace: expected a boolean", and
+  the samples run failed. Substrate's schema types the field `bool`, but its refusal was not reached, since the Rust
+  type refused first.
+- **The gates:** `scripts/gates.sh --all`, as the card names, exit 0 in 1,086 s, with the Rust and Python records
+  checks equal over every record. A default run was started first and its exit written ahead of it; reviewer-2's
+  review of 2026-10-28 (Medium 5) found it, and the default run was stopped.
+- **One more fix:** 0.11's rationale signed off "Claude (agent-resolved)"; the model name is out (the standing rule on
+  attribution in committed files), and 0.12's signs off "agent-resolved".
