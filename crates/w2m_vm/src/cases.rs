@@ -247,27 +247,15 @@ enum ModelStep {
 /// vCPU resumes at the dispatcher with x17 the next RIP. A guest fault goes to the runtime's exception path as
 /// `_raise_in_guest` (4332-4342) sends it.
 fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Result<ModelStep, HvError> {
-    use crate::model::{Fault, Flags, Thread, lift_mmx, lift_x87, step, step_mmx, step_x87};
-    // an MMX-register form (Sprint 174) or an x87 class (Sprint 175), which the translator's lifter refuses, or one
-    // the lifter lifts
-    enum Instruction {
-        Lifted(translator::lift::Lifted),
-        Mmx(crate::model::MmxStep),
-        X87(crate::model::X87Step),
-    }
-    let instruction = match translator::lift::lift(code, rip) {
-        Ok(ins) => Instruction::Lifted(ins),
-        Err(_) => match (lift_mmx(code, rip), lift_x87(code, rip)) {
-            (Ok(Some(m)), _) => Instruction::Mmx(m),
-            (_, Ok(Some(x))) => Instruction::X87(x),
-            _ => return Ok(ModelStep::Refused),
-        },
+    use crate::model::{Fault, Flags, Thread, step};
+    // the one lifter (Sprint 177: its MMX and x87 ops, which the model steps)
+    let Ok(ins) = translator::lift::lift(code, rip) else {
+        return Ok(ModelStep::Refused);
     };
-    if let Instruction::Lifted(ins) = &instruction
-        && ins
-            .ops
-            .iter()
-            .any(|op| matches!(op, translator::lift::Op::Sse { .. } | translator::lift::Op::Cpuid))
+    if ins
+        .ops
+        .iter()
+        .any(|op| matches!(op, translator::lift::Op::Sse { .. } | translator::lift::Op::Cpuid))
     {
         return Ok(ModelStep::Refused);
     }
@@ -334,11 +322,7 @@ fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Resu
         b[..10].copy_from_slice(&mem[at..at + 10]);
         th.x87_regs[(top + i) & 7] = u128::from_le_bytes(b);
     }
-    let result = match &instruction {
-        Instruction::Lifted(ins) => step(&mut th, &mut GuestModelMemory(guest), ins, code),
-        Instruction::Mmx(m) => step_mmx(&mut th, &mut GuestModelMemory(guest), m, code),
-        Instruction::X87(x) => step_x87(&mut th, &mut GuestModelMemory(guest), x, code),
-    };
+    let result = step(&mut th, &mut GuestModelMemory(guest), &ins, code);
     let mem = guest.memory.as_mut_slice();
     mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&th.mxcsr.to_le_bytes());
     // `_store_x87` (4325-4330), after a step or a fault alike (a faulting MMX store has set TOP 0, set 065b)

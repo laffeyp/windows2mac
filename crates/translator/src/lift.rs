@@ -170,6 +170,48 @@ pub enum Op {
         srcs: Vec<Temp>,
         bits: u32,
     },
+    /// ("mmx", ic, dst, src, imm): one MMX-register instruction the model runs on the x87 register file (lift.py
+    /// 307-324; Sprint 065), its operands as mmx.py reads them (Sprint 177: the one lifter)
+    Mmx {
+        ic: String,
+        dst: MmxArg,
+        src: MmxArg,
+        imm: u64,
+    },
+    /// ("x87", ic, opcode, reg, st, mem): one x87 instruction the model runs whole (rules/x87.py; Sprint 065): the
+    /// opcode byte, ModRM.reg, ST(i) of a register form, the memory operand of a memory form (Sprint 177)
+    X87 {
+        ic: String,
+        opcode: u8,
+        reg: u8,
+        st: Option<u8>,
+        mem: Option<Loc>,
+    },
+}
+
+/// An MMX operand as `lift_mmx` (lift.py 307-324) gives it to `mmx.py`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MmxArg {
+    /// ("mm", n): MMn, bits 63:0 of physical x87 register n
+    Mm(u8),
+    /// ("x", n): an XMM register
+    X(u8),
+    /// a general register or the memory operand
+    Loc(Loc),
+    /// ("i",): the immediate, in `imm`
+    Imm,
+    /// ("none",)
+    None,
+}
+
+impl MmxArg {
+    /// The memory operand's address temporary, if this is one.
+    pub fn addr(&self) -> Option<Temp> {
+        match self {
+            MmxArg::Loc(Loc::M { addr, .. }) => Some(*addr),
+            _ => None,
+        }
+    }
 }
 
 /// An SSE operand (lift.py 177-178): ("x", n) for XMM register n, or a general register or memory location.
@@ -490,6 +532,18 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
         // ("sse", ic, dst, src, ...): a store to a memory destination, else a load from a memory source
         Op::Sse { dst, .. } if dst.addr().is_some() => Some("store"),
         Op::Sse { src, .. } if src.addr().is_some() => Some("load"),
+        // ("mmx", ic, dst, src, imm) and ("x87", ic, opcode, reg, st, mem): lift.py 266-271 (Sprint 177)
+        Op::Mmx { dst, .. } if dst.addr().is_some() => Some("store"),
+        Op::Mmx { src, .. } if src.addr().is_some() => Some("load"),
+        Op::X87 {
+            ic,
+            mem: Some(Loc::M { .. }),
+            ..
+        } => Some(if matches!(ic.as_str(), "FSTP" | "FISTP" | "FISTTP" | "FNSTSW") {
+            "store"
+        } else {
+            "load"
+        }),
         Op::Ld { loc: Loc::M { .. }, .. } | Op::Mxcsr { store: false, .. } => Some("load"),
         Op::St { loc: Loc::M { .. }, .. }
         | Op::Set { loc: Loc::M { .. }, .. }
@@ -594,7 +648,42 @@ const NO_TEMPLATE_OK: [&str; 15] = [
 ];
 
 /// lift.py 304: the classes with no SSE form.
-const MMX_ONLY: [&str; 3] = ["EMMS", "MOVDQ2Q", "PSHUFW"];
+pub const MMX_ONLY: [&str; 3] = ["EMMS", "MOVDQ2Q", "PSHUFW"];
+
+/// `lift_mmx` (lift.py 307-324): ("mmx", ic, dst, src, imm), the operands as mmx.py reads them.
+fn lift_mmx(b: &mut Builder, ic: &str, ops: &[String], nxt: u64, address: u64) -> Result<(), LiftError> {
+    let mut out = Vec::new();
+    let mut imm = 0u64;
+    for o in ops {
+        if let Some(n) = o.strip_prefix("MM:") {
+            out.push(MmxArg::Mm(n.parse().map_err(|_| LiftError(format!("operand {o}")))?));
+        } else if o.starts_with("I:") {
+            let hex = o.split(':').nth(2).ok_or_else(|| LiftError(format!("operand {o}")))?;
+            imm = u64::from_str_radix(hex, 16).map_err(|_| LiftError(format!("operand {o}")))?;
+            out.push(MmxArg::Imm);
+        } else if let Some(n) = o.strip_prefix("R:XMM") {
+            out.push(MmxArg::X(n.parse().map_err(|_| LiftError(format!("operand {o}")))?));
+        } else {
+            match operand(b, o, nxt, None)?.0 {
+                Operand::Loc(loc) => out.push(MmxArg::Loc(loc)),
+                _ => return Err(LiftError(format!("{ic} at 0x{address:x}: operand {o}"))),
+            }
+        }
+    }
+    if matches!(ic, "PEXTRW" | "PSHUFW") {
+        out.truncate(2); // the immediate is imm, not an operand
+    }
+    while out.len() < 2 {
+        out.push(MmxArg::None);
+    }
+    b.ops.push(Op::Mmx {
+        ic: ic.to_string(),
+        dst: out[0],
+        src: out[1],
+        imm,
+    });
+    Ok(())
+}
 
 /// `lift` (lift.py 327-355): the instruction at the start of `code`, located at guest `address`. Bytes the decode spec
 /// has no row for are a LiftError too, so the run stops by name.
@@ -624,10 +713,15 @@ pub fn lift(code: &[u8], address: u64) -> Result<Lifted, LiftError> {
         )));
     }
     if MMX_ONLY.contains(&ic.as_str()) || ops.iter().any(|o| o.starts_with("MM:")) {
-        // lift_mmx (lift.py 307-324) comes with the MMX group
-        return Err(LiftError(format!(
-            "{ic} at 0x{address:x}: the MMX forms are a later group"
-        )));
+        // an MMX-register form, whatever its class's SSE rule (lift.py 345-347; Sprint 177)
+        let mut b = Builder::default();
+        lift_mmx(&mut b, &ic, &ops, nxt, address)?;
+        return Ok(Lifted {
+            address,
+            length: d.length as u64,
+            iclass: ic,
+            ops: b.ops,
+        });
     }
     let Some(rule) = crate::rules::rule(&ic) else {
         return Err(LiftError(format!("no lifting rule for {ic} at 0x{address:x}")));

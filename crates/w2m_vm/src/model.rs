@@ -8,7 +8,7 @@
 //! This slice holds the core's integer and control operations and the integer classes. An `sse` operation is refused
 //! by name: the SSE, MMX, VEX and x87 slices follow.
 
-use translator::lift::{Lifted, Loc, Op, RAX, RBX, RCX, RDI, RDX, RSI, RSP, Temp};
+use translator::lift::{Lifted, Loc, MmxArg, Op, RAX, RBX, RCX, RDI, RDX, RSI, RSP, Temp};
 
 const M64: u64 = u64::MAX;
 /// ntstatus.h (runtime.py 26-28)
@@ -616,6 +616,15 @@ impl<M: Memory> Step<'_, M> {
                 Op::Sse { ic, .. } => {
                     return Err(Fault::Refused(format!("sse {ic}: the model's SSE slice comes later")));
                 }
+                // `_mmx` and `_x87` (runtime.py 140-191), from the one lifter's ops (Sprint 177)
+                Op::Mmx { ic, dst, src, imm } => self.mmx(ic, *dst, *src, *imm)?,
+                Op::X87 {
+                    ic,
+                    opcode,
+                    reg,
+                    st,
+                    mem,
+                } => self.x87(ic, *opcode, *reg, *st, *mem, ins.address)?,
                 Op::X86 { ic, dst, srcs, bits } => {
                     let vals: Vec<u64> = srcs.iter().map(|s| self.temp(*s)).collect::<Result<_, _>>()?;
                     if let Some(target) = self.integer(ic, *dst, &vals, *bits)? {
@@ -967,83 +976,6 @@ fn signed(v: u64, bits: u32) -> i128 {
     }
 }
 
-/// An MMX operand as `lift_mmx` (lift.py 307-324) gives it to `mmx.py`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MmxArg {
-    /// ("mm", n): MMn, bits 63:0 of physical x87 register n
-    Mm(u8),
-    /// ("x", n): an XMM register
-    X(u8),
-    /// a general register or the memory operand
-    Loc(Loc),
-    /// ("i",): the immediate, in `imm`
-    Imm,
-    /// ("none",)
-    None,
-}
-
-/// One MMX-register instruction: the operations that compute its memory operand's address, then the step.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MmxStep {
-    pub address: u64,
-    pub length: u64,
-    pub ic: String,
-    pub pre: Vec<Op>,
-    pub dst: MmxArg,
-    pub src: MmxArg,
-    pub imm: u64,
-}
-
-/// `MMX_ONLY` (lift.py 304): the classes with no SSE form.
-const MMX_ONLY: [&str; 3] = ["EMMS", "MOVDQ2Q", "PSHUFW"];
-
-/// `lift_mmx` (lift.py 307-324) for the instruction at the start of `code`: None when it is not an MMX-register form.
-/// The translator's `lift` refuses these forms by name (their A64 lowering is a later slice), so the model lifts them.
-pub fn lift_mmx(code: &[u8], address: u64) -> Result<Option<MmxStep>, translator::lift::LiftError> {
-    use translator::lift::{Builder, LiftError, Operand, operand};
-    let Ok(d) = x86_decoder::decode(code, None) else {
-        return Ok(None);
-    };
-    let ops = x86_decoder::operands::operands(&d.fields).unwrap_or_default();
-    if !MMX_ONLY.contains(&d.iclass.as_str()) && !ops.iter().any(|o| o.starts_with("MM:")) {
-        return Ok(None);
-    }
-    let nxt = address + d.length as u64;
-    let mut b = Builder::default();
-    let (mut out, mut imm) = (Vec::new(), 0u64);
-    for o in &ops {
-        if let Some(n) = o.strip_prefix("MM:") {
-            out.push(MmxArg::Mm(n.parse().map_err(|_| LiftError(format!("operand {o}")))?));
-        } else if o.starts_with("I:") {
-            let hex = o.split(':').nth(2).ok_or_else(|| LiftError(format!("operand {o}")))?;
-            imm = u64::from_str_radix(hex, 16).map_err(|_| LiftError(format!("operand {o}")))?;
-            out.push(MmxArg::Imm);
-        } else if let Some(n) = o.strip_prefix("R:XMM") {
-            out.push(MmxArg::X(n.parse().map_err(|_| LiftError(format!("operand {o}")))?));
-        } else {
-            match operand(&mut b, o, nxt, None)?.0 {
-                Operand::Loc(loc) => out.push(MmxArg::Loc(loc)),
-                _ => return Err(LiftError(format!("{} at 0x{address:x}: operand {o}", d.iclass))),
-            }
-        }
-    }
-    if matches!(d.iclass.as_str(), "PEXTRW" | "PSHUFW") {
-        out.truncate(2); // the immediate is imm, not an operand
-    }
-    while out.len() < 2 {
-        out.push(MmxArg::None);
-    }
-    Ok(Some(MmxStep {
-        address,
-        length: d.length as u64,
-        ic: d.iclass.clone(),
-        pre: b.ops,
-        dst: out[0],
-        src: out[1],
-        imm,
-    }))
-}
-
 const M64_128: u128 = u64::MAX as u128;
 /// bits 79:64 of a register an MMX instruction writes (mmx.py 22)
 const ONES: u128 = 0xFFFF << 64;
@@ -1195,8 +1127,7 @@ impl<M: Memory> Step<'_, M> {
     }
 
     /// `mmx.execute` (83-121)
-    fn mmx(&mut self, m: &MmxStep) -> Result<(), Fault> {
-        let ic = m.ic.as_str();
+    fn mmx(&mut self, ic: &str, dst: MmxArg, src: MmxArg, imm: u64) -> Result<(), Fault> {
         if self.th.x87_sw & ES != 0 {
             return Err(Fault::Refused(format!(
                 "{ic} with an x87 exception pending (status word 0x{:x})",
@@ -1209,120 +1140,32 @@ impl<M: Memory> Step<'_, M> {
         }
         match ic {
             "MOVD" | "MOVQ" | "MOVDQ2Q" => {
-                let v = self.mmx_get(m.src)?;
+                let v = self.mmx_get(src)?;
                 self.mmx_transition(ic);
-                self.mmx_put(m.dst, if ic == "MOVD" { v & 0xFFFF_FFFF } else { v })?;
+                self.mmx_put(dst, if ic == "MOVD" { v & 0xFFFF_FFFF } else { v })?;
             }
             "PEXTRW" => {
-                let v = self.mmx_get(m.src)? >> (16 * (m.imm & 3)) & 0xFFFF;
+                let v = self.mmx_get(src)? >> (16 * (imm & 3)) & 0xFFFF;
                 self.mmx_transition(ic);
-                self.mmx_put(m.dst, v)?;
+                self.mmx_put(dst, v)?;
             }
             _ => {
                 let shift = matches!(ic, "PSRAW" | "PSRAD" | "PSRLQ");
                 let count = if shift {
-                    if m.src == MmxArg::Imm {
-                        m.imm
-                    } else {
-                        self.mmx_get(m.src)?
-                    }
+                    if src == MmxArg::Imm { imm } else { self.mmx_get(src)? }
                 } else {
-                    m.imm
+                    imm
                 };
-                let s = if shift { 0 } else { self.mmx_get(m.src)? };
-                let v = mmx_compute(ic, self.mmx_get(m.dst)?, s, count)?;
+                let s = if shift { 0 } else { self.mmx_get(src)? };
+                let v = mmx_compute(ic, self.mmx_get(dst)?, s, count)?;
                 self.mmx_transition(ic);
-                self.mmx_put(m.dst, v)?;
+                self.mmx_put(dst, v)?;
             }
         }
         // the tags valid once the write is done (a faulting store keeps them)
         self.th.x87_tags = 0xFF;
         Ok(())
     }
-}
-
-/// `_exec` with `_mmx` (runtime.py 165-191) for an MMX-register instruction: the address operations, then the step. A
-/// guest fault restores what `_exec` restores and keeps the x87 state, which `_mmx`'s `finally` writes back (a faulting
-/// store has set TOP 0, set 065b).
-pub fn step_mmx<M: Memory>(th: &mut Thread, mem: &mut M, m: &MmxStep, code: &[u8]) -> Result<(), Fault> {
-    let saved = th.clone();
-    let mut s = Step {
-        th,
-        mem,
-        t: Default::default(),
-        code,
-    };
-    let ins = Lifted {
-        address: m.address,
-        length: m.length,
-        iclass: m.ic.clone(),
-        ops: m.pre.clone(),
-    };
-    let r = s.exec_ops(&ins).and_then(|()| s.mmx(m));
-    if let Err(Fault::Guest { .. }) = &r {
-        let (sw, tags, x87) = (s.th.x87_sw, s.th.x87_tags, s.th.x87_regs);
-        let mxcsr = s.th.mxcsr;
-        *s.th = saved;
-        (s.th.x87_sw, s.th.x87_tags, s.th.x87_regs, s.th.mxcsr) = (sw, tags, x87, mxcsr);
-        s.th.rip = m.address;
-    }
-    r
-}
-
-/// `ICLASSES` (rules/x87.py 15-16): the x87 classes the game reaches.
-const X87_ICLASSES: [&str; 17] = [
-    "FLD", "FSTP", "FMUL", "FSQRT", "FSIN", "FCOS", "FADD", "FWAIT", "FISTTP", "FIADD", "FISTP", "FIDIVR", "FLDCW",
-    "FNCLEX", "FNSTSW", "FDIVR", "FIMUL",
-];
-
-/// One x87 instruction lifted as `rules/x87.py` lifts it (Sprint 175): ("x87", iclass, opcode, ModRM.reg, ST(i) or
-/// None, the memory operand or None), with the address operations before it.
-#[derive(Debug, Clone)]
-pub struct X87Step {
-    pub address: u64,
-    pub length: u64,
-    pub ic: String,
-    pub pre: Vec<Op>,
-    pub opcode: u8,
-    pub reg: u8,
-    pub st: Option<u8>,
-    pub mem: Option<Loc>,
-}
-
-/// `rules/x87.py` `rule` (19-30), for an x87 class the translator does not lift; None for any other class. The last
-/// `ST:` operand is ST(i), any other operand the memory one.
-pub fn lift_x87(code: &[u8], address: u64) -> Result<Option<X87Step>, translator::lift::LiftError> {
-    use translator::lift::{Builder, LiftError, Operand, operand};
-    let Ok(d) = x86_decoder::decode(code, None) else {
-        return Ok(None);
-    };
-    if !X87_ICLASSES.contains(&d.iclass.as_str()) {
-        return Ok(None);
-    }
-    let ops = x86_decoder::operands::operands(&d.fields).unwrap_or_default();
-    let nxt = address + d.length as u64;
-    let mut b = Builder::default();
-    let (mut st, mut mem) = (None, None);
-    for o in &ops {
-        if let Some(n) = o.strip_prefix("ST:") {
-            st = Some(n.parse().map_err(|_| LiftError(format!("operand {o}")))?);
-        } else {
-            match operand(&mut b, o, nxt, None)?.0 {
-                Operand::Loc(loc @ Loc::M { .. }) => mem = Some(loc),
-                _ => return Err(LiftError(format!("{} at 0x{address:x}: operand {o}", d.iclass))),
-            }
-        }
-    }
-    Ok(Some(X87Step {
-        address,
-        length: d.length as u64,
-        ic: d.iclass.clone(),
-        pre: b.ops,
-        opcode: d.fields.opcode,
-        reg: d.fields.modrm.map_or(0, |m| m >> 3 & 7),
-        st,
-        mem,
-    }))
 }
 
 /// The memory operand of an x87 step: `_x87`'s `read` and `write` (runtime.py 149-153).
@@ -1344,54 +1187,39 @@ impl<M: Memory> crate::x87::X87Memory for X87Operand<'_, M> {
     }
 }
 
-/// `_x87` (runtime.py 140-163) under `_exec`: the register stack from the thread, one instruction, and the stack back
-/// on success. On a guest fault the x87 state is as before, since `_x87` writes it back only after `execute` returns,
-/// and the rest is restored as `step` restores it. An exception the control word does not mask is refused by name.
-pub fn step_x87<M: Memory>(th: &mut Thread, mem: &mut M, x: &X87Step, code: &[u8]) -> Result<(), Fault> {
-    let saved = th.clone();
-    let mut s = Step {
-        th,
-        mem,
-        t: Default::default(),
-        code,
-    };
-    let ins = Lifted {
-        address: x.address,
-        length: x.length,
-        iclass: x.ic.clone(),
-        ops: x.pre.clone(),
-    };
-    let r = s.exec_ops(&ins).and_then(|()| {
-        let address = match x.mem {
-            Some(Loc::M { addr, .. }) => s.temp(addr)?,
+impl<M: Memory> Step<'_, M> {
+    /// `_x87` (runtime.py 140-163): the register stack from the thread, one instruction, and the stack back on success
+    /// only, so a guest fault leaves the x87 state as it was. An exception the control word does not mask is refused by
+    /// name.
+    fn x87(&mut self, ic: &str, opcode: u8, reg: u8, st: Option<u8>, mem: Option<Loc>, at: u64) -> Result<(), Fault> {
+        let address = match mem {
+            Some(Loc::M { addr, .. }) => self.temp(addr)?,
             _ => 0,
         };
-        let th = &mut *s.th;
+        let th = &mut *self.th;
         let mut fpu = crate::x87::Fpu::new(th.fcw, th.x87_sw, th.x87_regs, th.x87_tags);
         let mut ax = th.regs[0] as u16;
-        let mut operand = X87Operand { mem: s.mem, address };
-        crate::x87::execute(&mut fpu, &x.ic, x.opcode, x.reg, x.st, &mut operand, &mut ax).map_err(|e| match e {
-            Fault::Refused(why) => Fault::Refused(format!("{} at 0x{:x}: {why}", x.ic, x.address)),
+        let mut operand = X87Operand {
+            mem: &mut *self.mem,
+            address,
+        };
+        crate::x87::execute(&mut fpu, ic, opcode, reg, st, &mut operand, &mut ax).map_err(|e| match e {
+            Fault::Refused(why) => Fault::Refused(format!("{ic} at 0x{at:x}: {why}")),
             e => e,
         })?;
         (th.fcw, th.x87_sw, th.x87_regs, th.x87_tags) = (fpu.cw, fpu.sw, fpu.regs, fpu.abridged_tags());
-        if x.ic == "FNSTSW" && x.mem.is_none() {
+        if ic == "FNSTSW" && mem.is_none() {
             th.regs[0] = th.regs[0] & !0xFFFF | u64::from(ax);
         }
         Ok(())
-    });
-    if let Err(Fault::Guest { .. }) = &r {
-        let mxcsr = s.th.mxcsr;
-        *s.th = saved;
-        s.th.mxcsr = mxcsr;
-        s.th.rip = x.address;
     }
-    r
 }
 
 /// `_exec` (995-1013): one instruction. On a guest fault every register, flag, MXCSR and DF returns to its value
 /// before it, but REP's completed iterations stay (SDM Vol 1 7.3.9), MXCSR's flags a fault set survive, and RIP is the
-/// instruction's. `code` is the instruction's bytes, which `_windows_divide_status` decodes again.
+/// instruction's. An MMX form keeps the x87 state a fault leaves, which `_mmx`'s `finally` writes back (a faulting
+/// store has set TOP 0, set 065b); an x87 one writes it only on success. `code` is the instruction's bytes, which
+/// `_windows_divide_status` decodes again.
 pub fn step<M: Memory>(th: &mut Thread, mem: &mut M, ins: &Lifted, code: &[u8]) -> Result<(), Fault> {
     let saved = th.clone();
     let mut s = Step {
@@ -1404,9 +1232,13 @@ pub fn step<M: Memory>(th: &mut Thread, mem: &mut M, ins: &Lifted, code: &[u8]) 
     if let Err(Fault::Guest { .. }) = &r {
         let interrupted = s.th.regs;
         let mxcsr = s.th.mxcsr;
+        let x87 = (s.th.x87_sw, s.th.x87_tags, s.th.x87_regs);
         *s.th = saved;
         if ins.ops.iter().any(|op| matches!(op, Op::Rep { .. })) {
             s.th.regs = interrupted;
+        }
+        if ins.ops.iter().any(|op| matches!(op, Op::Mmx { .. })) {
+            (s.th.x87_sw, s.th.x87_tags, s.th.x87_regs) = x87;
         }
         s.th.mxcsr = mxcsr;
         s.th.rip = ins.address;

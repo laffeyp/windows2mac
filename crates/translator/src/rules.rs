@@ -87,6 +87,7 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         "STMXCSR" | "LDMXCSR" | "VSTMXCSR" | "VLDMXCSR" => mxcsr,
         "FNSTCW" => fpu_control,
         "XGETBV" => xgetbv,
+        ic if X87_ICLASSES.contains(&ic) => x87, // Sprint 177: rules/x87.py
         ic if REP_STRING.contains(&ic) => rep_string,
         "SHLD" | "SHRD" => double_shift,
         "RCR" => rcr,
@@ -1491,6 +1492,37 @@ fn fpu_control(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
     let (d, _) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
     let loc = loc(d, ctx)?;
     ctx.b.emit(Op::Fcw { loc });
+    Ok(())
+}
+
+/// `ICLASSES` (rules/x87.py 15-16): the x87 classes the game reaches.
+pub const X87_ICLASSES: [&str; 17] = [
+    "FLD", "FSTP", "FMUL", "FSQRT", "FSIN", "FCOS", "FADD", "FWAIT", "FISTTP", "FIADD", "FISTP", "FIDIVR", "FLDCW",
+    "FNCLEX", "FNSTSW", "FDIVR", "FIMUL",
+];
+
+/// `rule` (rules/x87.py 19-30): ("x87", iclass, opcode, ModRM.reg, ST(i) or None, the memory operand or None); the last
+/// `ST:` operand is ST(i), any other the memory one (Sprint 177).
+fn x87(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let reg = ctx.f.modrm.map_or(0, |m| m >> 3 & 7);
+    let (mut st, mut mem) = (None, None);
+    for o in ctx.ops.clone() {
+        if let Some(n) = o.strip_prefix("ST:") {
+            st = Some(n.parse().map_err(|_| LiftError(format!("operand {o}")))?);
+        } else {
+            match operand(ctx.b, &o, ctx.nxt, None)?.0 {
+                Operand::Loc(loc) => mem = Some(loc),
+                _ => return Err(LiftError(format!("{} at 0x{:x}: operand {o}", ctx.ic, ctx.address))),
+            }
+        }
+    }
+    ctx.b.emit(Op::X87 {
+        ic: ctx.ic.clone(),
+        opcode: ctx.f.opcode,
+        reg,
+        st,
+        mem,
+    });
     Ok(())
 }
 

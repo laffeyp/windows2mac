@@ -129,20 +129,30 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     let table = fs::read_to_string(root().join("tools/vm_compiler/stencil_table.h")).unwrap();
     let body = &table[table.find("vmc_symbol_name[").unwrap()..];
     let names: Vec<&str> = body[..body.find("};").unwrap()].split('"').skip(1).step_by(2).collect();
+    // a name the record's header lacks (x87_fast.c's five) gets a distinct placeholder address, the same for both
+    // compilers: at address 0 `mov_imm` is one word, not three, and the C stencil's branch past the call, fixed for
+    // three, lands two words past the model step (Sprint 177)
+    let placeholder = |i: usize| 0x7F01_0001_1000 + 0x100 * i as u64;
     let symbols: Vec<u64> = names
         .iter()
-        .map(|n| head["symbols"][*n].as_u64().unwrap_or(0))
+        .enumerate()
+        .map(|(i, n)| head["symbols"][*n].as_u64().unwrap_or(placeholder(i)))
         .collect();
     let exit_va = head["exit_va"].as_u64().unwrap();
     let state_va = PROCESS_VA + STATE_OFF;
-    // the runtime's functions the words call (CPUID's, PCMPISTRI's, the approximations'): the addresses the C emitter is
-    // given in its symbol table
-    let runtime = translator::lower::RuntimeCalls::from_symbols(|s| head["symbols"][s].as_u64());
+    // the runtime's functions the words call (CPUID's, PCMPISTRI's, the approximations', x87_fast.c's): the addresses the
+    // C emitter is given in its symbol table, as `symbols` above gives them (Sprint 177: the header has no `w2m_x87_*`,
+    // and the C emits `_x87_fast` with the table's names)
+    let runtime = translator::lower::RuntimeCalls::from_symbols(|s| match names.iter().position(|n| *n == s) {
+        Some(i) => Some(symbols[i]),
+        None => head["symbols"][s].as_u64(),
+    });
 
     let mut lifted = 0usize;
     let mut compared: BTreeMap<String, usize> = BTreeMap::new();
     let mut c_refused: BTreeMap<String, usize> = BTreeMap::new();
     let mut rust_refused: BTreeMap<String, usize> = BTreeMap::new();
+    let mut lowering_refused: BTreeMap<String, usize> = BTreeMap::new();
     let mut differ: BTreeMap<String, (usize, String)> = BTreeMap::new();
     let mut words = [0u32; 512];
     // the calls no Rust rule lifts yet, by decoded class: the later groups' reach (Sprint 160)
@@ -188,7 +198,13 @@ fn group_1_s_words_equal_the_c_emitter_s() {
             flags[1] as u32,
             flags[2] != 0,
         ) {
-            *rust_refused.entry(format!("{}: {e}", ins.iclass)).or_default() += 1;
+            // a lowering the Rust refuses by name, as a later group (Sprint 177: the MMX ops the one lifter emits, which
+            // the model steps), is held to the census; any other refusal fails
+            if e.to_string().contains("is a later group") {
+                *lowering_refused.entry(ins.iclass.clone()).or_default() += 1;
+            } else {
+                *rust_refused.entry(format!("{}: {e}", ins.iclass)).or_default() += 1;
+            }
             continue;
         }
         let rust = a.finish();
@@ -221,32 +237,44 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     println!("not lifted by the Rust rules, by class: {by_count:?}");
     println!("C refusals of lifted calls: {c_refused:?}");
     println!("Rust refusals: {rust_refused:?}");
+    println!("lowering refused by name, by class: {lowering_refused:?}");
     for (k, (n, example)) in differ.iter().take(30) {
         println!("  {n:7} {k}: {example}");
     }
     // the classes the Rust rules do not lift, held to the committed census (Sprint 176; reviewer-2's High 1 of
     // 2026-10-28): a class that stops lifting, or comes to lift, changes `store/census/c-words-unlifted-2026-10-28.tsv`
-    // in the same commit
+    // in the same commit; from Sprint 177 each row names its stage, "not lifted" or "lowering refused" (lifted, its
+    // lowering refused by name, the model stepping it)
     let held: BTreeMap<String, usize> = fs::read_to_string(root().join("store/census/c-words-unlifted-2026-10-28.tsv"))
         .expect("store/census/c-words-unlifted-2026-10-28.tsv")
         .lines()
         .skip(1)
         .map(|l| {
-            let (class, n) = l.split_once('\t').expect("class<TAB>calls");
-            (class.to_string(), n.parse().expect("a call count"))
+            let p: Vec<&str> = l.split('\t').collect();
+            assert_eq!(p.len(), 3, "class<TAB>calls<TAB>stage: {l}");
+            (format!("{} ({})", p[0], p[2]), p[1].parse().expect("a call count"))
         })
+        .collect();
+    let now: BTreeMap<String, usize> = not_lifted
+        .iter()
+        .map(|(c, n)| (format!("{c} (not lifted)"), *n))
+        .chain(
+            lowering_refused
+                .iter()
+                .map(|(c, n)| (format!("{c} (lowering refused)"), *n)),
+        )
         .collect();
     let moved: Vec<String> = held
         .keys()
-        .chain(not_lifted.keys())
+        .chain(now.keys())
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .filter(|c| held.get(*c) != not_lifted.get(*c))
-        .map(|c| format!("{c}: held {:?}, now {:?}", held.get(c), not_lifted.get(c)))
+        .filter(|c| held.get(*c) != now.get(*c))
+        .map(|c| format!("{c}: held {:?}, now {:?}", held.get(c), now.get(c)))
         .collect();
     assert!(
         moved.is_empty(),
-        "the unlifted classes moved from the census: {}",
+        "the unlifted and unlowered classes moved from the census: {}",
         moved.join("; ")
     );
     assert!(rust_refused.is_empty(), "the Rust compiler refused lifted calls");

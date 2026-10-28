@@ -1,106 +1,102 @@
-class	calls
-CMPPS	393
-CVTDQ2PS	283
-CVTPD2DQ	1
-CVTPD2PS	63
-CVTPS2DQ	31
-CVTPS2PD	64
-CVTTPS2DQ	11
-EMMS	1
-FCOS	3
-FLD	8
-FSIN	3
-FSQRT	2
-FSTP	8
-MOVD	33
-MOVHPD	2
-MOVQ	176
-PACKUSWB	13
-PADDSW	13
-PADDW	22
-PEXTRW	2
-PMADDUBSW	5
-PMOVSXDQ	4
-PMULHW	8
-PMULLW	8
-PSADBW	2
-PSHUFW	3
-PSRAW	8
-PSUBW	8
-PUNPCKHDQ	4
-PUNPCKHWD	4
-PUNPCKLBW	13
-PUNPCKLDQ	5
-PUNPCKLWD	5
-PXOR	5
-VADDPD	1
-VADDSD	56
-VADDSS	12
-VANDNPD	2
-VANDPD	6
-VANDPS	2
-VCOMISD	14
-VCOMISS	8
-VCVTDQ2PD	10
-VCVTDQ2PS	2
-VCVTPD2DQ	3
-VCVTPS2PD	1
-VCVTSD2SS	6
-VCVTSI2SS	1
-VCVTSS2SD	3
-VCVTSS2SI	1
-VCVTTPD2DQ	3
-VDIVSD	5
-VDIVSS	2
-VFMADD132SD	2
-VFMADD213SD	73
-VFMADD213SS	4
-VFMADD231SD	25
-VFMADD231SS	2
-VFMSUB213SD	6
-VFMSUB213SS	3
-VFNMADD132SD	3
-VFNMADD213SD	1
-VFNMADD231SD	8
-VMOVAPD	47
-VMOVAPS	7
-VMOVD	18
-VMOVDQA	22
-VMOVDQU	2
-VMOVQ	24
-VMOVSD	52
-VMOVSS	2
-VMOVUPS	6
-VMULPD	3
-VMULSD	93
-VMULSS	12
-VORPD	3
-VORPS	2
-VPADDD	2
-VPADDQ	3
-VPAND	23
-VPCMPEQB	3
-VPCMPEQQ	2
-VPCMPEQW	1
-VPMOVMSKB	4
-VPMOVSXDQ	2
-VPOR	11
-VPSHUFD	7
-VPSLLD	2
-VPSLLQ	3
-VPSRAD	1
-VPSRLD	2
-VPSRLQ	5
-VPSUBD	2
-VPSUBQ	5
-VPUNPCKLDQ	1
-VPXOR	9
-VSHUFPS	2
-VSUBSD	49
-VSUBSS	6
-VUCOMISD	2
-VUCOMISS	1
-VUNPCKLPD	1
-VXORPD	6
-VXORPS	1
-VZEROUPPER	5
+class	calls	stage
+CMPPS	393	not lifted
+CVTDQ2PS	283	not lifted
+CVTPD2DQ	1	not lifted
+CVTPD2PS	63	not lifted
+CVTPS2DQ	31	not lifted
+CVTPS2PD	64	not lifted
+CVTTPS2DQ	11	not lifted
+EMMS	1	lowering refused
+MOVD	33	lowering refused
+MOVHPD	2	not lifted
+MOVQ	176	lowering refused
+PACKUSWB	13	lowering refused
+PADDSW	13	lowering refused
+PADDW	22	lowering refused
+PEXTRW	1	lowering refused
+PEXTRW	1	not lifted
+PMADDUBSW	5	lowering refused
+PMOVSXDQ	4	not lifted
+PMULHW	8	lowering refused
+PMULLW	8	lowering refused
+PSADBW	2	lowering refused
+PSHUFW	3	lowering refused
+PSRAW	8	lowering refused
+PSUBW	8	lowering refused
+PUNPCKHDQ	4	lowering refused
+PUNPCKHWD	4	lowering refused
+PUNPCKLBW	13	lowering refused
+PUNPCKLDQ	5	lowering refused
+PUNPCKLWD	5	lowering refused
+PXOR	5	lowering refused
+VADDPD	1	not lifted
+VADDSD	56	not lifted
+VADDSS	12	not lifted
+VANDNPD	2	not lifted
+VANDPD	6	not lifted
+VANDPS	2	not lifted
+VCOMISD	14	not lifted
+VCOMISS	8	not lifted
+VCVTDQ2PD	10	not lifted
+VCVTDQ2PS	2	not lifted
+VCVTPD2DQ	3	not lifted
+VCVTPS2PD	1	not lifted
+VCVTSD2SS	6	not lifted
+VCVTSI2SS	1	not lifted
+VCVTSS2SD	3	not lifted
+VCVTSS2SI	1	not lifted
+VCVTTPD2DQ	3	not lifted
+VDIVSD	5	not lifted
+VDIVSS	2	not lifted
+VFMADD132SD	2	not lifted
+VFMADD213SD	73	not lifted
+VFMADD213SS	4	not lifted
+VFMADD231SD	25	not lifted
+VFMADD231SS	2	not lifted
+VFMSUB213SD	6	not lifted
+VFMSUB213SS	3	not lifted
+VFNMADD132SD	3	not lifted
+VFNMADD213SD	1	not lifted
+VFNMADD231SD	8	not lifted
+VMOVAPD	47	not lifted
+VMOVAPS	7	not lifted
+VMOVD	18	not lifted
+VMOVDQA	22	not lifted
+VMOVDQU	2	not lifted
+VMOVQ	24	not lifted
+VMOVSD	52	not lifted
+VMOVSS	2	not lifted
+VMOVUPS	6	not lifted
+VMULPD	3	not lifted
+VMULSD	93	not lifted
+VMULSS	12	not lifted
+VORPD	3	not lifted
+VORPS	2	not lifted
+VPADDD	2	not lifted
+VPADDQ	3	not lifted
+VPAND	23	not lifted
+VPCMPEQB	3	not lifted
+VPCMPEQQ	2	not lifted
+VPCMPEQW	1	not lifted
+VPMOVMSKB	4	not lifted
+VPMOVSXDQ	2	not lifted
+VPOR	11	not lifted
+VPSHUFD	7	not lifted
+VPSLLD	2	not lifted
+VPSLLQ	3	not lifted
+VPSRAD	1	not lifted
+VPSRLD	2	not lifted
+VPSRLQ	5	not lifted
+VPSUBD	2	not lifted
+VPSUBQ	5	not lifted
+VPUNPCKLDQ	1	not lifted
+VPXOR	9	not lifted
+VSHUFPS	2	not lifted
+VSUBSD	49	not lifted
+VSUBSS	6	not lifted
+VUCOMISD	2	not lifted
+VUCOMISS	1	not lifted
+VUNPCKLPD	1	not lifted
+VXORPD	6	not lifted
+VXORPS	1	not lifted
+VZEROUPPER	5	not lifted

@@ -224,7 +224,7 @@ impl<'a> Hybrid<'a> {
         };
         let state_va = guest_runtime::layout::PROCESS_VA + guest_runtime::layout::STATE_OFF;
         let mut a = a64_encoder::assembler::Assembler::new(base);
-        let ends = translator::lower::compile_insn(
+        let ends = match translator::lower::compile_insn(
             &mut a,
             &ins,
             exit_va,
@@ -233,8 +233,15 @@ impl<'a> Hybrid<'a> {
             None,
             translator::lower::ALL_FLAGS,
             false,
-        )
-        .map_err(|e| format!("the Rust compiler: {e}"))?;
+        ) {
+            Ok(ends) => ends,
+            // a lowering the Rust refuses by name as a later group (Sprint 177: the MMX ops the one lifter emits) is the
+            // Python's, as a class the Rust does not lift is; any other refusal fails
+            Err(e) if e.to_string().contains("is a later group") => {
+                return self.fixture.compile(code, address, base, exit_va);
+            }
+            Err(e) => return Err(format!("the Rust compiler: {e}")),
+        };
         let words = a.finish();
         *self.rust.borrow_mut().entry(ins.iclass.clone()).or_default() += 1;
         if let Ok(python) = self.fixture.compile(code, address, base, exit_va)

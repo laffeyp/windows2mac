@@ -665,7 +665,7 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> Result<(u32, u32), Compi
         Op::Sse { ic, .. } => (0, if FLAGS_SSE.contains(&ic.as_str()) { ALL_FLAGS } else { 0 }),
         Op::Div { .. } => (ALL_FLAGS, ALL_FLAGS), // #DE before any write; every flag undefined after
         // FLAGS_ALL_READ (859): the model's steps read the whole state
-        Op::Ud | Op::Xgetbv | Op::X86 { .. } => (ALL_FLAGS, 0),
+        Op::Ud | Op::Xgetbv | Op::X86 { .. } | Op::X87 { .. } => (ALL_FLAGS, 0),
         // FLAGS_NONE (857-858)
         Op::Imm { .. }
         | Op::Addr { .. }
@@ -680,7 +680,8 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> Result<(u32, u32), Compi
         | Op::Cpuid
         | Op::Df { .. }
         | Op::Pause
-        | Op::Fcw { .. } => (0, 0),
+        | Op::Fcw { .. }
+        | Op::Mmx { .. } => (0, 0),
     })
 }
 
@@ -807,6 +808,13 @@ fn temps_read(op: &Op) -> Vec<Temp> {
         Op::Cx16 { addr } => vec![*addr],
         // ("sse", ic, dst, src, ...): its memory operands' addresses (1015-1016)
         Op::Sse { dst, src, .. } => [dst.addr(), src.addr()].into_iter().flatten().collect(),
+        // ("x87", ic, opcode, reg, st, mem): its address (1043-1044); ("mmx", ic, dst, src, imm): its memory operands'
+        // addresses (1045-1046) (Sprint 177)
+        Op::X87 { mem, .. } => match mem {
+            Some(Loc::M { addr, .. }) => vec![*addr],
+            _ => vec![],
+        },
+        Op::Mmx { dst, src, .. } => [dst.addr(), src.addr()].into_iter().flatten().collect(),
         // ("mxcsr", "st"|"ld", m32) and ("fcw", "st", m16): lowered in A64
         Op::Mxcsr {
             loc: Loc::M { addr, .. },
@@ -1180,6 +1188,9 @@ pub struct RuntimeCalls {
     pub cpuid: u64,
     pub pcmpistri: Option<u64>,
     pub approximate: Option<u64>,
+    /// `tools/guest_runtime/x87_fast.c`'s five functions, when the image defines `w2m_x87_fld64` (Sprint 177;
+    /// vm_backend 1663: `_x87_fast` runs only then): fld64, st0_double, fstp_commit, st0_exact, sqrt_commit
+    pub x87_fast: Option<[Option<u64>; 5]>,
 }
 
 impl RuntimeCalls {
@@ -1189,6 +1200,16 @@ impl RuntimeCalls {
             cpuid: symbol("w2m_cpuid").unwrap_or(0),
             pcmpistri: symbol("w2m_pcmpistri"),
             approximate: symbol("w2m_approximate"),
+            x87_fast: symbol("w2m_x87_fld64").map(|_| {
+                [
+                    "w2m_x87_fld64",
+                    "w2m_x87_st0_double",
+                    "w2m_x87_fstp_commit",
+                    "w2m_x87_st0_exact",
+                    "w2m_x87_sqrt_commit",
+                ]
+                .map(&symbol)
+            }),
         }
     }
 }
@@ -1813,6 +1834,95 @@ pub fn compile_insn(
             } => lower_sse(a, ic, dst, src, *align, *imm, &reg, &folded)?,
             // run by the model (hvc #11, 1665 and 1785): the profile's #UD, XGETBV, and the model's whole steps
             Op::Ud | Op::Xgetbv | Op::X86 { .. } => a.emit(&[a64::hvc(HVC_SLOW_STEP)]),
+            // ("x87", ...) (1663-1666; Sprint 177): `_x87_fast` (1349-1400) for FLD m64, FSTP m64 and FSQRT when the
+            // runtime defines its functions: a call into x87_fast.c, which answers 0 where the result is not exact,
+            // and the model step then; every other x87 form is the model step
+            Op::X87 {
+                ic,
+                opcode,
+                reg: modrm_reg,
+                st,
+                mem,
+            } => {
+                let form = match (ic.as_str(), *opcode, *modrm_reg, st, mem) {
+                    ("FLD", 0xDD, 0, None, Some(Loc::M { addr, .. })) => Some(("fld", Some(*addr))),
+                    ("FSTP", 0xDD, 3, None, Some(Loc::M { addr, .. })) => Some(("fstp", Some(*addr))),
+                    ("FSQRT", 0xD9, _, _, None) => Some(("fsqrt", None)),
+                    _ => None,
+                };
+                match (form, runtime.x87_fast) {
+                    (Some((form, addr)), Some(calls)) => {
+                        let symbol = |i: usize| {
+                            calls[i].ok_or_else(|| {
+                                CompileError(format!("x87_fast.c's function {i} not in the runtime's symbols"))
+                            })
+                        };
+                        let n = NATIVE_OPERANDS;
+                        // `call` (1367-1375): x0-x15 to the state block, x0 as `x0` sets it, the call on the
+                        // runtime's stack, its answer to x17, x0-x15 back
+                        let call = |a: &mut Assembler, va: u64, x0: &[u32]| {
+                            save_guest_registers(a, state_va);
+                            a.emit(x0);
+                            call_runtime(a, va);
+                            a.emit(&[a64::mov(17, 0)]);
+                            load_guest_registers(a, state_va);
+                        };
+                        let (slow, done) = (a.label(), a.label());
+                        match form {
+                            "fld" => {
+                                // the load first: its fault before any change
+                                let r = at(addr.unwrap_or_default(), &reg)?;
+                                a.emit(&[a64::ldr(8, 17, r, 0)]);
+                                call(a, symbol(0)?, &[a64::mov(0, 17)]);
+                                a.branch(|off| a64::cbz(17, off), slow);
+                            }
+                            "fstp" => {
+                                // the address, kept past the call (x30 is a temp)
+                                let r = at(addr.unwrap_or_default(), &reg)?;
+                                a.emit(&[a64::str(8, r, 28, n + 24)]);
+                                call(a, symbol(1)?, &[a64::addi(0, 28, n)]);
+                                a.branch(|off| a64::cbz(17, off), slow);
+                                // the store, which may fault, before the commit
+                                a.emit(&[
+                                    a64::ldr(8, 16, 28, n),
+                                    a64::ldr(8, 17, 28, n + 24),
+                                    a64::str(8, 16, 17, 0),
+                                ]);
+                                call(a, symbol(2)?, &[a64::ldr(8, 0, 28, n + 8)]);
+                            }
+                            _ => {
+                                call(a, symbol(3)?, &[a64::addi(0, 28, n)]);
+                                a.branch(|off| a64::cbz(17, off), slow);
+                                // FPSR kept: MXCSR's flags live there; x - r*r, exact
+                                a.emit(&[
+                                    a64::mrs(16, a64::FPSR),
+                                    a64::str(8, 16, 28, n + 16),
+                                    a64::ldr_v(8, 30, 28, n),
+                                    a64::fsqrt_scalar(8, 31, 30),
+                                    a64::fp_fused("fmsub", 8, 30, 31, 31, 30),
+                                    a64::str_v(8, 31, 28, n),
+                                    a64::str_v(8, 30, 28, n + 8),
+                                    a64::ldr(8, 16, 28, n + 16),
+                                    a64::msr(a64::FPSR, 16),
+                                ]);
+                                call(a, symbol(4)?, &[a64::addi(0, 28, n)]);
+                            }
+                        }
+                        a.branch(a64::b, done);
+                        a.bind(slow);
+                        a.emit(&[a64::hvc(HVC_SLOW_STEP)]);
+                        a.bind(done);
+                    }
+                    _ => a.emit(&[a64::hvc(HVC_SLOW_STEP)]),
+                }
+            }
+            // ("mmx", ...): `rules/_mmx.py`'s A64 lowering (1658-1660) is not ported; refused by name (Sprint 177)
+            Op::Mmx { ic, .. } => {
+                return Err(CompileError(format!(
+                    "mmx {ic} at 0x{:x}: the MMX lowering (rules/_mmx.py) is a later group",
+                    ins.address
+                )));
+            }
             Op::Mxcsr { store: st, loc } => {
                 let Loc::M { addr, .. } = loc else {
                     return Err(CompileError(format!("MXCSR to a register at 0x{:x}", ins.address)));
