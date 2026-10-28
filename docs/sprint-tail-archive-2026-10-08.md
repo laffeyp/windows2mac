@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 154 (2026-10-25, closed)
+- **Scope:** reviewer-2's review of Sprints 151-152: Medium 1 (a committed record deleted), Medium 2 (the C words judge skipping on CI), the ledger's three conditions, the lows, group 2's counts.
+- **Dual contract:** signal — none: no producer's events change, the records stand as Sprint 153 made them; artifact pass (fmt, clippy, the gates with the ledger check); observation pass (the restored record replays; the two plants named; DIV 47 and IDIV 48 judged at a fault through Rust words). The CI run of the closing commit is the measure of `c_words` on Linux.
+- **CI does not run:** the case runner's three tests, `case_runs` and its ledger check (macOS only). CI now runs `c_words`.
+- **Rubber Duck Pass:** *Observation 1 (a deletion that hid an error's record):* Sprint 152 removed the record that showed its own error; restored, it stands outside the readers with a note. Disposition: resolved-here. *Observation 2 (link 3's Blocking 1, again):* a new judge skipped where its tool was absent, as the case runner once did; the lesson KIT_DIARY #65 holds was not applied to the next judge written. Disposition: resolved-here (fails on a missing compiler).
+- **Closed:** Sprint 153's CI run 40183768136 (success on 0e667473e).
+- **Files:** store/superseded/, crates/translator/tests/c_words.rs, crates/w2m_vm/, scripts/gates.sh, signals/proposals.json, docs/rust-port-plan-2026-10-24.md, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-151-the-lifter-and-the-integer-core.md, sprints/sprint-154-a-record-kept-and-a-judge-on-ci.md, signal-reports/sprint-154-report.md.
+
 ### Sprint 153 (2026-10-25, closed)
 - **Scope:** link 5's second group in Rust: the rest of `_int.py`'s A64-lowered rules and `bmi.py`, with their lowering.
 - **Dual contract:** signal pass (four `case-runner-rust` sessions, 512 classes accepted over them, the Rust translator the candidate for 161; no discrepancy; the ledger empty); artifact pass (fmt, clippy, the gates); observation pass (1,096,154 record calls equal to the C, 65,624 cases agree with Windows, 9,264 case codes equal to the Python's; the plant named).
