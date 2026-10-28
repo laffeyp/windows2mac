@@ -620,7 +620,7 @@
 
 ## Sprint tail
 
-### Sprint 194 (2026-10-28, gates running)
+### Sprint 194 (2026-10-28, closed)
 - **Scope:** reviewer-2's Mediums 2-3 and Lows 1 and 3 of its review of Sprints 190-192: the stream judge holds what the Python's own runs hold fixed, the call in flight, and every file a build script reads
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 918 s, kept in `store/gates/passes.tsv` as sprint 194 at a553ed1fa with root=cab5aedf3; multi-vCPU tests passed in their stage, 3 of 3); observation pass (`store/batch_run/stream-varying-2026-10-28.tsv` holds rows 426 and 438, columns 9-12 (a4-a7), derived again by the test from the four Python runs; the call in flight at the stop, CreateProcessW with a0-a7 0, fffefe64, 0, 0, 1, 1000000020, 0, 0, equals the Python's row 16 in columns 0-12; plant 1 named "lacks row 438 column 12"; plant 2 named "row 16, the call in flight at the stop, differs from the Python batch run's"; plant 3 named "a build script reads ../../specs/x86_decode.json, which INPUTS does not name").
 - **CI does not run:** the batch run and the guests (Hypervisor.framework); CI runs `batch_run.rs`'s varying-cells derivation, which reads only tracked files, and `built_from`'s build-inputs test.
