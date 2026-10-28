@@ -580,7 +580,7 @@
 
 ## Sprint tail
 
-### Sprint 183 (2026-10-28, gates running)
+### Sprint 183 (2026-10-28, closed)
 - **Scope:** the model's VEX step: `_vex`, `_vex_cross` and `_fma` with YMM bits 255:128, judged by the case runner on sets 049 and 049b
 - **Dual contract:** signal — SESSION_INIT 4, CANDIDATE_GENERATED and COMPARISON_COMPLETED 578 each (268, 177, 107, 26; the first profile up 32, VEX classes now judged), CANDIDATE_ACCEPTED 576, CANDIDATE_REJECTED, REDUCTION_COMPLETED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED 2 each (FCOS and FSIN), SESSION_COMPLETED 4, as the card named; artifact pass (`scripts/gates.sh` exit 0 in 902 s, kept in `build/gates-passes.txt`: Rust tests all, the planted chain 34, Python gates 2,550 passed and 1 skipped, records 4 new with 0 violations); observation pass (25,475 VEX model cases judged with 0 difference classes, sets 049 and 049b's model counts 4,655 to 367 and 22,445 to 1,258; plant 1 named VADDSD's ymm0.hi; plant 2 named VFMADD213SD).
 - **CI does not run:** the case runner and `case_runs` (macOS only); CI runs the model's and `x86fp.rs`'s unit tests.
