@@ -527,6 +527,10 @@ fn missing_reports(root: &Path) -> Result<Vec<u32>, String> {
 /// The first sprint whose closed tail entry must name a passing run `scripts/gates.sh` kept (Sprint 179).
 const FIRST_GATES_HELD_SPRINT: u32 = 179;
 
+/// The first sprint whose closed tail entry must name a kept run of its own sprint, `gates.sh`'s fourth column (Sprint
+/// 184; reviewer-2's Medium 3 of its review of 178-181: a seconds count alone can match another sprint's run).
+const FIRST_GATES_BOUND_SPRINT: u32 = 184;
+
 /// The first sprint whose named plants must show their judge's failure in its result (Sprint 171).
 const FIRST_QUOTED_PLANT_SPRINT: u32 = 171;
 
@@ -625,7 +629,10 @@ fn unquoted_numbers(card: &str) -> Vec<u32> {
 
 /// BLACKBOARD tail entries headed "### Sprint NNN (<date>, closed)" whose card is not `status: done`, or which hold an
 /// unfilled GATES-LINE or CI-LINE (Sprint 176; reviewer-2's Medium 6 of 2026-10-28: Sprints 174 and 175 headed their
-/// entries closed before their gates exited).
+/// entries closed before their gates exited). An entry headed "closed-partial" needs its card `status: closed-partial`,
+/// and a Deferred entry tagged "(Sprint N, partial)" needs card N so (Sprint 184; reviewer-2's Medium 2 of its review of
+/// 178-181: Sprint 178 closed partial under a "closed" status). Without `build/gates-passes.txt` the gates rule fails,
+/// except under `CI=true`, where it is skipped and says so.
 fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
     let board = fs::read_to_string(root.join("BLACKBOARD.md")).map_err(|e| format!("BLACKBOARD.md: {e}"))?;
     let tail = board
@@ -640,22 +647,31 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
     let mut wrong = Vec::new();
     // the passing gates runs `scripts/gates.sh` keeps (Sprint 179); absent on CI and in a fresh clone
     let passes = fs::read_to_string(root.join("build/gates-passes.txt")).ok();
+    let on_ci = std::env::var("CI").as_deref() == Ok("true");
+    let mut gates_unread = false;
+    let card_status = |n: u32| -> Result<Option<String>, String> {
+        let prefix = format!("sprint-{n:03}-");
+        match cards.iter().find(|(name, _)| name.starts_with(&prefix)) {
+            Some((_, path)) => Ok(fs::read_to_string(path)
+                .map_err(|e| e.to_string())?
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("status: ").map(str::to_string))),
+            None => Ok(None),
+        }
+    };
+    let card_done = |n: u32| -> Result<bool, String> { Ok(card_status(n)?.as_deref() == Some("done")) };
     for entry in tail.split("\n### Sprint ").skip(1) {
         let (head, body) = entry.split_once('\n').unwrap_or((entry, ""));
         let Some(n) = head.get(..3).and_then(|d| d.parse::<u32>().ok()) else {
             continue;
         };
-        let card_done = |n: u32| -> Result<bool, String> {
-            let prefix = format!("sprint-{n:03}-");
-            match cards.iter().find(|(name, _)| name.starts_with(&prefix)) {
-                Some((_, path)) => Ok(fs::read_to_string(path)
-                    .map_err(|e| e.to_string())?
-                    .lines()
-                    .any(|l| l.trim() == "status: done")),
-                None => Ok(false),
-            }
-        };
-        if !head.ends_with(", closed)") {
+        let partial = head.ends_with(", closed-partial)");
+        if partial && card_status(n)?.as_deref() != Some("closed-partial") {
+            wrong.push(format!(
+                "sprint {n:03}: its tail entry is headed closed-partial and its card is not closed-partial"
+            ));
+        }
+        if !head.ends_with(", closed)") && !partial {
             // a card marked done before its tail entry is headed closed (Sprint 179; reviewer-2's Medium 3)
             if card_done(n)? {
                 wrong.push(format!(
@@ -665,23 +681,39 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
             continue;
         }
         let body = body.split("\n\n").next().unwrap_or("");
-        // a closed entry's gates line names a run `gates.sh` kept (from Sprint 179)
-        if n >= FIRST_GATES_HELD_SPRINT
-            && let Some(passes) = &passes
-        {
-            let named = body.find("exit 0 in ").and_then(|i| {
-                let rest = &body[i + "exit 0 in ".len()..];
-                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-                (!digits.is_empty() && rest[digits.len()..].starts_with(" s")).then(|| format!("exit 0 in {digits} s"))
-            });
-            match named {
-                Some(run) if passes.lines().any(|l| l.split('\t').next() == Some(run.as_str())) => {}
-                Some(run) => wrong.push(format!(
-                    "sprint {n:03}: its tail entry names \"{run}\", which build/gates-passes.txt does not hold"
-                )),
-                None => wrong.push(format!(
-                    "sprint {n:03}: its tail entry names no gates run (\"exit 0 in N s\")"
-                )),
+        // a closed entry's gates line names a run `gates.sh` kept (from Sprint 179), of its own sprint (from 184)
+        if n >= FIRST_GATES_HELD_SPRINT {
+            match &passes {
+                None => gates_unread = true,
+                Some(passes) => {
+                    let named = body.find("exit 0 in ").and_then(|i| {
+                        let rest = &body[i + "exit 0 in ".len()..];
+                        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                        (!digits.is_empty() && rest[digits.len()..].starts_with(" s"))
+                            .then(|| format!("exit 0 in {digits} s"))
+                    });
+                    let sprint = format!("sprint {n:03}");
+                    let kept = |run: &str| {
+                        passes.lines().any(|l| {
+                            let cols: Vec<&str> = l.split('\t').collect();
+                            cols.first() == Some(&run)
+                                && (n < FIRST_GATES_BOUND_SPRINT || cols.get(3) == Some(&sprint.as_str()))
+                        })
+                    };
+                    match named {
+                        Some(run) if kept(&run) => {}
+                        Some(run) if n >= FIRST_GATES_BOUND_SPRINT && kept_any(passes, &run) => wrong.push(format!(
+                            "sprint {n:03}: its tail entry names \"{run}\", which build/gates-passes.txt holds for \
+                             another sprint"
+                        )),
+                        Some(run) => wrong.push(format!(
+                            "sprint {n:03}: its tail entry names \"{run}\", which build/gates-passes.txt does not hold"
+                        )),
+                        None => wrong.push(format!(
+                            "sprint {n:03}: its tail entry names no gates run (\"exit 0 in N s\")"
+                        )),
+                    }
+                }
             }
         }
         for token in ["GATES-LINE", "CI-LINE"] {
@@ -691,13 +723,37 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                 ));
             }
         }
-        if !card_done(n)? {
+        if !partial && !card_done(n)? {
             wrong.push(format!(
                 "sprint {n:03}: its tail entry is headed closed and its card is not done"
             ));
         }
     }
+    if gates_unread {
+        if on_ci {
+            println!("gates-passes: skipped (CI)");
+        } else {
+            wrong.push("build/gates-passes.txt does not exist: no closed entry's gates run can be read".to_string());
+        }
+    }
+    // a Deferred entry tagged "(Sprint N, partial)" names a partial close (Sprint 184)
+    let deferred = section(&board, "## Deferred");
+    for piece in deferred.split("(Sprint ").skip(1) {
+        let Some(n) = piece.split_once(", partial)").and_then(|(d, _)| d.parse::<u32>().ok()) else {
+            continue;
+        };
+        if card_status(n)?.as_deref() != Some("closed-partial") {
+            wrong.push(format!(
+                "sprint {n:03}: a Deferred entry names it partial and its card is not closed-partial"
+            ));
+        }
+    }
     Ok(wrong)
+}
+
+/// Whether `build/gates-passes.txt` holds a run of these seconds for any sprint.
+fn kept_any(passes: &str, run: &str) -> bool {
+    passes.lines().any(|l| l.split('\t').next() == Some(run))
 }
 
 fn run() -> Result<bool, String> {

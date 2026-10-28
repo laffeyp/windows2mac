@@ -81,3 +81,31 @@ Each check the review named holds what its name says, and each plant fails it.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the judges' inputs.
+
+## result
+
+- **The runtime image's symbols:** `zero_halfword_addresses_are_held_not_avoided` reads `image.symbols` from
+  `guest_runtime::build(root, runtime_defines(), RUNTIME_IMAGE_VA)`, the call `case_runtime_calls` makes. The image of
+  2026-10-28 holds one symbol with a zero halfword below bit 48, `a64_movz` at 0x7f0004170000, the in-VM compiler's
+  encoder, which is not among `vmc_symbol_name`'s 8 runtime calls; the record's header, an older image, had
+  `w2m_approximate` at 0x7f0004060000. The held list now names `a64_movz`; the x87 count holds at 10 of 24.
+- **Closed-partial:** `closed_too_early` takes a "closed-partial" heading only over a `closed-partial` card, applies
+  the unfilled-line checks to it, and requires `closed-partial` of each sprint a Deferred entry tags "(Sprint N,
+  partial)"; over the tree, Sprint 178 passes both. KIT_DIARY #72 records H5's recurrence and the rule that a card
+  claiming the translator lifts N classes quotes the lift's per-class output first; #73 the check; #74 the binary.
+- **The gates' run bound:** `gates.sh` reads at its start the sprint (the newest `status: active` card), HEAD and the
+  sha256 of `git diff HEAD`, and appends them to each kept line as columns 4-6. From Sprint 184 `--check` matches a
+  closed entry's "exit 0 in N s" to a line of its own sprint, names a run kept for another sprint as such, fails when
+  `build/gates-passes.txt` is absent, and under `CI=true` prints "gates-passes: skipped (CI)".
+- **`x86_address_at` as bisect_right:** `recon_lookup` takes the first RECON_COUNT entries as `[u8; 16]` chunks and
+  `partition_point`s them against (pc, M64), as `bisect_right(pc_map, (pc, M64)) - 1`; unit tests hold tied hosts, a pc
+  below the first entry and a truncated count.
+- **Plant 1** (`a64_movz` removed from the held list): `c_words` failed, "runtime-symbols-zero-halfword-2026-10-28.tsv
+  holds "symbol\taddress\n", now "symbol\taddress\na64_movz\t0x7f0004170000\n"". Restored.
+- **Plant 2** (the sprint match dropped from `--check`, any fourth column accepted): `a_closed_entry_needs_a_gates_run_
+  of_its_own_sprint` failed, "assertion `left == right` failed left: Some(0) right: Some(1)": `--check` passed an entry
+  naming Sprint 200's run. Restored byte for byte.
+- **Plant 3** (the first of tied entries taken): `tied_hosts_give_the_last_entry` failed, "assertion `left == right`
+  failed left: 4100 right: 4103" (0x1004 for 0x1007). Restored byte for byte.
+- **Departures:** the card's expected `--check` span was Sprints 171-183; the tail now holds 175-184. Every multi-line
+  edit used the Edit tool.

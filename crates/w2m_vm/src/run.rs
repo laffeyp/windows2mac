@@ -145,15 +145,24 @@ pub enum Stop {
 /// when none is (Sprint 181).
 pub fn x86_address_at(mem: &[u8], pc: u64) -> u64 {
     use guest_runtime::layout::{RECON_COUNT, RECON_TABLE, RUN_TABLE};
-    let n = read_u64(mem, RUN_TABLE + RECON_COUNT);
-    (0..n)
-        .map(|i| {
-            let at = RECON_TABLE + 16 * i;
-            (read_u64(mem, at), read_u64(mem, at + 8))
-        })
-        .filter(|(host, _)| *host <= pc)
-        .max()
-        .map_or(0, |(_, x86)| x86)
+    recon_lookup(mem, RECON_TABLE, read_u64(mem, RUN_TABLE + RECON_COUNT), pc)
+}
+
+/// `bisect_right(pc_map, (pc, M64)) - 1` over the first `n` (host, x86) entries at `table`, kept sorted as the code
+/// cache grows (vm_backend 4626-4628): the x86 address of the last entry whose host address is at or below `pc`, 0
+/// below the first (Sprint 184).
+fn recon_lookup(mem: &[u8], table: u64, n: u64, pc: u64) -> u64 {
+    let (entries, _) = mem[table as usize..(table + 16 * n) as usize].as_chunks::<16>();
+    let entry = |e: &[u8; 16]| {
+        (
+            u64::from_le_bytes(e[..8].try_into().unwrap()),
+            u64::from_le_bytes(e[8..].try_into().unwrap()),
+        )
+    };
+    match entries.partition_point(|e| entry(e) <= (pc, u64::MAX)) {
+        0 => 0,
+        i => entry(&entries[i - 1]).1,
+    }
 }
 
 /// The instruction bytes at guest `rip` for the model's lifter: up to 15 bytes of mapped memory, then 16 zeros, as
@@ -652,4 +661,40 @@ fn run(
         out.runtime_word = read_runtime_word(guest.memory.as_slice()); // Sprint 164: read once, at the stop
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::recon_lookup;
+
+    /// A table of (host, x86) entries at offset 0, as RECON_TABLE holds them.
+    fn table(entries: &[(u64, u64)]) -> Vec<u8> {
+        entries
+            .iter()
+            .flat_map(|(h, x)| h.to_le_bytes().into_iter().chain(x.to_le_bytes()))
+            .collect()
+    }
+
+    /// Two marks at one host address (a block's first instruction emits no words): bisect_right takes the last.
+    #[test]
+    fn tied_hosts_give_the_last_entry() {
+        let t = table(&[(0x100, 0x1000), (0x110, 0x1004), (0x110, 0x1007), (0x120, 0x100a)]);
+        assert_eq!(recon_lookup(&t, 0, 4, 0x110), 0x1007);
+        assert_eq!(recon_lookup(&t, 0, 4, 0x11c), 0x1007);
+        assert_eq!(recon_lookup(&t, 0, 4, 0x120), 0x100a);
+    }
+
+    #[test]
+    fn a_pc_below_the_first_entry_gives_zero() {
+        let t = table(&[(0x100, 0x1000), (0x110, 0x1004)]);
+        assert_eq!(recon_lookup(&t, 0, 2, 0xfc), 0);
+    }
+
+    /// Entries past RECON_COUNT are not yet published (vm_backend 4855-4859) and are not read.
+    #[test]
+    fn entries_past_the_count_are_not_read() {
+        let t = table(&[(0x100, 0x1000), (0x110, 0x1004), (0x120, 0x100a)]);
+        assert_eq!(recon_lookup(&t, 0, 2, 0x130), 0x1004);
+        assert_eq!(recon_lookup(&t, 0, 0, 0x130), 0);
+    }
 }

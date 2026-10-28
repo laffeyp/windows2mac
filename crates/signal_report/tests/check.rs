@@ -35,13 +35,26 @@ fn scratch_with_tail(name: &str, cards: &[(&str, &str)], reports: &[&str], tail:
 }
 
 fn check(root: &PathBuf) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_signal_report"))
-        .args(["--check", "--root"])
-        .arg(root)
-        .output()
-        .unwrap();
+    let (code, stderr, _) = check_on(root, false);
+    (code, stderr)
+}
+
+/// `--check` with `CI` set to "true" or removed (CI itself sets it): the exit code, stderr and stdout.
+fn check_on(root: &PathBuf, ci: bool) -> (Option<i32>, String, String) {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_signal_report"));
+    cmd.args(["--check", "--root"]).arg(root);
+    if ci {
+        cmd.env("CI", "true");
+    } else {
+        cmd.env_remove("CI");
+    }
+    let out = cmd.output().unwrap();
     let _ = fs::remove_dir_all(root);
-    (out.status.code(), String::from_utf8_lossy(&out.stderr).to_string())
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_string(),
+    )
 }
 
 #[test]
@@ -83,7 +96,9 @@ fn a_tail_entry_closed_before_its_card_or_its_gates_fails() {
         "\n### Sprint 201 (2026-10-28, closed)\n- **Dual contract:** artifact pass (GATES-LINE).\n\n\
          ### Sprint 200 (2026-10-28, closed)\n- **Dual contract:** artifact pass (gates exit 0).\n",
     );
-    let (code, stderr) = check(&root);
+    // on CI, where `build/gates-passes.txt` is never written (Sprint 184)
+    let (code, stderr, stdout) = check_on(&root, true);
+    assert!(stdout.contains("gates-passes: skipped (CI)"), "{stdout}");
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
@@ -115,5 +130,67 @@ fn a_done_card_needs_a_closed_tail_naming_a_kept_gates_run() {
         stderr.trim(),
         "sprint 201: its card is done and its tail entry is not headed closed\n\
          sprint 200: its tail entry names \"exit 0 in 912 s\", which build/gates-passes.txt does not hold"
+    );
+}
+
+/// Sprint 184's plant 2 (reviewer-2's Medium 3 of its review of 178-181): from Sprint 184 a closed entry's gates run
+/// must be its own sprint's; a run of the same seconds kept for another sprint fails, and no kept file fails locally.
+#[test]
+fn a_closed_entry_needs_a_gates_run_of_its_own_sprint() {
+    let tail = "\n### Sprint 201 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 909 s).\n\n\
+                ### Sprint 200 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 912 s).\n";
+    let cards = [("sprint-200-x.md", "done"), ("sprint-201-y.md", "done")];
+    let reports = ["sprint-200-report.md", "sprint-201-report.md"];
+    let root = scratch_with_tail("bound", &cards, &reports, tail);
+    fs::create_dir_all(root.join("build")).unwrap();
+    fs::write(
+        root.join("build/gates-passes.txt"),
+        "exit 0 in 909 s\tdefault\t2026-10-28T07:00:00Z\tsprint 200\tabc\tdef\n\
+         exit 0 in 912 s\tdefault\t2026-10-28T06:00:00Z\tsprint 200\tabc\tdef\n",
+    )
+    .unwrap();
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 201: its tail entry names \"exit 0 in 909 s\", which build/gates-passes.txt holds for another sprint"
+    );
+    let root = scratch_with_tail("unkept", &cards, &reports, tail);
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "build/gates-passes.txt does not exist: no closed entry's gates run can be read"
+    );
+}
+
+/// Sprint 184 (reviewer-2's Medium 2 of its review of 178-181): "closed-partial" heads only a `closed-partial` card,
+/// and a Deferred entry tagged "(Sprint N, partial)" needs card N `closed-partial`.
+#[test]
+fn a_partial_close_needs_its_cards_status() {
+    let root = scratch_with_tail(
+        "partial",
+        &[
+            ("sprint-170-a.md", "done"),
+            ("sprint-171-b.md", "closed-partial"),
+            ("sprint-172-c.md", "done"),
+        ],
+        &["sprint-170-report.md", "sprint-172-report.md"],
+        "",
+    );
+    fs::write(
+        root.join("BLACKBOARD.md"),
+        "# BLACKBOARD\n\n## Deferred\n\n- **2026-10-28 (Sprint 172, partial)** — a class left.\n\
+         - **2026-10-28 (Sprint 171, partial)** — another.\n\n## Sprint tail\n\n\
+         ### Sprint 171 (2026-10-28, closed-partial)\n- **Dual contract:** observation partial.\n\n\
+         ### Sprint 170 (2026-10-28, closed-partial)\n- **Dual contract:** observation partial.\n",
+    )
+    .unwrap();
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 170: its tail entry is headed closed-partial and its card is not closed-partial\n\
+         sprint 172: a Deferred entry names it partial and its card is not closed-partial"
     );
 }

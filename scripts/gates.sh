@@ -13,6 +13,11 @@
 set -eu
 cd "$(dirname "$0")/.."
 gates_start=$(date +%s)
+# the tree this run tests, read at its start: the sprint (the newest card with `status: active`), HEAD, and the sha256
+# of `git diff HEAD` (Sprint 184; reviewer-2's Medium 3 of its review of 178-181)
+gates_sprint=$(grep -l '^status: active$' sprints/sprint-*.md | sort | tail -1 | sed -E 's|.*/sprint-([0-9]{3})-.*|\1|')
+gates_head=$(git rev-parse HEAD)
+gates_diff=$(git diff HEAD | shasum -a 256 | cut -c1-64)
 # rustup installs cargo in ~/.cargo/bin, which a non-login shell may not have on its PATH (Sprint 126: the gates failed
 # with "cargo: command not found")
 [ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
@@ -194,5 +199,7 @@ echo "gates: all passed"
 # each passing run is kept, so `signal_report --check` can find the run a closed tail entry's gates line names
 # (Sprint 179; reviewer-2's Medium 3 of its review of 175-177: the close check read tokens, not the gates' state)
 mkdir -p build
-printf 'exit 0 in %s s\t%s\t%s\n' "$(( $(date +%s) - gates_start ))" "$([ $all = 1 ] && echo all || echo default)" \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> build/gates-passes.txt
+# (Sprint 184: the run's sprint, HEAD and diff sha256 follow, the sprint matched by `--check` from Sprint 184)
+printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\n' "$(( $(date +%s) - gates_start ))" \
+  "$([ $all = 1 ] && echo all || echo default)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$gates_sprint" "$gates_head" \
+  "$gates_diff" >> build/gates-passes.txt

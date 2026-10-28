@@ -297,7 +297,9 @@ fn held_census(file: &str, text: &str) -> Option<String> {
 /// for a three-word address while `a64_mov_imm` skips a zero halfword, so at an address with one the C's words for
 /// x87_fast.c's calls are wrong and the Rust's, branching by label as the Python does, are not. This pass gives the
 /// five a zero-halfword address and holds how many x87 calls' C words differ from the Rust's; and it holds which of the
-/// record's runtime symbols have a zero halfword below bit 48 (`w2m_approximate` at 0x7f0004060000).
+/// symbols of the runtime image the build makes have a zero halfword below bit 48 (Sprint 184: the record's header,
+/// an older image, had `w2m_approximate` at 0x7f0004060000; the image of 2026-10-28 has `a64_movz`, the in-VM
+/// compiler's encoder, which translated code does not call).
 #[test]
 fn zero_halfword_addresses_are_held_not_avoided() {
     let c_compile = load();
@@ -362,11 +364,14 @@ fn zero_halfword_addresses_are_held_not_avoided() {
         }
     }
     println!("x87 calls at zero-halfword addresses: {x87_calls}; their C words differing from the Rust's: {differing}");
-    let mut zero: Vec<String> = head["symbols"]
-        .as_object()
-        .unwrap()
+    // the runtime image the build makes, as the case runner's `case_runtime_calls` reads it (Sprint 184; reviewer-2's
+    // Medium 1 of its review of 178-181: the record's header is the image of the run that made it)
+    use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
+    let (_, image) = guest_runtime::build(&root(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+    let mut zero: Vec<String> = image
+        .symbols
         .iter()
-        .filter_map(|(k, v)| v.as_u64().map(|v| (k, v)))
+        .map(|(k, v)| (k, *v))
         .filter(|(_, v)| [0, 16, 32].iter().any(|s| v >> s & 0xFFFF == 0))
         .map(|(k, v)| format!("{k}\t0x{v:x}"))
         .collect();

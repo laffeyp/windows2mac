@@ -738,3 +738,24 @@ planted samples' ProducerFailed event since 162. Against it: the checks are youn
 **Kit change suggested:** a lesson the Rubber Duck Pass records as a class (`disposition: recorded`) names the check
 that would catch its next instance, or says why none can be written; a second recurrence of a recorded class makes
 the check the next card.
+
+### 2026-10-28 — Sprints 178-183: a coverage claim in a card's prose, and a close status the check did not read
+
+**Finding (#72):** H5 recurred as a coverage claim. Sprint 178's card said the translator lifts the 67 legacy classes
+the model would step; it lifted 40, and the sprint closed partial. The routes were read before the card and the lift
+was not. Sprint 180's card was drawn the same way, from the lowering's text, and held, but only because its count was
+checked by `c_words` before the commit. Rule: a card that claims the translator lifts N classes quotes the lift's
+per-class output (the C words judge's census, or the case runner's "to the model, not judged" line) before its
+commit. Sprint 183's card followed it, and its result names by class the 5,114 cases the model still does not step.
+
+**Finding (#73):** a partial close was recorded in prose only. Sprint 178's tail entry said "observation partial" under
+a "closed" heading and a `status: done` card until reviewer-2's review of 178-181 caught it. Sprint 184 makes it a
+check: `signal_report --check` takes a "closed-partial" heading only over a `closed-partial` card, and requires that
+status of a sprint a Deferred entry tags "(Sprint N, partial)". H5 holds: the rule went into code once it recurred.
+
+**Finding (#74):** a gate's line must name the tree it ran on. From Sprint 179 a closed entry's gates line matched a
+kept run by its seconds alone, which another sprint's run of the same length could meet. From Sprint 184 `gates.sh`
+keeps the sprint, HEAD and the diff's sha256 with each pass, and `--check` matches the sprint. Sprint 183 showed the
+same class from the other side: its first four records were written by a `case_runs` binary that a planted fault's
+test build had relinked, though the source was clean. A restore is done when the binaries the next step runs are
+rebuilt, not when the source compares equal.
