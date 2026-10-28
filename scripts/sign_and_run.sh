@@ -7,5 +7,16 @@
 set -eu
 binary=$1
 shift
-codesign -s - -f --entitlements "$(dirname "$0")/../tools/vm_monitor/entitlements.plist" "$binary" 2> /dev/null
+# Signed once, under a lock: cargo-nextest runs a test binary in many processes at once (its two listings, then a
+# process a test), and `codesign -f` on a file another process is signing or running failed 11 of 20 such runs
+# (Sprint 168). A binary that already holds the entitlement is run as it is.
+signed() { codesign -d --entitlements - "$binary" 2> /dev/null | grep -q com.apple.security.hypervisor; }
+if ! signed; then
+  lock="$binary.signing"
+  until mkdir "$lock" 2> /dev/null; do sleep 0.05; done
+  trap 'rmdir "$lock"' EXIT
+  signed || codesign -s - -f --entitlements "$(dirname "$0")/../tools/vm_monitor/entitlements.plist" "$binary" 2> /dev/null
+  rmdir "$lock"
+  trap - EXIT
+fi
 exec "$binary" "$@"
