@@ -56,7 +56,14 @@ planted=$(mktemp -d)/vocabulary-samples-planted
 if uv run substrate run --file harness/vocabulary-samples-planted.toml --root "$planted" --strict > /dev/null 2>&1; then
   echo "gates: the planted sample was accepted"; exit 1
 fi
-uv run substrate tail "$planted" --format jsonl --no-follow | grep -q "vocab_version" || { echo "gates: the planted failure does not name vocab_version"; exit 1; }
+# the failure itself, not the record's start, which names vocab_version in its config (Sprint 162 found the check read it)
+uv run substrate tail "$planted" --format jsonl --no-follow | grep '"kind":"substrate.ProducerFailed"' | grep -q "vocab_version" || { echo "gates: the planted failure does not name vocab_version"; exit 1; }
+# the planted metric: a value vocabulary 0.11 does not name, refused by substrate as by the Rust type (Sprint 162)
+planted=$(mktemp -d)/vocabulary-samples-planted-metric
+if uv run substrate run --file harness/vocabulary-samples-planted-metric.toml --root "$planted" --strict > /dev/null 2>&1; then
+  echo "gates: the planted metric was accepted"; exit 1
+fi
+uv run substrate tail "$planted" --format jsonl --no-follow | grep '"kind":"substrate.ProducerFailed"' | grep -q "Invalid enum value 'exit_ns_p95'" || { echo "gates: the planted failure does not name the metric value"; exit 1; }
 python3 scripts/check_vocab.py
 python3 scripts/gen_events.py --check
 python3 scripts/gen_decoder.py --check

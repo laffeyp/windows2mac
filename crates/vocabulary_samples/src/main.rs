@@ -18,11 +18,12 @@ use vocabulary_generator::{load_current, sample_payload};
 
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let (mut root, mut plant) = (PathBuf::from("."), false);
+    let (mut root, mut plant, mut plant_metric) = (PathBuf::from("."), false, false);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--root" => root = args.next().map(PathBuf::from).ok_or("--root needs a directory")?,
             "--plant-trailing-newline" => plant = true,
+            "--plant-unknown-metric" => plant_metric = true,
             other => return Err(format!("unknown argument {other}")),
         }
     }
@@ -31,6 +32,24 @@ fn run() -> Result<(), String> {
     io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
     let vocab = load_current(&root)?;
     let mut out = io::stdout().lock();
+    if plant_metric {
+        // Sprint 162: a MEASUREMENT_RECORDED whose metric the vocabulary does not name; its Rust type must refuse it,
+        // and the line, written past the type, substrate's schema must refuse too
+        let tag = vocab
+            .harness_tags()
+            .find(|t| t.name == "MEASUREMENT_RECORDED")
+            .ok_or("no MEASUREMENT_RECORDED")?;
+        let mut payload = sample_payload(tag, true, &vocab);
+        payload.insert("metric".to_string(), Value::from("exit_ns_p95"));
+        let payload = Value::Object(payload);
+        match HarnessEvent::from_kind("MEASUREMENT_RECORDED", &payload) {
+            Ok(_) => return Err("the Rust type accepted metric exit_ns_p95".into()),
+            Err(e) => eprintln!("vocabulary_samples: the Rust type refuses the plant: {e}"),
+        }
+        let line = format!("{{\"kind\": \"MEASUREMENT_RECORDED\", \"payload\": {payload}}}");
+        writeln!(out, "{line}").map_err(|e| e.to_string())?;
+        return out.flush().map_err(|e| e.to_string());
+    }
     if plant {
         let tag = vocab
             .harness_tags()
@@ -51,6 +70,19 @@ fn run() -> Result<(), String> {
             let event = HarnessEvent::from_kind(&tag.name, &payload).map_err(|e| e.to_string())?;
             writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
         }
+    }
+    // every `metric` value once more, so each one the vocabulary admits (P24's among them, Sprint 162) is read and
+    // written by MEASUREMENT_RECORDED's type and met by substrate's schema
+    let measurement = vocab
+        .harness_tags()
+        .find(|t| t.name == "MEASUREMENT_RECORDED")
+        .ok_or("no MEASUREMENT_RECORDED")?;
+    for metric in vocab.enums.get("metric").ok_or("no metric enum")? {
+        let mut payload = sample_payload(measurement, true, &vocab);
+        payload.insert("metric".to_string(), Value::from(metric.as_str()));
+        let event =
+            HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
+        writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
     }
     out.flush().map_err(|e| e.to_string())
 }

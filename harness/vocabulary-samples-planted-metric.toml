@@ -1,0 +1,20 @@
+# The planted fault of Sprint 162: a MEASUREMENT_RECORDED whose metric, exit_ns_p95, vocabulary 0.11 does not name.
+# The Rust type refuses it (the program says so on standard error and writes the line past the type), and substrate's
+# generated schema must refuse the line; the gates expect the Producer failed, naming the field.
+# Run from the repository root after `cargo build --release` (the command is the release binary):
+#   uv run substrate run --file harness/vocabulary-samples-planted-metric.toml
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.11"
+
+[[producer]]
+kind = "vocabulary_samples_planted_metric"
+command = ["../target/release/vocabulary_samples", "--root", "..", "--plant-unknown-metric"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "vocabulary_samples_planted_metric"
+
+[termination]
+recipe = "all_completed"

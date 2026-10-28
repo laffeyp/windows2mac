@@ -381,6 +381,23 @@
    "rationale": "The case runner's comparisons name the Windows runs' GitHub ids as their reference and the session as their target; no execution event on the record carries either, as differential.py's records (vm-oracle-<run>) did not. The tag's note says both are execution ids.",
    "status": "open",
    "revisit": "with P22"
+  },
+  {
+   "id": "P24",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "metric += exit_ns_p50, exit_ns_p99, runtime_word_hold_ns_p50, runtime_word_hold_ns_p99, runtime_word_wait_ns_p50, runtime_word_wait_ns_p99, wfe_exits"
+   ],
+   "source": "docs/rust-port-plan-2026-10-24.md step 3 (\"It measures what the design left to measurement: an exit's time, the runtime word's hold times, whether a guest WFE exits\"); reviewer-2's review of Sprints 155-161 (2026-10-27), High 1 and Medium 2; Decision 2026-10-27 (agent-resolved, link 5 and step 4); sprints/sprint-162-vocabulary-0-11.md",
+   "rationale": "Step 3's three measurements have no metric: an exit's time was sampled once (Sprint 142, 3,667 ns) and reported in a card, the runtime word's hold and wait times and a guest WFE's exit never, and no Rust code records a measurement. Seven values: an exit's time from the vCPU's exit to its next run, the runtime word's (RUN_TABLE + RUNTIME_LOCK, vm_backend.py 518) hold and wait per taking, each as the median and the 99th percentile over a run, as frame_time_ms_p50 and frame_time_ms_p99 are, the exit kind in the variant field as P20's vm_exits; and wfe_exits, the WFE or WFI traps a run took (ESR EC 0x01), 0 saying a guest WFE does not exit. The samples run emits each value in the sprint that adds it; Sprint 163 measures them.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-10-27",
+    "by": "agent-resolved",
+    "into": "0.11",
+    "grounds": "project — the plan's step 3 text, Decision 2026-10-24 (the host design's revisit conditions: the run-table word busy over 5% or a p99 wait over 10 µs), v0.2 §3.1 (performance numbers kept apart from acceptance); SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2; practice — a distribution reported as its quantiles with a label for its dimension (Prometheus naming practice, as P19 and P20)"
+   }
   }
  ]
 }

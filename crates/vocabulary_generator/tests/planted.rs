@@ -93,7 +93,7 @@ fn a_hand_written_crate_naming_a_deprecated_tag_fails_check_naming_both() {
     assert_eq!(out.status.code(), Some(1));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr).trim(),
-        "crates/planted/src/lib.rs: names GUEST_THREAD_EXITED, deprecated in vocabulary 0.10"
+        "crates/planted/src/lib.rs: names GUEST_THREAD_EXITED, deprecated in vocabulary 0.11"
     );
 }
 

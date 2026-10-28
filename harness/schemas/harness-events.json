@@ -215,7 +215,7 @@
     },
     "MEASUREMENT_RECORDED": {
       "measurement_id": {"type": "str", "min_length": 1},
-      "metric": {"type": "str", "enum": ["install_seconds", "cold_launch_seconds", "warm_launch_seconds", "frame_time_ms_p50", "frame_time_ms_p99", "compile_critical_path_ms", "copied_bytes", "dispatch_ns", "ordering_ops", "cpu_gpu_wait_ms", "invalidation_count", "ns_per_access", "vm_compile_blocks", "instructions_retired", "pause_instructions", "instructions_per_second", "run_seconds", "vm_exits", "thread_switches", "thread_wakes", "load_average"]},
+      "metric": {"type": "str", "enum": ["install_seconds", "cold_launch_seconds", "warm_launch_seconds", "frame_time_ms_p50", "frame_time_ms_p99", "compile_critical_path_ms", "copied_bytes", "dispatch_ns", "ordering_ops", "cpu_gpu_wait_ms", "invalidation_count", "ns_per_access", "vm_compile_blocks", "instructions_retired", "pause_instructions", "instructions_per_second", "run_seconds", "vm_exits", "thread_switches", "thread_wakes", "load_average", "exit_ns_p50", "exit_ns_p99", "runtime_word_hold_ns_p50", "runtime_word_hold_ns_p99", "runtime_word_wait_ns_p50", "runtime_word_wait_ns_p99", "wfe_exits"]},
       "value": {"type": "float"},
       "unit": {"type": "str"},
       "phase": {"type": "str", "enum": ["installation", "cold_launch", "warm_launch", "sustained", "discovery", "update"]},
