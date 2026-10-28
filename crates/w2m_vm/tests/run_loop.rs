@@ -206,6 +206,38 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
     }
 }
 
+/// Sprint 181: `model_steps.exe` reaches the model, CMPSS by hvc #10 and RCR (with its STC) by hvc #11, and the run loop
+/// serves them through `model_step`, the function the case runner judges; the run ends as the frozen Python host's
+/// (`build/run_loop/model-steps-python.json`): its stop, its output and its model exits.
+#[test]
+fn model_steps_runs_through_the_model_as_the_python_host() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let Some(python) = fixture(&root, "model-steps") else {
+        return;
+    };
+    let (loaded, mut guest) = guest_for(&root, "model_steps");
+    let mut host = HostCompiler::default();
+    let out = run(&mut guest, &loaded, &mut host);
+    println!("stop: {:?}", out.stop);
+    println!("exits: {:?}", out.exits);
+    println!("stdout: {:?}", String::from_utf8_lossy(&guest.stdout));
+    assert_eq!(python["stop"], "ExitProcess");
+    assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
+    assert_eq!(
+        String::from_utf8_lossy(&guest.stdout),
+        python["stdout"].as_str().unwrap(),
+        "the output differs from the Python host's"
+    );
+    for number in [10u16, 11] {
+        assert_eq!(
+            out.exits.get(&number).copied().unwrap_or(0),
+            python["exits"][number.to_string()].as_u64().unwrap(),
+            "hvc #{number}'s count differs from the Python host's"
+        );
+    }
+}
+
 #[test]
 fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());

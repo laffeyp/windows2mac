@@ -20,6 +20,8 @@ pub mod guest_stubs;
 pub mod host_request;
 pub mod ledger;
 pub mod model;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod model_step;
 pub mod monitor_code;
 pub mod process;
 pub mod record;

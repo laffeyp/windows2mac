@@ -133,8 +133,42 @@ pub enum Stop {
     Untranslated { target: u64, why: String },
     /// an `hvc #12` hand-over the host could not serve (Sprint 157), and why
     Handover { pc: u64, why: String },
+    /// a model exit (hvc 10 or 11) the model could not step: an operation it does not run, or a flag read while
+    /// undefined (Sprint 181), at guest `rip`
+    Model { rip: u64, why: String },
     /// any other exit
     Exit(String),
+}
+
+/// `x86_address_at` (vm_backend 4861-4863): the guest address of the host code at `pc`, from the reconstruction table
+/// (the entry with the largest host address at or below `pc`, as `bisect_right` over the sorted marks finds it); 0
+/// when none is (Sprint 181).
+pub fn x86_address_at(mem: &[u8], pc: u64) -> u64 {
+    use guest_runtime::layout::{RECON_COUNT, RECON_TABLE, RUN_TABLE};
+    let n = read_u64(mem, RUN_TABLE + RECON_COUNT);
+    (0..n)
+        .map(|i| {
+            let at = RECON_TABLE + 16 * i;
+            (read_u64(mem, at), read_u64(mem, at + 8))
+        })
+        .filter(|(host, _)| *host <= pc)
+        .max()
+        .map_or(0, |(_, x86)| x86)
+}
+
+/// The instruction bytes at guest `rip` for the model's lifter: up to 15 bytes of mapped memory, then 16 zeros, as
+/// `lift(code + bytes(16), ...)` pads them (Sprint 181).
+fn code_at(guest: &Guest, rip: u64) -> Vec<u8> {
+    let mut code: Vec<u8> = (0..15u64)
+        .map_while(|i| {
+            guest
+                .layout
+                .offset(rip + i)
+                .map(|o| guest.memory.as_slice()[o as usize])
+        })
+        .collect();
+    code.extend([0u8; 16]);
+    code
 }
 
 /// One taking of the runtime word as the guest timed it (Sprint 164; `monitor_code::LOCK_TIMING`): virtual-counter
@@ -547,6 +581,30 @@ fn run(
                     vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;
                     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
                     continue;
+                }
+            }
+        }
+        if number == crate::cases::HVC_SLOW_SSE || number == crate::cases::HVC_SLOW_STEP {
+            // `serve_exit` (5232, 5270-5271; Sprint 181): the instruction at the hvc's site, one step of the model,
+            // on at the dispatcher or the runtime's exception call as the step leaves the PC
+            let rip = x86_address_at(guest.memory.as_slice(), pc - 4);
+            let code = code_at(guest, rip);
+            match crate::model_step::model_step(guest, vcpu, &code, rip)? {
+                crate::model_step::ModelStep::Resumed | crate::model_step::ModelStep::Raised => {
+                    vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
+                    continue;
+                }
+                crate::model_step::ModelStep::Refused => {
+                    break Stop::Model {
+                        rip,
+                        why: "an operation the model does not run".into(),
+                    };
+                }
+                crate::model_step::ModelStep::Undefined(f) => {
+                    break Stop::Model {
+                        rip,
+                        why: format!("flag {f} read while undefined"),
+                    };
                 }
             }
         }
