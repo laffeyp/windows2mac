@@ -1,0 +1,38 @@
+# Step 4's census, 2026-10-28
+
+Step 4 of `docs/rust-port-plan-2026-10-24.md` (lines 132-142), "One vCPU to the batch run", sentence by sentence, with
+the items reviewer-2's reviews of 2026-10-27 and 2026-10-28 and the code review of 2026-10-28 attach to it (BLACKBOARD
+`## Surfaced for review`). Each row names its source, the count read from it on 2026-10-28, the Rust status, and the
+judge that closes it. Sprint 172; each later step-4 sprint closes rows and updates this table.
+
+The batch run is `store/runs/frontier-643a6283510c-1792267359516238000` (Sprint 108's card, 84-90: "the batch run
+conforms: the log's 168 lines, 0 divergences"), made by the frozen Python host on one vCPU.
+
+| # | What the step asks (plan line) | Source | Count, Python | Count, Rust | Status | Judge that closes it |
+|---|---|---|---|---|---|---|
+| 1 | "each with the Python tests' values carried into Rust tests by hand and cited by file and line" (132-133) | `tests/test_*.py`; `crates/*/tests/*.rs` | 82 test files | 29 test files | partial: no per-component map | a per-component table of Python test → Rust test, file and line, row by row as each component lands |
+| 2 | "loading's remainder (S2)" (133) | `crates/pe_loader`; `tests/test_pe*.py` | the Python loader ran the batch run (Sprint 108) | `pe_loader` loads `qpc` and `sleeper` for `w2m-vm` | partial | the loader's tests carried, and the batch run's module loads equal |
+| 3 | "the class judge over every class (S3)", gate "456 of 458 classes" (134-136) | `store/runs/class-runs.json` | 458 classes; 456 conform; 2 discrepancies (FCOS, FSIN) | the Rust case runner gives 512 class verdicts over four reference profiles (205, 174, 107, 26; Sprints 159-167); no Rust class judge writes `class-runs.json`'s form | absent | a Rust class judge over the 458 classes, its index equal to the Python's |
+| 4 | "the model and slow paths (S4)" (134) | the batch run's `vm_exits`: hvc 10 (slow SSE), hvc 11 (slow step) | hvc 10 258, hvc 11 286 | `run.rs` 553-554: hvc 10 and 11 end the run at `Stop::Hvc` | absent | the model in Rust, which 116,718 Windows cases wait on (Decision 2026-10-27) |
+| 5 | "every exit kind" (134-135) | the batch run's `vm_exits` | hvc 8 44,010; hvc 13 13,673; hvc 1 1,091; hvc 11 286; hvc 10 258; hvc 14 167; hvc 4 8; hvc 12 2 | served: hvc 1 (dispatch miss, compile), 8 (host requests, below), 12 (schedule), 13 (code write); not served (`Stop::Hvc`): 4, 10, 11, 14 | partial | each kind served with the Python test of it carried |
+| 5a | host requests (hvc 8) by op | `crates/w2m_vm/src/host_request.rs` 15-20; `src/w2m/vm_backend.py` `HOST_*` | the batch run's record does not count requests by op | Rust serves 6 ops: WRITE 1, EXIT 2, RUNTIME_FAULT 5, MODULE_AT 18, THREAD 30, EXCEPTION 31; the Python names FILETIME 14, RANDOM 23, MAP_VIEW 29, KERNEL 33 and others | partial; the per-op count is not measured | a count of hvc 8 by op on a Python batch run, then each op served |
+| 6 | "the family judge", gate "68 of 68 families" (135-136) | `store/runs/family-runs.json` | 68 of 68 conform; 3 carry divergence notes of unimplemented argument forms (known_folders, output_debug_string, thread_storage) | no Rust family judge | absent | a Rust family judge, its index equal to the Python's |
+| 7 | "the batch run's call comparison", gate "168 lines, 0 divergences" (135) | the batch run's COMPARISON_COMPLETED | conforms: 168 lines, 0 divergences, 24 values Windows varies | no Rust comparison; the Rust host cannot run the game | absent | the comparison in Rust, over the Rust host's batch run |
+| 8 | "the guests in `tests/data` with their stored output" (136) | `tests/data/timed_waits/*.exe` | 14 guests | 2 run by the Rust host to ExitProcess (`qpc`, `sleeper`) | partial (2 of 14) | each guest's stored output from the Rust host |
+| 9 | "The Python host's code moves under `oracle/` (git mv) and leaves CI"; the two ledgers become one (137, 139-142) | `src/w2m/`; `store/runs/discrepancy-ledger.json`, `store/case_runner/discrepancy-ledger.json` | 43 modules under `src/w2m/` | not moved; two ledgers | absent | at the step's close, by its gate |
+| 10 | "instructions a second on one vCPU, against Sprint 108's 2,095,145,119" (137-138) | the batch run's `instructions_per_second` | 2,095,145,118.8 | not measured: the Rust host does not run the batch run | absent | `instructions_per_second` on the Rust host's batch-run record |
+| 11 | the DLLs and imports the batch run loads and calls (Decision 2026-10-27's census) | the game's import tables; the batch run's module loads | not on the batch run's record as counts | not measured | absent; source to name | a count from the game's PE imports (`crates/pe_image`), then each module's Rust status |
+| 12 | the C words judge's per-class counts held to the census (reviewer-2's Medium 1, 2026-10-27) | `cargo test -p translator --release --test c_words` | 1,186,511 record calls | 1,184,578 lifted by the Rust rules; 1,184,313 compared in 225 classes; 1,933 unlifted (CMPPS 393, CVTDQ2PS 283, MOVQ 176 first) | partial | the judge's per-class counts asserted against this table, so a class at 0 fails |
+| 13 | flag liveness through each of the eight conditions on composed blocks (reviewer-2's High 1, 2026-10-28; code review finding 14) | the batch run's blocks | not counted | not counted; `cond_flags`' masks held by value (Sprint 171) | absent | blocks whose liveness passed each condition, counted on the batch run and judged against Windows |
+| 14 | the emits the batch run needs: EXECUTION_STARTED with `timeout_seconds`, EXECUTION_COMPLETED (with `guest_trace` false where judged by state), SERVICE_UNIMPLEMENTED (reviewer-2's Medium 2 of 2026-10-27; P22) | `crates/`: emit sites | the Python's frontier writes EXECUTION_STARTED and EXECUTION_COMPLETED | 0 Rust emit sites for EXECUTION_* or SERVICE_UNIMPLEMENTED | absent | the Rust run loop's producer writing them on its records |
+| 15a | code review finding 5: guest-written values that panic `w2m-vm` | `threads.rs` 164, `run.rs` 496, `host_request.rs` 127, `guest.rs` 529, `virtual_memory` 233 | — | panics | absent | each a named stop, with a test |
+| 15b | finding 9: errors as strings | `run.rs` 129-135; 14 `Result<_, String>` in `threads.rs` and `compile.rs` | — | strings | absent | typed errors the batch run's stops name |
+| 15c | finding 11: a full code cache ends the run | `compile.rs` 113 (64 MB) | the Python's batch run compiled 275,303 blocks with `flush_translations` | ends the run | absent | `flush_translations` in Rust, before the batch run |
+| 15d | finding 8: a compile time per block | Sprint 163's record, the hvc 1 p99s (about 200 µs) | — | not measured on the batch run | absent | compile time per block on the Rust host's batch run |
+
+## What the counts say
+
+Of the step's gate, the Rust side holds 2 of 14 guests (row 8) and none of the three judges' gates (rows 3, 6, 7). The
+three judges the gate names have no Rust form. The Rust host cannot reach the batch run while hvc 4, 10, 11 and 14 end
+the run (rows 4, 5) and while the host requests it does not serve stop it by name (row 5a). The model (row 4) is the
+first component, by Decision 2026-10-27: it closes rows 4 and the hvc 10 and 11 cells of row 5.
