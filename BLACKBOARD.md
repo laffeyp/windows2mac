@@ -594,7 +594,7 @@
 
 ## Sprint tail
 
-### Sprint 189 (2026-10-28, gates running)
+### Sprint 189 (2026-10-28, closed)
 - **Scope:** the batch run's first stop, MODULE 15: `modules.py`'s module requests (15, 16, 17) in Rust, the batch run run again to its next stop
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 933 s, kept in `store/gates/passes.tsv` as "sprint 189" at HEAD 4a43d6ed0 with its six trees: the batch run and guests, Rust tests all, the planted chain 34, the Python gates, the three multi-vCPU tests passed in their stage); observation pass (the batch run passes UnityPlayer.dll's LoadLibrary of api-ms-win-core-synch-l1-2-0 and stops at VIRTUAL_ALLOC 19, a reserve of 0x1ffff000 bytes, after 48 hvc 1, 60 hvc 8 and 2 hvc 11 exits, held; the 15 guests' stops unchanged; plant 1 named "left: Ok(4096) right: Ok(8192)"; plant 2 named "left: \"api-ms-win-core-synch-l1-2-0\"").
 - **CI does not run:** the module requests' service and the batch run (`modules.rs` and `host_request.rs` compile on macOS aarch64 only, and so do their unit tests).
