@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 178
-status: done
+status: closed-partial
 phase: 6
 pass_kind: functional
 ---
@@ -123,3 +123,10 @@ The legacy-encoded SSE model cases are judged against Windows through the Rust m
 - **Departures:** the 27 classes above; `crates/w2m_vm/src/lib.rs`, `cases.rs` and `store/case_runner/discrepancy-
   ledger.json` changed, files the card did not name; a `sed` inserted three lines (`LaneFn` and its comment), a
   multi-line edit outside the Edit tool.
+- **Status (annotated 2026-10-28, reviewer-2's Medium 2 of its review of Sprints 178-181):** the card closed as `done`
+  with its tail headed "closed", though only its commit message and Surfaced said partial; set to `closed-partial`, the
+  kit's template's status (`sdd-kit-3/templates/SPRINT_CARD.md` 14), as Sprints 090 and 096 are. The review also holds
+  that the partial-pass rule did not fit: the unlifted classes were 27 of 67 and 4,760 of 8,930 cases, the scope's own
+  premise, and a Decision of the same day named them as Sprint 180's judge; a false scope premise is a rescope, not a
+  partial pass. Sprint 180 took 10 of the 27; the other 17 (Deferred) get a slot in the Decision "Sequence after Sprint
+  182".

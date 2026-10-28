@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 182
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -81,3 +81,33 @@ The batch run's VEX calls lift and lower word for word with the C emitter.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: counts and two plants.
 - [x] One concept: the VEX translator group.
+
+## result
+
+- **The count first:** the registry routes 118 classes to `_vex.py`'s `rule` (the `BASE` map's keys, `CROSS`, 18 FMA
+  forms, VPERMILPS, VZEROUPPER); the census held 719 VEX calls in 71 of them. `_vex.py` 146-152 sends `vexs`, the
+  `SLOW` bases and every 256-bit form outside `NATIVE_256` to `hvc #10` (the record's 722 VEX calls hold no such
+  256-bit form), and lowers the rest through the base.
+- **The lifting:** `translator::lift` gains `Op::Vex`, `Op::Vexs`, `Op::Fma`, `Op::Vzeroupper` and `vex_operand`
+  (YMMn as XMM n, `lift.py` 175-182), with `commit_order`'s arms (272-277, 284-288); `rules.rs` gains `vex`,
+  `VEX_CLASSES` (118), `vex_base` (`BASE`), `VEX_CROSS` and `vex_fma`.
+- **The lowering:** `lower_vex` (`_vex.py` 149-207) and `lower_fma` (210-228), `VEX_SLOW`, `VEX_NATIVE_256`,
+  `SHIFT_BY_COUNT` (runtime.py 34), `clear_upper`, `YMM_HI_OFF` 0x400; the four ops in FLAGS_NONE and `_temps_read`
+  (vm_backend 858, 1017-1022). The first run refused VORPD's 3 calls: `lower_sse`'s logic arm lacked ORPD (`_sse.py`
+  397-399 has it); added.
+- **The C words judge:** 1,185,908 calls compared in 310 classes, no refusal and no difference: the census's 71 VEX
+  classes, 719 calls, moved to compared; one PEXTRW call stays unlifted and the 337 MMX calls lowered as a later group.
+- **The case runner:** its judged counts unchanged; the Rust translator compiles 435 classes and 259,213 cases (from
+  306 and 192,284), each word equal to the Python's, the compiler-of-record files rewritten for them; the model refuses
+  the four VEX ops by name, so VEX model cases stay counted as before.
+- **Plant 1** (VCVTSS2SI out of `VEX_SLOW`, so lowered through CVTSS2SI's base): `c_words` failed, "1 VCVTSS2SI flags
+  [0, 63, 0]: 0x18141c3f9 c57a2dc1: rust [b9405390 d3473210 f100fe1f 54000040 d4000142 b9405390". Restored byte for
+  byte. The card's first draft of this plant, a 256-bit form outside `NATIVE_256`, was redrawn before the card's commit:
+  the record holds none.
+- **Plant 2** (`clear_upper` dropped after a 128-bit write): `c_words` failed, "78 difference classes", the first "39
+  VMOVAPD flags [0, 0, 0]: 0x18141e854 c5f928c8: rust [4ea01c01] c [4ea01c01 91100390 a9017e1f]". Restored byte for
+  byte.
+- **Records:** four `case-runner-rust` records (1793201180225808000, -254340000, -284967000, -315861000), Sprint 181's
+  verdicts, `check_records` 0 violations each; the ledger holds 12 open entries.
+- **Departures:** `lower_sse`'s ORPD and `crates/w2m_vm/src/model.rs`'s refusal of the four ops; every multi-line edit
+  used the Edit tool, one-line `sed`s for the registration, an import, the flag table's arm and the plants.

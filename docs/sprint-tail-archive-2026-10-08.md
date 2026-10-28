@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 172 (2026-10-28, closed)
+- **Scope:** step 4's census: plan 132-142 sentence by sentence, with the items the reviews and the code review attach to it, each row with its source, count, Rust status and closing judge.
+- **Dual contract:** signal — none, as the card says; artifact pass (the default gates exit 0, no test selected for two prose files; `design_check` exit 0); observation pass (19 rows; each count read from its source this sprint; the planted count named by the read-back).
+- **CI does not run:** the read-back (a command over a committed record, run here); CI runs the workspace's tests as before.
+- **Rubber Duck Pass:** *Sequence narration:* no record. *Observation 1 (cells written past their sources):* three cells first said more than their sources: "512 classes" for 512 verdicts over four profiles, a loader claim, and the 116,718 cases worded as a skip; corrected before the commit. Disposition: resolved-here. *Observation 2 (what the census found):* none of the gate's three judges has a Rust form, and hvc 4, 10, 11 and 14 end a Rust run; the model, Decision 2026-10-27's first component, closes hvc 10 and 11. Disposition: recorded (the census's closing paragraph). *Observation 3 (counts no record holds):* host requests by op, DLLs and imports, liveness by condition and compile time per block are not on any record; each row names the measurement that closes it. Disposition: recorded. Edits outside the Edit tool: one-line `sed`s for three cells and the plant; the archive move was made with the Edit tool.
+- **Closed:** Sprint 171's CI run 40667897950 on 31a2fd782, in progress at this close; its result is recorded in Sprint 173's tail entry.
+- **Files:** docs/step-4-census-2026-10-28.md, docs/sprint-tail-archive-2026-10-08.md (Sprint 162's entry), BLACKBOARD.md, sprints/sprint-172-step-4s-census.md, signal-reports/sprint-172-report.md.
+
 ### Sprint 171 (2026-10-28, closed)
 - **Scope:** reviewer-2's review of Sprints 165-170, High 1, Mediums 1-4 and Lows 1-2: every judge and plant it named reaches what it names.
 - **Dual contract:** signal — none on `store/runs/`: the planted guest-trace run and the planted discrepancy chain write to temporary roots, as the card named; artifact pass (`scripts/gates.sh` exit 0 in 792 s: every Rust test, the samples with their three plants, the planted discrepancy chain, the Python gates); observation pass (eight items, each plant failing at its judge, quoted in the card's result).
