@@ -77,3 +77,17 @@ VIRTUAL_ALLOC 19.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: the virtual-memory requests.
+
+## result
+
+- **The requests:** `host_request::serve` answers VIRTUAL_ALLOC, FREE, PROTECT and QUERY 19-22 through `guest.arena`
+  over a `GuestView`, the second answer (the error, or PROTECT's old protection with the error above it) at the
+  transport's 48 and the result at 56; `memory_basic_information` writes QUERY's 48 bytes as vm_backend 4044-4045 packs
+  them; an arena refusal is a stop by name, as `virtual_memory.py` 253's `Unimplemented` is.
+- **The run:** the batch run on the Rust host stops at KERNEL 33, sub-operation 1, arguments 0xfffef760 0x16, after 98
+  hvc #1, 79 hvc #8 and 7 hvc #11 exits; the held file rewritten, the guests' lines unchanged.
+- **Plant 1** (the result and the second answer swapped on the transport page): `batch_run.rs` failed, "left:
+  [\"stop\tHvc 14\"" against the held KERNEL 33. Restored byte for byte.
+- **Plant 2** (RegionSize written at bytes 16-23): `virtual_query_writes_memory_basic_information_as_the_python_packs_it`
+  failed, "left: [0, 96, 69, 35, 1, 0, 0, 0, 0, 0, 64, 35, 1, 0, 0, 0, 0, 48, 0, 0, ...]". Restored byte for byte.
+- **Departures:** none from the card; every multi-line edit used the Edit tool.
