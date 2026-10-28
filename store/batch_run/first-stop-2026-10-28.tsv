@@ -1,20 +1,19 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs; the guests' fourth column is the frozen Python host's stop and output on one vCPU, 2026-10-28
-stop	HostRequest op 15: host request 15: not served by the Rust host yet
-arguments	0x181672a98 0x1c 0x1
-module asked for	api-ms-win-core-synch-l1-2-0 (loading 1)
+stop	HostRequest op 19: host request 19: not served by the Rust host yet
+arguments	0x0 0x1ffff000 0x2000
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	5
-hvc 8	1
-hvc 11	1
+hvc 1	48
+hvc 8	60
+hvc 11	2
 code cache full	0
-compiled	48
-cut by decode	0
+compiled	2785
+cut by decode	1
 cut by encoder	0
 cut by guarded	0
 cut by key size	0
 cut by no choice	0
 cut by no stencil	0
-decode	0
+decode	2
 encoder	0
 full	0
 guarded	0
@@ -23,13 +22,13 @@ key size	0
 log full	0
 no choice	0
 no stencil	0
-not a code page	5
+not a code page	46
 page needs a split	0
-pages protected	8
+pages protected	79
 pause	0
 recon full	0
 scan pages	0
-blocks the host compiled	48
+blocks the host compiled	2787
 guest	busychild	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
 guest	crosswake	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
 guest	handshake	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'

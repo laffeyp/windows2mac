@@ -15,6 +15,9 @@ use crate::guest::{Guest, GuestError};
 pub const HOST_WRITE: u64 = 1;
 pub const HOST_EXIT: u64 = 2;
 pub const HOST_RUNTIME_FAULT: u64 = 5;
+pub const HOST_MODULE: u64 = 15;
+pub const HOST_PROC: u64 = 16;
+pub const HOST_MODULE_PATH: u64 = 17;
 pub const HOST_MODULE_AT: u64 = 18;
 pub const HOST_EXCEPTION: u64 = 31;
 pub const HOST_THREAD: u64 = 30;
@@ -138,6 +141,53 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         HOST_MODULE_AT => {
             // the second answer: a DLL just loaded leaves its DllMain stub (`_pending_init`); none here
             let r = containing(guest, a0);
+            let mem = guest.memory.as_mut_slice();
+            mem[TRANSPORT + 48..TRANSPORT + 56].fill(0);
+            r
+        }
+        // `_module_request` (vm_backend 3889-3904; Sprint 189): the name or the path through guest memory, the answer
+        // `crate::modules` gives, a refusal a stop by name; DllMain's stub word 0, no DLL being loaded here
+        HOST_MODULE | HOST_PROC | HOST_MODULE_PATH => {
+            let read = |guest: &Guest, va: u64, n: u64| -> Result<Vec<u8>, HostError> {
+                let at = guest
+                    .layout
+                    .offset(va)
+                    .ok_or_else(|| HostError::Unserved(format!("a module request's name at unmapped 0x{va:x}")))?
+                    as usize;
+                Ok(guest.memory.as_slice()[at..at + n as usize].to_vec())
+            };
+            let r = match op {
+                HOST_MODULE => {
+                    let units: Vec<u16> = read(guest, a0, 2 * a1)?
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|c| u16::from_le_bytes(*c))
+                        .collect();
+                    crate::modules::module(guest, &String::from_utf16_lossy(&units), a2 != 0)
+                        .map_err(HostError::Unserved)?
+                }
+                HOST_PROC => {
+                    // latin-1: each byte its own code point (vm_backend 3895)
+                    let name: String = read(guest, a1, a2)?.iter().map(|b| char::from(*b)).collect();
+                    crate::modules::proc(guest, a0, &name).map_err(HostError::Unserved)?
+                }
+                _ => match crate::modules::file_name(guest, a0) {
+                    // HOST_MODULE_PATH: buffer a1, a2 characters; the path's length, M64 for no module
+                    None => u64::MAX,
+                    Some(path) => {
+                        let raw: Vec<u8> = path.encode_utf16().flat_map(u16::to_le_bytes).collect();
+                        let n = raw.len().min(2 * a2 as usize);
+                        if a2 != 0 {
+                            let at = guest.layout.offset(a1).ok_or_else(|| {
+                                HostError::Unserved(format!("a module path's buffer at unmapped 0x{a1:x}"))
+                            })? as usize;
+                            guest.memory.as_mut_slice()[at..at + n].copy_from_slice(&raw[..n]);
+                        }
+                        path.encode_utf16().count() as u64
+                    }
+                },
+            };
             let mem = guest.memory.as_mut_slice();
             mem[TRANSPORT + 48..TRANSPORT + 56].fill(0);
             r

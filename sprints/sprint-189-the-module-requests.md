@@ -78,3 +78,21 @@ The Rust host answers the module requests as `modules.py` does, and the batch ru
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: the module requests.
+
+## result
+
+- **The requests:** `crates/w2m_vm/src/modules.rs` carries `modules.py`'s `_canonical`, `API_SET_HOSTS`, `module`
+  (over `Handles`, the handles alone, so its rows are testable), `file_name` and `proc`, reading
+  `specs/windows_exports.json` once; `host_request::serve` answers MODULE 15 (the UTF-16 name at a0, a1 characters),
+  PROC 16 (the latin-1 name at a1, a2 bytes) and MODULE_PATH 17 (the path written to a1, a2 characters at most, its
+  length returned, M64 for no module), the DllMain stub word at the transport's 48 left 0.
+- **The run:** the batch run passes MODULE 15 and stops at VIRTUAL_ALLOC 19 with arguments 0x0 0x1ffff000 0x2000 (a
+  reserve with no base), after 48 hvc #1, 60 hvc #8 and 2 hvc #11 exits; `store/batch_run/first-stop-2026-10-28.tsv`
+  rewritten, the guests' lines unchanged.
+- **Plant 1** (an `api-ms-win-core-*` set answered as kernel32's handle): `each_name_means_the_module_modules_py_gives`
+  failed, "assertion `left == right` failed left: Ok(4096) right: Ok(8192)". Restored byte for byte.
+- **Plant 2** (`_canonical` without its ".dll" rule): `a_name_is_its_last_component_lowercased_with_dll_added` failed,
+  "left: \"api-ms-win-core-synch-l1-2-0\" right: \"api-ms-win-core-synch-l1-2-0.dll\"". Restored byte for byte.
+- **Departures:** a LoadLibrary that would map a DLL file or a system DLL after the start stops by name (no file bridge
+  yet); GetProcAddress's thunks are `import_thunk`'s, which reuse a thunk of the same name. Every multi-line edit used
+  the Edit tool but one `sed` that added three constants.

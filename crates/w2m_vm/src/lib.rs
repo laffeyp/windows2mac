@@ -23,6 +23,8 @@ pub mod ledger;
 pub mod model;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod model_step;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod modules;
 pub mod monitor_code;
 pub mod process;
 pub mod record;
