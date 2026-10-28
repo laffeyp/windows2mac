@@ -145,14 +145,20 @@ mod run {
         if args == ["--wfe-probe"] {
             return wfe_probe();
         }
-        let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json>] | w2m-vm --wfe-probe";
-        let (guest_path, output, serve_times) = match args.as_slice() {
+        let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json>] \
+                     | w2m-vm --wfe-probe";
+        // (guest, output, the measure asked for and its file); every path relative to the repository root
+        let (guest_path, output, measure) = match args.as_slice() {
             [guest, flag, output] if flag == "--output" => (guest, output, None),
-            [guest, flag, output, times, file] if flag == "--output" && times == "--serve-times" => {
-                (guest, output, Some(file))
+            [guest, flag, output, which, file]
+                if flag == "--output" && (which == "--serve-times" || which == "--runtime-word") =>
+            {
+                (guest, output, Some((which.as_str(), file)))
             }
             _ => return Err(usage.into()),
         };
+        let mut start = Start::console("probe.exe");
+        start.time_runtime_word = matches!(measure, Some(("--runtime-word", _)));
         let root = root();
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes
         let mut input = String::new();
@@ -177,15 +183,8 @@ mod run {
             .collect();
         let symbols = vm_compiler_symbols(&text(&root.join("tools/vm_compiler/stencil_table.h"))?)
             .map_err(|e| format!("tools/vm_compiler/stencil_table.h: {e:?}"))?;
-        let mut guest = Guest::new(
-            &loaded,
-            &image,
-            &services,
-            &Start::console("probe.exe"),
-            &modules,
-            &symbols,
-        )
-        .map_err(|e| format!("the guest: {e:?}"))?;
+        let mut guest = Guest::new(&loaded, &image, &services, &start, &modules, &symbols)
+            .map_err(|e| format!("the guest: {e:?}"))?;
 
         let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
         vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
@@ -195,16 +194,40 @@ mod run {
         let out = run_compiling(&mut guest, &loaded, &vcpu, MAX_STEPS, &mut host).map_err(|e| format!("{e:?}"))?;
 
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
-        if let Some(file) = serve_times {
-            let kinds: serde_json::Map<String, serde_json::Value> = out
-                .serve_by_kind
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone().into()))
-                .collect();
-            let exits: serde_json::Map<String, serde_json::Value> =
-                out.exits.iter().map(|(k, v)| (k.to_string(), (*v).into())).collect();
-            let json = serde_json::json!({ "kinds": kinds, "exits": exits });
-            fs::write(file, json.to_string()).map_err(|e| format!("{file}: {e}"))?;
+        if let Some((which, file)) = measure {
+            let json = if which == "--serve-times" {
+                let kinds: serde_json::Map<String, serde_json::Value> = out
+                    .serve_by_kind
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone().into()))
+                    .collect();
+                let exits: serde_json::Map<String, serde_json::Value> =
+                    out.exits.iter().map(|(k, v)| (k.to_string(), (*v).into())).collect();
+                serde_json::json!({ "kinds": kinds, "exits": exits })
+            } else {
+                // the runtime word's takings (Sprint 164): each as [site, wait start, taken, released, the exit count
+                // at each of the three], counter ticks
+                let w = &out.runtime_word;
+                let takings: Vec<[u64; 7]> = w
+                    .takings
+                    .iter()
+                    .map(|t| {
+                        [
+                            t.site,
+                            t.wait_start,
+                            t.taken,
+                            t.released,
+                            t.exits_at_wait_start,
+                            t.exits_at_taken,
+                            t.exits_at_released,
+                        ]
+                    })
+                    .collect();
+                serde_json::json!({ "counted": w.counted, "takings": takings })
+            };
+            // relative to the repository root, as `--output` is (the review of 2026-10-27 found it relative to the
+            // working directory)
+            fs::write(root.join(file), json.to_string()).map_err(|e| format!("{file}: {e}"))?;
         }
         if !matches!(out.stop, Stop::ExitProcess { .. }) {
             return Err(format!("{guest_path} stopped at {:?}, not at ExitProcess", out.stop));

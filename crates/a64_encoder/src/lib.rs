@@ -942,6 +942,9 @@ pub const ESR_EL1: SysReg = (3, 0, 5, 2, 0);
 pub const FAR_EL1: SysReg = (3, 0, 6, 0, 0);
 pub const ELR_EL1: SysReg = (3, 0, 4, 0, 1);
 pub const SPSR_EL1: SysReg = (3, 0, 4, 0, 0);
+/// The virtual counter, readable at EL1 and EL0 (Sprint 164, the runtime word's timing; clang gives d53be050 for
+/// `mrs x16, cntvct_el0`, 2026-10-27).
+pub const CNTVCT_EL0: SysReg = (3, 3, 14, 0, 2);
 
 fn sysreg((op0, op1, crn, crm, op2): SysReg) -> u32 {
     (op0 - 2) << 19 | op1 << 16 | crn << 12 | crm << 8 | op2 << 5
@@ -984,5 +987,12 @@ mod tests {
         assert_eq!(mov_imm(17, 0x7FFE_0000_0010), [movz(17, 0x10, 0), movk(17, 0x7FFE, 2)]);
         assert_eq!(mov_imm(0, 0), [movz(0, 0, 0)]);
         assert_eq!(mov_imm(0, u64::MAX).len(), 4);
+    }
+
+    /// clang's words, 2026-10-27 (Sprint 164): `mrs x0, cntvct_el0`, `mrs x16, cntvct_el0`.
+    #[test]
+    fn the_virtual_counter_reads_as_clang_assembles_it() {
+        assert_eq!(mrs(0, CNTVCT_EL0), 0xd53b_e040);
+        assert_eq!(mrs(16, CNTVCT_EL0), 0xd53b_e050);
     }
 }

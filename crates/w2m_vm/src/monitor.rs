@@ -65,7 +65,7 @@ impl MonitorMemory {
         extra: &[(u64, u64, u64)],
     ) -> Result<(MonitorMemory, MonitorCode), MonitorError> {
         let mut memory = Self::with_image(image)?;
-        let code = monitor_code::write(memory.as_mut_slice(), &image.symbols);
+        let code = monitor_code::write(memory.as_mut_slice(), &image.symbols, false);
         Ok((Self::finish(memory, &[], extra)?, code))
     }
 

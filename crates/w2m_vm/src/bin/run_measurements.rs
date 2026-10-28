@@ -5,10 +5,14 @@
 //! each measurement as a `w2m-vm` child through `scripts/sign_and_run.sh`:
 //! - `qpc` and `sleeper` (`tests/data/timed_waits`), each to ExitProcess with `--serve-times`: per exit kind, the
 //!   served exits' host time as `exit_ns_p50` and `exit_ns_p99` (nearest rank) and their count as `vm_exits`;
+//! - each guest again with `--runtime-word` (Sprint 164): the runtime word's hold and wait per taking, by the site
+//!   that took it, as `runtime_word_hold_ns_p50/p99` and `runtime_word_wait_ns_p50/p99` (nearest rank over the exact
+//!   ticks), the takings an exit interrupted apart;
 //! - `--wfe-probe`: `wfe_exits` for `wfe` and `wfi`, the WFx traps of 1,000 each.
 //!
 //! The record: SESSION_INIT (purpose measurement), a MEASUREMENT_RECORDED per number, SESSION_COMPLETED. A child that
-//! fails, or a guest whose served exits do not add up to its own exit tally less its last, fails the Producer by name.
+//! fails, a guest whose served exits do not add up to its own exit tally less its last, or a timed run with more
+//! takings than the timing area holds or a time that ran backward fails the Producer by name.
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
@@ -20,6 +24,7 @@ use events::{
     FiniteF64, HarnessU64, Id, Metric, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose, VOCAB_VERSION,
     Version, harness_line,
 };
+use w2m_vm::monitor_code::Site;
 use w2m_vm::record::{measurement_line, quantile};
 
 const GUESTS: [&str; 2] = ["qpc", "sleeper"];
@@ -29,6 +34,19 @@ fn root() -> PathBuf {
         .join("../..")
         .canonicalize()
         .unwrap()
+}
+
+/// The virtual counter's frequency on this Mac, from `sysctl -n hw.tbfrequency` (24,000,000 on Apple silicon,
+/// 2026-10-27): the guest's CNTVCT_EL0 counts at it.
+fn tick_frequency() -> Result<u64, String> {
+    let out = Command::new("sysctl")
+        .args(["-n", "hw.tbfrequency"])
+        .output()
+        .map_err(|e| format!("sysctl: {e}"))?;
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse()
+        .map_err(|e| format!("hw.tbfrequency: {e}"))
 }
 
 /// One `w2m-vm` child, signed with the Hypervisor entitlement; its standard output.
@@ -123,6 +141,86 @@ fn run() -> Result<(), String> {
                     &application,
                     Some(kind),
                 ));
+            }
+        }
+
+        // the runtime word's hold and wait times (Sprint 164): a second run with the takings timed in the guest, apart
+        // from the first, so the timing's few instructions are not in the exit times above
+        let word = format!("build/measurements/{guest}-word.json");
+        let timed_output = format!("build/measurements/{guest}-timed-stdout.txt");
+        child(&root, &[&exe, "--output", &timed_output, "--runtime-word", &word])?;
+        let (plain, timed) = (
+            std::fs::read(root.join(&output)).map_err(|e| e.to_string())?,
+            std::fs::read(root.join(&timed_output)).map_err(|e| e.to_string())?,
+        );
+        if guest == "sleeper" && plain != timed {
+            return Err(format!(
+                "{guest}: the timed run's output differs from the untimed run's"
+            ));
+        }
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join(&word)).map_err(|e| format!("{word}: {e}"))?)
+                .map_err(|e| format!("{word}: {e}"))?;
+        let counted = json["counted"].as_u64().ok_or(format!("{word}: no count"))?;
+        let takings: Vec<[u64; 7]> =
+            serde_json::from_value(json["takings"].clone()).map_err(|e| format!("{word}: {e}"))?;
+        if counted != takings.len() as u64 {
+            return Err(format!(
+                "{guest}: {counted} takings counted, {} written: the timing area is full",
+                takings.len()
+            ));
+        }
+        // [site, wait start, taken, released, exits at each]: a time that ran backward fails the run by name
+        let backward = takings.iter().filter(|t| t[2] < t[1] || t[3] < t[2]).count();
+        if backward != 0 {
+            return Err(format!("{guest}: {counted} takings, {backward} backward"));
+        }
+        let ns_per_tick = 1e9 / tick_frequency()? as f64;
+        for site in Site::ALL {
+            let at: Vec<&[u64; 7]> = takings.iter().filter(|t| t[0] == site as u64).collect();
+            // a hold or a wait within one run of the vCPU, apart from one an exit interrupted, which holds the host's
+            // time too (a bridge's C service exits by hvc #8 while it holds the word)
+            for (which, [p50, p99], start, end) in [
+                (
+                    "hold",
+                    [Metric::RuntimeWordHoldNsP50, Metric::RuntimeWordHoldNsP99],
+                    2,
+                    3,
+                ),
+                (
+                    "wait",
+                    [Metric::RuntimeWordWaitNsP50, Metric::RuntimeWordWaitNsP99],
+                    1,
+                    2,
+                ),
+            ] {
+                for across in [false, true] {
+                    let mut ticks: Vec<u64> = at
+                        .iter()
+                        .filter(|t| (t[start + 3] != t[end + 3]) == across)
+                        .map(|t| t[end] - t[start])
+                        .collect();
+                    if ticks.is_empty() {
+                        continue;
+                    }
+                    ticks.sort_unstable();
+                    let n = ticks.len();
+                    let (tag, variant) = if across {
+                        ("-across-exits", format!("{}; across an exit; {n} takings", site.name()))
+                    } else {
+                        ("", format!("{}; {n} takings", site.name()))
+                    };
+                    for (metric, q, name) in [(p50, 0.5, "p50"), (p99, 0.99, "p99")] {
+                        lines.push(measurement_line(
+                            &format!("{guest}-runtime-word-{}-{which}-ns-{name}{tag}", site.name()),
+                            metric,
+                            (quantile(&ticks, q) as f64 * ns_per_tick).round(),
+                            "ns",
+                            &application,
+                            Some(&variant),
+                        ));
+                    }
+                }
             }
         }
     }

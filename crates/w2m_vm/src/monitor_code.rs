@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 
 use a64_encoder as a64;
 use guest_runtime::layout::{
-    DISPATCH_BITS, DISPATCH_ENTRIES, DISPATCH_TABLE, LOCK_OWNER, MONITOR_DATA, MONITOR_VA, PROCESS_VA, RUN_TABLE,
-    RUNTIME_STACK, RUNTIME_STACK_SIZE, SAVE_AREA, STATE_OFF, VM_COMPILER,
+    DISPATCH_BITS, DISPATCH_ENTRIES, DISPATCH_TABLE, LOCK_OWNER, MAX_VCPUS, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA,
+    PAGE, PROCESS_VA, RUN_TABLE, RUNTIME_STACK, RUNTIME_STACK_SIZE, SAVE_AREA, STATE_OFF, VCPU_AREA, VCPU_STRIDE,
+    VM_COMPILER,
 };
 
 use crate::assembler::{Assembler, Target};
@@ -73,6 +74,124 @@ pub fn unlock_runtime(a: &mut Assembler) {
     a.emit(&[a64::STLR_WZR_X16]);
 }
 
+/// MONITOR_VA + this: the runtime word's timing area (Sprint 164), in the monitor region past its eight vCPU areas,
+/// where the region's rounding up to a 2 MB block leaves 1,331,200 bytes no one uses (`VCPU_AREA + 8 * VCPU_STRIDE` is
+/// 0xA8BB000, `MONITOR_SIZE` 0xAA00000). The header: the taking in hand's wait start at +0, taken time at +8, and the
+/// exit count at each at +16 and +24 (counter ticks; exits as the host counts them at +40); the takings at +32,
+/// counted even past the area's end; then `LOCK_TAKINGS` entries of 64 bytes from `LOCK_ENTRIES`, one per taking:
+/// wait start, taken, released, site (`Site`), and the exit count at each of the three. The run reads them at its
+/// stop.
+pub const LOCK_TIMING: u64 = (VCPU_AREA + MAX_VCPUS * VCPU_STRIDE + PAGE - 1) & !(PAGE - 1);
+pub const LOCK_TAKINGS_COUNT: u64 = 32;
+pub const LOCK_EXITS: u64 = 40;
+/// the release time while the entry is written
+const LOCK_RELEASED: u64 = 48;
+pub const LOCK_ENTRIES: u64 = 0x40;
+pub const LOCK_ENTRY: u64 = 64;
+pub const LOCK_TAKINGS: u64 = 16384;
+const _: () = assert!(LOCK_TIMING + LOCK_ENTRIES + LOCK_ENTRY * LOCK_TAKINGS <= MONITOR_SIZE);
+
+/// Where the runtime word was taken (the entry's site word).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Site {
+    /// the switch stub, from the switch to the register reload (`guest::switch_stub`)
+    Switch = 0,
+    /// a bridge, around a C service (`guest::bridge`)
+    Bridge = 1,
+    /// the dispatcher, around the VM compiler's call
+    Compile = 2,
+    /// the exception entry, around `w2m_exception`
+    Exception = 3,
+}
+
+impl Site {
+    pub const ALL: [Site; 4] = [Site::Switch, Site::Bridge, Site::Compile, Site::Exception];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Site::Switch => "switch",
+            Site::Bridge => "bridge",
+            Site::Compile => "compile",
+            Site::Exception => "exception",
+        }
+    }
+}
+
+/// The virtual counter and the host's exit count to the header at `time_off` and `exits_off`, through x16 and x18.
+/// The ISB keeps the counter's read from moving ahead of the instructions before it (Arm ARM: a CNTVCT_EL0 read may
+/// occur out of order; Linux reads it as `isb; mrs`, `arch/arm64/include/asm/arch_timer.h`
+/// `arch_timer_read_cntvct_el0`, read 2026-10-28).
+fn stamp(a: &mut Assembler, time_off: u64, exits_off: u64) {
+    a.emit(&[a64::ISB, a64::mrs(18, a64::CNTVCT_EL0)]);
+    a.emit(&a64::mov_imm(16, MONITOR_VA + LOCK_TIMING));
+    a.emit(&[
+        a64::str(8, 18, 16, time_off as u32),
+        a64::ldr(8, 18, 16, LOCK_EXITS as u32),
+        a64::str(8, 18, 16, exits_off as u32),
+    ]);
+}
+
+/// The runtime word taken, timed when `timed`: the counter and the exit count before the first attempt (the wait's
+/// start) and after the taking. `lock_runtime` clobbers x16 and x18 already; so does this.
+pub fn take_runtime(a: &mut Assembler, timed: bool) {
+    if timed {
+        stamp(a, 0, 16);
+    }
+    lock_runtime(a);
+    if timed {
+        stamp(a, 8, 24);
+    }
+}
+
+/// The taking written to the next entry with the release time and exit count, and counted, through three registers
+/// the site has free (`base`, `r1`, `r2`). Past `LOCK_TAKINGS` the taking is counted and not written, and the run's
+/// reader refuses the record.
+pub fn record_taking(a: &mut Assembler, site: Site, base: u32, r1: u32, r2: u32) {
+    let full = a.label();
+    a.emit(&[a64::ISB, a64::mrs(r2, a64::CNTVCT_EL0)]);
+    a.emit(&a64::mov_imm(base, MONITOR_VA + LOCK_TIMING));
+    a.emit(&[
+        a64::str(8, r2, base, LOCK_RELEASED as u32),
+        a64::ldr(8, r1, base, LOCK_TAKINGS_COUNT as u32),
+        a64::movz(r2, LOCK_TAKINGS, 0),
+        a64::cmp(r1, r2),
+    ]);
+    a.branch(|off| a64::bcond("hs", off), full);
+    let e = LOCK_ENTRIES as u32;
+    a.emit(&[
+        a64::add(r1, base, r1, a64::LSL, LOCK_ENTRY.ilog2()),
+        a64::ldr(8, r2, base, LOCK_RELEASED as u32),
+        a64::str(8, r2, r1, e + 16), // released
+        a64::ldr(8, r2, base, 0),
+        a64::str(8, r2, r1, e), // wait start
+        a64::ldr(8, r2, base, 8),
+        a64::str(8, r2, r1, e + 8), // taken
+        a64::movz(r2, site as u64, 0),
+        a64::str(8, r2, r1, e + 24),
+        a64::ldr(8, r2, base, 16),
+        a64::str(8, r2, r1, e + 32), // exits at the wait start
+        a64::ldr(8, r2, base, 24),
+        a64::str(8, r2, r1, e + 40), // exits at the taking
+        a64::ldr(8, r2, base, LOCK_EXITS as u32),
+        a64::str(8, r2, r1, e + 48), // exits at the release
+    ]);
+    a.bind(full);
+    a.emit(&[
+        a64::ldr(8, r2, base, LOCK_TAKINGS_COUNT as u32),
+        a64::addi(r2, r2, 1),
+        a64::str(8, r2, base, LOCK_TAKINGS_COUNT as u32),
+    ]);
+}
+
+/// The runtime word released, the taking recorded first when `timed`, through `free` (three registers the site does
+/// not need).
+pub fn release_runtime(a: &mut Assembler, timed: bool, site: Site, free: (u32, u32, u32)) {
+    if timed {
+        record_taking(a, site, free.0, free.1, free.2);
+    }
+    unlock_runtime(a);
+}
+
 /// `count_from_budget` (vm_backend 549-551).
 pub fn count_from_budget() -> [u32; 3] {
     [
@@ -103,8 +222,9 @@ pub fn vectors() -> Vec<u32> {
     vec.finish()
 }
 
-/// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address.
-pub fn dispatcher(symbols: &BTreeMap<String, u64>) -> (Vec<u32>, u64) {
+/// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address. `timed`: the runtime word's takings
+/// timed (Sprint 164).
+pub fn dispatcher(symbols: &BTreeMap<String, u64>, timed: bool) -> (Vec<u32>, u64) {
     let mut d = Assembler::new(MONITOR_VA + DISPATCHER);
     let (top, miss) = (d.label(), d.label());
     d.bind(top);
@@ -131,7 +251,7 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>) -> (Vec<u32>, u64) {
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER));
     d.emit(&[a64::ldr(8, 16, 16, VMC_ENABLED as u32)]);
     d.branch(|off| a64::cbz(16, off), host);
-    lock_runtime(&mut d);
+    take_runtime(&mut d, timed);
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
     for r in (0..16).step_by(2) {
         d.emit(&[a64::stp(r, r + 1, 16, 8 * i64::from(r))]);
@@ -146,7 +266,8 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>) -> (Vec<u32>, u64) {
         d.emit(&[a64::ldp(r, r + 1, 16, 8 * i64::from(r))]);
     }
     d.emit(&[a64::ldp(17, 30, 16, 128)]);
-    unlock_runtime(&mut d);
+    // x25 holds the compiled code; x16, x18 and x26 are free (x18 and x26 are temporaries, dead between blocks)
+    release_runtime(&mut d, timed, Site::Compile, (16, 18, 26));
     d.branch(|off| a64::cbz(25, off), host);
     d.emit(&[a64::br(25)]);
     d.bind(host);
@@ -160,12 +281,18 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>) -> (Vec<u32>, u64) {
         a64::ISB,
     ]);
     d.branch(a64::b, top);
-    (d.finish(), miss_va)
+    let words = d.finish();
+    assert!(
+        4 * words.len() as u64 <= EXCEPTION_ENTRY - DISPATCHER,
+        "the dispatcher overflows into the exception entry"
+    );
+    (words, miss_va)
 }
 
 /// The exception entry (vm_backend 4343-4400): its words and the call stub's address (`exception_call_va`).
-/// `resume_va` is where it goes on after the runtime dispatched the exception: the dispatcher.
-pub fn exception_entry(symbols: &BTreeMap<String, u64>, resume_va: u64) -> (Vec<u32>, u64) {
+/// `resume_va` is where it goes on after the runtime dispatched the exception: the dispatcher. `timed`: the runtime
+/// word's takings timed (Sprint 164).
+pub fn exception_entry(symbols: &BTreeMap<String, u64>, resume_va: u64, timed: bool) -> (Vec<u32>, u64) {
     let mut e = Assembler::new(MONITOR_VA + EXCEPTION_ENTRY);
     // a write to a page behind translated code: ask the host, then return to the store (x16 waits in SP, x17 in the
     // monitor data)
@@ -216,13 +343,14 @@ pub fn exception_entry(symbols: &BTreeMap<String, u64>, resume_va: u64) -> (Vec<
     assert_eq!(e.here(), cont);
     let exception_call_va = cont;
     e.emit(&count_from_budget());
-    lock_runtime(&mut e);
+    take_runtime(&mut e, timed);
     e.emit(&a64::mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE));
     e.emit(&[a64::addi(31, 16, 0)]);
     e.emit(&a64::mov_imm(16, symbols["w2m_exception"]));
     e.emit(&[a64::blr(16)]);
     e.emit(&budget_from_count());
-    unlock_runtime(&mut e);
+    // x0-x15 are reloaded from the state block after: x1 and x2 are free, with x16
+    release_runtime(&mut e, timed, Site::Exception, (16, 1, 2));
     e.emit(&a64::mov_imm(16, PROCESS_VA + STATE_OFF));
     for i in (0..16).step_by(2) {
         e.emit(&[a64::ldp(i, i + 1, 16, 8 * i64::from(i))]);
@@ -258,15 +386,15 @@ pub struct MonitorCode {
 
 /// Writes the monitor code into the monitor area (`mem` starts at `MONITOR_VA`): `_write_monitor`, vCPU 0's monitor
 /// data header (count 0, limit 0, the dispatch table's address), the vectors, the dispatcher, the empty table and the
-/// exception entry.
-pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>) -> MonitorCode {
+/// exception entry. `timed`: the runtime word's takings timed (Sprint 164; false writes the Python's words).
+pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, timed: bool) -> MonitorCode {
     let header: Vec<u8> = [0u64, 0, MONITOR_VA + DISPATCH_TABLE]
         .iter()
         .flat_map(|q| q.to_le_bytes())
         .collect();
     mem[MONITOR_DATA as usize..MONITOR_DATA as usize + 24].copy_from_slice(&header);
     write_words(mem, VECTORS, &vectors());
-    let (d, miss_va) = dispatcher(symbols);
+    let (d, miss_va) = dispatcher(symbols, timed);
     write_words(mem, DISPATCHER, &d);
     let mut empty = [0u8; 16];
     empty[..8].copy_from_slice(&EMPTY_TARGET.to_le_bytes());
@@ -276,7 +404,7 @@ pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>) -> MonitorCode {
         mem[at..at + 16].copy_from_slice(&empty);
     }
     let dispatch_va = MONITOR_VA + DISPATCHER;
-    let (e, exception_call_va) = exception_entry(symbols, dispatch_va);
+    let (e, exception_call_va) = exception_entry(symbols, dispatch_va, timed);
     write_words(mem, EXCEPTION_ENTRY, &e);
     MonitorCode {
         dispatch_va,

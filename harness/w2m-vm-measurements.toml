@@ -1,6 +1,6 @@
 # Step 3's measurements (Sprint 163; docs/rust-port-plan-2026-10-24.md step 3, amended 2026-10-27): an exit's host time
-# by kind on qpc and sleeper, and whether a guest WFE or WFI exits, as MEASUREMENT_RECORDED with vocabulary 0.11's
-# metrics (P24). run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
+# by kind on qpc and sleeper, whether a guest WFE or WFI exits, and (Sprint 164) the runtime word's hold and wait times
+# from a second, timed run of each guest, as MEASUREMENT_RECORDED with vocabulary 0.11's metrics (P24). run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
 # repository root after `cargo build --release`, on this Mac (Hypervisor.framework):
 #   uv run substrate run --file harness/w2m-vm-measurements.toml --root store/runs/w2m-vm-measurements-<ns> --strict
 

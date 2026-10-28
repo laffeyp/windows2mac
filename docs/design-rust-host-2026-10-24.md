@@ -142,6 +142,13 @@ this (the bridge, the service table's class, these locks); it is ported to Rust 
 and any new code inside the VM before then is Rust. On one vCPU (plan steps 3 to 5) every lock is uncontended; the
 split is built and judged at step 6.
 
+*Measured 2026-10-28 (Sprint 164, `store/runs/w2m-vm-measurements-1793171817000000000`, one vCPU, today's single
+word):* the switch stub's hold, the scheduling hold this paragraph prices at 200 ns, is 83 ns at p50 and at p99 over
+`sleeper`'s 3,018 takings. The word's other holds are the ones changes 1 and 3 remove: a bridge across its C service
+(2.1 to 4.3 µs at p50, to 57.5 µs when the service exits to the host) and the dispatcher across an in-VM compile
+(1.3 to 3.4 µs at p50, to 246 µs). Every wait but each run's first is 4 ticks (167 ns) or less. The revisit
+conditions stand as written; one vCPU cannot reach them.
+
 **What it adds.** One uncontended three-state lock (change 5) a call for the classes that take one, and none for
 the hottest three.
 

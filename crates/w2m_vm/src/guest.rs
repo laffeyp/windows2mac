@@ -22,7 +22,8 @@ use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE
 use crate::GIGA_BLOCK;
 use crate::assembler::{Assembler, Target};
 use crate::monitor_code::{
-    self, MonitorCode, REG_BUDGET, STATE_REDIRECT, budget_from_count, count_from_budget, lock_runtime, unlock_runtime,
+    self, MonitorCode, REG_BUDGET, STATE_REDIRECT, Site, budget_from_count, count_from_budget, record_taking,
+    release_runtime, take_runtime, unlock_runtime,
 };
 use crate::process::{self, Areas, PARAMETERS_ROOM, ProcessArea, ProcessError, Start, TRACE_SIZE};
 use crate::tables::{TableError, write_translation_tables};
@@ -314,7 +315,9 @@ impl CodeCache<'_> {
 /// thread's run-table entry and its vectors in its slot, write the count, and call threads.c `w2m_switch(schedule,
 /// stop)` on the runtime's stack; on 1 load the thread it chose and dispatch; on 0 restore and take the exit the stub
 /// stands for (a slice's end returns to the block's `hvc #4` in x30, a bridge's hand-over makes `hvc #12`).
-fn switch_stub(a: &mut Assembler, from_slice: bool, switch: u64, dispatch_va: u64) {
+/// `timed`: the runtime word's takings timed (Sprint 164), the taking recorded before the guest registers are reloaded
+/// (x18, x25 and x26 are reloaded there; x16 holds the entry they come from).
+fn switch_stub(a: &mut Assembler, from_slice: bool, switch: u64, dispatch_va: u64, timed: bool) {
     let entry_in_x16 = |a: &mut Assembler| {
         a.emit(&a64::mov_imm(16, MONITOR_VA + MONITOR_DATA));
         a.emit(&[a64::ldr(8, 16, 16, CURRENT_ENTRY as u32)]);
@@ -329,7 +332,7 @@ fn switch_stub(a: &mut Assembler, from_slice: bool, switch: u64, dispatch_va: u6
         a.emit(&a64::mov_imm(18, MONITOR_VA));
         a.emit(&[a64::add(17, 17, 18, a64::LSL, 0)]);
     };
-    lock_runtime(a); // before the first store to the shared run table
+    take_runtime(a, timed); // before the first store to the shared run table
     entry_in_x16(a);
     registers(a, a64::stp);
     vectors_at_x17(a);
@@ -364,10 +367,16 @@ fn switch_stub(a: &mut Assembler, from_slice: bool, switch: u64, dispatch_va: u6
         a64::msr(a64::FPCR, 18),
         a64::msr(a64::FPSR, 25),
     ]);
+    if timed {
+        record_taking(a, Site::Switch, 18, 25, 26);
+    }
     registers(a, a64::ldp);
     unlock_runtime(a); // x16 is not among the registers loaded
     a.branch(a64::b, Target::Va(dispatch_va));
     a.bind(decline);
+    if timed {
+        record_taking(a, Site::Switch, 18, 25, 26);
+    }
     registers(a, a64::ldp);
     unlock_runtime(a);
     a.emit(&[if from_slice { a64::ret() } else { a64::hvc(HVC_SCHEDULE) }]);
@@ -418,7 +427,8 @@ fn entry_stub(a: &mut Assembler, dispatch_va: u64) {
 /// of the return; RSP keeps the return address) and `state.schedule`: RETRY leaves the call unreturned with RIP at
 /// `thunk`; any schedule bit goes to the switch stub. With no service: `hvc #9`. Call tracing (`call_trace`) is not
 /// carried yet.
-fn bridge(a: &mut Assembler, service: Option<(u64, bool)>, thunk: u64, resume_va: u64, switch_va: u64) {
+/// `timed`: the runtime word's takings timed (Sprint 164); x1 and x2 are free at the release (x0-x15 reloaded after).
+fn bridge(a: &mut Assembler, service: Option<(u64, bool)>, thunk: u64, resume_va: u64, switch_va: u64, timed: bool) {
     let Some((service_va, sets_rax)) = service else {
         a.emit(&[a64::hvc(HVC_NO_SERVICE)]);
         return;
@@ -432,11 +442,11 @@ fn bridge(a: &mut Assembler, service: Option<(u64, bool)>, thunk: u64, resume_va
     a.emit(&a64::mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE));
     a.emit(&[a64::addi(31, 16, 0)]);
     a.emit(&count_from_budget());
-    lock_runtime(a);
+    take_runtime(a, timed);
     a.emit(&a64::mov_imm(16, service_va));
     a.emit(&[a64::blr(16)]);
     a.emit(&budget_from_count());
-    unlock_runtime(a);
+    release_runtime(a, timed, Site::Bridge, (16, 1, 2));
     a.emit(&a64::mov_imm(16, state));
     if sets_rax {
         a.emit(&[a64::str(8, 0, 16, 0)]);
@@ -497,6 +507,8 @@ pub struct Guest {
     pub next_table: u64,
     /// the threads by id (`self.threads`, Sprint 156): the host's own fields; their run table entries are in memory
     pub threads: BTreeMap<u64, crate::threads::Thread>,
+    /// the runtime word's takings timed in the monitor code and bridges (`Start::time_runtime_word`, Sprint 164)
+    pub time_runtime_word: bool,
     /// the loader's images, the program first, and the DLLs whose entry runs, in order (`self.ld.images`,
     /// `self.ld.init_order`): what a created thread's stack, static TLS and attach stub read (Sprint 156)
     pub images: Vec<pe_loader::Image>,
@@ -587,17 +599,18 @@ impl Guest {
         };
         let (ttbr, _) = write_translation_tables(mem, &layout.maps).map_err(GuestError::Tables)?;
         write_u64(mem, VM_COMPILER + VMC_CURSOR, CODE_CACHE);
-        let code = monitor_code::write(mem, &image.symbols);
+        let timed = start.time_runtime_word;
+        let code = monitor_code::write(mem, &image.symbols, timed);
         let switch = image.symbols["w2m_switch"];
         let mut cache = CodeCache { mem };
-        let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va))?;
-        let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va))?;
+        let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
+        let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;
         let mut thunks = loaded.thunks.clone();
         let mut bridges = BTreeMap::new();
         let mut bind = |cache: &mut CodeCache<'_>, thunk: u64, name: &str| -> Result<(), GuestError> {
             let (dll, function) = name.split_once('!').unwrap_or((name, ""));
             let service = service_for(services, dll, function).map(|s| (image.symbols[&s.symbol], s.sets_rax));
-            let va = cache.put(|a| bridge(a, service, thunk, code.dispatch_va, switch_va))?;
+            let va = cache.put(|a| bridge(a, service, thunk, code.dispatch_va, switch_va, timed))?;
             bridges.insert(thunk, va);
             Ok(())
         };
@@ -678,6 +691,7 @@ impl Guest {
                 .collect(),
             next_table: SPLIT_TABLES,
             threads: BTreeMap::new(),
+            time_runtime_word: timed,
             images: loaded.images.clone(),
             init_order: loaded.init_order.clone(),
         })
@@ -749,11 +763,11 @@ impl Guest {
         self.thunks.insert(thunk, name.to_string());
         let (dll, function) = name.split_once('!').unwrap_or((name, ""));
         let service = service_for(&self.services, dll, function).map(|s| (self.symbols[&s.symbol], s.sets_rax));
-        let (dispatch_va, switch_va) = (self.code.dispatch_va, self.switch_va);
+        let (dispatch_va, switch_va, timed) = (self.code.dispatch_va, self.switch_va, self.time_runtime_word);
         let mut cache = CodeCache {
             mem: self.memory.as_mut_slice(),
         };
-        let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va))?;
+        let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va, timed))?;
         self.bridges.insert(thunk, va);
         Ok(thunk)
     }

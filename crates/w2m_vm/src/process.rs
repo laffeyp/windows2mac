@@ -71,6 +71,9 @@ pub struct Start {
     /// (instructions a second, the wall clock's start as a FILETIME)
     pub instruction_clock: Option<(u64, u64)>,
     pub call_trace: bool,
+    /// the runtime word's takings timed in the monitor code (Sprint 164, step 3's measure); false writes the Python's
+    /// words
+    pub time_runtime_word: bool,
 }
 
 impl Start {
@@ -90,6 +93,7 @@ impl Start {
             clock_from_host: false,
             instruction_clock: None,
             call_trace: false,
+            time_runtime_word: false,
         }
     }
 

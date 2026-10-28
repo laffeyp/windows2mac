@@ -21,7 +21,10 @@ use crate::compile::HostCompiler;
 use crate::guest::{Guest, HVC_SCHEDULE, RT_IN_VM, STATE_SCHEDULE, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
 use crate::host_request::{HOST_THREAD, THREAD_END, THREAD_EXIT_CODE, THREAD_EXIT_STUB};
 use crate::monitor::set_system_registers;
-use crate::monitor_code::{EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, REG_BUDGET, dispatch_slot};
+use crate::monitor_code::{
+    EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, LOCK_ENTRIES, LOCK_ENTRY, LOCK_EXITS, LOCK_TAKINGS,
+    LOCK_TAKINGS_COUNT, LOCK_TIMING, REG_BUDGET, dispatch_slot,
+};
 use crate::threads::{FIRST_TID, STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
 
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
@@ -134,6 +137,48 @@ pub enum Stop {
     Exit(String),
 }
 
+/// One taking of the runtime word as the guest timed it (Sprint 164; `monitor_code::LOCK_TIMING`): virtual-counter
+/// ticks at the wait's start, the taking and the release, its site, and the host's exit count at each of the three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Taking {
+    pub site: u64,
+    pub wait_start: u64,
+    pub taken: u64,
+    pub released: u64,
+    pub exits_at_wait_start: u64,
+    pub exits_at_taken: u64,
+    pub exits_at_released: u64,
+}
+
+/// The runtime word's takings the guest timed: how many it counted, and those it wrote (no more than
+/// `LOCK_TAKINGS`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuntimeWordTimes {
+    pub counted: u64,
+    pub takings: Vec<Taking>,
+}
+
+/// The timing area as the guest left it.
+pub fn read_runtime_word(mem: &[u8]) -> RuntimeWordTimes {
+    let counted = read_u64(mem, LOCK_TIMING + LOCK_TAKINGS_COUNT);
+    let takings = (0..counted.min(LOCK_TAKINGS))
+        .map(|i| {
+            let e = LOCK_TIMING + LOCK_ENTRIES + LOCK_ENTRY * i;
+            let w = |k: u64| read_u64(mem, e + 8 * k);
+            Taking {
+                wait_start: w(0),
+                taken: w(1),
+                released: w(2),
+                site: w(3),
+                exits_at_wait_start: w(4),
+                exits_at_taken: w(5),
+                exits_at_released: w(6),
+            }
+        })
+        .collect();
+    RuntimeWordTimes { counted, takings }
+}
+
 /// What a run did.
 #[derive(Debug, Clone)]
 pub struct Outcome {
@@ -148,6 +193,8 @@ pub struct Outcome {
     pub serve_ns: Vec<u64>,
     /// the same times by the exit's kind (`hvc <k>`, `vtimer`, or `ec 0x<class>`), for step 3's measure (Sprint 163)
     pub serve_by_kind: BTreeMap<String, Vec<u64>>,
+    /// the runtime word's takings when the guest times them (Sprint 164)
+    pub runtime_word: RuntimeWordTimes,
     /// each run's time, from `hv_vcpu_run`'s call to its return, in ns
     pub run_ns: Vec<u64>,
     /// the exits, by hvc number (0 for a non-hvc exit)
@@ -305,6 +352,7 @@ fn run(
         counts: BTreeMap::new(),
         serve_ns: Vec::new(),
         serve_by_kind: BTreeMap::new(),
+        runtime_word: RuntimeWordTimes::default(),
         run_ns: Vec::new(),
         exits: BTreeMap::new(),
         created: Vec::new(),
@@ -361,8 +409,17 @@ fn run(
         }
         let started = Instant::now();
         let exit = vcpu.run()?;
-        out.run_ns.push(started.elapsed().as_nanos() as u64);
-        marked = Some(Instant::now());
+        let returned = Instant::now();
+        if guest.time_runtime_word {
+            // the exit counted where the guest's timing reads it, so a taking that spans an exit says so (Sprint 164)
+            let at = (LOCK_TIMING + LOCK_EXITS) as usize;
+            let word = &mut guest.memory.as_mut_slice()[at..at + 8];
+            let n = u64::from_le_bytes(word.try_into().unwrap()) + 1;
+            word.copy_from_slice(&n.to_le_bytes());
+        }
+        out.run_ns.push((returned - started).as_nanos() as u64);
+        // the exit's kind, named before the service is timed, so the naming is not counted in it (reviewer's finding
+        // of 2026-10-27: Sprint 163 named it after starting the timer)
         kind = match (exit.hvc_immediate(), &exit) {
             (Some(n), _) => format!("hvc {n}"),
             (None, Exit::VtimerActivated) => "vtimer".to_string(),
@@ -370,6 +427,7 @@ fn run(
                 .exception_class()
                 .map_or_else(|| format!("{e:?}"), |c| format!("ec 0x{c:02x}")),
         };
+        marked = Some(Instant::now());
         let mem = guest.memory.as_mut_slice();
         vm_compiled(mem, &mut out.blocks, &mut out.translations);
         let pc = vcpu.reg(Reg::Pc)?;
@@ -532,5 +590,8 @@ fn run(
             .insert(name, read_u64(mem, VM_COMPILER + VMC_COUNTS + 8 * i as u64));
     }
     out.stop = stop;
+    if guest.time_runtime_word {
+        out.runtime_word = read_runtime_word(guest.memory.as_slice()); // Sprint 164: read once, at the stop
+    }
     Ok(out)
 }
