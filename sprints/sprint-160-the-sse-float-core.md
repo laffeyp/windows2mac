@@ -100,3 +100,30 @@ where the cases reach them.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: three judges and two planted faults, each reaching the judge it tests.
 - [x] One concept: the SSE float core, `_sse.rule`'s classes.
+
+## result
+
+- `crates/translator`: `lift.rs` gains `SseLoc` (an XMM register or a location), `sse_operand` and `Op::Sse` with its
+  place in `commit_order`; `rules.rs` the 52 classes (`SSE_FLOAT_CORE`), `sse_aligned` for lift.py 97-98 and the
+  `sse` rule; `lower.rs` the op's places in the flag table and the temporaries, `fp_class`, `sse_src`,
+  `check_alignment`, `set_flags_from_fcmp` and `lower_sse`. `tests/c_words.rs` now prints the record calls no Rust
+  rule lifts, by decoded class, the census this card's scope was chosen from.
+- **The C emitter:** the Rust rules lift 1,173,060 of the record's 1,186,511 calls (1,096,927 before); the other
+  1,172,795 the C compiles, in 157 classes (115 before), equal the C's words. This group's are 75,873 calls in 42
+  classes, MOVAPS 21,644, MOVSS 15,278, MOVUPS 8,498, MOVSD_XMM 4,783, MULSS 3,287, MULPS 3,134, CVTSS2SD 2,719,
+  CVTSD2SS 2,389 the most. The C refuses 260 of this group's calls (MOVSS 258, MOVAPS 1, MOVSD_XMM 1) besides the 5
+  before. No Rust refusal.
+- **Windows:** the case runner with the Rust translator compiled 110,401 case instructions in 212 classes (75,713 in
+  160 before); each run's counts equal `expected.tsv`, zero difference classes.
+- **The Python words:** the Rust words equal the fixture's for all 13,032 case codes the Rust rules lift (11,041
+  before), of 25,919.
+- **The records:** four `case-runner-rust` sessions, `store/runs/case-runner-rust-1793163955000000000`,
+  `-1793164001000000000`, `-1793164024000000000`, `-1793164038000000000`: 205, 174, 107 and 26 classes accepted, as
+  before; the Rust translator the candidate for 65, 129, 107 and 0 of them (65, 77, 55 and 0 before); no discrepancy;
+  each session completed.
+- **Planted faults.** (1) PF's lazy value from `vs` in place of `vc`: the C judge named COMISD's words, the case
+  runner PF in all four compare classes ("243 COMISD PF: case 22052 … vm 1, cpu 0", COMISS, UCOMISD, UCOMISS). (2)
+  MOVAPS's alignment check skipped: the C judge named 6,225 MOVAPS calls, the case runner 93 MOVAPS cases Windows
+  faulted on that the VM completed ("vm completed, cpu fault … cpu 0xc0000005"), and the Python words judge the same
+  code's words. Restored, every judge passes.
+- Edits outside the Edit tool: one one-line `sed` added `SseLoc` to `lower.rs`'s import line.

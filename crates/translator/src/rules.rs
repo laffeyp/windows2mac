@@ -8,7 +8,8 @@
 //! `_int.py` lines it carries.
 
 use crate::lift::{
-    Ctx, LiftError, Loc, Op, Operand, RAX, RDX, RSP, alu_op, cc, operand, pop as pop_value, push as push_value, val,
+    Ctx, LiftError, Loc, Op, Operand, RAX, RDX, RSP, alu_op, cc, operand, pop as pop_value, push as push_value,
+    sse_operand, val,
 };
 
 /// A rule: the operations of one instruction appended to `ctx.b`.
@@ -92,6 +93,8 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         "STC" | "CLC" | "CMC" | "SAHF" | "PUSHFQ" | "POPFQ" | "LODSB" | "SCASB" | "SCASD" | "STOSB" | "MOVSB"
         | "MOVSD" | "CMPSB" | "CMPSD" => implicit,
         "LOOP" | "LOOPE" | "LOOPNE" | "JRCXZ" => loop_,
+        // group 4 (Sprint 160): `_sse.rule`'s classes
+        ic if SSE_FLOAT_CORE.contains(&ic) => sse,
         _ => return None,
     })
 }
@@ -1565,5 +1568,90 @@ fn loop_(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
     let (target, _) = operand(ctx.b, &ctx.ops[0], ctx.nxt, None)?;
     let srcs = vec![val(ctx.b, target)];
     model(ctx, None, srcs, 64);
+    Ok(())
+}
+
+// group 4 (Sprint 160): the SSE float core
+
+/// The classes whose module's rule is `_sse.rule` (store/rules/registry.tsv; lift.py 99-102's `SSE` base set).
+pub const SSE_FLOAT_CORE: [&str; 52] = [
+    "MOVAPS",
+    "MOVAPD",
+    "MOVUPS",
+    "MOVUPD",
+    "MOVSS",
+    "MOVSD_XMM",
+    "MOVD",
+    "MOVQ",
+    "XORPS",
+    "XORPD",
+    "ANDPS",
+    "ANDPD",
+    "ADDSS",
+    "ADDSD",
+    "ADDPS",
+    "ADDPD",
+    "SUBSS",
+    "SUBSD",
+    "SUBPS",
+    "SUBPD",
+    "MULSS",
+    "MULSD",
+    "MULPS",
+    "MULPD",
+    "DIVSS",
+    "DIVSD",
+    "DIVPS",
+    "DIVPD",
+    "SQRTSS",
+    "SQRTSD",
+    "SQRTPS",
+    "SQRTPD",
+    "MINSS",
+    "MINSD",
+    "MINPS",
+    "MINPD",
+    "MAXSS",
+    "MAXSD",
+    "MAXPS",
+    "MAXPD",
+    "CVTTSS2SI",
+    "CVTTSD2SI",
+    "CVTSS2SI",
+    "CVTSD2SI",
+    "CVTSI2SS",
+    "CVTSI2SD",
+    "CVTSS2SD",
+    "CVTSD2SS",
+    "UCOMISS",
+    "UCOMISD",
+    "COMISS",
+    "COMISD",
+];
+
+/// `SSE_ALIGNED` (lift.py 97-98) for this group's classes: a 16-byte memory operand of these must be 16-byte aligned
+/// (SDM: #GP otherwise). The later groups' classes join it with their rules (lift.py 104-141).
+fn sse_aligned(ic: &str) -> bool {
+    matches!(ic, "MOVAPS" | "MOVAPD" | "XORPS" | "XORPD" | "ANDPS" | "ANDPD")
+        || ["ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"]
+            .iter()
+            .any(|op| ic.strip_prefix(op).is_some_and(|t| t == "PS" || t == "PD"))
+}
+
+/// `_sse.rule` (_sse.py 32-39): one legacy-SSE instruction as one `sse` operation, aligned to 16 when it has a
+/// memory operand and its class is in `SSE_ALIGNED`.
+fn sse(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let dst = sse_operand(ctx.b, &ctx.ops[0], ctx.nxt)?;
+    let src = sse_operand(ctx.b, &ctx.ops[1], ctx.nxt)?;
+    let has_memory = dst.addr().is_some() || src.addr().is_some();
+    let align = if has_memory && sse_aligned(&ctx.ic) { 16 } else { 0 };
+    let ic = ctx.ic.clone();
+    ctx.b.emit(Op::Sse {
+        ic,
+        dst,
+        src,
+        align,
+        imm: None,
+    });
     Ok(())
 }

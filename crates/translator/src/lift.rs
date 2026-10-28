@@ -152,6 +152,16 @@ pub enum Op {
     Cx16 {
         addr: Temp,
     },
+    /// ("sse", iclass, dst, src, align[, imm]): one legacy-SSE instruction; dst and src are locations or XMM registers;
+    /// align 16 when a memory operand must be 16-byte aligned (#GP otherwise); computed after every read and before
+    /// any write (lift.py 52-56)
+    Sse {
+        ic: String,
+        dst: SseLoc,
+        src: SseLoc,
+        align: u32,
+        imm: Option<u64>,
+    },
     /// ("x86", ic, dst, srcs, bits): one integer instruction the model computes whole (Sprint 050; integer_model.py):
     /// dst a loc or None, srcs the temporaries it reads; implicit operands are read by the model, as one model step
     X86 {
@@ -160,6 +170,36 @@ pub enum Op {
         srcs: Vec<Temp>,
         bits: u32,
     },
+}
+
+/// An SSE operand (lift.py 177-178): ("x", n) for XMM register n, or a general register or memory location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SseLoc {
+    X(u8),
+    Loc(Loc),
+}
+
+impl SseLoc {
+    /// The memory operand's address temporary, if this is one.
+    pub fn addr(&self) -> Option<Temp> {
+        match self {
+            SseLoc::Loc(Loc::M { addr, .. }) => Some(*addr),
+            _ => None,
+        }
+    }
+}
+
+/// `_operand` (lift.py 175-178) for an SSE rule: an XMM register as ("x", n), anything else as `operand` reads it.
+/// The YMM registers come with the VEX group.
+pub fn sse_operand(b: &mut Builder, s: &str, next_ip: u64) -> Result<SseLoc, LiftError> {
+    if let Some(n) = s.strip_prefix("R:XMM") {
+        let n: u8 = n.parse().map_err(|_| LiftError(format!("operand {s}")))?;
+        return Ok(SseLoc::X(n));
+    }
+    match operand(b, s, next_ip, None)? {
+        (Operand::Loc(loc), _) => Ok(SseLoc::Loc(loc)),
+        _ => Err(LiftError(format!("operand {s}: not a location"))),
+    }
 }
 
 /// lift.py 154-159.
@@ -447,6 +487,9 @@ pub fn pop(b: &mut Builder) -> Temp {
 /// load. Otherwise the first violation, named. The kinds the Rust rules do not emit yet are not in `Op`.
 pub fn commit_order(ins: &Lifted) -> Option<String> {
     let memory_access = |op: &Op| match op {
+        // ("sse", ic, dst, src, ...): a store to a memory destination, else a load from a memory source
+        Op::Sse { dst, .. } if dst.addr().is_some() => Some("store"),
+        Op::Sse { src, .. } if src.addr().is_some() => Some("load"),
         Op::Ld { loc: Loc::M { .. }, .. } | Op::Mxcsr { store: false, .. } => Some("load"),
         Op::St { loc: Loc::M { .. }, .. }
         | Op::Set { loc: Loc::M { .. }, .. }
@@ -462,20 +505,21 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
         _ => None,
     };
     let effect = |op: &Op| {
-        matches!(
-            op,
-            Op::St { loc: Loc::R { .. }, .. }
-                | Op::Flags { .. }
-                | Op::Df { .. }
-                | Op::Cmov { .. }
-                | Op::Cpuid
-                | Op::Div { .. }
-                | Op::Set { loc: Loc::R { .. }, .. }
-                | Op::Cst { loc: Loc::R { .. }, .. }
-                | Op::Cstz { loc: Loc::R { .. }, .. }
-                | Op::Mxcsr { store: false, .. }
-                | Op::X86 { .. }
-        )
+        matches!(op, Op::Sse { dst, .. } if dst.addr().is_none())
+            || matches!(
+                op,
+                Op::St { loc: Loc::R { .. }, .. }
+                    | Op::Flags { .. }
+                    | Op::Df { .. }
+                    | Op::Cmov { .. }
+                    | Op::Cpuid
+                    | Op::Div { .. }
+                    | Op::Set { loc: Loc::R { .. }, .. }
+                    | Op::Cst { loc: Loc::R { .. }, .. }
+                    | Op::Cstz { loc: Loc::R { .. }, .. }
+                    | Op::Mxcsr { store: false, .. }
+                    | Op::X86 { .. }
+            )
     };
     let last_access = ins.ops.iter().rposition(|op| memory_access(op).is_some())?;
     let stores: Vec<usize> = (0..ins.ops.len())
@@ -503,6 +547,7 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
                 Op::Cpuid => "cpuid",
                 Op::Mxcsr { .. } => "mxcsr",
                 Op::X86 { .. } => "x86",
+                Op::Sse { .. } => "sse",
                 Op::Cmov { .. } => "cmov",
                 Op::Div { .. } => "div",
                 Op::Set { .. } => "set",

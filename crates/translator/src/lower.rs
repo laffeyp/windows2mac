@@ -15,7 +15,7 @@ use std::fmt;
 use a64_encoder::assembler::{Assembler, Target};
 use a64_encoder::{self as a64, LSL, LSR, ZR};
 
-use crate::lift::{Lifted, Loc, Op, Temp};
+use crate::lift::{Lifted, Loc, Op, SseLoc, Temp};
 
 /// vm_backend 357-371.
 pub const TEMP_REGS: [u32; 6] = [18, 25, 26, 27, 29, 30];
@@ -38,6 +38,10 @@ const AF_OPERANDS: u32 = 0x20;
 const PF_RESULT: u32 = AF_OPERANDS + 16;
 /// vm_backend 1125: one instruction run whole by the model.
 pub const HVC_SLOW_STEP: u32 = 11;
+/// HVC_SLOW_SSE (vm_backend 1118): one SSE instruction run by the model.
+pub const HVC_SLOW_SSE: u32 = 10;
+/// FLAGS_SSE (vm_backend 856): the SSE classes that write all six flags.
+const FLAGS_SSE: [&str; 6] = ["COMISS", "UCOMISS", "COMISD", "UCOMISD", "PCMPISTRI", "PCMPISTRI64"];
 /// vm_backend 97: the state block's gs_base (the TEB).
 const STATE_GS_BASE: u64 = 0xb0;
 // MONITOR_DATA (x28) + these (vm_backend 94-119): DF, MXCSR's saved value, the x87 control word, the register a lowering
@@ -651,6 +655,8 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> (u32, u32) {
         Op::Br { cond, .. } => (if *cond == "always" { 0 } else { cond_flags(cond) }, 0),
         Op::Set { cond, .. } | Op::Cmov { cond, .. } => (cond_flags(cond), 0),
         Op::Cx16 { .. } => (0, U_ZF),
+        // FLAGS_SSE (856): each writes all six
+        Op::Sse { ic, .. } => (0, if FLAGS_SSE.contains(&ic.as_str()) { ALL_FLAGS } else { 0 }),
         Op::Div { .. } => (ALL_FLAGS, ALL_FLAGS), // #DE before any write; every flag undefined after
         // FLAGS_ALL_READ (859): the model's steps read the whole state
         Op::Ud | Op::Xgetbv | Op::X86 { .. } => (ALL_FLAGS, 0),
@@ -793,6 +799,8 @@ fn temps_read(op: &Op) -> Vec<Temp> {
             Loc::R { .. } => vec![*t],
         },
         Op::Cx16 { addr } => vec![*addr],
+        // ("sse", ic, dst, src, ...): its memory operands' addresses (1015-1016)
+        Op::Sse { dst, src, .. } => [dst.addr(), src.addr()].into_iter().flatten().collect(),
         // ("mxcsr", "st"|"ld", m32) and ("fcw", "st", m16): lowered in A64
         Op::Mxcsr {
             loc: Loc::M { addr, .. },
@@ -1700,6 +1708,13 @@ pub fn compile_insn(
                 a.bind(fast);
                 mark_undefined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF);
             }
+            Op::Sse {
+                ic,
+                dst,
+                src,
+                align,
+                imm: _,
+            } => lower_sse(a, ic, dst, src, *align, &reg, &folded)?,
             // run by the model (hvc #11, 1665 and 1785): the profile's #UD, XGETBV, and the model's whole steps
             Op::Ud | Op::Xgetbv | Op::X86 { .. } => a.emit(&[a64::hvc(HVC_SLOW_STEP)]),
             Op::Mxcsr { store: st, loc } => {
@@ -1896,6 +1911,286 @@ fn lower_mxcsr(a: &mut Assembler, store: bool, addr: u32) {
         a64::bfi(17, 16, 1, 1), // AH
         a64::msr(a64::FPCR, 17),
     ]);
+}
+
+/// `FP_CLASSES` (vm_backend 1114-1116): the SSE classes that can raise an SIMD exception, lowered only while MXCSR masks
+/// all six.
+fn fp_class(ic: &str) -> bool {
+    let arithmetic = ["ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"].iter().any(|op| {
+        ic.strip_prefix(op)
+            .is_some_and(|t| matches!(t, "SS" | "SD" | "PS" | "PD"))
+    });
+    arithmetic
+        || matches!(
+            ic,
+            "CVTTSS2SI"
+                | "CVTTSD2SI"
+                | "CVTSS2SI"
+                | "CVTSD2SI"
+                | "CVTSI2SS"
+                | "CVTSI2SD"
+                | "CVTSS2SD"
+                | "CVTSD2SS"
+                | "UCOMISS"
+                | "UCOMISD"
+                | "COMISS"
+                | "COMISD"
+        )
+}
+
+/// `_sse_src` (_sse.py 70-75): the V register holding a source operand, an XMM register or `scratch` loaded from
+/// memory (`size` bytes).
+fn sse_src(
+    a: &mut Assembler,
+    loc: &SseLoc,
+    size: u32,
+    reg: &BTreeMap<Temp, u32>,
+    scratch: u32,
+) -> Result<u32, CompileError> {
+    match loc {
+        SseLoc::X(n) => Ok(u32::from(*n)),
+        SseLoc::Loc(Loc::M { addr, .. }) => {
+            a.emit(&[a64::ldr_v(size, scratch, reg_at(reg, *addr)?, 0)]);
+            Ok(scratch)
+        }
+        SseLoc::Loc(Loc::R { .. }) => Err(CompileError("an SSE source in a general register".into())),
+    }
+}
+
+fn reg_at(reg: &BTreeMap<Temp, u32>, t: Temp) -> Result<u32, CompileError> {
+    reg.get(&t)
+        .copied()
+        .ok_or_else(|| CompileError(format!("temporary {t} has no register")))
+}
+
+/// `_check_alignment` (_sse.py 78-86): #GP on a misaligned 16-byte operand, which Windows reports as an access
+/// violation at the instruction; a load from address 0 (never mapped) raises it through the same exception path,
+/// before the instruction changes anything.
+fn check_alignment(a: &mut Assembler, rt: u32) {
+    let ok = a.label();
+    a.emit(&[a64::ubfx(16, rt, 0, 4)]);
+    a.branch(|off| a64::cbz(16, off), ok);
+    a.emit(&[a64::movz(16, 0, 0), a64::ldr(8, 16, 16, 0)]);
+    a.bind(ok);
+}
+
+/// `_set_flags_from_fcmp` (_sse.py 89-97): (U)COMIS[SD]: FCMP gives NZCV 0011 unordered, 1000 less, 0110 equal, 0010
+/// greater; x86 wants ZF PF CF 111, 001, 100, 000 and OF SF AF cleared. PF is unordered, kept lazily (PF_RESULT: 0
+/// for PF set, 1 for clear, so V clear stores 1); x17 is scratch (x23 holds the step budget).
+fn set_flags_from_fcmp(a: &mut Assembler) {
+    a.emit(&[
+        a64::cset(17, "vs"),
+        a64::cset(REG_CF, "lt"),
+        a64::cset(REG_ZF, "eq"),
+        a64::orr(REG_ZF, REG_ZF, 17),
+        a64::mov(REG_OF, ZR),
+        a64::mov(REG_SF, ZR),
+        a64::cset(16, "vc"),
+        a64::stp(ZR, ZR, 28, i64::from(AF_OPERANDS)),
+        a64::str(8, 16, 28, AF_OPERANDS + 16),
+    ]);
+    mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF);
+}
+
+/// `_sse.lower` (_sse.py 324-488) for the SSE float core (group 4, Sprint 160): `_sse.rule`'s classes. XMM i is V i;
+/// V30 and V31 are scratch; FPCR follows MXCSR. An instruction that can raise an SIMD exception leaves the fast path
+/// when MXCSR unmasks any.
+fn lower_sse(
+    a: &mut Assembler,
+    ic: &str,
+    dst: &SseLoc,
+    src: &SseLoc,
+    align: u32,
+    reg: &BTreeMap<Temp, u32>,
+    folded: &BTreeMap<Temp, AddressForm>,
+) -> Result<(), CompileError> {
+    for loc in [dst, src] {
+        if let (Some(addr), true) = (loc.addr(), align != 0) {
+            check_alignment(a, reg_at(reg, addr)?);
+        }
+    }
+    if fp_class(ic) {
+        // fast path only when MXCSR masks all six (330-335)
+        let fast = a.label();
+        a.emit(&[
+            a64::ldr(4, 16, 28, MXCSR_OFF),
+            a64::ubfx(16, 16, 7, 6),
+            a64::cmpi(16, 0x3F),
+        ]);
+        a.branch(|off| a64::bcond("eq", off), fast);
+        a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
+        a.bind(fast);
+    }
+    let xmm = |l: &SseLoc| match l {
+        SseLoc::X(n) => Ok(u32::from(*n)),
+        _ => Err(CompileError(format!("sse {ic}: an XMM operand expected"))),
+    };
+    let addr_reg = |l: &SseLoc| match l.addr() {
+        Some(t) => reg_at(reg, t),
+        None => Err(CompileError(format!("sse {ic}: a memory operand expected"))),
+    };
+    match ic {
+        "MOVAPS" | "MOVAPD" | "MOVUPS" | "MOVUPD" => match (dst, src) {
+            // 368-374
+            (SseLoc::X(d), SseLoc::X(s)) => a.emit(&[a64::mov_v(u32::from(*d), u32::from(*s))]),
+            (SseLoc::X(d), _) => a.emit(&[a64::ldr_v(16, u32::from(*d), addr_reg(src)?, 0)]),
+            _ => a.emit(&[a64::str_v(16, xmm(src)?, addr_reg(dst)?, 0)]),
+        },
+        "MOVSS" | "MOVSD_XMM" => {
+            // 375-382: the register form merges; a load zeroes the rest
+            let n = if ic == "MOVSS" { 4 } else { 8 };
+            match (dst, src) {
+                (SseLoc::X(d), SseLoc::X(s)) => a.emit(&[a64::ins_lane0(n, u32::from(*d), u32::from(*s))]),
+                (SseLoc::X(d), _) => a.emit(&[a64::ldr_v(n, u32::from(*d), addr_reg(src)?, 0)]),
+                _ => a.emit(&[a64::str_v(n, xmm(src)?, addr_reg(dst)?, 0)]),
+            }
+        }
+        "MOVD" | "MOVQ" => match (dst, src) {
+            // 383-396
+            (_, SseLoc::Loc(Loc::R { idx, bits, .. })) => {
+                let n = bits / 8;
+                let idx = u32::from(*idx);
+                a.emit(&[
+                    if n == 8 { a64::mov(16, idx) } else { a64::mov32(16, idx) },
+                    a64::fmov_to_v(n, xmm(dst)?, 16),
+                ]);
+            }
+            (SseLoc::Loc(r @ Loc::R { bits, .. }), _) => {
+                a.emit(&[a64::fmov_from_v(bits / 8, 16, xmm(src)?)]);
+                store(a, r, 16, folded, reg)?;
+            }
+            (SseLoc::X(d), SseLoc::Loc(Loc::M { .. })) => {
+                let n = if ic == "MOVD" { 4 } else { 8 };
+                a.emit(&[a64::ldr_v(n, u32::from(*d), addr_reg(src)?, 0)]);
+            }
+            (SseLoc::Loc(Loc::M { .. }), _) => {
+                let n = if ic == "MOVD" { 4 } else { 8 };
+                a.emit(&[a64::str_v(n, xmm(src)?, addr_reg(dst)?, 0)]);
+            }
+            _ => {
+                // MOVQ xmm, xmm: the low 64 bits, the rest zeroed
+                a.emit(&[a64::fmov_from_v(8, 16, xmm(src)?), a64::fmov_to_v(8, xmm(dst)?, 16)]);
+            }
+        },
+        "XORPS" | "XORPD" | "ANDPS" | "ANDPD" => {
+            // 397-399
+            let v = sse_src(a, src, 16, reg, 31)?;
+            let d = xmm(dst)?;
+            a.emit(&[if ic.starts_with("XOR") {
+                a64::eor_v(d, d, v)
+            } else {
+                a64::and_v(d, d, v)
+            }]);
+        }
+        "CVTTSS2SI" | "CVTTSD2SI" | "CVTSS2SI" | "CVTSD2SI" => {
+            // 440-467: x86 reports only IE and PE here, and only IE when the result is the integer indefinite; FRINTX,
+            // FCVTZS and the range check can set IDC, and FRINTX sets IXC before an invalid conversion, so FPSR is
+            // rebuilt from its value before the instruction (in x18: the only temporary of this instruction, a memory
+            // source's address, is dead once the source is loaded)
+            let n = if ic.contains("SS") { 4 } else { 8 };
+            let SseLoc::Loc(r @ Loc::R { bits, .. }) = dst else {
+                return Err(CompileError(format!(
+                    "sse {ic}: a general register destination expected"
+                )));
+            };
+            let bits = *bits;
+            let mut v = sse_src(a, src, n, reg, 31)?;
+            a.emit(&[a64::mrs(18, a64::FPSR)]);
+            if !ic.starts_with("CVTT") {
+                a.emit(&[a64::frintx(n, 30, v)]); // round in MXCSR's mode first
+                v = 30;
+            }
+            a.emit(&[a64::fcvtzs(bits, n, 16, v)]);
+            // the integer indefinite 1 << (bits-1) on NaN or input >= 2^(bits-1); FCVTZS saturates and gives 0 for NaN
+            let bound: u64 = match (n, bits) {
+                (4, 32) => 0x4F00_0000,
+                (4, 64) => 0x5F00_0000,
+                (8, 32) => 0x41E0_0000_0000_0000,
+                _ => 0x43E0_0000_0000_0000,
+            };
+            let (ok, done) = (a.label(), a.label());
+            let breg = if v != 31 { 31 } else { 30 };
+            a.emit(&a64::mov_imm(17, bound));
+            a.emit(&[a64::fmov_to_v(n, breg, 17), a64::fcmp(n, v, breg, false)]);
+            a.branch(|off| a64::bcond("mi", off), ok); // CVT_INDEFINITE (vm_backend 1135) is True
+            a.emit(&a64::mov_imm(16, 1 << (bits - 1)));
+            a.emit(&[a64::movz(17, 1, 0), a64::orr(18, 18, 17), a64::msr(a64::FPSR, 18)]);
+            a.branch(a64::b, done);
+            a.bind(ok); // in range: IDC as it was before
+            a.emit(&[
+                a64::mrs(17, a64::FPSR),
+                a64::ubfx(18, 18, 7, 1),
+                a64::bfi(17, 18, 7, 1),
+                a64::msr(a64::FPSR, 17),
+            ]);
+            a.bind(done);
+            store(a, r, 16, folded, reg)?;
+        }
+        "CVTSI2SS" | "CVTSI2SD" => {
+            // 468-477
+            let n = if ic.ends_with("SS") { 4 } else { 8 };
+            let bits = match src {
+                SseLoc::Loc(Loc::R { idx, bits, .. }) => {
+                    let idx = u32::from(*idx);
+                    a.emit(&[if *bits == 64 {
+                        a64::mov(16, idx)
+                    } else {
+                        a64::mov32(16, idx)
+                    }]);
+                    *bits
+                }
+                SseLoc::Loc(Loc::M { addr, bytes }) => {
+                    a.emit(&[a64::ldr(*bytes, 16, reg_at(reg, *addr)?, 0)]);
+                    8 * bytes
+                }
+                SseLoc::X(_) => return Err(CompileError(format!("sse {ic}: an XMM source"))),
+            };
+            if bits == 32 {
+                a.emit(&[a64::sxtw(16, 16)]);
+            }
+            a.emit(&[a64::scvtf(n, 64, 30, 16), a64::ins_lane0(n, xmm(dst)?, 30)]);
+        }
+        "CVTSS2SD" | "CVTSD2SS" => {
+            // 478-481
+            let (sn, dn) = if ic == "CVTSS2SD" { (4, 8) } else { (8, 4) };
+            let v = sse_src(a, src, sn, reg, 31)?;
+            a.emit(&[a64::fcvt(dn, sn, 30, v), a64::ins_lane0(dn, xmm(dst)?, 30)]);
+        }
+        "UCOMISS" | "UCOMISD" | "COMISS" | "COMISD" => {
+            // 482-486
+            let n = if ic.ends_with("SS") { 4 } else { 8 };
+            let v = sse_src(a, src, n, reg, 31)?;
+            a.emit(&[a64::fcmp(n, xmm(dst)?, v, ic.starts_with("COMI"))]);
+            set_flags_from_fcmp(a);
+        }
+        _ => {
+            // 427-439: ADD SUB MUL DIV MIN MAX SQRT in SS SD PS PD
+            let (kind, form) = ic.split_at(ic.len() - 2);
+            if !["ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"].contains(&kind) {
+                return Err(CompileError(format!("sse {ic}")));
+            }
+            let kind = kind.to_lowercase();
+            let n = if form == "SS" || form == "PS" { 4 } else { 8 };
+            let d = xmm(dst)?;
+            if form == "SS" || form == "SD" {
+                let v = sse_src(a, src, n, reg, 31)?;
+                a.emit(&[if kind == "sqrt" {
+                    a64::fsqrt_scalar(n, 30, v)
+                } else {
+                    a64::fp_scalar(&kind, n, 30, d, v)
+                }]);
+                a.emit(&[a64::ins_lane0(n, d, 30)]);
+            } else {
+                let v = sse_src(a, src, 16, reg, 31)?;
+                a.emit(&[if kind == "sqrt" {
+                    a64::fsqrt_vector(n, d, v)
+                } else {
+                    a64::fp_vector(&kind, n, d, d, v)
+                }]);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A block's words and its marks (host VA, x86 address).

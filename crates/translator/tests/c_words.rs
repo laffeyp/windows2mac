@@ -144,8 +144,12 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     let mut rust_refused: BTreeMap<String, usize> = BTreeMap::new();
     let mut differ: BTreeMap<String, (usize, String)> = BTreeMap::new();
     let mut words = [0u32; 512];
+    // the calls no Rust rule lifts yet, by decoded class: the later groups' reach (Sprint 160)
+    let mut not_lifted: BTreeMap<String, usize> = BTreeMap::new();
     for (address, bytes, flags) in &calls {
         let Ok(ins) = lift(bytes, *address) else {
+            let class = x86_decoder::decode(bytes, None).map_or_else(|_| "undecoded".to_string(), |d| d.iclass);
+            *not_lifted.entry(class).or_default() += 1;
             continue; // a class of a later group
         };
         lifted += 1;
@@ -211,6 +215,9 @@ fn group_1_s_words_equal_the_c_emitter_s() {
         compared.len()
     );
     println!("compared by class: {compared:?}");
+    let mut by_count: Vec<_> = not_lifted.iter().collect();
+    by_count.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    println!("not lifted by the Rust rules, by class: {by_count:?}");
     println!("C refusals of lifted calls: {c_refused:?}");
     println!("Rust refusals: {rust_refused:?}");
     for (k, (n, example)) in differ.iter().take(30) {
