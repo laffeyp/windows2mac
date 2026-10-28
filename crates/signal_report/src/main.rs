@@ -524,6 +524,9 @@ fn missing_reports(root: &Path) -> Result<Vec<u32>, String> {
     Ok(missing)
 }
 
+/// The first sprint whose closed tail entry must name a passing run `scripts/gates.sh` kept (Sprint 179).
+const FIRST_GATES_HELD_SPRINT: u32 = 179;
+
 /// The first sprint whose named plants must show their judge's failure in its result (Sprint 171).
 const FIRST_QUOTED_PLANT_SPRINT: u32 = 171;
 
@@ -635,15 +638,52 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         .map(|e| (e.file_name().to_string_lossy().to_string(), e.path()))
         .collect();
     let mut wrong = Vec::new();
+    // the passing gates runs `scripts/gates.sh` keeps (Sprint 179); absent on CI and in a fresh clone
+    let passes = fs::read_to_string(root.join("build/gates-passes.txt")).ok();
     for entry in tail.split("\n### Sprint ").skip(1) {
         let (head, body) = entry.split_once('\n').unwrap_or((entry, ""));
-        if !head.ends_with(", closed)") {
-            continue;
-        }
         let Some(n) = head.get(..3).and_then(|d| d.parse::<u32>().ok()) else {
             continue;
         };
+        let card_done = |n: u32| -> Result<bool, String> {
+            let prefix = format!("sprint-{n:03}-");
+            match cards.iter().find(|(name, _)| name.starts_with(&prefix)) {
+                Some((_, path)) => Ok(fs::read_to_string(path)
+                    .map_err(|e| e.to_string())?
+                    .lines()
+                    .any(|l| l.trim() == "status: done")),
+                None => Ok(false),
+            }
+        };
+        if !head.ends_with(", closed)") {
+            // a card marked done before its tail entry is headed closed (Sprint 179; reviewer-2's Medium 3)
+            if card_done(n)? {
+                wrong.push(format!(
+                    "sprint {n:03}: its card is done and its tail entry is not headed closed"
+                ));
+            }
+            continue;
+        }
         let body = body.split("\n\n").next().unwrap_or("");
+        // a closed entry's gates line names a run `gates.sh` kept (from Sprint 179)
+        if n >= FIRST_GATES_HELD_SPRINT
+            && let Some(passes) = &passes
+        {
+            let named = body.find("exit 0 in ").and_then(|i| {
+                let rest = &body[i + "exit 0 in ".len()..];
+                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                (!digits.is_empty() && rest[digits.len()..].starts_with(" s")).then(|| format!("exit 0 in {digits} s"))
+            });
+            match named {
+                Some(run) if passes.lines().any(|l| l.split('\t').next() == Some(run.as_str())) => {}
+                Some(run) => wrong.push(format!(
+                    "sprint {n:03}: its tail entry names \"{run}\", which build/gates-passes.txt does not hold"
+                )),
+                None => wrong.push(format!(
+                    "sprint {n:03}: its tail entry names no gates run (\"exit 0 in N s\")"
+                )),
+            }
+        }
         for token in ["GATES-LINE", "CI-LINE"] {
             if body.contains(token) {
                 wrong.push(format!(
@@ -651,15 +691,7 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                 ));
             }
         }
-        let prefix = format!("sprint-{n:03}-");
-        let done = match cards.iter().find(|(name, _)| name.starts_with(&prefix)) {
-            Some((_, path)) => fs::read_to_string(path)
-                .map_err(|e| e.to_string())?
-                .lines()
-                .any(|l| l.trim() == "status: done"),
-            None => false,
-        };
-        if !done {
+        if !card_done(n)? {
             wrong.push(format!(
                 "sprint {n:03}: its tail entry is headed closed and its card is not done"
             ));

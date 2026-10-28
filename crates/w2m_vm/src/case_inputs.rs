@@ -237,7 +237,7 @@ impl<'a> Hybrid<'a> {
             Ok(ends) => ends,
             // a lowering the Rust refuses by name as a later group (Sprint 177: the MMX ops the one lifter emits) is the
             // Python's, as a class the Rust does not lift is; any other refusal fails
-            Err(e) if e.to_string().contains("is a later group") => {
+            Err(translator::lower::CompileError::LaterGroup { .. }) => {
                 return self.fixture.compile(code, address, base, exit_va);
             }
             Err(e) => return Err(format!("the Rust compiler: {e}")),

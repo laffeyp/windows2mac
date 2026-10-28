@@ -200,7 +200,7 @@ fn group_1_s_words_equal_the_c_emitter_s() {
         ) {
             // a lowering the Rust refuses by name, as a later group (Sprint 177: the MMX ops the one lifter emits, which
             // the model steps), is held to the census; any other refusal fails
-            if e.to_string().contains("is a later group") {
+            if matches!(e, translator::lower::CompileError::LaterGroup { .. }) {
                 *lowering_refused.entry(ins.iclass.clone()).or_default() += 1;
             } else {
                 *rust_refused.entry(format!("{}: {e}", ins.iclass)).or_default() += 1;
@@ -280,4 +280,110 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     assert!(rust_refused.is_empty(), "the Rust compiler refused lifted calls");
     assert!(differ.is_empty(), "{} difference classes", differ.len());
     assert!(total > 0, "nothing compared");
+}
+
+/// A committed census line held (written with W2M_WRITE_CENSUS=1): None when equal, else the difference named.
+fn held_census(file: &str, text: &str) -> Option<String> {
+    let path = root().join("store/census").join(file);
+    if std::env::var("W2M_WRITE_CENSUS").as_deref() == Ok("1") {
+        fs::write(&path, text).unwrap();
+        return None;
+    }
+    let held = fs::read_to_string(&path).unwrap_or_default();
+    (held != text).then(|| format!("{file} holds {held:?}, now {text:?}"))
+}
+
+/// Sprint 179 (reviewer-2's Medium 1 of its review of 175-177): the C stencil's branch past a runtime call is fixed
+/// for a three-word address while `a64_mov_imm` skips a zero halfword, so at an address with one the C's words for
+/// x87_fast.c's calls are wrong and the Rust's, branching by label as the Python does, are not. This pass gives the
+/// five a zero-halfword address and holds how many x87 calls' C words differ from the Rust's; and it holds which of the
+/// record's runtime symbols have a zero halfword below bit 48 (`w2m_approximate` at 0x7f0004060000).
+#[test]
+fn zero_halfword_addresses_are_held_not_avoided() {
+    let c_compile = load();
+    let (head, calls) = record();
+    let table = fs::read_to_string(root().join("tools/vm_compiler/stencil_table.h")).unwrap();
+    let body = &table[table.find("vmc_symbol_name[").unwrap()..];
+    let names: Vec<&str> = body[..body.find("};").unwrap()].split('"').skip(1).step_by(2).collect();
+    // the middle halfword 0: `mov_imm` takes two words, not three
+    let placeholder = |i: usize| 0x7F01_0000_1000 + 0x100 * i as u64;
+    let symbols: Vec<u64> = names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| head["symbols"][*n].as_u64().unwrap_or(placeholder(i)))
+        .collect();
+    let runtime = translator::lower::RuntimeCalls::from_symbols(|s| match names.iter().position(|n| *n == s) {
+        Some(i) => Some(symbols[i]),
+        None => head["symbols"][s].as_u64(),
+    });
+    let exit_va = head["exit_va"].as_u64().unwrap();
+    let state_va = PROCESS_VA + STATE_OFF;
+    let (mut x87_calls, mut differing) = (0usize, 0usize);
+    let mut words = [0u32; 512];
+    for (address, bytes, flags) in &calls {
+        let Ok(ins) = lift(bytes, *address) else { continue };
+        if !ins.ops.iter().any(|op| matches!(op, translator::lift::Op::X87 { .. })) {
+            continue;
+        }
+        x87_calls += 1;
+        let f = Flags {
+            nzcv_from: flags[0],
+            live_after: flags[1],
+            nzcv_out: flags[2],
+        };
+        let n = unsafe {
+            c_compile(
+                bytes.as_ptr(),
+                bytes.len() as c_int,
+                *address,
+                BASE,
+                exit_va,
+                &f,
+                symbols.as_ptr(),
+                words.as_mut_ptr(),
+                words.len() as c_int,
+            )
+        };
+        let nzcv_from = (flags[0] > 0).then(|| NZCV_KINDS[flags[0] as usize - 1]);
+        let mut a = Assembler::new(BASE);
+        compile_insn(
+            &mut a,
+            &ins,
+            exit_va,
+            state_va,
+            &runtime,
+            nzcv_from,
+            flags[1] as u32,
+            flags[2] != 0,
+        )
+        .unwrap();
+        if n < 0 || a.finish() != words[..n as usize] {
+            differing += 1;
+        }
+    }
+    println!("x87 calls at zero-halfword addresses: {x87_calls}; their C words differing from the Rust's: {differing}");
+    let mut zero: Vec<String> = head["symbols"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter_map(|(k, v)| v.as_u64().map(|v| (k, v)))
+        .filter(|(_, v)| [0, 16, 32].iter().any(|s| v >> s & 0xFFFF == 0))
+        .map(|(k, v)| format!("{k}\t0x{v:x}"))
+        .collect();
+    zero.sort();
+    println!("runtime symbols with a zero halfword below bit 48: {zero:?}");
+    let moved: Vec<String> = [
+        held_census(
+            "c-words-zero-halfword-2026-10-28.tsv",
+            &format!("x87_calls\tc_words_differing\n{x87_calls}\t{differing}\n"),
+        ),
+        held_census(
+            "runtime-symbols-zero-halfword-2026-10-28.tsv",
+            &format!("symbol\taddress\n{}\n", zero.join("\n")),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert!(moved.is_empty(), "{}", moved.join("; "));
 }

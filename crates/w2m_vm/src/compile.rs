@@ -108,7 +108,7 @@ impl HostCompiler {
             &runtime,
             live,
         )
-        .map_err(|e| e.0)?;
+        .map_err(|e| e.to_string())?;
         if cursor + 4 * words.len() as u64 > CODE_CACHE + CODE_CACHE_SIZE {
             return Err("code cache full".into());
         }
@@ -188,7 +188,7 @@ impl HostCompiler {
             // a condition the lowering does not name ends the compile by name, as the Python's KeyError leaves
             // `_flags_live_in` (4812), `_compile` and `serve_exit` (5242) uncaught and ends the run (Sprint 171)
             let (read, written) = insn_flags(&ins, previous.as_ref().and_then(nzcv_setter))
-                .map_err(|e| format!("0x{addr:x}, scanning the flags block 0x{owner:x} leaves live: {}", e.0))?;
+                .map_err(|e| format!("0x{addr:x}, scanning the flags block 0x{owner:x} leaves live: {e}"))?;
             live |= read & undecided;
             undecided &= !(read | written);
             if undecided == 0 {

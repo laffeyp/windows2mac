@@ -23,6 +23,37 @@ use w2m_vm::cases::run_cases;
 /// `OPEN` (tests/test_class_runs.py 33): the open discrepancies' differences, by class and judged part (Sprint 175).
 const OPEN: [(&str, usize); 4] = [("FCOS FSW", 4), ("FCOS st0", 10), ("FSIN FSW", 4), ("FSIN st0", 8)];
 
+/// The compiler of record held (Sprint 179; reviewer-2's High 2 of its review of 175-177): the classes the Rust
+/// translator compiled and how many, against `store/case_runner/<file>`, written with W2M_WRITE_RUST_COMPILED=1. None
+/// when they agree, else the classes that moved, named.
+fn held_rust_compiled(root: &Path, file: &str, map: &BTreeMap<String, usize>) -> Option<String> {
+    let path = root.join("store/case_runner").join(file);
+    let text: String = std::iter::once("class\tcount".to_string())
+        .chain(map.iter().map(|(c, n)| format!("{c}\t{n}")))
+        .map(|l| l + "\n")
+        .collect();
+    if std::env::var("W2M_WRITE_RUST_COMPILED").as_deref() == Ok("1") {
+        fs::write(&path, &text).unwrap();
+        return None;
+    }
+    let held: BTreeMap<String, usize> = fs::read_to_string(&path)
+        .unwrap_or_default()
+        .lines()
+        .skip(1)
+        .filter_map(|l| l.split_once('\t'))
+        .map(|(c, n)| (c.to_string(), n.parse().unwrap_or(0)))
+        .collect();
+    let moved: Vec<String> = held
+        .keys()
+        .chain(map.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|c| held.get(*c) != map.get(*c))
+        .map(|c| format!("{c}: held {:?}, now {:?}", held.get(c), map.get(c)))
+        .collect();
+    (!moved.is_empty()).then(|| format!("the Rust-compiled classes moved from {file}: {}", moved.join("; ")))
+}
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -79,6 +110,9 @@ fn the_rust_words_equal_the_python_words_on_every_case_code() {
         println!("    {class} {code:02x?}: {d}");
     }
     assert!(!rust.is_empty(), "the Rust translator compiled no case code");
+    if let Some(moved) = held_rust_compiled(&root, "rust-compiled-codes-by-class.tsv", &rust) {
+        panic!("{moved}");
+    }
     assert!(
         unlike.is_empty(),
         "{} case codes whose Rust words differ from the Python's",
@@ -323,6 +357,9 @@ fn judge(use_rust: bool) {
         println!("    judged / at a fault / to the model, per class: {}", per.join(", "));
         if rust.is_empty() {
             failures.push("the Rust translator compiled no case".into());
+        }
+        if let Some(moved) = held_rust_compiled(&root, "rust-compiled-by-class.tsv", &rust) {
+            failures.push(moved);
         }
         if !unlike.is_empty() {
             failures.push(format!(

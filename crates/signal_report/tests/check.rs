@@ -91,3 +91,29 @@ fn a_tail_entry_closed_before_its_card_or_its_gates_fails() {
          sprint 201: its tail entry is headed closed and its card is not done"
     );
 }
+
+/// Sprint 179's plant 3 (reviewer-2's Medium 3 of its review of 175-177): a card marked done while its tail entry is
+/// not headed closed, and a closed entry naming a gates run `gates.sh` never kept.
+#[test]
+fn a_done_card_needs_a_closed_tail_naming_a_kept_gates_run() {
+    let root = scratch_with_tail(
+        "gates",
+        &[("sprint-200-x.md", "done"), ("sprint-201-y.md", "done")],
+        &["sprint-200-report.md", "sprint-201-report.md"],
+        "\n### Sprint 201 (2026-10-28, gates running)\n- **Dual contract:** artifact pass (gates exit 0 in 909 s).\n\n\
+         ### Sprint 200 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 912 s).\n",
+    );
+    fs::create_dir_all(root.join("build")).unwrap();
+    fs::write(
+        root.join("build/gates-passes.txt"),
+        "exit 0 in 909 s\tdefault\t2026-10-28T07:00:00Z\n",
+    )
+    .unwrap();
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 201: its card is done and its tail entry is not headed closed\n\
+         sprint 200: its tail entry names \"exit 0 in 912 s\", which build/gates-passes.txt does not hold"
+    );
+}

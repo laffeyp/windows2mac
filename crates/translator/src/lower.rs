@@ -71,11 +71,19 @@ pub const NZCV_KINDS: [&str; 5] = ["sub", "add", "inc", "logic", "dec"];
 
 /// vm_backend 392: an operation or form the compiler cannot lower.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CompileError(pub String);
+pub enum CompileError {
+    /// refused, in words
+    Refused(String),
+    /// a lowering of a later group, refused by name: its class, which the model steps meanwhile (Sprint 179;
+    /// reviewer-2's High 2 of its review of 175-177: the judges matched this by substring)
+    LaterGroup { class: String, why: String },
+}
 
 impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        match self {
+            CompileError::Refused(why) | CompileError::LaterGroup { why, .. } => f.write_str(why),
+        }
     }
 }
 
@@ -520,7 +528,7 @@ fn set_flags(
         }
         return Ok(());
     }
-    Err(CompileError(format!("flags kind {kind}: a later group")))
+    Err(CompileError::Refused(format!("flags kind {kind}: a later group")))
 }
 
 /// `NZCV_CONDITIONS` (820-829): a conditional branch right after the flags' setter branches on NZCV itself.
@@ -596,7 +604,7 @@ fn inverse(c: &str) -> Result<&'static str, CompileError> {
         "lt" => "ge",
         "gt" => "le",
         "le" => "gt",
-        _ => return Err(CompileError(format!("no inverse of the condition {c:?}"))),
+        _ => return Err(CompileError::Refused(format!("no inverse of the condition {c:?}"))),
     })
 }
 
@@ -620,7 +628,7 @@ fn cond_flags(cc: &str) -> Result<u32, CompileError> {
         "be" => U_CF | U_ZF,
         "l" => U_SF | U_OF,
         "le" => U_ZF | U_SF | U_OF,
-        _ => return Err(CompileError(format!("no flags for the condition {cc:?}"))),
+        _ => return Err(CompileError::Refused(format!("no flags for the condition {cc:?}"))),
     })
 }
 
@@ -768,7 +776,7 @@ fn eval_condition(a: &mut Assembler, cc: &str) -> Result<(), CompileError> {
         exit_if_undefined(a, 'O');
         a.emit(&[a64::eor(16, REG_SF, REG_OF, LSL, 0)]);
     } else {
-        return Err(CompileError(format!("condition {cc}")));
+        return Err(CompileError::Refused(format!("condition {cc}")));
     }
     if neg {
         a.emit(&[a64::cmpi(16, 0), a64::cset(16, "eq")]);
@@ -1299,7 +1307,7 @@ pub fn compile_insn(
     let at = |t: Temp, reg: &BTreeMap<Temp, u32>| -> Result<u32, CompileError> {
         reg.get(&t)
             .copied()
-            .ok_or_else(|| CompileError(format!("temporary {t} has no register at 0x{:x}", ins.address)))
+            .ok_or_else(|| CompileError::Refused(format!("temporary {t} has no register at 0x{:x}", ins.address)))
     };
 
     for (i, op) in ops.iter().enumerate() {
@@ -1312,7 +1320,7 @@ pub fn compile_insn(
                 continue;
             }
             if free.is_empty() {
-                return Err(CompileError(format!(
+                return Err(CompileError::Refused(format!(
                     "more than {} live temporaries at 0x{:x}",
                     TEMP_REGS.len(),
                     ins.address
@@ -1422,9 +1430,9 @@ pub fn compile_insn(
                 t,
             } if locked => {
                 // 1550-1552: the store-exclusive, retried from the load-exclusive while it fails
-                let retry = *lock_retry
-                    .last()
-                    .ok_or_else(|| CompileError(format!("a locked store with no load at 0x{:x}", ins.address)))?;
+                let retry = *lock_retry.last().ok_or_else(|| {
+                    CompileError::Refused(format!("a locked store with no load at 0x{:x}", ins.address))
+                })?;
                 a.emit(&[a64::stlxr(*bytes, 16, at(*t, &reg)?, at(*addr, &reg)?)]);
                 a.branch(|off| a64::cbnz(16, off), retry);
             }
@@ -1485,7 +1493,8 @@ pub fn compile_insn(
                         bits = 64; // the 32-bit form zero-extends: no mask
                     }
                 } else if matches!(*o, "add" | "sub" | "and" | "or" | "xor") {
-                    let ry = ry.ok_or_else(|| CompileError(format!("alu {o}: no register for its operand")))?;
+                    let ry =
+                        ry.ok_or_else(|| CompileError::Refused(format!("alu {o}: no register for its operand")))?;
                     let w = match *o {
                         "add" => a64::add(rd, rx, ry, LSL, 0),
                         "sub" => a64::sub(rd, rx, ry),
@@ -1500,7 +1509,8 @@ pub fn compile_insn(
                         a.emit(&[w]);
                     }
                 } else {
-                    let ry = || ry.ok_or_else(|| CompileError(format!("alu {o}: no register for its operand")));
+                    let ry =
+                        || ry.ok_or_else(|| CompileError::Refused(format!("alu {o}: no register for its operand")));
                     let count_width = if bits == 64 { 6 } else { 5 };
                     match *o {
                         "shr" => {
@@ -1607,7 +1617,7 @@ pub fn compile_insn(
                                 }
                             }
                         }
-                        _ => return Err(CompileError(format!("alu {o}"))),
+                        _ => return Err(CompileError::Refused(format!("alu {o}"))),
                     }
                 }
                 mask(a, rd, bits);
@@ -1768,7 +1778,7 @@ pub fn compile_insn(
                 // PF 0) in x0
                 let v = sse_src(a, src, 16, &reg, 31)?;
                 let SseLoc::X(d) = dst else {
-                    return Err(CompileError(format!("sse {ic}: an XMM destination expected")));
+                    return Err(CompileError::Refused(format!("sse {ic}: an XMM destination expected")));
                 };
                 a.emit(&[
                     a64::str_v(16, u32::from(*d), 28, NATIVE_OPERANDS),
@@ -1807,7 +1817,7 @@ pub fn compile_insn(
                 }
                 let v = sse_src(a, src, if n == 4 { 16 } else { 4 }, &reg, 31)?;
                 let SseLoc::X(d) = dst else {
-                    return Err(CompileError(format!("sse {ic}: an XMM destination expected")));
+                    return Err(CompileError::Refused(format!("sse {ic}: an XMM destination expected")));
                 };
                 let d = u32::from(*d);
                 a.emit(&[
@@ -1854,7 +1864,7 @@ pub fn compile_insn(
                     (Some((form, addr)), Some(calls)) => {
                         let symbol = |i: usize| {
                             calls[i].ok_or_else(|| {
-                                CompileError(format!("x87_fast.c's function {i} not in the runtime's symbols"))
+                                CompileError::Refused(format!("x87_fast.c's function {i} not in the runtime's symbols"))
                             })
                         };
                         let n = NATIVE_OPERANDS;
@@ -1918,14 +1928,20 @@ pub fn compile_insn(
             }
             // ("mmx", ...): `rules/_mmx.py`'s A64 lowering (1658-1660) is not ported; refused by name (Sprint 177)
             Op::Mmx { ic, .. } => {
-                return Err(CompileError(format!(
-                    "mmx {ic} at 0x{:x}: the MMX lowering (rules/_mmx.py) is a later group",
-                    ins.address
-                )));
+                return Err(CompileError::LaterGroup {
+                    class: ic.clone(),
+                    why: format!(
+                        "mmx {ic} at 0x{:x}: the MMX lowering (rules/_mmx.py) is a later group",
+                        ins.address
+                    ),
+                });
             }
             Op::Mxcsr { store: st, loc } => {
                 let Loc::M { addr, .. } = loc else {
-                    return Err(CompileError(format!("MXCSR to a register at 0x{:x}", ins.address)));
+                    return Err(CompileError::Refused(format!(
+                        "MXCSR to a register at 0x{:x}",
+                        ins.address
+                    )));
                 };
                 lower_mxcsr(a, *st, at(*addr, &reg)?);
             }
@@ -2072,7 +2088,7 @@ fn store(
             None => {
                 let ra = reg
                     .get(addr)
-                    .ok_or_else(|| CompileError(format!("address temporary {addr} has no register")))?;
+                    .ok_or_else(|| CompileError::Refused(format!("address temporary {addr} has no register")))?;
                 a.emit(&[a64::str(*bytes, rt, *ra, 0)]);
             }
         },
@@ -2183,14 +2199,14 @@ fn sse_src(
             a.emit(&[a64::ldr_v(size, scratch, reg_at(reg, *addr)?, 0)]);
             Ok(scratch)
         }
-        SseLoc::Loc(Loc::R { .. }) => Err(CompileError("an SSE source in a general register".into())),
+        SseLoc::Loc(Loc::R { .. }) => Err(CompileError::Refused("an SSE source in a general register".into())),
     }
 }
 
 fn reg_at(reg: &BTreeMap<Temp, u32>, t: Temp) -> Result<u32, CompileError> {
     reg.get(&t)
         .copied()
-        .ok_or_else(|| CompileError(format!("temporary {t} has no register")))
+        .ok_or_else(|| CompileError::Refused(format!("temporary {t} has no register")))
 }
 
 /// `_check_alignment` (_sse.py 78-86): #GP on a misaligned 16-byte operand, which Windows reports as an access
@@ -2259,11 +2275,11 @@ fn lower_sse(
     }
     let xmm = |l: &SseLoc| match l {
         SseLoc::X(n) => Ok(u32::from(*n)),
-        _ => Err(CompileError(format!("sse {ic}: an XMM operand expected"))),
+        _ => Err(CompileError::Refused(format!("sse {ic}: an XMM operand expected"))),
     };
     let addr_reg = |l: &SseLoc| match l.addr() {
         Some(t) => reg_at(reg, t),
-        None => Err(CompileError(format!("sse {ic}: a memory operand expected"))),
+        None => Err(CompileError::Refused(format!("sse {ic}: a memory operand expected"))),
     };
     match ic {
         "MOVAPS" | "MOVAPD" | "MOVUPS" | "MOVUPD" => match (dst, src) {
@@ -2325,7 +2341,7 @@ fn lower_sse(
             // source's address, is dead once the source is loaded)
             let n = if ic.contains("SS") { 4 } else { 8 };
             let SseLoc::Loc(r @ Loc::R { bits, .. }) = dst else {
-                return Err(CompileError(format!(
+                return Err(CompileError::Refused(format!(
                     "sse {ic}: a general register destination expected"
                 )));
             };
@@ -2379,7 +2395,7 @@ fn lower_sse(
                     a.emit(&[a64::ldr(*bytes, 16, reg_at(reg, *addr)?, 0)]);
                     8 * bytes
                 }
-                SseLoc::X(_) => return Err(CompileError(format!("sse {ic}: an XMM source"))),
+                SseLoc::X(_) => return Err(CompileError::Refused(format!("sse {ic}: an XMM source"))),
             };
             if bits == 32 {
                 a.emit(&[a64::sxtw(16, 16)]);
@@ -2403,7 +2419,7 @@ fn lower_sse(
             // 427-439: ADD SUB MUL DIV MIN MAX SQRT in SS SD PS PD
             let (kind, form) = ic.split_at(ic.len() - 2);
             if !["ADD", "SUB", "MUL", "DIV", "MIN", "MAX", "SQRT"].contains(&kind) {
-                return Err(CompileError(format!("sse {ic}")));
+                return Err(CompileError::Refused(format!("sse {ic}")));
             }
             let kind = kind.to_lowercase();
             let n = if form == "SS" || form == "PS" { 4 } else { 8 };
@@ -2482,20 +2498,20 @@ fn lower_int(
     imm: Option<u64>,
     reg: &BTreeMap<Temp, u32>,
 ) -> Result<(), CompileError> {
-    let bad = || CompileError(format!("sse {ic}"));
+    let bad = || CompileError::Refused(format!("sse {ic}"));
     let xmm = |l: &SseLoc| match l {
         SseLoc::X(n) => Ok(u32::from(*n)),
-        _ => Err(CompileError(format!("sse {ic}: an XMM operand expected"))),
+        _ => Err(CompileError::Refused(format!("sse {ic}: an XMM operand expected"))),
     };
     let gpr = |l: &SseLoc| match l {
         SseLoc::Loc(Loc::R { idx, .. }) => Ok(u32::from(*idx)),
-        _ => Err(CompileError(format!("sse {ic}: a general register expected"))),
+        _ => Err(CompileError::Refused(format!("sse {ic}: a general register expected"))),
     };
     let addr_reg = |l: &SseLoc| match l.addr() {
         Some(t) => reg_at(reg, t),
-        None => Err(CompileError(format!("sse {ic}: a memory operand expected"))),
+        None => Err(CompileError::Refused(format!("sse {ic}: a memory operand expected"))),
     };
-    let need_imm = |what: &str| imm.ok_or_else(|| CompileError(format!("sse {ic}: no immediate for {what}")));
+    let need_imm = |what: &str| imm.ok_or_else(|| CompileError::Refused(format!("sse {ic}: no immediate for {what}")));
     if matches!(ic, "MOVDQA" | "MOVDQU" | "MOVNTPS" | "MOVNTDQ") {
         // 131-138
         match (dst, src) {
@@ -2818,10 +2834,10 @@ mod tests {
     fn an_unknown_condition_is_refused_by_name() {
         assert_eq!(cond_flags("le").unwrap(), U_ZF | U_SF | U_OF);
         assert_eq!(cond_flags("nle").unwrap(), U_ZF | U_SF | U_OF);
-        assert!(cond_flags("xx").unwrap_err().0.contains("\"xx\""));
+        assert!(cond_flags("xx").unwrap_err().to_string().contains("\"xx\""));
         assert_eq!(inverse("le").unwrap(), "gt");
         assert_eq!(inverse("gt").unwrap(), "le");
-        assert!(inverse("xx").unwrap_err().0.contains("\"xx\""));
+        assert!(inverse("xx").unwrap_err().to_string().contains("\"xx\""));
     }
 
     /// Every condition the lifter gives (`lift::cc`'s 16) has its flags. No end-to-end judge reaches `cond_flags` for
@@ -2838,7 +2854,7 @@ mod tests {
             iclass: "JXX".into(),
             ops: vec![Op::Br { cond: "xx", t: 0 }],
         };
-        assert!(insn_flags(&ins, None).unwrap_err().0.contains("\"xx\""));
+        assert!(insn_flags(&ins, None).unwrap_err().to_string().contains("\"xx\""));
     }
 
     /// Each one's mask is `COND_FLAGS`'s (`src/w2m/vm_backend.py` 852-853), by value, a negation as its condition

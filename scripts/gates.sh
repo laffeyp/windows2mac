@@ -12,6 +12,7 @@
 # the selection cannot map runs those gates whole. --all runs every gate over everything.
 set -eu
 cd "$(dirname "$0")/.."
+gates_start=$(date +%s)
 # rustup installs cargo in ~/.cargo/bin, which a non-login shell may not have on its PATH (Sprint 126: the gates failed
 # with "cargo: command not found")
 [ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
@@ -190,3 +191,8 @@ elif [ -n "$records" ]; then
   target/release/check_records --since 2026-10-17 --show 0 $records
 fi
 echo "gates: all passed"
+# each passing run is kept, so `signal_report --check` can find the run a closed tail entry's gates line names
+# (Sprint 179; reviewer-2's Medium 3 of its review of 175-177: the close check read tokens, not the gates' state)
+mkdir -p build
+printf 'exit 0 in %s s\t%s\t%s\n' "$(( $(date +%s) - gates_start ))" "$([ $all = 1 ] && echo all || echo default)" \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> build/gates-passes.txt
