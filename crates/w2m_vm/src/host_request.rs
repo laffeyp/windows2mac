@@ -26,6 +26,8 @@ pub const HOST_VIRTUAL_PROTECT: u64 = 21;
 pub const HOST_VIRTUAL_QUERY: u64 = 22;
 pub const HOST_EXCEPTION: u64 = 31;
 pub const HOST_THREAD: u64 = 30;
+/// processes.c's and sync_objects.c's requests to `kernel.py` (vm_backend 314; Sprint 193)
+pub const HOST_KERNEL: u64 = 33;
 /// threads.c's sub-requests (runtime.h 328; vm_backend 332-333)
 pub const THREAD_CREATE: u64 = 1;
 pub const THREAD_EXIT_STUB: u64 = 2;
@@ -79,6 +81,29 @@ impl From<GuestError> for HostError {
 /// runtime.h `w2m_transport`: the op at +0, six arguments from +8 (the second answer in the sixth, +48), the result
 /// at +56.
 const TRANSPORT: usize = (MONITOR_SIZE + TRANSPORT_OFF) as usize;
+
+/// Guest memory as `kernel.rs` reads and writes it, through the layout.
+struct KernelMemory<'a>(&'a mut Guest);
+
+impl crate::kernel::Memory for KernelMemory<'_> {
+    fn read(&self, va: u64, n: usize) -> Result<Vec<u8>, String> {
+        let at = self
+            .0
+            .layout
+            .offset(va)
+            .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
+        Ok(self.0.memory.as_slice()[at..at + n].to_vec())
+    }
+    fn write(&mut self, va: u64, data: &[u8]) -> Result<(), String> {
+        let at = self
+            .0
+            .layout
+            .offset(va)
+            .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
+        self.0.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+        Ok(())
+    }
+}
 
 /// MEMORY_BASIC_INFORMATION as vm_backend 4044-4045 packs it, `struct.pack("<QQIHHQIIIi", ...)`: BaseAddress 0,
 /// AllocationBase 8, AllocationProtect 16, PartitionId and a pad 20-23 zero, RegionSize 24, State 32, Protect 36,
@@ -255,6 +280,32 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             let mem = guest.memory.as_mut_slice();
             mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
             result
+        }
+        // `kernel.py`'s objects for this process (vm_backend 3819-3831; Sprint 193): the answer and its second word, and
+        // on a wake every blocked thread ready (`wake_all`, 3700-3706)
+        HOST_KERNEL => {
+            let pid = guest.process.process_id;
+            let mut objects = std::mem::take(&mut guest.kernel);
+            let answered = objects.request(pid, [a0, a1, a2, a3], &mut KernelMemory(guest));
+            guest.kernel = objects;
+            let answer = answered.map_err(HostError::Unserved)?;
+            if answer.wake {
+                let blocked: Vec<u64> = guest
+                    .threads
+                    .values()
+                    .map(|t| t.index)
+                    .filter(|&i| {
+                        let at = crate::threads::entry(i) + crate::threads::E_STATUS;
+                        read_u64(guest.memory.as_slice(), at as usize) == crate::threads::BLOCKED
+                    })
+                    .collect();
+                for i in blocked {
+                    crate::threads::set_status(guest, i, crate::threads::READY);
+                }
+            }
+            let mem = guest.memory.as_mut_slice();
+            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&answer.second.to_le_bytes());
+            answer.result
         }
         HOST_EXCEPTION if a0 == EXCEPTION_STUBS => guest.guest_stubs()?,
         HOST_EXCEPTION if a0 == EXCEPTION_CAPTURE_XMM => {

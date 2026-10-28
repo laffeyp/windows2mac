@@ -79,3 +79,24 @@ before its second process.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the shared objects in one process.
+
+## result
+
+- **The objects:** `crates/w2m_vm/src/kernel.rs`'s `Objects` answers KERNEL 33 as `kernel.py`'s `_request` does for one
+  process, over a `Memory` trait, and returns whether every blocked thread checks its wait again; `Guest` holds it,
+  `host_request` serves op 33 (the second word at the transport's 48) and readies every blocked thread on a wake.
+  PROCESS_CREATE stops by name.
+- **The run:** the Rust stream equals the Python's rows 0-15 in all 15 columns (three CreateEventW, CreatePipe,
+  SetHandleInformation, GetModuleHandleW, GetModuleFileNameW, GetLastError, GetCurrentProcessId, three
+  GetCommandLineW) and stops at row 16, CreateProcessW, arguments 0xa 0xfffefe64 0x60000003e; `busychild`,
+  `crosswake`, `handshake`, `pingpong`, `spinchild` and `twoproc` stop at their PROCESS_CREATE too. The held file
+  rewritten, its Python columns read with `jq`.
+- **Plant 1** (an existing name answered 0): `a_named_event_is_found_again_and_signaled` failed, "left:
+  (4294967296, 0) right: (4294967296, 1)". Restored byte for byte.
+- **Plant 2** (a write taking all n bytes): `a_pipe_holds_four_kilobytes_and_breaks_when_its_writer_closes` failed,
+  "left: 5000 right: 4096". Restored byte for byte.
+- **Plant 3** (a new event's id off by one) reached no judge: the three batch-run tests passed, since the host's ids
+  never reach the stream. Its replacement, a new event answering "existed": `the_batch_runs_calls_are_the_python_runs_
+  up_to_the_stop` failed, "row 4 of the call stream differs from the Python batch run's". Restored byte for byte.
+- **Departures:** plant 3 replaced as above; the second process bounded out pending the review. Every multi-line edit
+  used the Edit tool.

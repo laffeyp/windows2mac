@@ -588,6 +588,8 @@ pub struct Guest {
     pub trace_dynamic: BTreeMap<String, u64>,
     /// the traced images whose import slots are already on their own thunks (`_trace_bound`)
     pub trace_bound: BTreeSet<String>,
+    /// the objects this process shares through KERNEL 33 (`kernel.py`; Sprint 193)
+    pub kernel: crate::kernel::Objects,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -775,6 +777,7 @@ impl Guest {
             trace_quiet: BTreeMap::new(),
             trace_dynamic: BTreeMap::new(),
             trace_bound: BTreeSet::new(),
+            kernel: crate::kernel::Objects::new(),
         }
         .with_trace(start)
     }
