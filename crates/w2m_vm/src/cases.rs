@@ -245,14 +245,24 @@ enum ModelStep {
 /// vCPU resumes at the dispatcher with x17 the next RIP. A guest fault goes to the runtime's exception path as
 /// `_raise_in_guest` (4332-4342) sends it.
 fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Result<ModelStep, HvError> {
-    use crate::model::{Fault, Flags, Thread, step};
-    let Ok(ins) = translator::lift::lift(code, rip) else {
-        return Ok(ModelStep::Refused);
+    use crate::model::{Fault, Flags, Thread, lift_mmx, step, step_mmx};
+    // an MMX-register form, which the translator's lifter refuses (Sprint 174), or one the lifter lifts
+    enum Instruction {
+        Lifted(translator::lift::Lifted),
+        Mmx(crate::model::MmxStep),
+    }
+    let instruction = match translator::lift::lift(code, rip) {
+        Ok(ins) => Instruction::Lifted(ins),
+        Err(_) => match lift_mmx(code, rip) {
+            Ok(Some(m)) => Instruction::Mmx(m),
+            _ => return Ok(ModelStep::Refused),
+        },
     };
-    if ins
-        .ops
-        .iter()
-        .any(|op| matches!(op, translator::lift::Op::Sse { .. } | translator::lift::Op::Cpuid))
+    if let Instruction::Lifted(ins) = &instruction
+        && ins
+            .ops
+            .iter()
+            .any(|op| matches!(op, translator::lift::Op::Sse { .. } | translator::lift::Op::Cpuid))
     {
         return Ok(ModelStep::Refused);
     }
@@ -295,10 +305,44 @@ fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Resu
                 .unwrap(),
         ),
         rip,
+        xmm: [0; 16],
+        x87_sw: 0,
+        x87_tags: 0,
+        x87_regs: [0; 8],
     };
-    let result = step(&mut th, &mut GuestModelMemory(guest), &ins, code);
+    for k in 0..16u8 {
+        th.xmm[usize::from(k)] = vcpu.simd(k)?;
+    }
+    // the x87 state as `_slow_sse` reads it (4293-4298): FSW and the abridged tags from the state block, ST(i) in FXSAVE
+    // order, physical register (TOP + i) & 7
+    let st = (MONITOR_SIZE + STATE_OFF) as usize;
+    th.x87_sw = u16::from_le_bytes(
+        mem[st + X87_SW_OFF as usize..st + X87_SW_OFF as usize + 2]
+            .try_into()
+            .unwrap(),
+    );
+    th.x87_tags = mem[st + X87_SW_OFF as usize + 2];
+    let top = usize::from(th.x87_sw >> 11 & 7);
+    for i in 0..8 {
+        let at = st + X87_ST_OFF as usize + 16 * i;
+        let mut b = [0u8; 16];
+        b[..10].copy_from_slice(&mem[at..at + 10]);
+        th.x87_regs[(top + i) & 7] = u128::from_le_bytes(b);
+    }
+    let result = match &instruction {
+        Instruction::Lifted(ins) => step(&mut th, &mut GuestModelMemory(guest), ins, code),
+        Instruction::Mmx(m) => step_mmx(&mut th, &mut GuestModelMemory(guest), m, code),
+    };
     let mem = guest.memory.as_mut_slice();
     mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&th.mxcsr.to_le_bytes());
+    // `_store_x87` (4325-4330), after a step or a fault alike (a faulting MMX store has set TOP 0, set 065b)
+    mem[st + X87_SW_OFF as usize..st + X87_SW_OFF as usize + 2].copy_from_slice(&th.x87_sw.to_le_bytes());
+    mem[st + X87_SW_OFF as usize + 2] = th.x87_tags;
+    let top = usize::from(th.x87_sw >> 11 & 7);
+    for i in 0..8 {
+        let at = st + X87_ST_OFF as usize + 16 * i;
+        mem[at..at + 10].copy_from_slice(&th.x87_regs[(top + i) & 7].to_le_bytes()[..10]);
+    }
     match result {
         Ok(()) => {
             for (k, v) in th.regs.iter().enumerate() {

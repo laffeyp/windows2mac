@@ -77,6 +77,13 @@ pub struct Thread {
     pub mxcsr: u32,
     pub fcw: u16,
     pub rip: u64,
+    /// XMM0-15 (Sprint 174: MOVDQ2Q reads one)
+    pub xmm: [u128; 16],
+    /// the x87 status word, its abridged tags (bit p: physical register p in use) and the physical registers R0-R7,
+    /// 80 bits each (`x87.Fpu`; Sprint 174: MMn is bits 63:0 of Rn)
+    pub x87_sw: u16,
+    pub x87_tags: u8,
+    pub x87_regs: [u128; 8],
 }
 
 fn mask(bits: u32) -> u64 {
@@ -960,6 +967,308 @@ fn signed(v: u64, bits: u32) -> i128 {
     }
 }
 
+/// An MMX operand as `lift_mmx` (lift.py 307-324) gives it to `mmx.py`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MmxArg {
+    /// ("mm", n): MMn, bits 63:0 of physical x87 register n
+    Mm(u8),
+    /// ("x", n): an XMM register
+    X(u8),
+    /// a general register or the memory operand
+    Loc(Loc),
+    /// ("i",): the immediate, in `imm`
+    Imm,
+    /// ("none",)
+    None,
+}
+
+/// One MMX-register instruction: the operations that compute its memory operand's address, then the step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MmxStep {
+    pub address: u64,
+    pub length: u64,
+    pub ic: String,
+    pub pre: Vec<Op>,
+    pub dst: MmxArg,
+    pub src: MmxArg,
+    pub imm: u64,
+}
+
+/// `MMX_ONLY` (lift.py 304): the classes with no SSE form.
+const MMX_ONLY: [&str; 3] = ["EMMS", "MOVDQ2Q", "PSHUFW"];
+
+/// `lift_mmx` (lift.py 307-324) for the instruction at the start of `code`: None when it is not an MMX-register form.
+/// The translator's `lift` refuses these forms by name (their A64 lowering is a later slice), so the model lifts them.
+pub fn lift_mmx(code: &[u8], address: u64) -> Result<Option<MmxStep>, translator::lift::LiftError> {
+    use translator::lift::{Builder, LiftError, Operand, operand};
+    let Ok(d) = x86_decoder::decode(code, None) else {
+        return Ok(None);
+    };
+    let ops = x86_decoder::operands::operands(&d.fields).unwrap_or_default();
+    if !MMX_ONLY.contains(&d.iclass.as_str()) && !ops.iter().any(|o| o.starts_with("MM:")) {
+        return Ok(None);
+    }
+    let nxt = address + d.length as u64;
+    let mut b = Builder::default();
+    let (mut out, mut imm) = (Vec::new(), 0u64);
+    for o in &ops {
+        if let Some(n) = o.strip_prefix("MM:") {
+            out.push(MmxArg::Mm(n.parse().map_err(|_| LiftError(format!("operand {o}")))?));
+        } else if o.starts_with("I:") {
+            let hex = o.split(':').nth(2).ok_or_else(|| LiftError(format!("operand {o}")))?;
+            imm = u64::from_str_radix(hex, 16).map_err(|_| LiftError(format!("operand {o}")))?;
+            out.push(MmxArg::Imm);
+        } else if let Some(n) = o.strip_prefix("R:XMM") {
+            out.push(MmxArg::X(n.parse().map_err(|_| LiftError(format!("operand {o}")))?));
+        } else {
+            match operand(&mut b, o, nxt, None)?.0 {
+                Operand::Loc(loc) => out.push(MmxArg::Loc(loc)),
+                _ => return Err(LiftError(format!("{} at 0x{address:x}: operand {o}", d.iclass))),
+            }
+        }
+    }
+    if matches!(d.iclass.as_str(), "PEXTRW" | "PSHUFW") {
+        out.truncate(2); // the immediate is imm, not an operand
+    }
+    while out.len() < 2 {
+        out.push(MmxArg::None);
+    }
+    Ok(Some(MmxStep {
+        address,
+        length: d.length as u64,
+        ic: d.iclass.clone(),
+        pre: b.ops,
+        dst: out[0],
+        src: out[1],
+        imm,
+    }))
+}
+
+const M64_128: u128 = u64::MAX as u128;
+/// bits 79:64 of a register an MMX instruction writes (mmx.py 22)
+const ONES: u128 = 0xFFFF << 64;
+/// FSW.ES, an x87 exception pending (x87.py 35)
+const ES: u16 = 128;
+
+fn lanes(v: u64, bits: u32) -> Vec<u64> {
+    (0..64 / bits).map(|i| v >> (i * bits) & mask(bits)).collect()
+}
+
+fn join(xs: &[i128], bits: u32) -> u64 {
+    xs.iter().enumerate().fold(0u64, |acc, (i, x)| {
+        acc | ((*x as u64) & mask(bits)) << (i as u32 * bits)
+    })
+}
+
+fn clamp(v: i128, lo: i128, hi: i128) -> i128 {
+    v.clamp(lo, hi)
+}
+
+/// `mmx.compute` (45-80): the 64-bit result of a lane operation on destination d and source s.
+fn mmx_compute(ic: &str, d: u64, s: u64, count: u64) -> Result<u64, Fault> {
+    let sg = |x: u64, bits: u32| signed(x, bits);
+    let pair = |bits: u32| -> Vec<(u64, u64)> { lanes(d, bits).into_iter().zip(lanes(s, bits)).collect() };
+    Ok(match ic {
+        "PXOR" => d ^ s,
+        "PADDW" | "PADDD" | "PSUBW" => {
+            let bits = if ic == "PADDD" { 32 } else { 16 };
+            let v: Vec<i128> = pair(bits)
+                .iter()
+                .map(|(x, y)| {
+                    if ic == "PSUBW" {
+                        *x as i128 - *y as i128
+                    } else {
+                        *x as i128 + *y as i128
+                    }
+                })
+                .collect();
+            join(&v, bits)
+        }
+        "PADDSW" => {
+            let v: Vec<i128> = pair(16)
+                .iter()
+                .map(|(x, y)| clamp(sg(*x, 16) + sg(*y, 16), -0x8000, 0x7FFF))
+                .collect();
+            join(&v, 16)
+        }
+        "PMULLW" | "PMULHW" => {
+            let shift = if ic == "PMULHW" { 16 } else { 0 };
+            let v: Vec<i128> = pair(16)
+                .iter()
+                .map(|(x, y)| (sg(*x, 16) * sg(*y, 16)) >> shift)
+                .collect();
+            join(&v, 16)
+        }
+        "PMADDUBSW" => {
+            // DEST's bytes unsigned, SRC's signed; adjacent products summed
+            let (db, sb): (Vec<i128>, Vec<i128>) = (
+                lanes(d, 8).iter().map(|x| *x as i128).collect(),
+                lanes(s, 8).iter().map(|x| sg(*x, 8)).collect(),
+            );
+            let v: Vec<i128> = (0..4)
+                .map(|i| clamp(db[2 * i] * sb[2 * i] + db[2 * i + 1] * sb[2 * i + 1], -0x8000, 0x7FFF))
+                .collect();
+            join(&v, 16)
+        }
+        "PACKUSWB" => {
+            let v: Vec<i128> = lanes(d, 16)
+                .into_iter()
+                .chain(lanes(s, 16))
+                .map(|x| clamp(sg(x, 16), 0, 0xFF))
+                .collect();
+            join(&v, 8)
+        }
+        _ if ic.starts_with("PUNPCK") => {
+            let bits = match &ic[ic.len() - 2..] {
+                "BW" => 8,
+                "WD" => 16,
+                _ => 32,
+            };
+            let half = (32 / bits) as usize;
+            let (a, b) = (lanes(d, bits), lanes(s, bits));
+            let lo = ic.as_bytes()[6] == b'L';
+            let (a, b) = if lo {
+                (&a[..half], &b[..half])
+            } else {
+                (&a[half..], &b[half..])
+            };
+            let v: Vec<i128> = a.iter().zip(b).flat_map(|(x, y)| [*x as i128, *y as i128]).collect();
+            join(&v, bits)
+        }
+        "PSRAW" | "PSRAD" => {
+            let bits = if ic == "PSRAW" { 16 } else { 32 };
+            let n = count.min(u64::from(bits) - 1);
+            let v: Vec<i128> = lanes(d, bits).iter().map(|x| sg(*x, bits) >> n).collect();
+            join(&v, bits)
+        }
+        "PSRLQ" => {
+            if count > 63 {
+                0
+            } else {
+                d >> count
+            }
+        }
+        // the sum of |d - s| over the 8 bytes, in bits 15:0
+        "PSADBW" => lanes(d, 8)
+            .iter()
+            .zip(lanes(s, 8))
+            .map(|(x, y)| (*x as i64 - y as i64).unsigned_abs())
+            .sum(),
+        // word i of the result is the source's word imm[2i+1:2i]
+        "PSHUFW" => {
+            let w = lanes(s, 16);
+            let v: Vec<i128> = (0..4).map(|i| w[(count >> (2 * i) & 3) as usize] as i128).collect();
+            join(&v, 16)
+        }
+        _ => return Err(Fault::Refused(format!("MMX {ic} is not modelled"))),
+    })
+}
+
+impl<M: Memory> Step<'_, M> {
+    fn mmx_get(&self, o: MmxArg) -> Result<u64, Fault> {
+        match o {
+            MmxArg::Mm(n) => Ok((self.th.x87_regs[usize::from(n)] & M64_128) as u64),
+            MmxArg::X(n) => Ok(self.th.xmm[usize::from(n)] as u64),
+            MmxArg::Loc(loc) => self.load(loc),
+            MmxArg::Imm | MmxArg::None => Err(Fault::Refused("an MMX operand that holds no value".into())),
+        }
+    }
+
+    fn mmx_put(&mut self, o: MmxArg, v: u64) -> Result<(), Fault> {
+        match o {
+            MmxArg::Mm(n) => {
+                self.th.x87_regs[usize::from(n)] = ONES | u128::from(v);
+                Ok(())
+            }
+            MmxArg::Loc(loc) => self.store(loc, v),
+            _ => Err(Fault::Refused("an MMX destination the model does not write".into())),
+        }
+    }
+
+    /// TOP 0 after the reads, before the write (set 065b, Xeon 8573C: a faulting load leaves TOP, a faulting store has
+    /// set it); EMMS also marks every register empty
+    fn mmx_transition(&mut self, ic: &str) {
+        self.th.x87_sw &= !(7 << 11);
+        if ic == "EMMS" {
+            self.th.x87_tags = 0;
+        }
+    }
+
+    /// `mmx.execute` (83-121)
+    fn mmx(&mut self, m: &MmxStep) -> Result<(), Fault> {
+        let ic = m.ic.as_str();
+        if self.th.x87_sw & ES != 0 {
+            return Err(Fault::Refused(format!(
+                "{ic} with an x87 exception pending (status word 0x{:x})",
+                self.th.x87_sw
+            )));
+        }
+        if ic == "EMMS" {
+            self.mmx_transition(ic);
+            return Ok(());
+        }
+        match ic {
+            "MOVD" | "MOVQ" | "MOVDQ2Q" => {
+                let v = self.mmx_get(m.src)?;
+                self.mmx_transition(ic);
+                self.mmx_put(m.dst, if ic == "MOVD" { v & 0xFFFF_FFFF } else { v })?;
+            }
+            "PEXTRW" => {
+                let v = self.mmx_get(m.src)? >> (16 * (m.imm & 3)) & 0xFFFF;
+                self.mmx_transition(ic);
+                self.mmx_put(m.dst, v)?;
+            }
+            _ => {
+                let shift = matches!(ic, "PSRAW" | "PSRAD" | "PSRLQ");
+                let count = if shift {
+                    if m.src == MmxArg::Imm {
+                        m.imm
+                    } else {
+                        self.mmx_get(m.src)?
+                    }
+                } else {
+                    m.imm
+                };
+                let s = if shift { 0 } else { self.mmx_get(m.src)? };
+                let v = mmx_compute(ic, self.mmx_get(m.dst)?, s, count)?;
+                self.mmx_transition(ic);
+                self.mmx_put(m.dst, v)?;
+            }
+        }
+        // the tags valid once the write is done (a faulting store keeps them)
+        self.th.x87_tags = 0xFF;
+        Ok(())
+    }
+}
+
+/// `_exec` with `_mmx` (runtime.py 165-191) for an MMX-register instruction: the address operations, then the step. A
+/// guest fault restores what `_exec` restores and keeps the x87 state, which `_mmx`'s `finally` writes back (a faulting
+/// store has set TOP 0, set 065b).
+pub fn step_mmx<M: Memory>(th: &mut Thread, mem: &mut M, m: &MmxStep, code: &[u8]) -> Result<(), Fault> {
+    let saved = th.clone();
+    let mut s = Step {
+        th,
+        mem,
+        t: Default::default(),
+        code,
+    };
+    let ins = Lifted {
+        address: m.address,
+        length: m.length,
+        iclass: m.ic.clone(),
+        ops: m.pre.clone(),
+    };
+    let r = s.exec_ops(&ins).and_then(|()| s.mmx(m));
+    if let Err(Fault::Guest { .. }) = &r {
+        let (sw, tags, x87) = (s.th.x87_sw, s.th.x87_tags, s.th.x87_regs);
+        let mxcsr = s.th.mxcsr;
+        *s.th = saved;
+        (s.th.x87_sw, s.th.x87_tags, s.th.x87_regs, s.th.mxcsr) = (sw, tags, x87, mxcsr);
+        s.th.rip = m.address;
+    }
+    r
+}
+
 /// `_exec` (995-1013): one instruction. On a guest fault every register, flag, MXCSR and DF returns to its value
 /// before it, but REP's completed iterations stay (SDM Vol 1 7.3.9), MXCSR's flags a fault set survive, and RIP is the
 /// instruction's. `code` is the instruction's bytes, which `_windows_divide_status` decodes again.
@@ -1020,6 +1329,10 @@ mod tests {
             mxcsr: 0x1F80,
             fcw: 0x27F,
             rip: 0x1000,
+            xmm: [0; 16],
+            x87_sw: 0,
+            x87_tags: 0,
+            x87_regs: [0; 8],
         }
     }
 
