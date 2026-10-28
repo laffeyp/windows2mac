@@ -109,6 +109,12 @@ Each check holds a defect its input can produce, and each VEX path the model ste
   0]". Restored byte for byte.
 - **Plant 3** (the bound dropped, the slice's end taken as `table + 16 * n`): `a_count_past_the_table_is_an_error`
   failed, "panicked at crates/w2m_vm/src/run.rs:170:27". Restored byte for byte.
+- **Sprint 187's tree check, fixed at this close:** after the first work commit, c9c4d54bf, `signal_report --check`
+  failed: "git rm -r -q --cached --ignore-unmatch store/gates: error: the following file has staged content different
+  from both the file and the HEAD". The removal on the temporary index is forced (`-f`), and
+  `a_gates_run_must_have_tested_the_work_commits_trees` commits the passes file and a later line, as closes do; with
+  the force dropped it fails with git's refusal quoted above. The gates ran again on the fixed tree, and a second
+  "Sprint 188:" commit carries the fix.
 - **Departures:** plant 1 moved `RUNTIME_IMAGE_VA` rather than `RUNTIME_IMAGE`, whose sum the stack's assertion pins;
   no VEX.256 #XM was added to the guest, since the case runner judges the deferred check. Every multi-line edit used
   the Edit tool.

@@ -202,8 +202,11 @@ fn a_gates_run_must_have_tested_the_work_commits_trees() {
     );
     // the tree the gates ran on
     let ran = git(&root, &["write-tree", "--prefix=crates/"]);
-    // the work, changed after the pass
+    // the work, changed after the pass, committed with the pass line as a close commits it
     fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 1; }\n").unwrap();
+    fs::create_dir_all(root.join("store/gates")).unwrap();
+    let line = format!("exit 0 in 901 s\tdefault\t2026-10-28T07:00:00Z\tsprint 190\tabc\tdef\tcrates={ran}\n");
+    fs::write(root.join("store/gates/passes.tsv"), &line).unwrap();
     git(&root, &["add", "-A"]);
     git(
         &root,
@@ -220,10 +223,27 @@ fn a_gates_run_must_have_tested_the_work_commits_trees() {
     );
     let held = git(&root, &["rev-parse", "HEAD:crates"]);
     let commit = git(&root, &["rev-parse", "--short=9", "HEAD"]);
-    fs::create_dir_all(root.join("store/gates")).unwrap();
+    // a later sprint commits its pass line and the next gates append theirs, so the work commit's copy of the file is
+    // neither HEAD's nor the working file's (Sprint 188: `git rm --cached` refused that until it was forced)
+    let later = format!("{line}exit 0 in 902 s\tdefault\t2026-10-28T08:00:00Z\tsprint 191\tabc\tdef\tcrates={ran}\n");
+    fs::write(root.join("store/gates/passes.tsv"), &later).unwrap();
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "-c",
+            "user.name=w2m",
+            "-c",
+            "user.email=w2m@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Sprint 191: later",
+        ],
+    );
     fs::write(
         root.join("store/gates/passes.tsv"),
-        format!("exit 0 in 901 s\tdefault\t2026-10-28T07:00:00Z\tsprint 190\tabc\tdef\tcrates={ran}\n"),
+        format!("{later}exit 0 in 903 s\tdefault\t2026-10-28T09:00:00Z\tsprint 192\tabc\tdef\tcrates={ran}\n"),
     )
     .unwrap();
     let (code, stderr) = check(&root);

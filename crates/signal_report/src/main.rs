@@ -809,7 +809,7 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
     with_index(&["read-tree", &commit])?;
-    with_index(&["rm", "-r", "-q", "--cached", "--ignore-unmatch", "store/gates"])?;
+    with_index(&["rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch", "store/gates"])?;
     let mut moved = None;
     for pair in trees.split(' ') {
         let Some((dir, ran)) = pair.split_once('=') else {
