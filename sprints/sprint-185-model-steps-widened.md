@@ -78,3 +78,22 @@ The run loop serves the batch run's every hvc #11 class, and a raised #XM, as th
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants, both run before the commit.
 - [x] One concept: the model's steps on the run loop.
+
+## result
+
+- **The guest:** `model_steps.c` adds POPFQ (CF from bit 0 of the round, read by SETC), FSIN and FCOS, and XGETBV to
+  each of its 100 rounds, then registers a vectored handler and overflows one ADDSS with the exception unmasked; the
+  handler keeps the code and masks every exception in the context's MXCSR, and ADDSS runs again to infinity. Built
+  with `tests/test_timed_waits.py`'s line (GCC 16.2.0).
+- **The fixture:** the frozen Python host ran it twice, byte for byte the same: ExitProcess, "48743d4d4fd79694" and
+  "c00000917f800000", exits hvc #1 21, #8 4, #10 301, #11 701; `store/run_loop/model-steps-python.sha256` pins
+  9254554583e0607c9a70bf10aeddec9cd12c9cda8ae54c082875c8ada25de7ed.
+- **The judge:** the Rust run loop gives the same stop, output and hvc #10 and #11 counts; its doc now names ADDSS,
+  which Sprint 181's guest used, not CMPSS.
+- **Plant 1** (the model's POPFQ dropping CF): the run-loop judge failed, "the output differs from the Python host's
+  left: "6df648a15c8ca4a2\nc00000917f800000\n"". Restored byte for byte.
+- **Plant 2** (`xm_status` giving the overflow 0xC000008F): the run-loop judge failed, "left:
+  "48743d4d4fd79694\nc000008f7f800000\n"". Restored byte for byte.
+- **Departures:** Sprint 184's close failed CI, `c_words`'s image build on Linux ("ld: ld: unrecognized -a option
+  `rch'"); `crates/translator/tests/c_words.rs` holds the image's symbols on macOS only, by `cfg`, and says so
+  elsewhere. Every multi-line edit used the Edit tool.

@@ -759,3 +759,18 @@ keeps the sprint, HEAD and the diff's sha256 with each pass, and `--check` match
 same class from the other side: its first four records were written by a `case_runs` binary that a planted fault's
 test build had relinked, though the source was clean. A restore is done when the binaries the next step runs are
 rebuilt, not when the source compares equal.
+
+**Finding (#75):** a close's "CI does not run" line was written from memory six times and was wrong each time:
+Sprints 176-184 said `c_words`'s C emitter is macOS only, though the test has run on CI's Linux since Sprint 154 and
+says so in its module doc. The error surfaced only when Sprint 184 gave `c_words` a macOS-only call and CI failed.
+The line names judges, so it is read from `.github/workflows/ci.yml` and the last CI log, not recalled; a judge that
+calls a macOS-only tool is gated by `cfg` in the same edit.
+
+**Finding (#76):** two of Sprint 184's checks held less than #73-74 say. The gates line records HEAD and the diff's
+sha256, and `--check` compares neither, so #74's "a gate's line must name the tree it ran on" is written, not read; and
+the pass file is untracked, so a fresh clone's gates fail their own check (reviewer-2, review of 182-184, Medium 2).
+The zero-halfword list held a defect no runtime address can produce: `a64_mov_imm` never skips halfword 0, and the
+image's halfwords 1 and 2 are never zero (Medium 1, correcting the reviewer's own earlier Medium 1, which this board
+had accepted). In both, the check was built from the finding's words without reading the code the finding was about
+(`a64_encoder.c` 25-32; the line that reads the columns back). A check is planted against the defect it names, at an
+input the system can produce, before it is held.

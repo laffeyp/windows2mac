@@ -206,9 +206,11 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
     }
 }
 
-/// Sprint 181: `model_steps.exe` reaches the model, CMPSS by hvc #10 and RCR (with its STC) by hvc #11, and the run loop
+/// Sprint 181: `model_steps.exe` reaches the model, ADDSS by hvc #10 and RCR (with its STC) by hvc #11, and the run loop
 /// serves them through `model_step`, the function the case runner judges; the run ends as the frozen Python host's
-/// (`build/run_loop/model-steps-python.json`): its stop, its output and its model exits.
+/// (`build/run_loop/model-steps-python.json`): its stop, its output and its model exits. Sprint 185 widens the guest to
+/// the batch run's other hvc #11 classes (POPFQ, FSIN, FCOS, XGETBV) and one #XM raised and caught by a vectored
+/// handler: 301 hvc #10 and 701 hvc #11 exits.
 #[test]
 fn model_steps_runs_through_the_model_as_the_python_host() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());

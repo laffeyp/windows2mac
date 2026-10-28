@@ -364,31 +364,45 @@ fn zero_halfword_addresses_are_held_not_avoided() {
         }
     }
     println!("x87 calls at zero-halfword addresses: {x87_calls}; their C words differing from the Rust's: {differing}");
-    // the runtime image the build makes, as the case runner's `case_runtime_calls` reads it (Sprint 184; reviewer-2's
-    // Medium 1 of its review of 178-181: the record's header is the image of the run that made it)
-    use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
-    let (_, image) = guest_runtime::build(&root(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
-    let mut zero: Vec<String> = image
-        .symbols
-        .iter()
-        .map(|(k, v)| (k, *v))
-        .filter(|(_, v)| [0, 16, 32].iter().any(|s| v >> s & 0xFFFF == 0))
-        .map(|(k, v)| format!("{k}\t0x{v:x}"))
-        .collect();
-    zero.sort();
-    println!("runtime symbols with a zero halfword below bit 48: {zero:?}");
     let moved: Vec<String> = [
         held_census(
             "c-words-zero-halfword-2026-10-28.tsv",
             &format!("x87_calls\tc_words_differing\n{x87_calls}\t{differing}\n"),
         ),
-        held_census(
-            "runtime-symbols-zero-halfword-2026-10-28.tsv",
-            &format!("symbol\taddress\n{}\n", zero.join("\n")),
-        ),
+        image_zero_halfword_symbols().and_then(|zero| {
+            held_census(
+                "runtime-symbols-zero-halfword-2026-10-28.tsv",
+                &format!("symbol\taddress\n{}\n", zero.join("\n")),
+            )
+        }),
     ]
     .into_iter()
     .flatten()
     .collect();
     assert!(moved.is_empty(), "{}", moved.join("; "));
+}
+
+/// The symbols of the runtime image the build makes with a zero halfword below bit 48, as the case runner's
+/// `case_runtime_calls` reads the image (Sprint 184; reviewer-2's Medium 1 of its review of 178-181: the record's header
+/// is the image of the run that made it). The image links with Apple's `ld -arch` (`guest_runtime` lib.rs 165), so on
+/// another host (CI's Linux runner, Sprint 185) the list is not held and the test says so.
+#[cfg(target_os = "macos")]
+fn image_zero_halfword_symbols() -> Option<Vec<String>> {
+    use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
+    let (_, image) = guest_runtime::build(&root(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+    let mut zero: Vec<String> = image
+        .symbols
+        .iter()
+        .filter(|(_, v)| [0, 16, 32].iter().any(|s| **v >> s & 0xFFFF == 0))
+        .map(|(k, v)| format!("{k}\t0x{v:x}"))
+        .collect();
+    zero.sort();
+    println!("runtime symbols with a zero halfword below bit 48: {zero:?}");
+    Some(zero)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn image_zero_halfword_symbols() -> Option<Vec<String>> {
+    println!("runtime symbols with a zero halfword: not held on this host (the image links with Apple's ld)");
+    None
 }

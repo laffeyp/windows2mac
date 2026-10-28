@@ -179,9 +179,26 @@ if [ $python = 1 ]; then
   # away)
   mkdir -p build/gates-failures
   kept=build/gates-failures/pytest-$(date +%Y%m%dT%H%M%S).txt
-  uv run pytest -q > "$kept" 2>&1 || { tail -40 "$kept"; echo "gates: pytest failed; its output is $kept"; exit 1; }
+  # three frozen-host tests on two vCPUs whose counts or races vary under the suite's load, each failing once in a full
+  # run and passing alone (Deferred 2026-10-28, Sprints 152, 173 and 184; Decision "Sequence after Sprint 185", reviewer-2's
+  # Medium 4 of its review of 182-184): out of the main run, run once in their own stage, each outcome kept in
+  # build/gates-multi-vcpu.txt with the run's sprint; a failure there is reported, not retried, and does not stop the
+  # gates; their fix is step 6's (plan 2026-10-24)
+  multi_vcpu="tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried
+tests/test_parked_vcpu_wake.py::test_a_thread_readied_in_the_vm_runs_on_the_waiting_vcpu
+tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wake_pending"
+  deselect=""
+  for t in $multi_vcpu; do deselect="$deselect --deselect $t"; done
+  # shellcheck disable=SC2086
+  uv run pytest -q $deselect > "$kept" 2>&1 || { tail -40 "$kept"; echo "gates: pytest failed; its output is $kept"; exit 1; }
   tail -3 "$kept"
   rm "$kept"
+  for t in $multi_vcpu; do
+    if uv run pytest -q "$t" > build/gates-multi-vcpu-last.txt 2>&1; then outcome=passed; else outcome=failed; fi
+    printf '%s\t%s\tsprint %s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$outcome" "$gates_sprint" "$t" >> build/gates-multi-vcpu.txt
+    echo "gates: multi-vCPU stage: $outcome $t"
+    [ $outcome = passed ] || { tail -5 build/gates-multi-vcpu-last.txt; echo "gates: reported, not retried (build/gates-multi-vcpu.txt)"; }
+  done
 fi
 if [ $all = 1 ]; then
   uv run python scripts/check_replay.py
