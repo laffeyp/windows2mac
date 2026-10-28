@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 179
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -84,3 +84,34 @@ Each input the review named is held by its judge, and each plant fails it.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants on judges' paths.
 - [x] One concept: the judges' inputs held.
+
+## result
+
+- **The compiler of record:** `CompileError` is an enum, `Refused(String)` and `LaterGroup { class, why }`; the MMX
+  lowering's refusal is `LaterGroup`, matched by variant in `case_inputs.rs` and `c_words.rs`, no string. The case
+  runner holds the Rust-compiled map in both tests that have it: `store/case_runner/rust-compiled-by-class.tsv` (306
+  classes, 189,268 cases, the judging run, equal to Sprint 177's printed count) and `rust-compiled-codes-by-class.tsv`
+  (306 classes, 16,824 distinct codes); the Python-words judging test has no Rust map to hold.
+- **Plant 1** (`lift` refusing ADD_LOCK): the case runner failed, "the Rust-compiled classes moved from
+  rust-compiled-by-class.tsv: ADD_LOCK: held Some(740), now None", beside expected.tsv's and expected-by-class.tsv's
+  rows. Restored byte for byte.
+- **Zero-halfword addresses:** a second `c_words` test gives x87_fast.c's five a zero-halfword address
+  (`0x7F01_0000_1000 + 0x100 * i`): 10 of the 24 x87 calls' C words then differ from the Rust's, FSTP m64's 8 and
+  FSQRT's 2, whose stencil branches past a runtime call; FLD m64 branches before its only call. Held in
+  `store/census/c-words-zero-halfword-2026-10-28.tsv`; and the record's one runtime symbol with a zero halfword below
+  bit 48, `w2m_approximate` at 0x7f0004060000, in `runtime-symbols-zero-halfword-2026-10-28.tsv`.
+- **Plant 2** (the pass counting no C word as differing): `c_words` failed, "c-words-zero-halfword-2026-10-28.tsv
+  holds \"x87_calls\tc_words_differing\n24\t10\n\", now \"x87_calls\tc_words_differing\n24\t0\n\"". Restored byte for
+  byte.
+- **The gates' last exit:** `scripts/gates.sh` appends each passing run to `build/gates-passes.txt` ("exit 0 in N s",
+  its mode, its time); `signal_report --check` fails a `done` card whose tail entry is not headed closed, and a closed
+  entry from Sprint 179 on whose "exit 0 in N s" the file does not hold (skipped where the file is absent, as on CI).
+- **Plant 3** (a done card under a "gates running" heading, and a closed entry naming a run never kept): the
+  integration test `a_done_card_needs_a_closed_tail_naming_a_kept_gates_run` holds `--check`'s output: "sprint 201: its
+  card is done and its tail entry is not headed closed" and "sprint 200: its tail entry names \"exit 0 in 912 s\",
+  which build/gates-passes.txt does not hold".
+- **Departures from the card:** the card had the gates write their last run with the sha256 of `git diff HEAD`, to
+  match the sprint's work commit; the gates run on a tree that later splits into a work commit and a close commit, and
+  a sprint's gates may run more than once, so the file keeps every passing run and the rule starts at Sprint 179, whose
+  earlier entries quote times no file held. `crates/w2m_vm/src/compile.rs` changed (two reads of `CompileError`'s
+  string), and the plants' one-line `sed`s are the only edits outside the Edit tool.

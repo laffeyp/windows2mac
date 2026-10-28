@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 169 (2026-10-28, closed)
+- **Scope:** Decision 2026-10-28: `scripts/check_records.py` ported to Rust, rule for rule, so vocabulary 0.12 can change T4 in Rust.
+- **Dual contract:** signal — none, as the card says; artifact pass (`check_records --since 2026-10-17 --show 0` exit 0; the default gates exit 0 in 248 s, `rdeps(w2m_vm)` 31 tests); observation pass (the Rust lines equal the Python's byte for byte over 38,609 records at `--show 0`, `3` and `50`; plant 1 named T2 in both and found the reader's gap; plant 2 named T4, 439 against 101).
+- **CI does not run:** `check_records` over the store (the records are committed, but CI runs its own steps); the comparison runs in `scripts/gates.sh --all` on this Mac.
+- **Rubber Duck Pass:** *Sequence narration:* no record. *Observation 1 (three differences the byte comparison found):* E1's examples in another order (a `serde_json` map sorts keys; the Python keeps the file's order), T3's int-or-float printing, and the reader going on past a skipped `seq` where substrate's raises RecordGapError. Disposition: resolved-here (each fixed, the comparison identical). *Observation 2 (the card's plant changed by what it found):* plant 1 as written cut one line, which made a gap; the gap is now refused in both, and a record cut before SESSION_COMPLETED gives the T2 the card wanted. Disposition: resolved-here. *Observation 3 (the selective gates' first long run):* `rdeps(w2m_vm)` ran 31 tests in 198 s, the case runner's two side by side, where the full gates took 13 min 42 s. Disposition: recorded. Edits outside the Edit tool: one-line `sed`s for the `?`s, the plant and its restoring, and an `awk` that inserted Sprint 159's entry into the archive, a multi-line edit, checked verbatim by `diff`.
+- **Closed:** Sprint 168's CI run 40659307851 on cea838ba1, in progress at this close; its result is recorded in Sprint 170's tail entry.
+- **Files:** crates/w2m_vm/src/bin/check_records.rs, scripts/gates.sh, docs/sprint-tail-archive-2026-10-08.md (Sprint 159's entry), WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-169-the-records-check-in-rust.md, signal-reports/sprint-169-report.md.
+
 ### Sprint 168 (2026-10-28, closed)
 - **Scope:** the user's instruction of 2026-10-28: the gates run, by default, what the change since `origin/sprint-066` reaches, by established methods; `--all` keeps every gate.
 - **Dual contract:** signal — none, as the card says (the gates write no record); artifact pass (`scripts/gates.sh` exit 0 on this sprint's change; `scripts/gates.sh --all` exit 0 in 844 s); observation pass (6 s for this sprint's change against 13 min 42 s for Sprint 167's full gates; plant 1 failed at its test in 4 s with 14 of 126 tests selected; plant 3 chose the Python gates).
