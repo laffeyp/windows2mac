@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 181
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -80,3 +80,30 @@ The run loop serves hvc 10 and 11 through the function the case runner judges.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: unchanged counts and two plants.
 - [x] One concept: the run loop serves the model.
+
+## result
+
+- **The move:** `model_step`, `GuestModelMemory`, `ModelStep`, `mxcsr_flags_from_fpsr` and `FPSR_TO_MXCSR` left
+  `cases.rs` for `crates/w2m_vm/src/model_step.rs` unchanged, `ModelStep` and `model_step` public; `cases.rs` calls them
+  from there. The case runner's three tests pass with its held files unchanged (`expected.tsv`, `expected-by-class.tsv`,
+  the two compiler-of-record files), and the four records hold Sprint 180's verdicts: 236, 177, 107 and 26,
+  `check_records` 0 violations each; the ledger holds 10 open FCOS and FSIN entries.
+- **The run loop:** `run.rs` serves hvc 10 and 11 before its `Stop::Hvc`: `x86_address_at` (vm_backend 4861-4863, over
+  the reconstruction table in guest memory) gives the guest address of the hvc's site, `code_at` reads up to 15 bytes
+  there with 16 zeros after, `model_step` steps it, and the run goes on at the PC the step leaves; a step the model
+  cannot take stops the run as `Stop::Model { rip, why }`.
+- **The guest:** `tests/data/timed_waits/model_steps.c`, built with GCC 16.2.0 as its neighbours, unmasks MXCSR's
+  overflow exception (0x1b80) so ADDSS leaves its fast path for hvc #10, and runs RCR with STC before it, each a whole
+  step by hvc #11, 100 rounds. The frozen Python host ran it to ExitProcess with "7a6a27c287bac48c" and 100 hvc #10, 200
+  hvc #11 exits, twice byte for byte; `build/run_loop/model-steps-python.json`, pinned by
+  `store/run_loop/model-steps-python.sha256`. The Rust run loop gives the same stop, output and exits, 9 dispatch
+  misses too (`model_steps_runs_through_the_model_as_the_python_host`).
+- **Plant 1** (MXCSR not written back after a step, `model_step.rs`): the case runner failed, "33 CVTPD2PS fault MXCSR:
+  case 4137: [66, 0f, 5a, 20] vm 0xf300, cpu 0xf328", with ADDSD's. Restored byte for byte.
+- **Plant 2** as the card wrote it (resuming at the instruction, not the next) would re-run the instruction without end
+  and hang the judge rather than fail it; it was redrawn on the same path before it ran, the step's RIP one byte off: the
+  run-loop judge failed, output "f55eb7fa87bac48c" against the Python's "7a6a27c287bac48c". Restored byte for byte.
+- **Departures from the card:** the guest's hvc #10 class is ADDSS with an exception unmasked, not CMPSS, which the Rust
+  does not lift (Sprint 178's Deferred classes): the first build stopped at "no lifting rule for CMPSS at 0x140001024";
+  plant 2 redrawn as above. Every multi-line edit used the Edit tool; one-line `sed`s for the imports, the module line
+  and the plants.
