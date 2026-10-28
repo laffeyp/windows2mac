@@ -12,6 +12,7 @@
 | H2 | Resolve-and-record holds up on a project whose key facts (TSO access, oracle behavior) can only be settled by probes: the agent records the decision provisionally and a probe sprint confirms or supersedes it, with no wait state. | partially | 2026-10-03: four same-day agent decisions superseded cleanly by the v0.2 user decision; but two of them were scope (intent), not probe-settleable facts. OQ-1 is still the first probe test. |
 | H3 | The ≤2-files sprint rule fits a compiler/runtime project if contracts are one file each. | refuted | Sprints 023-033: ten of eleven cards recorded an exception; Sprints 029-032 touched 27-55 files each. The checkable unit is one path from input to verdict. Project override recorded 2026-10-09. |
 | H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
+| H5 | A lesson reaches new code only as a check in code; a lesson held in prose recurs. | supported | 2026-10-28: the Emits rule (126, 131, 162), multi-line edits outside the Edit tool (128-158), a skipping judge (149, 154) recurred in prose; Signal Reports (a gate since 127) and planted samples (read from 162) have not. |
 
 ---
 
@@ -690,3 +691,50 @@ states each condition's measure and the verdict, or the link does not close.
 
 **Kit change suggested:** the close of a sprint that ends a design's link lists that link's revisit conditions with
 their measured values.
+
+### 2026-10-28 — Sprints 150-164: a step's gate met six sprints before its text, and lessons that recurred in prose
+
+Step 3 of `docs/rust-port-plan-2026-10-24.md`, the walking skeleton, names a gate ("the guest's output and record
+equal the stored ones") and three measurements ("an exit's time, the runtime word's hold times, whether a guest WFE
+exits"). Sprint 158 met the gate: `w2m-vm` ran `sleeper` to ExitProcess(0) under substrate, and its 40 events equalled
+the frozen Python's but for three exempt fields. The measurements stood where Sprint 142 left them, one exit sampled
+at 3,667 ns, and no Rust code recorded a measurement. Sprints 159-161 lifted three more translator groups under link
+5, whose purpose (letting `qpc` and then `sleeper` run further) had ended at Sprint 157. reviewer-2's review of
+2026-10-27 named both; Decision 2026-10-27 closed link 5 and amended the step. Sprint 162 added the seven metrics
+(vocabulary 0.11, P24); Sprint 163 measured an exit's time by kind (served exits' medians 584 to 1,042 ns, beside the C
+monitor's 813-852 ns) and the WFx traps (WFE 0 of 1,000, WFI 1,000 of 1,000); Sprint 164 measured the runtime word.
+
+Step 3's synthesis: the step met its gate at Sprint 158 and its text at Sprint 164, six sprints later. Its numbers do
+not reopen the host design. The switch stub holds the word 83 ns at p50 and p99 over 3,018 takings
+(`store/runs/w2m-vm-measurements-1793171817000000000`), inside the design's 200 ns; the long holds are the compile
+site's (to 246 µs) and the bridges' (to 57.5 µs), which the design's step 6 changes remove; every wait but each run's
+first is 4 ticks or less, and the first (163 and 179 ticks, no exit inside) is not explained. Sprint 164's own
+instrument went through three forms. A 48-entry ring, sized without a count of takings, lost 2,914 of 3,002. Histograms
+for all four sites in one, topping out at 5.3 µs below the design's 10 µs revisit point, with a lower bound carried in
+prose and counter reads without an ISB, went to reviewer-2's second review. An entry per taking with its site and the
+exits around it, in 1.3 MB the monitor region left unused, came third.
+
+**Finding (#69):** a step's gate is one sentence of its text, and a step that meets its gate looks done. A close that
+ends a step reads the step's whole text against the records, sentence by sentence, as #68 asks of a design's revisit
+conditions.
+
+**Finding (#70):** an instrument's capacity and range are numbers the sprint measures or derives before sizing it: the
+ring needed the takings a run makes (3,002 on `sleeper`, which one counted run gives), and the histogram's range needed the design's own
+threshold (10 µs, in the design's text). Both were in reach before the code was written.
+
+**Finding (#71):** an order set by a Decision changed in a Surfaced disposition (the code review's of 2026-10-28 moved
+the locked XCHG ahead of KIT_DIARY and the census card), and only the next review caught it. A disposition that
+changes the order is a Decision, written as one.
+
+**Hypothesis H5** (new): a lesson reaches new code only as a check in code; a lesson held in prose recurs. For it:
+three rules held in prose recurred. The Emits rule ("name the plane's list") was written at 131 after 126 and broken at
+162. Multi-line edits outside the Edit tool went on in 128, 131, 142, 143, 153, 157 and 158. A judge that skips (#65,
+149) was written again at 154. Plants that could not fail or did not run recurred in 149, 155, 156, 162 and 163, and
+zsh expansion that ran or counted nothing in 149 and 159. Two rules made into checks have not recurred: a gate has
+failed a closed sprint without a Signal Report since 127 (reports had stopped at 122), and the gates have read the
+planted samples' ProducerFailed event since 162. Against it: the checks are young (the Signal Report gate since 2026-10-24,
+37 sprints), so their record is short. Verdict: supported.
+
+**Kit change suggested:** a lesson the Rubber Duck Pass records as a class (`disposition: recorded`) names the check
+that would catch its next instance, or says why none can be written; a second recurrence of a recorded class makes
+the check the next card.
