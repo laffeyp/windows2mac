@@ -631,7 +631,7 @@
 
 ## Sprint tail
 
-### Sprint 196 (2026-10-28, gates running)
+### Sprint 196 (2026-10-28, closed)
 - **Scope:** reviewer-2's Medium 5 of its review of Sprints 190-192 and Medium 1 of its review of 185-189: the module families judged on the Rust host by their contracts, and a LoadLibrary of a name found nowhere answered 0
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 953 s, kept in `store/gates/passes.tsv` as sprint 196 at 8f2c5e598 with root=d1db7d639; multi-vCPU: 3 of 3 passed); observation pass (`family_runs.rs` holds the 12 runner binaries the four module contracts name: 10 end and equal their contracts row for row (windows.module.queries 6 of 6, 18 rows; .system 2 of 2, 14 rows; .names_ansi 2 of 2, 10 rows after its derivation), and windows.module.search's 2 stop at FILE_MKDIR 25, held; queries ran past `w2m-no-such-module.dll` once `modules.rs` answered 0; the batch run's stream and the guests' stops unchanged; plant 1 named "row file.image differs from the contract's"; plant 2 named "row load.missing differs from the contract's"; plant 3 named "row first differs from the contract's"; plant 4, the lookup held to the top level, failed the modules test, "called `Result::unwrap_err()` on an `Ok` value: 0").
 - **CI does not run:** the family runs (Hypervisor.framework); CI runs `modules.rs`'s three unit tests and compiles `family_runs.rs`, which finds no build/family_runs there and says so.
