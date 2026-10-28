@@ -109,6 +109,17 @@ pub const AP_READ_ONLY: u64 = 1 << 7;
 /// The runtime image's link address (vm_backend 1183: `MONITOR_VA + RUNTIME_IMAGE`).
 pub const RUNTIME_IMAGE_VA: u64 = MONITOR_VA + RUNTIME_IMAGE;
 
+// Every address of the runtime image loads in three words: `a64_mov_imm` (tools/vm_compiler/a64_encoder.c 25-32) emits
+// halfword 0 always and skips a zero halfword 1, 2 or 3, and the C stencils branch past a runtime call as if the address
+// took three (Sprint 188; reviewer-2's Medium 1 of its review of 182-184). So no 4 GB boundary falls inside the image,
+// its halfword 2 is nonzero, and halfword 1 of its first address is nonzero (halfword 1 rises through the image).
+const _: () = assert!(
+    RUNTIME_IMAGE_VA >> 32 == (RUNTIME_IMAGE_VA + RUNTIME_IMAGE_SIZE - 1) >> 32
+        && RUNTIME_IMAGE_VA >> 32 & 0xFFFF != 0
+        && RUNTIME_IMAGE_VA >> 16 & 0xFFFF != 0,
+    "a runtime image address with a zero halfword 1 or 2: the C stencils' branch past a runtime call would be wrong"
+);
+
 /// The defines the runtime is compiled against: `vm_backend.runtime_defines()` (1075-1104), name for name.
 pub fn runtime_defines() -> Vec<(String, u64)> {
     let mut d: Vec<(String, u64)> = [

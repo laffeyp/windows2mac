@@ -2722,4 +2722,18 @@ mod tests {
         run(&[0xD2, 0xD8], &mut th, &mut mem).unwrap(); // rcr al, cl
         assert_eq!((th.regs[0] & 0xFF, th.flags.c), (0x81, Some(false)));
     }
+
+    /// `_vex` 750-753: a 256-bit store writes all 32 bytes, XMM then bits 255:128 (Sprint 188; reviewer-2's Medium 5 of
+    /// its review of 182-184). No lowered instruction reaches this branch (every VEX move with a 256-bit store form is
+    /// in `VEX_NATIVE_256`), so the case runner cannot judge it and this test holds it.
+    #[test]
+    fn a_vex_256_store_writes_all_32_bytes() {
+        let (mut th, mut mem) = (thread(), region());
+        th.regs[0] = 0x1010;
+        th.xmm[0] = 0x0f0e_0d0c_0b0a_0908_0706_0504_0302_0100;
+        th.ymm_hi[0] = 0x1f1e_1d1c_1b1a_1918_1716_1514_1312_1110;
+        run(&[0xC5, 0xFC, 0x11, 0x00], &mut th, &mut mem).unwrap(); // vmovups [rax], ymm0
+        let stored = mem.read(0x1010, 32).unwrap();
+        assert_eq!(stored, (0..32).collect::<Vec<u8>>());
+    }
 }

@@ -84,3 +84,31 @@ Each check holds a defect its input can produce, and each VEX path the model ste
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the checks that held nothing.
+
+## result
+
+- **The layout, asserted:** `layout.rs` asserts at compile time, under `RUNTIME_IMAGE_VA`, that no 4 GB boundary falls
+  inside the image, its halfword 2 is nonzero and halfword 1 of its first address is nonzero; it holds for
+  0x7f0004170000 + 8 MB. `c_words`'s zero-halfword test holds only the 10-of-24 count, its doc naming it the C
+  stencil's behaviour at an address the layout rules out; the symbol list moved by `git mv` to `store/superseded/`
+  with a note, the Decision "Sequence after Sprint 185" amended.
+- **VEX's paths:** the `defer_fp` plant (`self.defer_fp = false`, each half checked by itself) failed the case runner
+  in 27 difference classes, "259 VHADDPD MXCSR: case 20306: [c4, 01, 7d, 7c, 6c, 85, 3b] vm 0x1f8d, cpu 0x1fad", and
+  "2 VADDPD fault code: case 13230: [c5, ed, 58, 4f, ee] vm 0xc000008f, cpu 0xc0000090": the case runner judges it, and
+  `model_steps.exe` needs no case. The store plant (16 bytes written) passed the case runner, 0 difference classes in
+  sets 049 and 049b: no lowered instruction reaches the branch. `a_vex_256_store_writes_all_32_bytes` steps
+  `vmovups [rax], ymm0` directly and holds the 32 bytes.
+- **`recon_lookup` bounded:** it takes the table's capacity and returns an error naming a count past it or past the
+  memory; `x86_address_at` returns that error, and the run loop stops at `Stop::Exit` with it.
+  `a_count_past_the_table_is_an_error` holds it; census row 15a names it.
+- **Plant 1** (`RUNTIME_IMAGE_VA` at MONITOR_VA + 0x1_0000_0000, a 4 GB boundary): the build failed, "error[E0080]:
+  evaluation panicked: a runtime image address with a zero halfword 1 or 2: the C stencils' branch past a runtime call
+  would be wrong". Restored byte for byte.
+- **Plant 2** (the 256-bit store writing 16 bytes): the case runner passed; `a_vex_256_store_writes_all_32_bytes`
+  failed, "left: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0]". Restored byte for byte.
+- **Plant 3** (the bound dropped, the slice's end taken as `table + 16 * n`): `a_count_past_the_table_is_an_error`
+  failed, "panicked at crates/w2m_vm/src/run.rs:170:27". Restored byte for byte.
+- **Departures:** plant 1 moved `RUNTIME_IMAGE_VA` rather than `RUNTIME_IMAGE`, whose sum the stack's assertion pins;
+  no VEX.256 #XM was added to the guest, since the case runner judges the deferred check. Every multi-line edit used
+  the Edit tool.

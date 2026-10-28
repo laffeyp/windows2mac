@@ -294,12 +294,12 @@ fn held_census(file: &str, text: &str) -> Option<String> {
 }
 
 /// Sprint 179 (reviewer-2's Medium 1 of its review of 175-177): the C stencil's branch past a runtime call is fixed
-/// for a three-word address while `a64_mov_imm` skips a zero halfword, so at an address with one the C's words for
-/// x87_fast.c's calls are wrong and the Rust's, branching by label as the Python does, are not. This pass gives the
-/// five a zero-halfword address and holds how many x87 calls' C words differ from the Rust's; and it holds which of the
-/// symbols of the runtime image the build makes have a zero halfword below bit 48 (Sprint 184: the record's header,
-/// an older image, had `w2m_approximate` at 0x7f0004060000; the image of 2026-10-28 has `a64_movz`, the in-VM
-/// compiler's encoder, which translated code does not call).
+/// for a three-word address while `a64_mov_imm` skips a zero halfword 1, 2 or 3, so at an address with one the C's
+/// words for x87_fast.c's calls are wrong and the Rust's, branching by label as the Python does, are not. This pass
+/// gives the five an address whose halfword 2 is zero and holds how many x87 calls' C words differ from the Rust's: the
+/// C stencil's behaviour at an address the layout rules out (Sprint 188; reviewer-2's Medium 1 of its review of
+/// 182-184): `guest_runtime::layout` asserts at compile time that every runtime image address has halfwords 1 and 2
+/// nonzero, which replaced the list of the image's zero-halfword symbols this test held in Sprints 179-187.
 #[test]
 fn zero_halfword_addresses_are_held_not_avoided() {
     let c_compile = load();
@@ -364,45 +364,9 @@ fn zero_halfword_addresses_are_held_not_avoided() {
         }
     }
     println!("x87 calls at zero-halfword addresses: {x87_calls}; their C words differing from the Rust's: {differing}");
-    let moved: Vec<String> = [
-        held_census(
-            "c-words-zero-halfword-2026-10-28.tsv",
-            &format!("x87_calls\tc_words_differing\n{x87_calls}\t{differing}\n"),
-        ),
-        image_zero_halfword_symbols().and_then(|zero| {
-            held_census(
-                "runtime-symbols-zero-halfword-2026-10-28.tsv",
-                &format!("symbol\taddress\n{}\n", zero.join("\n")),
-            )
-        }),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    assert!(moved.is_empty(), "{}", moved.join("; "));
-}
-
-/// The symbols of the runtime image the build makes with a zero halfword below bit 48, as the case runner's
-/// `case_runtime_calls` reads the image (Sprint 184; reviewer-2's Medium 1 of its review of 178-181: the record's header
-/// is the image of the run that made it). The image links with Apple's `ld -arch` (`guest_runtime` lib.rs 165), so on
-/// another host (CI's Linux runner, Sprint 185) the list is not held and the test says so.
-#[cfg(target_os = "macos")]
-fn image_zero_halfword_symbols() -> Option<Vec<String>> {
-    use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
-    let (_, image) = guest_runtime::build(&root(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
-    let mut zero: Vec<String> = image
-        .symbols
-        .iter()
-        .filter(|(_, v)| [0, 16, 32].iter().any(|s| **v >> s & 0xFFFF == 0))
-        .map(|(k, v)| format!("{k}\t0x{v:x}"))
-        .collect();
-    zero.sort();
-    println!("runtime symbols with a zero halfword below bit 48: {zero:?}");
-    Some(zero)
-}
-
-#[cfg(not(target_os = "macos"))]
-fn image_zero_halfword_symbols() -> Option<Vec<String>> {
-    println!("runtime symbols with a zero halfword: not held on this host (the image links with Apple's ld)");
-    None
+    let moved = held_census(
+        "c-words-zero-halfword-2026-10-28.tsv",
+        &format!("x87_calls\tc_words_differing\n{x87_calls}\t{differing}\n"),
+    );
+    assert!(moved.is_none(), "{}", moved.unwrap_or_default());
 }

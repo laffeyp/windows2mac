@@ -142,27 +142,42 @@ pub enum Stop {
 
 /// `x86_address_at` (vm_backend 4861-4863): the guest address of the host code at `pc`, from the reconstruction table
 /// (the entry with the largest host address at or below `pc`, as `bisect_right` over the sorted marks finds it); 0
-/// when none is (Sprint 181).
-pub fn x86_address_at(mem: &[u8], pc: u64) -> u64 {
-    use guest_runtime::layout::{RECON_COUNT, RECON_TABLE, RUN_TABLE};
-    recon_lookup(mem, RECON_TABLE, read_u64(mem, RUN_TABLE + RECON_COUNT), pc)
+/// when none is (Sprint 181). The count is the guest's to write, so a count past the table's `RECON_ENTRIES` or the
+/// memory is an error, not a slice past the end (Sprint 188; reviewer-2's Low 4 of its review of 182-184).
+pub fn x86_address_at(mem: &[u8], pc: u64) -> Result<u64, String> {
+    use guest_runtime::layout::{RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE};
+    recon_lookup(
+        mem,
+        RECON_TABLE,
+        read_u64(mem, RUN_TABLE + RECON_COUNT),
+        RECON_ENTRIES,
+        pc,
+    )
 }
 
 /// `bisect_right(pc_map, (pc, M64)) - 1` over the first `n` (host, x86) entries at `table`, kept sorted as the code
 /// cache grows (vm_backend 4626-4628): the x86 address of the last entry whose host address is at or below `pc`, 0
 /// below the first (Sprint 184).
-fn recon_lookup(mem: &[u8], table: u64, n: u64, pc: u64) -> u64 {
-    let (entries, _) = mem[table as usize..(table + 16 * n) as usize].as_chunks::<16>();
+fn recon_lookup(mem: &[u8], table: u64, n: u64, capacity: u64, pc: u64) -> Result<u64, String> {
+    let end = table
+        .checked_add(n.saturating_mul(16))
+        .filter(|e| *e <= mem.len() as u64);
+    let (Some(end), true) = (end, n <= capacity) else {
+        return Err(format!(
+            "the reconstruction table's count {n} is past its {capacity} entries or the memory"
+        ));
+    };
+    let (entries, _) = mem[table as usize..end as usize].as_chunks::<16>();
     let entry = |e: &[u8; 16]| {
         (
             u64::from_le_bytes(e[..8].try_into().unwrap()),
             u64::from_le_bytes(e[8..].try_into().unwrap()),
         )
     };
-    match entries.partition_point(|e| entry(e) <= (pc, u64::MAX)) {
+    Ok(match entries.partition_point(|e| entry(e) <= (pc, u64::MAX)) {
         0 => 0,
         i => entry(&entries[i - 1]).1,
-    }
+    })
 }
 
 /// The instruction bytes at guest `rip` for the model's lifter: up to 15 bytes of mapped memory, then 16 zeros, as
@@ -596,7 +611,10 @@ fn run(
         if number == crate::cases::HVC_SLOW_SSE || number == crate::cases::HVC_SLOW_STEP {
             // `serve_exit` (5232, 5270-5271; Sprint 181): the instruction at the hvc's site, one step of the model,
             // on at the dispatcher or the runtime's exception call as the step leaves the PC
-            let rip = x86_address_at(guest.memory.as_slice(), pc - 4);
+            let rip = match x86_address_at(guest.memory.as_slice(), pc - 4) {
+                Ok(rip) => rip,
+                Err(why) => break Stop::Exit(why),
+            };
             let code = code_at(guest, rip);
             match crate::model_step::model_step(guest, vcpu, &code, rip)? {
                 crate::model_step::ModelStep::Resumed | crate::model_step::ModelStep::Raised => {
@@ -679,22 +697,34 @@ mod tests {
     #[test]
     fn tied_hosts_give_the_last_entry() {
         let t = table(&[(0x100, 0x1000), (0x110, 0x1004), (0x110, 0x1007), (0x120, 0x100a)]);
-        assert_eq!(recon_lookup(&t, 0, 4, 0x110), 0x1007);
-        assert_eq!(recon_lookup(&t, 0, 4, 0x11c), 0x1007);
-        assert_eq!(recon_lookup(&t, 0, 4, 0x120), 0x100a);
+        assert_eq!(recon_lookup(&t, 0, 4, 8, 0x110), Ok(0x1007));
+        assert_eq!(recon_lookup(&t, 0, 4, 8, 0x11c), Ok(0x1007));
+        assert_eq!(recon_lookup(&t, 0, 4, 8, 0x120), Ok(0x100a));
     }
 
     #[test]
     fn a_pc_below_the_first_entry_gives_zero() {
         let t = table(&[(0x100, 0x1000), (0x110, 0x1004)]);
-        assert_eq!(recon_lookup(&t, 0, 2, 0xfc), 0);
+        assert_eq!(recon_lookup(&t, 0, 2, 8, 0xfc), Ok(0));
     }
 
     /// Entries past RECON_COUNT are not yet published (vm_backend 4855-4859) and are not read.
     #[test]
     fn entries_past_the_count_are_not_read() {
         let t = table(&[(0x100, 0x1000), (0x110, 0x1004), (0x120, 0x100a)]);
-        assert_eq!(recon_lookup(&t, 0, 2, 0x130), 0x1004);
-        assert_eq!(recon_lookup(&t, 0, 0, 0x130), 0);
+        assert_eq!(recon_lookup(&t, 0, 2, 8, 0x130), Ok(0x1004));
+        assert_eq!(recon_lookup(&t, 0, 0, 8, 0x130), Ok(0));
+    }
+
+    /// The count is the guest's to write (Sprint 188; reviewer-2's Low 4 of its review of 182-184): one past the
+    /// table's capacity, or past the memory, is an error naming it, not a panic.
+    #[test]
+    fn a_count_past_the_table_is_an_error() {
+        let t = table(&[(0x100, 0x1000), (0x110, 0x1004)]);
+        let past = "the reconstruction table's count 3 is past its 2 entries or the memory";
+        assert_eq!(recon_lookup(&t, 0, 3, 2, 0x110), Err(past.to_string()));
+        let beyond = "the reconstruction table's count 3 is past its 8 entries or the memory";
+        assert_eq!(recon_lookup(&t, 0, 3, 8, 0x110), Err(beyond.to_string()));
+        assert!(recon_lookup(&t, 0, u64::MAX, u64::MAX, 0x110).is_err());
     }
 }
