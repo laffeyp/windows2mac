@@ -122,6 +122,13 @@ quotes were copied from the sources on 2026-10-24.
    by name at the first declined block, then the decoder, a case runner, the lifter, and the rules and lowering in
    groups follow, each judged by the C emitter's words where it has a stencil and by its classes' cases run through
    the case runner against Windows. Gate: the guest's output and record equal the stored ones.
+   *Amended 2026-10-27 (reviewer-2's review of Sprints 155-161):* the gate was met for `sleeper` at Sprint 158, but the
+   step's own text was not: an exit's time was sampled once (Sprint 142, 3,667 ns), the runtime word's hold times and
+   a guest WFE were never measured, and no Rust code records a measurement. Link 5's purpose, letting `qpc` and then
+   `sleeper` run further, ended at Sprint 157; its groups 3 to 5 (Sprints 159-161, chosen by the batch run's record
+   census) were step 4's translator work done early. The step closes with a measurement sprint (the three figures on a
+   record as MEASUREMENT_RECORDED); the classes left (CMPPS, the packed conversions, VEX, MMX, x87) become rows of step
+   4's census, not further link-5 groups.
 4. **One vCPU to the batch run.** The skeleton grows by component, each with the Python tests' values carried into
    Rust tests by hand and cited by file and line, and with its judge: loading's remainder (S2); the class judge over
    every class (S3; each rule group's classes judged at step 3); the model and slow paths (S4); every exit kind, with
