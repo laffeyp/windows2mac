@@ -341,6 +341,15 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 152 (2026-10-25, closed)
+- **Scope:** the review of Sprints 149-150: High 1 (TRACE_INGESTED over verdict lines), High 2 (the judges' discrepancies outside any ledger), Medium 1 (three CPUs merged into one profile), Medium 2 (a race hit dismissed), the lows, and the review's third judge.
+- **Dual contract:** signal pass (eight sessions, SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; in the planted chain DISCREPANCY_REPORTED, ROUTED and RESOLVED, 107 each); artifact pass (fmt, clippy, the gates; replay level 2 of each record); observation pass (the chain closed; a wrong `src` refused; the Rust words equal the Python's on 4,103 codes).
+- **CI does not run:** the case runner's three tests and `case_runs` (macOS only, the downloaded results, the fixture); CI runs the ledger's unit tests.
+- **Corrections:** Sprint 150 said its record met rule T4; it met it with TRACE_INGESTED over lines nothing validated. Sprint 151's tail did not say its record was withheld until this sprint (it does). Sprint 150's tail did not state its full gates exit: the second run exited 0. The review counted 248 rule modules; the registry map holds 249.
+- **Rubber Duck Pass:** *Observation 1 (a profile is two facts):* the review named three CPUs; measured, the 8573C runs span two Windows images, so four profiles. Disposition: resolved-here. *Observation 2 (a ledger a Producer cannot finish):* a Producer cannot read its own unfinalised record, so the ledger file is written after a run by `case_runs --write-ledger`. Disposition: resolved-here. *Observation 3 (a stray command):* one edit command began with `python3 -` and waited on standard input until stopped; it changed nothing, checked with `git diff`. Disposition: resolved-here (the Edit tool made the change).
+- **Closed:** Sprint 151's CI run 40179455651 (success on 28c7fca35).
+- **Files:** crates/w2m_vm/, harness/, store/case_runner/, store/runs/case-runner-*, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-152-the-judges-records-made-true.md, signal-reports/sprint-152-report.md.
+
 ### Sprint 151 (2026-10-25, closed)
 - **Scope:** link 5's first group in Rust, the lifter folded in as the link-3 review advised: lifted and lowered as the frozen Python does, judged word for word against the C emitter and against Windows through the case runner.
 - **Dual contract:** signal deferred to Sprint 152 (the `case-runner-rust` record was made, 387 classes accepted with 38 Rust candidates, and withheld: reviewer-2 found its form states a validation that never happened); artifact pass (fmt, clippy, the gates); observation pass (1,060,791 record calls equal to the C; 36,939 cases agree with Windows and equal the Python's words; two plants named).
