@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 171
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -98,3 +98,35 @@ Every judge and plant reviewer-2 named reaches what it names, and the report che
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: a plant per item.
 - [x] One concept: judges that reach what they name.
+
+## result
+
+1. **`cond_flags`'s masks by value:** the test holds each of `lift::cc`'s 16 conditions to `COND_FLAGS`'s mask
+   (vm_backend 852-853), a negation as its condition. Plant `"l" => U_SF`: the test failed, "assertion `left == right`
+   failed: l, left: Some(4), right: Some(12)". Restored.
+2. **The look-ahead:** read first, the frozen Python's KeyError leaves `_flags_live_in` (4812), `_compile` (4588,
+   no `except` at 4617) and `serve_exit` (5242) uncaught and ends the run; it does not refuse the block, as the review
+   assumed. The Rust look-ahead now returns the error, and the run stops at `Stop::Untranslated` (`run.rs` 578) naming
+   it. A test builds an instruction branching on "xx" and `insn_flags` refuses it by name. Not reached: no lifted
+   instruction carries an unknown condition, so the look-ahead's `?` is judged by reading, not by a run.
+3. **The Rust-test trigger:** `.cargo/`, `rust-toolchain.toml`, `scripts/sign_and_run.sh` and `corpus/` select every
+   Rust test. Plant (a change to the runner, by `GATES_CHANGED`): the plan printed "Rust tests: all (an input outside
+   one crate changed)", where `design_check` alone gives "rdeps(design_check)".
+4. **`build/` inputs:** `store/case_runner/build-inputs.sha256` holds 147 files. Plant (one hash changed): "a build/
+   input differs from store/case_runner/build-inputs.sha256: build/case_runner/python-words.txt: FAILED"; plant (a new
+   download): "build/probe-runs/plant-171/result-1.bin new". Each selected every Rust test; removed, the selection is
+   `rdeps(design_check)` again.
+5. **Sprint 168's plant 2, placed:** `a64_encoder`'s CNTVCT test made false, with only `design_check` changed: the
+   default run ran 14 tests and exited 0; `--all` exited 101, "tests::the_virtual_counter_reads_as_clang_assembles_it
+   --- FAILED". The first default run exited 1 with its 14 tests passed: since Sprint 168, `docs=$(for ...)` returned
+   the last `[ -f ]`'s 1 under `set -e` whenever no changed crate has a library; the loop now ends with `true`.
+6. **A string `guest_trace`:** substrate refused the planted line, "EXECUTION_COMPLETED: Expected `bool | null`, got
+   `str` - at `$.guest_trace`", after the Rust type refused it; the gates read that from ProducerFailed.
+7. **The discrepancy chain:** the gates run `harness/case-runs-planted.toml` whenever Rust tests run: 32
+   DISCREPANCY_REPORTED, 0 violations. Plant (the report's initial-state hash set to the zero placeholder):
+   `check_records` held 32, "DISCREPANCY_REPORTED.initial_state_sha256 is the zero placeholder", exit 1. Restored.
+8. **Named plants quoted:** `signal_report --check` fails a sprint from 171 marked done whose contract names a planted
+   fault and whose result quotes no judge's failure for one. Plant (this card marked done before this result existed):
+   "sprint 171: its observation contract names a planted fault and its result quotes no judge's failure for a plant",
+   exit 1. Restored.
+- **`scripts/gates.sh --plan`** prints the selection and stops; the selection is decided before any gate runs.
