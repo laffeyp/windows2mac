@@ -719,7 +719,16 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                             // multi-vCPU stage is the stage's record
                             if n >= FIRST_CLOSE_BOUND_SPRINT {
                                 wrong.extend(close_moved(root, n)?);
-                                wrong.extend(multi_vcpu_claim(root, n, body));
+                                if n >= FIRST_WALKED_SPRINT {
+                                    wrong.extend(multi_vcpu_count(root, n, body, kept(&run).unwrap()));
+                                } else {
+                                    wrong.extend(multi_vcpu_claim(root, n, body));
+                                }
+                            }
+                            // from Sprint 195 every commit between its card and the next card is its card, its work
+                            // or its close
+                            if n >= FIRST_WALKED_SPRINT {
+                                wrong.extend(commits_walked(root, n)?);
                             }
                         }
                         Some(run) if n >= FIRST_GATES_BOUND_SPRINT && kept_any(passes, &run) => wrong.push(format!(
@@ -789,15 +798,12 @@ fn close_moved(root: &Path, n: u32) -> Result<Option<String>, String> {
         return Ok(None);
     };
     let changed = git(root, &["diff-tree", "--no-commit-id", "--name-only", "-r", &commit])?;
-    Ok(changed
-        .lines()
-        .find(|p| !BOOKKEEPING.iter().any(|b| *p == *b || p.starts_with(&format!("{b}/"))))
-        .map(|p| {
-            format!(
-                "sprint {n:03}: its close commit {} changes {p}, outside the bookkeeping paths",
-                &commit[..9]
-            )
-        }))
+    Ok(changed.lines().find(|p| !is_bookkeeping(p, n)).map(|p| {
+        format!(
+            "sprint {n:03}: its close commit {} changes {p}, outside the bookkeeping paths",
+            &commit[..9]
+        )
+    }))
 }
 
 /// A closed entry that says the multi-vCPU tests passed, held to the stage's last three lines for its sprint.
@@ -819,6 +825,123 @@ fn multi_vcpu_claim(root: &Path, n: u32, body: &str) -> Option<String> {
         "sprint {n:03}: its tail entry says the multi-vCPU tests passed, and {MULTI_VCPU} holds {} of 3 passed",
         last.iter().filter(|l| l.split('\t').nth(1) == Some("passed")).count()
     ))
+}
+
+/// The first sprint whose commits are walked from its card to the next card's, whose multi-vCPU claim is a stated
+/// count, and whose gated tree keeps the documents `design_check` reads (Sprint 195; reviewer-2's Medium 4 and Low 4 of
+/// its review of 190-192).
+const FIRST_WALKED_SPRINT: u32 = 195;
+
+/// The documents under `docs/` that `design_check` reads (its `is_checked`: a name beginning `design-`, `solution-`,
+/// `recentering-` or `architecture-`, or holding `plan-`); from Sprint 195 they are gated, not bookkeeping, as git
+/// pathspecs.
+const DESIGN_DOCUMENTS: [&str; 5] = [
+    "docs/design-*",
+    "docs/solution-*",
+    "docs/recentering-*",
+    "docs/architecture-*",
+    "docs/*plan-*",
+];
+
+/// Whether `path` is one sprint `n`'s close commit may change: under `BOOKKEEPING`, and from Sprint 195 not one of
+/// `DESIGN_DOCUMENTS`.
+fn is_bookkeeping(path: &str, n: u32) -> bool {
+    let under = BOOKKEEPING
+        .iter()
+        .any(|b| path == *b || path.starts_with(&format!("{b}/")));
+    let design = path.strip_prefix("docs/").is_some_and(|name| {
+        !name.contains('/')
+            && (["design-", "solution-", "recentering-", "architecture-"]
+                .iter()
+                .any(|p| name.starts_with(p))
+                || name.contains("plan-"))
+    });
+    under && !(n >= FIRST_WALKED_SPRINT && design)
+}
+
+/// Seconds since 1970 of a "YYYY-MM-DDTHH:MM:SSZ" time, by the civil-from-days formula (Howard Hinnant, "chrono-
+/// Compatible Low-Level Date Algorithms", `days_from_civil`).
+fn epoch_seconds(time: &str) -> Option<i64> {
+    let n = |r: std::ops::Range<usize>| time.get(r)?.parse::<i64>().ok();
+    let (y, m, d) = (n(0..4)?, n(5..7)?, n(8..10)?);
+    let (hh, mm, ss) = (n(11..13)?, n(14..16)?, n(17..19)?);
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some((era * 146_097 + doe - 719_468) * 86_400 + hh * 3600 + mm * 60 + ss)
+}
+
+/// From Sprint 195 a closed entry states "multi-vCPU: k of 3 passed", and k is the count of the stage's rows for its
+/// sprint, passed, timed inside the cited gates run (the pass line's end less its seconds, to its end); a missing
+/// statement or another count is named (reviewer-2's Medium 4 of its review of 190-192: the phrase's absence passed).
+fn multi_vcpu_count(root: &Path, n: u32, body: &str, pass: &str) -> Option<String> {
+    let stated = body
+        .split("multi-vCPU: ")
+        .nth(1)
+        .and_then(|rest| rest.split_once(" of 3 passed"))
+        .and_then(|(k, _)| k.parse::<usize>().ok());
+    let Some(stated) = stated else {
+        return Some(format!(
+            "sprint {n:03}: its tail entry states no \"multi-vCPU: k of 3 passed\""
+        ));
+    };
+    let cols: Vec<&str> = pass.split('\t').collect();
+    let seconds: i64 = cols[0]
+        .strip_prefix("exit 0 in ")
+        .and_then(|s| s.strip_suffix(" s"))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let end = cols.get(2).and_then(|t| epoch_seconds(t)).unwrap_or(0);
+    let text = fs::read_to_string(root.join(MULTI_VCPU)).unwrap_or_default();
+    let sprint = format!("sprint {n:03}");
+    let passed = text
+        .lines()
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .filter(|c| c.get(2) == Some(&sprint.as_str()) && c.get(1) == Some(&"passed"))
+        .filter(|c| {
+            c.first()
+                .and_then(|t| epoch_seconds(t))
+                .is_some_and(|t| end - seconds <= t && t <= end)
+        })
+        .count();
+    (passed != stated).then(|| {
+        format!(
+            "sprint {n:03}: its tail entry states multi-vCPU {stated} of 3 passed, and {MULTI_VCPU} holds {passed} \
+             passed in its gates run"
+        )
+    })
+}
+
+/// Sprint `n`'s commits from its card's to the next card's (or HEAD), each named that is not its work ("Sprint N: "),
+/// its close ("Sprint N closed:", bookkeeping only, held by `close_moved`) or the card itself (Sprint 195; reviewer-2's
+/// Medium 4 of its review of 190-192: a commit under another subject between a pass and a close went unchecked).
+fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
+    let is_card =
+        |s: &str, k: u32| s.starts_with(&format!("Sprint {k} card:")) || s.starts_with(&format!("Sprint {k}'s card:"));
+    let log = git(root, &["log", "--reverse", "--format=%H%x09%s"])?;
+    let commits: Vec<(&str, &str)> = log.lines().filter_map(|l| l.split_once('\t')).collect();
+    let Some(start) = commits.iter().position(|(_, s)| is_card(s, n)) else {
+        return Ok(vec![format!(
+            "sprint {n:03}: no card commit (\"Sprint {n} card: ...\")"
+        )]);
+    };
+    let (work, close) = (format!("Sprint {n}: "), format!("Sprint {n} closed:"));
+    let mut wrong = Vec::new();
+    for (hash, subject) in &commits[start + 1..] {
+        if is_card(subject, n + 1) {
+            break;
+        }
+        if !(subject.starts_with(&work) || subject.starts_with(&close)) {
+            wrong.push(format!(
+                "sprint {n:03}: commit {} \"{subject}\" stands between its card and the next card, and is neither its \
+                 work nor its close",
+                &hash[..9]
+            ));
+        }
+    }
+    Ok(wrong)
 }
 
 /// Whether the passes file holds a run of these seconds for any sprint.
@@ -882,8 +1005,13 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
     with_index(&["read-tree", &commit])?;
-    let mut remove = vec!["rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch"];
+    let mut remove = vec!["rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch", "--"];
     remove.extend(BOOKKEEPING);
+    // from Sprint 195 the documents design_check reads stay in the gated tree, as `scripts/gated-tree.sh` keeps them
+    let kept: Vec<String> = DESIGN_DOCUMENTS.iter().map(|d| format!(":(exclude){d}")).collect();
+    if n >= FIRST_WALKED_SPRINT {
+        remove.extend(kept.iter().map(String::as_str));
+    }
     with_index(&remove)?;
     let mut moved = None;
     for pair in trees.split(' ') {

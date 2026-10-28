@@ -85,3 +85,28 @@ multi-line shell edit is refused before it runs.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the bindings that fail open.
+
+## result
+
+- **Every commit walked:** `commits_walked` takes the commits from "Sprint N card:" (or "Sprint N's card:") to the next
+  card's and names any that is neither "Sprint N: " nor "Sprint N closed:"; from `FIRST_WALKED_SPRINT` 195.
+- **The multi-vCPU claim stated:** `multi_vcpu_count` requires "multi-vCPU: k of 3 passed" and holds k to the stage's
+  passed rows for the sprint timed from the pass line's end less its seconds to its end.
+- **The tree step shared:** `scripts/gated-tree.sh` prints the gated tree; `gates.sh` and `check.rs`'s
+  `gates_root_tree` run it.
+- **design_check's documents:** `DESIGN_DOCUMENTS` (design-, solution-, recentering-, architecture-, *plan-) stay in the
+  gated tree from 195, and `is_bookkeeping` fails a close that changes one; ten documents match today.
+- **vex_store_reach from every encoding:** the test lifts 12,288 three-byte VEX.256 encodings with a memory operand; the
+  stores lifted are MOVAPD, MOVAPS, MOVDQA, MOVDQU and MOVUPS, all native, Sprint 192's five.
+- **The edit check:** `crates/edit_guard` refuses a heredoc written or `tee`d to a path outside the temporary
+  directories and `sed -i` with `a\`, `i\`, `c\`, an address range or a newline; a heredoc's body is not read as shell.
+  The hook's settings were refused by the session's permission classifier; the program waits on the user's settings.
+- **Plant 1** (the walk's result dropped): the walk test failed, its expected line "commit … \"tidy\" stands between its
+  card and the next card, and is neither its work nor its close" missing. Restored byte for byte.
+- **Plant 2** (the count without the run's start): the walk test failed, its expected line "store/gates/multi-vcpu.tsv
+  holds 2 passed in its gates run" missing. Restored byte for byte.
+- **Plant 3** (`a\` dropped from the check) reached no judge: the one `a\` case also held a newline. Its replacement 3b,
+  the same plant against a new one-line `$a\ last line` case, panicked "called `Option::unwrap()` on a `None` value" at
+  `lib.rs:280`. Restored byte for byte, rebuilt.
+- **Departures:** the hook not installed (above); the store test enumerates encodings through the lifter rather than
+  the decoder's rows, which covers every row the lifter takes.

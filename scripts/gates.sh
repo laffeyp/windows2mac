@@ -25,13 +25,8 @@ gates_diff=$(git diff HEAD | shasum -a 256 | cut -c1-64)
 # (Sprint 192, reviewer-2's Medium 3 of its review of 185-189: the six directories left out Cargo.toml, Cargo.lock,
 # rust-toolchain.toml, .cargo/, specs/, signals/, schemas/ and harness/; the run now keeps one tree, the whole work tree
 # less the bookkeeping paths a close commit may change, and the session's own .claude/)
-gates_index=$(mktemp)
-rm -f "$gates_index"
-GIT_INDEX_FILE=$gates_index git add -A -- . ':!.claude'
-GIT_INDEX_FILE=$gates_index git rm -r -q -f --cached --ignore-unmatch BLACKBOARD.md KIT_DIARY.md WORKING_AGREEMENT.md \
-  sprints signal-reports docs store/gates
-gates_trees="root=$(GIT_INDEX_FILE=$gates_index git write-tree)"
-rm -f "$gates_index"
+# (Sprint 195: the step is scripts/gated-tree.sh, shared with signal_report's test, and keeps design_check's documents)
+gates_trees="root=$(sh scripts/gated-tree.sh)"
 # rustup installs cargo in ~/.cargo/bin, which a non-login shell may not have on its PATH (Sprint 126: the gates failed
 # with "cargo: command not found")
 [ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"

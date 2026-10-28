@@ -303,43 +303,17 @@ fn commit(dir: &Path, message: &str) {
     );
 }
 
-/// `gates.sh`'s root tree (Sprint 192): the work tree less the bookkeeping paths, from a temporary index.
+/// `gates.sh`'s root tree, by the script `gates.sh` runs (Sprint 195; reviewer-2's Medium 4 of its review of 190-192:
+/// the test had copied the steps).
 fn gates_root_tree(dir: &Path) -> String {
-    let index = dir.join(".git/gates-index");
-    let run = |args: &[&str]| {
-        let out = Command::new("git")
-            .arg("-C")
-            .arg(dir)
-            .args(args)
-            .env("GIT_INDEX_FILE", &index)
-            .output()
-            .unwrap();
-        assert!(
-            out.status.success(),
-            "git {args:?}: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        String::from_utf8_lossy(&out.stdout).trim().to_string()
-    };
-    run(&["add", "-A", "--", "."]);
-    run(&[
-        "rm",
-        "-r",
-        "-q",
-        "-f",
-        "--cached",
-        "--ignore-unmatch",
-        "BLACKBOARD.md",
-        "KIT_DIARY.md",
-        "WORKING_AGREEMENT.md",
-        "sprints",
-        "signal-reports",
-        "docs",
-        "store/gates",
-    ]);
-    let tree = run(&["write-tree"]);
-    let _ = fs::remove_file(&index);
-    tree
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/gated-tree.sh");
+    let out = Command::new("sh").arg(script).current_dir(dir).output().unwrap();
+    assert!(
+        out.status.success(),
+        "gated-tree.sh: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
 /// Sprint 192's plants 1 and 2 (reviewer-2's Medium 3 of its review of 185-189): from Sprint 192 the gates' tree is
@@ -348,35 +322,35 @@ fn gates_root_tree(dir: &Path) -> String {
 #[test]
 fn the_root_tree_and_the_close_commit_are_held() {
     let tail =
-        "\n### Sprint 195 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 905 s).\n";
-    let root = scratch_with_tail("root", &[("sprint-195-x.md", "done")], &["sprint-195-report.md"], tail);
+        "\n### Sprint 194 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 905 s).\n";
+    let root = scratch_with_tail("root", &[("sprint-194-x.md", "done")], &["sprint-194-report.md"], tail);
     fs::create_dir_all(root.join("crates/a")).unwrap();
     fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
     fs::write(root.join("Cargo.toml"), "[profile.release]\noverflow-checks = true\n").unwrap();
     git(&root, &["init", "-q"]);
-    commit(&root, "Sprint 195's card");
+    commit(&root, "Sprint 194's card");
     let ran = gates_root_tree(&root);
     fs::create_dir_all(root.join("store/gates")).unwrap();
     fs::write(
         root.join("store/gates/passes.tsv"),
-        format!("exit 0 in 905 s\tdefault\t2026-10-28T07:00:00Z\tsprint 195\tabc\tdef\troot={ran}\n"),
+        format!("exit 0 in 905 s\tdefault\t2026-10-28T07:00:00Z\tsprint 194\tabc\tdef\troot={ran}\n"),
     )
     .unwrap();
     // the work, with Cargo.toml changed after the pass
     fs::write(root.join("Cargo.toml"), "[profile.release]\noverflow-checks = false\n").unwrap();
-    commit(&root, "Sprint 195: the work");
+    commit(&root, "Sprint 194: the work");
     let work = git(&root, &["rev-parse", "--short=9", "HEAD"]);
     let root_copy = root.clone();
     let (code, stderr) = check(&root);
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        format!("sprint 195: its gates ran on a tree whose Cargo.toml its work commit {work} does not hold")
+        format!("sprint 194: its gates ran on a tree whose Cargo.toml its work commit {work} does not hold")
     );
     let _ = root_copy;
 
     // the same pass held, and a close commit that changes a crate file
-    let root = scratch_with_tail("close", &[("sprint-195-x.md", "done")], &["sprint-195-report.md"], tail);
+    let root = scratch_with_tail("close", &[("sprint-194-x.md", "done")], &["sprint-194-report.md"], tail);
     fs::create_dir_all(root.join("crates/a")).unwrap();
     fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
     git(&root, &["init", "-q"]);
@@ -384,17 +358,70 @@ fn the_root_tree_and_the_close_commit_are_held() {
     fs::create_dir_all(root.join("store/gates")).unwrap();
     fs::write(
         root.join("store/gates/passes.tsv"),
-        format!("exit 0 in 905 s\tdefault\t2026-10-28T07:00:00Z\tsprint 195\tabc\tdef\troot={ran}\n"),
+        format!("exit 0 in 905 s\tdefault\t2026-10-28T07:00:00Z\tsprint 194\tabc\tdef\troot={ran}\n"),
     )
     .unwrap();
-    commit(&root, "Sprint 195: the work");
+    commit(&root, "Sprint 194: the work");
     fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 2; }\n").unwrap();
-    commit(&root, "Sprint 195 closed: its Signal Report");
+    commit(&root, "Sprint 194 closed: its Signal Report");
     let close = git(&root, &["rev-parse", "--short=9", "HEAD"]);
     let (code, stderr) = check(&root);
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        format!("sprint 195: its close commit {close} changes crates/a/lib.rs, outside the bookkeeping paths")
+        format!("sprint 194: its close commit {close} changes crates/a/lib.rs, outside the bookkeeping paths")
+    );
+}
+
+/// Sprint 195's plants 1 and 2 (reviewer-2's Medium 4 and Low 4 of its review of 190-192): from Sprint 195 a commit
+/// under another subject between the card and the next card fails, named; a stated multi-vCPU count the stage's rows
+/// in the run do not hold fails; and a close that changes a document design_check reads fails.
+#[test]
+fn every_commit_from_the_card_is_walked_and_the_multi_vcpu_count_is_held() {
+    let tail = "\n### Sprint 196 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 900 s; \
+                multi-vCPU: 3 of 3 passed).\n";
+    let root = scratch_with_tail("walk", &[("sprint-196-x.md", "done")], &["sprint-196-report.md"], tail);
+    fs::create_dir_all(root.join("crates/a")).unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
+    fs::write(root.join("docs/design-x-2026-10-28.md"), "# x\n").unwrap();
+    fs::write(root.join("docs/notes-2026-10-28.md"), "# notes\n").unwrap();
+    git(&root, &["init", "-q"]);
+    commit(&root, "Sprint 196 card: x");
+    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 1; }\n").unwrap();
+    commit(&root, "tidy");
+    let tidy = git(&root, &["rev-parse", "--short=9", "HEAD"]);
+    let ran = gates_root_tree(&root);
+    fs::create_dir_all(root.join("store/gates")).unwrap();
+    fs::write(
+        root.join("store/gates/passes.tsv"),
+        format!("exit 0 in 900 s\tdefault\t2026-10-28T07:00:00Z\tsprint 196\tabc\tdef\troot={ran}\n"),
+    )
+    .unwrap();
+    // two passed inside the run (06:45:00 to 07:00:00), one passed before it
+    fs::write(
+        root.join("store/gates/multi-vcpu.tsv"),
+        "2026-10-28T06:40:00Z\tpassed\tsprint 196\tt1\n\
+         2026-10-28T06:59:00Z\tpassed\tsprint 196\tt2\n\
+         2026-10-28T06:59:30Z\tfailed\tsprint 196\tt3\n\
+         2026-10-28T07:00:00Z\tpassed\tsprint 196\tt1\n",
+    )
+    .unwrap();
+    commit(&root, "Sprint 196: the work");
+    fs::write(root.join("docs/notes-2026-10-28.md"), "# notes, more\n").unwrap();
+    fs::write(root.join("docs/design-x-2026-10-28.md"), "# x, changed\n").unwrap();
+    commit(&root, "Sprint 196 closed: its Signal Report");
+    let close = git(&root, &["rev-parse", "--short=9", "HEAD"]);
+    let (code, stderr) = check(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 196: its close commit {close} changes docs/design-x-2026-10-28.md, outside the bookkeeping paths\n\
+             sprint 196: its tail entry states multi-vCPU 3 of 3 passed, and store/gates/multi-vcpu.tsv holds 2 passed \
+             in its gates run\n\
+             sprint 196: commit {tidy} \"tidy\" stands between its card and the next card, and is neither its work nor \
+             its close"
+        )
     );
 }

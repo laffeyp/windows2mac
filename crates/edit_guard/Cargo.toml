@@ -1,0 +1,10 @@
+[package]
+name = "edit_guard"
+description = "A PreToolUse hook on Bash that refuses a multi-line change written to a file by a heredoc or by sed (Sprint 195)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true

@@ -25,6 +25,13 @@ name = "design_check"
 version = "0.1.0"
 
 [[package]]
+name = "edit_guard"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "events"
 version = "0.1.0"
 dependencies = [
