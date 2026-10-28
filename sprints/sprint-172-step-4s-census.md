@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 172
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -96,3 +96,22 @@ Step 4's work is a list of rows with sources, counts and judges, so each later s
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: coverage, sourced counts, a plant.
 - [x] One concept: the census.
+
+## result
+
+- **The census:** `docs/step-4-census-2026-10-28.md`, 19 rows: every sentence of plan 132-142, the code review's
+  findings 5, 8, 9 and 11, reviewer-2's items (a)-(j) of 2026-10-28 and its Medium 1 and 2 of 2026-10-27. Each count
+  was read from its source this sprint: `class-runs.json` (458 classes, 456 conform, FCOS and FSIN not),
+  `family-runs.json` (68 of 68 conform, 3 with notes of unimplemented argument forms), the batch run's record
+  (`frontier-643a6283510c-1792267359516238000`: 2,095,145,118.8 instructions a second; exits hvc 8 44,010, hvc 13
+  13,673, hvc 1 1,091, hvc 11 286, hvc 10 258, hvc 14 167, hvc 4 8, hvc 12 2, equal to Sprint 108's card),
+  `run.rs` 446-586 (Rust serves hvc 1, 8, 12, 13; 4, 10, 11, 14 end at `Stop::Hvc`), `host_request.rs` (6 ops),
+  `tests/data/timed_waits` (14 guests, 2 run by the Rust host), the C words judge (1,933 unlifted).
+- **What it shows:** the Rust side holds none of the gate's three judges (classes, families, the call comparison) and
+  2 of 14 guests; hvc 4, 10, 11 and 14 and the unserved host requests end a Rust run before the batch run could.
+- **Not on any record:** host requests by op, the DLLs and imports as counts, flag liveness by condition, compile time
+  per block on the batch run; each row says which measurement closes it.
+- **Three cells corrected before the commit** to what their sources say: the loader's row, "512 class verdicts over
+  four profiles" (not 512 classes), and the 116,718 cases as Decision 2026-10-27 words them.
+- **The plant** (row 5's hvc 8 count changed to 44,011): the read-back of row 5 against the record printed "row 5
+  differs from the record: hvc 8 44,010"; restored, it reads back clean.
