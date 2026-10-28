@@ -620,7 +620,7 @@
 
 ## Sprint tail
 
-### Sprint 195 (2026-10-28, gates running)
+### Sprint 195 (2026-10-28, closed)
 - **Scope:** reviewer-2's Medium 4 and Lows 2 and 4 of its review of Sprints 190-192, and Sprint 194's third multi-line shell edit: the bindings that failed open, and the edit rule made a check
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 433 s, kept in `store/gates/passes.tsv` as sprint 195 at 30249c7c0 with root=18ba7cf03; the Python gates and their multi-vCPU stage did not run, since nothing the frozen Python reads changed: multi-vCPU: 0 of 3 passed); observation pass (from Sprint 195 `--check` walks every commit from a sprint's card to the next card's, holds a stated "multi-vCPU: k of 3 passed" to the stage's rows inside the cited run, and keeps the ten plans and designs `design_check` reads out of the bookkeeping paths; `scripts/gated-tree.sh` is the gates' tree step and the test's; `vex_store_reach` lifts 12,288 VEX.256 encodings and finds the same five store bases, all native; `edit_guard` refuses a heredoc written to a project file and `sed -i` with `a\`, `i\`, `c\`, a range or a newline; plant 1 named "commit … \"tidy\" stands between its card and the next card"; plant 2 named "holds 2 passed in its gates run"; plant 3 reached no judge and plant 3b panicked the `sed` test at `lib.rs:280`).
 - **CI does not run:** the gates themselves (macOS); CI runs `signal_report`'s tests, the walk and count test among them, `edit_guard`'s tests and `vex_store_reach`.
