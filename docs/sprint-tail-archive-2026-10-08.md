@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 156 (2026-10-25, closed)
+- **Scope:** link 5's run-loop judge, its second program: CreateThread served by the Rust host, and `sleeper` past its thread request with two threads.
+- **Dual contract:** signal — none, as the card says (the skeleton's record comes at link 6); artifact pass (fmt, clippy, the gates); observation pass (the created thread equal to the Python host's, field for field; the stack's mapping as `_map_pages` leaves it; `woke` printed and a named stop; two planted faults each failed it at the field named).
+- **CI does not run:** the run loop's two tests (macOS only, the Python fixtures).
+- **Rubber Duck Pass:** *Observation 1 (a plant the fixture could not see):* the card's first plant, the guard pages left mapped, changes no recorded field; the judge gained a check of the stack pages' stage-1 mapping before the plant counted. Disposition: resolved-here. *Observation 2 (a check that ran nothing):* a build checked through `grep` showed no errors because `cargo` was not on the shell's PATH and the "command not found" line was filtered out; every command since reads its exit status. Disposition: resolved-here. *Observation 3 (a stop that named only its op):* `HostRequest { op: 30 }` named two different requests, CreateThread and THREAD_EXIT_CODE; the stop now carries the host's refusal text. Disposition: resolved-here.
+- **Closed:** Sprint 155's CI run 40186644238 (success on f8db65215).
+- **Files:** crates/w2m_vm/, crates/virtual_memory/src/lib.rs, store/run_loop/sleeper-python.sha256, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-156-a-second-thread.md, signal-reports/sprint-156-report.md.
+
 ### Sprint 155 (2026-10-25, closed)
 - **Scope:** link 5's run-loop judge: the blocks the VM's C declines compiled in Rust inside the skeleton's run loop, so `qpc` runs past its first decline.
 - **Dual contract:** signal — none, as the card says (the skeleton's record comes at link 6); artifact pass (fmt, clippy, the gates); observation pass (`qpc` to ExitProcess(0) with its counter in range; the blocks and the host's words equal the Python host's; a planted inverse condition failed it).

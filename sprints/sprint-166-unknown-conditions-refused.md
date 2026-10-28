@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 166
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -79,3 +79,23 @@ No condition the lowering does not name is lowered as another.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: unchanged counts and two plants.
 - [x] One concept: the two fallbacks.
+
+## result
+
+- **The change:** `inverse` and `cond_flags` (`crates/translator/src/lower.rs`) name `le` and return a `CompileError`
+  naming any other condition they do not hold; `op_flags`, `op_flag_masks` and `insn_flags` carry it, and
+  `assemble_block` with it. The run loop's look-ahead (`crates/w2m_vm/src/compile.rs`), which returns a flag mask,
+  counts every flag live on the error; the instruction's own compile refuses it by name.
+- **The judges:** the C words judge compares 1,184,313 of 1,184,578 lifted calls with no Rust refusal and no
+  difference, as before; the case runner's three tests pass (133.96 s with the second plant in); the four
+  `case-runner-rust` records (`1793173959000000000`, `1793174000000000000`, `1793174024000000000`,
+  `1793174038000000000`) hold SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED and CANDIDATE_ACCEPTED for 205,
+  174, 107 and 26 classes and SESSION_COMPLETED, with no discrepancy, as Sprint 161's.
+- **Plant 1** (`inverse`'s `_ => "gt"` restored): the unit test failed at `inverse("xx")`.
+- **Plant 2** (`cond_flags`'s `le` arm dropped) did not do what the card said. The case runner passed with it, the C
+  words judge passed with it, and `qpc` and `sleeper` ran to ExitProcess with it. `compile_insn` reads `op_flag_masks`
+  only for an instruction that holds a flags op (`lower.rs` 1215), and a Jcc, SETcc or CMOVcc holds none; `cond_flags`
+  is reached only through `insn_flags`, from `assemble_block` and the run loop's look-ahead, and the two guests'
+  host-compiled blocks branch on no `le`. The unit test caught it (`cond_flags("le")`), and a second test now holds
+  every one of `lift::cc`'s 16 conditions to the table. No end-to-end judge reaches `cond_flags` for every name; the
+  batch run at step 4 is the first that may.
