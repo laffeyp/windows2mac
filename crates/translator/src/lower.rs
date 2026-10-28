@@ -689,7 +689,11 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> Result<(u32, u32), Compi
         | Op::Df { .. }
         | Op::Pause
         | Op::Fcw { .. }
-        | Op::Mmx { .. } => (0, 0),
+        | Op::Mmx { .. }
+        | Op::Vex { .. }
+        | Op::Vexs { .. }
+        | Op::Fma { .. }
+        | Op::Vzeroupper => (0, 0),
     })
 }
 
@@ -823,6 +827,10 @@ fn temps_read(op: &Op) -> Vec<Temp> {
             _ => vec![],
         },
         Op::Mmx { dst, src, .. } => [dst.addr(), src.addr()].into_iter().flatten().collect(),
+        // ("vex", ...) and ("vexs", ...): d's and s2's addresses; ("fma", ...): s3's (1017-1022; Sprint 182)
+        Op::Vex { d, s2, .. } | Op::Vexs { d, s2, .. } => [d.addr(), s2.addr()].into_iter().flatten().collect(),
+        Op::Fma { s3, .. } => s3.addr().into_iter().collect(),
+        Op::Vzeroupper => vec![],
         // ("mxcsr", "st"|"ld", m32) and ("fcw", "st", m16): lowered in A64
         Op::Mxcsr {
             loc: Loc::M { addr, .. },
@@ -1927,6 +1935,25 @@ pub fn compile_insn(
                 }
             }
             // ("mmx", ...): `rules/_mmx.py`'s A64 lowering (1658-1660) is not ported; refused by name (Sprint 177)
+            // VEX (_vex.py's `lower`, 136-207; Sprint 182)
+            Op::Vzeroupper => {
+                a.emit(&[a64::addi(16, 28, YMM_HI_OFF)]);
+                for i in 0..16 {
+                    a.emit(&[a64::stp(a64::ZR, a64::ZR, 16, 16 * i)]);
+                }
+            }
+            // in the model for now
+            Op::Vexs { .. } => a.emit(&[a64::hvc(HVC_SLOW_SSE)]),
+            Op::Fma { ic, d, s2, s3, .. } => lower_fma(a, ic, d, s2, s3, &reg)?,
+            Op::Vex {
+                base,
+                d,
+                s1,
+                s2,
+                vl,
+                align,
+                imm,
+            } => lower_vex(a, base, d, s1.as_ref(), s2, *vl, *align, *imm, &reg, &folded)?,
             Op::Mmx { ic, .. } => {
                 return Err(CompileError::LaterGroup {
                     class: ic.clone(),
@@ -2336,12 +2363,14 @@ fn lower_sse(
                 a.emit(&[a64::fmov_from_v(8, 16, xmm(src)?), a64::fmov_to_v(8, xmm(dst)?, 16)]);
             }
         },
-        "XORPS" | "XORPD" | "ANDPS" | "ANDPD" => {
-            // 397-399
+        "XORPS" | "XORPD" | "ANDPS" | "ANDPD" | "ORPD" => {
+            // 397-399 (ORPD from Sprint 182: VORPD's base)
             let v = sse_src(a, src, 16, reg, 31)?;
             let d = xmm(dst)?;
             a.emit(&[if ic.starts_with("XOR") {
                 a64::eor_v(d, d, v)
+            } else if ic == "ORPD" {
+                a64::orr_v(d, d, v)
             } else {
                 a64::and_v(d, d, v)
             }]);
@@ -2548,6 +2577,269 @@ const SSE_050: [&str; 39] = [
     "PSLLW",
     "MOVNTDQ",
 ];
+
+/// MONITOR_DATA + this: YMM0-15 bits 255:128, 16 bytes each (vm_backend 106).
+const YMM_HI_OFF: u32 = 0x400;
+
+/// `SLOW` (_vex.py 57-59): VEX bases the model runs (x86fp) for now.
+const VEX_SLOW: [&str; 19] = [
+    "CMPSD_XMM_VEX",
+    "HADDPD",
+    "PSHUFB",
+    "PALIGNR",
+    "PINSRD",
+    "PINSRQ",
+    "PEXTRQ",
+    "CMPPS_VEX",
+    "ROUNDSD",
+    "PBLENDD",
+    "PERMILPS_VAR",
+    "PADDB",
+    "PMULUDQ",
+    "PUNPCKHQDQ",
+    "CVTSS2SI",
+    "CVTSI2SS",
+    "CVTTSD2SI",
+    "RCPPS",
+    "RSQRTPS",
+];
+
+/// `NATIVE_256` (_vex.py 60-63): the bases lowered natively at VEX.256 too.
+const VEX_NATIVE_256: [&str; 35] = [
+    "PXOR",
+    "XORPS",
+    "XORPD",
+    "PAND",
+    "POR",
+    "ORPD",
+    "ANDPD",
+    "ANDPS",
+    "PCMPEQB",
+    "PCMPEQW",
+    "PSUBQ",
+    "PSUBD",
+    "PADDQ",
+    "MOVDQU",
+    "MOVDQA",
+    "MOVAPD",
+    "PMOVMSKB",
+    "MOVUPS",
+    "MOVAPS",
+    "PADDD",
+    "PSRLD",
+    "PSLLD",
+    "PSRAD",
+    "PSLLDQ",
+    "PANDN",
+    "PUNPCKLDQ",
+    "PSHUFD",
+    "UNPCKHPS",
+    "UNPCKLPS",
+    "PCMPEQD",
+    "PCMPGTD",
+    "ANDNPS",
+    "ORPS",
+    "SHUFPS",
+    "UNPCKLPD",
+];
+
+/// `SHIFT_BY_COUNT` (runtime.py 34): at VEX.256 one count shifts both halves.
+const SHIFT_BY_COUNT: [&str; 7] = ["PSRLQ", "PSLLQ", "PSRLD", "PSLLD", "PSRAD", "PSRLW", "PSRAW"];
+
+/// `_clear_upper` (_vex.py 110-111): a register's bits 255:128 to zero.
+fn clear_upper(a: &mut Assembler, reg: u32) {
+    a.emit(&[
+        a64::addi(16, 28, YMM_HI_OFF),
+        a64::stp(a64::ZR, a64::ZR, 16, 16 * i64::from(reg)),
+    ]);
+}
+
+/// `lower` (_vex.py 149-207) for a ("vex", base, d, s1, s2, L, align, imm): the base's lowering on the low half, and at
+/// VEX.256 on the upper halves staged from the monitor data page.
+#[allow(clippy::too_many_arguments)]
+fn lower_vex(
+    a: &mut Assembler,
+    base: &str,
+    d: &SseLoc,
+    s1: Option<&SseLoc>,
+    s2: &SseLoc,
+    vl: u8,
+    align: u32,
+    imm: Option<u64>,
+    reg: &BTreeMap<Temp, u32>,
+    folded: &BTreeMap<Temp, AddressForm>,
+) -> Result<(), CompileError> {
+    let vl = vl != 0;
+    if VEX_SLOW.contains(&base) || (vl && !VEX_NATIVE_256.contains(&base)) {
+        a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
+        return Ok(());
+    }
+    if fp_class(base) {
+        // `_fp_guard` (118-125): the model runs it while MXCSR unmasks any exception
+        unmasked_to_model(a);
+    }
+    for loc in [d, s2] {
+        if let (Some(t), true) = (loc.addr(), align != 0) {
+            let ok = a.label();
+            a.emit(&[a64::ubfx(16, reg_at(reg, t)?, 0, if align == 32 { 5 } else { 4 })]);
+            a.branch(|off| a64::cbz(16, off), ok);
+            // #GP: an access violation at the instruction
+            a.emit(&[a64::movz(16, 0, 0), a64::ldr(8, 16, 16, 0)]);
+            a.bind(ok);
+        }
+    }
+    let x = |l: &SseLoc| match l {
+        SseLoc::X(n) => Some(u32::from(*n)),
+        _ => None,
+    };
+    let addr = |l: &SseLoc| -> Result<u32, CompileError> {
+        match l.addr() {
+            Some(t) => reg_at(reg, t),
+            None => Err(CompileError::Refused(format!("vex {base}: a memory operand expected"))),
+        }
+    };
+    let base_lower = |a: &mut Assembler, dd: &SseLoc, ss: &SseLoc| lower_sse(a, base, dd, ss, 0, imm, reg, folded);
+    if vl && base == "PMOVMSKB" {
+        // 32 sign bits: the high half first, then the low
+        let SseLoc::Loc(Loc::R { idx, .. }) = d else {
+            return Err(CompileError::Refused(
+                "vex PMOVMSKB: a general register destination expected".into(),
+            ));
+        };
+        let rd = u32::from(*idx);
+        let s = x(s2).ok_or_else(|| CompileError::Refused("vex PMOVMSKB: an XMM source expected".into()))?;
+        a.emit(&[a64::addi(16, 28, YMM_HI_OFF), a64::ldr_v(16, 29, 16, 16 * s)]);
+        base_lower(a, d, &SseLoc::X(29))?;
+        a.emit(&[a64::eor(rd, a64::ZR, rd, a64::LSL, 16), a64::str(8, rd, 28, SPILL)]);
+        base_lower(a, d, s2)?;
+        a.emit(&[a64::ldr(8, 16, 28, SPILL), a64::orr(rd, rd, 16)]);
+        return Ok(());
+    }
+    // a shift by count shifts both halves by s2's low quadword (SDM PSLLD, VEX.256 form)
+    let count = vl && SHIFT_BY_COUNT.contains(&base) && imm.is_none();
+    let mut low_src = *s2;
+    let mut hi_src = match (count, x(s2)) {
+        (true, Some(n)) => n,
+        _ => 29,
+    };
+    if let (Some(_), Some(SseLoc::Loc(Loc::M { bytes, .. })), Some(_)) = (s1, Some(s2), x(d)) {
+        // memory first: a fault leaves every register as it was (set 049, Xeon 8573C)
+        let n = (*bytes).min(16);
+        if vl && !count {
+            a.emit(&[a64::ldr_v(16, 27, addr(s2)?, 16)]);
+        }
+        a.emit(&[a64::ldr_v(n, 29, addr(s2)?, 0)]);
+        low_src = SseLoc::X(29);
+        hi_src = if count { 29 } else { 27 };
+    }
+    if let (Some(s1n), Some(dn)) = (s1.and_then(x), x(d))
+        && s1n != dn
+    {
+        if x(s2) == Some(dn) {
+            // s2 is d: keep it before d takes s1
+            a.emit(&[a64::mov_v(29, dn)]);
+            low_src = SseLoc::X(29);
+            hi_src = if count { 29 } else { 27 };
+        }
+        a.emit(&[a64::mov_v(dn, s1n)]);
+    }
+    if vl && x(d).is_some() {
+        // stage both upper halves before d changes
+        a.emit(&[a64::addi(16, 28, YMM_HI_OFF)]);
+        if let Some(s1n) = s1.and_then(x) {
+            a.emit(&[a64::ldr_v(16, 28, 16, 16 * s1n)]);
+        }
+        if let (Some(s2n), false) = (x(s2), count) {
+            // (a shift's count stays in s2's low half)
+            a.emit(&[a64::ldr_v(16, hi_src, 16, 16 * s2n)]);
+        } else if s2.addr().is_some() && s1.is_none() {
+            a.emit(&[a64::ldr_v(16, hi_src, addr(s2)?, 16)]);
+        }
+    }
+    if d.addr().is_some() && vl {
+        // a 256-bit store: the upper half first, so a fault on the next page leaves memory as it was
+        let s = x(s2).ok_or_else(|| CompileError::Refused(format!("vex {base}: an XMM source expected")))?;
+        a.emit(&[
+            a64::addi(16, 28, YMM_HI_OFF),
+            a64::ldr_v(16, 28, 16, 16 * s),
+            a64::str_v(16, 28, addr(d)?, 16),
+        ]);
+    }
+    base_lower(a, d, &low_src)?;
+    if let Some(dn) = x(d)
+        && !matches!(base, "COMISD" | "UCOMISD" | "COMISS" | "UCOMISS")
+    {
+        if !vl {
+            clear_upper(a, dn);
+        } else {
+            if s1.is_none() && imm.is_none() {
+                // a 256-bit load or move: the source's upper half
+                a.emit(&[a64::mov_v(28, hi_src)]);
+            } else {
+                // (PSHUFD's imm8 permutes each half alike)
+                base_lower(a, &SseLoc::X(28), &SseLoc::X(hi_src as u8))?;
+            }
+            a.emit(&[a64::addi(16, 28, YMM_HI_OFF), a64::str_v(16, 28, 16, 16 * dn)]);
+        }
+    }
+    Ok(())
+}
+
+/// `_lower_fma` (_vex.py 210-228): scalar FMA natively while MXCSR masks every exception; packed forms in the model.
+fn lower_fma(
+    a: &mut Assembler,
+    ic: &str,
+    d: &SseLoc,
+    s2: &SseLoc,
+    s3: &SseLoc,
+    reg: &BTreeMap<Temp, u32>,
+) -> Result<(), CompileError> {
+    let (kind, order, form) = (
+        &ic[1..ic.len() - 5],
+        &ic[ic.len() - 5..ic.len() - 2],
+        &ic[ic.len() - 2..],
+    );
+    if form.starts_with('P') {
+        a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
+        return Ok(());
+    }
+    let n = if form == "SS" { 4 } else { 8 };
+    unmasked_to_model(a);
+    let xreg = |l: &SseLoc| match l {
+        SseLoc::X(r) => Ok(u32::from(*r)),
+        _ => Err(CompileError::Refused(format!("fma {ic}: an XMM operand expected"))),
+    };
+    let (o1, o2) = (xreg(d)?, xreg(s2)?);
+    let o3 = match s3 {
+        SseLoc::X(r) => u32::from(*r),
+        _ => {
+            let t = s3
+                .addr()
+                .ok_or_else(|| CompileError::Refused(format!("fma {ic}: a memory operand expected")))?;
+            a.emit(&[a64::ldr_v(n, 31, reg_at(reg, t)?, 0)]);
+            31
+        }
+    };
+    let regs = [o1, o2, o3];
+    let ((m0, m1), add) = match order {
+        "132" => ((0, 2), 1),
+        "213" => ((1, 0), 2),
+        _ => ((1, 2), 0),
+    };
+    // FUSED (_vex.py 64)
+    let fused = match kind {
+        "FMADD" => "fmadd",
+        "FMSUB" => "fnmsub",
+        "FNMADD" => "fmsub",
+        _ => "fnmadd",
+    };
+    a.emit(&[
+        a64::fp_fused(fused, n, 30, regs[m0], regs[m1], regs[add]),
+        a64::ins_lane0(n, o1, 30),
+    ]);
+    clear_upper(a, o1);
+    Ok(())
+}
 
 /// `_unmasked_to_model` (_sse.py 23-29): the model runs the instruction when MXCSR unmasks any exception, since only
 /// the model raises the SIMD fault.

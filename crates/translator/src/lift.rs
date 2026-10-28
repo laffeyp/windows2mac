@@ -187,6 +187,50 @@ pub enum Op {
         st: Option<u8>,
         mem: Option<Loc>,
     },
+    /// ("vex", base, d, s1, s2, L, align, imm): a VEX instruction as its legacy-SSE base (lift.py 39-41; rules/_vex.py;
+    /// Sprint 182): d = base(s1, s2) on each 128-bit half; VEX.128 zeroes a register destination's bits 255:128; s1
+    /// None for two-operand forms
+    Vex {
+        base: String,
+        d: SseLoc,
+        s1: Option<SseLoc>,
+        s2: SseLoc,
+        vl: u8,
+        align: u32,
+        imm: Option<u64>,
+    },
+    /// ("vexs", ic, d, s1, s2, L, imm): a whole-register VEX instruction, data moving between the 128-bit halves
+    Vexs {
+        ic: String,
+        d: SseLoc,
+        s1: Option<SseLoc>,
+        s2: SseLoc,
+        vl: u8,
+        imm: Option<u64>,
+    },
+    /// ("fma", ic, d, s2, s3, L): VFMADD/VFMSUB/VFNMADD/VFNMSUB 132/213/231, one rounding
+    Fma {
+        ic: String,
+        d: SseLoc,
+        s2: SseLoc,
+        s3: SseLoc,
+        vl: u8,
+    },
+    /// ("vzeroupper",): every YMM's bits 255:128 to zero
+    Vzeroupper,
+}
+
+/// `_operand` (lift.py 175-182) for a VEX rule: XMMn and YMMn as ("x", n), the YMM register's low half being the XMM
+/// register; anything else as `operand` reads it (Sprint 182).
+pub fn vex_operand(b: &mut Builder, s: &str, next_ip: u64) -> Result<SseLoc, LiftError> {
+    if let Some(n) = s.strip_prefix("R:XMM").or_else(|| s.strip_prefix("R:YMM")) {
+        let n: u8 = n.parse().map_err(|_| LiftError(format!("operand {s}")))?;
+        return Ok(SseLoc::X(n));
+    }
+    match operand(b, s, next_ip, None)? {
+        (Operand::Loc(loc), _) => Ok(SseLoc::Loc(loc)),
+        _ => Err(LiftError(format!("operand {s}: not a location"))),
+    }
 }
 
 /// An MMX operand as `lift_mmx` (lift.py 307-324) gives it to `mmx.py`.
@@ -544,6 +588,11 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
         } else {
             "load"
         }),
+        // ("vexs", ...) and ("vex", ...): a store to a memory d, else a load from a memory s2; ("fma", ...): a load from a
+        // memory s3 (lift.py 272-277; Sprint 182)
+        Op::Vex { d, .. } | Op::Vexs { d, .. } if d.addr().is_some() => Some("store"),
+        Op::Vex { s2, .. } | Op::Vexs { s2, .. } if s2.addr().is_some() => Some("load"),
+        Op::Fma { s3, .. } if s3.addr().is_some() => Some("load"),
         Op::Ld { loc: Loc::M { .. }, .. } | Op::Mxcsr { store: false, .. } => Some("load"),
         Op::St { loc: Loc::M { .. }, .. }
         | Op::Set { loc: Loc::M { .. }, .. }
@@ -560,6 +609,8 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
     };
     let effect = |op: &Op| {
         matches!(op, Op::Sse { dst, .. } if dst.addr().is_none())
+            || matches!(op, Op::Vex { d, .. } | Op::Vexs { d, .. } if d.addr().is_none())
+            || matches!(op, Op::Fma { .. } | Op::Vzeroupper)
             || matches!(
                 op,
                 Op::St { loc: Loc::R { .. }, .. }
@@ -602,6 +653,10 @@ pub fn commit_order(ins: &Lifted) -> Option<String> {
                 Op::Mxcsr { .. } => "mxcsr",
                 Op::X86 { .. } => "x86",
                 Op::Sse { .. } => "sse",
+                Op::Vex { .. } => "vex",
+                Op::Vexs { .. } => "vexs",
+                Op::Fma { .. } => "fma",
+                Op::Vzeroupper => "vzeroupper",
                 Op::Cmov { .. } => "cmov",
                 Op::Div { .. } => "div",
                 Op::Set { .. } => "set",

@@ -621,6 +621,14 @@ impl<M: Memory> Step<'_, M> {
                     align,
                     imm,
                 } => self.sse(ic, *dst, *src, *align, *imm)?,
+                // VEX: the model's VEX step (runtime.py `_vex`, `_vex_cross`, `_fma`) is the next slice (Sprint 182)
+                Op::Vex { base, .. } => {
+                    return Err(Fault::Refused(format!("vex {base}: the model's VEX slice comes later")));
+                }
+                Op::Vexs { ic, .. } | Op::Fma { ic, .. } => {
+                    return Err(Fault::Refused(format!("{ic}: the model's VEX slice comes later")));
+                }
+                Op::Vzeroupper => return Err(Fault::Refused("VZEROUPPER: the model's VEX slice comes later".into())),
                 // `_mmx` and `_x87` (runtime.py 140-191), from the one lifter's ops (Sprint 177)
                 Op::Mmx { ic, dst, src, imm } => self.mmx(ic, *dst, *src, *imm)?,
                 Op::X87 {

@@ -8,7 +8,7 @@
 //! `_int.py` lines it carries.
 
 use crate::lift::{
-    Ctx, LiftError, Loc, Op, Operand, RAX, RDX, RSP, alu_op, cc, operand, pop as pop_value, push as push_value,
+    Ctx, LiftError, Loc, Op, Operand, RAX, RDX, RSP, SseLoc, alu_op, cc, operand, pop as pop_value, push as push_value,
     sse_operand, val,
 };
 
@@ -88,6 +88,7 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         "FNSTCW" => fpu_control,
         "XGETBV" => xgetbv,
         ic if X87_ICLASSES.contains(&ic) => x87, // Sprint 177: rules/x87.py
+        ic if VEX_CLASSES.contains(&ic) => vex,  // Sprint 182: rules/_vex.py
         ic if REP_STRING.contains(&ic) => rep_string,
         "SHLD" | "SHRD" => double_shift,
         "RCR" => rcr,
@@ -1526,6 +1527,386 @@ fn x87(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
         reg,
         st,
         mem,
+    });
+    Ok(())
+}
+
+/// The classes the registry routes to `rules/_vex.py`'s `rule` (118; Sprint 182).
+pub const VEX_CLASSES: [&str; 118] = [
+    "VADDPD",
+    "VADDPS",
+    "VADDSD",
+    "VADDSS",
+    "VANDNPD",
+    "VANDNPS",
+    "VANDPD",
+    "VANDPS",
+    "VBROADCASTF128",
+    "VBROADCASTSS",
+    "VCMPPS",
+    "VCMPSD",
+    "VCOMISD",
+    "VCOMISS",
+    "VCVTDQ2PD",
+    "VCVTDQ2PS",
+    "VCVTPD2DQ",
+    "VCVTPS2PD",
+    "VCVTSD2SS",
+    "VCVTSI2SS",
+    "VCVTSS2SD",
+    "VCVTSS2SI",
+    "VCVTTPD2DQ",
+    "VCVTTPS2DQ",
+    "VCVTTSD2SI",
+    "VDIVSD",
+    "VDIVSS",
+    "VEXTRACTF128",
+    "VEXTRACTI128",
+    "VFMADD132PD",
+    "VFMADD132SD",
+    "VFMADD213SD",
+    "VFMADD213SS",
+    "VFMADD231PS",
+    "VFMADD231SD",
+    "VFMADD231SS",
+    "VFMSUB132SD",
+    "VFMSUB213SD",
+    "VFMSUB213SS",
+    "VFNMADD132SD",
+    "VFNMADD213SD",
+    "VFNMADD231PS",
+    "VFNMADD231SD",
+    "VHADDPD",
+    "VINSERTF128",
+    "VINSERTI128",
+    "VMAXPS",
+    "VMINPS",
+    "VMOVAPD",
+    "VMOVAPS",
+    "VMOVD",
+    "VMOVDQA",
+    "VMOVDQU",
+    "VMOVLHPS",
+    "VMOVQ",
+    "VMOVSD",
+    "VMOVSS",
+    "VMOVUPS",
+    "VMULPD",
+    "VMULPS",
+    "VMULSD",
+    "VMULSS",
+    "VORPD",
+    "VORPS",
+    "VPADDB",
+    "VPADDD",
+    "VPADDQ",
+    "VPALIGNR",
+    "VPAND",
+    "VPANDN",
+    "VPBLENDD",
+    "VPBROADCASTD",
+    "VPBROADCASTQ",
+    "VPCMPEQB",
+    "VPCMPEQD",
+    "VPCMPEQQ",
+    "VPCMPEQW",
+    "VPCMPGTD",
+    "VPERMD",
+    "VPERMILPS",
+    "VPERMQ",
+    "VPEXTRQ",
+    "VPINSRD",
+    "VPINSRQ",
+    "VPMOVMSKB",
+    "VPMOVSXDQ",
+    "VPMULUDQ",
+    "VPOR",
+    "VPSHUFB",
+    "VPSHUFD",
+    "VPSLLD",
+    "VPSLLDQ",
+    "VPSLLQ",
+    "VPSRAD",
+    "VPSRLD",
+    "VPSRLDQ",
+    "VPSRLQ",
+    "VPSUBD",
+    "VPSUBQ",
+    "VPUNPCKHQDQ",
+    "VPUNPCKLDQ",
+    "VPXOR",
+    "VRCPPS",
+    "VROUNDSD",
+    "VRSQRTPS",
+    "VSHUFPS",
+    "VSUBPS",
+    "VSUBSD",
+    "VSUBSS",
+    "VUCOMISD",
+    "VUCOMISS",
+    "VUNPCKHPS",
+    "VUNPCKLPD",
+    "VUNPCKLPS",
+    "VXORPD",
+    "VXORPS",
+    "VZEROALL",
+    "VZEROUPPER",
+];
+
+/// `BASE` (_vex.py 25-47): a VEX class and the legacy base whose semantics it has.
+pub fn vex_base(ic: &str) -> Option<&'static str> {
+    Some(match ic {
+        "VMULSD" => "MULSD",
+        "VADDSD" => "ADDSD",
+        "VSUBSD" => "SUBSD",
+        "VDIVSD" => "DIVSD",
+        "VMOVSD" => "MOVSD_XMM",
+        "VMOVQ" => "MOVQ",
+        "VMOVD" => "MOVD",
+        "VMOVAPD" => "MOVAPD",
+        "VMOVDQA" => "MOVDQA",
+        "VMOVDQU" => "MOVDQU",
+        "VCOMISD" => "COMISD",
+        "VUCOMISD" => "UCOMISD",
+        "VPAND" => "PAND",
+        "VPOR" => "POR",
+        "VPXOR" => "PXOR",
+        "VXORPS" => "XORPS",
+        "VXORPD" => "XORPD",
+        "VORPD" => "ORPD",
+        "VANDPD" => "ANDPD",
+        "VANDPS" => "ANDPS",
+        "VPCMPEQB" => "PCMPEQB",
+        "VPCMPEQW" => "PCMPEQW",
+        "VPSUBQ" => "PSUBQ",
+        "VPSUBD" => "PSUBD",
+        "VPADDQ" => "PADDQ",
+        "VCVTDQ2PD" => "CVTDQ2PD",
+        "VPSRLQ" => "PSRLQ",
+        "VPSLLQ" => "PSLLQ",
+        "VPSRLDQ" => "PSRLDQ",
+        "VPMOVMSKB" => "PMOVMSKB",
+        "VCVTTPD2DQ" => "CVTTPD2DQ",
+        "VCVTPD2DQ" => "CVTPD2DQ",
+        "VCMPSD" => "CMPSD_XMM_VEX",
+        "VMOVLHPS" => "MOVLHPS",
+        "VHADDPD" => "HADDPD",
+        "VMOVUPS" => "MOVUPS",
+        "VMOVAPS" => "MOVAPS",
+        "VPADDD" => "PADDD",
+        "VPSRLD" => "PSRLD",
+        "VPSLLD" => "PSLLD",
+        "VPSRAD" => "PSRAD",
+        "VPSLLDQ" => "PSLLDQ",
+        "VPANDN" => "PANDN",
+        "VPUNPCKLDQ" => "PUNPCKLDQ",
+        "VMULPS" => "MULPS",
+        "VADDPS" => "ADDPS",
+        "VSUBPS" => "SUBPS",
+        "VMAXPS" => "MAXPS",
+        "VMINPS" => "MINPS",
+        "VPSHUFD" => "PSHUFD",
+        "VUNPCKHPS" => "UNPCKHPS",
+        "VUNPCKLPS" => "UNPCKLPS",
+        "VPCMPEQD" => "PCMPEQD",
+        "VPCMPGTD" => "PCMPGTD",
+        "VMULSS" => "MULSS",
+        "VADDSS" => "ADDSS",
+        "VSUBSS" => "SUBSS",
+        "VDIVSS" => "DIVSS",
+        "VCOMISS" => "COMISS",
+        "VUCOMISS" => "UCOMISS",
+        "VMOVSS" => "MOVSS",
+        "VCVTSD2SS" => "CVTSD2SS",
+        "VCVTSS2SD" => "CVTSS2SD",
+        "VRCPPS" => "RCPPS",
+        "VRSQRTPS" => "RSQRTPS",
+        "VANDNPS" => "ANDNPS",
+        "VORPS" => "ORPS",
+        "VMULPD" => "MULPD",
+        "VADDPD" => "ADDPD",
+        "VSHUFPS" => "SHUFPS",
+        "VUNPCKLPD" => "UNPCKLPD",
+        "VCVTSS2SI" => "CVTSS2SI",
+        "VCVTSI2SS" => "CVTSI2SS",
+        "VCVTTSD2SI" => "CVTTSD2SI",
+        "VPADDB" => "PADDB",
+        "VPMULUDQ" => "PMULUDQ",
+        "VPUNPCKHQDQ" => "PUNPCKHQDQ",
+        "VPCMPEQQ" => "PCMPEQQ",
+        "VPSHUFB" => "PSHUFB",
+        "VPALIGNR" => "PALIGNR",
+        "VPINSRD" => "PINSRD",
+        "VPINSRQ" => "PINSRQ",
+        "VPEXTRQ" => "PEXTRQ",
+        "VANDNPD" => "ANDNPS",
+        "VCVTDQ2PS" => "CVTDQ2PS",
+        "VCVTTPS2DQ" => "CVTTPS2DQ",
+        "VCMPPS" => "CMPPS_VEX",
+        "VROUNDSD" => "ROUNDSD",
+        "VPBLENDD" => "PBLENDD",
+        "VCVTPS2PD" => "CVTPS2PD",
+        "VPMOVSXDQ" => "PMOVSXDQ",
+        _ => return None,
+    })
+}
+
+/// `CROSS` (_vex.py 49-50): whole-register VEX instructions, data moving between the 128-bit halves.
+const VEX_CROSS: [&str; 11] = [
+    "VPERMQ",
+    "VPERMD",
+    "VPBROADCASTD",
+    "VPBROADCASTQ",
+    "VBROADCASTSS",
+    "VBROADCASTF128",
+    "VINSERTF128",
+    "VINSERTI128",
+    "VEXTRACTF128",
+    "VEXTRACTI128",
+    "VZEROALL",
+];
+
+/// `FMA` (_vex.py 52-53): V{FMADD,FMSUB,FNMADD,FNMSUB}{132,213,231}{SS,SD,PS,PD}.
+fn vex_fma(ic: &str) -> bool {
+    let Some(rest) = ["VFMADD", "VFMSUB", "VFNMADD", "VFNMSUB"]
+        .iter()
+        .find_map(|k| ic.strip_prefix(k))
+    else {
+        return false;
+    };
+    rest.len() == 5 && ["132", "213", "231"].contains(&&rest[..3]) && ["SS", "SD", "PS", "PD"].contains(&&rest[3..])
+}
+
+/// `rule` (_vex.py 67-107; Sprint 182): one VEX instruction as `vex`, `vexs`, `fma` or `vzeroupper`.
+fn vex(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    use crate::lift::vex_operand;
+    let ic = ctx.ic.clone();
+    let template = ctx.f.ops.unwrap_or("");
+    // VEX.L counts only for templates with x-forms; a scalar row ignores it (LIG: SDM Vol 2A 2.3.6.2)
+    let vl = if template.contains('x') { ctx.f.vl } else { 0 };
+    if ic == "VZEROUPPER" {
+        ctx.b.emit(Op::Vzeroupper);
+        return Ok(());
+    }
+    if ic == "VZEROALL" {
+        ctx.b.emit(Op::Vexs {
+            ic,
+            d: SseLoc::X(0),
+            s1: None,
+            s2: SseLoc::X(0),
+            vl: 1,
+            imm: None,
+        });
+        return Ok(());
+    }
+    let mut locs = Vec::new();
+    for o in ctx.ops.clone() {
+        if !o.starts_with("I:") {
+            locs.push(vex_operand(ctx.b, &o, ctx.nxt)?);
+        }
+    }
+    let last = ctx.ops.last().cloned().unwrap_or_default();
+    let imm = match last.strip_prefix("I:") {
+        Some(rest) => {
+            let hex = rest
+                .split(':')
+                .nth(1)
+                .ok_or_else(|| LiftError(format!("operand {last}")))?;
+            Some(u64::from_str_radix(hex, 16).map_err(|_| LiftError(format!("operand {last}")))?)
+        }
+        None => None,
+    };
+    let operand_count = |n: usize| {
+        if locs.len() < n {
+            Err(LiftError(format!(
+                "{ic} at 0x{:x}: {} operands",
+                ctx.address,
+                locs.len()
+            )))
+        } else {
+            Ok(())
+        }
+    };
+    if vex_fma(&ic) {
+        operand_count(3)?;
+        ctx.b.emit(Op::Fma {
+            ic,
+            d: locs[0],
+            s2: locs[1],
+            s3: locs[2],
+            vl,
+        });
+        return Ok(());
+    }
+    if ic == "VPERMILPS" {
+        // imm8 form: PSHUFD's order; vvvv form: a select
+        let (base, d, s1, s2) = if imm.is_some() {
+            operand_count(2)?;
+            ("PSHUFD", locs[0], None, locs[1])
+        } else {
+            operand_count(3)?;
+            ("PERMILPS_VAR", locs[0], Some(locs[1]), locs[2])
+        };
+        ctx.b.emit(Op::Vex {
+            base: base.to_string(),
+            d,
+            s1,
+            s2,
+            vl,
+            align: 0,
+            imm,
+        });
+        return Ok(());
+    }
+    let cross_at_256 = matches!(ic.as_str(), "VCVTPS2PD" | "VPMOVSXDQ");
+    if VEX_CROSS.contains(&ic.as_str()) || (cross_at_256 && ctx.f.vl != 0) {
+        operand_count(2)?;
+        let (d, s1, s2) = if locs.len() == 3 {
+            (locs[0], Some(locs[1]), locs[2])
+        } else {
+            (locs[0], None, locs[1])
+        };
+        ctx.b.emit(Op::Vexs {
+            ic,
+            d,
+            s1,
+            s2,
+            vl: if cross_at_256 { 1 } else { vl },
+            imm,
+        });
+        return Ok(());
+    }
+    // L0_ONLY (_vex.py 54): their 256-bit forms change operand widths
+    if matches!(ic.as_str(), "VCVTDQ2PD" | "VCVTTPD2DQ" | "VCVTPD2DQ") && ctx.f.vl != 0 {
+        return Err(LiftError(format!(
+            "{ic} at 0x{:x}: the 256-bit form is not lifted",
+            ctx.address
+        )));
+    }
+    let base = vex_base(&ic).ok_or_else(|| LiftError(format!("{ic}: no VEX base")))?;
+    operand_count(2)?;
+    let (d, s1, s2) = if imm.is_some() && locs.len() == 2 && template == "Hx,Wx,Ib" {
+        (locs[0], Some(locs[1]), locs[1]) // shift by imm8: vvvv = shift(r/m)
+    } else if locs.len() == 3 {
+        (locs[0], Some(locs[1]), locs[2])
+    } else {
+        (locs[0], None, locs[1])
+    };
+    let has_memory = d.addr().is_some() || s2.addr().is_some();
+    // ALIGNED (_vex.py 55): the only VEX forms that fault on alignment
+    let align = if has_memory && matches!(ic.as_str(), "VMOVAPD" | "VMOVDQA" | "VMOVAPS") {
+        if vl != 0 { 32 } else { 16 }
+    } else {
+        0
+    };
+    ctx.b.emit(Op::Vex {
+        base: base.to_string(),
+        d,
+        s1,
+        s2,
+        vl,
+        align,
+        imm,
     });
     Ok(())
 }
