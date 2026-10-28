@@ -121,13 +121,16 @@ else
 fi
 if [ $all = 1 ]; then
   uv run python scripts/check_replay.py
-  # the vocabulary's rules over every record; records made from 2026-10-17 on are held to them (Sprint 109)
-  uv run python scripts/check_records.py --since 2026-10-17 --show 0
+  # the vocabulary's rules over every record; records made from 2026-10-17 on are held to them (Sprint 109), by the
+  # Python and by its Rust port (Sprint 169), whose printed lines must be the Python's
+  py=$(uv run python scripts/check_records.py --since 2026-10-17 --show 0)
+  echo "$py"
+  [ "$(target/release/check_records --since 2026-10-17 --show 0)" = "$py" ] || { echo "gates: the Rust records check differs from the Python's"; exit 1; }
 elif [ -n "$records" ]; then
   said "records: $(printf '%s\n' "$records" | grep -c .) new"
   for r in $records; do uv run substrate replay "$r" --level 2 > /dev/null; done
   # shellcheck disable=SC2086
-  uv run python scripts/check_records.py --since 2026-10-17 --show 0 $records
+  target/release/check_records --since 2026-10-17 --show 0 $records
 else
   said "records: none new"
 fi
