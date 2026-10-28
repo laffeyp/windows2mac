@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 173
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -92,3 +92,34 @@ The integer and misaligned-lock model cases are judged against Windows through t
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: counts and two plants.
 - [x] One concept: the model's core and its integer classes.
+
+## result
+
+- **The model:** `crates/w2m_vm/src/model.rs`, `runtime.py` 193-388 and 995-1161 and `integer_model.py` whole, each
+  function citing its lines. The case runner's hvc 10 and 11 call it as `_slow_sse` does (`cases.rs` `model_step`):
+  the registers, flags (C Z S O from their registers, P and A lazy), DF, MXCSR and FCW in; one step over guest memory;
+  the result out, x17 the next RIP and the dispatcher next; a guest fault raised through the runtime's exception path
+  with the exit's registers, as `_raise_in_guest` raises it. An `sse` or `cpuid` operation is refused, the case
+  counted to the model as before.
+- **Judged against Windows:** 3,521 cases the case runner had counted and not judged, with 0 difference classes in
+  both tests: the misaligned locked forms (533 in set 041: ADD_LOCK 91, XOR_LOCK 85, AND_LOCK 83, SUB_LOCK 83, OR_LOCK
+  77, INC_LOCK 31, DEC_LOCK 30, CMPXCHG_LOCK 28, XADD_LOCK 25; NEG_LOCK 29 in 042), DIV 237 (044), IDIV 219 (046b), LDMXCSR 52
+  (044d), VLDMXCSR 227 (049b) and 2,224 in set 050 (RCR 784, SHLD 276, SHRD 264, CMC 132, CLC 116, PUSHFQ 116, SAHF
+  116, the string and loop classes 24 each, and the rest). `store/case_runner/expected.tsv`'s seven changed runs moved
+  judged up and "to the model" down by exactly those counts.
+- **A fault the judge found:** the first run named "2 IDIV r2: case 344: [2e, 4c, f7, 3f] vm 0xe5fc5d3b249a4f53, cpu
+  0xe5fc5d3b249a4f54": the signed 128-bit dividend was built with `1 << 128`, a shift past the type that release
+  builds wrap. Fixed; every other wide shift in the file read and found within its type.
+- **Plant 1** (RCR's 8-bit count taken mod 8): the case runner failed, "88 RCR CF: case 206: [66, c0, 9c, 75, d6, 28,
+  f7, 52, 4b] vm 1, cpu 0", with "120 RCR data window" and "7 RCR r0". Restored.
+- **Plant 2** as the card wrote it (a fault that keeps the model's flags) reached no judge: the case runner passed.
+  On a fault the case runner raises with the exit's own registers, as the Python's `_raise_in_guest` takes `x`, so
+  the model's restored state is never read on that path. Replaced by a plant on the fault path the judge reads, the
+  exception RIP off by one: the case runner failed, "91 ADD_LOCK fault rip: case 19: [f0, 66, 01, 42, d0] vm
+  0x20000001, cpu 0x20000000", and so AND_LOCK, CMPXCHG_LOCK, DEC_LOCK. Restored.
+- **The Python tests' values:** no Python test names `integer_model`; `tests/test_runtime.py` runs the whole Python
+  runtime with its kernel32 over `skeleton.exe`, and its one model fact, `mul_hi`'s high half (59-61), is a Rust unit
+  test, with DIV's fault and RCR's count mod 9.
+- **Not done:** the Rust run loop (`run.rs` 553-554) still ends at hvc 10 and 11. No guest the Rust host runs reaches
+  them (`qpc` and `sleeper` run to ExitProcess without), so a serving path there would have no judge; it lands with
+  the batch run's first model exit.

@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 163 (2026-10-27, closed)
+- **Scope:** two of step 3's three measurements on a record: an exit's host time by kind on `qpc` and `sleeper`, and whether a guest WFE exits.
+- **Dual contract:** signal — SESSION_INIT 1 (purpose measurement, 0.11), MEASUREMENT_RECORDED 17, SESSION_COMPLETED 1 (completed) on `w2m-vm-measurements-1793169234000000000`, every tag the card named and none it did not; artifact pass (fmt, clippy, the gates exit 0); observation pass (each guest to ExitProcess, its served exits equal to its tally less one; p50 ≤ p99 for every kind; WFE 0 and WFI 1,000; the planted quantile named "p50 … left: 30, right: 20").
+- **CI does not run:** `run_measurements` and `w2m-vm` (macOS only, Hypervisor.framework); CI runs `record.rs`'s quantile test.
+- **Rubber Duck Pass:** *Sequence narration:* SESSION_INIT for the profile w2m-vm-measurements, then per guest and exit kind a `vm_exits` count and `exit_ns_p50` and `exit_ns_p99`, then `wfe_exits` for wfe (0) and wfi (1,000), then SESSION_COMPLETED after 0.918 s. *Observation 1 (a sample too small for its quantile):* `qpc` and `sleeper` serve 1 to 14 exits a kind, so p99 is the largest; the hvc 1 p99s are compiles. Disposition: recorded (stated in the card; step 4's batch run gives the distribution the host design needs). *Observation 2 (a plant the card set that could not fail):* the card named a 3-sample test, where both rules give the same median; the test uses four. Disposition: resolved-here. *Observation 3 (an answer the design waited for):* WFE does not exit; the design's alternative (a spin ending in WFE) is closed and its hvc stands. Disposition: recorded.
+- **Closed:** Sprint 162's CI run 40644147884 (success on 74e8fe348).
+- **Files:** crates/w2m_vm/ (run.rs, record.rs, bin/w2m-vm.rs, bin/run_measurements.rs), harness/w2m-vm-measurements.toml, store/runs/w2m-vm-measurements-1793169234000000000, docs/sprint-tail-archive-2026-10-08.md (Sprint 153's entry), WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-163-an-exits-time-and-wfe.md, signal-reports/sprint-163-report.md.
+
 ### Sprint 162 (2026-10-27, closed)
 - **Scope:** vocabulary 0.11: the seven `metric` values step 3's measurements need (P24), the first part of reviewer-2's High 1.
 - **Dual contract:** signal — MEASUREMENT_RECORDED 30 times (each of the seven new values at least once) and SESSION_INIT 2 on the samples record, which replays; the run also fired every other harness kind twice, which the card's Emits did not name; artifact pass (`vocabulary_generator --check`, fmt, clippy, the gates exit 0 on the fourth run); observation pass (the planted `exit_ns_p95` refused by the Rust type and by substrate: "Invalid enum value 'exit_ns_p95' - at `$.metric`").
