@@ -146,6 +146,8 @@ pub struct Outcome {
     pub counts: BTreeMap<&'static str, u64>,
     /// each served exit's host time, from the vCPU's exit to its next run, in ns
     pub serve_ns: Vec<u64>,
+    /// the same times by the exit's kind (`hvc <k>`, `vtimer`, or `ec 0x<class>`), for step 3's measure (Sprint 163)
+    pub serve_by_kind: BTreeMap<String, Vec<u64>>,
     /// each run's time, from `hv_vcpu_run`'s call to its return, in ns
     pub run_ns: Vec<u64>,
     /// the exits, by hvc number (0 for a non-hvc exit)
@@ -302,6 +304,7 @@ fn run(
         blocks: BTreeMap::new(),
         counts: BTreeMap::new(),
         serve_ns: Vec::new(),
+        serve_by_kind: BTreeMap::new(),
         run_ns: Vec::new(),
         exits: BTreeMap::new(),
         created: Vec::new(),
@@ -335,6 +338,7 @@ fn run(
 
     let runtime = MONITOR_VA + RUNTIME_IMAGE..MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE;
     let mut marked = None::<Instant>;
+    let mut kind = String::new(); // the last exit's kind, whose service `marked` times
     let stop = loop {
         // `_before_run` (5129-5141): one vCPU, no other process: the slice's end (`_slice_until`), the VM may switch
         // threads itself; x23 the budget left, outside the runtime's C
@@ -351,12 +355,21 @@ fn run(
             }
         }
         if let Some(t) = marked {
-            out.serve_ns.push(t.elapsed().as_nanos() as u64);
+            let ns = t.elapsed().as_nanos() as u64;
+            out.serve_ns.push(ns);
+            out.serve_by_kind.entry(kind.clone()).or_default().push(ns);
         }
         let started = Instant::now();
         let exit = vcpu.run()?;
         out.run_ns.push(started.elapsed().as_nanos() as u64);
         marked = Some(Instant::now());
+        kind = match (exit.hvc_immediate(), &exit) {
+            (Some(n), _) => format!("hvc {n}"),
+            (None, Exit::VtimerActivated) => "vtimer".to_string(),
+            (None, e) => e
+                .exception_class()
+                .map_or_else(|| format!("{e:?}"), |c| format!("ec 0x{c:02x}")),
+        };
         let mem = guest.memory.as_mut_slice();
         vm_compiled(mem, &mut out.blocks, &mut out.translations);
         let pc = vcpu.reg(Reg::Pc)?;

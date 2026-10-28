@@ -79,6 +79,37 @@ pub fn translation_lines(image_sha256: &str, entry: u64, blocks: &[(u64, u64, u6
     lines
 }
 
+/// The `q` quantile of `sorted` (ascending, not empty) by nearest rank: the smallest value with at least `q` of the
+/// sample at or below it, the ceil(q·n)-th (Sprint 163, step 3's `exit_ns_p50` and `exit_ns_p99`).
+pub fn quantile(sorted: &[u64], q: f64) -> u64 {
+    let rank = ((q * sorted.len() as f64).ceil() as usize).clamp(1, sorted.len());
+    sorted[rank - 1]
+}
+
+/// One MEASUREMENT_RECORDED line of the step-3 measurements' record (Sprint 163), in a Python batch run's conventions
+/// (`destination_profile_id` `w2m-vm`, `backend` `managed_vm`, `phase` `discovery`, `artifact_state` `warm`).
+pub fn measurement_line(
+    measurement_id: &str,
+    metric: events::Metric,
+    value: f64,
+    unit: &str,
+    application: &str,
+    variant: Option<&str>,
+) -> String {
+    harness_line(&events::MeasurementRecorded {
+        measurement_id: Id::new(measurement_id).expect("not empty"),
+        metric,
+        value: FiniteF64::new(value).expect("a measured number is finite"),
+        unit: unit.to_string(),
+        phase: events::MeasurementPhase::Discovery,
+        backend: events::Backend::ManagedVm,
+        application_profile_id: Id::new(application).expect("not empty"),
+        artifact_state: events::ArtifactState::Warm,
+        destination_profile_id: Id::new("w2m-vm").expect("not empty"),
+        variant: variant.map(str::to_string),
+    })
+}
+
 /// A record's w2m events, in order: (kind, payload) of every frame whose kind is not substrate's.
 pub fn w2m_events(record: &Path) -> Vec<(String, Value)> {
     frames(record)
@@ -151,6 +182,15 @@ mod tests {
     }
 
     const IMAGE: &str = "6863d5ecd3a14fb5df0f1b194135fecd9e59a153aa2564ddfc2db034181d37de";
+
+    /// Nearest rank: of four, the median is the second, not the third an index of n·q would take.
+    #[test]
+    fn the_quantile_is_the_nearest_rank() {
+        let sample = [10, 20, 30, 40];
+        assert_eq!(quantile(&sample, 0.5), 20, "p50");
+        assert_eq!(quantile(&sample, 0.99), 40, "p99");
+        assert_eq!(quantile(&[7], 0.5), 7, "one value");
+    }
 
     #[test]
     fn a_time_is_not_compared_and_a_block_is() {

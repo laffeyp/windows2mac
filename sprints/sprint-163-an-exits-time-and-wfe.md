@@ -95,3 +95,31 @@ Step 3's exit time by kind and the WFE answer are on a record, in vocabulary 0.1
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values with their bounds and a plant.
 - [x] One concept: step 3's exit and WFE measurements.
+
+## result
+
+- **The record** (`store/runs/w2m-vm-measurements-1793169234000000000`, substrate exit 0): SESSION_INIT (purpose
+  measurement, vocabulary 0.11), 17 MEASUREMENT_RECORDED, SESSION_COMPLETED completed in 0.918 s.
+- **An exit's host time, by kind** (from `hv_vcpu_run`'s return to the next run; nearest rank):
+
+  | guest | kind | exits served | p50 | p99 |
+  |---|---|---|---|---|
+  | qpc | hvc 1 | 6 | 708 ns | 199,000 ns |
+  | qpc | hvc 8 | 1 | 1,042 ns | 1,042 ns |
+  | sleeper | hvc 1 | 14 | 584 ns | 223,083 ns |
+  | sleeper | hvc 8 | 7 | 708 ns | 34,625 ns |
+  | sleeper | hvc 12 | 1 | 3,375 ns | 3,375 ns |
+
+  The medians, 584 to 1,042 ns, stand beside the C monitor's 813-852 ns of Sprint 132; Sprint 142's one sample, 3,667
+  ns, was not the common case. The samples are small: with n under 100 the p99 is the largest, and the hvc 1 p99s
+  (about 200 µs) are the misses where the host compiled a block, not exits served alone. Each guest's served hvc exits
+  equal its run's own tally less the last exit (the producer checks it). No vtimer or exception exit occurred. The
+  distribution the host design's budgets need comes from step 4's batch run, which serves exits by the hundred
+  thousand; these are the skeleton's.
+- **Whether a guest WFE exits:** no. Of 1,000 WFEs the framework trapped none, and the run reached its `hvc #0` before
+  the watchdog: a guest WFE neither exits nor stalls. Of 1,000 WFIs it trapped all 1,000 (ESR EC 0x01, ISS bit 0 clear).
+  The host design (247-249) said "If WFE exits, the spin can end in WFE and the host answer with a yield; if not, the
+  hvc above stands": the hvc stands.
+- **The plant** (below, run after the gates): the card named a 3-sample test; of three, the median is the second by
+  either rule, so the test uses four ([10, 20, 30, 40]: nearest rank 20, an index of n·q 30). Planted, the index of
+  n·q: the test failed "p50 … left: 30, right: 20". Restored, it passes.
