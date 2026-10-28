@@ -620,7 +620,7 @@
 
 ## Sprint tail
 
-### Sprint 193 (2026-10-28, gates running)
+### Sprint 193 (2026-10-28, closed)
 - **Scope:** the stream's next family, KERNEL 33, for one process: `kernel.py`'s events, pipes, close, ref and process state in Rust; the second process at row 16 the next card's
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 912 s, kept in `store/gates/passes.tsv` as sprint 193 at c3b220559 with root=2906f9427; the three multi-vCPU tests passed in their stage); observation pass (the Rust stream equals the Python's rows 0-15 in every column and stops at row 16, CreateProcessW, KERNEL 33's PROCESS_CREATE by name; the six guests that stopped at KERNEL 33 now stop at their PROCESS_CREATE; plant 1 named "(4294967296, 0)" against "(4294967296, 1)"; plant 2 named 5000 against 4096; plant 3 reached no judge and plant 3b named "row 4 of the call stream differs from the Python batch run's").
 - **CI does not run:** the batch run and the guests (Hypervisor.framework); CI runs `kernel.rs`'s two unit tests.
