@@ -578,9 +578,10 @@ pub fn nzcv_condition(kind: &str, cc: &str) -> Option<&'static str> {
     table.iter().find(|(k, _)| *k == cc).map(|(_, v)| *v)
 }
 
-/// `INVERSE` (830-831): each Arm condition's inverse, named as `a64.COND` first names it, never `cs` or `cc`.
-fn inverse(c: &str) -> &'static str {
-    match c {
+/// `INVERSE` (830-831): each Arm condition's inverse, named as `a64.COND` first names it, never `cs` or `cc`. A name
+/// it does not hold is refused, as the Python's dict raises KeyError (Sprint 166; it gave "gt" before).
+fn inverse(c: &str) -> Result<&'static str, CompileError> {
+    Ok(match c {
         "eq" => "ne",
         "ne" => "eq",
         "cs" | "hs" => "lo",
@@ -594,8 +595,9 @@ fn inverse(c: &str) -> &'static str {
         "ge" => "lt",
         "lt" => "ge",
         "gt" => "le",
-        _ => "gt",
-    }
+        "le" => "gt",
+        _ => return Err(CompileError(format!("no inverse of the condition {c:?}"))),
+    })
 }
 
 /// `nzcv_setter` (834-839): the flags kind whose NZCV a conditional branch right after `ins` may branch on.
@@ -606,9 +608,10 @@ pub fn nzcv_setter(ins: &Lifted) -> Option<&'static str> {
     }
 }
 
-/// `COND_FLAGS` (852-853).
-fn cond_flags(cc: &str) -> u32 {
-    match cc.strip_prefix('n').unwrap_or(cc) {
+/// `COND_FLAGS` (852-853). A condition it does not name is refused, as the Python's dict raises KeyError (Sprint 166;
+/// it gave `le`'s flags before).
+fn cond_flags(cc: &str) -> Result<u32, CompileError> {
+    Ok(match cc.strip_prefix('n').unwrap_or(cc) {
         "o" => U_OF,
         "b" => U_CF,
         "z" => U_ZF,
@@ -616,8 +619,9 @@ fn cond_flags(cc: &str) -> u32 {
         "p" => U_PF,
         "be" => U_CF | U_ZF,
         "l" => U_SF | U_OF,
-        _ => U_ZF | U_SF | U_OF, // "le"
-    }
+        "le" => U_ZF | U_SF | U_OF,
+        _ => return Err(CompileError(format!("no flags for the condition {cc:?}"))),
+    })
 }
 
 /// `FLAGS_WRITTEN` (854-855).
@@ -631,8 +635,8 @@ fn flags_written(kind: &str) -> u32 {
 }
 
 /// `_op_flags` (864-889): (flags read, flags written) by one lifted op.
-fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> (u32, u32) {
-    match op {
+fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> Result<(u32, u32), CompileError> {
+    Ok(match op {
         Op::Flags {
             kind, b: count, bits, ..
         } => {
@@ -654,8 +658,8 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> (u32, u32) {
             }
         }
         Op::Alu { op, .. } => (if matches!(*op, "adc" | "sbb") { U_CF } else { 0 }, 0),
-        Op::Br { cond, .. } => (if *cond == "always" { 0 } else { cond_flags(cond) }, 0),
-        Op::Set { cond, .. } | Op::Cmov { cond, .. } => (cond_flags(cond), 0),
+        Op::Br { cond, .. } => (if *cond == "always" { 0 } else { cond_flags(cond)? }, 0),
+        Op::Set { cond, .. } | Op::Cmov { cond, .. } => (cond_flags(cond)?, 0),
         Op::Cx16 { .. } => (0, U_ZF),
         // FLAGS_SSE (856): each writes all six
         Op::Sse { ic, .. } => (0, if FLAGS_SSE.contains(&ic.as_str()) { ALL_FLAGS } else { 0 }),
@@ -677,19 +681,19 @@ fn op_flags(op: &Op, constant: &BTreeMap<Temp, u64>) -> (u32, u32) {
         | Op::Df { .. }
         | Op::Pause
         | Op::Fcw { .. } => (0, 0),
-    }
+    })
 }
 
 /// `_op_flag_masks` (892-904): `_op_flags` of each op; a Jcc that branches on the previous instruction's NZCV reads
 /// no flag register.
-fn op_flag_masks(ins: &Lifted, nzcv_kind: Option<&str>) -> Vec<(u32, u32)> {
+fn op_flag_masks(ins: &Lifted, nzcv_kind: Option<&str>) -> Result<Vec<(u32, u32)>, CompileError> {
     let mut constant = BTreeMap::new();
     let mut out = Vec::new();
     for op in &ins.ops {
         if let Op::Imm { t, value } = op {
             constant.insert(*t, *value);
         }
-        let (mut r, w) = op_flags(op, &constant);
+        let (mut r, w) = op_flags(op, &constant)?;
         if let Op::Br { cond, .. } = op
             && nzcv_kind.is_some_and(|k| nzcv_condition(k, cond).is_some())
         {
@@ -697,17 +701,17 @@ fn op_flag_masks(ins: &Lifted, nzcv_kind: Option<&str>) -> Vec<(u32, u32)> {
         }
         out.push((r, w));
     }
-    out
+    Ok(out)
 }
 
 /// `insn_flags` (907-913): (flags `ins` reads before writing them, flags it writes).
-pub fn insn_flags(ins: &Lifted, nzcv_kind: Option<&str>) -> (u32, u32) {
+pub fn insn_flags(ins: &Lifted, nzcv_kind: Option<&str>) -> Result<(u32, u32), CompileError> {
     let (mut read, mut written) = (0, 0);
-    for (r, w) in op_flag_masks(ins, nzcv_kind) {
+    for (r, w) in op_flag_masks(ins, nzcv_kind)? {
         read |= r & !written;
         written |= w;
     }
-    (read, written)
+    Ok((read, written))
 }
 
 /// `nzcv_branch` (916-919): `nxt` is a Jcc that branches on `setter`'s NZCV.
@@ -1210,7 +1214,7 @@ pub fn compile_insn(
     let mut flags_live: BTreeMap<usize, u32> = BTreeMap::new();
     let mut live = live_after;
     if ops.iter().any(|op| matches!(op, Op::Flags { .. })) {
-        let masks = op_flag_masks(ins, nzcv_from);
+        let masks = op_flag_masks(ins, nzcv_from)?;
         for i in (0..ops.len()).rev() {
             if matches!(ops[i], Op::Flags { .. }) {
                 flags_live.insert(i, live);
@@ -1622,7 +1626,7 @@ pub fn compile_insn(
                     match nzcv_from.and_then(|k| nzcv_condition(k, cond)) {
                         Some(arm) => {
                             // the previous instruction's NZCV
-                            let inv = inverse(arm);
+                            let inv = inverse(arm)?;
                             a.branch(move |off| a64::bcond(inv, off), skip);
                         }
                         None => {
@@ -2672,7 +2676,7 @@ pub fn assemble_block(
     for k in (0..insns.len()).rev() {
         lives[k] = live;
         let setter = if k > 0 { nzcv_setter(&insns[k - 1]) } else { None };
-        let (read, written) = insn_flags(&insns[k], setter);
+        let (read, written) = insn_flags(&insns[k], setter)?;
         live = live & !written | read;
     }
     for (k, ins) in insns.iter().enumerate() {
@@ -2697,6 +2701,31 @@ pub fn assemble_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Sprint 166: a condition the tables do not name is refused by name, as the Python's dicts raise KeyError; `le`
+    /// and its negation keep their flags, and `le` and `gt` invert each other.
+    #[test]
+    fn an_unknown_condition_is_refused_by_name() {
+        assert_eq!(cond_flags("le").unwrap(), U_ZF | U_SF | U_OF);
+        assert_eq!(cond_flags("nle").unwrap(), U_ZF | U_SF | U_OF);
+        assert!(cond_flags("xx").unwrap_err().0.contains("\"xx\""));
+        assert_eq!(inverse("le").unwrap(), "gt");
+        assert_eq!(inverse("gt").unwrap(), "le");
+        assert!(inverse("xx").unwrap_err().0.contains("\"xx\""));
+    }
+
+    /// Every condition the lifter gives (`lift::cc`'s 16) has its flags. No end-to-end judge reaches `cond_flags` for
+    /// every name: the C words judge and the case runner compile one instruction at a time, where a Jcc, SETcc or
+    /// CMOVcc holds no flags op, and the two guests' host-compiled blocks branch on no `le` (Sprint 166's plant).
+    #[test]
+    fn every_condition_the_lifter_gives_has_its_flags() {
+        for suffix in [
+            "O", "NO", "B", "NB", "Z", "NZ", "BE", "NBE", "S", "NS", "P", "NP", "L", "NL", "LE", "NLE",
+        ] {
+            let cc = crate::lift::cc(suffix).unwrap();
+            assert!(cond_flags(cc).is_ok(), "{cc}");
+        }
+    }
 
     const RAX: u8 = 0;
     const RBX: u8 = 3;

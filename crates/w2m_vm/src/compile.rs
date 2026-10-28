@@ -185,7 +185,11 @@ impl HostCompiler {
             for p in pages {
                 self.code_pages.get_mut(&p).unwrap().insert(owner);
             }
-            let (read, written) = insn_flags(&ins, previous.as_ref().and_then(nzcv_setter));
+            // a condition the lowering does not name (Sprint 166): every flag counted live, which keeps the code
+            // right; the instruction's own compile refuses it by name
+            let Ok((read, written)) = insn_flags(&ins, previous.as_ref().and_then(nzcv_setter)) else {
+                return live | undecided;
+            };
             live |= read & undecided;
             undecided &= !(read | written);
             if undecided == 0 {
