@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 153 (2026-10-25, closed)
+- **Scope:** link 5's second group in Rust: the rest of `_int.py`'s A64-lowered rules and `bmi.py`, with their lowering.
+- **Dual contract:** signal pass (four `case-runner-rust` sessions, 512 classes accepted over them, the Rust translator the candidate for 161; no discrepancy; the ledger empty); artifact pass (fmt, clippy, the gates); observation pass (1,096,154 record calls equal to the C, 65,624 cases agree with Windows, 9,264 case codes equal to the Python's; the plant named).
+- **CI does not run:** the case runner's three tests and `case_runs`; the C words judge returns early without clang.
+- **Rubber Duck Pass:** *Observation 1 (perl for multi-line edits again):* three edits to `lower.rs` went through `perl -0pi` over several lines, the error class the standing rule names; the file's head was checked intact and the rest used the Edit tool. Disposition: recorded. *Observation 2 (a class count off by five):* the card said 75 classes; 70 is the count (38 named, 16 SETcc, 16 CMOVcc). Disposition: resolved-here. *Observation 3 (temporaries in the Python's order):* each rule draws its temporaries in the Python's order, since the register a temporary gets follows the order of writes; the equal words on a million calls bear it out. Disposition: recorded.
+- **Closed:** Sprint 152's CI run 40181818440 (success on 9a76b1d51).
+- **Files:** crates/translator/, store/runs/case-runner-rust-*, store/case_runner/discrepancy-ledger.json, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-153-the-integer-rest.md, signal-reports/sprint-153-report.md.
+
 ### Sprint 152 (2026-10-25, closed)
 - **Scope:** the review of Sprints 149-150: High 1 (TRACE_INGESTED over verdict lines), High 2 (the judges' discrepancies outside any ledger), Medium 1 (three CPUs merged into one profile), Medium 2 (a race hit dismissed), the lows, and the review's third judge.
 - **Dual contract:** signal pass (eight sessions, SESSION_INIT, CANDIDATE_GENERATED, COMPARISON_COMPLETED, CANDIDATE_ACCEPTED, SESSION_COMPLETED; in the planted chain DISCREPANCY_REPORTED, ROUTED and RESOLVED, 107 each); artifact pass (fmt, clippy, the gates; replay level 2 of each record); observation pass (the chain closed; a wrong `src` refused; the Rust words equal the Python's on 4,103 codes).
