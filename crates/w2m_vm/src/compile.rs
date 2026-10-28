@@ -94,18 +94,18 @@ impl HostCompiler {
         let mem = guest.memory.as_mut_slice();
         let cursor = read_u64(mem, VM_COMPILER + VMC_CURSOR);
         let base = MONITOR_VA + cursor;
-        // the runtime's w2m_cpuid, which CPUID's words call (`_compile` passes the runtime's symbols, 4618-4619)
-        let cpuid_va = *guest
-            .symbols
-            .get("w2m_cpuid")
-            .ok_or("the guest runtime defines no w2m_cpuid")?;
+        // the runtime's functions the words call (`_compile` passes the runtime's symbols, 4618-4619)
+        if !guest.symbols.contains_key("w2m_cpuid") {
+            return Err("the guest runtime defines no w2m_cpuid".into());
+        }
+        let runtime = translator::lower::RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied());
         let (words, marks) = assemble_block(
             &insns,
             base,
             exit_va,
             guest.slice_va,
             PROCESS_VA + STATE_OFF,
-            cpuid_va,
+            &runtime,
             live,
         )
         .map_err(|e| e.0)?;

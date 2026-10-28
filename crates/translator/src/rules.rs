@@ -95,6 +95,9 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         "LOOP" | "LOOPE" | "LOOPNE" | "JRCXZ" => loop_,
         // group 4 (Sprint 160): `_sse.rule`'s classes
         ic if SSE_FLOAT_CORE.contains(&ic) => sse,
+        // group 5 (Sprint 161): `int_rule`'s classes `_lower_int` lowers; MOVLPS and MOVNTDQ through `memory_only_rule`
+        "MOVLPS" | "MOVNTDQ" => sse_memory_only,
+        ic if SSE2_INT_BLOCK.contains(&ic) => sse_int,
         _ => return None,
     })
 }
@@ -1629,13 +1632,241 @@ pub const SSE_FLOAT_CORE: [&str; 52] = [
     "COMISD",
 ];
 
-/// `SSE_ALIGNED` (lift.py 97-98) for this group's classes: a 16-byte memory operand of these must be 16-byte aligned
-/// (SDM: #GP otherwise). The later groups' classes join it with their rules (lift.py 104-141).
+/// `SSE_ALIGNED` (lift.py 97-141, the set as the frozen Python builds it, 104 classes; Sprint 161): a memory operand of
+/// these must be 16-byte aligned (SDM: #GP otherwise).
+const SSE_ALIGNED: [&str; 104] = [
+    "ADDPD",
+    "ADDPS",
+    "ANDNPS",
+    "ANDPD",
+    "ANDPS",
+    "CMPPD",
+    "CMPPS",
+    "CVTDQ2PS",
+    "CVTPD2DQ",
+    "CVTPD2PS",
+    "CVTPS2DQ",
+    "CVTTPD2DQ",
+    "CVTTPS2DQ",
+    "DIVPD",
+    "DIVPS",
+    "HADDPD",
+    "MAXPD",
+    "MAXPS",
+    "MINPD",
+    "MINPS",
+    "MOVAPD",
+    "MOVAPS",
+    "MOVDQA",
+    "MOVNTDQ",
+    "MOVNTPS",
+    "MPSADBW",
+    "MULPD",
+    "MULPS",
+    "ORPD",
+    "ORPS",
+    "PABSW",
+    "PACKSSDW",
+    "PACKSSWB",
+    "PACKUSWB",
+    "PADDB",
+    "PADDD",
+    "PADDQ",
+    "PADDSB",
+    "PADDSW",
+    "PADDUSB",
+    "PADDW",
+    "PALIGNR",
+    "PAND",
+    "PANDN",
+    "PAVGB",
+    "PCMPEQB",
+    "PCMPEQD",
+    "PCMPEQQ",
+    "PCMPEQW",
+    "PCMPGTB",
+    "PCMPGTD",
+    "PCMPGTW",
+    "PMADDUBSW",
+    "PMADDWD",
+    "PMAXSW",
+    "PMAXUB",
+    "PMAXUD",
+    "PMAXUW",
+    "PMINSD",
+    "PMULHW",
+    "PMULLD",
+    "PMULLW",
+    "POR",
+    "PSADBW",
+    "PSHUFB",
+    "PSHUFD",
+    "PSHUFHW",
+    "PSHUFLW",
+    "PSLLD",
+    "PSLLQ",
+    "PSLLW",
+    "PSRAD",
+    "PSRAW",
+    "PSRLD",
+    "PSRLQ",
+    "PSRLW",
+    "PSUBD",
+    "PSUBQ",
+    "PSUBSB",
+    "PSUBUSB",
+    "PSUBW",
+    "PUNPCKHBW",
+    "PUNPCKHDQ",
+    "PUNPCKHQDQ",
+    "PUNPCKHWD",
+    "PUNPCKLBW",
+    "PUNPCKLDQ",
+    "PUNPCKLQDQ",
+    "PUNPCKLWD",
+    "PXOR",
+    "RCPPS",
+    "RSQRTPS",
+    "SHUFPD",
+    "SHUFPS",
+    "SQRTPD",
+    "SQRTPS",
+    "SUBPD",
+    "SUBPS",
+    "UNPCKHPD",
+    "UNPCKHPS",
+    "UNPCKLPD",
+    "UNPCKLPS",
+    "XORPD",
+    "XORPS",
+];
+
 fn sse_aligned(ic: &str) -> bool {
-    matches!(ic, "MOVAPS" | "MOVAPD" | "XORPS" | "XORPD" | "ANDPS" | "ANDPD")
-        || ["ADD", "SUB", "MUL", "DIV", "SQRT", "MIN", "MAX"]
-            .iter()
-            .any(|op| ic.strip_prefix(op).is_some_and(|t| t == "PS" || t == "PD"))
+    SSE_ALIGNED.contains(&ic)
+}
+
+/// `SSE2_INT_LOWERED` (_sse.py 100-126): the classes `int_rule` lifts and `_lower_int` lowers (group 5, Sprint 161).
+pub const SSE2_INT_BLOCK: [&str; 77] = [
+    "ANDNPS",
+    "CVTDQ2PD",
+    "MOVDQA",
+    "MOVDQU",
+    "MOVHLPS",
+    "MOVHPS",
+    "MOVLHPS",
+    "MOVLPS",
+    "MOVMSKPS",
+    "MOVNTDQ",
+    "MOVNTPS",
+    "ORPS",
+    "PACKSSDW",
+    "PACKSSWB",
+    "PACKUSWB",
+    "PADDB",
+    "PADDD",
+    "PADDQ",
+    "PADDSB",
+    "PADDSW",
+    "PADDUSB",
+    "PADDW",
+    "PAND",
+    "PANDN",
+    "PCMPEQB",
+    "PCMPEQD",
+    "PCMPEQQ",
+    "PCMPEQW",
+    "PCMPGTB",
+    "PCMPGTD",
+    "PCMPISTRI",
+    "PCMPISTRI64",
+    "PINSRW",
+    "PMADDUBSW",
+    "PMAXUB",
+    "PMOVMSKB",
+    "PMULHW",
+    "PMULLD",
+    "PMULLW",
+    "POR",
+    "PSADBW",
+    "PSHUFB",
+    "PSHUFD",
+    "PSHUFHW",
+    "PSHUFLW",
+    "PSLLD",
+    "PSLLDQ",
+    "PSLLQ",
+    "PSRAD",
+    "PSRAW",
+    "PSRLD",
+    "PSRLDQ",
+    "PSRLQ",
+    "PSRLW",
+    "PSUBD",
+    "PSUBQ",
+    "PSUBSB",
+    "PSUBUSB",
+    "PSUBW",
+    "PUNPCKHBW",
+    "PUNPCKHDQ",
+    "PUNPCKHQDQ",
+    "PUNPCKHWD",
+    "PUNPCKLBW",
+    "PUNPCKLDQ",
+    "PUNPCKLQDQ",
+    "PUNPCKLWD",
+    "PXOR",
+    "RCPPS",
+    "RCPSS",
+    "RSQRTPS",
+    "RSQRTSS",
+    "SHUFPS",
+    "UNPCKHPD",
+    "UNPCKHPS",
+    "UNPCKLPD",
+    "UNPCKLPS",
+];
+
+/// `int_rule` (_sse.py 42-51): as `rule`, with an immediate when the template has one (PSHUFD V,W,Ib; the
+/// shift-by-immediate forms W,Ib, whose source is the destination itself).
+fn sse_int(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    let last = ctx.ops.last().cloned().unwrap_or_default();
+    let imm = match last.strip_prefix("I:") {
+        Some(rest) => {
+            let hex = rest
+                .split(':')
+                .nth(1)
+                .ok_or_else(|| LiftError(format!("operand {last}")))?;
+            Some(u64::from_str_radix(hex, 16).map_err(|_| LiftError(format!("operand {last}")))?)
+        }
+        None => None,
+    };
+    let dst = sse_operand(ctx.b, &ctx.ops[0], ctx.nxt)?;
+    let src = if ctx.ops.len() == 2 && imm.is_some() {
+        dst
+    } else {
+        sse_operand(ctx.b, &ctx.ops[1], ctx.nxt)?
+    };
+    let has_memory = dst.addr().is_some() || src.addr().is_some();
+    let align = if has_memory && sse_aligned(&ctx.ic) { 16 } else { 0 };
+    let ic = ctx.ic.clone();
+    ctx.b.emit(Op::Sse {
+        ic,
+        dst,
+        src,
+        align,
+        imm,
+    });
+    Ok(())
+}
+
+/// `memory_only_rule` (_sse.py 54-59): MOVLPS, MOVHPD, MOVNTDQ, whose SDM forms are memory only; a register operand
+/// is #UD.
+fn sse_memory_only(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    if ctx.ops.iter().any(|o| o.starts_with("R:XMM")) && ctx.ops.iter().all(|o| !o.starts_with("M:")) {
+        ctx.b.emit(Op::Ud);
+        return Ok(());
+    }
+    sse_int(ctx)
 }
 
 /// `_sse.rule` (_sse.py 32-39): one legacy-SSE instruction as one `sse` operation, aligned to 16 when it has a

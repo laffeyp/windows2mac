@@ -52,6 +52,8 @@ const FCW_OFF: u32 = 0x70;
 const SPILL: u32 = 0x78;
 const PAUSE_COUNT: u32 = 0xA8;
 const SLICE_UNTIL: u32 = 0xC0;
+/// NATIVE_OPERANDS (vm_backend 126): two 16-byte operands for a native helper call (PCMPISTRI, the approximations).
+const NATIVE_OPERANDS: u32 = 0x300;
 /// MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE (vm_backend 81, 136-143): the top of the runtime's AArch64 stack,
 /// where CPUID's call into the guest runtime runs.
 pub const RUNTIME_STACK_TOP: u64 = 0x7F00_0000_0000 + 0x60000 + 0x400_0000 + 0x100000 + 0x10000;
@@ -1165,19 +1167,40 @@ fn fused_move(
     }
 }
 
+/// The guest runtime's functions the lowering calls (compile_insn's `symbols`, vm_backend 1417-1421): `w2m_cpuid`, which
+/// CPUID calls (0 without a runtime image, as `symbols["w2m_cpuid"] if symbols else 0`); `w2m_pcmpistri` and
+/// `w2m_approximate`, which PCMPISTRI and RCPPS, RSQRTPS, RCPSS, RSQRTSS call when the image defines them (else the model
+/// runs them, 1790, 1813).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RuntimeCalls {
+    pub cpuid: u64,
+    pub pcmpistri: Option<u64>,
+    pub approximate: Option<u64>,
+}
+
+impl RuntimeCalls {
+    /// From a runtime image's symbol table, read through `symbol`.
+    pub fn from_symbols(symbol: impl Fn(&str) -> Option<u64>) -> RuntimeCalls {
+        RuntimeCalls {
+            cpuid: symbol("w2m_cpuid").unwrap_or(0),
+            pcmpistri: symbol("w2m_pcmpistri"),
+            approximate: symbol("w2m_approximate"),
+        }
+    }
+}
+
 /// `compile_insn` (1417-1885): append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`.
 /// `nzcv_from`: the flags kind of the previous instruction's NZCV; `live_after`: the flags a later instruction reads;
 /// `nzcv_out`: the next instruction's Jcc branches on this one's NZCV. Returns true when control never falls through.
 /// `state_va` is the process area's state block (PROCESS_VA + STATE_OFF), for a GS-relative address and CPUID's saved
-/// registers. `cpuid_va` is the compiling VM's runtime image's `w2m_cpuid`, which CPUID calls; 0 without a runtime
-/// image, as the Python's `symbols` absent.
+/// registers. `runtime` holds the compiling VM's runtime image's functions the lowering calls (the Python's `symbols`).
 #[allow(clippy::too_many_arguments)]
 pub fn compile_insn(
     a: &mut Assembler,
     ins: &Lifted,
     exit_va: u64,
     state_va: u64,
-    cpuid_va: u64,
+    runtime: &RuntimeCalls,
     nzcv_from: Option<&str>,
     live_after: u32,
     nzcv_out: bool,
@@ -1712,9 +1735,78 @@ pub fn compile_insn(
                 ic,
                 dst,
                 src,
+                imm: Some(imm),
+                ..
+            } if matches!(ic.as_str(), "PCMPISTRI" | "PCMPISTRI64") && runtime.pcmpistri.is_some() => {
+                // 1790-1812: natively, as CPUID's call is made: the operands to the monitor data page at
+                // NATIVE_OPERANDS, the GPRs to the state block, and string_compare.c answers ECX and CF ZF SF OF (AF and
+                // PF 0) in x0
+                let v = sse_src(a, src, 16, &reg, 31)?;
+                let SseLoc::X(d) = dst else {
+                    return Err(CompileError(format!("sse {ic}: an XMM destination expected")));
+                };
+                a.emit(&[
+                    a64::str_v(16, u32::from(*d), 28, NATIVE_OPERANDS),
+                    a64::str_v(16, v, 28, NATIVE_OPERANDS + 16),
+                ]);
+                save_guest_registers(a, state_va);
+                a.emit(&[
+                    a64::addi(0, 28, NATIVE_OPERANDS),
+                    a64::addi(1, 28, NATIVE_OPERANDS + 16),
+                ]);
+                a.emit(&a64::mov_imm(2, imm & 0xFF));
+                call_runtime(a, runtime.pcmpistri.unwrap());
+                a.emit(&[a64::mov(17, 0)]);
+                load_guest_registers(a, state_va);
+                a.emit(&[
+                    a64::ubfx(RCX, 17, 0, 5), // ECX, RCX's upper half cleared
+                    a64::ubfx(REG_CF, 17, 8, 1),
+                    a64::ubfx(REG_ZF, 17, 9, 1),
+                    a64::ubfx(REG_SF, 17, 10, 1),
+                    a64::ubfx(REG_OF, 17, 11, 1),
+                    a64::movz(16, 1, 0), // PF and AF clear (PF_RESULT 1)
+                    a64::stp(ZR, ZR, 28, i64::from(AF_OPERANDS)),
+                    a64::str(8, 16, 28, PF_RESULT),
+                ]);
+                mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF);
+            }
+            Op::Sse {
+                ic, dst, src, align, ..
+            } if matches!(ic.as_str(), "RCPPS" | "RSQRTPS" | "RCPSS" | "RSQRTSS") && runtime.approximate.is_some() => {
+                // 1813-1833: the reference CPU's tables in the runtime's C (approximate.c), as PCMPISTRI's call: the
+                // destination and the source to NATIVE_OPERANDS, the GPRs to the state block (the C uses no vector
+                // register), and the destination back with its new lanes
+                let n = if ic.ends_with("PS") { 4 } else { 1 };
+                if let (Some(addr), true) = (src.addr(), *align != 0) {
+                    check_alignment(a, reg_at(&reg, addr)?);
+                }
+                let v = sse_src(a, src, if n == 4 { 16 } else { 4 }, &reg, 31)?;
+                let SseLoc::X(d) = dst else {
+                    return Err(CompileError(format!("sse {ic}: an XMM destination expected")));
+                };
+                let d = u32::from(*d);
+                a.emit(&[
+                    a64::str_v(16, d, 28, NATIVE_OPERANDS),
+                    a64::str_v(16, v, 28, NATIVE_OPERANDS + 16),
+                ]);
+                save_guest_registers(a, state_va);
+                a.emit(&[
+                    a64::addi(0, 28, NATIVE_OPERANDS),
+                    a64::addi(1, 28, NATIVE_OPERANDS + 16),
+                    a64::movz(2, u64::from(ic.contains("RSQRT")), 0),
+                    a64::movz(3, n, 0),
+                ]);
+                call_runtime(a, runtime.approximate.unwrap());
+                load_guest_registers(a, state_va);
+                a.emit(&[a64::ldr_v(16, d, 28, NATIVE_OPERANDS)]);
+            }
+            Op::Sse {
+                ic,
+                dst,
+                src,
                 align,
-                imm: _,
-            } => lower_sse(a, ic, dst, src, *align, &reg, &folded)?,
+                imm,
+            } => lower_sse(a, ic, dst, src, *align, *imm, &reg, &folded)?,
             // run by the model (hvc #11, 1665 and 1785): the profile's #UD, XGETBV, and the model's whole steps
             Op::Ud | Op::Xgetbv | Op::X86 { .. } => a.emit(&[a64::hvc(HVC_SLOW_STEP)]),
             Op::Mxcsr { store: st, loc } => {
@@ -1796,7 +1888,7 @@ pub fn compile_insn(
                 }
                 a.emit(&a64::mov_imm(16, RUNTIME_STACK_TOP));
                 a.emit(&[a64::addi(31, 16, 0)]);
-                a.emit(&a64::mov_imm(16, cpuid_va));
+                a.emit(&a64::mov_imm(16, runtime.cpuid));
                 a.emit(&[a64::blr(16)]);
                 a.emit(&a64::mov_imm(16, state_va));
                 for r in (0..16).step_by(2) {
@@ -1913,6 +2005,30 @@ fn lower_mxcsr(a: &mut Assembler, store: bool, addr: u32) {
     ]);
 }
 
+/// The guest's x0-x15 to the state block at `state_va` (x16 holds its address), before a call into the runtime's C.
+fn save_guest_registers(a: &mut Assembler, state_va: u64) {
+    a.emit(&a64::mov_imm(16, state_va));
+    for r in (0..16).step_by(2) {
+        a.emit(&[a64::stp(r, r + 1, 16, 8 * i64::from(r))]);
+    }
+}
+
+/// The guest's x0-x15 back from the state block at `state_va`.
+fn load_guest_registers(a: &mut Assembler, state_va: u64) {
+    a.emit(&a64::mov_imm(16, state_va));
+    for r in (0..16).step_by(2) {
+        a.emit(&[a64::ldp(r, r + 1, 16, 8 * i64::from(r))]);
+    }
+}
+
+/// A call into the runtime's C at `va` on the runtime's own stack (SP set from its top), as CPUID's is made.
+fn call_runtime(a: &mut Assembler, va: u64) {
+    a.emit(&a64::mov_imm(16, RUNTIME_STACK_TOP));
+    a.emit(&[a64::addi(31, 16, 0)]);
+    a.emit(&a64::mov_imm(16, va));
+    a.emit(&[a64::blr(16)]);
+}
+
 /// `FP_CLASSES` (vm_backend 1114-1116): the SSE classes that can raise an SIMD exception, lowered only while MXCSR masks
 /// all six.
 fn fp_class(ic: &str) -> bool {
@@ -1995,12 +2111,14 @@ fn set_flags_from_fcmp(a: &mut Assembler) {
 /// `_sse.lower` (_sse.py 324-488) for the SSE float core (group 4, Sprint 160): `_sse.rule`'s classes. XMM i is V i;
 /// V30 and V31 are scratch; FPCR follows MXCSR. An instruction that can raise an SIMD exception leaves the fast path
 /// when MXCSR unmasks any.
+#[allow(clippy::too_many_arguments)]
 fn lower_sse(
     a: &mut Assembler,
     ic: &str,
     dst: &SseLoc,
     src: &SseLoc,
     align: u32,
+    imm: Option<u64>,
     reg: &BTreeMap<Temp, u32>,
     folded: &BTreeMap<Temp, AddressForm>,
 ) -> Result<(), CompileError> {
@@ -2020,6 +2138,10 @@ fn lower_sse(
         a.branch(|off| a64::bcond("eq", off), fast);
         a.emit(&[a64::hvc(HVC_SLOW_SSE)]);
         a.bind(fast);
+    }
+    if crate::rules::SSE2_INT_BLOCK.contains(&ic) {
+        // 340-342
+        return lower_int(a, ic, dst, src, imm, reg);
     }
     let xmm = |l: &SseLoc| match l {
         SseLoc::X(n) => Ok(u32::from(*n)),
@@ -2193,6 +2315,332 @@ fn lower_sse(
     Ok(())
 }
 
+/// `LANE_LOWERED` (_sse.py 103-111): one NEON three-same instruction each, d = op(d, source): (name, lane size).
+fn lane_lowered(ic: &str) -> Option<(&'static str, u32)> {
+    Some(match ic {
+        "PUNPCKLQDQ" | "UNPCKLPD" => ("zip1", 3),
+        "UNPCKHPD" | "PUNPCKHQDQ" => ("zip2", 3),
+        "PADDQ" => ("add", 3),
+        "PADDW" => ("add", 1),
+        "PSUBW" => ("sub", 1),
+        "PCMPEQD" => ("cmeq", 2),
+        "PCMPGTD" => ("cmgt", 2),
+        "PSUBUSB" => ("uqsub", 0),
+        "PSUBSB" => ("sqsub", 0),
+        "PADDSB" => ("sqadd", 0),
+        "PADDSW" => ("sqadd", 1),
+        "PMAXUB" => ("umax", 0),
+        "PMULLW" => ("mul", 1),
+        "PUNPCKHBW" => ("zip2", 0),
+        "PUNPCKHDQ" => ("zip2", 2),
+        "PUNPCKHWD" => ("zip2", 1),
+        "PUNPCKLWD" => ("zip1", 1),
+        "PCMPEQW" => ("cmeq", 1),
+        "PADDUSB" => ("uqadd", 0),
+        "PCMPGTB" => ("cmgt", 0),
+        "PADDB" => ("add", 0),
+        "PCMPEQQ" => ("cmeq", 3),
+        "PMULLD" => ("mul", 2),
+        _ => return None,
+    })
+}
+
+/// `SHIFTS` (_sse.py 114-115): (lane size, kind) of the shifts by imm8 or by the source's low 64 bits.
+fn shifts(ic: &str) -> Option<(u32, &'static str)> {
+    Some(match ic {
+        "PSRLD" => (2, "right"),
+        "PSLLD" => (2, "left"),
+        "PSRAD" => (2, "arith"),
+        "PSRLW" => (1, "right"),
+        "PSRAW" => (1, "arith"),
+        "PSLLQ" => (3, "left"),
+        _ => return None,
+    })
+}
+
+/// `_lower_int` (_sse.py 129-321): the SSE2 integer block in NEON (Sprint 044 on). V31 and V30 are scratch; x16 and x17
+/// too.
+fn lower_int(
+    a: &mut Assembler,
+    ic: &str,
+    dst: &SseLoc,
+    src: &SseLoc,
+    imm: Option<u64>,
+    reg: &BTreeMap<Temp, u32>,
+) -> Result<(), CompileError> {
+    let bad = || CompileError(format!("sse {ic}"));
+    let xmm = |l: &SseLoc| match l {
+        SseLoc::X(n) => Ok(u32::from(*n)),
+        _ => Err(CompileError(format!("sse {ic}: an XMM operand expected"))),
+    };
+    let gpr = |l: &SseLoc| match l {
+        SseLoc::Loc(Loc::R { idx, .. }) => Ok(u32::from(*idx)),
+        _ => Err(CompileError(format!("sse {ic}: a general register expected"))),
+    };
+    let addr_reg = |l: &SseLoc| match l.addr() {
+        Some(t) => reg_at(reg, t),
+        None => Err(CompileError(format!("sse {ic}: a memory operand expected"))),
+    };
+    let need_imm = |what: &str| imm.ok_or_else(|| CompileError(format!("sse {ic}: no immediate for {what}")));
+    if matches!(ic, "MOVDQA" | "MOVDQU" | "MOVNTPS" | "MOVNTDQ") {
+        // 131-138
+        match (dst, src) {
+            (SseLoc::X(d), SseLoc::X(s)) => a.emit(&[a64::mov_v(u32::from(*d), u32::from(*s))]),
+            (SseLoc::X(d), _) => a.emit(&[a64::ldr_v(16, u32::from(*d), addr_reg(src)?, 0)]),
+            _ => a.emit(&[a64::str_v(16, xmm(src)?, addr_reg(dst)?, 0)]),
+        }
+        return Ok(());
+    }
+    if ic == "PMOVMSKB" {
+        // 139-149: the 16 sign bits into a general register
+        let (v, rd) = (xmm(src)?, gpr(dst)?);
+        for (lane, shift) in [(1, 8), (0, 0)] {
+            a.emit(&[a64::umov_d(16, v, lane)]);
+            a.emit(&a64::mov_imm(17, 0x8080_8080_8080_8080));
+            a.emit(&[a64::and(16, 16, 17), a64::lsri(16, 16, 7)]);
+            a.emit(&a64::mov_imm(17, 0x0102_0408_1020_4080));
+            a.emit(&[a64::mul(16, 16, 17), a64::lsri(16, 16, 56)]);
+            if shift != 0 {
+                a.emit(&[a64::eor(rd, ZR, 16, LSL, 8)]);
+            } else {
+                a.emit(&[a64::orr(rd, rd, 16)]);
+            }
+        }
+        return Ok(());
+    }
+    if ic == "MOVMSKPS" {
+        // 187-193: the four sign bits into a general register; the bits do not overlap, so EOR is OR
+        let (v, rd) = (xmm(src)?, gpr(dst)?);
+        a.emit(&[a64::mov(rd, ZR)]);
+        for lane in 0..4 {
+            a.emit(&[
+                a64::umov_s(16, v, lane),
+                a64::lsri(16, 16, 31),
+                a64::eor(rd, rd, 16, LSL, lane),
+            ]);
+        }
+        return Ok(());
+    }
+    if ic == "PINSRW" {
+        // 220-227: the source's low word into word imm & 7
+        let (d, lane) = (xmm(dst)?, (need_imm("PINSRW")? & 7) as u32);
+        match src {
+            SseLoc::Loc(Loc::M { addr, .. }) => {
+                a.emit(&[a64::ldr(2, 16, reg_at(reg, *addr)?, 0), a64::ins_h(d, lane, 16)]);
+            }
+            _ => a.emit(&[a64::ins_h(d, lane, gpr(src)?)]),
+        }
+        return Ok(());
+    }
+    if matches!(ic, "MOVHPS" | "MOVLPS") {
+        // 228-233, 251-256: the high (low) quadword from or to memory
+        let lane = u32::from(ic == "MOVHPS");
+        match dst {
+            SseLoc::X(d) => a.emit(&[a64::ldr(8, 16, addr_reg(src)?, 0), a64::ins_d(u32::from(*d), lane, 16)]),
+            _ => a.emit(&[a64::umov_d(16, xmm(src)?, lane), a64::str(8, 16, addr_reg(dst)?, 0)]),
+        }
+        return Ok(());
+    }
+    let d = xmm(dst)?;
+    match ic {
+        "CVTDQ2PD" => {
+            // 151-154: two signed words to doubles, exactly
+            let v = sse_src(a, src, 8, reg, 31)?;
+            a.emit(&[a64::sxtl_2d(30, v), a64::scvtf_2d(d, 30)]);
+        }
+        "PSRLDQ" | "PSLLDQ" => {
+            // 155-162: whole-register byte shifts by imm8
+            let n = need_imm(ic)?;
+            if n > 15 {
+                a.emit(&[a64::movi_zero(d)]);
+            } else if n != 0 {
+                let n = n as u32;
+                a.emit(&[a64::movi_zero(31)]);
+                a.emit(&[if ic == "PSRLDQ" {
+                    a64::ext_v(d, d, 31, n)
+                } else {
+                    a64::ext_v(d, 31, d, 16 - n)
+                }]);
+            }
+        }
+        "PSRLQ" if imm.is_some() => {
+            // 163-168
+            let n = need_imm(ic)?;
+            if n > 63 {
+                a.emit(&[a64::movi_zero(d)]);
+            } else if n != 0 {
+                a.emit(&[a64::ushr_2d(d, d, n as u32)]);
+            }
+        }
+        "PSRLQ" => {
+            // 169-180: by a count in the source's low 64 bits
+            let v = sse_src(a, src, 16, reg, 31)?;
+            let (big, done) = (a.label(), a.label());
+            a.emit(&[a64::umov_d(16, v, 0), a64::cmpi(16, 63)]);
+            a.branch(|off| a64::bcond("hi", off), big);
+            for lane in 0..2 {
+                a.emit(&[a64::umov_d(17, d, lane), a64::lsrv(17, 17, 16), a64::ins_d(d, lane, 17)]);
+            }
+            a.branch(a64::b, done);
+            a.bind(big);
+            a.emit(&[a64::movi_zero(d)]);
+            a.bind(done);
+        }
+        // 181-186: run in the model (string_compare.py, approximate.py)
+        "PCMPISTRI" | "PCMPISTRI64" | "RCPPS" | "RSQRTPS" | "RCPSS" | "RSQRTSS" => a.emit(&[a64::hvc(HVC_SLOW_SSE)]),
+        _ if shifts(ic).is_some() && imm.is_some() => {
+            // 194-205: by imm8; past the lane, zero (logical) or the sign
+            let (size, kind) = shifts(ic).unwrap();
+            let bits = 8u64 << size;
+            let n = need_imm(ic)?.min(bits) as u32;
+            if kind == "arith" {
+                if n != 0 {
+                    a.emit(&[a64::shift_right(d, d, n, size, true)]);
+                }
+            } else if u64::from(n) >= bits {
+                a.emit(&[a64::movi_zero(d)]);
+            } else if n != 0 {
+                a.emit(&[if kind == "right" {
+                    a64::shift_right(d, d, n, size, false)
+                } else {
+                    a64::shift_left(d, d, n, size)
+                }]);
+            }
+        }
+        _ if shifts(ic).is_some() => {
+            // 206-219: by the source's low 64 bits, clamped to the lane's bits
+            let (size, kind) = shifts(ic).unwrap();
+            let bits = 8u32 << size;
+            let v = sse_src(a, src, 16, reg, 31)?;
+            let small = a.label();
+            a.emit(&[a64::umov_d(16, v, 0), a64::cmpi(16, bits)]);
+            a.branch(|off| a64::bcond("ls", off), small);
+            a.emit(&[a64::movz(16, u64::from(bits), 0)]);
+            a.bind(small);
+            if kind != "left" {
+                a.emit(&[a64::sub(16, ZR, 16)]); // a negative count shifts right
+            }
+            a.emit(&[a64::dup_gpr(30, 16, size)]); // the shift count is the lane's low byte
+            a.emit(&[a64::three_same(
+                if kind == "arith" { "sshl" } else { "ushl" },
+                d,
+                d,
+                30,
+                size,
+            )]);
+        }
+        "PSHUFLW" | "PSHUFHW" => {
+            // 234-241: four words permuted by imm; the other four kept
+            let n = need_imm(ic)?;
+            let v = sse_src(a, src, 16, reg, 31)?;
+            a.emit(&[a64::mov_v(30, v), a64::mov_v(d, 30)]);
+            let base = if ic == "PSHUFLW" { 0 } else { 4 };
+            for lane in 0..4u32 {
+                a.emit(&[a64::ins_h_element(
+                    d,
+                    base + lane,
+                    30,
+                    base + (n >> (2 * lane) & 3) as u32,
+                )]);
+            }
+        }
+        "SHUFPS" => {
+            // 242-250: words 0, 1 from the destination; 2, 3 from the source
+            let n = need_imm(ic)?;
+            let v = sse_src(a, src, 16, reg, 31)?;
+            a.emit(&[a64::mov_v(30, d)]);
+            if v != 31 {
+                a.emit(&[a64::mov_v(31, v)]);
+            }
+            for lane in 0..4u32 {
+                a.emit(&[a64::ins_s_element(
+                    d,
+                    lane,
+                    if lane < 2 { 30 } else { 31 },
+                    (n >> (2 * lane) & 3) as u32,
+                )]);
+            }
+        }
+        "MOVHLPS" | "MOVLHPS" => {
+            // 257-260: one quadword between halves; the other kept
+            let (v, hl) = (xmm(src)?, ic == "MOVHLPS");
+            a.emit(&[a64::umov_d(16, v, u32::from(hl)), a64::ins_d(d, u32::from(!hl), 16)]);
+        }
+        "PSHUFD" => {
+            // 261-267: word i of the result = source word (imm >> 2i) & 3
+            let n = need_imm(ic)?;
+            let v = sse_src(a, src, 16, reg, 31)?;
+            a.emit(&[a64::mov_v(30, v)]);
+            for lane in 0..4u32 {
+                a.emit(&[a64::ins_s_element(d, lane, 30, (n >> (2 * lane) & 3) as u32)]);
+            }
+        }
+        _ => {
+            // 268-321: d = op(d, source)
+            let v = sse_src(a, src, 16, reg, 31)?;
+            match ic {
+                "PAND" => a.emit(&[a64::and_v(d, d, v)]),
+                "POR" | "ORPS" => a.emit(&[a64::orr_v(d, d, v)]),
+                "PSUBD" => a.emit(&[a64::sub_v(d, d, v, 2)]),
+                "PSUBQ" => a.emit(&[a64::sub_v(d, d, v, 3)]),
+                "PUNPCKLBW" => a.emit(&[a64::zip1_v(d, d, v)]),
+                "PCMPEQB" => a.emit(&[a64::cmeq_v(d, d, v)]),
+                "PXOR" => a.emit(&[a64::eor_v(d, d, v)]),
+                "ANDNPS" | "PANDN" => a.emit(&[a64::bic_v(d, v, d)]),
+                "UNPCKLPS" | "PUNPCKLDQ" => a.emit(&[a64::zip1_4s(d, d, v)]),
+                "UNPCKHPS" => a.emit(&[a64::zip2_4s(d, d, v)]),
+                "PADDD" => a.emit(&[a64::add_v(d, d, v, 2)]),
+                _ if lane_lowered(ic).is_some() => {
+                    let (name, size) = lane_lowered(ic).unwrap();
+                    a.emit(&[a64::three_same(name, d, d, v, size)]);
+                }
+                "PACKUSWB" => a.emit(&[a64::sqxtun(30, d, false), a64::sqxtun(30, v, true), a64::mov_v(d, 30)]),
+                "PACKSSWB" => a.emit(&[a64::sqxtn(30, d, false), a64::sqxtn(30, v, true), a64::mov_v(d, 30)]),
+                // dwords to signed words, saturated: the destination's low half, the source's high
+                "PACKSSDW" => a.emit(&[a64::sqxtn_h(30, d, false), a64::sqxtn_h(30, v, true), a64::mov_v(d, 30)]),
+                // each word's signed product, its high half
+                "PMULHW" => a.emit(&[
+                    a64::smull(30, d, v, false),
+                    a64::smull(31, d, v, true),
+                    a64::three_same("uzp2", d, 30, 31, 1),
+                ]),
+                // a byte's index with bit 7 set gives 0; TBL gives 0 for any index past 15
+                "PSHUFB" => a.emit(&[a64::movi_bytes(30, 0x8F), a64::and_v(30, v, 30), a64::tbl(d, d, 30)]),
+                // each quadword's eight absolute byte differences summed into its low word (SDM PSADBW)
+                "PSADBW" => a.emit(&[
+                    a64::three_same("uabd", 30, d, v, 0),
+                    a64::add_pairwise_long(30, 30, 0, false),
+                    a64::add_pairwise_long(30, 30, 1, false),
+                    a64::add_pairwise_long(30, 30, 2, false),
+                    a64::mov_v(d, 30),
+                ]),
+                "PMADDUBSW" => {
+                    // the destination's unsigned bytes times the source's signed bytes, adjacent products added with
+                    // signed saturation to a word; the source read whole before any scratch it may be is written
+                    let free: Vec<u32> = [30, 31, 29].into_iter().filter(|t| *t != v).collect();
+                    let (t1, t2) = (free[0], free[1]);
+                    let t3 = if [29, 30, 31].contains(&v) { v } else { 29 };
+                    a.emit(&[
+                        a64::extend_bytes(t1, v, true, true),
+                        a64::extend_bytes(t2, d, true, false),
+                        a64::three_same("mul", t2, t2, t1, 1),
+                        a64::add_pairwise_long(t2, t2, 1, true),
+                        a64::extend_bytes(t1, v, false, true),
+                        a64::extend_bytes(t3, d, false, false),
+                        a64::three_same("mul", t3, t3, t1, 1),
+                        a64::add_pairwise_long(t3, t3, 1, true),
+                        a64::sqxtn_h(t1, t3, false),
+                        a64::sqxtn_h(t1, t2, true),
+                        a64::mov_v(d, t1),
+                    ]);
+                }
+                _ => return Err(bad()),
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A block's words and its marks (host VA, x86 address).
 pub type Block = (Vec<u32>, Vec<(u64, u64)>);
 
@@ -2206,7 +2654,7 @@ pub fn assemble_block(
     exit_va: u64,
     slice_va: u64,
     state_va: u64,
-    cpuid_va: u64,
+    runtime: &RuntimeCalls,
     live_out: u32,
 ) -> Result<Block, CompileError> {
     let mut a = Assembler::new(base);
@@ -2231,7 +2679,7 @@ pub fn assemble_block(
         marks.push((a.here(), ins.address));
         let from = if k > 0 { nzcv_setter(&insns[k - 1]) } else { None };
         let out = k + 1 < insns.len() && nzcv_branch(ins, &insns[k + 1]);
-        ended = compile_insn(&mut a, ins, exit_va, state_va, cpuid_va, from, lives[k], out)?;
+        ended = compile_insn(&mut a, ins, exit_va, state_va, runtime, from, lives[k], out)?;
     }
     if !ended {
         a.emit(&a64::mov_imm(17, addr));

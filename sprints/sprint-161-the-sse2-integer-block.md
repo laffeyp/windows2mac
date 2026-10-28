@@ -94,3 +94,37 @@ Windows where the cases reach them.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: three judges and two planted faults, each reaching the judge it tests.
 - [x] One concept: `_lower_int`'s classes.
+
+## result
+
+- `crates/translator`: `rules.rs` gains `SSE2_INT_BLOCK` (the 77 classes), `sse_int` (`int_rule`),
+  `sse_memory_only` (`memory_only_rule`, for MOVLPS and MOVNTDQ) and the full `SSE_ALIGNED` (104 classes, read from the
+  frozen `w2m.lift`), replacing Sprint 160's table of lift.py 97-98; `lower.rs` gains `lower_int` with `lane_lowered`
+  and `shifts`, routed from `lower_sse`.
+- **An amendment found by the C judge.** The first run named PCMPISTRI, RCPPS and RSQRTPS in 7 difference classes:
+  `compile_insn` lowers them by calling the runtime's C (`w2m_pcmpistri`, `w2m_approximate`, `vm_backend.py`
+  1790-1833) whenever the compiling VM's symbols hold them, and leaves them to the model only otherwise, as
+  `_lower_int` does. `compile_insn` and `assemble_block` now take `RuntimeCalls` (the three functions the words call)
+  in place of Sprint 159's `cpuid_va`; the two calls are carried with `save_guest_registers`, `call_runtime` and
+  `load_guest_registers` and `NATIVE_OPERANDS`; the run loop, the case runner (`case_runtime_calls`) and the C judge
+  pass the runtime's symbols.
+- **The C emitter:** the Rust rules lift 1,184,578 of the record's 1,186,511 calls (1,173,060 before); the other
+  1,184,313 the C compiles, in 225 classes (157 before), equal the C's words. This group's are 11,518 calls in 68
+  classes, SHUFPS 2,841, MOVDQA 2,528, PSHUFD 1,161, UNPCKLPS 574, MOVDQU 447, PXOR 367, ORPS 341, ANDNPS 311 the most.
+  No Rust refusal. The calls left are CMPPS, the packed conversions, the VEX forms, the MMX forms (MOVQ 176, MOVD 33,
+  PADDW 22 with MM registers) and x87.
+- **Windows:** the case runner with the Rust translator compiled 131,649 case instructions in 289 classes (110,401 in
+  212 before); each run's counts equal `expected.tsv`, zero difference classes.
+- **The Python words:** the Rust words equal the fixture's for all 15,716 case codes the Rust rules lift (13,032
+  before), of 25,919.
+- **The records:** four `case-runner-rust` sessions, `store/runs/case-runner-rust-1793165537000000000`,
+  `-1793165579000000000`, `-1793165603000000000`, `-1793165617000000000`: 205, 174, 107 and 26 classes accepted, as
+  before; the Rust translator the candidate for 93, 152, 107 and 26 (65, 129, 107 and 0 before); no discrepancy; each
+  session completed. The fourth profile's 26 are SSE2 integer classes (MOVHPS, PACKUSWB, PADDQ, …): Sprint 153's
+  result called that set "x87 cases alone", which was wrong.
+- **Planted faults** (both at once, different classes). (1) PSHUFD's selector `imm >> lane`: the C judge named 433
+  PSHUFD calls among others, the case runner PSHUFD cases by register ("PSHUFD xmm2: case 2943 …"). (2) PSRLW as an
+  arithmetic shift: the C judge named "PSRLW … rust [4f180421] c [6f180421]", the case runner "PSRLW xmm6: case 1223 …
+  vm …ffffffffffff, cpu …0000". Restored, every judge passes.
+- The gates were started with a shell `&` in place of a background task, so their end was read from a file the run
+  wrote, not from a notification.
