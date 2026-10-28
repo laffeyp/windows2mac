@@ -15,3 +15,6 @@ serde_json = "1.0.154"
 
 [profile.release]
 debug = 1
+# a shift by the type's width or an arithmetic overflow panics in release too (Sprint 176; reviewer-2's Low 1 of
+# 2026-10-28: Sprint 173's IDIV `1i128 << 128` wrapped in the release case runs)
+overflow-checks = true

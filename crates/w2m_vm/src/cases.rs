@@ -118,6 +118,8 @@ pub struct Tally {
     case: usize,
     /// by iclass: the cases the Rust model stepped and then judged (Sprint 173)
     pub modelled_by_class: BTreeMap<String, usize>,
+    /// by iclass: the cases whose memory Windows left undefined, not run (Sprint 176)
+    pub undefined_by_class: BTreeMap<String, usize>,
 }
 
 impl Tally {
@@ -636,6 +638,7 @@ pub fn run_cases(
         };
         if cpu_cases::undefined_memory(c).is_some() {
             tally.undefined_memory += 1;
+            *tally.undefined_by_class.entry(d.iclass.clone()).or_default() += 1;
             continue;
         }
         if r.marker == 2 {

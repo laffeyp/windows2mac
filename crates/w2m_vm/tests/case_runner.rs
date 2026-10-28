@@ -124,6 +124,7 @@ fn judge(use_rust: bool) {
         let (mut at_fault, mut to_model): (BTreeMap<String, usize>, BTreeMap<String, usize>) = Default::default();
         let mut seen_sets = BTreeSet::new();
         let mut distinct = (0, 0);
+        let mut by_class_rows = Vec::new();
         for run in &runs {
             let (fmt, cases) = read_cases(&fs::read(&run.set).unwrap()).unwrap();
             let results = read_results(&run.result, fmt).unwrap();
@@ -203,6 +204,30 @@ fn judge(use_rust: bool) {
                 Some(want) => failures.push(format!("run {}: counts {got:?}, expected {want:?}", run.id)),
                 None => failures.push(format!("run {}: not in store/case_runner/expected.tsv", run.id)),
             }
+            // each class's counts (Sprint 176; reviewer-2's Medium 4 of 2026-10-28: equal totals hid a class leaving
+            // the judged set while another joined)
+            let classes: BTreeSet<&String> = [
+                &t.by_class,
+                &t.faults_by_class,
+                &t.model_by_class,
+                &t.modelled_by_class,
+                &t.undefined_by_class,
+            ]
+            .iter()
+            .flat_map(|m| m.keys())
+            .collect();
+            for class in classes {
+                let n = |m: &BTreeMap<String, usize>| m.get(class).copied().unwrap_or(0);
+                by_class_rows.push(format!(
+                    "{}\t{class}\t{}\t{}\t{}\t{}\t{}",
+                    run.id,
+                    n(&t.by_class),
+                    n(&t.faults_by_class),
+                    n(&t.model_by_class),
+                    n(&t.modelled_by_class),
+                    n(&t.undefined_by_class)
+                ));
+            }
             for (class, n) in &t.by_class {
                 *reached.entry(class.clone()).or_default() += n;
             }
@@ -215,6 +240,30 @@ fn judge(use_rust: bool) {
             if seen_sets.insert(set_name) {
                 distinct.0 += t.judged;
                 distinct.1 += cases.len();
+            }
+        }
+        // `store/case_runner/expected-by-class.tsv`: written with W2M_WRITE_EXPECTED_BY_CLASS=1, held otherwise
+        let path = root.join("store/case_runner/expected-by-class.tsv");
+        let text = format!(
+            "run\tclass\tjudged\tfaults_judged\tmodel\tstepped_by_model\tundefined_memory\n{}\n",
+            by_class_rows.join("\n")
+        );
+        if std::env::var("W2M_WRITE_EXPECTED_BY_CLASS").as_deref() == Ok("1") {
+            fs::write(&path, &text).unwrap();
+        } else {
+            let held = fs::read_to_string(&path).unwrap_or_default();
+            let held: BTreeSet<&str> = held.lines().collect();
+            let now: BTreeSet<&str> = text.lines().collect();
+            let moved: Vec<String> = held
+                .symmetric_difference(&now)
+                .map(|l| format!("{} {l}", if held.contains(l) { "held" } else { "now" }))
+                .collect();
+            if !moved.is_empty() {
+                failures.push(format!(
+                    "{} class rows differ from store/case_runner/expected-by-class.tsv: {}",
+                    moved.len(),
+                    moved.iter().take(6).cloned().collect::<Vec<_>>().join("; ")
+                ));
             }
         }
         (failures, reached, distinct, at_fault, to_model)

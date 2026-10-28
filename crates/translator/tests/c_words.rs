@@ -7,7 +7,7 @@
 //! is the expectation. It needs no VM and no untracked input, so it runs everywhere, CI's Linux included; a missing C
 //! compiler fails it (Sprint 154: it had skipped on CI, reviewer-2's review of Sprints 151-152).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::fs;
 use std::io::Read;
@@ -224,6 +224,31 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     for (k, (n, example)) in differ.iter().take(30) {
         println!("  {n:7} {k}: {example}");
     }
+    // the classes the Rust rules do not lift, held to the committed census (Sprint 176; reviewer-2's High 1 of
+    // 2026-10-28): a class that stops lifting, or comes to lift, changes `store/census/c-words-unlifted-2026-10-28.tsv`
+    // in the same commit
+    let held: BTreeMap<String, usize> = fs::read_to_string(root().join("store/census/c-words-unlifted-2026-10-28.tsv"))
+        .expect("store/census/c-words-unlifted-2026-10-28.tsv")
+        .lines()
+        .skip(1)
+        .map(|l| {
+            let (class, n) = l.split_once('\t').expect("class<TAB>calls");
+            (class.to_string(), n.parse().expect("a call count"))
+        })
+        .collect();
+    let moved: Vec<String> = held
+        .keys()
+        .chain(not_lifted.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|c| held.get(*c) != not_lifted.get(*c))
+        .map(|c| format!("{c}: held {:?}, now {:?}", held.get(c), not_lifted.get(c)))
+        .collect();
+    assert!(
+        moved.is_empty(),
+        "the unlifted classes moved from the census: {}",
+        moved.join("; ")
+    );
     assert!(rust_refused.is_empty(), "the Rust compiler refused lifted calls");
     assert!(differ.is_empty(), "{} difference classes", differ.len());
     assert!(total > 0, "nothing compared");

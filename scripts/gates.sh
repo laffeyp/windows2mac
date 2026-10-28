@@ -168,7 +168,14 @@ if [ $python = 1 ]; then
   uv run python scripts/gen_stencil_table.py --check     # Sprint 080: the C table from store/stencil
   uv run ruff check src scripts tests
   uv run mypy
-  uv run pytest -q
+  # a failing run's output is kept under build/gates-failures/ before the gates exit, so a failure that does not repeat
+  # leaves its evidence (Sprint 176; reviewer-2's Medium 5 of 2026-10-28: Sprint 173's frozen-host failure was re-run
+  # away)
+  mkdir -p build/gates-failures
+  kept=build/gates-failures/pytest-$(date +%Y%m%dT%H%M%S).txt
+  uv run pytest -q > "$kept" 2>&1 || { tail -40 "$kept"; echo "gates: pytest failed; its output is $kept"; exit 1; }
+  tail -3 "$kept"
+  rm "$kept"
 fi
 if [ $all = 1 ]; then
   uv run python scripts/check_replay.py

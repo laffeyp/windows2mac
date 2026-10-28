@@ -555,6 +555,14 @@ fn unquoted_plants(root: &Path) -> Result<Vec<u32>, String> {
         if !contract.contains("planted fault") {
             continue;
         }
+        // a card that numbers its plants needs a quoted judge line for each number (Sprint 176); one that does not,
+        // a quoted line for any plant (Sprint 171)
+        if !numbered_plants(&section(&card, "## observation contract")).is_empty() {
+            if !unquoted_numbers(&card).is_empty() {
+                unquoted.push(n);
+            }
+            continue;
+        }
         let result = section(&card, "## result");
         let quoted = result.lines().any(|l| {
             let lower = l.to_lowercase();
@@ -567,6 +575,97 @@ fn unquoted_plants(root: &Path) -> Result<Vec<u32>, String> {
     unquoted.sort_unstable();
     unquoted.dedup();
     Ok(unquoted)
+}
+
+/// The plants a card's observation contract numbers: "(1)", "(2)" in its "Planted faults" bullet (Sprint 176;
+/// reviewer-2's Medium 3 of 2026-10-28: the rule passed a card whose one plant of two was quoted).
+fn numbered_plants(contract: &str) -> BTreeSet<u32> {
+    let Some(at) = contract.find("Planted faults") else {
+        return BTreeSet::new();
+    };
+    let bullet = contract[at..].split("\n- ").next().unwrap_or("");
+    bullet
+        .split('(')
+        .skip(1)
+        .filter_map(|p| p.split_once(')').and_then(|(n, _)| n.parse::<u32>().ok()))
+        .collect()
+}
+
+/// Text in double quotes of 3 or more characters: a judge's line quoted.
+fn quotes(text: &str) -> bool {
+    text.split('"').skip(1).step_by(2).any(|q| q.trim().len() >= 3)
+}
+
+/// The numbered plants whose result bullet ("- **Plant k**") is missing or quotes no judge. A bullet that says its plant
+/// reached no judge counts only if a quote follows that phrase: the replacement plant's failure (Sprint 173's plant 2).
+fn unquoted_numbers(card: &str) -> Vec<u32> {
+    let numbers = numbered_plants(&section(card, "## observation contract"));
+    let result = section(card, "## result");
+    let bullets: Vec<&str> = result.split("\n- ").collect();
+    numbers
+        .into_iter()
+        .filter(|k| {
+            let head = format!("**plant {k}");
+            let Some(b) = bullets
+                .iter()
+                .find(|b| b.trim_start_matches("- ").to_lowercase().starts_with(&head))
+            else {
+                return true;
+            };
+            match b.to_lowercase().find("reached no judge") {
+                Some(i) => !quotes(&b[i..]),
+                None => !quotes(b),
+            }
+        })
+        .collect()
+}
+
+/// BLACKBOARD tail entries headed "### Sprint NNN (<date>, closed)" whose card is not `status: done`, or which hold an
+/// unfilled GATES-LINE or CI-LINE (Sprint 176; reviewer-2's Medium 6 of 2026-10-28: Sprints 174 and 175 headed their
+/// entries closed before their gates exited).
+fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
+    let board = fs::read_to_string(root.join("BLACKBOARD.md")).map_err(|e| format!("BLACKBOARD.md: {e}"))?;
+    let tail = board
+        .split("\n## Sprint tail\n")
+        .nth(1)
+        .ok_or("BLACKBOARD.md: no ## Sprint tail")?;
+    let cards: Vec<(String, PathBuf)> = fs::read_dir(root.join("sprints"))
+        .map_err(|e| format!("sprints: {e}"))?
+        .flatten()
+        .map(|e| (e.file_name().to_string_lossy().to_string(), e.path()))
+        .collect();
+    let mut wrong = Vec::new();
+    for entry in tail.split("\n### Sprint ").skip(1) {
+        let (head, body) = entry.split_once('\n').unwrap_or((entry, ""));
+        if !head.ends_with(", closed)") {
+            continue;
+        }
+        let Some(n) = head.get(..3).and_then(|d| d.parse::<u32>().ok()) else {
+            continue;
+        };
+        let body = body.split("\n\n").next().unwrap_or("");
+        for token in ["GATES-LINE", "CI-LINE"] {
+            if body.contains(token) {
+                wrong.push(format!(
+                    "sprint {n:03}: its tail entry is headed closed and holds {token}"
+                ));
+            }
+        }
+        let prefix = format!("sprint-{n:03}-");
+        let done = match cards.iter().find(|(name, _)| name.starts_with(&prefix)) {
+            Some((_, path)) => fs::read_to_string(path)
+                .map_err(|e| e.to_string())?
+                .lines()
+                .any(|l| l.trim() == "status: done"),
+            None => false,
+        };
+        if !done {
+            wrong.push(format!(
+                "sprint {n:03}: its tail entry is headed closed and its card is not done"
+            ));
+        }
+    }
+    Ok(wrong)
 }
 
 fn run() -> Result<bool, String> {
@@ -607,7 +706,14 @@ fn run() -> Result<bool, String> {
                  failure"
             );
         }
-        return Ok(missing.is_empty() && unquoted.is_empty());
+        let early = closed_too_early(&root)?;
+        for w in &early {
+            eprintln!("{w}");
+        }
+        if early.is_empty() {
+            println!("every tail entry headed closed has its card done and no unfilled line");
+        }
+        return Ok(missing.is_empty() && unquoted.is_empty() && early.is_empty());
     }
     let n = sprint.ok_or("usage: signal_report NNN [--write] [--backfill YYYY-MM-DD] | --check")?;
     let text = report(&root, n, backfill.as_deref())?;
@@ -657,6 +763,25 @@ mod tests {
         assert_eq!(section(card, "### Emits"), "- SESSION_INIT\n\n#### deeper\n\nstill");
         assert_eq!(section(card, "## scope"), "first\n\nsecond");
         assert_eq!(section(card, "## absent"), "");
+    }
+
+    const CARD: &str = "## observation contract\n\n- **Planted faults:** (1) one; (2) two (Sprint 173).\n\n\
+                        ## result\n\n- **Plant 1** (one): the judge failed, \"88 RCR CF: case 206\".\n\
+                        - **Plant 2** (two) reached no judge. Replaced: the judge failed, \"91 ADD_LOCK fault rip\".\n";
+
+    #[test]
+    fn each_numbered_plant_needs_its_own_quote() {
+        assert_eq!(
+            numbered_plants(&section(CARD, "## observation contract")),
+            [1, 2].into()
+        );
+        assert!(unquoted_numbers(CARD).is_empty());
+        // plant 1's quote removed: the card fails on 1 though plant 2 is quoted
+        let one_unquoted = CARD.replace("\"88 RCR CF: case 206\"", "88 RCR CF");
+        assert_eq!(unquoted_numbers(&one_unquoted), [1]);
+        // a plant that reached no judge, with no replacement quoted after it
+        let no_replacement = CARD.replace("Replaced: the judge failed, \"91 ADD_LOCK fault rip\".", "");
+        assert_eq!(unquoted_numbers(&no_replacement), [2]);
     }
 
     #[test]
