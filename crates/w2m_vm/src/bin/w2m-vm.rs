@@ -360,10 +360,17 @@ mod run {
         }
         tsv += &format!("blocks the host compiled\t{}\n", out.translations.len());
         // the call stream at the stop, in `scripts/call_compare.py` `write_tsv`'s form, beside the stop file (Sprint 191)
-        let (calls, dropped) = guest.traced_calls();
+        let (calls, in_flight, dropped) = guest.traced_calls()?;
         let calls_file = format!("{}.calls.tsv", stop_file.trim_end_matches(".tsv"));
         fs::write(root.join(&calls_file), &calls).map_err(|e| format!("{calls_file}: {e}"))?;
-        tsv += &format!("calls traced\t{}\ncalls dropped\t{dropped}\n", calls.lines().count());
+        // the calls not yet returned at the stop (Sprint 194), without their return and error
+        let in_flight_file = format!("{}.in-flight.tsv", stop_file.trim_end_matches(".tsv"));
+        fs::write(root.join(&in_flight_file), &in_flight).map_err(|e| format!("{in_flight_file}: {e}"))?;
+        tsv += &format!(
+            "calls traced\t{}\ncalls in flight\t{}\ncalls dropped\t{dropped}\n",
+            calls.lines().count(),
+            in_flight.lines().count()
+        );
         fs::write(root.join(stop_file), &tsv).map_err(|e| format!("{stop_file}: {e}"))?;
         print!("{tsv}");
         Ok(())

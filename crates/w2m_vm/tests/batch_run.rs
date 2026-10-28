@@ -18,6 +18,14 @@ use std::path::{Path, PathBuf};
 const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
 /// The Python batch run's calls, in `scripts/call_compare.py` `write_tsv`'s form (Sprint 108's frontier run)
 const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792267359516238000.tsv";
+/// The cells at which the Python's own runs differ (Sprint 194)
+const VARYING: &str = "store/batch_run/stream-varying-2026-10-28.tsv";
+/// The Python batch run repeated on the same code (2026-10-28), each 10,516 rows
+const REPEATS: [&str; 3] = [
+    "store/frontier-calls/frontier-643a6283510c-1792269281973223000.tsv",
+    "store/frontier-calls/frontier-643a6283510c-1792273674526334000.tsv",
+    "store/frontier-calls/frontier-643a6283510c-1792300672353112000.tsv",
+];
 /// Guests whose output is a clock's reading, 16 hex digits and a newline
 const CLOCK_GUESTS: [&str; 2] = ["qpc", "qpc2"];
 
@@ -80,7 +88,58 @@ fn the_batch_run_and_the_guests_stop_where_held() {
     );
 }
 
-/// The Rust run's call stream is the Python's, row for row, every column, up to the stop.
+/// The (row, column) cells at which the Python's own runs of the same code differ (Sprint 194; reviewer-2's Medium 2
+/// of its review of 190-192): GetFileAttributesExW's a4-a7 at rows 426 and 438, a FILETIME the call leaves on the stack.
+fn varying(root: &Path) -> Vec<(usize, usize)> {
+    fs::read_to_string(root.join(VARYING))
+        .unwrap()
+        .lines()
+        .skip(1)
+        .map(|l| {
+            let (row, column) = l.split_once('\t').unwrap();
+            (row.parse().unwrap(), column.parse().unwrap())
+        })
+        .collect()
+}
+
+/// The varying list is the cells at which the repeat runs differ from `STREAM`, every one and no other.
+#[test]
+fn the_varying_cells_are_where_the_python_runs_differ() {
+    let root = root();
+    let reference = fs::read_to_string(root.join(STREAM)).unwrap();
+    let mut differ = Vec::new();
+    for run in REPEATS {
+        let other = fs::read_to_string(root.join(run)).unwrap();
+        assert_eq!(
+            other.lines().count(),
+            reference.lines().count(),
+            "{run} has another row count"
+        );
+        for (row, (a, b)) in reference.lines().zip(other.lines()).enumerate() {
+            for (column, (x, y)) in a.split('\t').zip(b.split('\t')).enumerate() {
+                if x != y && !differ.contains(&(row, column)) {
+                    differ.push((row, column));
+                }
+            }
+        }
+    }
+    differ.sort();
+    let held = varying(&root);
+    for cell in &differ {
+        assert!(held.contains(cell), "{VARYING} lacks row {} column {}", cell.0, cell.1);
+    }
+    for cell in &held {
+        assert!(
+            differ.contains(cell),
+            "{VARYING} names row {} column {}, where the runs agree",
+            cell.0,
+            cell.1
+        );
+    }
+}
+
+/// The Rust run's call stream is the Python's, row for row, every cell but the varying ones, up to the stop; the call
+/// in flight at the stop is the Python's next row but its return and error.
 #[test]
 fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     let root = root();
@@ -88,14 +147,45 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
         return;
     };
     let stream = fs::read_to_string(root.join(STREAM)).unwrap();
+    let skip = varying(&root);
     let ours: Vec<&str> = calls.lines().collect();
-    let python: Vec<&str> = stream.lines().take(ours.len()).collect();
+    let python: Vec<&str> = stream.lines().take(ours.len() + 1).collect();
     assert!(!ours.is_empty(), "the Rust run traced no call");
+    assert!(ours.len() < python.len(), "the Rust stream runs past the Python's");
     for (row, (r, p)) in ours.iter().zip(&python).enumerate() {
-        assert_eq!(r, p, "row {row} of the call stream differs from the Python batch run's");
+        let cells = |l: &'_ str| -> Vec<String> {
+            l.split('\t')
+                .enumerate()
+                .map(|(c, x)| {
+                    if skip.contains(&(row, c)) {
+                        "*".to_string()
+                    } else {
+                        x.to_string()
+                    }
+                })
+                .collect()
+        };
+        assert_eq!(
+            cells(r),
+            cells(p),
+            "row {row} of the call stream differs from the Python batch run's"
+        );
     }
-    assert_eq!(ours.len(), python.len(), "the Rust stream runs past the Python's");
-    println!("the Rust stream equals the Python's rows 0-{}", ours.len() - 1);
+    let in_flight = written(&root, "first-stop.in-flight.tsv").unwrap_or_default();
+    let Some(first) = in_flight.lines().next() else {
+        panic!("no call in flight at the stop");
+    };
+    let row = ours.len();
+    let p: Vec<&str> = python[row].split('\t').collect();
+    assert_eq!(
+        first.split('\t').collect::<Vec<_>>(),
+        p[..13],
+        "row {row}, the call in flight at the stop, differs from the Python batch run's"
+    );
+    println!(
+        "the Rust stream equals the Python's rows 0-{}, and row {row} is in flight",
+        row - 1
+    );
 }
 
 /// Each guest that ends at ExitProcess prints what the frozen Python host's run printed (Sprint 191).

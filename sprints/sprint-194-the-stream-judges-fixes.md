@@ -83,3 +83,25 @@ flight, and the build digest covers every file a build script reads.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the stream judge's inputs.
+
+## result
+
+- **The varying cells:** `store/batch_run/stream-varying-2026-10-28.tsv` holds rows 426 and 438, columns 9-12 (a4-a7),
+  and `the_varying_cells_are_where_the_python_runs_differ` derives the same eight cells from the reference and the three
+  repeat runs; the stream test skips those cells and holds every other cell exactly.
+- **The call in flight:** `traced_calls` returns the records not yet ready; `w2m-vm` writes them to
+  `<stop>.in-flight.tsv` and counts them in the stop file ("calls in flight 1", held). The record, CreateProcessW with
+  a0-a7 0, fffefe64, 0, 0, 1, 1000000020, 0, 0, equals the Python's row 16 in columns 0-12.
+- **The build's inputs:** `INPUTS` names `specs/x86_decode.json` in `build.rs` and `built_from.rs`;
+  `every_file_a_build_script_reads_is_an_input` reads each crate's `build.rs` and holds the two lists equal.
+- **The trace port:** a thunk with no name and an unmapped saved RSP are named errors, as the Python's lookups raise.
+- **The constants:** `TRACE_RECORDS_OFF` and `TRACE_RECORD` come from `guest_runtime::layout` only.
+- **Plant 1** (pair 438, 12 dropped from the list): the derivation test failed, "store/batch_run/stream-varying-
+  2026-10-28.tsv lacks row 438 column 12". Restored byte for byte.
+- **Plant 2** (the in-flight record's a0 plus 1): the stream test failed, "row 16, the call in flight at the stop,
+  differs from the Python batch run's". Restored byte for byte, rebuilt, the batch run run again, 4 of 4 tests pass.
+- **Plant 3** (`specs/x86_decode.json` dropped from both lists): the build-inputs test failed, "a build script reads
+  ../../specs/x86_decode.json, which INPUTS does not name". Restored byte for byte.
+- **Departures:** the card's expected arguments were the host request's words (0xa 0xfffefe64 0x60000003e); the judge
+  compares the call's a0-a7. The result section was first appended by a shell heredoc, then restored from HEAD and
+  written with the Edit tool.

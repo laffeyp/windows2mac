@@ -964,7 +964,15 @@ impl Guest {
         if word(self.memory.as_slice(), t) != 0 {
             let mem = self.memory.as_slice();
             let rsp = word(mem, (MONITOR_SIZE + STATE_OFF + 8 * 4) as usize);
-            let caller = self.layout.offset(rsp).map_or(0, |off| word(mem, off as usize));
+            // the Python's `self.mem.read(rsp, 8)` raises on an unmapped RSP (Sprint 194; reviewer-2's Low 1)
+            let caller = match self.layout.offset(rsp) {
+                Some(off) => word(mem, off as usize),
+                None => {
+                    return Err(GuestError::Layout(format!(
+                        "GetProcAddress's saved RSP {rsp:#x} is not mapped"
+                    )));
+                }
+            };
             let traced_caller = (0..2).any(|i| {
                 let (lo, hi) = (word(mem, t + 40 + 16 * i), word(mem, t + 48 + 16 * i));
                 lo <= caller && caller < hi
@@ -992,36 +1000,40 @@ impl Guest {
     /// `traced_calls` (4133-4147; Sprint 191): the calls call_trace.c recorded, in `scripts/call_compare.py`
     /// `write_tsv`'s form (seq, tid, label, DLL, function, eight arguments, return value and last error, hex but for
     /// seq, tid and the error), and the count the full area left out.
-    pub fn traced_calls(&self) -> (String, u64) {
+    ///
+    /// From Sprint 194 (reviewer-2's Medium 2 and Low 1 of its review of 190-192) it also returns the records not yet
+    /// ready, the calls in flight, as (seq, tid, image, dll, function, a0..a7), and a thunk with no name is an error,
+    /// as the Python's `self.ld.thunks[...]` raises.
+    pub fn traced_calls(&self) -> Result<(String, String, u64), String> {
         use guest_runtime::layout::{TRACE_OFF, TRACE_RECORD, TRACE_RECORDS_OFF};
         let mem = self.memory.as_slice();
         let t = (MONITOR_SIZE + TRACE_OFF) as usize;
         let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
         let (count, dropped) = (word(t + 16), word(t + 32));
-        let mut tsv = String::new();
+        let (mut tsv, mut in_flight) = (String::new(), String::new());
         for k in 0..count as usize {
             let r = t + (TRACE_RECORDS_OFF + TRACE_RECORD * k as u64) as usize;
             let f: Vec<u64> = (0..15).map(|i| word(r + 8 * i)).collect();
-            if f[0] == 0 {
-                continue;
-            }
-            let name = self.thunks.get(&(THUNK_BASE + 16 * f[4])).map_or("?!?", String::as_str);
-            let (dll, function) = name.split_once('!').unwrap_or((name, ""));
+            let thunk = THUNK_BASE + 16 * f[4];
+            let Some((dll, function)) = self.thunks.get(&thunk).and_then(|n| n.split_once('!')) else {
+                return Err(format!(
+                    "trace record {k} (seq {}) names thunk {thunk:#x}, which has no name",
+                    f[1]
+                ));
+            };
             let label = self
                 .call_trace
                 .get(f[3] as usize)
                 .map_or("GetProcAddress", String::as_str);
             let args: Vec<String> = f[5..13].iter().map(|a| format!("{a:x}")).collect();
-            tsv += &format!(
-                "{}\t{}\t{label}\t{dll}\t{function}\t{}\t{:x}\t{}\n",
-                f[1],
-                f[2],
-                args.join("\t"),
-                f[13],
-                f[14]
-            );
+            let call = format!("{}\t{}\t{label}\t{dll}\t{function}\t{}", f[1], f[2], args.join("\t"));
+            if f[0] == 0 {
+                in_flight += &format!("{call}\n");
+            } else {
+                tsv += &format!("{call}\t{:x}\t{}\n", f[13], f[14]);
+            }
         }
-        (tsv, dropped)
+        Ok((tsv, in_flight, dropped))
     }
 
     /// `_code_page` (vm_backend): x86 code the host writes, on fresh pages of the arena, an address never translated

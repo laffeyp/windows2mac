@@ -30,6 +30,7 @@ recon full	0
 scan pages	0
 blocks the host compiled	7091
 calls traced	16
+calls in flight	1
 calls dropped	0
 guest	busychild	HostRequest op 33: a second process (CreateProcessW): the next card's	ExitProcess	done\n
 guest	crosswake	HostRequest op 33: a second process (CreateProcessW): the next card's	ExitProcess	done\n

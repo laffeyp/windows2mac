@@ -9,7 +9,14 @@ use std::path::Path;
 use std::process::Command;
 
 /// What the digest stages (Sprint 192), as `w2m_vm::built_from::INPUTS` stages it.
-const INPUTS: [&str; 5] = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo"];
+const INPUTS: [&str; 6] = [
+    "crates",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    ".cargo",
+    "specs/x86_decode.json",
+];
 
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
