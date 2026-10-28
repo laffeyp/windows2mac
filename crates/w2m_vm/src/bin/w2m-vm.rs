@@ -49,7 +49,7 @@ mod run {
     use w2m_vm::guest::{Guest, vm_compiler_symbols};
     use w2m_vm::process::Start;
     use w2m_vm::record::translation_lines;
-    use w2m_vm::run::{Stop, run_compiling};
+    use w2m_vm::run::{Outcome, Stop, run_compiling};
 
     /// The run's limit, as `tests/test_timed_waits.py`'s Machine sets it.
     const MAX_STEPS: u64 = 1 << 40;
@@ -146,7 +146,14 @@ mod run {
             return wfe_probe();
         }
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json>] \
-                     | w2m-vm --wfe-probe";
+                     | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> | w2m-vm --wfe-probe";
+        if let [flag, directory, program, out_flag, output, stop_flag, stop_file] = args.as_slice()
+            && flag == "--game"
+            && out_flag == "--output"
+            && stop_flag == "--stop"
+        {
+            return game(Path::new(directory), program, output, stop_file);
+        }
         // (guest, output, the measure asked for and its file); every path relative to the repository root
         let (guest_path, output, measure) = match args.as_slice() {
             [guest, flag, output] if flag == "--output" => (guest, output, None),
@@ -167,31 +174,8 @@ mod run {
         // the guest, as `tests/test_timed_waits.py` `run_guest` loads it: the program's own name probe.exe
         let data = fs::read(root.join(guest_path)).map_err(|e| format!("{guest_path}: {e}"))?;
         let loaded = pe_loader::load(&data, None, "probe.exe").map_err(|e| format!("{guest_path}: {e:?}"))?;
-        let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA)
-            .map_err(|e| format!("the guest runtime's build: {e:?}"))?;
-        let services = guest_runtime::services::services(
-            &guest_runtime::texts(&root).map_err(|e| format!("the guest runtime's sources: {e:?}"))?,
-        )
-        .map_err(|e| format!("the guest runtime's services: {e:?}"))?;
-        let exports: serde_json::Value = serde_json::from_str(&text(&root.join("specs/windows_exports.json"))?)
-            .map_err(|e| format!("specs/windows_exports.json: {e}"))?;
-        let modules: BTreeSet<String> = exports["modules"]
-            .as_object()
-            .ok_or("specs/windows_exports.json holds no modules")?
-            .keys()
-            .cloned()
-            .collect();
-        let symbols = vm_compiler_symbols(&text(&root.join("tools/vm_compiler/stencil_table.h"))?)
-            .map_err(|e| format!("tools/vm_compiler/stencil_table.h: {e:?}"))?;
-        let mut guest = Guest::new(&loaded, &image, &services, &start, &modules, &symbols)
-            .map_err(|e| format!("the guest: {e:?}"))?;
-
-        let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
-        vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
-            .map_err(|e| format!("{e:?}"))?;
-        let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
-        let mut host = HostCompiler::default();
-        let out = run_compiling(&mut guest, &loaded, &vcpu, MAX_STEPS, &mut host).map_err(|e| format!("{e:?}"))?;
+        let mut guest = guest_of(&root, &loaded, &start)?;
+        let out = on_one_vcpu(&mut guest, &loaded)?;
 
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
         if let Some((which, file)) = measure {
@@ -230,13 +214,144 @@ mod run {
             fs::write(root.join(file), json.to_string()).map_err(|e| format!("{file}: {e}"))?;
         }
         if !matches!(out.stop, Stop::ExitProcess { .. }) {
-            return Err(format!("{guest_path} stopped at {:?}, not at ExitProcess", out.stop));
+            return Err(format!(
+                "{guest_path} stopped at {}, not at ExitProcess",
+                stop_name(&out.stop)
+            ));
         }
         let blocks: Vec<(u64, u64, u64)> = out.translations.iter().map(|t| (t.start, t.end, t.code)).collect();
         let mut stdout = io::stdout().lock();
         for line in translation_lines(&sha256(&data), loaded.entry, &blocks, started.elapsed()) {
             writeln!(stdout, "{line}").map_err(|e| e.to_string())?;
         }
+        Ok(())
+    }
+
+    /// The guest for `loaded` and `start`: the runtime image the build makes, its services, the exported modules and
+    /// the VM compiler's symbols, as `tests/test_timed_waits.py` builds a VM.
+    fn guest_of(root: &Path, loaded: &pe_loader::Loaded, start: &Start) -> Result<Guest, String> {
+        let (_, image) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA)
+            .map_err(|e| format!("the guest runtime's build: {e:?}"))?;
+        let services = guest_runtime::services::services(
+            &guest_runtime::texts(root).map_err(|e| format!("the guest runtime's sources: {e:?}"))?,
+        )
+        .map_err(|e| format!("the guest runtime's services: {e:?}"))?;
+        let exports: serde_json::Value = serde_json::from_str(&text(&root.join("specs/windows_exports.json"))?)
+            .map_err(|e| format!("specs/windows_exports.json: {e}"))?;
+        let modules: BTreeSet<String> = exports["modules"]
+            .as_object()
+            .ok_or("specs/windows_exports.json holds no modules")?
+            .keys()
+            .cloned()
+            .collect();
+        let symbols = vm_compiler_symbols(&text(&root.join("tools/vm_compiler/stencil_table.h"))?)
+            .map_err(|e| format!("tools/vm_compiler/stencil_table.h: {e:?}"))?;
+        Guest::new(loaded, &image, &services, start, &modules, &symbols).map_err(|e| format!("the guest: {e:?}"))
+    }
+
+    /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop.
+    fn on_one_vcpu(guest: &mut Guest, loaded: &pe_loader::Loaded) -> Result<Outcome, String> {
+        let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
+        vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+            .map_err(|e| format!("{e:?}"))?;
+        let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
+        let mut host = HostCompiler::default();
+        run_compiling(guest, loaded, &vcpu, MAX_STEPS, &mut host).map_err(|e| format!("{e:?}"))
+    }
+
+    /// A stop by its kind and reason, without host addresses, which move when the runtime image is rebuilt (Sprint
+    /// 186): what `store/batch_run/first-stop-2026-10-28.tsv` holds.
+    fn stop_name(stop: &Stop) -> String {
+        match stop {
+            Stop::HostRequest { op, why, .. } => format!("HostRequest op {op}: {why}"),
+            Stop::Hvc { number, .. } => format!("Hvc {number}"),
+            Stop::Handover { why, .. } => format!("Handover: {why}"),
+            Stop::Model { rip, why } => format!("Model at 0x{rip:x}: {why}"),
+            other => format!("{other:?}"),
+        }
+    }
+
+    /// `USER_ENVIRONMENT` (vm_backend 342-343): the environment the batch run's game starts with.
+    const USER_ENVIRONMENT: [&str; 3] = [
+        "TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
+        "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
+        "USERPROFILE=C:\\Users\\runneradmin",
+    ];
+    /// `BATCH_ARGUMENTS` (scripts/run_frontier.py 64)
+    const BATCH_ARGUMENTS: &str = "-batchmode -nographics -logFile \"C:\\w2m\\unity.log\"";
+    /// `CLOCK_RATE` and `REFERENCE_START` (scripts/run_frontier.py 68-69): instructions a second, and game run
+    /// 38216081440's start as a FILETIME
+    const CLOCK_RATE: u64 = 1_400_000_000;
+    const REFERENCE_START: u64 = 134_362_624_920_000_000;
+
+    /// The batch run on the Rust host (Sprint 186; reviewer-2's High 1 of its review of 182-184): `program` in
+    /// `directory`, its DLLs supplied from the directory, started as `scripts/run_frontier.py` 266-273 starts it (a GUI
+    /// program, foreground held, `USER_ENVIRONMENT`, `BATCH_ARGUMENTS`, the instruction clock), run on one vCPU to its
+    /// stop; the guest's output to `output` and the stop to `stop_file`, each relative to the repository root.
+    fn game(directory: &Path, program: &str, output: &str, stop_file: &str) -> Result<(), String> {
+        let root = root();
+        let started = Instant::now();
+        let data = fs::read(directory.join(program)).map_err(|e| format!("{program}: {e}"))?;
+        let supply = |name: &str| fs::read(directory.join(name)).ok();
+        let loaded = pe_loader::load(&data, Some(&supply), program).map_err(|e| format!("{program}: {e:?}"))?;
+        let mut start = Start::console(program);
+        start.gui = true;
+        start.foreground_held = true;
+        start.environment = USER_ENVIRONMENT.iter().map(|s| s.to_string()).collect();
+        start.command_line = Some(format!("\"C:\\w2m\\app\\{program}\" {BATCH_ARGUMENTS}"));
+        start.instruction_clock = Some((CLOCK_RATE, REFERENCE_START));
+        let mut guest = guest_of(&root, &loaded, &start)?;
+        let out = on_one_vcpu(&mut guest, &loaded)?;
+        fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
+        let mut tsv = format!(
+            "stop\t{}\nseconds\t{:.1}\n",
+            stop_name(&out.stop),
+            started.elapsed().as_secs_f64()
+        );
+        if let Stop::HostRequest { op, .. } = out.stop {
+            // the request's arguments on the transport page (vm_backend 3808-3812); HOST_MODULE's name is UTF-16 at a0,
+            // a1 characters (3892-3893)
+            use guest_runtime::layout::{MONITOR_SIZE, TRANSPORT_OFF};
+            let mem = guest.memory.as_slice();
+            let word = |k: u64| {
+                let at = (MONITOR_SIZE + TRANSPORT_OFF + 8 * k) as usize;
+                u64::from_le_bytes(mem[at..at + 8].try_into().unwrap())
+            };
+            let (a0, a1, a2) = (word(1), word(2), word(3));
+            tsv += &format!("arguments\t0x{a0:x} 0x{a1:x} 0x{a2:x}\n");
+            if op == 15
+                && let Some(at) = guest.layout.offset(a0)
+            {
+                let units: Vec<u16> = mem[at as usize..at as usize + 2 * a1 as usize]
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|c| u16::from_le_bytes(*c))
+                    .collect();
+                tsv += &format!(
+                    "module asked for\t{} (loading {a2})\n",
+                    String::from_utf16_lossy(&units)
+                );
+            }
+        }
+        tsv += &format!(
+            "images\t{}\n",
+            loaded
+                .images
+                .iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        for (number, n) in &out.exits {
+            tsv += &format!("hvc {number}\t{n}\n");
+        }
+        for (name, n) in &out.counts {
+            tsv += &format!("{name}\t{n}\n");
+        }
+        tsv += &format!("blocks the host compiled\t{}\n", out.translations.len());
+        fs::write(root.join(stop_file), &tsv).map_err(|e| format!("{stop_file}: {e}"))?;
+        print!("{tsv}");
         Ok(())
     }
 }

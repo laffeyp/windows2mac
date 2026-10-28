@@ -1,0 +1,47 @@
+# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs; the guests' fourth column is the frozen Python host's stop and output on one vCPU, 2026-10-28
+stop	HostRequest op 15: host request 15: not served by the Rust host yet
+arguments	0x181672a98 0x1c 0x1
+module asked for	api-ms-win-core-synch-l1-2-0 (loading 1)
+images	Hail to the Rainbow.exe UnityPlayer.dll
+hvc 1	5
+hvc 8	1
+hvc 11	1
+code cache full	0
+compiled	48
+cut by decode	0
+cut by encoder	0
+cut by guarded	0
+cut by key size	0
+cut by no choice	0
+cut by no stencil	0
+decode	0
+encoder	0
+full	0
+guarded	0
+host only	0
+key size	0
+log full	0
+no choice	0
+no stencil	0
+not a code page	5
+page needs a split	0
+pages protected	8
+pause	0
+recon full	0
+scan pages	0
+blocks the host compiled	48
+guest	busychild	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	crosswake	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	handshake	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	model_steps	ExitProcess	'ExitProcess' b'48743d4d4fd79694\nc00000917f800000\n'
+guest	mutual_context	HostRequest op 30: thread request 5: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	mutual	HostRequest op 30: thread request 5: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	pingpong	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	qpc	ExitProcess	'ExitProcess' b'00001abcd9b5ed09\n'
+guest	qpc2	ExitProcess	'ExitProcess' b'00001abcd9c0b5c6\n'
+guest	readied	ExitProcess	'ExitProcess' b'done\n'
+guest	sleeper	ExitProcess	'ExitProcess' b'woke\ndone\n'
+guest	spinchild	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	statsize	HostRequest op 24: host request 24: not served by the Rust host yet	'ExitProcess' b'done\n'
+guest	twoproc	HostRequest op 33: host request 33: not served by the Rust host yet	'ExitProcess' b'child ended\n'
+guest	twoready	ExitProcess	'ExitProcess' b'done\n'

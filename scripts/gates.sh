@@ -108,6 +108,26 @@ cargo clippy --all-targets -- -D warnings
 # the case runner (crates/w2m_vm/tests/case_runner.rs) fails rather than skips when its inputs are missing: the
 # downloaded Windows results (build/probe-runs) and the Python words fixture (build/case_runner) (Sprint 149; the
 # review of link 3 found it could pass having judged nothing). CI, on Linux, does not compile it.
+# the batch run on the Rust host to its first stop, and each tests/data guest's stop (Sprint 186; reviewer-2's High 1
+# of its review of 182-184): `w2m-vm` built and run, its stops written under build/batch_run/, which
+# crates/w2m_vm/tests/batch_run.rs holds to store/batch_run/first-stop-2026-10-28.tsv; the game is the batch run's
+# depot, ~/w2m-depots/hail-to-the-rainbow
+if [ $rust != none ]; then
+  cargo build --release --quiet --bin w2m-vm
+  mkdir -p build/batch_run
+  rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv
+  echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm --game "$HOME/w2m-depots/hail-to-the-rainbow" \
+    "Hail to the Rainbow.exe" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv > /dev/null
+  for p in tests/data/timed_waits/*.exe; do
+    n=$(basename "$p" .exe)
+    if why=$(echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "$p" --output "build/batch_run/guest-$n.txt" 2>&1 >/dev/null); then
+      stop=ExitProcess
+    else
+      stop=$(printf '%s\n' "$why" | sed -n 's/.* stopped at \(.*\), not at ExitProcess$/\1/p' | tail -1)
+    fi
+    printf '%s\t%s\n' "$n" "$stop" >> build/batch_run/guests.tsv
+  done
+fi
 if [ $rust = all ]; then
   W2M_REQUIRE_CASE_RUNS=1 cargo test --quiet
 elif [ $rust = crates ]; then

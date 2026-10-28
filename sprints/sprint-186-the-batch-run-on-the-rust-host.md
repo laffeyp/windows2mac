@@ -81,3 +81,29 @@ The batch run's first stop on the Rust host is named and held, and every tests/d
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: the batch run on the Rust host.
+
+## result
+
+- **The batch run's start:** `w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv>` loads the program
+  with its DLLs read from the directory, starts it as `run_frontier.py` 266-273 does, and runs it on one vCPU; the
+  guest's build and the VM's set-up moved into `guest_of` and `on_one_vcpu`, which the guest form shares.
+- **The stop:** MODULE 15, "host request 15: not served by the Rust host yet", with arguments 0x181672a98 0x1c 0x1:
+  UnityPlayer.dll's LoadLibrary of "api-ms-win-core-synch-l1-2-0" (loading 1). Before it: the program and UnityPlayer.dll
+  loaded, 5 hvc #1, 1 hvc #8 and 1 hvc #11 exits, 48 blocks compiled, 8 pages protected, in about 0.1 s. Held in
+  `store/batch_run/first-stop-2026-10-28.tsv`, without host addresses (`stop_name`).
+- **The guests:** on the Rust host 6 of 15 end at ExitProcess (`model_steps`, `qpc`, `qpc2`, `readied`, `sleeper`,
+  `twoready`); `busychild`, `crosswake`, `handshake`, `pingpong`, `spinchild` and `twoproc` stop at KERNEL 33,
+  `mutual` and `mutual_context` at THREAD 30's request 5, `statsize` at FILE_STAT 24. The frozen Python host, run the
+  same day on one vCPU, ends all 15 at ExitProcess; its stops and outputs are the held file's fourth column.
+- **The judge:** `scripts/gates.sh` builds and runs `w2m-vm` on the game and each guest before the tests, and
+  `crates/w2m_vm/tests/batch_run.rs` holds what it wrote to the committed file, failing under
+  `W2M_REQUIRE_CASE_RUNS=1` when the files are missing.
+- **The census:** rows 5, 5a, 8, 10 and 12 and the counts' paragraph brought up to date.
+- **Plant 1** (the DLL supply dropped): the stop stayed MODULE 15, asked by the program's own CRT; `batch_run.rs` failed,
+  "left: [... "images\tHail to the Rainbow.exe" ... "compiled\t38" ...]" against the held UnityPlayer.dll and 48.
+  Restored byte for byte.
+- **Plant 2** (`-batchmode` dropped from the command line) reached no judge: nothing reads the command line before
+  MODULE 15, and `batch_run.rs` passed. Its replacement on the judged path, the stop's name without its op, failed:
+  "left: ["stop\tHostRequest: host request 15: not served by the Rust host yet"". Restored byte for byte.
+- **Departures:** plant 1's expected value (the stop moving into loading) was wrong, as quoted; the record of a run that
+  does not end at ExitProcess is not written, as `w2m-vm.rs` 8-10 says. Every multi-line edit used the Edit tool.
