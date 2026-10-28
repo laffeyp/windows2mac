@@ -341,6 +341,15 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 149 (2026-10-25, closed)
+- **Scope:** the large review of link 3 (reviewer-2, 2026-10-25): two blocking findings (a vacuous pass; the revisit unmeasured) and Mediums 1-4, fixed before link 4.
+- **Dual contract:** signal — none fired; Sprint 150 binds the runner's verdicts to records (Medium 5); artifact pass (fmt, clippy, the gates with `W2M_REQUIRE_CASE_RUNS=1`); observation pass (counts equal per run, zero differences, three plants named, the revisit measured at 235 of 249).
+- **CI does not run:** the case runner (`crates/w2m_vm/tests/case_runner.rs`: macOS only, downloaded results, the fixture). The arena's replay now does.
+- **Corrections:** Sprint 148's observation 3 said the runner judges everything `scripts/vm_oracle.py` judges; it does not judge the 116,718 cases the model runs. Sprints 147 and 148 gave 173,776 judged; set 039 runs twice, and 136,153 distinct cases are judged of 250,840. Sprint 145's observation 1 was marked resolved-here while the vacuous path stayed in the code.
+- **Rubber Duck Pass:** *Observation 1 (two plants that ran nothing):* the first runs of two plants passed a command through a zsh variable, which does not word-split, and exited 127 without running; the empty grep was nearly read as a pass. Disposition: resolved-here (rerun with the command written out; both named). *Observation 2 (the fixture's generator is inline Python):* regenerating the fixture runs the frozen Python inline, which the user's ruling allows as running; it is named in WORKING_AGREEMENT. Disposition: recorded.
+- **Closed:** Sprint 148's CI run 40172473690 (success on 90d5b84b6).
+- **Files:** crates/w2m_vm/, scripts/gates.sh, store/case_runner/, store/rules/registry.tsv, WORKING_AGREEMENT.md, KIT_DIARY.md, BLACKBOARD.md, sprints/sprint-149-the-case-runner-bound.md, signal-reports/sprint-149-report.md.
+
 ### Sprint 148 (2026-10-25, closed)
 - **Scope:** the case runner's last judged fields: MXCSR, XMM, the YMM upper halves and the x87 state, at completion and at a fault.
 - **Dual contract:** signal — none fired, as the card says; artifact pass (fmt, clippy, the gates); observation pass (zero differences; the fields' reach counted; the plant named).
