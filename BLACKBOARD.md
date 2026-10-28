@@ -594,7 +594,7 @@
 
 ## Sprint tail
 
-### Sprint 185 (2026-10-28, gates running)
+### Sprint 185 (2026-10-28, closed)
 - **Scope:** reviewer-2's Medium 5 of its review of Sprints 178-181: the run loop's judge of `model_step` widened to the batch run's every hvc #11 class and a raised #XM
 - **Dual contract:** signal — none, as the card says (the judge is the run-loop test); artifact pass (`scripts/gates.sh` exit 0 in 908 s, kept as "sprint 185" at HEAD 63093d4aa: Rust tests all, the planted chain 34, the Python gates without the three multi-vCPU tests, then those three each passed once in their own stage, `build/gates-multi-vcpu.txt`; an earlier run on the same work failed one of them, Observation 4); observation pass (the Rust run loop ends `model_steps.exe` as the frozen Python host: ExitProcess 0, "48743d4d4fd79694" and "c00000917f800000", hvc #10 301 and #11 701; plant 1 named the first line, "6df648a15c8ca4a2"; plant 2 the second, "c000008f7f800000").
 - **CI does not run:** the run-loop judges (they need Hypervisor.framework); CI runs `c_words`, whose image-symbol hold it now passes over with a printed line.
