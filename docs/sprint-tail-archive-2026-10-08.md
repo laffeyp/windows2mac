@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 165 (2026-10-28, closed)
+- **Scope:** KIT_DIARY's entry for Sprints 150-164, with step 3's synthesis and hypothesis H5.
+- **Dual contract:** signal — none, as the card says (no producer runs; the Signal Report says the card names no tag and the sprint made no record); artifact pass (the gates exit 0); observation pass (every number in the entry read back against the records, the tail and the archive before the commit: 40 events and three exempt fields at 158; 3,667 ns at 142; 584-1,042 ns and 813-852 ns at 163; WFE 0 and WFI 1,000; 83 ns over 3,018 takings, 246 µs, 57.5 µs, 163 and 179 ticks, 2,914 of 3,002 at 164; the sprints of each recurring class).
+- **CI does not run:** nothing this sprint adds; CI runs the workspace's tests as before.
+- **Rubber Duck Pass:** *Sequence narration:* no record; the work is one KIT_DIARY entry and a hypothesis row. *Observation 1 (two numbers wrong in the first draft):* the entry said the Signal Report gate had stood "five weeks"; it is from 2026-10-24, four days and 37 sprints; and it called the ring's count "one count away", which said nothing. Both corrected before the commit by the read-back the card required. *Observation 2 (a class recorded under the wrong sprint):* the card's draft put a glob at 149; 149's fault was a command in a zsh variable, not word-split, and the glob was 159's. Corrected in the card before its commit. Disposition: resolved-here (both).
+- **Closed:** Sprint 164's CI run 40650672275 on 605f0ce55, in progress at this close; its result is recorded in Sprint 166's tail entry.
+- **Files:** KIT_DIARY.md, docs/sprint-tail-archive-2026-10-08.md (Sprint 155's entry), BLACKBOARD.md, sprints/sprint-165-kit-diary-and-step-3s-synthesis.md, signal-reports/sprint-165-report.md.
+
 ### Sprint 164 (2026-10-28, closed)
 - **Scope:** step 3's third measurement on a record: how long the runtime word is held per taking, and how long a taker waits, by site.
 - **Dual contract:** signal — SESSION_INIT 1 (purpose measurement, 0.11), MEASUREMENT_RECORDED 41, SESSION_COMPLETED 1 (completed) on `w2m-vm-measurements-1793171817000000000`, every tag the card named and none it did not; artifact pass (fmt, clippy, the gates exit 0); observation pass (each guest to ExitProcess, the timed `sleeper`'s output equal to the untimed; no time backward and no taking unwritten; the planted slot swap named "qpc: 15 takings, 15 backward").
