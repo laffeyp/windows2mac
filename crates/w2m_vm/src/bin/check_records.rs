@@ -7,8 +7,9 @@
 //! (`state_transitions`; a rule whose payload match is prose is checked for order alone, and its count says so), and E1
 //! and E6 (`evidence_constraints`). T5, T6 and S14 are the guest trace's, enforced at ingest.
 //!
-//! The rules come from `signals/rust-current.json`'s vocabulary; its three rule sections equal 0.9's, which the Python
-//! reads (compared 2026-10-28). Prints, per rule, the records it applied to, its violations and what it could not check,
+//! The rules come from `signals/rust-current.json`'s vocabulary. Its three rule sections equalled 0.9's, which the
+//! Python reads, until 0.12 (Sprint 170), whose T4 leaves out an execution with `guest_trace` false (P22); the two
+//! checks agree on every record that carries no such execution. Prints, per rule, the records it applied to, its violations and what it could not check,
 //! as the Python prints them. With `--since YYYY-MM-DD`, exits 1 on a violation in a record made that day or later (a
 //! record's time is its directory's nanosecond suffix); older records are reported, never rewritten.
 //!
@@ -313,10 +314,14 @@ fn t3(events: &[Event], found: &mut Vec<(String, String)>, applied: &mut Counts,
     }
 }
 
-/// `_t4` (130-138).
+/// `_t4` (130-138), with 0.12's scope (P22, Sprint 170): an EXECUTION_COMPLETED whose `guest_trace` is false makes no
+/// guest trace and is not held to an ingest.
 fn t4(events: &[Event], found: &mut Vec<(String, String)>, applied: &mut Counts) {
     let end = events.iter().find(|e| e.kind == "SESSION_COMPLETED").map(|e| e.seq);
     for c in events.iter().filter(|e| e.kind == "EXECUTION_COMPLETED") {
+        if c.payload.get("guest_trace") == Some(&Value::Bool(false)) {
+            continue;
+        }
         bump(applied, "T4");
         let sha = c.payload.get("trace_sha256");
         let follow = events

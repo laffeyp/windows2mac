@@ -367,8 +367,14 @@
    ],
    "source": "reviewer-2's review of Sprints 149-150 (2026-10-25), High 1; sprints/sprint-152-the-judges-records-made-true.md; store/superseded/README-2026-10-25.md",
    "rationale": "The case runner's runs are executions in the VM judged by their end state, not by guest output, so T4's ingest cannot be met honestly; Sprint 150 met it with TRACE_INGESTED over verdict lines, and Sprint 152 dropped the execution events instead, as differential.py's records carried none. A judge-only execution marked on EXECUTION_COMPLETED would let the records name each run again without a false ingest.",
-   "status": "open",
-   "revisit": "the first sprint whose records need a judged execution named by an event (the skeleton's gate, link 6)"
+   "status": "ratified",
+   "revisit": "the first sprint whose records need a judged execution named by an event (the skeleton's gate, link 6)",
+   "ratified": {
+    "date": "2026-10-28",
+    "by": "agent-resolved",
+    "into": "0.12",
+    "grounds": "project — reviewer-2's Low of 2026-10-27 (P22 settled before step 4's first record), Decision 2026-10-28 (the records check in Rust first, Sprint 169); SDD — PRINCIPLES.md proposal taxonomy (an optional field and a rule's scope bump the minor version), AGENTS.md hard rule 2; practice — a test that judges a program's end state records no output trace, and says so rather than ingesting its verdicts as one (Sprint 150's error, reviewer-2's High 1 of 2026-10-25)"
+   }
   },
   {
    "id": "P23",
@@ -379,8 +385,14 @@
    ],
    "source": "reviewer-2's review of Sprints 151-152 (2026-10-25), concern (c)",
    "rationale": "The case runner's comparisons name the Windows runs' GitHub ids as their reference and the session as their target; no execution event on the record carries either, as differential.py's records (vm-oracle-<run>) did not. The tag's note says both are execution ids.",
-   "status": "open",
-   "revisit": "with P22"
+   "status": "ratified",
+   "revisit": "with P22",
+   "ratified": {
+    "date": "2026-10-28",
+    "by": "agent-resolved",
+    "into": "0.12",
+    "grounds": "project — the case runner's records name the Windows runs' GitHub ids and the session (crates/w2m_vm/src/bin/case_runs.rs), reviewer-2's concern (c) of 2026-10-25; SDD — PRINCIPLES.md proposal taxonomy (a note's scope, no type change), AGENTS.md hard rule 2; practice — a comparison names its reference where the reference lives, here a CI run outside the record"
+   }
   },
   {
    "id": "P24",

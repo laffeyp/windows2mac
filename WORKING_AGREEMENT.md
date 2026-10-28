@@ -27,7 +27,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 
 | Type / module | Canonical home |
 |---|---|
-| Signal vocabulary | `signals/rust-current.json` names the version Rust code speaks (0.11 since 2026-10-27, P24; 0.10 from 2026-10-24, P21); `signals/current.json` names the frozen Python host's (0.9, P20), until the Python host moves under `oracle/` (Decision 2026-10-24, Sprint 131); `signals/<version>.json` + `<version>-rationale.md`; proposals in `signals/proposals.json` |
+| Signal vocabulary | `signals/rust-current.json` names the version Rust code speaks (0.12 since 2026-10-28, P22 and P23; 0.11 from 2026-10-27, P24; 0.10 from 2026-10-24, P21); `signals/current.json` names the frozen Python host's (0.9, P20), until the Python host moves under `oracle/` (Decision 2026-10-24, Sprint 131); `signals/<version>.json` + `<version>-rationale.md`; proposals in `signals/proposals.json` |
 | Vocabulary rationale | `signals/<version>-rationale.md`, one per version (0.1-0.7) |
 | Vocabulary proposals | `signals/proposals.json` |
 | Vocabulary structure gate | `scripts/check_vocab.py` |
@@ -129,7 +129,7 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 ## Vocabulary discipline overrides
 
 - **Validator-extras posture:** strict (default), unless Sprint 0 records a reason.
-- **Vocabulary location:** `signals/rust-current.json` → `signals/0.11.json` for Rust; `signals/current.json` → `signals/0.9.json` for the frozen Python host (0.1-0.9 kept unchanged).
+- **Vocabulary location:** `signals/rust-current.json` → `signals/0.12.json` for Rust; `signals/current.json` → `signals/0.9.json` for the frozen Python host (0.1-0.9 kept unchanged).
 - **Vocabulary CI gate command:** `python3 scripts/check_vocab.py` (structure of the version `signals/current.json` names; added Sprint 000) for the Python host's 0.9; `target/release/vocabulary_generator --check` for Rust's 0.10, which also fails a hand-written crate that names a deprecated tag (Sprint 131).
 
 ---

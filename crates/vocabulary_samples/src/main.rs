@@ -84,6 +84,16 @@ fn run() -> Result<(), String> {
             HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
         writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
     }
+    // an execution judged by its end state (P22, Sprint 170): `guest_trace` false, which the samples' bools (true)
+    // never write, read and written by EXECUTION_COMPLETED's type and met by substrate's schema
+    let completed = vocab
+        .harness_tags()
+        .find(|t| t.name == "EXECUTION_COMPLETED")
+        .ok_or("no EXECUTION_COMPLETED")?;
+    let mut payload = sample_payload(completed, true, &vocab);
+    payload.insert("guest_trace".to_string(), Value::from(false));
+    let event = HarnessEvent::from_kind("EXECUTION_COMPLETED", &Value::Object(payload)).map_err(|e| e.to_string())?;
+    writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
     out.flush().map_err(|e| e.to_string())
 }
 

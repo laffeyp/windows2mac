@@ -86,7 +86,7 @@ fn every_deprecated_tag_is_refused_by_name_on_both_planes() {
             (refused.path.as_str(), refused.reason.as_str()),
             (
                 if tag.is_guest() { "tag" } else { "kind" },
-                format!("{:?} is deprecated in vocabulary 0.11", tag.name).as_str()
+                format!("{:?} is deprecated in vocabulary {}", tag.name, events::VOCAB_VERSION).as_str()
             )
         );
     }

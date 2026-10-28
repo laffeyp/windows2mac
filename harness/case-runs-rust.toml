@@ -5,7 +5,7 @@
 
 [baseline]
 harness = "w2m"
-vocabulary = "0.11"
+vocabulary = "0.12"
 # not `differential`: that key marks the causal records differential.py writes, which tests/test_differential.py holds
 # to their chain; this record's events come from one Producer
 judge = "case-runner-rust"

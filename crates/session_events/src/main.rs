@@ -77,9 +77,10 @@ mod tests {
         assert_eq!(
             harness_line(&session_init()),
             format!(
-                "{{\"kind\": \"SESSION_INIT\", \"payload\": {{\"vocab_version\": \"0.11\", \"profile\": \
+                "{{\"kind\": \"SESSION_INIT\", \"payload\": {{\"vocab_version\": \"{}\", \"profile\": \
                  \"w2m-session-check\", \"contract_version\": \"0.0\", \"harness_version\": \"{HARNESS_VERSION}\", \
-                 \"purpose\": \"conformance\"}}}}"
+                 \"purpose\": \"conformance\"}}}}",
+                events::VOCAB_VERSION
             )
         );
     }

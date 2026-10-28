@@ -77,7 +77,8 @@
       "guest_line_count": {"type": "int", "ge": 0, "le": 9007199254740991},
       "exit_code": {"type": "int", "ge": -9007199254740991, "le": 9007199254740991, "optional": true},
       "elapsed_seconds": {"type": "float", "optional": true},
-      "unobserved": {"type": "str", "optional": true}
+      "unobserved": {"type": "str", "optional": true},
+      "guest_trace": {"type": "bool", "optional": true}
     },
     "EXECUTION_FAILED": {
       "execution_id": {"type": "str", "min_length": 1},

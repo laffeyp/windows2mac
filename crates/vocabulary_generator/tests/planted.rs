@@ -91,9 +91,15 @@ fn a_hand_written_crate_naming_a_deprecated_tag_fails_check_naming_both() {
     .unwrap();
     let out = scratch.generator(&["--check"]);
     assert_eq!(out.status.code(), Some(1));
+    // the version from the pointer the generator reads, not a literal: Sprints 162 and 170 found the literal pinned
+    let current: Value =
+        serde_json::from_str(&fs::read_to_string(repository().join("signals/rust-current.json")).unwrap()).unwrap();
     assert_eq!(
         String::from_utf8_lossy(&out.stderr).trim(),
-        "crates/planted/src/lib.rs: names GUEST_THREAD_EXITED, deprecated in vocabulary 0.11"
+        format!(
+            "crates/planted/src/lib.rs: names GUEST_THREAD_EXITED, deprecated in vocabulary {}",
+            current["version"].as_str().unwrap()
+        )
     );
 }
 
