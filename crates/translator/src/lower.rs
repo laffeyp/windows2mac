@@ -2717,13 +2717,43 @@ mod tests {
     /// Every condition the lifter gives (`lift::cc`'s 16) has its flags. No end-to-end judge reaches `cond_flags` for
     /// every name: the C words judge and the case runner compile one instruction at a time, where a Jcc, SETcc or
     /// CMOVcc holds no flags op, and the two guests' host-compiled blocks branch on no `le` (Sprint 166's plant).
+    /// An instruction branching on a condition the table lacks is refused by name through `insn_flags`, the path the
+    /// run loop's look-ahead takes (`w2m_vm::compile`), where the frozen Python's KeyError ends the run (Sprint 171).
+    /// No lifted instruction carries such a condition (`lift::cc` gives only the 16 the table names), so it is built.
+    #[test]
+    fn insn_flags_refuses_an_unknown_condition_by_name() {
+        let ins = Lifted {
+            address: 0x1000,
+            length: 2,
+            iclass: "JXX".into(),
+            ops: vec![Op::Br { cond: "xx", t: 0 }],
+        };
+        assert!(insn_flags(&ins, None).unwrap_err().0.contains("\"xx\""));
+    }
+
+    /// Each one's mask is `COND_FLAGS`'s (`src/w2m/vm_backend.py` 852-853), by value, a negation as its condition
+    /// (Sprint 171; reviewer-2's High 1 of 2026-10-28: the test held only membership, so a wrong mask passed).
     #[test]
     fn every_condition_the_lifter_gives_has_its_flags() {
+        // vm_backend 852-853: {"o": U_OF, "b": U_CF, "z": U_ZF, "s": U_SF, "p": U_PF, "be": U_CF | U_ZF,
+        // "l": U_SF | U_OF, "le": U_ZF | U_SF | U_OF}
+        let python = [
+            ("o", U_OF),
+            ("b", U_CF),
+            ("z", U_ZF),
+            ("s", U_SF),
+            ("p", U_PF),
+            ("be", U_CF | U_ZF),
+            ("l", U_SF | U_OF),
+            ("le", U_ZF | U_SF | U_OF),
+        ];
         for suffix in [
             "O", "NO", "B", "NB", "Z", "NZ", "BE", "NBE", "S", "NS", "P", "NP", "L", "NL", "LE", "NLE",
         ] {
             let cc = crate::lift::cc(suffix).unwrap();
-            assert!(cond_flags(cc).is_ok(), "{cc}");
+            let base = cc.strip_prefix('n').unwrap_or(cc);
+            let want = python.iter().find(|(k, _)| *k == base).map(|(_, m)| *m);
+            assert_eq!(cond_flags(cc).ok(), want, "{cc}");
         }
     }
 

@@ -18,12 +18,13 @@ use vocabulary_generator::{load_current, sample_payload};
 
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let (mut root, mut plant, mut plant_metric) = (PathBuf::from("."), false, false);
+    let (mut root, mut plant, mut plant_metric, mut plant_guest_trace) = (PathBuf::from("."), false, false, false);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--root" => root = args.next().map(PathBuf::from).ok_or("--root needs a directory")?,
             "--plant-trailing-newline" => plant = true,
             "--plant-unknown-metric" => plant_metric = true,
+            "--plant-string-guest-trace" => plant_guest_trace = true,
             other => return Err(format!("unknown argument {other}")),
         }
     }
@@ -47,6 +48,25 @@ fn run() -> Result<(), String> {
             Err(e) => eprintln!("vocabulary_samples: the Rust type refuses the plant: {e}"),
         }
         let line = format!("{{\"kind\": \"MEASUREMENT_RECORDED\", \"payload\": {payload}}}");
+        writeln!(out, "{line}").map_err(|e| e.to_string())?;
+        return out.flush().map_err(|e| e.to_string());
+    }
+    if plant_guest_trace {
+        // Sprint 171 (reviewer-2's Medium 4): an EXECUTION_COMPLETED whose guest_trace is the string "false", where 0.12
+        // types it bool (P22); its Rust type refuses it, and the line, written past the type, substrate's schema must
+        // refuse too (Sprint 170's plant met the Rust type first and never reached the schema)
+        let tag = vocab
+            .harness_tags()
+            .find(|t| t.name == "EXECUTION_COMPLETED")
+            .ok_or("no EXECUTION_COMPLETED")?;
+        let mut payload = sample_payload(tag, true, &vocab);
+        payload.insert("guest_trace".to_string(), Value::from("false"));
+        let payload = Value::Object(payload);
+        match HarnessEvent::from_kind("EXECUTION_COMPLETED", &payload) {
+            Ok(_) => return Err("the Rust type accepted guest_trace \"false\"".into()),
+            Err(e) => eprintln!("vocabulary_samples: the Rust type refuses the plant: {e}"),
+        }
+        let line = format!("{{\"kind\": \"EXECUTION_COMPLETED\", \"payload\": {payload}}}");
         writeln!(out, "{line}").map_err(|e| e.to_string())?;
         return out.flush().map_err(|e| e.to_string());
     }

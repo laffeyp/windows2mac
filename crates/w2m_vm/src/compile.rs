@@ -90,7 +90,7 @@ impl HostCompiler {
         }
         let exit_va = guest.code.dispatch_va;
         self.protect_code(guest, start, addr, None)?; // before the successor scan, which reads the pages it covers
-        let live = self.flags_live_out(guest, start, insns.last().unwrap(), addr);
+        let live = self.flags_live_out(guest, start, insns.last().unwrap(), addr)?;
         let mem = guest.memory.as_mut_slice();
         let cursor = read_u64(mem, VM_COMPILER + VMC_CURSOR);
         let base = MONITOR_VA + cursor;
@@ -135,7 +135,7 @@ impl HostCompiler {
 
     /// `_flags_live_out` (4778-4788): the flags a block read after it ends, from its direct successors; a successor
     /// not known when compiling reads all.
-    fn flags_live_out(&mut self, guest: &Guest, start: u64, last: &Lifted, end: u64) -> u32 {
+    fn flags_live_out(&mut self, guest: &Guest, start: u64, last: &Lifted, end: u64) -> Result<u32, String> {
         let constant: BTreeMap<u32, u64> = last
             .ops
             .iter()
@@ -151,21 +151,21 @@ impl HostCompiler {
             return self.flags_live_in(guest, start, end);
         };
         let Some(target) = constant.get(&t) else {
-            return ALL_FLAGS;
+            return Ok(ALL_FLAGS);
         };
-        let taken = self.flags_live_in(guest, start, *target);
-        taken
+        let taken = self.flags_live_in(guest, start, *target)?;
+        Ok(taken
             | if cond == "always" {
                 0
             } else {
-                self.flags_live_in(guest, start, end)
-            }
+                self.flags_live_in(guest, start, end)?
+            })
     }
 
     /// `_flags_live_in` (4790-4825): the flags code at `addr` reads before writing them, from at most LIVENESS_SCAN
     /// instructions on its straight path; only pages already behind translated code are read, and `owner` joins each
     /// such page's blocks.
-    fn flags_live_in(&mut self, guest: &Guest, owner: u64, mut addr: u64) -> u32 {
+    fn flags_live_in(&mut self, guest: &Guest, owner: u64, mut addr: u64) -> Result<u32, String> {
         let (mut live, mut undecided) = (0u32, ALL_FLAGS);
         let mut previous: Option<Lifted> = None;
         for _ in 0..LIVENESS_SCAN {
@@ -185,15 +185,14 @@ impl HostCompiler {
             for p in pages {
                 self.code_pages.get_mut(&p).unwrap().insert(owner);
             }
-            // a condition the lowering does not name (Sprint 166): every flag counted live, which keeps the code
-            // right; the instruction's own compile refuses it by name
-            let Ok((read, written)) = insn_flags(&ins, previous.as_ref().and_then(nzcv_setter)) else {
-                return live | undecided;
-            };
+            // a condition the lowering does not name ends the compile by name, as the Python's KeyError leaves
+            // `_flags_live_in` (4812), `_compile` and `serve_exit` (5242) uncaught and ends the run (Sprint 171)
+            let (read, written) = insn_flags(&ins, previous.as_ref().and_then(nzcv_setter))
+                .map_err(|e| format!("0x{addr:x}, scanning the flags block 0x{owner:x} leaves live: {}", e.0))?;
             live |= read & undecided;
             undecided &= !(read | written);
             if undecided == 0 {
-                return live;
+                return Ok(live);
             }
             let br = ins.ops.iter().find_map(|op| match op {
                 Op::Br { cond, t } => Some((*cond, *t)),
@@ -216,7 +215,7 @@ impl HostCompiler {
                 _ => break,
             }
         }
-        live | undecided
+        Ok(live | undecided)
     }
 
     /// `_protect_code` (4535-4551): the pages under guest bytes [start, end) read-only, and the block over them noted

@@ -1,0 +1,24 @@
+# The case runner's planted discrepancy chain (Sprint 171; reviewer-2's Low 1 of 2026-10-28): the Rust case runner with
+# CF flipped in every completed case of the session's first run's Windows results, so its record holds
+# CANDIDATE_REJECTED, REDUCTION_COMPLETED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED per CF class (32 on the first
+# profile's runs, Sprint 167). The gates run it into a temporary root and hold it to rules S5 and E1 with
+# `check_records`. Run from the repository root after `cargo build --release`, on this Mac:
+#   W2M_CASE_PROFILE="<cpu>; <profile>" uv run substrate run --file harness/case-runs-planted.toml --root <tmp>/case-runs-planted-<ns>
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.12"
+judge = "case-runner-rust-planted"
+implementation = "the Rust case runner with the first run's CF flipped, a planted fault"
+reference = "the Intel runs of store/case_runner/expected.tsv"
+
+[[producer]]
+kind = "case_runs"
+command = ["../scripts/sign_and_run.sh", "../target/release/case_runs", "--rust-translator", "--plant-flip-cf"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "case_runs"
+
+[termination]
+recipe = "all_completed"

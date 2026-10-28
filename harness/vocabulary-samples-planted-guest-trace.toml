@@ -1,0 +1,21 @@
+# The planted fault of Sprint 171 (reviewer-2's Medium 4 of 2026-10-28): an EXECUTION_COMPLETED whose guest_trace is the
+# string "false", where vocabulary 0.12 types it bool (P22). The Rust type refuses it (the program says so on standard
+# error and writes the line past the type), and substrate's generated schema must refuse the line; the gates expect the
+# Producer failed, naming the field. Sprint 170's plant met the Rust type first and never reached the schema.
+# Run from the repository root after `cargo build --release` (the command is the release binary):
+#   uv run substrate run --file harness/vocabulary-samples-planted-guest-trace.toml
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.12"
+
+[[producer]]
+kind = "vocabulary_samples_planted_guest_trace"
+command = ["../target/release/vocabulary_samples", "--root", "..", "--plant-string-guest-trace"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "vocabulary_samples_planted_guest_trace"
+
+[termination]
+recipe = "all_completed"

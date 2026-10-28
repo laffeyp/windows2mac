@@ -524,6 +524,51 @@ fn missing_reports(root: &Path) -> Result<Vec<u32>, String> {
     Ok(missing)
 }
 
+/// The first sprint whose named plants must show their judge's failure in its result (Sprint 171).
+const FIRST_QUOTED_PLANT_SPRINT: u32 = 171;
+
+/// Sprints from 171 marked done whose card's observation contract names a planted fault and whose result section has
+/// no line that names a plant and quotes, in double quotes, what its judge printed (Sprint 171; reviewer-2's Medium 4 of
+/// 2026-10-28: plants recorded without reaching their judge, after KIT_DIARY's H5 said a lesson needs a check).
+fn unquoted_plants(root: &Path) -> Result<Vec<u32>, String> {
+    let mut unquoted = Vec::new();
+    for entry in fs::read_dir(root.join("sprints"))
+        .map_err(|e| format!("sprints: {e}"))?
+        .flatten()
+    {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(n) = name
+            .strip_prefix("sprint-")
+            .and_then(|r| r.get(..3))
+            .and_then(|d| d.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if n < FIRST_QUOTED_PLANT_SPRINT || !name.ends_with(".md") {
+            continue;
+        }
+        let card = fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
+        if !card.lines().any(|l| l.trim() == "status: done") {
+            continue;
+        }
+        let contract = section(&card, "## observation contract").to_lowercase();
+        if !contract.contains("planted fault") {
+            continue;
+        }
+        let result = section(&card, "## result");
+        let quoted = result.lines().any(|l| {
+            let lower = l.to_lowercase();
+            lower.contains("plant") && l.split('"').nth(1).is_some_and(|q| q.trim().len() >= 3)
+        });
+        if !quoted {
+            unquoted.push(n);
+        }
+    }
+    unquoted.sort_unstable();
+    unquoted.dedup();
+    Ok(unquoted)
+}
+
 fn run() -> Result<bool, String> {
     let mut args = std::env::args().skip(1);
     let (mut root, mut sprint, mut write, mut check, mut backfill) = (PathBuf::from("."), None, false, false, None);
@@ -549,7 +594,20 @@ fn run() -> Result<bool, String> {
         if missing.is_empty() {
             println!("every sprint from {FIRST_REPORTED_SPRINT:03} marked done has a Signal Report");
         }
-        return Ok(missing.is_empty());
+        let unquoted = unquoted_plants(&root)?;
+        for n in &unquoted {
+            eprintln!(
+                "sprint {n:03}: its observation contract names a planted fault and its result quotes no judge's \
+                 failure for a plant"
+            );
+        }
+        if unquoted.is_empty() {
+            println!(
+                "every sprint from {FIRST_QUOTED_PLANT_SPRINT:03} marked done that names a plant quotes its judge's \
+                 failure"
+            );
+        }
+        return Ok(missing.is_empty() && unquoted.is_empty());
     }
     let n = sprint.ok_or("usage: signal_report NNN [--write] [--backfill YYYY-MM-DD] | --check")?;
     let text = report(&root, n, backfill.as_deref())?;
