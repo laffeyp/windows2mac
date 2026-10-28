@@ -607,7 +607,7 @@
 
 ## Sprint tail
 
-### Sprint 190 (2026-10-28, gates running)
+### Sprint 190 (2026-10-28, closed)
 - **Scope:** the batch run's stop at VIRTUAL_ALLOC 19: the four virtual-memory requests served through the ported arena, the batch run run again to its next stop
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 902 s, kept in `store/gates/passes.tsv` as "sprint 190" at HEAD 7839e3bba with its six trees: the batch run and guests, Rust tests all, the planted chain 34, the Python gates, the three multi-vCPU tests passed in their stage); observation pass (the batch run passes its VirtualAllocs and stops at KERNEL 33, sub-operation 1, after 98 hvc 1, 79 hvc 8 and 7 hvc 11 exits, held; the guests' stops unchanged; plant 1 named "left: [\"stop\tHvc 14\""; plant 2 named RegionSize at bytes 16-23).
 - **CI does not run:** the requests' service and the batch run (macOS aarch64); `memory_basic_information`'s test is in `host_request.rs`, compiled there only.
