@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 167
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -90,3 +90,23 @@ A Rust case runner's discrepancy is reported as the Python's class runs report i
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: the hashes against the Python's, and a plant check_records names.
 - [x] One concept: the discrepancy's form.
+
+## result
+
+- **The hashes:** `cpu_cases::case_hashes` writes the Python's canonical JSON itself. On each committed set's first
+  case (13 sets, all format 2) it gives the frozen Python's two hashes (`crates/cpu_cases/tests/case_hashes.rs`, the
+  values computed 2026-10-28 by running `semantics_differential.read_cases` and `class_run.case_hashes`). On the built,
+  uncommitted sets it was checked once: `semantics_049`'s first case (format 3, YMM upper halves set) and
+  `semantics_065`'s (format 4, an x87 register of 1199942704056667479188510) both equal the Python's; that check is
+  not kept, since a test that skips where its file is absent is the fault KIT_DIARY #65 names.
+- **The record's form:** `cases::Tally` keeps each difference's first case (`first_case`), `case_runs` hashes it, and
+  emits REDUCTION_COMPLETED (steps 0, minimized equal to source, `preserved_mismatch` true) before each
+  DISCREPANCY_REPORTED, which names the hashes; the empty-hash constant is gone.
+- **The planted run** (`case_runs --plant-flip-cf`, a topology in the scratchpad, the record outside `store/runs/`):
+  205 classes, 32 rejected, each with REDUCTION_COMPLETED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED;
+  `check_records` applied S5 and E1 with 0 violations.
+- **The plant** (REDUCTION_COMPLETED moved after the report): `check_records` named S5, 32 violations; the file was
+  restored from its saved copy.
+- **The case named:** the planted record's first report (ADD_LOCK, "run 38029980267: case 0") names program
+  `d266341d…` and state `caf08742…`; the frozen Python's `case_hashes` of case 0 of that run's set
+  (`probes/semantics_041/cases.bin`, found by the run's `cases.sha256`) gives the same two.

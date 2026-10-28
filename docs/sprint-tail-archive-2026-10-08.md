@@ -341,6 +341,14 @@ Entries rolled out of `BLACKBOARD.md` `## Sprint tail` on 2026-10-08 (Sprint 027
 - **Files:** signals/0.1.json, signals/0.1-rationale.md, signals/proposals.json, scripts/check_vocab.py
 - **Closed:** clean.
 
+### Sprint 157 (2026-10-25, closed)
+- **Scope:** link 5's run-loop judge, `sleeper` to its end: THREAD_EXIT_CODE, THREAD_EXIT_STUB, THREAD_END and the `hvc #12` hand-over at a thread's end served by the Rust host.
+- **Dual contract:** signal — none, as the card says (the skeleton's record comes at link 6); artifact pass (fmt, clippy, the gates); observation pass (ExitProcess(0) with the Python's output; the thread requests, the detach stub's bytes and the hand-over equal to the Python host's; two planted faults each failed it, one at the stop and the requests, one at the exit code read back).
+- **CI does not run:** the run loop's two tests and the hypervisor crate's vector register test (macOS only; the run loop's need the Python fixtures).
+- **Rubber Duck Pass:** *Observation 1 (a declaration stable Rust refuses):* `hv_vcpu_set_simd_fp_reg` takes its 16 bytes by value as a short vector, which AAPCS64 passes in v0; stable Rust rejects `uint8x16_t` in an `extern "C"` signature (`simd_ffi`), so the call is made from inline assembly, and a test has the guest copy the set register and the host read the copy. Disposition: resolved-here. *Observation 2 (an edit outside the Edit tool):* WORKING_AGREEMENT's three changed lines were written by an inline script; its diff was read and holds only them. Disposition: recorded. *Observation 3 (two gates runs failed):* the first at `cargo fmt --check`, the second at clippy's `large_enum_variant` (`Switch::Go` carried 31 registers); after `cargo fmt` and a `Switch` that leaves the registers in `schedule`'s `x`, the third ran from the start. Disposition: resolved-here.
+- **Closed:** Sprint 156's CI run 40188695646 (success on daa0bec17).
+- **Files:** crates/hypervisor/, crates/w2m_vm/, store/run_loop/sleeper-end-python.sha256, WORKING_AGREEMENT.md, BLACKBOARD.md, sprints/sprint-157-a-thread-ends.md, signal-reports/sprint-157-report.md.
+
 ### Sprint 156 (2026-10-25, closed)
 - **Scope:** link 5's run-loop judge, its second program: CreateThread served by the Rust host, and `sleeper` past its thread request with two threads.
 - **Dual contract:** signal — none, as the card says (the skeleton's record comes at link 6); artifact pass (fmt, clippy, the gates); observation pass (the created thread equal to the Python host's, field for field; the stack's mapping as `_map_pages` leaves it; `woke` printed and a named stop; two planted faults each failed it at the field named).
