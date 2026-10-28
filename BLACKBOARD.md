@@ -594,7 +594,7 @@
 
 ## Sprint tail
 
-### Sprint 187 (2026-10-28, gates running)
+### Sprint 187 (2026-10-28, closed)
 - **Scope:** reviewer-2's Mediums 2 and 3 and Lows 3 and 5 of its review of Sprints 182-184: the judges' inputs bound to the trees they judge
 - **Dual contract:** signal — SESSION_INIT 4, CANDIDATE_GENERATED and COMPARISON_COMPLETED 578 each (268, 177, 107, 26), CANDIDATE_ACCEPTED 576, CANDIDATE_REJECTED, REDUCTION_COMPLETED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED 2 each (FCOS and FSIN), SESSION_COMPLETED 4, Sprint 183's verdicts, written through `cargo run`, as the card named; artifact pass (`scripts/gates.sh` exit 0 in 940 s, kept in `store/gates/passes.tsv` as "sprint 187" at HEAD 2464e0d40 with its six trees: the batch run and guests, Rust tests all, the planted chain 34, the Python gates, the three multi-vCPU tests passed in their stage); observation pass (`--check` passes over Sprints 178-186 from `store/gates/passes.tsv`; plant 1 named "left: Some(0) right: Some(1)" when the tree comparison was dropped; plant 2, `case_runs` over a changed `crates/` file, refused, "case_runs was built from crates/ 78e35f17829e34c4d936092ead326742004aa883 and the work tree's is aac8c1a24e4834f4b894e544ca15bf94192b176e").
 - **CI does not run:** the case runner and `case_runs`'s records (Hypervisor.framework); CI runs `signal_report`'s tests, the tree comparison among them, and from this sprint fetches the whole history so `--check`'s comparison runs there too.
