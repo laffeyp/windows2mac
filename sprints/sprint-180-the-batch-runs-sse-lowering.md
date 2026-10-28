@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 180
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -78,3 +78,30 @@ The batch run's SSE calls the Rust rules did not lift are lifted and lowered wor
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: counts and two plants.
 - [x] One concept: the batch run's SSE lowering.
+
+## result
+
+- **The count first:** each class's rule read from the frozen registry: CMPPS, CMPPD, the seven packed conversions and
+  PMOVSXDQ through `_sse.py`'s `int_rule`, MOVHPD through `memory_only_rule`; their lowering at `_sse.py` 330-335
+  (CMPPS and CMPPD join the MXCSR fast path), 336-339, 343-360, 400-424 with `_to_dwords` 491-528, and 425-426.
+- **The slice:** `rules.rs` registers the eleven classes on `sse_int` and `sse_memory_only`; `lower.rs` gains
+  `CMP_LOWERED`'s arm, PMOVSXDQ before the integer block, the conversions behind `unmasked_to_model`, `to_dwords`, the
+  `SSE_050` list and its `hvc #10` arm, and CMPPS and CMPPD in `fp_class`; `CVT_INDEFINITE` is True inline, as the
+  Rust's CVT*2SI arm already takes it.
+- **The C words judge:** 1,185,189 calls compared in 239 classes, no refusal and no difference: the census's 848 SSE
+  calls and PMOVSXDQ's 4 moved from "not lifted" to compared, nine classes, the census file changed by those nine rows.
+  720 calls in 72 classes stay unlifted (the VEX 719 and one PEXTRW).
+- **The case runner:** the Rust translator compiles 317 classes and 192,284 cases (from 306 and 189,268), each word
+  equal to the Python's; the model now steps the newly lifted classes' cases, set 049 judging 19,679 (from 19,621) and
+  set 050 10,166 (from 9,320), 904 cases in all, 0 difference classes. 17 legacy classes, 3,856 cases, stay counted
+  to the model: CMPSD_XMM, CMPSS, MPSADBW, PSLLW and 13 more, which `_sse.py` sends to `hvc #10` whole or the Rust does
+  not lift.
+- **Plant 1** (CMPPS's LT lowered as LE): `c_words` failed, "148 CMPPS flags [0, 0, 0]: 0x1808139af 440fc2c701: rust
+  [b9405390 d3473210 f100fe1f 54000040 d4000142 6e", with three more CMPPS rows. Restored byte for byte.
+- **Plant 2** (CVTDQ2PS's MXCSR check dropped): `c_words` failed, "192 CVTDQ2PS flags [0, 0, 0]: 0x1180033e52 0f5bc0:
+  rust [4e21d800] c [b9405390 d3473210 f100fe1f 5400004". Restored byte for byte.
+- **Records:** four `case-runner-rust` records (1793197269611612000, -638024000, -666181000, -697380000): 236, 177, 107
+  and 26 class verdicts, the first one more than Sprint 178's, FCOS and FSIN rejected; `check_records` 0 violations
+  each; the ledger holds 8 open entries, two for each record that reports the pair.
+- **Edits:** every multi-line edit used the Edit tool; one-line `sed`s for the plants, two `CVT_INDEFINITE` lines and
+  `expected.tsv`'s two rows.
