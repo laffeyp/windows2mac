@@ -142,6 +142,12 @@ fn judge(use_rust: bool) {
                 t.seconds
             );
             println!("    host requests by op: {:?}", t.host_requests);
+            // Sprint 173: the cases the Rust model stepped, then judged against Windows
+            println!(
+                "    stepped by the Rust model and judged: {} ({:?})",
+                t.modelled_by_class.values().sum::<usize>(),
+                t.modelled_by_class
+            );
             println!(
                 "    judged with YMM upper halves {}, with x87 state {}",
                 t.ymm_judged, t.x87_judged

@@ -16,7 +16,7 @@ use cpu_cases::{
 };
 use guest_runtime::layout::{
     DISPATCH_ENTRIES, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE,
-    STATE_OFF, TRANSPORT_OFF, VECTOR_SLOTS, VM_COMPILER,
+    SAVE_AREA, STATE_OFF, TRANSPORT_OFF, VECTOR_SLOTS, VM_COMPILER,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
 use pe_loader::{Loaded, Memory};
@@ -26,7 +26,7 @@ use crate::assembler::{Assembler, Target};
 use crate::guest::{Exception, Guest, VMC_CURSOR, VMC_ENABLED};
 use crate::host_request::{self, Served};
 use crate::monitor::set_system_registers;
-use crate::monitor_code::{EMPTY_TARGET, HVC_FAULT_GIVE_BACK, REG_BUDGET};
+use crate::monitor_code::{EMPTY_TARGET, HVC_FAULT_GIVE_BACK, REG_BUDGET, SAVE_VECTORS};
 use crate::run::{
     FCW_OFF, GiveBack, LOCK_OWNER, MXCSR_OFF, REG_UNDEFINED_FLAGS, Tails, dispatch_insert, exit_count, fpcr_for,
 };
@@ -116,6 +116,8 @@ pub struct Tally {
     pub first_case: BTreeMap<String, usize>,
     /// the case being judged
     case: usize,
+    /// by iclass: the cases the Rust model stepped and then judged (Sprint 173)
+    pub modelled_by_class: BTreeMap<String, usize>,
 }
 
 impl Tally {
@@ -195,6 +197,163 @@ fn windows(guest: &Guest, r: &CaseResult) -> Vec<(String, String)> {
 const FPSR_TO_MXCSR: [(u32, u32); 6] = [(0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1)];
 
 /// `mxcsr_flags_from_fpsr` (vm_backend 1146-1147).
+/// Guest memory as the model reads it (`loader.Memory`): an access wholly inside mapped, contiguous memory.
+struct GuestModelMemory<'a>(&'a mut Guest);
+
+impl GuestModelMemory<'_> {
+    fn span(&self, va: u64, n: usize) -> Result<usize, crate::model::Fault> {
+        let fault = || crate::model::Fault::Guest {
+            code: crate::model::STATUS_ACCESS_VIOLATION,
+            why: format!("access of {n} bytes at 0x{va:x} outside mapped memory"),
+        };
+        let first = self.0.layout.offset(va).ok_or_else(fault)?;
+        let last = self.0.layout.offset(va + n as u64 - 1).ok_or_else(fault)?;
+        if last != first + n as u64 - 1 {
+            return Err(fault());
+        }
+        Ok(first as usize)
+    }
+}
+
+impl crate::model::Memory for GuestModelMemory<'_> {
+    fn read(&self, va: u64, n: usize) -> Result<Vec<u8>, crate::model::Fault> {
+        let at = self.span(va, n)?;
+        Ok(self.0.memory.as_slice()[at..at + n].to_vec())
+    }
+
+    fn write(&mut self, va: u64, data: &[u8]) -> Result<(), crate::model::Fault> {
+        let at = self.span(va, data.len())?;
+        self.0.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+        Ok(())
+    }
+}
+
+/// What a model exit came to.
+enum ModelStep {
+    /// stepped; the vCPU resumes at the dispatcher
+    Resumed,
+    /// a guest fault raised through the runtime's exception path
+    Raised,
+    /// an operation this slice does not run: counted, not judged
+    Refused,
+    /// a flag read while undefined: the run stops, as the Python's UndefinedFlag stops it
+    Undefined(char),
+}
+
+/// `_slow_sse` (vm_backend 4268-4323) for the model's integer slice (Sprint 173): the VM's registers, flags, DF,
+/// MXCSR and FCW into the model, one step of the instruction at `rip` over guest memory, and the result back; the
+/// vCPU resumes at the dispatcher with x17 the next RIP. A guest fault goes to the runtime's exception path as
+/// `_raise_in_guest` (4332-4342) sends it.
+fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> Result<ModelStep, HvError> {
+    use crate::model::{Fault, Flags, Thread, step};
+    let Ok(ins) = translator::lift::lift(code, rip) else {
+        return Ok(ModelStep::Refused);
+    };
+    if ins
+        .ops
+        .iter()
+        .any(|op| matches!(op, translator::lift::Op::Sse { .. } | translator::lift::Op::Cpuid))
+    {
+        return Ok(ModelStep::Refused);
+    }
+    let md = MONITOR_DATA;
+    let mut x = [0u64; 31];
+    for (k, v) in x.iter_mut().enumerate() {
+        *v = vcpu.reg(Reg::X(k as u8))?;
+    }
+    let mem = guest.memory.as_slice();
+    let undefined = x[REG_UNDEFINED_FLAGS as usize];
+    let defined = |f: char| undefined >> FLAG_BIT.iter().find(|(k, _)| *k == f).unwrap().1 & 1 == 0;
+    let reg_flag = |f: char| defined(f).then(|| x[usize::from(FLAG_REG.iter().find(|(k, _)| *k == f).unwrap().1)] != 0);
+    let (af_a, af_b, pf_r) = (
+        read_u64(mem, md + AF_OPERANDS),
+        read_u64(mem, md + AF_OPERANDS + 8),
+        read_u64(mem, md + PF_RESULT),
+    );
+    let stored = u32::from_le_bytes(
+        mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4]
+            .try_into()
+            .unwrap(),
+    );
+    let fpsr = vcpu.reg(Reg::Fpsr)?;
+    let mut th = Thread {
+        regs: x[..16].try_into().unwrap(),
+        // `x86_flags` (5368-5375): C Z S O from their registers, P and A lazy from the monitor data page
+        flags: Flags {
+            c: reg_flag('C'),
+            z: reg_flag('Z'),
+            s: reg_flag('S'),
+            o: reg_flag('O'),
+            p: defined('P').then(|| parity_even(pf_r)),
+            a: defined('A').then_some((af_a ^ af_b ^ pf_r) & 0x10 != 0),
+        },
+        df: mem[(md + DF_BYTE) as usize] != 0,
+        mxcsr: stored | mxcsr_flags_from_fpsr(fpsr) as u32,
+        fcw: u16::from_le_bytes(
+            mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2]
+                .try_into()
+                .unwrap(),
+        ),
+        rip,
+    };
+    let result = step(&mut th, &mut GuestModelMemory(guest), &ins, code);
+    let mem = guest.memory.as_mut_slice();
+    mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&th.mxcsr.to_le_bytes());
+    match result {
+        Ok(()) => {
+            for (k, v) in th.regs.iter().enumerate() {
+                vcpu.set_reg(Reg::X(k as u8), *v)?;
+            }
+            let f = th.flags;
+            let mut undefined = 0u64;
+            for (name, value) in [('C', f.c), ('Z', f.z), ('S', f.s), ('O', f.o), ('P', f.p), ('A', f.a)] {
+                let bit = FLAG_BIT.iter().find(|(k, _)| *k == name).unwrap().1;
+                match value {
+                    None => undefined |= 1 << bit,
+                    Some(v) => {
+                        if let Some((_, reg)) = FLAG_REG.iter().find(|(k, _)| *k == name) {
+                            vcpu.set_reg(Reg::X(*reg), u64::from(v))?;
+                        }
+                    }
+                }
+            }
+            vcpu.set_reg(Reg::X(REG_UNDEFINED_FLAGS), undefined)?;
+            // `set_af_df` (2089-2092): lazy operands that read back as AF and PF, and DF
+            write_u64(mem, md + AF_OPERANDS, if f.a == Some(true) { 0x10 } else { 0 });
+            write_u64(mem, md + AF_OPERANDS + 8, 0);
+            write_u64(mem, md + PF_RESULT, if f.p == Some(true) { 0 } else { 1 });
+            mem[(md + DF_BYTE) as usize] = u8::from(th.df);
+            mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&th.fcw.to_le_bytes());
+            // the vectors with FPCR from MXCSR, FPSR's flags now in the stored word (4318)
+            vcpu.set_reg(Reg::Fpcr, fpcr_for(th.mxcsr))?;
+            vcpu.set_reg(Reg::Fpsr, 0)?;
+            vcpu.set_reg(Reg::X(17), th.rip)?;
+            vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;
+            Ok(ModelStep::Resumed)
+        }
+        Err(Fault::Guest { code, .. }) => {
+            // `_raise_in_guest`: x0-x30 as the exit left them, the code and the RIP, the vectors, then the runtime's
+            // exception call
+            let save = md + SAVE_AREA;
+            for (i, v) in x.iter().enumerate() {
+                write_u64(mem, save + 8 * i as u64, *v);
+            }
+            write_u64(mem, save + 0x118, u64::from(code));
+            write_u64(mem, save + 0x120, rip);
+            for k in 0..16u8 {
+                let q = vcpu.simd(k)?;
+                let at = (save + SAVE_VECTORS + 16 * u64::from(k)) as usize;
+                mem[at..at + 16].copy_from_slice(&q.to_le_bytes());
+            }
+            vcpu.set_reg(Reg::Fpsr, 0)?;
+            vcpu.set_reg(Reg::Pc, guest.code.exception_call_va)?;
+            Ok(ModelStep::Raised)
+        }
+        Err(Fault::Undefined(f)) => Ok(ModelStep::Undefined(f)),
+        Err(Fault::Refused(_)) => Ok(ModelStep::Refused),
+    }
+}
+
 fn mxcsr_flags_from_fpsr(fpsr: u64) -> u64 {
     FPSR_TO_MXCSR
         .iter()
@@ -536,6 +695,7 @@ pub fn run_cases(
         let iclass = d.iclass.as_str();
         // the run to the case's end; a fault's walk asks the host through `hvc #8` until the process ends
         // (vm_backend 5246-5256)
+        let (mut given_back, mut modelled, mut undefined_read) = (false, false, None);
         let exit = loop {
             let e = match vcpu.run()? {
                 Exit::VtimerActivated => {
@@ -551,6 +711,24 @@ pub fn run_cases(
                 *tally.host_requests.entry(HOST_GIVE_BACK).or_default() += 1;
                 continue;
             }
+            if matches!(e.hvc_immediate(), Some(HVC_SLOW_SSE | HVC_SLOW_STEP)) {
+                // the model (Sprint 173; `_slow_sse`, vm_backend 5203-5210 and 5270-5271): the exit's give-back and
+                // count, then one step; a step the slice refuses is counted below, not judged
+                let pc = vcpu.reg(Reg::Pc)?;
+                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
+                given_back = true;
+                match model_step(guest, vcpu, &c.code, CODE_VA)? {
+                    ModelStep::Resumed | ModelStep::Raised => {
+                        modelled = true;
+                        continue;
+                    }
+                    ModelStep::Refused => break Ok(e),
+                    ModelStep::Undefined(f) => {
+                        undefined_read = Some(f);
+                        break Ok(e);
+                    }
+                }
+            }
             if e.hvc_immediate() != Some(8) {
                 break Ok(e);
             }
@@ -562,6 +740,9 @@ pub fn run_cases(
                 Err(e) => break Err(Err(e.to_string())),
             }
         };
+        if modelled {
+            *tally.modelled_by_class.entry(iclass.to_string()).or_default() += 1;
+        }
         let pc = vcpu.reg(Reg::Pc)?;
         let exit = match exit {
             Ok(e) => e,
@@ -595,8 +776,21 @@ pub fn run_cases(
         match exit.hvc_immediate() {
             Some(1) => {}
             Some(HVC_SLOW_SSE | HVC_SLOW_STEP) => {
-                // the model is step 4's: counted, not judged; its exit's give-back and count as the run loop's
-                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
+                if let Some(f) = undefined_read {
+                    // the model read a flag the SDM leaves undefined: the Python's UndefinedFlag stops the run
+                    tally.note(
+                        iclass,
+                        "vm stopped",
+                        format!("case {i}: {:02x?} the model read {f}F undefined", c.code),
+                    );
+                    tally.judged += 1;
+                    continue;
+                }
+                // a model step this slice refuses (SSE, MMX, x87, VEX: the next slices): counted, not judged; its
+                // exit's give-back and count as the run loop's
+                if !given_back {
+                    exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
+                }
                 tally.model += 1;
                 *tally.model_by_class.entry(iclass.to_string()).or_default() += 1;
                 continue;
