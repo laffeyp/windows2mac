@@ -607,7 +607,7 @@
 
 ## Sprint tail
 
-### Sprint 191 (2026-10-28, gates running)
+### Sprint 191 (2026-10-28, closed)
 - **Scope:** reviewer-2's High 1 and Medium 4 of its review of Sprints 185-189: the batch run held by the Python's call stream it answers, not only by its stop; the guests by their output
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 916 s, kept in `store/gates/passes.tsv` as "sprint 191" at HEAD 73da69191 with its six trees: the batch run with its trace and the guests, Rust tests all with `batch_run.rs`'s three, the planted chain 34, the Python gates, the three multi-vCPU tests passed in their stage; a first run was stopped to take Observation 5's fix); observation pass (the Rust stream equals the Python's rows 0-3 in every column, no column named as varying, and stops at row 4, UnityPlayer's CreateEventW, KERNEL 33's EVENT_OPEN; the 6 guests that end print the Python host's output; plant 1 named "row 0 of the call stream differs" with the return 0; plant 2 named row 0 with GetSystemTimeAsFileTime; plant 3 named "readied's output differs from the Python host's").
 - **CI does not run:** the batch run, its trace and the guests (Hypervisor.framework); CI compiles `batch_run.rs`, which finds no build/batch_run there and says so.
