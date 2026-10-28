@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 169
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -89,3 +89,20 @@ The Rust check gives the Python's verdicts on every record, so the next vocabula
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: byte-equal output on every record, and two plants.
 - [x] One concept: the records check.
+
+## result
+
+- **The check:** `target/release/check_records` (`crates/w2m_vm/src/bin/check_records.rs`). Over every record in
+  `store/runs/` (38,609) its printed lines equal the Python's byte for byte at `--show 0` (24 lines), `--show 3` and
+  `--show 50` (287 lines, every example): 2,017 violations, 0 held, 170 known. It runs in 6 s; the Python in 45 s.
+- **Two faults the comparison found in the first draft:** E1's examples within one event came in another order, since
+  a `serde_json` map sorts keys and the Python's `types.items()` keeps the file's; the fields now follow the tag's
+  `payload` and `optional_payload` order. And T3's printed limit follows Python's int-or-float printing.
+- **Plant 1** (a record copied outside the store with its SESSION_COMPLETED removed) found a third: the Python's
+  reader, substrate's `read_record`, refused it, "seq gap: expected 45, got 46", while the Rust reader went on. The
+  Rust check now refuses a sequence that skips, in the same words, exit 2. A record cut before SESSION_COMPLETED, with
+  no gap, gives T2 1 violation in both.
+- **Plant 2** (T4's `!= 1` as `== 1`): T4's violations went from 439 to 101; the comparison with the Python's lines
+  names the line. Restored, the lines are identical again.
+- **The gates:** the default runs the Rust check over the new records; `--all` runs both over every record and fails
+  when their lines differ.
