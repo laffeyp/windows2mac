@@ -80,3 +80,29 @@ other sources.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: the judges' bindings.
+
+## result
+
+- **The gates' passes, tracked and read:** `gates.sh` stages `crates`, `scripts`, `tests`, `tools`, `src` and `store`
+  into a temporary index at its start, drops `store/gates`, and writes each directory's tree id into the pass line's
+  seventh column; the line goes to `store/gates/passes.tsv`, which holds the lines of Sprints 179-186 moved from
+  `build/gates-passes.txt`. `signal_report --check` reads the tracked file, fails without it on CI as anywhere, and
+  from Sprint 187 finds the work commit ("Sprint 187: ...") and compares its trees (`trees_moved`), naming the first
+  that differs. `ci.yml` checks out with `fetch-depth: 0`. The check's tests moved to the sprints whose rules they hold
+  (170-171, 180-181, 185-186), and `a_gates_run_must_have_tested_the_work_commits_trees` builds a two-commit repository.
+- **A stale `case_runs` refused:** `crates/w2m_vm/build.rs` stamps the `crates/` tree id (`W2M_CRATES_TREE`);
+  `w2m_vm::built_from::check` takes the work tree's at start, and `case_runs` refuses to write a record when they
+  differ. The harness runs `cargo run --release --quiet --bin case_runs -- --rust-translator` and names the 435
+  classes the Rust compiles.
+- **Record ids** and **#72's rule:** the harness comment states the convention; WORKING_AGREEMENT gains "A coverage
+  claim quotes its count", the multi-line note for 183-186, and the multi-vCPU stage of Sprint 185.
+- **Records:** four `case-runner-rust` records through `cargo run` (1793213020000000000, -030000000, -060000000,
+  -090000000), 268, 177, 107 and 26 classes as Sprint 183's, `check_records` 0 violations each; the ledger holds 16.
+- **Plant 1** (the tree comparison dropped, `if false && n >= FIRST_TREE_BOUND_SPRINT`):
+  `a_gates_run_must_have_tested_the_work_commits_trees` failed, "assertion `left == right` failed left: Some(0) right:
+  Some(1)". Restored byte for byte.
+- **Plant 2** (a line appended to `crates/w2m_vm/src/ledger.rs` after the build): `case_runs` refused, "case_runs was
+  built from crates/ 78e35f17829e34c4d936092ead326742004aa883 and the work tree's is
+  aac8c1a24e4834f4b894e544ca15bf94192b176e". Restored byte for byte; the tree id returned to 78e35f17.
+- **Departures:** the digest is a tree id from a temporary index, not the sha256 of `git diff HEAD`, so an untracked
+  file counts; every multi-line edit used the Edit tool.

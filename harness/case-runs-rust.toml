@@ -1,7 +1,12 @@
 # The case runner's verdicts with the Rust translator (Sprint 151; harness/case-runs.toml is Sprint 150's): the Rust
 # translator for the classes link 5's groups carry, the frozen Python lowering's words for the rest. Run from the
-# repository root after `cargo build --release`, on this Mac (Hypervisor.framework, build/probe-runs, the fixture):
+# repository root on this Mac (Hypervisor.framework, build/probe-runs, the fixture):
 #   uv run substrate run --file harness/case-runs-rust.toml --root store/runs/case-runner-rust-<ns> --strict
+# <ns> is the run's start in nanoseconds; the four profiles, started together, take one start and 30 ms steps after it
+# (Sprint 187; reviewer-2's Low 3 of its review of 182-184). The producer is built by cargo from the current sources,
+# signed by the runner (.cargo/config.toml), and refuses to run when the work tree's crates/ is not the one it was built
+# from (`w2m_vm::built_from`; Sprint 187, reviewer-2's Medium 3: a relinked planted binary wrote Sprint 183's first four
+# records).
 
 [baseline]
 harness = "w2m"
@@ -9,13 +14,14 @@ vocabulary = "0.12"
 # not `differential`: that key marks the causal records differential.py writes, which tests/test_differential.py holds
 # to their chain; this record's events come from one Producer
 judge = "case-runner-rust"
-implementation = "the Rust translator for link 5's carried groups, the frozen Python lowering's words for the rest, run by the Rust case runner"
+implementation = "the Rust translator for the 435 classes it compiles (store/case_runner/rust-compiled-by-class.tsv), the frozen Python lowering's words for the rest, run by the Rust case runner"
 reference = "the Intel runs of store/case_runner/expected.tsv"
 
 [[producer]]
 kind = "case_runs"
-# hv_vm_create refuses an unsigned process: the binary is signed with the Hypervisor entitlement first
-command = ["../scripts/sign_and_run.sh", "../target/release/case_runs", "--rust-translator"]
+# hv_vm_create refuses an unsigned process: cargo's runner signs the binary with the Hypervisor entitlement before it
+# runs (Sprint 187: built by cargo, never a prebuilt binary)
+command = ["cargo", "run", "--release", "--quiet", "--bin", "case_runs", "--", "--rust-translator"]
 schemas = "schemas/harness-events.json"
 
 [[initial]]

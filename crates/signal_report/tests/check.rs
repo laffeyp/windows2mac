@@ -4,7 +4,7 @@
 //! closed before its card is done, or with an unfilled gates line.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn scratch(name: &str, cards: &[(&str, &str)], reports: &[&str]) -> PathBuf {
@@ -91,19 +91,18 @@ fn every_done_card_with_a_report_passes() {
 fn a_tail_entry_closed_before_its_card_or_its_gates_fails() {
     let root = scratch_with_tail(
         "early",
-        &[("sprint-200-x.md", "done"), ("sprint-201-y.md", "active")],
-        &["sprint-200-report.md"],
-        "\n### Sprint 201 (2026-10-28, closed)\n- **Dual contract:** artifact pass (GATES-LINE).\n\n\
-         ### Sprint 200 (2026-10-28, closed)\n- **Dual contract:** artifact pass (gates exit 0).\n",
+        &[("sprint-170-x.md", "done"), ("sprint-171-y.md", "active")],
+        &["sprint-170-report.md"],
+        "\n### Sprint 171 (2026-10-28, closed)\n- **Dual contract:** artifact pass (GATES-LINE).\n\n\
+         ### Sprint 170 (2026-10-28, closed)\n- **Dual contract:** artifact pass (gates exit 0).\n",
     );
-    // on CI, where `build/gates-passes.txt` is never written (Sprint 184)
-    let (code, stderr, stdout) = check_on(&root, true);
-    assert!(stdout.contains("gates-passes: skipped (CI)"), "{stdout}");
+    // sprints before 179, whose gates runs were not kept
+    let (code, stderr) = check(&root);
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        "sprint 201: its tail entry is headed closed and holds GATES-LINE\n\
-         sprint 201: its tail entry is headed closed and its card is not done"
+        "sprint 171: its tail entry is headed closed and holds GATES-LINE\n\
+         sprint 171: its tail entry is headed closed and its card is not done"
     );
 }
 
@@ -113,14 +112,14 @@ fn a_tail_entry_closed_before_its_card_or_its_gates_fails() {
 fn a_done_card_needs_a_closed_tail_naming_a_kept_gates_run() {
     let root = scratch_with_tail(
         "gates",
-        &[("sprint-200-x.md", "done"), ("sprint-201-y.md", "done")],
-        &["sprint-200-report.md", "sprint-201-report.md"],
-        "\n### Sprint 201 (2026-10-28, gates running)\n- **Dual contract:** artifact pass (gates exit 0 in 909 s).\n\n\
-         ### Sprint 200 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 912 s).\n",
+        &[("sprint-180-x.md", "done"), ("sprint-181-y.md", "done")],
+        &["sprint-180-report.md", "sprint-181-report.md"],
+        "\n### Sprint 181 (2026-10-28, gates running)\n- **Dual contract:** artifact pass (gates exit 0 in 909 s).\n\n\
+         ### Sprint 180 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 912 s).\n",
     );
-    fs::create_dir_all(root.join("build")).unwrap();
+    fs::create_dir_all(root.join("store/gates")).unwrap();
     fs::write(
-        root.join("build/gates-passes.txt"),
+        root.join("store/gates/passes.tsv"),
         "exit 0 in 909 s\tdefault\t2026-10-28T07:00:00Z\n",
     )
     .unwrap();
@@ -128,8 +127,8 @@ fn a_done_card_needs_a_closed_tail_naming_a_kept_gates_run() {
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        "sprint 201: its card is done and its tail entry is not headed closed\n\
-         sprint 200: its tail entry names \"exit 0 in 912 s\", which build/gates-passes.txt does not hold"
+        "sprint 181: its card is done and its tail entry is not headed closed\n\
+         sprint 180: its tail entry names \"exit 0 in 912 s\", which store/gates/passes.tsv does not hold"
     );
 }
 
@@ -137,30 +136,101 @@ fn a_done_card_needs_a_closed_tail_naming_a_kept_gates_run() {
 /// must be its own sprint's; a run of the same seconds kept for another sprint fails, and no kept file fails locally.
 #[test]
 fn a_closed_entry_needs_a_gates_run_of_its_own_sprint() {
-    let tail = "\n### Sprint 201 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 909 s).\n\n\
-                ### Sprint 200 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 912 s).\n";
-    let cards = [("sprint-200-x.md", "done"), ("sprint-201-y.md", "done")];
-    let reports = ["sprint-200-report.md", "sprint-201-report.md"];
+    let tail = "\n### Sprint 186 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 909 s).\n\n\
+                ### Sprint 185 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 912 s).\n";
+    let cards = [("sprint-185-x.md", "done"), ("sprint-186-y.md", "done")];
+    let reports = ["sprint-185-report.md", "sprint-186-report.md"];
     let root = scratch_with_tail("bound", &cards, &reports, tail);
-    fs::create_dir_all(root.join("build")).unwrap();
+    fs::create_dir_all(root.join("store/gates")).unwrap();
     fs::write(
-        root.join("build/gates-passes.txt"),
-        "exit 0 in 909 s\tdefault\t2026-10-28T07:00:00Z\tsprint 200\tabc\tdef\n\
-         exit 0 in 912 s\tdefault\t2026-10-28T06:00:00Z\tsprint 200\tabc\tdef\n",
+        root.join("store/gates/passes.tsv"),
+        "exit 0 in 909 s\tdefault\t2026-10-28T07:00:00Z\tsprint 185\tabc\tdef\n\
+         exit 0 in 912 s\tdefault\t2026-10-28T06:00:00Z\tsprint 185\tabc\tdef\n",
     )
     .unwrap();
     let (code, stderr) = check(&root);
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        "sprint 201: its tail entry names \"exit 0 in 909 s\", which build/gates-passes.txt holds for another sprint"
+        "sprint 186: its tail entry names \"exit 0 in 909 s\", which store/gates/passes.tsv holds for another sprint"
     );
+    // no kept file fails, on CI too (Sprint 187: the file is tracked)
     let root = scratch_with_tail("unkept", &cards, &reports, tail);
+    let (code, stderr, _) = check_on(&root, true);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "store/gates/passes.tsv does not exist: no closed entry's gates run can be read"
+    );
+}
+
+/// `git` in `dir`, its output trimmed; a failure fails the test.
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git").arg("-C").arg(dir).args(args).output().unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// Sprint 187's plant 1 (reviewer-2's Medium 2 of its review of 182-184): from Sprint 187 a closed entry's gates run
+/// must have tested its work commit's trees; a source line changed after the pass and before the work commit fails,
+/// naming the tree.
+#[test]
+fn a_gates_run_must_have_tested_the_work_commits_trees() {
+    let tail =
+        "\n### Sprint 190 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 901 s).\n";
+    let root = scratch_with_tail("trees", &[("sprint-190-x.md", "done")], &["sprint-190-report.md"], tail);
+    fs::create_dir_all(root.join("crates/a")).unwrap();
+    fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
+    git(&root, &["init", "-q"]);
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "-c",
+            "user.name=w2m",
+            "-c",
+            "user.email=w2m@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Sprint 190's card",
+        ],
+    );
+    // the tree the gates ran on
+    let ran = git(&root, &["write-tree", "--prefix=crates/"]);
+    // the work, changed after the pass
+    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 1; }\n").unwrap();
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "-c",
+            "user.name=w2m",
+            "-c",
+            "user.email=w2m@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Sprint 190: the work",
+        ],
+    );
+    let held = git(&root, &["rev-parse", "HEAD:crates"]);
+    let commit = git(&root, &["rev-parse", "--short=9", "HEAD"]);
+    fs::create_dir_all(root.join("store/gates")).unwrap();
+    fs::write(
+        root.join("store/gates/passes.tsv"),
+        format!("exit 0 in 901 s\tdefault\t2026-10-28T07:00:00Z\tsprint 190\tabc\tdef\tcrates={ran}\n"),
+    )
+    .unwrap();
     let (code, stderr) = check(&root);
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        "build/gates-passes.txt does not exist: no closed entry's gates run can be read"
+        format!("sprint 190: its gates ran on crates/ {ran}, and its work commit {commit} holds {held}")
     );
 }
 

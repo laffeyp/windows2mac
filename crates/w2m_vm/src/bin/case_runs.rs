@@ -162,6 +162,9 @@ mod run {
             }
             return Ok(());
         }
+        // a record is written only by a binary built from the sources it stands for (Sprint 187; reviewer-2's Medium 3
+        // of its review of 182-184)
+        w2m_vm::built_from::check(&root, "case_runs")?;
         let plant = flag("--plant-flip-cf");
         let use_rust = flag("--rust-translator");
         let judge = if use_rust { JUDGE_RUST } else { JUDGE };

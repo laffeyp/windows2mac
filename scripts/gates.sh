@@ -18,6 +18,19 @@ gates_start=$(date +%s)
 gates_sprint=$(grep -l '^status: active$' sprints/sprint-*.md | sort | tail -1 | sed -E 's|.*/sprint-([0-9]{3})-.*|\1|')
 gates_head=$(git rev-parse HEAD)
 gates_diff=$(git diff HEAD | shasum -a 256 | cut -c1-64)
+# and the trees this run tests (Sprint 187; reviewer-2's Medium 2 of its review of 182-184: the line's HEAD and diff were
+# written and never read): the work tree staged into a temporary index, `store/gates/` left out (the pass line lands
+# there after the run), and each directory's tree id, which `signal_report --check` compares with the sprint's work
+# commit
+gates_index=$(mktemp)
+rm -f "$gates_index"
+GIT_INDEX_FILE=$gates_index git add -A -- crates scripts tests tools src store
+GIT_INDEX_FILE=$gates_index git rm -r -q --cached --ignore-unmatch store/gates
+gates_trees=""
+for d in crates scripts tests tools src store; do
+  gates_trees="$gates_trees${gates_trees:+ }$d=$(GIT_INDEX_FILE=$gates_index git write-tree --prefix=$d/)"
+done
+rm -f "$gates_index"
 # rustup installs cargo in ~/.cargo/bin, which a non-login shell may not have on its PATH (Sprint 126: the gates failed
 # with "cargo: command not found")
 [ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
@@ -235,8 +248,10 @@ fi
 echo "gates: all passed"
 # each passing run is kept, so `signal_report --check` can find the run a closed tail entry's gates line names
 # (Sprint 179; reviewer-2's Medium 3 of its review of 175-177: the close check read tokens, not the gates' state)
-mkdir -p build
-# (Sprint 184: the run's sprint, HEAD and diff sha256 follow, the sprint matched by `--check` from Sprint 184)
-printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\n' "$(( $(date +%s) - gates_start ))" \
+# (Sprint 184: the run's sprint, HEAD and diff sha256 follow, the sprint matched by `--check` from Sprint 184; Sprint
+# 187: then the trees, compared with the work commit's from Sprint 187, and the file tracked, committed with the work, so
+# a fresh clone's check reads it)
+mkdir -p store/gates
+printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\t%s\n' "$(( $(date +%s) - gates_start ))" \
   "$([ $all = 1 ] && echo all || echo default)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$gates_sprint" "$gates_head" \
-  "$gates_diff" >> build/gates-passes.txt
+  "$gates_diff" "$gates_trees" >> store/gates/passes.tsv

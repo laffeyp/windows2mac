@@ -18,6 +18,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          # the whole history: `signal_report --check` compares a closed sprint's gates trees with its work commit's
+          # (Sprint 187)
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - name: llvm-objdump
         run: |

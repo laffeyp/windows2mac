@@ -531,6 +531,12 @@ const FIRST_GATES_HELD_SPRINT: u32 = 179;
 /// 184; reviewer-2's Medium 3 of its review of 178-181: a seconds count alone can match another sprint's run).
 const FIRST_GATES_BOUND_SPRINT: u32 = 184;
 
+/// The first sprint whose closed entry's gates run must have tested its work commit's trees (Sprint 187).
+const FIRST_TREE_BOUND_SPRINT: u32 = 187;
+
+/// The passing gates runs `scripts/gates.sh` keeps, tracked from Sprint 187 (until then `build/gates-passes.txt`).
+const PASSES: &str = "store/gates/passes.tsv";
+
 /// The first sprint whose named plants must show their judge's failure in its result (Sprint 171).
 const FIRST_QUOTED_PLANT_SPRINT: u32 = 171;
 
@@ -631,8 +637,9 @@ fn unquoted_numbers(card: &str) -> Vec<u32> {
 /// unfilled GATES-LINE or CI-LINE (Sprint 176; reviewer-2's Medium 6 of 2026-10-28: Sprints 174 and 175 headed their
 /// entries closed before their gates exited). An entry headed "closed-partial" needs its card `status: closed-partial`,
 /// and a Deferred entry tagged "(Sprint N, partial)" needs card N so (Sprint 184; reviewer-2's Medium 2 of its review of
-/// 178-181: Sprint 178 closed partial under a "closed" status). Without `build/gates-passes.txt` the gates rule fails,
-/// except under `CI=true`, where it is skipped and says so.
+/// 178-181: Sprint 178 closed partial under a "closed" status). Without the tracked passes file the gates rule fails,
+/// on CI too (Sprint 187: the file is committed and CI fetches the whole history), and from Sprint 187 a closed entry's
+/// run must have tested its work commit's trees.
 fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
     let board = fs::read_to_string(root.join("BLACKBOARD.md")).map_err(|e| format!("BLACKBOARD.md: {e}"))?;
     let tail = board
@@ -645,9 +652,9 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         .map(|e| (e.file_name().to_string_lossy().to_string(), e.path()))
         .collect();
     let mut wrong = Vec::new();
-    // the passing gates runs `scripts/gates.sh` keeps (Sprint 179); absent on CI and in a fresh clone
-    let passes = fs::read_to_string(root.join("build/gates-passes.txt")).ok();
-    let on_ci = std::env::var("CI").as_deref() == Ok("true");
+    // the passing gates runs `scripts/gates.sh` keeps (Sprint 179), tracked from Sprint 187, so CI and a fresh clone
+    // read them (reviewer-2's Medium 2 of its review of 182-184)
+    let passes = fs::read_to_string(root.join(PASSES)).ok();
     let mut gates_unread = false;
     let card_status = |n: u32| -> Result<Option<String>, String> {
         let prefix = format!("sprint-{n:03}-");
@@ -694,20 +701,26 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                     });
                     let sprint = format!("sprint {n:03}");
                     let kept = |run: &str| {
-                        passes.lines().any(|l| {
+                        passes.lines().find(|l| {
                             let cols: Vec<&str> = l.split('\t').collect();
                             cols.first() == Some(&run)
                                 && (n < FIRST_GATES_BOUND_SPRINT || cols.get(3) == Some(&sprint.as_str()))
                         })
                     };
                     match named {
-                        Some(run) if kept(&run) => {}
+                        Some(run) if kept(&run).is_some() => {
+                            // from Sprint 187 the run's trees are the work commit's (column 7)
+                            if n >= FIRST_TREE_BOUND_SPRINT
+                                && let Some(w) = trees_moved(root, n, kept(&run).unwrap())?
+                            {
+                                wrong.push(w);
+                            }
+                        }
                         Some(run) if n >= FIRST_GATES_BOUND_SPRINT && kept_any(passes, &run) => wrong.push(format!(
-                            "sprint {n:03}: its tail entry names \"{run}\", which build/gates-passes.txt holds for \
-                             another sprint"
+                            "sprint {n:03}: its tail entry names \"{run}\", which {PASSES} holds for another sprint"
                         )),
                         Some(run) => wrong.push(format!(
-                            "sprint {n:03}: its tail entry names \"{run}\", which build/gates-passes.txt does not hold"
+                            "sprint {n:03}: its tail entry names \"{run}\", which {PASSES} does not hold"
                         )),
                         None => wrong.push(format!(
                             "sprint {n:03}: its tail entry names no gates run (\"exit 0 in N s\")"
@@ -730,11 +743,9 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     if gates_unread {
-        if on_ci {
-            println!("gates-passes: skipped (CI)");
-        } else {
-            wrong.push("build/gates-passes.txt does not exist: no closed entry's gates run can be read".to_string());
-        }
+        wrong.push(format!(
+            "{PASSES} does not exist: no closed entry's gates run can be read"
+        ));
     }
     // a Deferred entry tagged "(Sprint N, partial)" names a partial close (Sprint 184)
     let deferred = section(&board, "## Deferred");
@@ -751,9 +762,70 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
     Ok(wrong)
 }
 
-/// Whether `build/gates-passes.txt` holds a run of these seconds for any sprint.
+/// Whether the passes file holds a run of these seconds for any sprint.
 fn kept_any(passes: &str, run: &str) -> bool {
     passes.lines().any(|l| l.split('\t').next() == Some(run))
+}
+
+/// The first tree a gates run tested that sprint `n`'s work commit (the first commit whose subject begins "Sprint NNN:
+/// ") does not hold, or None when every one matches (Sprint 187; reviewer-2's Medium 2 of its review of 182-184: a pass
+/// line's HEAD and diff were written and never read). The pass line's seventh column is `gates.sh`'s "dir=tree" list,
+/// each tree taken with `store/gates/` left out; the commit's are taken the same way, from a temporary index.
+fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String> {
+    let Some(trees) = line.split('\t').nth(6).filter(|t| !t.is_empty()) else {
+        return Ok(Some(format!(
+            "sprint {n:03}: its gates run in {PASSES} names no trees (column 7)"
+        )));
+    };
+    let subject = format!("Sprint {n}: ");
+    let log = git(root, &["log", "--format=%H%x09%s"])?;
+    let Some(commit) = log
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .find(|(_, s)| s.starts_with(&subject))
+        .map(|(h, _)| h.to_string())
+    else {
+        return Ok(Some(format!(
+            "sprint {n:03}: no commit \"{subject}...\" to compare its gates run's trees with"
+        )));
+    };
+    let index = std::env::temp_dir().join(format!("signal-report-index-{}-{n}", std::process::id()));
+    let _ = fs::remove_file(&index);
+    let with_index = |args: &[&str]| -> Result<String, String> {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .env("GIT_INDEX_FILE", &index)
+            .output()
+            .map_err(|e| format!("git: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "git {}: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    with_index(&["read-tree", &commit])?;
+    with_index(&["rm", "-r", "-q", "--cached", "--ignore-unmatch", "store/gates"])?;
+    let mut moved = None;
+    for pair in trees.split(' ') {
+        let Some((dir, ran)) = pair.split_once('=') else {
+            continue;
+        };
+        let held = with_index(&["write-tree", &format!("--prefix={dir}/")])?;
+        if held != ran {
+            moved = Some(format!(
+                "sprint {n:03}: its gates ran on {dir}/ {ran}, and its work commit {} holds {held}",
+                &commit[..9]
+            ));
+            break;
+        }
+    }
+    let _ = fs::remove_file(&index);
+    Ok(moved)
 }
 
 fn run() -> Result<bool, String> {
