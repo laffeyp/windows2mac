@@ -594,7 +594,7 @@
 
 ## Sprint tail
 
-### Sprint 186 (2026-10-28, gates running)
+### Sprint 186 (2026-10-28, closed)
 - **Scope:** reviewer-2's High 1 of its review of Sprints 182-184: the batch run on the Rust host to its first stop, and each tests/data guest's stop
 - **Dual contract:** signal — none new, as the card says (`w2m-vm` writes a record only at ExitProcess); artifact pass (`scripts/gates.sh` exit 0 in 891 s, kept as "sprint 186" at HEAD 2607e4431: the batch run and the 15 guests by `w2m-vm`, Rust tests all with `batch_run.rs`, the planted chain 34, the Python gates, and the three multi-vCPU tests passed in their stage); observation pass (the batch run stops first at MODULE 15, UnityPlayer.dll's LoadLibrary of api-ms-win-core-synch-l1-2-0, after 5 hvc 1, 1 hvc 8 and 1 hvc 11 exits and 48 blocks, two images loaded; 6 of 15 guests end at ExitProcess on the Rust host, 9 stop at KERNEL 33 (6), THREAD 30 request 5 (2) and FILE_STAT 24 (1), where the frozen Python host ends all 15; plant 1 named "images\tHail to the Rainbow.exe"; plant 2 reached no judge and plant 2b named "HostRequest: host request 15").
 - **CI does not run:** the batch run and the guests (`w2m-vm` needs Hypervisor.framework, and the depot is this Mac's); CI compiles `w2m-vm`'s non-macOS stub and runs `batch_run.rs`, which finds no build/batch_run there and says so.
