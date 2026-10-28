@@ -133,12 +133,12 @@ if [ $rust != none ]; then
     "Hail to the Rainbow.exe" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv > /dev/null
   for p in tests/data/timed_waits/*.exe; do
     n=$(basename "$p" .exe)
-    if why=$(echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "$p" --output "build/batch_run/guest-$n.txt" 2>&1 >/dev/null); then
-      stop=ExitProcess
-    else
-      stop=$(printf '%s\n' "$why" | sed -n 's/.* stopped at \(.*\), not at ExitProcess$/\1/p' | tail -1)
-    fi
-    printf '%s\t%s\n' "$n" "$stop" >> build/batch_run/guests.tsv
+    # w2m-vm writes the guest's stop by name (Sprint 191); a guest that fails before its run leaves none, and its
+    # stderr, kept beside it, names why
+    rm -f "build/batch_run/guest-$n.stop"
+    echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "$p" --output "build/batch_run/guest-$n.txt" \
+      --stop "build/batch_run/guest-$n.stop" > /dev/null 2> "build/batch_run/guest-$n.stderr" || true
+    printf '%s\t%s\n' "$n" "$(cat "build/batch_run/guest-$n.stop" 2>/dev/null)" >> build/batch_run/guests.tsv
   done
 fi
 if [ $rust = all ]; then

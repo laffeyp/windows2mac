@@ -2,15 +2,24 @@
 // Copyright (C) 2026 Peter Laffey
 //! The batch run on the Rust host to its first stop, and each tests/data guest's stop (Sprint 186; reviewer-2's High 1
 //! of its review of Sprints 182-184: no card had run the Rust host on the batch run). `scripts/gates.sh` runs `w2m-vm
-//! --game` on the batch run's depot and `w2m-vm` on each guest, writing build/batch_run/first-stop.tsv and guests.tsv;
-//! this test holds them to `store/batch_run/first-stop-2026-10-28.tsv`, so a change that moves the first stop, or a
-//! guest's, fails here until the held file is rewritten with the card that moved it. The run's seconds are not held,
-//! and the guests' Python column is the frozen host's, for the reader.
+//! --game` on the batch run's depot and `w2m-vm` on each guest, writing under build/batch_run/ the stop, the call
+//! stream and each guest's stop and output; this test holds them to `store/batch_run/first-stop-2026-10-28.tsv`, so a
+//! change that moves the first stop, or a guest's, fails here until the held file is rewritten with the card that moved
+//! it. The run's seconds are not held.
+//!
+//! From Sprint 191 (reviewer-2's High 1 and Medium 4 of its review of 185-189) it also holds what the run answered: the
+//! Rust host's call stream equals the Python's batch run's (`STREAM`) row for row up to the stop, every column, and
+//! each guest that ends at ExitProcess prints what the frozen Python host's run printed (the held file's fifth column),
+//! but `qpc` and `qpc2`, which print a clock's reading, held by its form.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
+/// The Python batch run's calls, in `scripts/call_compare.py` `write_tsv`'s form (Sprint 108's frontier run)
+const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792267359516238000.tsv";
+/// Guests whose output is a clock's reading, 16 hex digits and a newline
+const CLOCK_GUESTS: [&str; 2] = ["qpc", "qpc2"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -34,6 +43,23 @@ fn written(root: &Path, name: &str) -> Option<String> {
     }
 }
 
+/// The held file's lines but comments, a guest's line cut to (guest, name, Rust stop).
+fn held(root: &Path) -> (Vec<String>, Vec<Vec<String>>) {
+    let text = fs::read_to_string(root.join(HELD)).unwrap();
+    let mut lines = Vec::new();
+    let mut guests = Vec::new();
+    for l in text.lines().filter(|l| !l.starts_with('#')) {
+        if l.starts_with("guest\t") {
+            let cols: Vec<String> = l.split('\t').map(str::to_string).collect();
+            lines.push(cols[..3].join("\t"));
+            guests.push(cols);
+        } else {
+            lines.push(l.to_string());
+        }
+    }
+    (lines, guests)
+}
+
 #[test]
 fn the_batch_run_and_the_guests_stop_where_held() {
     let root = root();
@@ -46,22 +72,57 @@ fn the_batch_run_and_the_guests_stop_where_held() {
         .map(str::to_string)
         .collect();
     ours.extend(guests.lines().map(|l| format!("guest\t{l}")));
-    let held: Vec<String> = fs::read_to_string(root.join(HELD))
-        .unwrap()
-        .lines()
-        .filter(|l| !l.starts_with('#'))
-        .map(|l| {
-            // a guest's line without its fourth column, the Python host's stop and output
-            if l.starts_with("guest\t") {
-                l.split('\t').take(3).collect::<Vec<_>>().join("\t")
-            } else {
-                l.to_string()
-            }
-        })
-        .collect();
+    let (lines, _) = held(&root);
     println!("{}", ours.join("\n"));
     assert_eq!(
-        ours, held,
+        ours, lines,
         "the batch run's first stop or a guest's stop moved from {HELD}"
     );
+}
+
+/// The Rust run's call stream is the Python's, row for row, every column, up to the stop.
+#[test]
+fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
+    let root = root();
+    let Some(calls) = written(&root, "first-stop.calls.tsv") else {
+        return;
+    };
+    let stream = fs::read_to_string(root.join(STREAM)).unwrap();
+    let ours: Vec<&str> = calls.lines().collect();
+    let python: Vec<&str> = stream.lines().take(ours.len()).collect();
+    assert!(!ours.is_empty(), "the Rust run traced no call");
+    for (row, (r, p)) in ours.iter().zip(&python).enumerate() {
+        assert_eq!(r, p, "row {row} of the call stream differs from the Python batch run's");
+    }
+    assert_eq!(ours.len(), python.len(), "the Rust stream runs past the Python's");
+    println!("the Rust stream equals the Python's rows 0-{}", ours.len() - 1);
+}
+
+/// Each guest that ends at ExitProcess prints what the frozen Python host's run printed (Sprint 191).
+#[test]
+fn each_guest_that_ends_prints_what_the_python_host_printed() {
+    let root = root();
+    if written(&root, "guests.tsv").is_none() {
+        return;
+    }
+    let (_, guests) = held(&root);
+    let mut compared = 0;
+    for cols in guests {
+        let (name, rust_stop, python_output) = (&cols[1], &cols[2], cols[4].replace("\\n", "\n"));
+        if !rust_stop.starts_with("ExitProcess") {
+            continue;
+        }
+        let ours = written(&root, &format!("guest-{name}.txt")).unwrap();
+        if CLOCK_GUESTS.contains(&name.as_str()) {
+            let digits = ours.strip_suffix('\n').unwrap_or("");
+            assert!(
+                digits.len() == 16 && digits.chars().all(|c| c.is_ascii_hexdigit()),
+                "{name} printed {ours:?}, not a clock's 16 hex digits"
+            );
+        } else {
+            assert_eq!(ours, python_output, "{name}'s output differs from the Python host's");
+        }
+        compared += 1;
+    }
+    println!("{compared} guests' output compared");
 }

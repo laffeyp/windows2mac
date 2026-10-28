@@ -46,8 +46,16 @@ type Compile =
 
 /// The C emitter built for the host and loaded (Sprint 154: on CI's Linux too, where it once skipped). The compiler is
 /// `$CC` when set, else `xcrun clang` on macOS (which gives the linker the SDK) and `cc` elsewhere; a compiler that is
-/// missing or fails fails the test.
+/// missing or fails fails the test. Built once a process (Sprint 191): the two tests run on two threads of one process,
+/// and each building `libvmc-<pid>` at the same path let one load the library while the other was still writing it
+/// (CI run 40763197676: "file too short").
 fn load() -> Compile {
+    static LOADED: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    let p = *LOADED.get_or_init(|| build_and_load() as usize);
+    unsafe { std::mem::transmute::<usize, Compile>(p) }
+}
+
+fn build_and_load() -> Compile {
     let mut cmd: Vec<String> = match std::env::var("CC") {
         Ok(cc) => cc.split_whitespace().map(str::to_string).collect(),
         Err(_) if cfg!(target_os = "macos") => vec!["xcrun".into(), "clang".into()],

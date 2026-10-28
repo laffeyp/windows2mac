@@ -428,7 +428,62 @@ fn entry_stub(a: &mut Assembler, dispatch_va: u64) {
 /// `thunk`; any schedule bit goes to the switch stub. With no service: `hvc #9`. Call tracing (`call_trace`) is not
 /// carried yet.
 /// `timed`: the runtime word's takings timed (Sprint 164); x1 and x2 are free at the release (x0-x15 reloaded after).
-fn bridge(a: &mut Assembler, service: Option<(u64, bool)>, thunk: u64, resume_va: u64, switch_va: u64, timed: bool) {
+/// call_trace.h's UNTRACED (vm_backend 256-259): functions that read or unwind their caller's context or never return
+/// keep a plain bridge.
+const UNTRACED: [&str; 16] = [
+    "RaiseException",
+    "RtlUnwindEx",
+    "RtlUnwind",
+    "RtlCaptureContext",
+    "RtlVirtualUnwind",
+    "RtlLookupFunctionEntry",
+    "RtlRestoreContext",
+    "RtlCaptureStackBackTrace",
+    "CaptureStackBackTrace",
+    "ExitProcess",
+    "ExitThread",
+    "FreeLibraryAndExitThread",
+    "TerminateProcess",
+    "GetProcAddress",
+    "SetUnhandledExceptionFilter",
+    "UnhandledExceptionFilter",
+];
+
+/// `TRACE_WIDE_ARGS` (vm_backend 253): functions whose argument i is a UTF-16 string the trace keeps, bit i.
+const TRACE_WIDE_ARGS: [(&str, u8); 1] = [("SetThreadDescription", 1 << 1)];
+
+/// vm_backend 3754-3757 (Sprint 191): with the trace on, a bridge calls `w2m_traced`, but for UNTRACED functions and
+/// w2m's own COM methods (`W2m*`, reached through a vtable, not an import); a function whose arguments the trace keeps
+/// as strings gets its mask byte. Some(`w2m_traced`'s address) for the traced form.
+fn traced_form(
+    call_trace: &[String],
+    function: &str,
+    symbols: &BTreeMap<String, u64>,
+    mem: &mut [u8],
+    thunk: u64,
+) -> Option<u64> {
+    use guest_runtime::layout::{TRACE_OFF, TRACE_THUNKS, TRACE_WIDE_OFF};
+    if call_trace.is_empty() || UNTRACED.contains(&function) || function.starts_with("W2m") {
+        return None;
+    }
+    let index = (thunk - THUNK_BASE) / 16;
+    if let Some((_, mask)) = TRACE_WIDE_ARGS.iter().find(|(f, _)| *f == function)
+        && index < TRACE_THUNKS
+    {
+        mem[(MONITOR_SIZE + TRACE_OFF + TRACE_WIDE_OFF + index) as usize] = *mask;
+    }
+    symbols.get("w2m_traced").copied()
+}
+
+fn bridge(
+    a: &mut Assembler,
+    service: Option<(u64, bool)>,
+    thunk: u64,
+    resume_va: u64,
+    switch_va: u64,
+    timed: bool,
+    traced: Option<u64>,
+) {
     let Some((service_va, sets_rax)) = service else {
         a.emit(&[a64::hvc(HVC_NO_SERVICE)]);
         return;
@@ -441,9 +496,19 @@ fn bridge(a: &mut Assembler, service: Option<(u64, bool)>, thunk: u64, resume_va
     a.emit(&[a64::mov(0, 1), a64::mov(1, 2), a64::mov(2, 8), a64::mov(3, 9)]); // x4 = RSP already
     a.emit(&a64::mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE));
     a.emit(&[a64::addi(31, 16, 0)]);
+    // vm_backend 3754-3760 (Sprint 191): a traced call goes through `w2m_traced` (call_trace.c), the service in x5 and
+    // the thunk's index in x6
+    let target = match traced {
+        Some(traced_va) => {
+            a.emit(&a64::mov_imm(5, service_va));
+            a.emit(&a64::mov_imm(6, (thunk - pe_loader::THUNK_BASE) / 16));
+            traced_va
+        }
+        None => service_va,
+    };
     a.emit(&count_from_budget());
     take_runtime(a, timed);
-    a.emit(&a64::mov_imm(16, service_va));
+    a.emit(&a64::mov_imm(16, target));
     a.emit(&[a64::blr(16)]);
     a.emit(&budget_from_count());
     release_runtime(a, timed, Site::Bridge, (16, 1, 2));
@@ -513,6 +578,16 @@ pub struct Guest {
     /// `self.ld.init_order`): what a created thread's stack, static TLS and attach stub read (Sprint 156)
     pub images: Vec<pe_loader::Image>,
     pub init_order: Vec<usize>,
+    /// the images whose calls call_trace.c records (`Start::call_trace`; Sprint 191)
+    pub call_trace: Vec<String>,
+    /// the block whose first compile opens the trace (`_trace_from`, vm_backend 2483-2487), 0 for from the start
+    pub trace_from: u64,
+    /// GetProcAddress's thunks: untraced ones given while the trace was closed, traced ones its hook gave after
+    /// (`_trace_quiet`, `_trace_dynamic`), by "DLL!Name"
+    pub trace_quiet: BTreeMap<String, u64>,
+    pub trace_dynamic: BTreeMap<String, u64>,
+    /// the traced images whose import slots are already on their own thunks (`_trace_bound`)
+    pub trace_bound: BTreeSet<String>,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -610,7 +685,8 @@ impl Guest {
         let mut bind = |cache: &mut CodeCache<'_>, thunk: u64, name: &str| -> Result<(), GuestError> {
             let (dll, function) = name.split_once('!').unwrap_or((name, ""));
             let service = service_for(services, dll, function).map(|s| (image.symbols[&s.symbol], s.sets_rax));
-            let va = cache.put(|a| bridge(a, service, thunk, code.dispatch_va, switch_va, timed))?;
+            let traced = traced_form(&start.call_trace, function, &image.symbols, cache.mem, thunk);
+            let va = cache.put(|a| bridge(a, service, thunk, code.dispatch_va, switch_va, timed, traced))?;
             bridges.insert(thunk, va);
             Ok(())
         };
@@ -665,7 +741,7 @@ impl Guest {
             mem: memory.as_mut_slice(),
             layout: &layout,
         });
-        Ok(Guest {
+        Guest {
             memory,
             layout,
             ttbr,
@@ -694,7 +770,39 @@ impl Guest {
             time_runtime_word: timed,
             images: loaded.images.clone(),
             init_order: loaded.init_order.clone(),
-        })
+            call_trace: start.call_trace.clone(),
+            trace_from: 0,
+            trace_quiet: BTreeMap::new(),
+            trace_dynamic: BTreeMap::new(),
+            trace_bound: BTreeSet::new(),
+        }
+        .with_trace(start)
+    }
+
+    /// The trace's start (vm_backend 2480-2487, 2508; Sprint 191): the traced images' slots on their own thunks, and,
+    /// with `call_trace_from`, the trace closed until that export's block is first compiled, its address given to the
+    /// VM's compiler (`VMC_EXIT + 16`), which leaves that block to the host.
+    fn with_trace(mut self, start: &Start) -> Result<Guest, GuestError> {
+        use guest_runtime::layout::TRACE_OFF;
+        self.trace_ranges()?;
+        if let Some(from) = &start.call_trace_from {
+            let (dll, export) = from.split_once('!').unwrap_or((from, ""));
+            let image = self
+                .images
+                .iter()
+                .find(|im| im.name.eq_ignore_ascii_case(dll))
+                .ok_or_else(|| GuestError::Layout(format!("the trace opens at {from}, whose image is not loaded")))?;
+            let at = image
+                .export(export)
+                .ok()
+                .flatten()
+                .ok_or_else(|| GuestError::Layout(format!("the trace opens at {from}, which is not exported")))?;
+            self.trace_from = at;
+            let mem = self.memory.as_mut_slice();
+            mem[(MONITOR_SIZE + TRACE_OFF) as usize..(MONITOR_SIZE + TRACE_OFF + 8) as usize].fill(0);
+            write_u64(mem, VM_COMPILER + VMC_EXIT + 16, at);
+        }
+        Ok(self)
     }
 
     /// `_page_descriptor` (4507-4533): the memory offset of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB
@@ -759,17 +867,158 @@ impl Guest {
         if let Some((t, _)) = self.thunks.iter().find(|(_, n)| n.to_lowercase() == key) {
             return Ok(*t);
         }
+        self.make_thunk(name)
+    }
+
+    /// `make_thunk` (2920-2924): a new thunk after the others, with its bridge, whatever thunks the name has already
+    /// (a traced image's own slots and GetProcAddress's hook each need one of their own; Sprint 191).
+    pub fn make_thunk(&mut self, name: &str) -> Result<u64, GuestError> {
         let thunk = THUNK_BASE + 16 * self.thunks.len() as u64;
         self.thunks.insert(thunk, name.to_string());
         let (dll, function) = name.split_once('!').unwrap_or((name, ""));
         let service = service_for(&self.services, dll, function).map(|s| (self.symbols[&s.symbol], s.sets_rax));
         let (dispatch_va, switch_va, timed) = (self.code.dispatch_va, self.switch_va, self.time_runtime_word);
+        let traced = traced_form(
+            &self.call_trace,
+            function,
+            &self.symbols,
+            self.memory.as_mut_slice(),
+            thunk,
+        );
         let mut cache = CodeCache {
             mem: self.memory.as_mut_slice(),
         };
-        let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va, timed))?;
+        let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va, timed, traced))?;
         self.bridges.insert(thunk, va);
         Ok(thunk)
+    }
+
+    /// The owner byte of `thunk` in the trace header (call_trace.c `owner`): 1 + a traced image, 1 + TRACE_DYNAMIC for
+    /// GetProcAddress's hook, 0xFF for never; thunks past the first TRACE_THUNKS have none.
+    fn trace_owner(&mut self, thunk: u64, owner: u8) {
+        use guest_runtime::layout::{TRACE_OFF, TRACE_OWNER_OFF, TRACE_THUNKS};
+        let index = (thunk - THUNK_BASE) / 16;
+        if index < TRACE_THUNKS {
+            self.memory.as_mut_slice()[(MONITOR_SIZE + TRACE_OFF + TRACE_OWNER_OFF + index) as usize] = owner;
+        }
+    }
+
+    /// `_trace_ranges` (4097-4120; Sprint 191): each traced image's range in the trace header as it is mapped, and its
+    /// import slots on thunks of their own, owner 1 + the image, as tools/jit_capture points each hooked image's slots at
+    /// its own thunks; a slot bound to a game DLL's export (no Windows hook there) stays.
+    pub fn trace_ranges(&mut self) -> Result<(), GuestError> {
+        use guest_runtime::layout::TRACE_OFF;
+        for (i, name) in self.call_trace.clone().iter().enumerate() {
+            let Some(image) = self
+                .images
+                .iter()
+                .find(|im| im.name.eq_ignore_ascii_case(name))
+                .cloned()
+            else {
+                continue;
+            };
+            let (base, end) = (image.base, image.base + u64::from(image.pe.size_of_image));
+            let at = (MONITOR_SIZE + TRACE_OFF + 40 + 16 * i as u64) as usize;
+            let mem = self.memory.as_mut_slice();
+            mem[at..at + 8].copy_from_slice(&base.to_le_bytes());
+            mem[at + 8..at + 16].copy_from_slice(&end.to_le_bytes());
+            if self.trace_bound.contains(&name.to_lowercase()) {
+                continue;
+            }
+            self.trace_bound.insert(name.to_lowercase());
+            for &slot in image.pe.iat.keys() {
+                let va = base + u64::from(slot);
+                let off = self
+                    .layout
+                    .offset(va)
+                    .ok_or_else(|| GuestError::Layout(format!("{name}'s import slot 0x{va:x} is not mapped")))?
+                    as usize;
+                let held = u64::from_le_bytes(self.memory.as_slice()[off..off + 8].try_into().unwrap());
+                let Some(key) = self.thunks.get(&held).cloned() else {
+                    continue;
+                };
+                let own = self.make_thunk(&key)?;
+                self.memory.as_mut_slice()[off..off + 8].copy_from_slice(&own.to_le_bytes());
+                self.trace_owner(own, i as u8 + 1);
+            }
+        }
+        Ok(())
+    }
+
+    /// `_traced_proc` (4062-4095; Sprint 191): GetProcAddress's answer as the capture's process sees it. With the trace
+    /// closed, a thunk of its own marked never traced; with it open and the caller (the return address at the saved
+    /// RSP) inside a traced image, a thunk of its own with the GetProcAddress label; another caller's, the shared one.
+    pub fn traced_proc(&mut self, va: u64) -> Result<u64, GuestError> {
+        use guest_runtime::layout::{TRACE_DYNAMIC, TRACE_OFF};
+        if self.call_trace.is_empty() {
+            return Ok(va);
+        }
+        let Some(key) = self.thunks.get(&va).cloned() else {
+            return Ok(va);
+        };
+        let t = (MONITOR_SIZE + TRACE_OFF) as usize;
+        let word = |mem: &[u8], at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        if word(self.memory.as_slice(), t) != 0 {
+            let mem = self.memory.as_slice();
+            let rsp = word(mem, (MONITOR_SIZE + STATE_OFF + 8 * 4) as usize);
+            let caller = self.layout.offset(rsp).map_or(0, |off| word(mem, off as usize));
+            let traced_caller = (0..2).any(|i| {
+                let (lo, hi) = (word(mem, t + 40 + 16 * i), word(mem, t + 48 + 16 * i));
+                lo <= caller && caller < hi
+            });
+            if !traced_caller {
+                return Ok(va);
+            }
+            if let Some(hooked) = self.trace_dynamic.get(&key) {
+                return Ok(*hooked);
+            }
+            let hooked = self.make_thunk(&key)?;
+            self.trace_dynamic.insert(key, hooked);
+            self.trace_owner(hooked, 1 + TRACE_DYNAMIC);
+            return Ok(hooked);
+        }
+        if let Some(quiet) = self.trace_quiet.get(&key) {
+            return Ok(*quiet);
+        }
+        let quiet = self.make_thunk(&key)?;
+        self.trace_quiet.insert(key, quiet);
+        self.trace_owner(quiet, 0xFF);
+        Ok(quiet)
+    }
+
+    /// `traced_calls` (4133-4147; Sprint 191): the calls call_trace.c recorded, in `scripts/call_compare.py`
+    /// `write_tsv`'s form (seq, tid, label, DLL, function, eight arguments, return value and last error, hex but for
+    /// seq, tid and the error), and the count the full area left out.
+    pub fn traced_calls(&self) -> (String, u64) {
+        use guest_runtime::layout::{TRACE_OFF, TRACE_RECORD, TRACE_RECORDS_OFF};
+        let mem = self.memory.as_slice();
+        let t = (MONITOR_SIZE + TRACE_OFF) as usize;
+        let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let (count, dropped) = (word(t + 16), word(t + 32));
+        let mut tsv = String::new();
+        for k in 0..count as usize {
+            let r = t + (TRACE_RECORDS_OFF + TRACE_RECORD * k as u64) as usize;
+            let f: Vec<u64> = (0..15).map(|i| word(r + 8 * i)).collect();
+            if f[0] == 0 {
+                continue;
+            }
+            let name = self.thunks.get(&(THUNK_BASE + 16 * f[4])).map_or("?!?", String::as_str);
+            let (dll, function) = name.split_once('!').unwrap_or((name, ""));
+            let label = self
+                .call_trace
+                .get(f[3] as usize)
+                .map_or("GetProcAddress", String::as_str);
+            let args: Vec<String> = f[5..13].iter().map(|a| format!("{a:x}")).collect();
+            tsv += &format!(
+                "{}\t{}\t{label}\t{dll}\t{function}\t{}\t{:x}\t{}\n",
+                f[1],
+                f[2],
+                args.join("\t"),
+                f[13],
+                f[14]
+            );
+        }
+        (tsv, dropped)
     }
 
     /// `_code_page` (vm_backend): x86 code the host writes, on fresh pages of the arena, an address never translated

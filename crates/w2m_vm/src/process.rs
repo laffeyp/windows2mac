@@ -70,7 +70,11 @@ pub struct Start {
     pub clock_from_host: bool,
     /// (instructions a second, the wall clock's start as a FILETIME)
     pub instruction_clock: Option<(u64, u64)>,
-    pub call_trace: bool,
+    /// the images whose calls `call_trace.c` records, at most 2 (vm_backend 2346-2348; Sprint 191: a bool until then)
+    pub call_trace: Vec<String>,
+    /// "DLL!export": the trace opens at the first compile of its block, as tools/jit_capture hooks the images before
+    /// UnityMain (vm_backend 2481-2487); None: from the start
+    pub call_trace_from: Option<String>,
     /// the runtime word's takings timed in the monitor code (Sprint 164, step 3's measure); false writes the Python's
     /// words
     pub time_runtime_word: bool,
@@ -92,7 +96,8 @@ impl Start {
             process_group: START_GROUP,
             clock_from_host: false,
             instruction_clock: None,
-            call_trace: false,
+            call_trace: Vec::new(),
+            call_trace_from: None,
             time_runtime_word: false,
         }
     }
@@ -303,7 +308,7 @@ pub fn write(
     q(areas.process, st + 192, 0);
     q(areas.process, RING_OFF, 0);
     q(areas.process, RING_OFF + 8, (RING_SIZE - RING_HEADER) / 24);
-    q(areas.process, TRACE_OFF, u64::from(start.call_trace));
+    q(areas.process, TRACE_OFF, u64::from(!start.call_trace.is_empty()));
     q(areas.process, TRACE_OFF + 8, 0);
     q(areas.process, TRACE_OFF + 16, 0);
     q(areas.process, TRACE_OFF + 24, TRACE_CAPACITY);

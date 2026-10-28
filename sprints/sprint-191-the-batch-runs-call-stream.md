@@ -88,3 +88,31 @@ guest that ends by its output.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the batch run's call stream.
+
+## result
+
+- **The call trace in Rust:** `Start::call_trace` is the list of traced images and `call_trace_from` the export the
+  trace opens at; `Guest` gains `make_thunk` (always a new thunk, as vm_backend 2920-2924), `trace_ranges` (each traced
+  image's slots on thunks of their own, owner 1 + the image), `traced_proc` (GetProcAddress's quiet and dynamic
+  thunks), `traced_calls` (the records in `write_tsv`'s form) and `with_trace` (the ranges, the trace closed until
+  UnityMain's block, its address at `VMC_EXIT + 16`); the bridge takes a traced form (`w2m_traced`, the service in x5,
+  the thunk index in x6, `UNTRACED` and `TRACE_WIDE_ARGS`); the host compiler opens the trace at that block; the layout
+  gains the trace's offsets. `w2m-vm --game` traces UnityPlayer.dll and mono-2.0-bdwgc.dll from UnityMain and writes
+  `<stop>.calls.tsv`.
+- **The comparison:** the Rust stream's 4 rows equal the Python's rows 0-3 in all 15 columns (VirtualAlloc,
+  VirtualProtect, InitializeCriticalSectionAndSpinCount, GetCurrentProcessId), no column named as varying; the run stops
+  at row 4, CreateEventW(0, 0, 0, a name at 0xfffef760), KERNEL 33's EVENT_OPEN. The held file records 4 calls traced.
+- **The guests' output:** `w2m-vm` writes a guest's stop with `--stop`, `gates.sh` keeps each guest's stderr and drops
+  its `sed`, and `each_guest_that_ends_prints_what_the_python_host_printed` compares the 6 that end (model_steps,
+  readied, sleeper, twoready exactly; qpc and qpc2 by the clock's form).
+- **Plant 1** (`traced_calls` taking the return value from the last-error field): `the_batch_runs_calls_are_the_python_
+  runs_up_to_the_stop` failed, "row 0 of the call stream differs from the Python batch run's", the return column 0.
+  Restored byte for byte.
+- **Plant 2** (the trace open from the start): the same test failed, "row 0 of the call stream differs from the Python
+  batch run's", its row 0 "GetSystemTimeAsFileTime". Restored byte for byte.
+- **Plant 3** (readied's held output "dene\n"): `each_guest_that_ends_prints_what_the_python_host_printed` failed,
+  "readied's output differs from the Python host's". Restored byte for byte.
+- **A race in `c_words`:** CI failed on 7839e3bba (run 40763197676), "libvmc-5124.so: file too short": the two tests
+  built the C emitter at one path on two threads. `load` builds it once a process; three runs passed.
+- **Departures:** the review's question of row 16 is settled by the stream (the Rust host had not reached it); one
+  multi-line `sed` and one inline Python read, both recorded; every other multi-line edit used the Edit tool.

@@ -101,6 +101,14 @@ pub const INHERIT_OFF: u64 = SYSTEM_IMAGES_OFF + SYSTEM_IMAGES * 0x1000;
 pub const FAULT_LOG_OFF: u64 = INHERIT_OFF + 0x1000;
 pub const CURRENT_DIRECTORY_OFF: u64 = FAULT_LOG_OFF + 0x1000;
 pub const TRACE_OFF: u64 = CURRENT_DIRECTORY_OFF + 0x1000;
+// vm_backend 249-251 and call_trace.c's struct (Sprint 191): the records after the counters, each 120 bytes; the owner
+// bytes of the first 16,384 thunks at 0x80, their string masks at 0x4300; the label GetProcAddress's hook gives
+pub const TRACE_RECORDS_OFF: u64 = 0x34D000;
+pub const TRACE_RECORD: u64 = 120;
+pub const TRACE_THUNKS: u64 = 16384;
+pub const TRACE_OWNER_OFF: u64 = 0x80;
+pub const TRACE_WIDE_OFF: u64 = 0x4300;
+pub const TRACE_DYNAMIC: u8 = 2;
 // vm_backend 286, 344, 129
 pub const INIT_STUB_SLOT: u64 = 0x80;
 pub const TLS_TAKEN: u64 = 16;

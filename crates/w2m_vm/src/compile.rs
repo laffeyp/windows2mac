@@ -70,6 +70,11 @@ impl HostCompiler {
     /// `_compile` (4588-4642), not in lockstep and with no translation cache: the block at `start` compiled at the
     /// code cursor, its marks, tails and pages noted. Err names why it cannot be.
     pub fn compile(&mut self, guest: &mut Guest, start: u64) -> Result<u64, String> {
+        if start == guest.trace_from && guest.trace_from != 0 {
+            // the trace opens (vm_backend 4589-4590; Sprint 191): the VM's compiler left this block to the host
+            let at = (guest_runtime::layout::MONITOR_SIZE + guest_runtime::layout::TRACE_OFF) as usize;
+            guest.memory.as_mut_slice()[at..at + 8].copy_from_slice(&1u64.to_le_bytes());
+        }
         let mut insns: Vec<Lifted> = Vec::new();
         let mut addr = start;
         while insns.len() < MAX_BLOCK_INSNS {

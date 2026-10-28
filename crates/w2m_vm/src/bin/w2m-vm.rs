@@ -158,7 +158,8 @@ mod run {
         let (guest_path, output, measure) = match args.as_slice() {
             [guest, flag, output] if flag == "--output" => (guest, output, None),
             [guest, flag, output, which, file]
-                if flag == "--output" && (which == "--serve-times" || which == "--runtime-word") =>
+                if flag == "--output"
+                    && (which == "--serve-times" || which == "--runtime-word" || which == "--stop") =>
             {
                 (guest, output, Some((which.as_str(), file)))
             }
@@ -178,7 +179,11 @@ mod run {
         let out = on_one_vcpu(&mut guest, &loaded)?;
 
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
-        if let Some((which, file)) = measure {
+        if let Some(("--stop", file)) = measure {
+            // the guest's stop by name, as the game's is written (Sprint 191; reviewer-2's Medium 4 of its review of
+            // 185-189: `gates.sh` had read it from stderr with `sed`)
+            fs::write(root.join(file), format!("{}\n", stop_name(&out.stop))).map_err(|e| format!("{file}: {e}"))?;
+        } else if let Some((which, file)) = measure {
             let json = if which == "--serve-times" {
                 let kinds: serde_json::Map<String, serde_json::Value> = out
                     .serve_by_kind
@@ -300,6 +305,10 @@ mod run {
         start.environment = USER_ENVIRONMENT.iter().map(|s| s.to_string()).collect();
         start.command_line = Some(format!("\"C:\\w2m\\app\\{program}\" {BATCH_ARGUMENTS}"));
         start.instruction_clock = Some((CLOCK_RATE, REFERENCE_START));
+        // the call trace as `run_frontier.py` 271-272 asks it (Sprint 191): UnityPlayer.dll's and mono's calls, from
+        // UnityMain
+        start.call_trace = vec!["UnityPlayer.dll".into(), "mono-2.0-bdwgc.dll".into()];
+        start.call_trace_from = Some("UnityPlayer.dll!UnityMain".into());
         let mut guest = guest_of(&root, &loaded, &start)?;
         let out = on_one_vcpu(&mut guest, &loaded)?;
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
@@ -350,6 +359,11 @@ mod run {
             tsv += &format!("{name}\t{n}\n");
         }
         tsv += &format!("blocks the host compiled\t{}\n", out.translations.len());
+        // the call stream at the stop, in `scripts/call_compare.py` `write_tsv`'s form, beside the stop file (Sprint 191)
+        let (calls, dropped) = guest.traced_calls();
+        let calls_file = format!("{}.calls.tsv", stop_file.trim_end_matches(".tsv"));
+        fs::write(root.join(&calls_file), &calls).map_err(|e| format!("{calls_file}: {e}"))?;
+        tsv += &format!("calls traced\t{}\ncalls dropped\t{dropped}\n", calls.lines().count());
         fs::write(root.join(stop_file), &tsv).map_err(|e| format!("{stop_file}: {e}"))?;
         print!("{tsv}");
         Ok(())

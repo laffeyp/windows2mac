@@ -190,7 +190,9 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 HOST_PROC => {
                     // latin-1: each byte its own code point (vm_backend 3895)
                     let name: String = read(guest, a1, a2)?.iter().map(|b| char::from(*b)).collect();
-                    crate::modules::proc(guest, a0, &name).map_err(HostError::Unserved)?
+                    // GetProcAddress's answer as the capture's process sees it (`_traced_proc`, vm_backend 3895)
+                    let va = crate::modules::proc(guest, a0, &name).map_err(HostError::Unserved)?;
+                    guest.traced_proc(va)?
                 }
                 _ => match crate::modules::file_name(guest, a0) {
                     // HOST_MODULE_PATH: buffer a1, a2 characters; the path's length, M64 for no module
