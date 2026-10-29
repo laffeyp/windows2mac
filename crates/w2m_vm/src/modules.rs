@@ -7,10 +7,10 @@
 //! HOST_MODULE 15, HOST_PROC 16 and HOST_MODULE_PATH 17 (vm_backend 3889-3904); HOST_MODULE_AT 18 is
 //! `host_request::containing`.
 //!
-//! Two departures from the Python, each a stop rather than a guess: the Rust host maps no DLL file after the start
-//! yet, so a LoadLibrary that would map one (`_load_dll`) or a system DLL not imported (`load_system`) stops by name; and a GetProcAddress thunk is `Guest::import_thunk`'s, which reuses a thunk of the same name, where
-//! the Python keeps kernelbase's and ntdll's apart from the program's imports (they differ only for a program that
-//! imports from KERNELBASE.dll or ntdll.dll by name, which the batch run's images do not).
+//! A DLL file loaded after the start is mapped (`load_dll`, Sprint 207). GetProcAddress keeps its own thunks
+//! (`Guest::proc_thunks`, the Python's `Modules._thunks`), apart from the import thunks (`Guest::imports`), so a
+//! thunk's address is the frozen host's (Sprint 209; before, a GetProcAddress thunk was `import_thunk`'s, which reused
+//! any thunk of the name).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -450,11 +450,12 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
         if !spec().exports.get(stem).is_some_and(|names| names.contains(name)) {
             return Ok(0);
         }
-        // the program's own import thunk when it imports the name (Windows answers the import's address), otherwise a
-        // thunk per module and name
-        return guest
-            .import_thunk(&format!("{spelling}!{name}"))
-            .map_err(|e| format!("{e:?}"));
+        // the program's own import thunk when it imports the name (Windows answers the import's address,
+        // proc.imported), otherwise GetProcAddress's own thunk per module and name (modules.py 172-177)
+        if let Some(t) = guest.imports.get(&format!("{c}!{}", name.to_lowercase())) {
+            return Ok(*t);
+        }
+        return proc_thunk(guest, format!("{spelling}!{name}"));
     }
     let p = &guest.process;
     let module = if handle == p.kernel32 {
@@ -471,12 +472,29 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
     if !spec().exports.get(module).is_some_and(|names| names.contains(name)) {
         return Ok(0);
     }
+    // modules.py 185-190: kernel32's imported names answer with the import thunk
+    if module == "kernel32"
+        && let Some(t) = guest.imports.get(&format!("kernel32.dll!{}", name.to_lowercase()))
+    {
+        return Ok(*t);
+    }
     let key = if module == "ntdll" {
         format!("ntdll.dll!{name}")
     } else {
         format!("{}.dll!{name}", module.to_uppercase())
     };
-    guest.import_thunk(&key).map_err(|e| format!("{e:?}"))
+    proc_thunk(guest, key)
+}
+
+/// GetProcAddress's own thunk for `key` ("DLL!Name" as asked), made once (`Modules._thunks`, modules.py 176, 189;
+/// Sprint 209: before, `import_thunk` reused any thunk of the name, the trace's own among them).
+fn proc_thunk(guest: &mut Guest, key: String) -> Result<u64, String> {
+    if let Some(t) = guest.proc_thunks.get(&key) {
+        return Ok(*t);
+    }
+    let t = guest.make_thunk(&key).map_err(|e| format!("{e:?}"))?;
+    guest.proc_thunks.insert(key, t);
+    Ok(t)
 }
 
 #[cfg(test)]

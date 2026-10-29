@@ -15,10 +15,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const HELD: &str = "store/exit_ledger/first-difference-2026-10-28.tsv";
+const HELD: &str = "store/exit_ledger/differences-2026-10-29.tsv";
 const PINS: &str = "store/exit_ledger/python.sha256";
-const COLUMNS: [&str; 13] = [
-    "seq", "kind", "site", "executed", "warp", "op", "a0", "a1", "a2", "a3", "second", "result", "written",
+const COLUMNS: [&str; 14] = [
+    "seq", "kind", "site", "executed", "warp", "op", "a0", "a1", "a2", "a3", "second", "result", "written", "process",
 ];
 /// The stop row's columns that the fixture cannot know: the site, the second, the result and the written ranges.
 const UNKNOWN_AT_STOP: [usize; 4] = [2, 10, 11, 12];
@@ -35,35 +35,33 @@ fn rows(path: &Path) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// For each column, the first row at which `rust` departs from `python` there, one line of the held file each
-/// (process, column, row, the frozen host's value, the Rust host's, the row's kind), then the row counts: each column
-/// apart, so a difference in one (the thunks' numbering in `site`) does not hide another (the count in `executed`).
-fn first_differences(process: &str, python: &[Vec<String>], rust: &[Vec<String>]) -> Vec<String> {
+/// Every cell at which `rust` departs from `python`, one line of the held file each (process, row, column, the frozen
+/// host's value, the Rust host's, the row's kind), and each row only one side has, by its kind (process, row,
+/// "missing" or "extra", its kind): every row of every column judged, so a difference past a held one fails (Sprint
+/// 209; reviewer-2's High 1 of its review of 206-209: the held file had named each column's first difference only).
+fn differences(process: &str, python: &[Vec<String>], rust: &[Vec<String>]) -> Vec<String> {
     let last = python.len().saturating_sub(1);
     let cell = |row: &Vec<String>, c: usize| row.get(c).map_or("-", |s| s).to_string();
-    let mut out: Vec<String> = (1..COLUMNS.len())
-        .map(|c| {
-            python
-                .iter()
-                .zip(rust)
-                .enumerate()
-                .find(|(i, (p, r))| {
-                    !(*i == last && UNKNOWN_AT_STOP.contains(&c))
-                        && p.get(c).is_none_or(|v| v != "*")
-                        && p.get(c) != r.get(c)
-                })
-                .map_or(format!("{process}\t{}\tnone", COLUMNS[c]), |(i, (p, r))| {
-                    format!(
-                        "{process}\t{}\t{i}\t{}\t{}\t{}",
-                        COLUMNS[c],
-                        cell(p, c),
-                        cell(r, c),
-                        cell(p, 1)
-                    )
-                })
-        })
-        .collect();
-    out.push(format!("{process}\trows\t{}\t{}", python.len(), rust.len()));
+    let mut out = Vec::new();
+    for (i, (p, r)) in python.iter().zip(rust).enumerate() {
+        for (c, column) in COLUMNS.iter().enumerate().skip(1) {
+            let unknown = i == last && UNKNOWN_AT_STOP.contains(&c);
+            if !unknown && p.get(c).is_none_or(|v| v != "*") && p.get(c) != r.get(c) {
+                out.push(format!(
+                    "{process}\t{i}\t{column}\t{}\t{}\t{}",
+                    cell(p, c),
+                    cell(r, c),
+                    cell(p, 1)
+                ));
+            }
+        }
+    }
+    for (i, p) in python.iter().enumerate().skip(rust.len()) {
+        out.push(format!("{process}\t{i}\tmissing\t{}", cell(p, 1)));
+    }
+    for (i, r) in rust.iter().enumerate().skip(python.len()) {
+        out.push(format!("{process}\t{i}\textra\t{}", cell(r, 1)));
+    }
     out
 }
 
@@ -130,7 +128,7 @@ fn each_process_parts_from_the_frozen_host_where_held() {
         } else {
             root.join(format!("build/exit_ledger/rust.tsv.{process}"))
         };
-        found.extend(first_differences(&process, &python, &rows(&rust)));
+        found.extend(differences(&process, &python, &rows(&rust)));
     }
     println!("{}", found.join("\n"));
     let held: Vec<String> = fs::read_to_string(root.join(HELD))
@@ -149,25 +147,29 @@ fn each_process_parts_from_the_frozen_host_where_held() {
 fn a_difference_is_named_by_its_row_and_column() {
     let row = |s: &str| s.split('\t').map(str::to_string).collect::<Vec<_>>();
     let python = vec![
-        row("0\thvc 1\t10\t27\t0\t-\t-\t-\t-\t-\t-\t-\t-"),
-        row("1\thvc 8\t20\t30\t0\tf\t1\t2\t3\t4\t0\t0\t-"),
+        row("0\thvc 1\t10\t27\t0\t-\t-\t-\t-\t-\t-\t-\t-\taa"),
+        row("1\thvc 1\t30\t29\t0\t-\t-\t-\t-\t-\t-\t-\t-\taa"),
+        row("2\thvc 8\t20\t30\t0\tf\t1\t2\t3\t4\t0\t0\t-\tbb"),
     ];
     let mut rust = python.clone();
-    let found = |rust: &[Vec<String>]| first_differences("main", &python, rust);
-    assert!(
-        found(&rust)
-            .iter()
-            .all(|l| l.ends_with("none") || l == "main\trows\t2\t2")
-    );
-    rust[0][4] = "143".into();
+    let found = |rust: &[Vec<String>]| differences("main", &python, rust);
+    assert!(found(&rust).is_empty());
+    // every differing row is named, a second difference in the same column too
     rust[0][2] = "11".into();
-    let lines = found(&rust);
-    assert!(lines.contains(&"main\twarp\t0\t0\t143\thvc 1".to_string()), "{lines:?}");
-    assert!(lines.contains(&"main\tsite\t0\t10\t11\thvc 1".to_string()), "{lines:?}");
-    // the stop row's answer is not compared; a short ledger is named by its count
+    rust[1][2] = "31".into();
+    rust[1][13] = "cc".into();
+    assert_eq!(
+        found(&rust),
+        [
+            "main\t0\tsite\t10\t11\thvc 1",
+            "main\t1\tsite\t30\t31\thvc 1",
+            "main\t1\tprocess\taa\tcc\thvc 1"
+        ]
+    );
+    // the stop row's answer is not compared; a short ledger names its missing row by its kind
     let mut rust = python.clone();
-    rust[1][11] = "10".into();
-    assert!(found(&rust).contains(&"main\tresult\tnone".to_string()));
+    rust[2][11] = "10".into();
+    assert!(found(&rust).is_empty());
     rust.pop();
-    assert!(found(&rust).contains(&"main\trows\t2\t1".to_string()));
+    assert_eq!(found(&rust), ["main\t2\tmissing\thvc 8"]);
 }

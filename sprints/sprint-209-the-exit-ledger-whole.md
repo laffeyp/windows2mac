@@ -82,3 +82,37 @@ The exit ledger judges every row and every guest write, and the Rust host's thun
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the exit ledger whole.
+
+## result
+
+- **The thunks:** the two hosts made the same 1,100 thunks at the start, in a different order: the Rust filled the
+  COM vtables (54 thunks) before the traced image's own thunks (490), where the Python's `__init__` makes them after
+  (`_trace_ranges` 2480, `_com_vtables` 2488). `Guest::com_vtables` now runs after `trace_ranges`, and the thunk
+  tables are equal address for address. Past mono's load the site column parted again by 11 thunks: `import_thunk`
+  matched any thunk of the name, the trace's own and GetProcAddress's among them; `Guest::imports` and
+  `Guest::proc_thunks` now keep them apart as the Python's `Modules.imports` and `Modules._thunks` do. The code
+  cache follows the Python's `__init__` order too: the trace's own bridges, the COM vtables', then the slice and entry
+  stubs (the first gates run found the slice stub placed before the COM bridges, a BL offset in qpc's host-compiled
+  block moved).
+- **The judge:** `exit_ledger.rs` holds every differing (process, row, column) and names a row one side lacks by its
+  kind; `store/exit_ledger/differences-2026-10-29.tsv` (renamed by `git mv` from first-difference-2026-10-28.tsv)
+  holds one line, the child's row 190, `hvc 12`, which the fixture writes when it stops the run.
+- **The writes:** a fourteenth column holds the sha256 of the process area below the trace (the PEB, the loader
+  lists, the TEBs, the system images, the transport) at each exit, on both hosts, the writes no wrap reaches; at the
+  stop the two process areas differed in 24 bytes, all in the trace's records 426 and 438, the stream's varying cells.
+- **The run:** every cell of every exit agrees to the game's first MAP_VIEW, 1,024 exits of the game and 190 of the
+  child, the process area included; the stream, the guests and the families as before.
+- **The logs and the Decisions:** the three repeats' run logs are tracked under store/frontier-logs/<run id>/run.log
+  and census rows 4 and 5a cite them; `signal_report --check` holds each agent-resolved Decision from 2026-10-25 to
+  one decision clause and one revisit clause.
+- **Plant 1** (the COM vtables made before the trace's own thunks again): the judge failed with 73 lines, every row
+  whose site moved, beginning "main 0 site 7ffe00003100 7ffe00003460 hvc 1". Restored byte for byte.
+- **Plant 2** (the loader list not written again after a late load): the judge failed with 668 lines, the process
+  column from mono's load, "main 356 process 1b3b0956… 19a8f14e… hvc 8". Restored byte for byte.
+- **Plant 3** (a Decision given a second revisit clause): `--check` failed, "the Decision of 2026-10-28 \"Step 4's
+  reference run (reviewer-2's follow-up on Sprint 207\" holds 1 decision clauses and 2 revisit clauses, not one
+  each". Restored byte for byte.
+- **Departures:** every guest write is not logged: the written column stays the request view's, and the process
+  column covers the process area below the trace; the arena's writes (a mapped DLL, VirtualQuery's record on the
+  guest stack) are in neither, which the doc says. Plant 2 planted the loader list, not the init stub's page the card
+  named, since the init stub's page is in the arena.

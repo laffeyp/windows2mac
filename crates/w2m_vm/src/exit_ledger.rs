@@ -12,8 +12,11 @@
 //! argument words, the second and result words at the transport's 48 and 56, and the sha256 of the writes the host made
 //! through the request's memory view, each as its address and length (little-endian u64s) then its bytes, "-" for
 //! none. Other exits leave the request columns "-". The written ranges are those the frozen host makes through
-//! `_GuestView` (the file bridge, the kernel requests, HOST_MODULE_PATH's path) and HOST_RANDOM's bytes; the arena's
-//! zeroing, VirtualQuery's record and the thread requests' writes are not in it yet.
+//! `_GuestView` (the file bridge, the kernel requests, HOST_MODULE_PATH's path) and HOST_RANDOM's bytes. The last
+//! column (Sprint 209) is the sha256 of the process area below the trace (`PROCESS_VA` to `TRACE_OFF`: the PEB, the
+//! loader lists, the TEBs, the system images, the transport), which holds the host's writes no wrap reaches, the
+//! loader's and the threads'; the trace's records are the call stream's, which `batch_run.rs` judges. The arena's
+//! writes (a mapped DLL, VirtualQuery's record on the guest stack) are in neither.
 
 use std::io::Write;
 
@@ -69,10 +72,11 @@ impl Ledger {
     }
 
     /// The pending row, with the count and warp as the guest will resume with them.
-    pub fn resume(&mut self, executed: u64, warp: u64) -> Result<(), String> {
+    pub fn resume(&mut self, executed: u64, warp: u64, process: &[u8]) -> Result<(), String> {
         let Some(row) = self.pending.take() else {
             return Ok(());
         };
+        let process = guest_runtime::sha256::hex(process);
         let written = std::mem::take(&mut self.written);
         let request = match row.request {
             Some(r) => {
@@ -88,7 +92,7 @@ impl Ledger {
         };
         writeln!(
             self.out,
-            "{}\t{}\t{:x}\t{executed}\t{warp}\t{request}",
+            "{}\t{}\t{:x}\t{executed}\t{warp}\t{request}\t{process}",
             self.seq, row.kind, row.site
         )
         .map_err(|e| e.to_string())?;

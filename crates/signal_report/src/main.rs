@@ -1195,7 +1195,17 @@ fn run() -> Result<bool, String> {
         if early.is_empty() {
             println!("every tail entry headed closed has its card done and no unfilled line");
         }
-        return Ok(missing.is_empty() && unquoted.is_empty() && early.is_empty());
+        let blackboard = fs::read_to_string(root.join("BLACKBOARD.md")).map_err(|e| format!("BLACKBOARD.md: {e}"))?;
+        let split = decisions_split(&blackboard);
+        for w in &split {
+            eprintln!("{w}");
+        }
+        if split.is_empty() {
+            println!(
+                "every agent-resolved Decision from {FIRST_CLAUSED_DECISION} holds one decision and one revisit clause"
+            );
+        }
+        return Ok(missing.is_empty() && unquoted.is_empty() && early.is_empty() && split.is_empty());
     }
     let n = sprint.ok_or("usage: signal_report NNN [--write] [--backfill YYYY-MM-DD] | --check")?;
     let text = report(&root, n, backfill.as_deref())?;
@@ -1207,6 +1217,30 @@ fn run() -> Result<bool, String> {
         print!("{text}");
     }
     Ok(true)
+}
+
+/// The first date whose agent-resolved Decisions carry a decision clause and a revisit clause each (most before it
+/// carry no decision clause).
+const FIRST_CLAUSED_DECISION: &str = "2026-10-25";
+
+/// Each "- **YYYY-MM-DD agent-resolved**" entry from `FIRST_CLAUSED_DECISION` holding other than one "Decision:" and
+/// one "Revisit if:", named (Sprint 209; reviewer-2's Medium 4 of its review of 206-209: an insert split one Decision,
+/// leaving its clauses trailing the next).
+fn decisions_split(blackboard: &str) -> Vec<String> {
+    blackboard
+        .lines()
+        .filter_map(|l| {
+            let date = l.strip_prefix("- **")?.split(' ').next()?;
+            (l.contains(" agent-resolved**") && date >= FIRST_CLAUSED_DECISION).then_some((date, l))
+        })
+        .filter_map(|(date, l)| {
+            let (d, r) = (l.matches("Decision:").count(), l.matches("Revisit if:").count());
+            (d != 1 || r != 1).then(|| {
+                let title: String = l.split(" — ").nth(1).unwrap_or(l).chars().take(60).collect();
+                format!("the Decision of {date} \"{title}\" holds {d} decision clauses and {r} revisit clauses, not one each")
+            })
+        })
+        .collect()
 }
 
 fn main() -> ExitCode {
@@ -1250,6 +1284,23 @@ mod tests {
     const CARD: &str = "## observation contract\n\n- **Planted faults:** (1) one; (2) two (Sprint 173).\n\n\
                         ## result\n\n- **Plant 1** (one): the judge failed, \"88 RCR CF: case 206\".\n\
                         - **Plant 2** (two) reached no judge. Replaced: the judge failed, \"91 ADD_LOCK fault rip\".\n";
+
+    /// Sprint 209: a Decision split by an insert is named; one before 2026-10-25 is not held.
+    #[test]
+    fn a_decision_holds_one_decision_and_one_revisit_clause() {
+        let whole = "- **2026-10-28 agent-resolved** — A (x). Decision: do it. Revisit if: it fails.";
+        assert!(decisions_split(whole).is_empty());
+        let split = "- **2026-10-28 agent-resolved** — A (x). The opening only.\n\
+                     - **2026-10-28 agent-resolved** — B. Decision: b. Revisit if: b. Decision: a. Revisit if: a.";
+        let named = decisions_split(split);
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(
+            named[0].contains("holds 0 decision clauses and 0 revisit clauses"),
+            "{named:?}"
+        );
+        let old = "- **2026-10-09 agent-resolved** — Old. Revisit if: never.";
+        assert!(decisions_split(old).is_empty());
+    }
 
     /// A partial close is a close (Sprint 206: Sprint 205's "closed-partial:" commit failed the walk on CI).
     #[test]

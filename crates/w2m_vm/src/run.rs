@@ -348,6 +348,12 @@ pub fn dispatch_insert(mem: &mut [u8], target: u64, va: u64) {
     }
 }
 
+/// The process area from `PROCESS_VA` up to the trace (`TRACE_OFF`), the exit ledger's last column (Sprint 209).
+fn process_below_trace(mem: &[u8]) -> &[u8] {
+    let at = MONITOR_SIZE as usize;
+    &mem[at..at + guest_runtime::layout::TRACE_OFF as usize]
+}
+
 /// `_vm_compiled` (vm_backend 2559-2580): each block block_compiler.c compiled since the last exit, from its log entry
 /// (start, end, code, then u32s first, nmarks, count, cut, live_out, live_used, npages, and the pages at 56), noted as
 /// the host notes its own compiles: the marks' tails (`_note_tails`, so a model step's give-back counts the block's
@@ -579,7 +585,7 @@ fn run(
         if let Some(l) = &mut guest.exit_ledger {
             let mem = guest.memory.as_slice();
             let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
-            if let Err(why) = l.resume(read_u64(mem, md), warp) {
+            if let Err(why) = l.resume(read_u64(mem, md), warp, process_below_trace(mem)) {
                 break Stop::Exit(format!("the exit ledger: {why}"));
             }
         }
@@ -881,7 +887,7 @@ fn run(
     if let Some(l) = &mut guest.exit_ledger {
         let mem = guest.memory.as_slice();
         let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
-        let _ = l.resume(read_u64(mem, md), warp);
+        let _ = l.resume(read_u64(mem, md), warp, process_below_trace(mem));
         let _ = l.flush();
         // the blocks both compilers made (Sprint 207)
         let mut blocks: Vec<(u64, u64)> = out.translations.iter().map(|t| (t.start, t.end)).collect();

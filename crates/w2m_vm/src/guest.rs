@@ -588,6 +588,11 @@ pub struct Guest {
     pub switch_slice_va: u64,
     /// thunk address -> "DLL!Name": the loader's, then those the COM vtables made
     pub thunks: BTreeMap<u64, String>,
+    /// the import thunks by "dll!name" in lower case (`Modules.imports`, vm_backend 2918): the loader's, then those
+    /// `import_thunk` makes; not the trace's own nor GetProcAddress's (Sprint 209)
+    pub imports: BTreeMap<String, u64>,
+    /// GetProcAddress's thunks of system modules by "DLL!Name" as asked (`Modules._thunks`, modules.py 176, 189)
+    pub proc_thunks: BTreeMap<String, u64>,
     /// thunk address -> its bridge's address
     pub bridges: BTreeMap<u64, u64>,
     pub slice_va: u64,
@@ -753,7 +758,9 @@ impl Guest {
         let mut cache = CodeCache { mem };
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;
-        let mut thunks = loaded.thunks.clone();
+        let thunks = loaded.thunks.clone();
+        // `imports` (vm_backend 2918): the loader's thunks by their lowercase names
+        let imports: BTreeMap<String, u64> = thunks.iter().map(|(t, n)| (n.to_lowercase(), *t)).collect();
         let mut bridges = BTreeMap::new();
         let mut bind = |cache: &mut CodeCache<'_>, thunk: u64, name: &str| -> Result<(), GuestError> {
             let (dll, function) = name.split_once('!').unwrap_or((name, ""));
@@ -766,32 +773,8 @@ impl Guest {
         for (&thunk, name) in &loaded.thunks {
             bind(&mut cache, thunk, name)?;
         }
-        // `_com_vtables` (3078-3085): each COM class's vtable in the runtime image filled with its methods' thunks, each
-        // an import thunk (`_import_thunk`, 3087-3092) made after the loader's, with its bridge
-        let mut imports: BTreeMap<String, u64> = thunks.iter().map(|(t, n)| (n.to_lowercase(), *t)).collect();
-        for (symbol, dll, prefix, dxgi, methods) in COM_VTABLES {
-            let at = image.symbols[symbol] - MONITOR_VA;
-            let all = if dxgi { &DXGI_OBJECT[..] } else { &[][..] }.iter().chain(methods);
-            for (i, method) in all.enumerate() {
-                let name = format!("{dll}!{prefix}{method}");
-                let thunk = match imports.get(&name.to_lowercase()) {
-                    Some(t) => *t,
-                    None => {
-                        let t = pe_loader::THUNK_BASE + 16 * thunks.len() as u64;
-                        thunks.insert(t, name.clone());
-                        bind(&mut cache, t, &name)?;
-                        imports.insert(name.to_lowercase(), t);
-                        t
-                    }
-                };
-                write_u64(cache.mem, at + 8 * i as u64, thunk);
-            }
-        }
-        let slice_va = cache.put(|a| slice_stub(a, switch_slice_va))?;
-        let entry_va = cache.put(|a| entry_stub(a, code.dispatch_va))?;
-        write_u64(cache.mem, VM_COMPILER + VMC_EXIT, code.dispatch_va);
-        write_u64(cache.mem, VM_COMPILER + VMC_EXIT + 8, slice_va);
-        write_u64(cache.mem, VM_COMPILER + VMC_EXIT + 16, 0); // the trace opens from the start
+        // the trace's own thunks, the COM vtables', then the slice and entry stubs, in the Python's `__init__` order
+        // (2480-2508): `with_trace` makes them (Sprint 209)
         for (i, name) in vm_compiler_symbols.iter().enumerate() {
             let va = *image.symbols.get(name).ok_or_else(|| {
                 GuestError::Layout(format!("the stencil table names {name}, which the runtime lacks"))
@@ -823,9 +806,11 @@ impl Guest {
             switch_va,
             switch_slice_va,
             thunks,
+            imports,
+            proc_thunks: BTreeMap::new(),
             bridges,
-            slice_va,
-            entry_va,
+            slice_va: 0,
+            entry_va: 0,
             services: services.to_vec(),
             symbols: image.symbols.clone(),
             arena,
@@ -885,9 +870,38 @@ impl Guest {
             self.trace_from = at;
             let mem = self.memory.as_mut_slice();
             mem[(MONITOR_SIZE + TRACE_OFF) as usize..(MONITOR_SIZE + TRACE_OFF + 8) as usize].fill(0);
-            write_u64(mem, VM_COMPILER + VMC_EXIT + 16, at);
         }
+        self.com_vtables()?;
+        // the slice and entry stubs after every bridge, then the VM compiler's exits (vm_backend 2506-2508): the
+        // dispatcher, the slice stub, the block that opens the trace (0: from the start)
+        let (switch_slice_va, dispatch_va) = (self.switch_slice_va, self.code.dispatch_va);
+        let mut cache = CodeCache {
+            mem: self.memory.as_mut_slice(),
+        };
+        self.slice_va = cache.put(|a| slice_stub(a, switch_slice_va))?;
+        self.entry_va = cache.put(|a| entry_stub(a, dispatch_va))?;
+        let mem = self.memory.as_mut_slice();
+        write_u64(mem, VM_COMPILER + VMC_EXIT, dispatch_va);
+        write_u64(mem, VM_COMPILER + VMC_EXIT + 8, self.slice_va);
+        write_u64(mem, VM_COMPILER + VMC_EXIT + 16, self.trace_from);
         Ok(self)
+    }
+
+    /// `_com_vtables` (3078-3085): each COM class's vtable in the runtime image filled with its methods' thunks, each an
+    /// import thunk (`_import_thunk`, 3087-3092) with its bridge; made after the trace's own thunks (`_trace_ranges`,
+    /// 2480, before `_com_vtables`, 2488), so each thunk's address is the frozen host's (Sprint 209: made before them,
+    /// the 54 COM thunks moved the traced image's 490 own thunks, and the exit ledger's site column parted at the
+    /// game's first exit).
+    fn com_vtables(&mut self) -> Result<(), GuestError> {
+        for (symbol, dll, prefix, dxgi, methods) in COM_VTABLES {
+            let at = self.symbols[symbol] - MONITOR_VA;
+            let all = if dxgi { &DXGI_OBJECT[..] } else { &[][..] }.iter().chain(methods);
+            for (i, method) in all.enumerate() {
+                let thunk = self.import_thunk(&format!("{dll}!{prefix}{method}"))?;
+                write_u64(self.memory.as_mut_slice(), at + 8 * i as u64, thunk);
+            }
+        }
+        Ok(())
     }
 
     /// `_page_descriptor` (4507-4533): the memory offset of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB
@@ -948,11 +962,15 @@ impl Guest {
     /// `_import_thunk` (3087-3092) with `make_thunk` (2920-2924): the thunk `name` ("KERNEL32.dll!Name") has, or a new
     /// one after the others with its bridge.
     pub fn import_thunk(&mut self, name: &str) -> Result<u64, GuestError> {
+        // `m.imports.get(key) or m.make_thunk(name)` over the import thunks only, not every thunk of the name (Sprint
+        // 209: matching the trace's own or GetProcAddress's thunks, the Rust host made 11 fewer after mono's load)
         let key = name.to_lowercase();
-        if let Some((t, _)) = self.thunks.iter().find(|(_, n)| n.to_lowercase() == key) {
+        if let Some(t) = self.imports.get(&key) {
             return Ok(*t);
         }
-        self.make_thunk(name)
+        let t = self.make_thunk(name)?;
+        self.imports.insert(key, t);
+        Ok(t)
     }
 
     /// `make_thunk` (2920-2924): a new thunk after the others, with its bridge, whatever thunks the name has already
