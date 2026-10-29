@@ -82,6 +82,56 @@ impl From<GuestError> for HostError {
 /// at +56.
 const TRANSPORT: usize = (MONITOR_SIZE + TRANSPORT_OFF) as usize;
 
+/// `wake_all` (vm_backend 3700-3706): every blocked thread of this process checks its wait again.
+pub fn wake_blocked(guest: &mut Guest) {
+    let blocked: Vec<u64> = guest
+        .threads
+        .values()
+        .map(|t| t.index)
+        .filter(|&i| {
+            let at = crate::threads::entry(i) + crate::threads::E_STATUS;
+            read_u64(guest.memory.as_slice(), at as usize) == crate::threads::BLOCKED
+        })
+        .collect();
+    for i in blocked {
+        crate::threads::set_status(guest, i, crate::threads::READY);
+    }
+}
+
+/// A child's KERNEL 33 request, served by the supervisor in its turn (Sprint 197): the result, with the second word
+/// written and a pending wake applied; None in the supervisor's own process.
+fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostError> {
+    let Some(crate::turns::Link::Child(link)) = &guest.link else {
+        return Ok(None);
+    };
+    let (result, second, wake) = link.request(a, &guest.layout.maps).map_err(HostError::Unserved)?;
+    if wake {
+        wake_blocked(guest);
+    }
+    let mem = guest.memory.as_mut_slice();
+    mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+    Ok(Some(result))
+}
+
+/// A child's start as `spawner` makes it (kernel.py 437-468), for `w2m-vm --child`: the command line, its ids, the
+/// inherited handles and current directory, the parent's environment, process group, clock and program directory.
+fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json::Value, String> {
+    let s = &guest.start;
+    Ok(serde_json::json!({
+        "command_line": child.command_line,
+        "pid": child.pid,
+        "tid": child.tid,
+        "inherited": child.inherited.iter().map(|(h, k, o)| [*h, *k, *o]).collect::<Vec<_>>(),
+        "directory": child.directory,
+        "environment": s.environment,
+        "process_group": s.process_group,
+        "instruction_clock": s.instruction_clock.map(|(rate, epoch)| [rate, epoch]),
+        "app_root": s.app_root.as_ref().map(|p| p.to_string_lossy().to_string()),
+        "parent_image": s.image_name,
+        "program_path": s.program_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+    }))
+}
+
 /// Guest memory as `kernel.rs` reads and writes it, through the layout.
 struct KernelMemory<'a>(&'a mut Guest);
 
@@ -284,28 +334,42 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         // `kernel.py`'s objects for this process (vm_backend 3819-3831; Sprint 193): the answer and its second word, and
         // on a wake every blocked thread ready (`wake_all`, 3700-3706)
         HOST_KERNEL => {
-            let pid = guest.process.process_id;
-            let mut objects = std::mem::take(&mut guest.kernel);
-            let answered = objects.request(pid, [a0, a1, a2, a3], &mut KernelMemory(guest));
-            guest.kernel = objects;
-            let answer = answered.map_err(HostError::Unserved)?;
-            if answer.wake {
-                let blocked: Vec<u64> = guest
-                    .threads
-                    .values()
-                    .map(|t| t.index)
-                    .filter(|&i| {
-                        let at = crate::threads::entry(i) + crate::threads::E_STATUS;
-                        read_u64(guest.memory.as_slice(), at as usize) == crate::threads::BLOCKED
-                    })
-                    .collect();
-                for i in blocked {
-                    crate::threads::set_status(guest, i, crate::threads::READY);
+            // a child's request goes to the supervisor, which serves it against the child's shared memory in the
+            // supervisor's turn (Sprint 197)
+            if let Some(result) = child_request(guest, [a0, a1, a2, a3])? {
+                result
+            } else {
+                let pid = guest.process.process_id;
+                let mut objects = std::mem::take(&mut guest.kernel);
+                objects.add(pid);
+                let answered = objects.request(pid, [a0, a1, a2, a3], &mut KernelMemory(guest));
+                guest.kernel = objects;
+                let answer = answered.map_err(HostError::Unserved)?;
+                if let Some(child) = &answer.spawn {
+                    // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
+                    let start = child_start(guest, child).map_err(HostError::Unserved)?;
+                    if guest.link.is_none() {
+                        guest.link = Some(crate::turns::Link::Supervisor(
+                            crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
+                                .map_err(HostError::Unserved)?,
+                        ));
+                    }
+                    if let Some(crate::turns::Link::Supervisor(s)) = &mut guest.link {
+                        s.spawn(child, start).map_err(HostError::Unserved)?;
+                    }
+                    // a parent shares the vCPU with its children from here: time slices (`_set_budget`)
+                    crate::threads::set_budget(guest);
                 }
+                if answer.wake {
+                    wake_blocked(guest);
+                    if let Some(crate::turns::Link::Supervisor(s)) = &guest.link {
+                        s.wake_children();
+                    }
+                }
+                let mem = guest.memory.as_mut_slice();
+                mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&answer.second.to_le_bytes());
+                answer.result
             }
-            let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&answer.second.to_le_bytes());
-            answer.result
         }
         HOST_EXCEPTION if a0 == EXCEPTION_STUBS => guest.guest_stubs()?,
         HOST_EXCEPTION if a0 == EXCEPTION_CAPTURE_XMM => {

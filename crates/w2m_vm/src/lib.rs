@@ -21,6 +21,7 @@ pub mod guest_stubs;
 pub mod host_request;
 pub mod kernel;
 pub mod ledger;
+pub mod machine;
 pub mod model;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod model_step;
@@ -31,9 +32,13 @@ pub mod process;
 pub mod record;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod run;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod shared;
 pub mod tables;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod threads;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod turns;
 pub mod x86fp;
 pub mod x87;
 

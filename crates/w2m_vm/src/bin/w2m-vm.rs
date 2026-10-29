@@ -53,6 +53,8 @@ mod run {
 
     /// The run's limit, as `tests/test_timed_waits.py`'s Machine sets it.
     const MAX_STEPS: u64 = 1 << 40;
+    /// a guest run's limit, family_run.py `run_in_vm`'s `timeout_ms=60_000` (Sprint 197)
+    const GUEST_SECONDS: u64 = 60;
 
     fn root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -147,6 +149,12 @@ mod run {
         }
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json>] \
                      | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> | w2m-vm --wfe-probe";
+        if let [flag, page_fd, memory_fd, slot] = args.as_slice()
+            && flag == "--child"
+        {
+            let n = |s: &String| s.parse::<u64>().map_err(|e| format!("--child {s}: {e}"));
+            return child(n(page_fd)? as i32, n(memory_fd)? as i32, n(slot)? as usize);
+        }
         if let [flag, directory, program, out_flag, output, stop_flag, stop_file] = args.as_slice()
             && flag == "--game"
             && out_flag == "--output"
@@ -168,6 +176,7 @@ mod run {
         let mut start = Start::console("probe.exe");
         start.time_runtime_word = matches!(measure, Some(("--runtime-word", _)));
         let root = root();
+        start.program_path = Some(root.join(guest_path));
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
@@ -261,6 +270,15 @@ mod run {
             .map_err(|e| format!("{e:?}"))?;
         let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
         let mut host = HostCompiler::default();
+        // a guest's run stops at GUEST_SECONDS, as family_run.py's `run_in_vm` stops a probe at 60 s (`timeout_ms`), so
+        // a guest that spins fails by name rather than hanging the gates (Sprint 197); the batch run has no limit
+        if guest.start.app_root.is_none() {
+            let handle = vcpu.handle();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(GUEST_SECONDS));
+                let _ = handle.stop();
+            });
+        }
         run_compiling(guest, loaded, &vcpu, MAX_STEPS, &mut host).map_err(|e| format!("{e:?}"))
     }
 
@@ -293,6 +311,90 @@ mod run {
     /// `directory`, its DLLs supplied from the directory, started as `scripts/run_frontier.py` 266-273 starts it (a GUI
     /// program, foreground held, `USER_ENVIRONMENT`, `BATCH_ARGUMENTS`, the instruction clock), run on one vCPU to its
     /// stop; the guest's output to `output` and the stop to `stop_file`, each relative to the repository root.
+    /// `w2m-vm --child <turn page fd> <memory fd> <slot>` (Sprint 197): a child process a supervisor `w2m-vm` started
+    /// for a PROCESS_CREATE (`spawner`, kernel.py 437-468), its start one JSON line on standard input. Its program is
+    /// the command line's first token, quoted or not, found in C:\w2m\app on the host or, for a run with no program
+    /// directory, the parent's own program when the name is its name; its DLLs from the program's directory. It runs
+    /// in its turns and tells the supervisor its end or its stop.
+    fn child(page_fd: i32, memory_fd: i32, slot: usize) -> Result<(), String> {
+        let mut line = String::new();
+        io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
+        let s: serde_json::Value = serde_json::from_str(&line).map_err(|e| format!("a child's start: {e}"))?;
+        let text = |k: &str| s[k].as_str().map(str::to_string);
+        let number = |k: &str| s[k].as_u64().ok_or_else(|| format!("a child's start lacks {k}"));
+        let pid = number("pid")?;
+        let link = w2m_vm::turns::ChildLink::open(page_fd, slot, pid)?;
+        link.first_turn();
+        let run = || -> Result<Outcome, String> {
+            let command_line = text("command_line").ok_or("a child's start lacks its command line")?;
+            let first = if let Some(rest) = command_line.strip_prefix('"') {
+                rest.split('"').next().unwrap_or("").to_string()
+            } else {
+                command_line.split(' ').next().unwrap_or("").to_string()
+            };
+            let leaf = first.rsplit(['\\', '/']).next().unwrap_or("").to_string();
+            let path = match (text("app_root"), text("program_path"), text("parent_image")) {
+                (Some(root), _, _) => w2m_vm::modules::host_file(&PathBuf::from(root), &first)?,
+                (None, Some(program), Some(parent)) if leaf.eq_ignore_ascii_case(&parent) => {
+                    Some(PathBuf::from(program))
+                }
+                _ => None,
+            }
+            .ok_or_else(|| {
+                format!("CreateProcessW of {first:?}: no such file (ERROR_FILE_NOT_FOUND is not in the rows)")
+            })?;
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let data = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let here = path.parent().map(Path::to_path_buf).unwrap_or_default();
+            let supply = |dll: &str| fs::read(here.join(dll)).ok();
+            let loaded = pe_loader::load(&data, Some(&supply), &name).map_err(|e| format!("{name}: {e:?}"))?;
+            let mut start = Start::console(&name);
+            start.gui = loaded.image.as_ref().is_some_and(|i| i.subsystem == 2);
+            start.command_line = Some(command_line.clone());
+            start.environment = s["environment"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.as_str().map(str::to_string))
+                .collect();
+            start.process_id = pid;
+            start.tid = number("tid")?;
+            start.inherited = Some(
+                s["inherited"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| Some((e[0].as_u64()?, e[1].as_u64()?, e[2].as_u64()?)))
+                    .collect(),
+            );
+            start.directory = text("directory");
+            start.process_group = number("process_group")? as u32;
+            start.instruction_clock = s["instruction_clock"]
+                .as_array()
+                .and_then(|c| Some((c.first()?.as_u64()?, c.get(1)?.as_u64()?)));
+            start.app_root = text("app_root").map(PathBuf::from);
+            start.program_path = Some(path.clone());
+            start.memory_fd = Some(memory_fd);
+            let root = root();
+            let mut guest = guest_of(&root, &loaded, &start)?;
+            guest.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
+                page_fd, slot, pid,
+            )?));
+            on_one_vcpu(&mut guest, &loaded)
+        };
+        match run() {
+            Ok(out) => match out.stop {
+                Stop::ExitProcess { code } => link.end(u64::from(code)),
+                other => link.stop(&stop_name(&other)),
+            },
+            Err(why) => link.stop(&why),
+        }
+        Ok(())
+    }
+
     fn game(directory: &Path, program: &str, output: &str, stop_file: &str) -> Result<(), String> {
         let root = root();
         let started = Instant::now();
@@ -311,6 +413,7 @@ mod run {
         start.call_trace_from = Some("UnityPlayer.dll!UnityMain".into());
         // the depot is C:\w2m\app, the Python's file bridge root (`host_file`, `in_app_directory`; Sprint 196)
         start.app_root = Some(directory.to_path_buf());
+        start.program_path = Some(directory.join(program));
         let mut guest = guest_of(&root, &loaded, &start)?;
         let out = on_one_vcpu(&mut guest, &loaded)?;
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;

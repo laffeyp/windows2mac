@@ -326,6 +326,102 @@ pub enum Switch {
     /// a thread goes on at the dispatcher with the registers `schedule` left in its `x`; the vector slots to swap,
     /// (outgoing, incoming), when it is another thread
     Go { vectors: Option<(u64, u64)> },
+    /// no thread is ready in a process of a machine (`IDLE`, vm_backend 3565-3571): the turn goes to the machine, and
+    /// `resume_idle` goes on from here
+    Idle,
+}
+
+unsafe extern "C" {
+    /// `mach/mach_time.h`
+    fn mach_absolute_time() -> u64;
+    fn mach_timebase_info(info: *mut [u32; 2]) -> i32;
+}
+
+/// `_counter_now` (vm_backend 4886-4895): the guest's 10 MHz counter now: on the instruction clock the count and the
+/// warp; else the host's monotonic clock in 100 ns units (`monotonic_count`, kernel32.py 36-38, which is
+/// `mach_absolute_time` on macOS, the counter the guest reads as CNTVCT_EL0).
+pub fn counter_now(guest: &Guest) -> u64 {
+    let mem = guest.memory.as_slice();
+    if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
+        let executed = u128::from(read_u64(mem, MONITOR_DATA));
+        let rate = u128::from(read_u64(mem, MONITOR_DATA + CLOCK_RATE));
+        let warp = u128::from(read_u64(mem, RUN_TABLE + CLOCK_WARP));
+        return (executed / rate * 10_000_000 + executed % rate * 10_000_000 / rate + warp) as u64;
+    }
+    let mut base = [0u32; 2];
+    let ticks = unsafe {
+        mach_timebase_info(&mut base);
+        mach_absolute_time()
+    };
+    (u128::from(ticks) * u128::from(base[0]) / u128::from(base[1]) / 100) as u64
+}
+
+/// `_wake_expired` (4897-4905): every blocked thread whose deadline has passed is ready.
+pub fn wake_expired(guest: &mut Guest) {
+    let now = counter_now(guest);
+    let mem = guest.memory.as_slice();
+    let expired: Vec<u64> = guest
+        .threads
+        .values()
+        .filter(|t| {
+            let d = read_u64(mem, entry(t.index) + E_DEADLINE);
+            read_u64(mem, entry(t.index) + E_STATUS) == BLOCKED && d != u64::MAX && d <= now
+        })
+        .map(|t| t.index)
+        .collect();
+    for index in expired {
+        set_status(guest, index, READY);
+    }
+}
+
+/// What a process reports of itself at the end of its turn (`VM.ready`, `waits_with_deadline`, vm_backend 3653-3690):
+/// a thread ready and not suspended, and a thread blocked with a deadline.
+pub fn turn_state(guest: &Guest) -> crate::turns::State {
+    let mem = guest.memory.as_slice();
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    crate::turns::State {
+        clock: 0,
+        ready: guest
+            .threads
+            .values()
+            .any(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0),
+        timed: guest
+            .threads
+            .values()
+            .any(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX),
+    }
+}
+
+/// `_resume_idle` (3632-3652) after the machine gave the turn back: expired waits woken; with none ready, a blocked
+/// thread with a deadline runs to check it (the instruction clock's warp is not carried, and refuses by name); then
+/// `_switch` from the thread that went idle.
+pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32) -> Result<Switch, String> {
+    wake_expired(guest);
+    let mem = guest.memory.as_slice();
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    if !guest
+        .threads
+        .values()
+        .any(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0)
+    {
+        let timed = guest
+            .threads
+            .values()
+            .find(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
+            .map(|t| t.index);
+        if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
+            return Err("an idle process's warp to a deadline on the instruction clock is not served yet".into());
+        }
+        if let Some(index) = timed {
+            set_status(guest, index, READY);
+        }
+    }
+    let cur = guest
+        .threads
+        .get(&cur_tid)
+        .ok_or_else(|| format!("thread {cur_tid} went idle, and the host holds no such thread"))?
+        .clone();
+    switch(guest, x, &cur, bits)
 }
 
 /// `_schedule` (3500-3519) for `hvc #12`: the current thread (its registers in `x`, at an instruction boundary) hands
@@ -374,6 +470,9 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         .clone()
         .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0)
         .map(|t| (*t).clone());
+    if next.is_none() && guest.link.is_some() {
+        return Ok(Switch::Idle);
+    }
     let Some(next) = next else {
         let timed = rotation
             .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
@@ -584,7 +683,8 @@ pub fn create_thread(
 /// `_set_budget` (3284-3289): the step budget the block entries check: the run's limit, or with more than one thread a
 /// time slice.
 pub fn set_budget(guest: &mut Guest) {
-    let shared = guest.threads.len() > 1;
+    // a process of a machine shares the vCPU's time with the others too (Sprint 197)
+    let shared = guest.threads.len() > 1 || guest.link.is_some();
     let mem = guest.memory.as_mut_slice();
     let (executed, max_steps) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + RUN_END));
     let limit = if shared {
@@ -599,6 +699,11 @@ pub fn set_budget(guest: &mut Guest) {
 /// thread is suspended or another is ready; the count at which the earliest deadline of a blocked thread falls, on the
 /// instruction clock (0 on another clock); else ~0.
 pub fn slice_until(guest: &Guest) -> u64 {
+    // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
+    // 2750-2754; Sprint 197)
+    if guest.link.as_ref().is_some_and(crate::turns::Link::others_due) {
+        return 0;
+    }
     let mem = guest.memory.as_slice();
     let current = current_tid(guest);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);

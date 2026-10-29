@@ -89,3 +89,34 @@ the two share the kernel objects as `kernel.py`'s Machine shares them, and the b
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: kernel.Machine.
+
+## result
+
+- **The tables:** `kernel::Objects` holds a record per process (`Process`: exit code, handles on it, handles it holds);
+  PROCESS_CREATE reads the command line, the inherited list and the one directory, numbers the child as `allocate_ids`
+  (4100, thread 0x100004), and answers the child to start (`Spawn`); PROCESS_STATE answers STILL_ACTIVE, the exit code
+  or ~0; `end` keeps the code and closes what the process held. Unit test
+  `a_child_starts_holds_what_it_inherits_and_ends_with_its_code`.
+- **The child:** `turns::Supervisor::spawn` starts `w2m-vm --child <page fd> <memory fd> <slot>` with its start as one
+  JSON line; the child finds its program as `spawner` does (C:\w2m\app on the host, or the parent's own program by
+  name), maps its memory from the supervisor's unlinked file (`GuestMemory::shared`), and sends each KERNEL 33 request
+  through the turn page with its layout's maps; the supervisor serves it against the shared memory.
+- **The turns:** `shared::Page` waits on the turn word with `os_sync_wait_on_address` and OS_SYNC_WAIT_ON_ADDRESS_SHARED;
+  a process hands the turn back when idle (`Switch::Idle`, `resume_idle`), at a slice's end while another is ready
+  (`hvc #4`, with `give_back`), at its end and at a stop; `machine::next` chooses the next as `_next` does, with the
+  1 ms wall-clock wait before a timed waiter and the deadlock stop. The round trip: median 6,292 ns, p99 12,750 ns.
+- **The clock:** each process posts `counter_now` at its turn's end; the machine's clock is the latest; on the
+  instruction clock a process behind it is warped up when it runs again (`_catch_up`).
+- **The run:** 12 of 15 guests end, the six that start a child with the Python host's output; the batch run passes row
+  16 and stops at row 49 (LoadLibrary of api-ms-win-core-winrt-l1-1-0.dll, combase.dll not imported at the start), its
+  stream equal to the Python's rows 0-48 with row 49 in flight. A guest run stops at 60 s by name.
+- **Plant 1** (`_catch_up`'s warp skipped) reached no judge: the guests run on the wall clock and the batch run's rows
+  0-48 do not read the child's clock. Its replacement 1b (`catch_up` answering 0) failed
+  `a_process_behind_the_machine_clock_is_caught_up`, "left: 0". Restored byte for byte.
+- **Plant 2** (the child's exit code not kept): `each_guest_that_ends_prints_what_the_python_host_printed` failed,
+  "twoproc's output differs from the Python host's", left "child bad code\n". Restored byte for byte.
+- **Plant 3** (Sprint 193's plant again, a new event's id off by one): handshake and pingpong stopped, "kernel request 2
+  on 4294967297, which is not an event", crosswake at the run's time limit, and
+  `the_batch_run_and_the_guests_stop_where_held` failed. Restored byte for byte.
+- **Departures:** the child's environment is the parent's at its start, not `environment_now`; a grandchild process,
+  and a child's own children, stop by name; the run's 60 s guest limit is new, added for plant 3's hang.

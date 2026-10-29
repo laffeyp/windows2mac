@@ -114,45 +114,10 @@ impl AppDirectory {
     /// relative to C:\w2m\app, each component matched case-folded; a path the bridge refuses is Err, as it raises. A
     /// full path outside C:\w2m\app finds no file: the bridge's drive holds only empty system folders.
     fn host_file(&self, name: &str) -> Result<bool, String> {
-        let name = name.strip_prefix("\\\\?\\").unwrap_or(name);
-        let b = name.as_bytes();
-        let parts: Vec<&str> = if b.len() > 1 && b[1] == b':' {
-            if !matches!(b[0], b'c' | b'C') || (b.len() > 2 && !matches!(b[2], b'\\' | b'/')) {
-                return Err(format!(
-                    "file path on a drive other than C: or drive-relative: {name:?}"
-                ));
-            }
-            let parts = split(name.get(3..).unwrap_or(""));
-            match parts.as_slice() {
-                [w, a, rest @ ..] if w.eq_ignore_ascii_case("w2m") && a.eq_ignore_ascii_case("app") => rest.to_vec(),
-                _ => return Ok(false),
-            }
-        } else if name.starts_with(['\\', '/']) {
-            return Err(format!("file path rooted without a drive, or UNC: {name:?}"));
-        } else {
-            split(name)
-        };
-        if parts.contains(&"..") {
-            return Err(format!("file path with '..': {name:?}"));
+        match &self.root {
+            Some(root) => Ok(host_file(root, name)?.is_some()),
+            None => Ok(matches!(app_parts(name)?.as_deref(), Some([p]) if p.eq_ignore_ascii_case(&self.program))),
         }
-        let Some(root) = &self.root else {
-            return Ok(matches!(parts.as_slice(), [p] if p.eq_ignore_ascii_case(&self.program)));
-        };
-        let mut here = root.clone();
-        for part in parts {
-            let Ok(entries) = std::fs::read_dir(&here) else {
-                return Ok(false);
-            };
-            let found = entries
-                .flatten()
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .find(|e| e.eq_ignore_ascii_case(part));
-            let Some(found) = found else {
-                return Ok(false);
-            };
-            here.push(found);
-        }
-        Ok(here.is_file())
     }
 
     /// `in_app_directory` (vm_backend 2926-2927): a top-level entry of C:\w2m\app named `c` (canonical, lowercase).
@@ -166,6 +131,57 @@ impl AppDirectory {
             None => self.program.to_lowercase() == c,
         }
     }
+}
+
+/// `_parts` (file_bridge.py 210-223) for a name under C:\w2m\app: its components below C:\w2m\app, a full C:\ path or
+/// a relative one; None for a full path elsewhere on C:, where the bridge's drive holds only empty system folders; Err
+/// for a path the bridge refuses.
+fn app_parts(name: &str) -> Result<Option<Vec<&str>>, String> {
+    let name = name.strip_prefix("\\\\?\\").unwrap_or(name);
+    let b = name.as_bytes();
+    let parts: Vec<&str> = if b.len() > 1 && b[1] == b':' {
+        if !matches!(b[0], b'c' | b'C') || (b.len() > 2 && !matches!(b[2], b'\\' | b'/')) {
+            return Err(format!(
+                "file path on a drive other than C: or drive-relative: {name:?}"
+            ));
+        }
+        let parts = split(name.get(3..).unwrap_or(""));
+        match parts.as_slice() {
+            [w, a, rest @ ..] if w.eq_ignore_ascii_case("w2m") && a.eq_ignore_ascii_case("app") => rest.to_vec(),
+            _ => return Ok(None),
+        }
+    } else if name.starts_with(['\\', '/']) {
+        return Err(format!("file path rooted without a drive, or UNC: {name:?}"));
+    } else {
+        split(name)
+    };
+    if parts.contains(&"..") {
+        return Err(format!("file path with '..': {name:?}"));
+    }
+    Ok(Some(parts))
+}
+
+/// `host_file` (file_bridge.py 202-240): the host file a guest name means under C:\w2m\app, which is `root` on the
+/// host, each component matched case-folded; None when no file is there.
+pub fn host_file(root: &std::path::Path, name: &str) -> Result<Option<PathBuf>, String> {
+    let Some(parts) = app_parts(name)? else {
+        return Ok(None);
+    };
+    let mut here = root.to_path_buf();
+    for part in parts {
+        let Ok(entries) = std::fs::read_dir(&here) else {
+            return Ok(None);
+        };
+        let found = entries
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .find(|e| e.eq_ignore_ascii_case(part));
+        let Some(found) = found else {
+            return Ok(None);
+        };
+        here.push(found);
+    }
+    Ok(here.is_file().then_some(here))
 }
 
 /// A path's components, "\" or "/" separated, empty ones and "." dropped (`_parts`).

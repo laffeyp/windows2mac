@@ -81,6 +81,7 @@ mod ffi {
     /// `sys/mman.h`.
     pub const PROT_READ: i32 = 0x01;
     pub const PROT_WRITE: i32 = 0x02;
+    pub const MAP_SHARED: i32 = 0x0001;
     pub const MAP_PRIVATE: i32 = 0x0002;
     pub const MAP_ANON: i32 = 0x1000;
     /// `hv_vm_config.h`: `HV_IPA_GRANULE_4KB`, the first value of the `hv_ipa_granule` enum.
@@ -296,6 +297,30 @@ impl GuestMemory {
                 ffi::PROT_READ | ffi::PROT_WRITE,
                 ffi::MAP_PRIVATE | ffi::MAP_ANON,
                 -1,
+                0,
+            )
+        };
+        if p as isize == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(GuestMemory { ptr: p.cast(), len })
+    }
+
+    /// `len` bytes of the file `fd`, mapped shared (Sprint 197): a child process's memory, which the supervisor maps
+    /// too and serves the child's requests against, as the Python's host maps each vm_monitor's memory file
+    /// (vm_backend 2393-2395). The file is unlinked before either maps it, so no file outlives the run.
+    pub fn shared(fd: i32, len: usize) -> std::io::Result<GuestMemory> {
+        assert!(
+            len > 0 && len.is_multiple_of(16 * 1024),
+            "guest memory is a whole number of 16 KB pages"
+        );
+        let p = unsafe {
+            ffi::mmap(
+                std::ptr::null_mut(),
+                len,
+                ffi::PROT_READ | ffi::PROT_WRITE,
+                ffi::MAP_SHARED,
+                fd,
                 0,
             )
         };

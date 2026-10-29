@@ -81,6 +81,12 @@ pub struct Start {
     /// Sprint 196): the batch run's depot; None for a probe run, whose directory holds only the program (family_run.py
     /// `run_in_vm` writes probe.exe alone)
     pub app_root: Option<std::path::PathBuf>,
+    /// a child's memory: the descriptor of the unlinked file the supervisor made, which the guest sizes and maps
+    /// shared so the supervisor serves its requests against it (Sprint 197); None: anonymous memory
+    pub memory_fd: Option<i32>,
+    /// the program's file on the host: a child started by its own name finds it here when the run has no program
+    /// directory (a probe run's C:\w2m\app holds only the program; Sprint 197)
+    pub program_path: Option<std::path::PathBuf>,
 }
 
 impl Start {
@@ -103,6 +109,8 @@ impl Start {
             call_trace_from: None,
             time_runtime_word: false,
             app_root: None,
+            memory_fd: None,
+            program_path: None,
         }
     }
 

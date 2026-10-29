@@ -375,6 +375,66 @@ pub fn run_to_first_decline(
 /// As `run_to_first_decline`, with the host compiling the blocks the VM's C declines (Sprint 155: `serve_exit`'s
 /// `_compile`, 5243, and its code-write exit, 5297-5299), until an exit this run does not serve or a block it cannot
 /// compile.
+/// `_give_back` with `_stop_block_length` (vm_backend 4862-4878): a thread leaving at a block's stop goes on at the
+/// block's entry, whose SUBS counts the block again, so the block's instructions come off the count. `after_stop` is
+/// the word after the stop's `hvc #4`, the B to the block's body; the SUBS x23, x23, #n is two words before the body.
+fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
+    let mem = guest.memory.as_mut_slice();
+    let word_at = |mem: &[u8], off: u64| u32::from_le_bytes(mem[off as usize..off as usize + 4].try_into().unwrap());
+    let off = after_stop - MONITOR_VA;
+    let imm26 = i64::from(word_at(mem, off) & 0x3FF_FFFF);
+    let body = (off as i64 + 4 * if imm26 >> 25 != 0 { imm26 - (1 << 26) } else { imm26 }) as u64;
+    let subs = word_at(mem, body - 8);
+    let reg = REG_BUDGET;
+    if subs & !(0xFFF << 10) != 0xF100_0000 | reg << 5 | reg {
+        return Err(format!(
+            "the word before the block's body at 0x{body:x} is 0x{subs:08x}, not its SUBS"
+        ));
+    }
+    let count = read_u64(mem, MONITOR_DATA);
+    write_u64(mem, MONITOR_DATA, count - u64::from(subs >> 10 & 0xFFF));
+    Ok(())
+}
+
+/// The process's turn ends (Sprint 197: `VM.steps` yields "idle" or "slice", vm_backend 5066, 5082): the machine runs
+/// the others until this process's turn comes back; a pending wake readies its blocked threads, and on the instruction
+/// clock it is caught up to the machine's (`_catch_up`). Err: the run stops (a deadlock, a child's stop).
+fn hand_over(guest: &mut Guest, message: crate::turns::Message) -> Result<(), String> {
+    use crate::turns::{Back, Link};
+    let mut state = crate::threads::turn_state(guest);
+    state.clock = crate::threads::counter_now(guest);
+    let (wake, machine, processes) = match guest.link.take() {
+        Some(Link::Supervisor(mut s)) => {
+            let mut objects = std::mem::take(&mut guest.kernel);
+            let back = s.hand_over(&mut objects, state);
+            let processes = 1 + s.children.len();
+            guest.kernel = objects;
+            guest.link = Some(Link::Supervisor(s));
+            match back? {
+                Back::Run { wake, machine } | Back::Timed { wake, machine } => (wake, machine, processes),
+            }
+        }
+        Some(Link::Child(c)) => {
+            let (wake, machine) = c.yield_turn(message, state);
+            guest.link = Some(Link::Child(c));
+            (wake, machine, 2)
+        }
+        None => (false, 0, 1),
+    };
+    if wake {
+        crate::host_request::wake_blocked(guest);
+    }
+    // `_catch_up` (vm_backend 3680-3688): on the instruction clock a process behind the machine's clock is moved to
+    // it, as time passed for it while it waited
+    let mem = guest.memory.as_mut_slice();
+    if read_u64(mem, MONITOR_DATA + crate::process::CLOCK_MODE) == 2 {
+        let lag = crate::machine::catch_up(state.clock, machine, processes);
+        let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
+        write_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP, warp + lag);
+    }
+    Ok(())
+}
+
 pub fn run_compiling(
     guest: &mut Guest,
     loaded: &Loaded,
@@ -423,8 +483,18 @@ fn run(
         return Ok(out);
     }
     {
+        // `_set_budget`: one thread, the run's limit; a child shares the vCPU from its first instruction (Sprint 197)
+        let shared = guest.link.is_some();
         let mem = guest.memory.as_mut_slice();
-        write_u64(mem, md + 8, max_steps); // `_set_budget`: one thread, the run's limit
+        write_u64(
+            mem,
+            md + 8,
+            if shared {
+                max_steps.min(guest_runtime::layout::TIME_SLICE)
+            } else {
+                max_steps
+            },
+        );
         write_u64(mem, VM_COMPILER + VMC_ENABLED, 1);
         mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&0x1F80u32.to_le_bytes());
         write_u64(mem, md + LOCK_OWNER, 1);
@@ -455,7 +525,10 @@ fn run(
             let (count, limit) = (read_u64(mem, md), read_u64(mem, md + 8));
             write_u64(mem, md + SLICE_UNTIL, slice_until);
             write_u64(mem, md + RUN_END, max_steps);
-            write_u64(mem, RUN_TABLE + u64::from(RT_IN_VM), 1);
+            // the VM switches threads itself unless another process is due (Sprint 197)
+            let others_due = guest.link.as_ref().is_some_and(crate::turns::Link::others_due);
+            let mem = guest.memory.as_mut_slice();
+            write_u64(mem, RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
             if !runtime.contains(&pc) {
                 vcpu.set_reg(Reg::X(REG_BUDGET as u8), limit.wrapping_sub(count))?;
             }
@@ -507,6 +580,10 @@ fn run(
                 continue;
             }
             *out.exits.entry(0).or_default() += 1;
+            if matches!(exit, Exit::Canceled) {
+                // `hv_vcpus_exit` from the run's time limit (w2m-vm's GUEST_SECONDS; Sprint 197)
+                break Stop::Exit("the run's time limit".into());
+            }
             break Stop::Exit(format!("{exit:?} at pc 0x{pc:x}"));
         };
         *out.exits.entry(number).or_default() += 1;
@@ -580,8 +657,15 @@ fn run(
                 *v = vcpu.reg(Reg::X(r as u8))?;
             }
             let from = crate::threads::current_tid(guest);
-            match crate::threads::schedule(guest, &mut x, bits) {
+            let mut switched = crate::threads::schedule(guest, &mut x, bits);
+            // no thread ready in a process of a machine: the turn goes to the others until one is (Sprint 197)
+            while switched == Ok(Switch::Idle) {
+                switched = hand_over(guest, crate::turns::Message::Idle)
+                    .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, bits));
+            }
+            match switched {
                 Err(why) => break Stop::Handover { pc, why },
+                Ok(Switch::Idle) => unreachable!(),
                 Ok(Switch::Ended(code)) => {
                     out.handovers.push(Handover {
                         schedule: bits,
@@ -632,6 +716,59 @@ fn run(
                         rip,
                         why: format!("flag {f} read while undefined"),
                     };
+                }
+            }
+        }
+        if number == 4 && guest.link.is_some() {
+            // a slice's end in a process of a machine (`serve_exit`, 5280-5293; Sprint 197): at the run's limit a
+            // stop; else the next slice's budget and expired waits woken, then the turn to another process that is
+            // ready, or the next thread of this one, the stopped block's count given back as the thread goes on at its
+            // entry
+            let count = read_u64(guest.memory.as_slice(), md);
+            if count >= max_steps {
+                break Stop::Exit(format!("max_steps: {count} of {max_steps} at pc 0x{pc:x}"));
+            }
+            crate::threads::set_budget(guest);
+            crate::threads::wake_expired(guest);
+            let others = guest.link.as_ref().is_some_and(crate::turns::Link::others_ready);
+            if !others && guest.threads.len() < 2 {
+                continue;
+            }
+            let at = match x86_address_at(guest.memory.as_slice(), pc - 4) {
+                Ok(at) => at,
+                Err(why) => break Stop::Exit(why),
+            };
+            let mut x = [0u64; 31];
+            for (r, v) in x.iter_mut().enumerate() {
+                *v = vcpu.reg(Reg::X(r as u8))?;
+            }
+            x[17] = at;
+            if let Err(why) = give_back(guest, pc) {
+                break Stop::Exit(why);
+            }
+            if others && let Err(why) = hand_over(guest, crate::turns::Message::Slice) {
+                break Stop::Handover { pc, why };
+            }
+            let from = crate::threads::current_tid(guest);
+            let mut switched = crate::threads::schedule(guest, &mut x, 0);
+            while switched == Ok(Switch::Idle) {
+                switched = hand_over(guest, crate::turns::Message::Idle)
+                    .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, 0));
+            }
+            match switched {
+                Err(why) => break Stop::Handover { pc, why },
+                Ok(Switch::Idle) => unreachable!(),
+                Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
+                Ok(Switch::Go { vectors }) => {
+                    if let Some((save, load)) = vectors {
+                        swap_vectors(vcpu, guest.memory.as_mut_slice(), save, load)?;
+                    }
+                    for (r, v) in x.iter().enumerate() {
+                        vcpu.set_reg(Reg::X(r as u8), *v)?;
+                    }
+                    vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;
+                    vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
+                    continue;
                 }
             }
         }

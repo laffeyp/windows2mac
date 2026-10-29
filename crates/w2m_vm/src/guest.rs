@@ -592,6 +592,10 @@ pub struct Guest {
     pub trace_bound: BTreeSet<String>,
     /// the objects this process shares through KERNEL 33 (`kernel.py`; Sprint 193)
     pub kernel: crate::kernel::Objects,
+    /// the process's place in the run's machine (Sprint 197): None alone and not yet a parent
+    pub link: Option<crate::turns::Link>,
+    /// how the process started: a child's start copies its environment, group and clock (`spawner`; Sprint 197)
+    pub start: Start,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -658,7 +662,16 @@ impl Guest {
         vm_compiler_symbols: &[String],
     ) -> Result<Guest, GuestError> {
         let layout = Layout::new(loaded);
-        let mut memory = hypervisor::GuestMemory::new(layout.size as usize).map_err(GuestError::Memory)?;
+        let mut memory = match start.memory_fd {
+            // a child's: the supervisor's unlinked file, sized here and mapped shared (Sprint 197)
+            Some(fd) => {
+                use std::os::fd::FromRawFd;
+                let file = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(fd) });
+                file.set_len(layout.size).map_err(GuestError::Memory)?;
+                hypervisor::GuestMemory::shared(fd, layout.size as usize).map_err(GuestError::Memory)?
+            }
+            None => hypervisor::GuestMemory::new(layout.size as usize).map_err(GuestError::Memory)?,
+        };
         let mem = memory.as_mut_slice();
         for &(i, off) in &layout.placed {
             let r = &loaded.memory.regions[i];
@@ -781,6 +794,8 @@ impl Guest {
             trace_dynamic: BTreeMap::new(),
             trace_bound: BTreeSet::new(),
             kernel: crate::kernel::Objects::new(),
+            link: None,
+            start: start.clone(),
         }
         .with_trace(start)
     }
