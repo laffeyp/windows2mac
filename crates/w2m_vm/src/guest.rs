@@ -599,6 +599,10 @@ pub struct Guest {
     /// the host's random bytes on the instruction clock, `random.Random(0x5EED)` (vm_backend 2357; Sprint 203); None:
     /// the host's CSPRNG
     pub random: Option<crate::mt19937::Random>,
+    /// the process's file system (`self.files`, vm_backend; Sprint 204); None: a run with no file-system root
+    pub files: Option<crate::file_bridge::FileBridge>,
+    /// the run stops at the 60 s limit (guests and their children, Sprint 197); a child inherits it (Sprint 204)
+    pub limited: bool,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -800,6 +804,8 @@ impl Guest {
             link: None,
             start: start.clone(),
             random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
+            files: None,
+            limited: false,
         }
         .with_trace(start)
     }

@@ -7,9 +7,8 @@
 //! HOST_MODULE 15, HOST_PROC 16 and HOST_MODULE_PATH 17 (vm_backend 3889-3904); HOST_MODULE_AT 18 is
 //! `host_request::containing`.
 //!
-//! Two departures from the Python, each a stop rather than a guess: the Rust host has no file bridge yet, so a
-//! LoadLibrary that would map a DLL file after the start (`_load_dll`) or a system DLL not imported (`load_system`)
-//! stops by name; and a GetProcAddress thunk is `Guest::import_thunk`'s, which reuses a thunk of the same name, where
+//! Two departures from the Python, each a stop rather than a guess: the Rust host maps no DLL file after the start
+//! yet, so a LoadLibrary that would map one (`_load_dll`) or a system DLL not imported (`load_system`) stops by name; and a GetProcAddress thunk is `Guest::import_thunk`'s, which reuses a thunk of the same name, where
 //! the Python keeps kernelbase's and ntdll's apart from the program's imports (they differ only for a program that
 //! imports from KERNELBASE.dll or ntdll.dll by name, which the batch run's images do not).
 
@@ -266,7 +265,7 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
     // `_load_dll` (vm_backend 3906-3918): a file the name finds, full or relative to C:\w2m\app, would be mapped
     if h.app.host_file(name)? {
         return Err(format!(
-            "LoadLibrary {name}: a DLL file after the start, not served by the Rust host yet (it has no file bridge)"
+            "LoadLibrary {name}: a DLL file after the start, not mapped by the Rust host yet (no `_load_dll`)"
         ));
     }
     // modules.py 124-129: a System32 DLL whose exports the spec lists is a synthetic system image in the next free
@@ -405,7 +404,7 @@ mod tests {
     }
 
     /// LoadLibrary of a name not in the process (modules.py 117-132, file_bridge.py 202-240): a DLL file the name finds,
-    /// beside the program or below it by a full or relative path, stops by name (no file bridge yet); a system DLL not
+    /// beside the program or below it by a full or relative path, stops by name (no `_load_dll` yet); a system DLL not
     /// imported stops by name; and a name found nowhere is 0 (Sprint 196; reviewer-2's High 2 of its review of 193-196).
     #[test]
     fn a_load_of_a_name_found_nowhere_is_0() {

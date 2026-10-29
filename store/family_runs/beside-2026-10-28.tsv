@@ -1,0 +1,3 @@
+# the file each module family's runner binary had beside it on the runner (Sprint 204): family, binary (sha256), name, file (sha256 under store/binaries/); transcribed from scripts/family_run.py 643-646, the family's `dll_name` with `dll_on_disk` and each run's `dll`; read by scripts/gates.sh, which passes it to w2m-vm as --beside
+search	df6ca688fd04c4599788e7c9ce2ff311246e6d96bb2273edaa87282ece84c023	module_search_dll.dll	735a3c71d68c4329e287bd1730b1bae07a5f448c80312daefd34f624f40d79cb
+search	1924070efea39f066a9859354c9c77138e32db51f26e5426e51b669140ea016d	module_search_dll.dll	14dc071ae4f8c7321ae556b887ea440281eb7070c3ae9b8998aba1ce195ee192

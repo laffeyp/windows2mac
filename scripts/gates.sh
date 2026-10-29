@@ -160,8 +160,12 @@ if [ $rust != none ]; then
   for c in queries system names_ansi search; do
     for b in $(grep -o 'probe sha256:[0-9a-f]*' "contracts/windows.module.$c/0.1.0.json" | cut -d: -f2 | sort -u); do
       rm -f "build/family_runs/$c-$b.stop"
+      # the file the runner had beside the binary, if any (Sprint 204: store/family_runs/beside-2026-10-28.tsv)
+      beside=$(awk -F'\t' -v b="$b" '$2 == b { print "--beside " $3 " store/binaries/" $4 ".dll" }' \
+        store/family_runs/beside-2026-10-28.tsv)
+      # shellcheck disable=SC2086
       echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "store/binaries/$b.exe" \
-        --output "build/family_runs/$c-$b.txt" --stop "build/family_runs/$c-$b.stop" > /dev/null \
+        --output "build/family_runs/$c-$b.txt" --stop "build/family_runs/$c-$b.stop" $beside > /dev/null \
         2> "build/family_runs/$c-$b.stderr" || true
     done
   done

@@ -25,6 +25,9 @@ pub const HOST_VIRTUAL_FREE: u64 = 20;
 pub const HOST_VIRTUAL_PROTECT: u64 = 21;
 pub const HOST_VIRTUAL_QUERY: u64 = 22;
 pub const HOST_EXCEPTION: u64 = 31;
+use crate::file_bridge::{
+    FILE_DUP, FILE_FSTAT, FILE_LIST, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK,
+};
 /// vm_backend 287: a0 bytes of the host's CSPRNG at guest address a1 (bcrypt.c, com.c)
 pub const HOST_RANDOM: u64 = 23;
 
@@ -171,6 +174,10 @@ fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json
         "app_root": s.app_root.as_ref().map(|p| p.to_string_lossy().to_string()),
         "parent_image": s.image_name,
         "program_path": s.program_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+        // the parent's drive and read-only setting: the child's bridge shares them (kernel.py 460; Sprint 204)
+        "drive": guest.files.as_ref().map(|f| f.drive.to_string_lossy().to_string()),
+        "read_only": guest.files.as_ref().map(|f| f.read_only),
+        "limited": guest.limited,
     }))
 }
 
@@ -412,6 +419,26 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&answer.second.to_le_bytes());
                 answer.result
             }
+        }
+        // the file primitives (vm_backend 3811-3818; Sprint 204): the process's file bridge, the second word at the
+        // transport's 48
+        op if (FILE_LOOKUP..=FILE_UNLINK).contains(&op)
+            || matches!(
+                op,
+                FILE_STAT | FILE_MKDIR | FILE_RMDIR | FILE_FSTAT | FILE_DUP | FILE_LIST
+            ) =>
+        {
+            let Some(mut files) = guest.files.take() else {
+                return Err(HostError::Unserved(
+                    "a file call in a run with no file-system root".into(),
+                ));
+            };
+            let served = files.request(&mut KernelMemory(guest), op, [a0, a1, a2, a3]);
+            guest.files = Some(files);
+            let (result, second) = served.map_err(HostError::Unserved)?;
+            let mem = guest.memory.as_mut_slice();
+            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+            result
         }
         // vm_backend 3840-3842 (Sprint 203): a0 bytes at a1, on the instruction clock from the process's generator
         // seeded 0x5EED (`random.Random(0x5EED).randbytes`), else from the host's CSPRNG as `os.urandom` reads it

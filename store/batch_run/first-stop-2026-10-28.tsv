@@ -1,19 +1,20 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
-stop	HostRequest op 24: host request 24: not served by the Rust host yet
-arguments	0x7f000446f128 0x36 0x7f000416ff68
+stop	HostRequest op 15: LoadLibrary C:\w2m\app\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll: a DLL file after the start, not mapped by the Rust host yet (no `_load_dll`)
+arguments	0x10b001b710 0x3b 0x1
+module asked for	C:\w2m\app\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll (loading 1)
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	129
-hvc 4	4
-hvc 8	157
+hvc 1	143
+hvc 4	6
+hvc 8	201
 hvc 11	7
 code cache full	0
-compiled	12716
+compiled	14018
 cut by decode	17
 cut by encoder	0
 cut by guarded	1
 cut by key size	0
 cut by no choice	0
-cut by no stencil	5
+cut by no stencil	6
 decode	23
 encoder	0
 full	0
@@ -22,15 +23,15 @@ host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	5
-not a code page	99
+no stencil	7
+not a code page	111
 page needs a split	0
-pages protected	441
+pages protected	467
 pause	0
 recon full	0
 scan pages	0
-blocks the host compiled	12746
-calls traced	374
+blocks the host compiled	14050
+calls traced	500
 calls in flight	1
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
@@ -45,7 +46,7 @@ guest	qpc2	ExitProcess { code: 0 }	ExitProcess	00001abcd9c0b5c6\n
 guest	readied	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	sleeper	ExitProcess { code: 0 }	ExitProcess	woke\ndone\n
 guest	spinchild	ExitProcess { code: 0 }	ExitProcess	done\n
-guest	statsize	HostRequest op 24: host request 24: not served by the Rust host yet	ExitProcess	done\n
+guest	statsize	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	twoproc	ExitProcess { code: 0 }	ExitProcess	child ended\n
 guest	twoready	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	twoproc-ic	ExitProcess { code: 0 }	ExitProcess	child ended\n

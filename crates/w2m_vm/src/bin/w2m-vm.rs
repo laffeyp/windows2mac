@@ -149,10 +149,20 @@ mod run {
         if instruction_clock {
             args.pop();
         }
+        // a file beside probe.exe under its name, as `run_in_vm` writes a family's DLL when `dll_on_disk` (Sprint 204)
+        let beside = match args.iter().position(|a| a == "--beside") {
+            Some(i) if args.len() >= i + 3 => {
+                let file: Vec<String> = args.drain(i..i + 3).skip(1).collect();
+                Some((file[0].clone(), file[1].clone()))
+            }
+            Some(_) => return Err("--beside <name> <file>".into()),
+            None => None,
+        };
         if args == ["--wfe-probe"] {
             return wfe_probe();
         }
-        let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json>] \
+        let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | --stop \
+                     <tsv>] [--beside <name> <file>] [--instruction-clock] \
                      | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> | w2m-vm --wfe-probe";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
@@ -192,8 +202,22 @@ mod run {
         // the guest, as `tests/test_timed_waits.py` `run_guest` loads it: the program's own name probe.exe
         let data = fs::read(root.join(guest_path)).map_err(|e| format!("{guest_path}: {e}"))?;
         let loaded = pe_loader::load(&data, None, "probe.exe").map_err(|e| format!("{guest_path}: {e:?}"))?;
+        // C:\w2m\app: a fresh directory holding the program as probe.exe, as `run_guest` and `run_in_vm` make it
+        // (Sprint 204)
+        let app = std::env::temp_dir().join(format!("w2m-app-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&app);
+        fs::create_dir_all(&app).map_err(|e| format!("{}: {e}", app.display()))?;
+        fs::write(app.join("probe.exe"), &data).map_err(|e| format!("{}: {e}", app.display()))?;
+        if let Some((name, file)) = &beside {
+            fs::copy(root.join(file), app.join(name)).map_err(|e| format!("--beside {file}: {e}"))?;
+        }
+        start.app_root = Some(app.clone());
         let mut guest = guest_of(&root, &loaded, &start)?;
-        let out = on_one_vcpu(&mut guest, &loaded)?;
+        guest.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
+        let out = on_one_vcpu(&mut guest, &loaded, true);
+        drop(guest.files.take());
+        let _ = fs::remove_dir_all(&app);
+        let out = out?;
 
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
         if let Some(("--stop", file)) = measure {
@@ -272,7 +296,7 @@ mod run {
     }
 
     /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop.
-    fn on_one_vcpu(guest: &mut Guest, loaded: &pe_loader::Loaded) -> Result<Outcome, String> {
+    fn on_one_vcpu(guest: &mut Guest, loaded: &pe_loader::Loaded, limited: bool) -> Result<Outcome, String> {
         let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
         vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
             .map_err(|e| format!("{e:?}"))?;
@@ -280,7 +304,8 @@ mod run {
         let mut host = HostCompiler::default();
         // a guest's run stops at GUEST_SECONDS, as family_run.py's `run_in_vm` stops a probe at 60 s (`timeout_ms`), so
         // a guest that spins fails by name rather than hanging the gates (Sprint 197); the batch run has no limit
-        if guest.start.app_root.is_none() {
+        guest.limited = limited;
+        if limited {
             let handle = vcpu.handle();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(GUEST_SECONDS));
@@ -389,13 +414,22 @@ mod run {
             start.memory_fd = Some(memory_fd);
             let root = root();
             let mut guest = guest_of(&root, &loaded, &start)?;
+            // a child's bridge: the parent's root, read-only setting and drive (kernel.py 460; Sprint 204)
+            if let (Some(app), Some(drive)) = (&start.app_root, text("drive")) {
+                let read_only = s["read_only"].as_bool().unwrap_or(false);
+                guest.files = Some(w2m_vm::file_bridge::FileBridge::new(
+                    app,
+                    read_only,
+                    Some(Path::new(&drive)),
+                )?);
+            }
             guest.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
                 page_fd, slot, pid,
             )?));
             // the child starts at the machine's clock, as `VM.steps` catches every process up at its start (Sprint 199;
             // reviewer-2's High 1 of its review of 196-198: tests/test_timed_waits.py 141-152's plant gives "clock behind")
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
-            on_one_vcpu(&mut guest, &loaded)
+            on_one_vcpu(&mut guest, &loaded, s["limited"].as_bool().unwrap_or(true))
         };
         match run() {
             Ok(out) => match out.stop {
@@ -427,7 +461,9 @@ mod run {
         start.app_root = Some(directory.to_path_buf());
         start.program_path = Some(directory.join(program));
         let mut guest = guest_of(&root, &loaded, &start)?;
-        let out = on_one_vcpu(&mut guest, &loaded)?;
+        // the depot mounted read-only, as `run_frontier.py` 268 makes it (Sprint 204)
+        guest.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
+        let out = on_one_vcpu(&mut guest, &loaded, false)?;
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
         let mut tsv = format!(
             "stop\t{}\nseconds\t{:.1}\n",
