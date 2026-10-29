@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 200
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -88,6 +88,8 @@ stated.
   gates.
 - **Plant 1** (store/batch_run/ back in the trigger): the plan for the usual change said "gates: Python gates".
   Restored byte for byte. The `sed` ran with no address (Observation 2) and changed both trigger lines.
-- **Plants 2 and 3:** not run; the measured times state plant 2's claim, and store/case_runner's selection is shown
-  above.
+- **Plant 2** (`rust=all` on `cargo test`): the measured run is its judge, "rust tests exit 0 in 347 s" against
+  "nextest exit in 188 s" for the same tests on the idle machine.
+- **Plant 3** (`store/` taken out of the all-Rust trigger): the plan for `store/case_runner/expected.tsv` said "gates:
+  Rust tests: none (no crate changed)", the case runner unselected. Restored byte for byte.
 - **Departures:** this sprint's own gates run every stage, since it changes `gates.sh` (Sprint 198's rule).
