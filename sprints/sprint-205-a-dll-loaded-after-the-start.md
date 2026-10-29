@@ -82,3 +82,31 @@ passes row 500.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: a DLL loaded after the start.
+
+## result
+
+Closed partial: the code did not land. It stands on branch sprint-205-wip (worktree base cb013d8e8, the card
+ccac604c4, the work uncommitted there) and lands after Sprint 207 (the Decision "Sequence after Sprint 205").
+
+- **The load, written:** `modules::load_dll` (the bridge's resolution, `place_image`, `map_image`, imports bound to a
+  loaded DLL's export or the import thunk, `snapshot_image`, `dll_paths`, PEB.Ldr written again through
+  `process::write_loader_data` over a `LoaderList`, `trace_ranges`); `Guest::init_stub` and `init_stub_code`
+  (vm_backend 4002-4021); the module request's second answer is `pending_init`. mono-2.0-bdwgc.dll (4,974,728 bytes,
+  no TLS directory, entry RVA 0x31953c) maps and its DllMain runs.
+- **The run:** the stream equals the Python's rows 0-923, 925 calls traced, and the run stops at row 925, MAP_VIEW 29
+  (MapViewOfFile of mscorlib.dll, 0x3b9a00 bytes). Row 924, CreateFileMappingW, differs in its first stack argument:
+  0x165e00000000 for 0x13fc00000000, the value in all four stored Python runs.
+- **The cause, measured:** the word is a residue of mono's /GS cookie, 0x165e8e8cc734 on the Rust host (guest memory at
+  0x7ffe00003050 and the heap from 0x200028c60; stack canaries cookie ^ RSP) and 0x13fc8e8cff34 on the Python's (row
+  939). At mono's load the Rust game process had run 2,648,351 instructions with a clock warp of 609; the cookie's
+  bits 32-47, ((E + c) >> 32 ^ c) & 0xffff with E = 134362624920000000, give c = 19,526 for Rust's and exactly
+  18,916 = 2,648,351 / 140 for the Python's, and the low words agree, 0x3da2 ^ 0x05a2 = 0x3800. The instruction
+  counts are equal; the Rust warp comes from six catch-ups after the child's slices, which the Python host does not
+  make. The judge comes first: the Decision's Sprint 206 exit ledger.
+- **Plant 1** (an import bound to the thunk): not run; the code did not land.
+- **Plant 2** (DllMain's reason 0): not run; the code did not land.
+- **Plant 3** (the trace left open): not run; the code did not land.
+- **Departures:** one `sed` with an address range in `process.rs`, which edit_guard classes as multi-line (it renamed
+  `areas.process` on the 10 lines of `write_loader_data` that held it, adding none), on the branch; it is quoted in
+  the tail and redone with the Edit tool when the code lands. The temporary prints and dumps used for the measurement
+  stay off the branch's commit.

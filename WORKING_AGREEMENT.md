@@ -136,6 +136,7 @@ Written before any sprint authors code against the SDK (TECHNIQUES.md #46). Hype
 
 ## Build and verification commands
 
+- **A worktree builds into its own target directory** (Sprint 203's Observation 3; reviewer-2's Low 2 of its review of Sprints 199-205): `CARGO_TARGET_DIR=<worktree>/target`, never the main tree's `target/`. Build scripts compiled from a worktree record its path, and `w2m_vm`'s build digest ran git in the removed worktree: `W2M_CRATES_TREE=unknown`, and `case_runs` refused "built from the inputs unknown". The repair is `cargo clean --release -p x86_decoder` and `-p w2m_vm` in the main tree.
 - `python3 scripts/check_vocab.py` — expected exit 0.
 - `python3 -c "import json; json.load(open('signals/0.7.json'))"` — expected exit 0.
 - `uv sync --extra dev` — expected exit 0 (CPython 3.12 via uv).
