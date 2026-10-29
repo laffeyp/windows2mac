@@ -159,7 +159,8 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
 pub fn current_tid(guest: &Guest) -> u64 {
     let mem = guest.memory.as_slice();
     if read_u64(mem, RUN_TABLE + RT_COUNT) == 0 {
-        return FIRST_TID;
+        // `_first_tid` (vm_backend 2497): the start's thread id, a child's from the Machine (Sprint 206: it was 4)
+        return guest.start.tid;
     }
     let at = read_u64(mem, MONITOR_DATA + CURRENT_ENTRY) - MONITOR_VA;
     read_u64(mem, at + E_TID)

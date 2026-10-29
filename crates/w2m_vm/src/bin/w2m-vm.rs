@@ -158,11 +158,17 @@ mod run {
             Some(_) => return Err("--beside <name> <file>".into()),
             None => None,
         };
+        // the exit ledger (Sprint 206): this process's rows at the path, each child's at the path and ".<pid>"
+        let ledger = match args.iter().position(|a| a == "--exit-ledger") {
+            Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
+            Some(_) => return Err("--exit-ledger <tsv>".into()),
+            None => None,
+        };
         if args == ["--wfe-probe"] {
             return wfe_probe();
         }
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | --stop \
-                     <tsv>] [--beside <name> <file>] [--instruction-clock] \
+                     <tsv>] [--beside <name> <file>] [--exit-ledger <tsv>] [--instruction-clock] \
                      | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> | w2m-vm --wfe-probe";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
@@ -175,7 +181,7 @@ mod run {
             && out_flag == "--output"
             && stop_flag == "--stop"
         {
-            return game(Path::new(directory), program, output, stop_file);
+            return game(Path::new(directory), program, output, stop_file, ledger.as_deref());
         }
         // (guest, output, the measure asked for and its file); every path relative to the repository root
         let (guest_path, output, measure) = match args.as_slice() {
@@ -423,6 +429,11 @@ mod run {
                     Some(Path::new(&drive)),
                 )?);
             }
+            // the parent's exit ledger, this process's rows beside it (Sprint 206)
+            if let Some(base) = text("exit_ledger") {
+                let path = std::path::PathBuf::from(format!("{base}.{pid}"));
+                guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&path)?);
+            }
             guest.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
                 page_fd, slot, pid,
             )?));
@@ -441,7 +452,13 @@ mod run {
         Ok(())
     }
 
-    fn game(directory: &Path, program: &str, output: &str, stop_file: &str) -> Result<(), String> {
+    fn game(
+        directory: &Path,
+        program: &str,
+        output: &str,
+        stop_file: &str,
+        ledger: Option<&str>,
+    ) -> Result<(), String> {
         let root = root();
         let started = Instant::now();
         let data = fs::read(directory.join(program)).map_err(|e| format!("{program}: {e}"))?;
@@ -463,6 +480,9 @@ mod run {
         let mut guest = guest_of(&root, &loaded, &start)?;
         // the depot mounted read-only, as `run_frontier.py` 268 makes it (Sprint 204)
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
+        if let Some(path) = ledger {
+            guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&root.join(path))?);
+        }
         let out = on_one_vcpu(&mut guest, &loaded, false)?;
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
         let mut tsv = format!(

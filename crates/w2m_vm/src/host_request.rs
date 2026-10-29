@@ -120,6 +120,18 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
     }
     let mem = guest.memory.as_mut_slice();
     mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+    // a pipe's bytes, which the supervisor wrote into this process's memory: the exit ledger's written ranges, as the
+    // frozen host's child writes them through its own `_GuestView` (kernel.py 254, the one kernel write; Sprint 206)
+    if a[0] == crate::kernel::PIPE_READ
+        && second == 0
+        && result > 0
+        && let Some(at) = guest.layout.offset(a[2])
+    {
+        let data = guest.memory.as_slice()[at as usize..(at + result) as usize].to_vec();
+        if let Some(l) = &mut guest.exit_ledger {
+            l.wrote(a[2], &data);
+        }
+    }
     Ok(Some(result))
 }
 
@@ -178,6 +190,8 @@ fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json
         "drive": guest.files.as_ref().map(|f| f.drive.to_string_lossy().to_string()),
         "read_only": guest.files.as_ref().map(|f| f.read_only),
         "limited": guest.limited,
+        // the parent's exit ledger, which the child's rows sit beside (Sprint 206)
+        "exit_ledger": guest.exit_ledger.as_ref().map(|l| l.path.to_string_lossy().to_string()),
     }))
 }
 
@@ -200,6 +214,10 @@ impl crate::kernel::Memory for KernelMemory<'_> {
             .offset(va)
             .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
         self.0.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+        // the exit ledger's written ranges, as the frozen host's fixture logs `_GuestView.write` (Sprint 206)
+        if let Some(l) = &mut self.0.exit_ledger {
+            l.wrote(va, data);
+        }
         Ok(())
     }
 }
@@ -329,6 +347,10 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                                 HostError::Unserved(format!("a module path's buffer at unmapped 0x{a1:x}"))
                             })? as usize;
                             guest.memory.as_mut_slice()[at..at + n].copy_from_slice(&raw[..n]);
+                            // the Python writes it through `_GuestView` (vm_backend 3904): the ledger's written ranges
+                            if let Some(l) = &mut guest.exit_ledger {
+                                l.wrote(a1, &raw[..n]);
+                            }
                         }
                         path.encode_utf16().count() as u64
                     }

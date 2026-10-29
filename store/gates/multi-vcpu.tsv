@@ -52,3 +52,6 @@
 2026-10-29T03:29:39Z	passed	sprint 204	tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried
 2026-10-29T03:29:40Z	passed	sprint 204	tests/test_parked_vcpu_wake.py::test_a_thread_readied_in_the_vm_runs_on_the_waiting_vcpu
 2026-10-29T03:29:53Z	passed	sprint 204	tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wake_pending
+2026-10-29T04:22:29Z	passed	sprint 206	tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried
+2026-10-29T04:22:30Z	passed	sprint 206	tests/test_parked_vcpu_wake.py::test_a_thread_readied_in_the_vm_runs_on_the_waiting_vcpu
+2026-10-29T04:22:45Z	passed	sprint 206	tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wake_pending

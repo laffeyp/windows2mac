@@ -1,0 +1,5 @@
+# the frozen Python host's exit ledgers of the batch run to mono's load (Sprint 206): each process's file from two runs of the generator WORKING_AGREEMENT gives, 2026-10-28; the cells where the two runs differ are the ledger's varying cells
+dbe23ead1a9563b52ffca70d51ce7b6c0f00a0276040faf14070de66f388b6f6  python.tsv
+944f30a47237e66439c39712e701684df9def6f13d544e7ac182785e4f983f3e  python.tsv.4100
+ec08c2ae6585a3657aae53fc962601a2d0214bafcb3953250e315bd104b8e0fa  python-repeat.tsv
+944f30a47237e66439c39712e701684df9def6f13d544e7ac182785e4f983f3e  python-repeat.tsv.4100

@@ -85,3 +85,32 @@ Both hosts write the exit ledger to mono's load, and a test names the first exit
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the exit ledger.
+
+## result
+
+- **The ledgers:** `crates/w2m_vm/src/exit_ledger.rs`, one row per host exit written just before the guest resumes
+  (ordinal, kind, x86 site, monitor word 0, warp, and for hvc 8 the request's op, four arguments, answer words and the
+  sha256 of its writes); `w2m-vm --exit-ledger` writes the game's and each child's (`.<pid>`), unbuffered; the frozen
+  host's from two runs of the generator in WORKING_AGREEMENT, pinned by `store/exit_ledger/python.sha256`.
+- **The judge:** `crates/w2m_vm/tests/exit_ledger.rs` names, per process and column, the first row where the Rust
+  ledger departs, skipping the cells where the frozen host's two runs differ, and holds the lines to
+  `store/exit_ledger/first-difference-2026-10-28.tsv`.
+- **The run:** every exit kind, request op, argument, answer and written range agrees through 357 exits of the game
+  and 163 of UnityCrashHandler64. The instruction count parts at each process's first `hvc 11` model step (187
+  against 194; 129 against 136), the warp by a tick after it (the game's row 318, the child's row 44), and the thunks'
+  numbering differs from row 0. At mono's load both hosts carry warp 609; Sprint 205's "no warp on the Python host" was
+  wrong, and is annotated where it stood.
+- **Defects the ledger found and fixed:** the child's first thread took id 4, not the Machine's 0x100004 (`run.rs`,
+  `current_tid`); a child's ledger lost its buffer when the run stopped it; the written column's logging covered the
+  file bridge and kernel only, and now covers HOST_MODULE_PATH, HOST_RANDOM and a child's forwarded pipe read, as the
+  frozen host writes them.
+- **Plant 1** (the catch-up doubled): the judge failed, "main warp 231 142 6730 hvc 4". Restored byte for byte.
+- **Plant 2** (Sprint 204's READ count one more): the judge failed, "main result 306 85 86 hvc 8", the read itself,
+  where the stream had passed. Restored byte for byte.
+- **Plant 3** (one more instruction counted at each resume): the judge failed, "main executed 0 27 28 hvc 1".
+  Restored byte for byte.
+- **Departures:** the expected value "two frozen-host runs give the same bytes" holds for the child and for all but
+  five cells of the game (FILE_STAT's and FILE_OPEN's written times), which the judge takes as varying; the first
+  difference is the count at a model step, before CreateProcessW, not a warp after it; the written column omits the
+  arena's zeroing, VirtualQuery's record and the thread requests' writes on both hosts; `signal_report`'s commit walk
+  now takes "Sprint N closed-partial:" as a close (Sprint 205's close failed CI on it).

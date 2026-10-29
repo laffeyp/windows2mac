@@ -790,15 +790,20 @@ const FIRST_CLOSE_BOUND_SPRINT: u32 = 192;
 /// The multi-vCPU stage's results, tracked from Sprint 192 (date, outcome, "sprint NNN", test).
 const MULTI_VCPU: &str = "store/gates/multi-vcpu.tsv";
 
+/// Whether `subject` is sprint `n`'s close: "Sprint N closed:", or "Sprint N closed-partial:" for a sprint closed
+/// partial (Sprint 206: Sprint 205's partial close failed the commit walk on CI, which knew only the first).
+fn is_close(subject: &str, n: u32) -> bool {
+    subject.starts_with(&format!("Sprint {n} closed:")) || subject.starts_with(&format!("Sprint {n} closed-partial:"))
+}
+
 /// A path of sprint `n`'s close commit ("Sprint N closed: ...") outside `BOOKKEEPING`, named; None when it changes
 /// bookkeeping only, or has not been made yet (a tail entry is headed closed in the close commit itself).
 fn close_moved(root: &Path, n: u32) -> Result<Option<String>, String> {
-    let subject = format!("Sprint {n} closed:");
     let log = git(root, &["log", "--format=%H%x09%s"])?;
     let Some(commit) = log
         .lines()
         .filter_map(|l| l.split_once('\t'))
-        .find(|(_, s)| s.starts_with(&subject))
+        .find(|(_, s)| is_close(s, n))
         .map(|(h, _)| h.to_string())
     else {
         return Ok(None);
@@ -1026,13 +1031,13 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
             "sprint {n:03}: no card commit (\"Sprint {n} card: ...\")"
         )]);
     };
-    let (work, close) = (format!("Sprint {n}: "), format!("Sprint {n} closed:"));
+    let work = format!("Sprint {n}: ");
     let mut wrong = Vec::new();
     for (hash, subject) in &commits[start + 1..] {
         if is_card(subject, n + 1) {
             break;
         }
-        if !(subject.starts_with(&work) || subject.starts_with(&close)) {
+        if !(subject.starts_with(&work) || is_close(subject, n)) {
             wrong.push(format!(
                 "sprint {n:03}: commit {} \"{subject}\" stands between its card and the next card, and is neither its \
                  work nor its close",
@@ -1245,6 +1250,18 @@ mod tests {
     const CARD: &str = "## observation contract\n\n- **Planted faults:** (1) one; (2) two (Sprint 173).\n\n\
                         ## result\n\n- **Plant 1** (one): the judge failed, \"88 RCR CF: case 206\".\n\
                         - **Plant 2** (two) reached no judge. Replaced: the judge failed, \"91 ADD_LOCK fault rip\".\n";
+
+    /// A partial close is a close (Sprint 206: Sprint 205's "closed-partial:" commit failed the walk on CI).
+    #[test]
+    fn a_close_is_closed_or_closed_partial() {
+        assert!(is_close(
+            "Sprint 205 closed-partial: its Signal Report; BLACKBOARD",
+            205
+        ));
+        assert!(is_close("Sprint 204 closed: its Signal Report; BLACKBOARD", 204));
+        assert!(!is_close("Sprint 205 closed partial: its Signal Report", 205));
+        assert!(!is_close("Sprint 2050 closed: x", 205));
+    }
 
     #[test]
     fn each_numbered_plant_needs_its_own_quote() {

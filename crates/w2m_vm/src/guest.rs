@@ -603,6 +603,8 @@ pub struct Guest {
     pub files: Option<crate::file_bridge::FileBridge>,
     /// the run stops at the 60 s limit (guests and their children, Sprint 197); a child inherits it (Sprint 204)
     pub limited: bool,
+    /// one row per host exit, for the comparison with the frozen host's (`w2m-vm --exit-ledger`; Sprint 206)
+    pub exit_ledger: Option<crate::exit_ledger::Ledger>,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -806,6 +808,7 @@ impl Guest {
             random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
             files: None,
             limited: false,
+            exit_ledger: None,
         }
         .with_trace(start)
     }

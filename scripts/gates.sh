@@ -135,8 +135,12 @@ if [ $rust != none ]; then
   cargo build --release --quiet --bin w2m-vm
   mkdir -p build/batch_run
   rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv
+  # with the exit ledger crates/w2m_vm/tests/exit_ledger.rs holds to the frozen host's (Sprint 206)
+  mkdir -p build/exit_ledger
+  rm -f build/exit_ledger/rust.tsv build/exit_ledger/rust.tsv.*
   echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm --game "$HOME/w2m-depots/hail-to-the-rainbow" \
-    "Hail to the Rainbow.exe" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv > /dev/null
+    "Hail to the Rainbow.exe" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv \
+    --exit-ledger build/exit_ledger/rust.tsv > /dev/null
   for p in tests/data/timed_waits/*.exe; do
     n=$(basename "$p" .exe)
     # w2m-vm writes the guest's stop by name (Sprint 191); a guest that fails before its run leaves none, and its

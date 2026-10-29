@@ -14,6 +14,7 @@ pub mod case_inputs;
 pub mod cases;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod compile;
+pub mod exit_ledger;
 pub mod file_bridge;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod guest;

@@ -8,7 +8,9 @@
 //! it. The run's seconds are not held.
 //!
 //! From Sprint 191 (reviewer-2's High 1 and Medium 4 of its review of 185-189) it also holds what the run answered: the
-//! Rust host's call stream equals the Python's batch run's (`STREAM`) row for row up to the stop, every column, and
+//! Rust host's call stream equals the Python's batch run's (`STREAM`) row for row up to the stop, every column (a call's
+//! arguments, return value and last error only: what a host writes through pointers and the clock it keeps are not in
+//! the stream, and `tests/exit_ledger.rs` holds them from Sprint 206; reviewer-2's Medium 1 of 199-205), and
 //! each guest that ends at ExitProcess prints what the frozen Python host's run printed (the held file's fifth column),
 //! but `qpc` and `qpc2`, which print a clock's reading, held by its form.
 

@@ -25,7 +25,7 @@ use crate::monitor_code::{
     EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, LOCK_ENTRIES, LOCK_ENTRY, LOCK_EXITS, LOCK_TAKINGS,
     LOCK_TAKINGS_COUNT, LOCK_TIMING, REG_BUDGET, dispatch_slot,
 };
-use crate::threads::{FIRST_TID, STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
+use crate::threads::{STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
 
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
 pub const MXCSR_OFF: u64 = 0x50;
@@ -447,7 +447,8 @@ fn run(
 ) -> Result<Outcome, HvError> {
     let md = MONITOR_DATA;
     let first = Thread {
-        tid: FIRST_TID,
+        // the start's thread id, a child's from the Machine (`_first_tid`, vm_backend 2497; Sprint 206: it was 4)
+        tid: guest.start.tid,
         index: 0,
         teb: PROCESS_VA + TEB_OFF,
         stack: guest.process.stack,
@@ -534,6 +535,14 @@ fn run(
             out.serve_ns.push(ns);
             out.serve_by_kind.entry(kind.clone()).or_default().push(ns);
         }
+        // the exit ledger's row for the last exit, the count and warp as the guest resumes with them (Sprint 206)
+        if let Some(l) = &mut guest.exit_ledger {
+            let mem = guest.memory.as_slice();
+            let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
+            if let Err(why) = l.resume(read_u64(mem, md), warp) {
+                break Stop::Exit(format!("the exit ledger: {why}"));
+            }
+        }
         let started = Instant::now();
         let exit = vcpu.run()?;
         let returned = Instant::now();
@@ -570,6 +579,27 @@ fn run(
             let tails = host.as_deref().map_or(&none, |h| &h.tails);
             exit_count(vcpu, mem, tails, give_back)?;
         }
+        if guest.exit_ledger.is_some() {
+            // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
+            let site = match exit.hvc_immediate() {
+                Some(1) => vcpu.reg(Reg::X(17))?,
+                Some(_) => x86_address_at(mem, pc.wrapping_sub(4)).unwrap_or(0),
+                None => pc,
+            };
+            let request = (exit.hvc_immediate() == Some(8)).then(|| {
+                let t = MONITOR_SIZE + TRANSPORT_OFF;
+                let w = |i: u64| read_u64(mem, t + 8 * i);
+                [w(0), w(1), w(2), w(3), w(4), 0, 0]
+            });
+            if let Some(l) = &mut guest.exit_ledger {
+                l.exit(crate::exit_ledger::Row {
+                    kind: kind.clone(),
+                    site,
+                    request,
+                });
+            }
+        }
+        let mem = guest.memory.as_mut_slice();
         let Some(number) = exit.hvc_immediate() else {
             if matches!(exit, Exit::VtimerActivated) {
                 vcpu.set_vtimer_mask(true)?;
@@ -608,6 +638,10 @@ fn run(
                 crate::threads::current_tid(guest),
             );
             let served = crate::host_request::serve(guest, vcpu);
+            if let Some(l) = &mut guest.exit_ledger {
+                let (t, mem) = (MONITOR_SIZE + TRANSPORT_OFF, guest.memory.as_slice());
+                l.answered(read_u64(mem, t + 48), read_u64(mem, t + 56));
+            }
             if op == HOST_THREAD && matches!(sub, THREAD_EXIT_STUB | THREAD_END | THREAD_EXIT_CODE) && served.is_ok() {
                 let answer = read_u64(guest.memory.as_slice(), MONITOR_SIZE + TRANSPORT_OFF + 56);
                 out.thread_requests.push(ThreadRequest {
@@ -805,6 +839,13 @@ fn run(
         dispatch_insert(mem, target, va);
         vcpu.set_reg(Reg::Pc, guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
+    // the stop's own row, then the file whole (Sprint 206)
+    if let Some(l) = &mut guest.exit_ledger {
+        let mem = guest.memory.as_slice();
+        let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
+        let _ = l.resume(read_u64(mem, md), warp);
+        let _ = l.flush();
+    }
     let mem = guest.memory.as_slice();
     for (i, name) in VMC_COUNT_NAMES.iter().enumerate() {
         out.counts

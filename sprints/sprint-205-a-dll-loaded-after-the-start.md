@@ -102,7 +102,10 @@ ccac604c4, the work uncommitted there) and lands after Sprint 207 (the Decision 
   bits 32-47, ((E + c) >> 32 ^ c) & 0xffff with E = 134362624920000000, give c = 19,526 for Rust's and exactly
   18,916 = 2,648,351 / 140 for the Python's, and the low words agree, 0x3da2 ^ 0x05a2 = 0x3800. The instruction
   counts are equal; the Rust warp comes from six catch-ups after the child's slices, which the Python host does not
-  make. The judge comes first: the Decision's Sprint 206 exit ledger.
+  make. The judge comes first: the Decision's Sprint 206 exit ledger. *(Annotated 2026-10-28, Sprint 206: the
+  warp claim is wrong. The exit ledgers give the frozen host warp 609 at mono's load too, and counts of 2,648,296
+  against 2,648,351, the same 18,916 + 609 ticks; the "no warp" was inferred from the cookie formula, not measured. The
+  cookie's difference arises after the load, inside mono's DllMain.)*
 - **Plant 1** (an import bound to the thunk): not run; the code did not land.
 - **Plant 2** (DllMain's reason 0): not run; the code did not land.
 - **Plant 3** (the trace left open): not run; the code did not land.
