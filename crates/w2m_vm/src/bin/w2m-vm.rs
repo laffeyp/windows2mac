@@ -143,7 +143,12 @@ mod run {
 
     pub fn main() -> Result<(), String> {
         let started = Instant::now();
-        let args: Vec<String> = std::env::args().skip(1).collect();
+        let mut args: Vec<String> = std::env::args().skip(1).collect();
+        // a guest on the instruction clock, `family_run.INSTRUCTION_CLOCK` as `run_guest` passes it (Sprint 199)
+        let instruction_clock = args.last().is_some_and(|a| a == "--instruction-clock");
+        if instruction_clock {
+            args.pop();
+        }
         if args == ["--wfe-probe"] {
             return wfe_probe();
         }
@@ -175,6 +180,9 @@ mod run {
         };
         let mut start = Start::console("probe.exe");
         start.time_runtime_word = matches!(measure, Some(("--runtime-word", _)));
+        if instruction_clock {
+            start.instruction_clock = Some((CLOCK_RATE, REFERENCE_START));
+        }
         let root = root();
         start.program_path = Some(root.join(guest_path));
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes
@@ -324,6 +332,7 @@ mod run {
         let number = |k: &str| s[k].as_u64().ok_or_else(|| format!("a child's start lacks {k}"));
         let pid = number("pid")?;
         let link = w2m_vm::turns::ChildLink::open(page_fd, slot, pid)?;
+        w2m_vm::turns::end_with_parent()?;
         link.first_turn();
         let run = || -> Result<Outcome, String> {
             let command_line = text("command_line").ok_or("a child's start lacks its command line")?;
@@ -383,6 +392,9 @@ mod run {
             guest.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
                 page_fd, slot, pid,
             )?));
+            // the child starts at the machine's clock, as `VM.steps` catches every process up at its start (Sprint 199;
+            // reviewer-2's High 1 of its review of 196-198: tests/test_timed_waits.py 141-152's plant gives "clock behind")
+            w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
             on_one_vcpu(&mut guest, &loaded)
         };
         match run() {

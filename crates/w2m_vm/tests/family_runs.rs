@@ -74,6 +74,13 @@ fn each_module_family_conforms_or_stops_where_held() {
             Some(((c.next()?.into(), c.next()?.into()), c.next()?.into()))
         })
         .collect();
+    // a time limit is a hang, never an expected stop (Sprint 199; reviewer-2's Medium 3 of its review of 196-198)
+    for stop in held.values() {
+        assert!(
+            !stop.contains("the run's time limit"),
+            "{STOPS} holds a hang as a stop: {stop}"
+        );
+    }
     let mut seen = Vec::new();
     let mut conformed = 0;
     for (family, contract_id) in FAMILIES {

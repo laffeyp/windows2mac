@@ -113,17 +113,52 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
     Ok(Some(result))
 }
 
+/// `environment_now` (vm_backend 3598-3612): the environment block's entries as the guest holds them now
+/// (ProcessParameters.Environment, which environment.c moves on each change), what a child started with no environment
+/// of its own gets (Sprint 199; reviewer-2's Low 1 of its review of 196-198: the parent's start block before).
+fn environment_now(guest: &Guest) -> Result<Vec<String>, String> {
+    use guest_runtime::layout::{ENVIRONMENT_OFF, ENVIRONMENT_SIZE, PROCESS_VA};
+    let mem = guest.memory.as_slice();
+    let parameters = guest
+        .layout
+        .offset(crate::process::PARAMETERS_VA + 0x80)
+        .ok_or("ProcessParameters is not mapped")? as usize;
+    let at = read_u64(mem, parameters);
+    let off = at.wrapping_sub(PROCESS_VA);
+    if !(ENVIRONMENT_OFF..=ENVIRONMENT_OFF + ENVIRONMENT_SIZE / 2).contains(&off) {
+        return Err(format!("ProcessParameters.Environment at 0x{at:x}, outside its area"));
+    }
+    let start = (MONITOR_SIZE + off) as usize;
+    let block = &mem[start..start + (ENVIRONMENT_SIZE / 2) as usize];
+    let units: Vec<u16> = block
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .collect();
+    let end = units
+        .windows(2)
+        .position(|w| w == [0, 0])
+        .ok_or("the environment block has no end within its area")?;
+    Ok(String::from_utf16_lossy(&units[..end])
+        .split('\0')
+        .filter(|e| !e.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
 /// A child's start as `spawner` makes it (kernel.py 437-468), for `w2m-vm --child`: the command line, its ids, the
-/// inherited handles and current directory, the parent's environment, process group, clock and program directory.
+/// inherited handles and current directory, the parent's environment now, process group, clock and program directory.
 fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json::Value, String> {
     let s = &guest.start;
+    let environment = environment_now(guest)?;
     Ok(serde_json::json!({
         "command_line": child.command_line,
         "pid": child.pid,
         "tid": child.tid,
         "inherited": child.inherited.iter().map(|(h, k, o)| [*h, *k, *o]).collect::<Vec<_>>(),
         "directory": child.directory,
-        "environment": s.environment,
+        "environment": environment,
         "process_group": s.process_group,
         "instruction_clock": s.instruction_clock.map(|(rate, epoch)| [rate, epoch]),
         "app_root": s.app_root.as_ref().map(|p| p.to_string_lossy().to_string()),

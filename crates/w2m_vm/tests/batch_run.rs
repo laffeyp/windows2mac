@@ -81,6 +81,13 @@ fn the_batch_run_and_the_guests_stop_where_held() {
         .collect();
     ours.extend(guests.lines().map(|l| format!("guest\t{l}")));
     let (lines, _) = held(&root);
+    // a time limit is a hang, never an expected stop (Sprint 199; reviewer-2's Medium 3 of its review of 196-198)
+    for l in &lines {
+        assert!(
+            !l.contains("the run's time limit"),
+            "{HELD} holds a hang as a stop: {l}"
+        );
+    }
     println!("{}", ours.join("\n"));
     assert_eq!(
         ours, lines,

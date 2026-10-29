@@ -48,3 +48,4 @@ guest	spinchild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	statsize	HostRequest op 24: host request 24: not served by the Rust host yet	ExitProcess	done\n
 guest	twoproc	ExitProcess { code: 0 }	ExitProcess	child ended\n
 guest	twoready	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	twoproc-ic	ExitProcess { code: 0 }	ExitProcess	child ended\n

@@ -424,14 +424,7 @@ fn hand_over(guest: &mut Guest, message: crate::turns::Message) -> Result<(), St
     if wake {
         crate::host_request::wake_blocked(guest);
     }
-    // `_catch_up` (vm_backend 3680-3688): on the instruction clock a process behind the machine's clock is moved to
-    // it, as time passed for it while it waited
-    let mem = guest.memory.as_mut_slice();
-    if read_u64(mem, MONITOR_DATA + crate::process::CLOCK_MODE) == 2 {
-        let lag = crate::machine::catch_up(state.clock, machine, processes);
-        let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
-        write_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP, warp + lag);
-    }
+    crate::threads::catch_up(guest, machine, processes);
     Ok(())
 }
 
@@ -526,7 +519,10 @@ fn run(
             write_u64(mem, md + SLICE_UNTIL, slice_until);
             write_u64(mem, md + RUN_END, max_steps);
             // the VM switches threads itself unless another process is due (Sprint 197)
-            let others_due = guest.link.as_ref().is_some_and(crate::turns::Link::others_due);
+            let others_due = guest
+                .link
+                .as_ref()
+                .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)));
             let mem = guest.memory.as_mut_slice();
             write_u64(mem, RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
             if !runtime.contains(&pc) {
@@ -730,7 +726,10 @@ fn run(
             }
             crate::threads::set_budget(guest);
             crate::threads::wake_expired(guest);
-            let others = guest.link.as_ref().is_some_and(crate::turns::Link::others_ready);
+            let others = guest
+                .link
+                .as_ref()
+                .is_some_and(|l| l.others_ready(crate::threads::counter_now(guest)));
             if !others && guest.threads.len() < 2 {
                 continue;
             }

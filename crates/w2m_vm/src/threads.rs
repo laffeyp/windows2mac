@@ -356,6 +356,19 @@ pub fn counter_now(guest: &Guest) -> u64 {
     (u128::from(ticks) * u128::from(base[0]) / u128::from(base[1]) / 100) as u64
 }
 
+/// `_catch_up` (vm_backend 3680-3688): on the instruction clock, in a machine of `processes`, a process behind the
+/// machine's clock `machine` is moved to it by its warp, as time passed for it while it waited; at its start too
+/// (`VM.steps`, 5055-5080; Sprint 199, reviewer-2's High 1 of its review of 196-198).
+pub fn catch_up(guest: &mut Guest, machine: u64, processes: usize) {
+    if read_u64(guest.memory.as_slice(), MONITOR_DATA + CLOCK_MODE) != 2 {
+        return;
+    }
+    let lag = crate::machine::catch_up(counter_now(guest), machine, processes);
+    let mem = guest.memory.as_mut_slice();
+    let warp = read_u64(mem, RUN_TABLE + CLOCK_WARP);
+    write_u64(mem, RUN_TABLE + CLOCK_WARP, warp + lag);
+}
+
 /// `_wake_expired` (4897-4905): every blocked thread whose deadline has passed is ready.
 pub fn wake_expired(guest: &mut Guest) {
     let now = counter_now(guest);
@@ -379,17 +392,51 @@ pub fn wake_expired(guest: &mut Guest) {
 pub fn turn_state(guest: &Guest) -> crate::turns::State {
     let mem = guest.memory.as_slice();
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    let deadline = guest
+        .threads
+        .values()
+        .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0)
+        .map(|t| word(t, E_DEADLINE))
+        .min()
+        .unwrap_or(u64::MAX);
     crate::turns::State {
-        clock: 0,
+        clock: counter_now(guest),
         ready: guest
             .threads
             .values()
             .any(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0),
-        timed: guest
-            .threads
-            .values()
-            .any(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX),
+        timed: deadline != u64::MAX,
+        deadline,
+        blocked: guest.threads.values().any(|t| word(t, E_STATUS) == BLOCKED),
     }
+}
+
+/// `warp_to_deadline` (vm_backend 3614-3628): on the instruction clock with no thread ready, the clock moved to the
+/// earliest deadline of a blocked, unsuspended thread (the lowest tid among equals) and that thread made ready; false
+/// when no thread waits with a deadline or the clock is another.
+pub fn warp_to_deadline(guest: &mut Guest) -> bool {
+    let mem = guest.memory.as_slice();
+    if read_u64(mem, MONITOR_DATA + CLOCK_MODE) != 2 {
+        return false;
+    }
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    let first = guest
+        .threads
+        .values()
+        .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
+        .min_by_key(|t| (word(t, E_DEADLINE), t.tid))
+        .map(|t| (t.index, word(t, E_DEADLINE)));
+    let Some((index, deadline)) = first else {
+        return false;
+    };
+    let now = counter_now(guest);
+    if deadline > now {
+        let mem = guest.memory.as_mut_slice();
+        let warp = read_u64(mem, RUN_TABLE + CLOCK_WARP);
+        write_u64(mem, RUN_TABLE + CLOCK_WARP, warp + deadline - now);
+    }
+    set_status(guest, index, READY);
+    true
 }
 
 /// `_resume_idle` (3632-3652) after the machine gave the turn back: expired waits woken; with none ready, a blocked
@@ -409,10 +456,11 @@ pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32
             .values()
             .find(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
             .map(|t| t.index);
-        if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
-            return Err("an idle process's warp to a deadline on the instruction clock is not served yet".into());
-        }
-        if let Some(index) = timed {
+        // the instruction clock warps to the earliest deadline (Sprint 199); the wall clock runs the first timed
+        // waiter to check its wait
+        if !warp_to_deadline(guest)
+            && let Some(index) = timed
+        {
             set_status(guest, index, READY);
         }
     }
@@ -701,7 +749,7 @@ pub fn set_budget(guest: &mut Guest) {
 pub fn slice_until(guest: &Guest) -> u64 {
     // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
     // 2750-2754; Sprint 197)
-    if guest.link.as_ref().is_some_and(crate::turns::Link::others_due) {
+    if guest.link.as_ref().is_some_and(|l| l.others_due(counter_now(guest))) {
         return 0;
     }
     let mem = guest.memory.as_slice();

@@ -45,6 +45,28 @@ const MAPS_MAX: usize = 256;
 /// (`_machine_now`, the latest of the processes'), for `_catch_up`
 const CLOCK: usize = MAPS + 3 * MAPS_MAX;
 const MACHINE: usize = CLOCK + 1;
+/// the earliest deadline of a blocked thread (u64::MAX for none), and whether a thread is blocked, at the turn's end:
+/// readiness is computed from them when a turn is chosen (`ready`, `_deadline_passed`, vm_backend 3653-3669; Sprint 199)
+const DEADLINE: usize = MACHINE + 1;
+const BLOCKED: usize = MACHINE + 2;
+
+/// `VM.ready` (vm_backend 3653-3662) for slot `s` from what it posted: a thread ready, its earliest deadline at or
+/// before the machine's clock `now`, or a wake pending with a thread blocked.
+fn slot_ready(page: &Page, s: usize, now: u64) -> bool {
+    page.load(word(s, READY)) != 0
+        || page.load(word(s, DEADLINE)) <= now
+        || (page.load(word(s, WAKE)) != 0 && page.load(word(s, BLOCKED)) != 0)
+}
+
+/// `_machine_now` over the posted clocks and the asking process's own `clock`.
+fn machine_clock(page: &Page, clock: u64) -> u64 {
+    (0..SLOTS)
+        .filter(|&s| page.load(word(s, PID)) != 0)
+        .map(|s| page.load(word(s, CLOCK)))
+        .chain(std::iter::once(clock))
+        .max()
+        .unwrap_or(clock)
+}
 
 /// What a process hands the turn back with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +90,21 @@ pub struct State {
     pub timed: bool,
     /// the process's clock (`_counter_now`); 0 when not given
     pub clock: u64,
+    /// the earliest deadline of a blocked, unsuspended thread, u64::MAX for none
+    pub deadline: u64,
+    /// a thread is blocked
+    pub blocked: bool,
+}
+
+/// A process's state at its turn's end, written to its slot.
+fn post_state(page: &Page, s: usize, state: State) {
+    page.store(word(s, READY), u64::from(state.ready));
+    page.store(word(s, TIMED), u64::from(state.timed));
+    page.store(word(s, DEADLINE), state.deadline);
+    page.store(word(s, BLOCKED), u64::from(state.blocked));
+    if state.clock != 0 {
+        page.store(word(s, CLOCK), state.clock);
+    }
 }
 
 /// The guest's maps written to its slot, so the supervisor can find a VA in the shared memory.
@@ -92,6 +129,74 @@ pub struct ChildLink {
     pub supervisor: u64,
 }
 
+/// `sys/event.h` 86-93
+#[repr(C)]
+struct Kevent {
+    ident: usize,
+    filter: i16,
+    flags: u16,
+    fflags: u32,
+    data: isize,
+    udata: *mut std::ffi::c_void,
+}
+
+unsafe extern "C" {
+    /// `sys/event.h` 371-375
+    fn kqueue() -> i32;
+    fn kevent(
+        kq: i32,
+        changes: *const Kevent,
+        nchanges: i32,
+        events: *mut Kevent,
+        nevents: i32,
+        timeout: *const u8,
+    ) -> i32;
+}
+
+/// `sys/event.h` 72, 136, 142, 260
+const EVFILT_PROC: i16 = -5;
+const EV_ADD: u16 = 0x0001;
+const EV_ONESHOT: u16 = 0x0010;
+const NOTE_EXIT: u32 = 0x8000_0000;
+
+/// A child ends the moment its supervisor does, mid-turn included, so no child outlives the run (Sprint 199;
+/// reviewer-2's Medium 3 of its review of 196-198: a child checked its parent only while it waited for a turn): a
+/// thread waits on the parent's exit with kqueue's EVFILT_PROC and NOTE_EXIT and ends the process.
+pub fn end_with_parent() -> Result<(), String> {
+    let parent = std::os::unix::process::parent_id();
+    let kq = unsafe { kqueue() };
+    if kq == -1 {
+        return Err(format!("kqueue: {}", std::io::Error::last_os_error()));
+    }
+    let change = Kevent {
+        ident: parent as usize,
+        filter: EVFILT_PROC,
+        flags: EV_ADD | EV_ONESHOT,
+        fflags: NOTE_EXIT,
+        data: 0,
+        udata: std::ptr::null_mut(),
+    };
+    if unsafe { kevent(kq, &change, 1, std::ptr::null_mut(), 0, std::ptr::null()) } == -1 {
+        return Err(format!(
+            "kevent on the parent {parent}: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    std::thread::spawn(move || {
+        let mut event = Kevent {
+            ident: 0,
+            filter: 0,
+            flags: 0,
+            fflags: 0,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        };
+        unsafe { kevent(kq, std::ptr::null(), 0, &mut event, 1, std::ptr::null()) };
+        std::process::exit(1);
+    });
+    Ok(())
+}
+
 impl ChildLink {
     /// A child's side of the page its supervisor passed by descriptor; the supervisor's pid is in slot 0.
     pub fn open(page_fd: i32, slot: usize, pid: u64) -> Result<ChildLink, String> {
@@ -111,10 +216,9 @@ impl ChildLink {
     /// Hands the turn to the supervisor with `message` and waits for it back; true when a wake is pending.
     fn hand_back(&self, message: Message, state: State) -> bool {
         let s = self.slot;
-        self.page.store(word(s, READY), u64::from(state.ready));
-        self.page.store(word(s, TIMED), u64::from(state.timed));
-        if state.clock != 0 {
-            self.page.store(word(s, CLOCK), state.clock);
+        // a request's turn goes on after its answer: the state posted at the last turn's end stands
+        if message != Message::Request {
+            post_state(&self.page, s, state);
         }
         self.page.store(word(s, MESSAGE), message as u64);
         self.page.post(TURN, self.supervisor);
@@ -144,6 +248,11 @@ impl ChildLink {
     /// posts the guest's maps).
     pub fn first_turn(&self) {
         self.wait_for_turn();
+    }
+
+    /// The machine's clock as the supervisor wrote it when it gave this turn (`_machine_now`).
+    pub fn machine(&self) -> u64 {
+        self.page.load(word(self.slot, MACHINE))
     }
 
     /// A KERNEL 33 request served by the supervisor: (result, second, a wake pending here).
@@ -213,38 +322,34 @@ pub enum Link {
 }
 
 impl Link {
-    /// `Machine.others_ready` (kernel.py 326-327): another process has a thread to run now (not yet started, a thread
-    /// ready, a wake pending), as each last reported.
-    pub fn others_ready(&self) -> bool {
-        let (page, me) = match self {
-            Link::Supervisor(s) => {
-                if s.children.iter().any(|c| !c.started) {
-                    return true;
-                }
-                (&s.page, 0)
-            }
-            Link::Child(c) => (&c.page, c.slot),
-        };
-        (0..SLOTS)
-            .filter(|&s| s != me && page.load(word(s, PID)) != 0)
-            .any(|s| page.load(word(s, READY)) != 0 || page.load(word(s, WAKE)) != 0)
+    /// The page and this process's slot; true too when a child has not yet started, which is ready (`not threads`).
+    fn page_and_slot(&self) -> (&Page, usize, bool) {
+        match self {
+            Link::Supervisor(s) => (&s.page, 0, s.children.iter().any(|c| !c.started)),
+            Link::Child(c) => (&c.page, c.slot, false),
+        }
     }
 
-    /// `_other_process_due` (vm_backend 2750-2754): another process is ready (not yet started, a thread ready, a wake
-    /// pending) or waits with a deadline, as each last reported at its turn's end.
-    pub fn others_due(&self) -> bool {
-        let (page, me) = match self {
-            Link::Supervisor(s) => {
-                if s.children.iter().any(|c| !c.started) {
-                    return true;
-                }
-                (&s.page, 0)
-            }
-            Link::Child(c) => (&c.page, c.slot),
-        };
-        (0..SLOTS)
-            .filter(|&s| s != me && page.load(word(s, PID)) != 0)
-            .any(|s| page.load(word(s, READY)) != 0 || page.load(word(s, TIMED)) != 0 || page.load(word(s, WAKE)) != 0)
+    /// `Machine.others_ready` (kernel.py 326-327): another process has a thread to run now, `VM.ready` computed from
+    /// what each posted against the machine's clock with this process's own `clock` (Sprint 199: before, the posted
+    /// bit alone, so a child's passed deadline waited for its parent to idle).
+    pub fn others_ready(&self, clock: u64) -> bool {
+        let (page, me, unstarted) = self.page_and_slot();
+        let now = machine_clock(page, clock);
+        unstarted
+            || (0..SLOTS)
+                .filter(|&s| s != me && page.load(word(s, PID)) != 0)
+                .any(|s| slot_ready(page, s, now))
+    }
+
+    /// `_other_process_due` (vm_backend 2750-2754): another process is ready or waits with a deadline.
+    pub fn others_due(&self, clock: u64) -> bool {
+        let (page, me, unstarted) = self.page_and_slot();
+        let now = machine_clock(page, clock);
+        unstarted
+            || (0..SLOTS)
+                .filter(|&s| s != me && page.load(word(s, PID)) != 0)
+                .any(|s| slot_ready(page, s, now) || page.load(word(s, DEADLINE)) != u64::MAX)
     }
 }
 
@@ -382,12 +487,25 @@ impl Supervisor {
         let mut own = own;
         let mut own_wake = false;
         loop {
-            self.page.store(word(0, READY), u64::from(own.ready || own_wake));
-            self.page.store(word(0, TIMED), u64::from(own.timed));
+            post_state(
+                &self.page,
+                0,
+                State {
+                    ready: own.ready || own_wake,
+                    ..own
+                },
+            );
+            // `_machine_now` (vm_backend 3671-3678): the latest clock of the processes that have run
+            let clocks: Vec<u64> = std::iter::once(own.clock)
+                .chain(self.children.iter().map(|c| self.page.load(word(c.slot, CLOCK))))
+                .collect();
+            let machine = crate::machine::machine_now(&clocks);
+            // readiness when the turn is chosen (`VM.ready`, 3653-3669; Sprint 199): a thread ready, a deadline passed
+            // on the machine's clock, a wake pending with a thread blocked
             let mut live = vec![Turn {
                 pid: self.pid,
                 started: true,
-                ready: own.ready || own_wake,
+                ready: own.ready || own.deadline <= machine || (own_wake && own.blocked),
                 timed: own.timed,
             }];
             for c in &self.children {
@@ -395,7 +513,7 @@ impl Supervisor {
                 live.push(Turn {
                     pid: c.pid,
                     started: c.started,
-                    ready: self.page.load(word(s, READY)) != 0 || self.page.load(word(s, WAKE)) != 0,
+                    ready: slot_ready(&self.page, s, machine),
                     timed: self.page.load(word(s, TIMED)) != 0,
                 });
             }
@@ -404,11 +522,6 @@ impl Supervisor {
             if matches!(chosen, Next::Timed(_)) && !self.instruction_clock {
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
-            // `_machine_now` (vm_backend 3671-3678): the latest clock of the processes that have run
-            let clocks: Vec<u64> = std::iter::once(own.clock)
-                .chain(self.children.iter().map(|c| self.page.load(word(c.slot, CLOCK))))
-                .collect();
-            let machine = crate::machine::machine_now(&clocks);
             let pid = match chosen {
                 Next::Run(p) if p == self.pid => {
                     self.current = self.pid;

@@ -172,6 +172,51 @@ mod tests {
         assert!(median < 1_000_000, "median round trip {median} ns");
     }
 
+    /// The turn's round trip between two processes, as a supervisor and a child `w2m-vm` hand it (Sprint 199;
+    /// reviewer-2's Medium 5 of its review of 196-198: measured between threads before): this test runs its own binary
+    /// again as the other process, which inherits the page's descriptor and hands the turn back 10,000 times; the
+    /// median is printed and held under 1 ms, a gross failure only.
+    #[test]
+    fn a_turn_goes_to_another_process_and_comes_back() {
+        const ROUNDS: u64 = 10_000;
+        if let Ok(fd) = std::env::var("W2M_TURN_PEER") {
+            let page = Page::map(fd.parse().unwrap(), 16 * 1024).unwrap();
+            for r in 0..ROUNDS {
+                page.wait_until(0, |v| v == 2 * r + 1);
+                page.post(0, 2 * r + 2);
+            }
+            return;
+        }
+        let file = anonymous_file(16 * 1024).unwrap();
+        let fd = inheritable(&file).unwrap();
+        let page = Page::map(fd, 16 * 1024).unwrap();
+        let mut peer = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "shared::tests::a_turn_goes_to_another_process_and_comes_back",
+                "--nocapture",
+            ])
+            .env("W2M_TURN_PEER", fd.to_string())
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut ns = Vec::with_capacity(ROUNDS as usize);
+        for r in 0..ROUNDS {
+            let t = std::time::Instant::now();
+            page.post(0, 2 * r + 1);
+            page.wait_until(0, |v| v == 2 * r + 2);
+            ns.push(t.elapsed().as_nanos() as u64);
+        }
+        assert!(peer.wait().unwrap().success());
+        ns.sort_unstable();
+        let median = ns[ns.len() / 2];
+        println!(
+            "turn round trip across two processes: median {median} ns, p99 {} ns over {ROUNDS}",
+            ns[ns.len() * 99 / 100]
+        );
+        assert!(median < 1_000_000, "median round trip {median} ns");
+    }
+
     /// The turn word between two mappings of one unlinked file: a post through one ends a wait through the other, and
     /// the file is gone from the temporary directory while both map it.
     #[test]

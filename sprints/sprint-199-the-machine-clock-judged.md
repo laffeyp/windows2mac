@@ -86,3 +86,27 @@ no child outlives its supervisor.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the machine clock.
+
+## result
+
+- **The judge:** `w2m-vm <guest> ... --instruction-clock` runs a guest at 1,400,000,000 a second from
+  134362624920000000; `gates.sh` runs twoproc so as twoproc-ic, held to "child ended" by `batch_run.rs`. Before this
+  sprint it printed "clock behind".
+- **Catch-up at a start:** `threads::catch_up`, called by the child once its guest is built with the machine clock the
+  supervisor wrote for its first turn, and by `hand_over` on every resume.
+- **Readiness when chosen:** each process posts its earliest deadline and whether a thread is blocked (`turn_state`,
+  `post_state`); `slot_ready` computes a thread ready, the deadline at or before the machine's clock, or a wake with a
+  thread blocked, in `others_ready`, `others_due` and the supervisor's choice.
+- **The warp:** `threads::warp_to_deadline`, used by `resume_idle` on the instruction clock in place of the refusal.
+- **The environment:** `environment_now` reads ProcessParameters.Environment's block for the child's start.
+- **No orphan, no held hang:** `turns::end_with_parent` (kqueue EVFILT_PROC, NOTE_EXIT) ends a child with its parent;
+  `batch_run.rs` and `family_runs.rs` refuse a held stop of "the run's time limit".
+- **The round trip across processes:** `a_turn_goes_to_another_process_and_comes_back`: median 7,625 to 7,792 ns, p99
+  11,750 to 14,500 ns in three runs, under the Decision's 10 µs median.
+- **Plant 1** (no catch-up at a child's start): `each_guest_that_ends_prints_what_the_python_host_printed` failed,
+  "twoproc-ic's output differs from the Python host's", left "clock behind\n". Restored byte for byte.
+- **Plant 2** (the deadline term dropped from readiness): twoproc-ic stopped at "the run's time limit", and
+  `the_batch_run_and_the_guests_stop_where_held` and the output test failed. Restored byte for byte.
+- **Plant 3** (a held stop of the time limit): `the_batch_run_and_the_guests_stop_where_held` failed, "holds a hang as a
+  stop: guest\ttwoproc-ic\tExit(\"the run's time limit\")". Restored byte for byte.
+- **Departures:** the parent watch's mid-turn path has no run-level judge (Observation 2).

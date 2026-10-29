@@ -139,6 +139,13 @@ if [ $rust != none ]; then
       --stop "build/batch_run/guest-$n.stop" > /dev/null 2> "build/batch_run/guest-$n.stderr" || true
     printf '%s\t%s\n' "$n" "$(cat "build/batch_run/guest-$n.stop" 2>/dev/null)" >> build/batch_run/guests.tsv
   done
+  # twoproc on the instruction clock, the machine clock's run-level judge, as tests/test_timed_waits.py 152 runs it
+  # (Sprint 199; reviewer-2's High 1 of its review of 196-198)
+  rm -f build/batch_run/guest-twoproc-ic.stop
+  echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm tests/data/timed_waits/twoproc.exe \
+    --output build/batch_run/guest-twoproc-ic.txt --stop build/batch_run/guest-twoproc-ic.stop --instruction-clock \
+    > /dev/null 2> build/batch_run/guest-twoproc-ic.stderr || true
+  printf '%s\t%s\n' twoproc-ic "$(cat build/batch_run/guest-twoproc-ic.stop 2>/dev/null)" >> build/batch_run/guests.tsv
   # the module families on the Rust host (Sprint 196; census row 6): each runner binary a contract's evidence names,
   # run as probe.exe, its printed rows and stop under build/family_runs/, which crates/w2m_vm/tests/family_runs.rs
   # holds to the contract's rows or to store/family_runs/module-stops-2026-10-28.tsv
