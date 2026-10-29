@@ -73,3 +73,21 @@ A close stands on the `ci` run of a tree that holds it, read from the tracked fi
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the close's run.
+
+## result
+
+- **The workflow:** `store/gates/ci.tsv` keeps each run's `workflowName` in a fifth column, read again with `gh run view`
+  for the 16 runs on file: all `ci`. `ci_held` names a cited run of another workflow.
+- **The head:** `ci_held` takes the sprint's close commit (`close_commit`, "Sprint N closed:" or "closed-partial:" by
+  `git log`) and names a cited run whose head does not hold it (`git merge-base --is-ancestor`). Every cited run from
+  Sprint 199 on the board holds its close.
+- **The waiver:** read from the clause that names the run's id (clauses end at ";", ")" and ". "); Sprint 210's
+  annotation passes, its clause naming 40936387557 saying "failed".
+- **Pending:** the "closed (CI pending)" heading is not taken, as the scope says.
+- **Plant 1** (every head made not to hold its close): `--check` named "sprint 214: its CI run 40952329895 ran on
+  309ef13adcc8d2c21136a6e37b59c9b9150a5203, which does not hold the sprint's close", and 213. Restored byte for byte.
+- **Plant 2** (Sprint 213's run recorded as windows-probe in ci.tsv): `--check` named "sprint 213: its CI run 40948787264
+  is of the workflow \"windows-probe\", not ci". Restored byte for byte.
+- **Plant 3** (the waiver read from the whole entry): the unit test failed, "\"failed\" in another clause waives
+  nothing: []". Restored byte for byte.
+- **Departures:** none from the card's files; ci.tsv was rewritten from `gh run view`'s output, as Sprint 212 wrote it.

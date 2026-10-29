@@ -754,7 +754,17 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         // from Sprint 199 the run a later entry cites for this sprint's close concluded success, or this entry names
         // it failed (Sprint 212)
         if n >= FIRST_CI_HELD_SPRINT {
-            wrong.extend(ci_held(n, body, tail, ci.as_deref()));
+            let close = close_commit(root, n);
+            let holds_close = |head: &str| -> Option<bool> {
+                let close = close.as_deref()?;
+                std::process::Command::new("git")
+                    .args(["merge-base", "--is-ancestor", close, head])
+                    .current_dir(root)
+                    .status()
+                    .ok()
+                    .map(|s| s.success())
+            };
+            wrong.extend(ci_held(n, body, tail, ci.as_deref(), &holds_close));
         }
         for token in ["GATES-LINE", "CI-LINE"] {
             if body.contains(token) {
@@ -796,9 +806,17 @@ const CI_RUNS: &str = "store/gates/ci.tsv";
 const FIRST_CI_HELD_SPRINT: u32 = 199;
 
 /// Sprint `n`'s close against its CI run: the run a later tail entry cites as "Sprint N's CI run <id>" (or "(<id>")
-/// must be in `ci` and conclude success, or `body`, the sprint's own entry, names the run and "failed". No later entry
-/// citing a run: the close's CI is pending, and nothing is held yet. WORKING_AGREEMENT's "CI on the closing commit".
-fn ci_held(n: u32, body: &str, tail: &str, ci: Option<&str>) -> Vec<String> {
+/// must be in `ci`, a run of the `ci` workflow whose head holds the sprint's close (`holds_close`: Some(false) when it
+/// does not; Sprint 216, reviewer-3's Medium 3 of its review of 212-214), and conclude success, or the clause of
+/// `body`, the sprint's own entry, that names the run says "failed". No later entry citing a run: the close's CI is
+/// pending, and nothing is held yet. WORKING_AGREEMENT's "CI on the closing commit".
+fn ci_held(
+    n: u32,
+    body: &str,
+    tail: &str,
+    ci: Option<&str>,
+    holds_close: &dyn Fn(&str) -> Option<bool>,
+) -> Vec<String> {
     let cited = format!("Sprint {n}'s CI run ");
     let Some(at) = tail.find(&cited) else {
         return Vec::new();
@@ -818,22 +836,50 @@ fn ci_held(n: u32, body: &str, tail: &str, ci: Option<&str>) -> Vec<String> {
             "{CI_RUNS} does not exist: sprint {n:03}'s CI run {digits} cannot be read"
         )];
     };
-    match ci
+    let Some(cols) = ci
         .lines()
         .map(|l| l.split('\t').collect::<Vec<_>>())
         .find(|c| c[0] == digits)
-    {
-        None => vec![format!(
+    else {
+        return vec![format!(
             "sprint {n:03}: its CI run {digits} is not in {CI_RUNS} (`gh run view {digits} --json conclusion`)"
-        )],
-        Some(cols) if cols.get(2) == Some(&"success") => Vec::new(),
-        Some(_) if body.contains(&digits) && body.contains("failed") => Vec::new(),
-        Some(cols) => vec![format!(
+        )];
+    };
+    let mut wrong = Vec::new();
+    if cols.get(4) != Some(&"ci") {
+        wrong.push(format!(
+            "sprint {n:03}: its CI run {digits} is of the workflow {:?}, not ci",
+            cols.get(4).unwrap_or(&"")
+        ));
+    }
+    let head = cols.get(1).copied().unwrap_or("");
+    if holds_close(head) == Some(false) {
+        wrong.push(format!(
+            "sprint {n:03}: its CI run {digits} ran on {head}, which does not hold the sprint's close"
+        ));
+    }
+    // the waiver: the clause that names the run's id says it failed (clauses end at ";", ". " or ")")
+    let waived = body
+        .split([';', ')'])
+        .flat_map(|c| c.split(". "))
+        .any(|clause| clause.contains(&digits) && clause.contains("failed"));
+    if cols.get(2) != Some(&"success") && !waived {
+        wrong.push(format!(
             "sprint {n:03}: its tail entry is headed closed and its CI run {digits} concluded {}, which the entry does not \
              name",
             cols.get(2).unwrap_or(&"nothing")
-        )],
+        ));
     }
+    wrong
+}
+
+/// Sprint `n`'s close commit, "Sprint N closed:" or "Sprint N closed-partial:", by `git log`; None before it is made.
+fn close_commit(root: &Path, n: u32) -> Option<String> {
+    let log = git(root, &["log", "--format=%H%x09%s"]).ok()?;
+    log.lines()
+        .filter_map(|l| l.split_once('\t'))
+        .find(|(_, s)| is_close(s, n))
+        .map(|(h, _)| h.to_string())
 }
 
 /// The first sprint whose close commit is held to bookkeeping paths and whose multi-vCPU claim to the stage's record
@@ -1428,19 +1474,38 @@ mod tests {
     /// concluded success, or the close's own entry names it failed; a run not on file is named; no citation, pending.
     #[test]
     fn a_close_is_held_to_the_conclusion_of_its_ci_run() {
-        let ci = "# header\n11\taaa\tsuccess\tt\n22\tbbb\tfailure\tt\n";
+        let ci = "# header\n11\taaa\tsuccess\tt\tci\n22\tbbb\tfailure\tt\tci\n44\tddd\tsuccess\tt\twindows-probe\n";
         let tail = "### Sprint 211\n- **Closed:** Sprint 210's CI run 11 (head aaa) passed.\n\
-                    ### Sprint 212\n- **Closed:** Sprint 211's CI run (22, head bbb) failed.\n";
-        assert!(ci_held(210, "an entry", tail, Some(ci)).is_empty());
-        let named = ci_held(211, "an entry", tail, Some(ci));
+                    ### Sprint 212\n- **Closed:** Sprint 211's CI run (22, head bbb) failed.\n\
+                    ### Sprint 213\n- **Closed:** Sprint 212's CI run 44 passed.\n";
+        let holds = |_: &str| Some(true);
+        assert!(ci_held(210, "an entry", tail, Some(ci), &holds).is_empty());
+        let named = ci_held(211, "an entry", tail, Some(ci), &holds);
         assert_eq!(named.len(), 1, "{named:?}");
         assert!(named[0].contains("its CI run 22 concluded failure"), "{named:?}");
-        assert!(ci_held(211, "its run 22 failed, repaired later", tail, Some(ci)).is_empty());
-        let unread = ci_held(210, "an entry", "Sprint 210's CI run 33 passed", Some(ci));
+        assert!(ci_held(211, "its run 22 failed, repaired later", tail, Some(ci), &holds).is_empty());
+        let unread = ci_held(210, "an entry", "Sprint 210's CI run 33 passed", Some(ci), &holds);
         assert!(unread[0].contains("33 is not in"), "{unread:?}");
         assert!(
-            ci_held(212, "an entry", tail, Some(ci)).is_empty(),
-            "no later entry cites 212's run: pending"
+            ci_held(214, "an entry", tail, Some(ci), &holds).is_empty(),
+            "no later entry cites 214's run: pending"
+        );
+        // Sprint 216: the run of another workflow, a head that does not hold the close, and a waiver in another clause
+        let other = ci_held(212, "an entry", tail, Some(ci), &holds);
+        assert!(
+            other[0].contains("of the workflow \"windows-probe\", not ci"),
+            "{other:?}"
+        );
+        let before = ci_held(210, "an entry", tail, Some(ci), &|_: &str| Some(false));
+        assert!(
+            before[0].contains("ran on aaa, which does not hold the sprint's close"),
+            "{before:?}"
+        );
+        let elsewhere = ci_held(211, "its run 22 passed; the gates failed once", tail, Some(ci), &holds);
+        assert_eq!(
+            elsewhere.len(),
+            1,
+            "\"failed\" in another clause waives nothing: {elsewhere:?}"
         );
     }
 
