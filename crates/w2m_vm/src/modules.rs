@@ -592,6 +592,60 @@ mod tests {
         assert_eq!(module_in(&h, "nothing.dll", false), Ok(0));
     }
 
+    /// GetProcAddress's thunks apart from the import thunks (modules.py 172-190, `Modules._thunks`; Sprint 210, owed by
+    /// Sprint 209's tail): kernel32's imported name answers with its import thunk; a name not imported gets a thunk of
+    /// its own, the same one when asked again; and `import_thunk` of that name later makes another, not GetProcAddress's.
+    /// The guest needs the runtime image clang builds, so the test runs on the Mac, as `tests/bridges.rs` does.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn getprocaddress_keeps_its_thunks_apart_from_the_imports() {
+        use super::proc;
+        use crate::guest::{Guest, vm_compiler_symbols};
+        use crate::process::Start;
+        use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
+        use std::path::Path;
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let data = std::fs::read(root.join("tests/data/timed_waits/qpc.exe")).unwrap();
+        let loaded = pe_loader::load(&data, None, "probe.exe").unwrap();
+        let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+        let services = guest_runtime::services::services(&guest_runtime::texts(&root).unwrap()).unwrap();
+        let table = std::fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap();
+        let symbols = vm_compiler_symbols(&table).unwrap();
+        let exports: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join("specs/windows_exports.json")).unwrap()).unwrap();
+        let system = exports["modules"].as_object().unwrap().keys().cloned().collect();
+        let mut g = Guest::new(
+            &loaded,
+            &image,
+            &services,
+            &Start::console("probe.exe"),
+            &system,
+            &symbols,
+        )
+        .unwrap();
+        let kernel32 = g.process.kernel32;
+        let imported = g.imports["kernel32.dll!queryperformancecounter"];
+        assert_eq!(proc(&mut g, kernel32, "QueryPerformanceCounter"), Ok(imported));
+        let own = proc(&mut g, kernel32, "Sleep").unwrap();
+        assert_ne!(own, 0, "kernel32 exports Sleep");
+        assert!(
+            !g.imports.values().any(|&t| t == own),
+            "Sleep's thunk is GetProcAddress's own"
+        );
+        assert_eq!(proc(&mut g, kernel32, "Sleep"), Ok(own), "made once");
+        let import = g.import_thunk("KERNEL32.dll!Sleep").unwrap();
+        assert_ne!(import, own, "an import of Sleep makes its own thunk");
+        assert_eq!(
+            proc(&mut g, kernel32, "Sleep"),
+            Ok(import),
+            "and GetProcAddress then answers the import's"
+        );
+    }
+
     /// `_canonical`: the last component, lowercase, ".dll" when the name has no extension (LoadLibrary's rule).
     #[test]
     fn a_name_is_its_last_component_lowercased_with_dll_added() {

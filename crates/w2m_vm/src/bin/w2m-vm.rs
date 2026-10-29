@@ -55,6 +55,10 @@ mod run {
     const MAX_STEPS: u64 = 1 << 40;
     /// a guest run's limit, family_run.py `run_in_vm`'s `timeout_ms=60_000` (Sprint 197)
     const GUEST_SECONDS: u64 = 60;
+    /// the batch run's limit, `run_frontier.py`'s `--timeout-seconds` default (Sprint 210), and the grace its record
+    /// states, `KILL_GRACE_SECONDS` (run_frontier.py 73)
+    const GAME_SECONDS: u64 = 10_800;
+    const KILL_GRACE_SECONDS: u64 = 60;
 
     fn root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -220,7 +224,8 @@ mod run {
         start.app_root = Some(app.clone());
         let mut guest = guest_of(&root, &loaded, &start)?;
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
-        let out = on_one_vcpu(&mut guest, &loaded, true);
+        guest.limited = true;
+        let out = on_one_vcpu(&mut guest, &loaded, Some(GUEST_SECONDS));
         drop(guest.files.take());
         let _ = fs::remove_dir_all(&app);
         let out = out?;
@@ -301,20 +306,20 @@ mod run {
         Guest::new(loaded, &image, &services, start, &modules, &symbols).map_err(|e| format!("the guest: {e:?}"))
     }
 
-    /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop.
-    fn on_one_vcpu(guest: &mut Guest, loaded: &pe_loader::Loaded, limited: bool) -> Result<Outcome, String> {
+    /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop or `seconds`.
+    fn on_one_vcpu(guest: &mut Guest, loaded: &pe_loader::Loaded, seconds: Option<u64>) -> Result<Outcome, String> {
         let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
         vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
             .map_err(|e| format!("{e:?}"))?;
         let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
         let mut host = HostCompiler::default();
         // a guest's run stops at GUEST_SECONDS, as family_run.py's `run_in_vm` stops a probe at 60 s (`timeout_ms`), so
-        // a guest that spins fails by name rather than hanging the gates (Sprint 197); the batch run has no limit
-        guest.limited = limited;
-        if limited {
+        // a guest that spins fails by name rather than hanging the gates (Sprint 197); the batch run at GAME_SECONDS,
+        // the bound its record states (Sprint 210)
+        if let Some(seconds) = seconds {
             let handle = vcpu.handle();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(GUEST_SECONDS));
+                std::thread::sleep(std::time::Duration::from_secs(seconds));
                 let _ = handle.stop();
             });
         }
@@ -326,6 +331,7 @@ mod run {
     fn stop_name(stop: &Stop) -> String {
         match stop {
             Stop::HostRequest { op, why, .. } => format!("HostRequest op {op}: {why}"),
+            Stop::HostFailure { op, why, .. } => format!("HostFailure op {op}: {why}"),
             Stop::Hvc { number, .. } => format!("Hvc {number}"),
             Stop::Handover { why, .. } => format!("Handover: {why}"),
             Stop::Model { rip, why } => format!("Model at 0x{rip:x}: {why}"),
@@ -440,7 +446,9 @@ mod run {
             // the child starts at the machine's clock, as `VM.steps` catches every process up at its start (Sprint 199;
             // reviewer-2's High 1 of its review of 196-198: tests/test_timed_waits.py 141-152's plant gives "clock behind")
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
-            on_one_vcpu(&mut guest, &loaded, s["limited"].as_bool().unwrap_or(true))
+            guest.limited = s["limited"].as_bool().unwrap_or(true);
+            let seconds = guest.limited.then_some(GUEST_SECONDS);
+            on_one_vcpu(&mut guest, &loaded, seconds)
         };
         match run() {
             Ok(out) => match out.stop {
@@ -477,13 +485,16 @@ mod run {
         // the depot is C:\w2m\app, the Python's file bridge root (`host_file`, `in_app_directory`; Sprint 196)
         start.app_root = Some(directory.to_path_buf());
         start.program_path = Some(directory.join(program));
+        // the Producer's input, one JSON line, read so the pipe closes, as a guest run reads it
+        let mut input = String::new();
+        io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
         let mut guest = guest_of(&root, &loaded, &start)?;
         // the depot mounted read-only, as `run_frontier.py` 268 makes it (Sprint 204)
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
         if let Some(path) = ledger {
             guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&root.join(path))?);
         }
-        let out = on_one_vcpu(&mut guest, &loaded, false)?;
+        let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS))?;
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
         let mut tsv = format!(
             "stop\t{}\nseconds\t{:.1}\n",
@@ -545,7 +556,38 @@ mod run {
             in_flight.lines().count()
         );
         fs::write(root.join(stop_file), &tsv).map_err(|e| format!("{stop_file}: {e}"))?;
-        print!("{tsv}");
+        // the run's execution record on standard output (Sprint 210), as `run_frontier.py` writes the batch run's
+        let subject = sha256(&data);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_nanos();
+        let id = format!("frontier-{}-{nanos}", &subject[..12]);
+        let end = w2m_vm::record::RunEnd::of(&out.stop, guest.called_service());
+        let stem = Path::new(program)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let stop = stop_name(&out.stop);
+        let record = w2m_vm::record::execution_lines(&w2m_vm::record::Execution {
+            id: &id,
+            subject_sha256: &subject,
+            program_stem: &stem,
+            timeout_seconds: GAME_SECONDS,
+            kill_grace_seconds: KILL_GRACE_SECONDS,
+            executed: out.executed,
+            run_seconds: out.run_ns.iter().sum::<u64>() as f64 / 1e9,
+            host_seconds: out.serve_ns.iter().sum::<u64>() as f64 / 1e9,
+            exits: out.exits.iter().map(|(k, n)| (*k, *n)).collect(),
+            end,
+            calls: (&sha256(calls.as_bytes()), calls.lines().count() as u64),
+            stop: &stop,
+            elapsed: started.elapsed(),
+        });
+        let mut stdout = io::stdout().lock();
+        for line in record {
+            writeln!(stdout, "{line}").map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 }

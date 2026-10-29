@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 209
-status: done
+status: closed-partial
 phase: 6
 pass_kind: functional
 ---
@@ -116,3 +116,6 @@ The exit ledger judges every row and every guest write, and the Rust host's thun
   column covers the process area below the trace; the arena's writes (a mapped DLL, VirtualQuery's record on the
   guest stack) are in neither, which the doc says. Plant 2 planted the loader list, not the init stub's page the card
   named, since the init stub's page is in the arena.
+- **Regraded closed-partial** (2026-10-29, reviewer-3's High 1 of its review of 205-209): the expected value "the
+  written column covers the loader's and the arena's writes too" is not met, and the init stub's page is a blind spot,
+  not a planted fault; BLACKBOARD Deferred "(Sprint 209, partial)" carries the arena's writes.

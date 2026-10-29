@@ -959,6 +959,29 @@ impl Guest {
         (MONITOR_SIZE + off) as usize
     }
 
+    /// The Windows call a service stopped in (Sprint 210): the return address at the guest's saved RSP (the state
+    /// block's slot 4, as vm_backend 3804-3805 reads it), and the function it called when the instruction before it is
+    /// `call [rip+disp32]` (FF 15) through an import slot holding one of the thunks; None when RSP is unmapped. The
+    /// frozen host names the refusal's words as the service, where vocabulary 0.12 names "DLL!Function"; the name is
+    /// read here instead, the words kept when the call does not resolve.
+    pub fn called_service(&self) -> Option<(u64, Option<String>)> {
+        let mem = self.memory.as_slice();
+        let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let rsp = word((MONITOR_SIZE + STATE_OFF + 8 * 4) as usize);
+        let ret = word(self.layout.offset(rsp)? as usize);
+        let name = (|| {
+            let at = self.layout.offset(ret.checked_sub(6)?)? as usize;
+            if mem.get(at..at + 2)? != [0xff, 0x15] {
+                return None;
+            }
+            let disp = i32::from_le_bytes(mem[at + 2..at + 6].try_into().unwrap());
+            let slot = ret.wrapping_add_signed(i64::from(disp));
+            let thunk = word(self.layout.offset(slot)? as usize);
+            self.thunks.get(&thunk).cloned()
+        })();
+        Some((ret, name))
+    }
+
     /// `_import_thunk` (3087-3092) with `make_thunk` (2920-2924): the thunk `name` ("KERNEL32.dll!Name") has, or a new
     /// one after the others with its bridge.
     pub fn import_thunk(&mut self, name: &str) -> Result<u64, GuestError> {

@@ -1,0 +1,27 @@
+# The batch run's record on the Rust host (Sprint 210; the Decision "Sequence after Sprint 208"): w2m-vm runs Hail to
+# the Rainbow.exe from the depot ~/w2m-depots/hail-to-the-rainbow to its first stop and writes the run's execution
+# record, run_frontier.py's session, on a substrate record (its root named by a nanosecond suffix, which dates it for
+# check_records); the stop, the call stream and the exit ledger under build/.
+# crates/w2m_vm/tests/batch_record.rs holds the record to the frozen host's of 2026-10-21 and to the stop file. Run by
+# scripts/gates.sh from the repository root after `cargo build --release`, on this Mac (Hypervisor.framework):
+#   uv run substrate run --file harness/w2m-vm-game.toml --root build/batch_run/record-<ns> --strict
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.12"
+host = "w2m-vm"
+implementation = "the Rust host, w2m-vm, on one vCPU with the Rust translator for the blocks the VM's C declines"
+reference = "the frozen Python host's batch run of 2026-10-21, store/runs/frontier-643a6283510c-1792623423346201000"
+
+[[producer]]
+kind = "w2m_vm_game"
+# sh for the depot's $HOME, in harness/, where substrate runs a Producer; w2m-vm reads its paths from the root; signed
+# with the Hypervisor entitlement first
+command = ["sh", "-c", "exec ../scripts/sign_and_run.sh ../target/release/w2m-vm --game \"$HOME/w2m-depots/hail-to-the-rainbow\" \"Hail to the Rainbow.exe\" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv --exit-ledger build/exit_ledger/rust.tsv"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "w2m_vm_game"
+
+[termination]
+recipe = "all_completed"

@@ -11,7 +11,13 @@
 //! The golden check reads two records' w2m events (every frame but substrate's own) and holds them equal in order,
 //! kind for kind and field for field, but for three fields each implementation sets for itself: `elapsed_seconds` (a
 //! time), `harness_version` (the Python's 0.0.1, the crate's own version), and `vocab_version` (the frozen Python
-//! writes 0.9, the Rust vocabulary is 0.10).
+//! writes 0.9, the Rust vocabulary is `VOCAB_VERSION`, 0.12 on 2026-10-29).
+//!
+//! A run's execution record (Sprint 210) is `run_frontier.py`'s (262-266, 380-407): one session, purpose
+//! `application`: SESSION_INIT, EXECUTION_STARTED, MEASUREMENT_RECORDED for what the Rust host measures (the
+//! instructions, the seconds in the VM, the exits by hvc), SERVICE_UNIMPLEMENTED at a host request it does not serve,
+//! EXECUTION_COMPLETED, SESSION_COMPLETED. The frozen host's measurements by thread, by the host's time per exit, of
+//! switches, wakes and load have no Rust counterpart yet and are left out, not written as 0.
 
 use std::path::Path;
 use std::time::Duration;
@@ -75,6 +81,189 @@ pub fn translation_lines(image_sha256: &str, entry: u64, blocks: &[(u64, u64, u6
         // `round(time.monotonic() - t0, 3)`
         elapsed_seconds: FiniteF64::new((elapsed.as_secs_f64() * 1000.0).round() / 1000.0)
             .expect("a measured duration is finite"),
+    }));
+    lines
+}
+
+/// `EMPTY` (run_frontier.py 63): the sha256 of no bytes, a run's initial state and injected inputs.
+pub const EMPTY_SHA256: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+/// One run's facts for its execution record.
+pub struct Execution<'a> {
+    /// `frontier-<the subject's first 12 hex digits>-<ns>`, as `run_frontier.py` names a run
+    pub id: &'a str,
+    /// the program's sha256, 64 hex digits
+    pub subject_sha256: &'a str,
+    /// the program's file stem, for the measurements' `application_profile_id`
+    pub program_stem: &'a str,
+    pub timeout_seconds: u64,
+    pub kill_grace_seconds: u64,
+    pub executed: u64,
+    /// the seconds in the VM, `hv_vcpu_run`'s calls summed, and in the host serving the exits
+    pub run_seconds: f64,
+    pub host_seconds: f64,
+    /// the exits by hvc number (0: an exit other than an hvc)
+    pub exits: Vec<(u16, u64)>,
+    pub end: RunEnd,
+    /// the call stream's sha256 (64 hex digits) and rows, named in `unobserved` (the Rust host writes no guest trace)
+    pub calls: (&'a str, u64),
+    pub stop: &'a str,
+    pub elapsed: Duration,
+}
+
+/// How a run ended, as `run_frontier.py` 400-407 names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunEnd {
+    /// ExitProcess, with its code: exited
+    Exited(u32),
+    /// the run's time limit: timed_out
+    TimedOut,
+    /// a request the host does not serve (the Python's Unimplemented, vm_backend 3802-3805): SERVICE_UNIMPLEMENTED
+    /// with the refusal's words and the call's return address, then killed
+    Unimplemented { service: String, return_address: u64 },
+    /// anything else: faulted
+    Faulted,
+}
+
+impl RunEnd {
+    /// The end a stop is (Sprint 210; reviewer-3's High 2 of its review of 210): a request the host does not serve is a
+    /// service not implemented, named by the Windows call it stopped in (`called`, `Guest::called_service`'s return
+    /// address and function) or, when that does not resolve, by the refusal's words; a failure in serving a request is
+    /// a fault, as is any stop but ExitProcess and the time limit.
+    pub fn of(stop: &crate::run::Stop, called: Option<(u64, Option<String>)>) -> RunEnd {
+        use crate::run::Stop;
+        match stop {
+            Stop::ExitProcess { code } => RunEnd::Exited(*code),
+            Stop::Exit(why) if why == "the run's time limit" => RunEnd::TimedOut,
+            Stop::HostRequest { why, .. } => match called {
+                Some((ret, name)) => RunEnd::Unimplemented {
+                    service: name.unwrap_or_else(|| why.clone()),
+                    return_address: ret,
+                },
+                None => RunEnd::Faulted,
+            },
+            _ => RunEnd::Faulted,
+        }
+    }
+}
+
+/// `profile_slug` (run_frontier.py 371): the stem lowercased, each run of other characters one hyphen, then the
+/// subject's first 12 hex digits.
+pub fn application_profile(stem: &str, subject_sha256: &str) -> String {
+    let mut slug = String::new();
+    for c in stem.to_lowercase().chars() {
+        if c.is_ascii_lowercase() || c.is_ascii_digit() {
+            slug.push(c);
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    format!("{}-{}", slug.trim_matches('-'), &subject_sha256[..12])
+}
+
+/// The execution record's events, as substrate lines (see the module's documentation).
+pub fn execution_lines(e: &Execution) -> Vec<String> {
+    use events::{
+        ExecutionCompleted, ExecutionStarted, ExitStatus, HarnessI64, Metric, ProfileKind, ServiceUnimplemented,
+        SubjectKind,
+    };
+    let id = || Id::new(e.id).expect("not empty");
+    let empty = || Sha256::new(EMPTY_SHA256).expect("the empty sha256");
+    let seconds = |s: u64| Some(FiniteF64::new(s as f64).expect("finite"));
+    let mut lines = vec![harness_line(&SessionInit {
+        vocab_version: Version::new(VOCAB_VERSION).expect("the vocabulary's own version"),
+        profile: Id::new("w2m-vm").expect("a constant, not empty"),
+        contract_version: Version::new(VOCAB_VERSION).expect("the vocabulary's own version"),
+        harness_version: Version::new(HARNESS_VERSION).expect("Cargo's package version"),
+        purpose: SessionPurpose::Application,
+    })];
+    lines.push(harness_line(&ExecutionStarted {
+        execution_id: id(),
+        subject_kind: SubjectKind::Application,
+        subject_sha256: Sha256::new(format!("sha256:{}", e.subject_sha256)).expect("64 lowercase hex digits"),
+        profile_kind: ProfileKind::ManagedVm,
+        profile_id: Id::new("w2m-vm").expect("not empty"),
+        initial_state_sha256: empty(),
+        injected_inputs_sha256: empty(),
+        timeout_seconds: seconds(e.timeout_seconds),
+        kill_grace_seconds: seconds(e.kill_grace_seconds),
+        unobserved: None,
+    }));
+    // run_measurements' ids and variants (run_frontier.py 159-177), for the rows the Rust host measures
+    let application = application_profile(e.program_stem, e.subject_sha256);
+    // the rate over the seconds in the VM and in the host, as run_frontier.py 164-165 takes it
+    let wall = e.run_seconds + e.host_seconds;
+    let mut rows = vec![
+        (
+            Metric::InstructionsRetired,
+            "process".to_string(),
+            e.executed as f64,
+            "instructions",
+        ),
+        (
+            Metric::InstructionsPerSecond,
+            "process".to_string(),
+            if wall > 0.0 { e.executed as f64 / wall } else { 0.0 },
+            "instructions/s",
+        ),
+        (Metric::RunSeconds, "vm".to_string(), e.run_seconds, "s"),
+    ];
+    for (k, n) in &e.exits {
+        rows.push((Metric::VmExits, format!("hvc {k}"), *n as f64, "exits"));
+    }
+    for (metric, variant, value, unit) in rows {
+        let slug = variant.to_lowercase().replace(' ', "_");
+        lines.push(measurement_line(
+            &format!("{}-{}-{slug}", e.id, metric.as_str()),
+            metric,
+            value,
+            unit,
+            &application,
+            Some(&variant),
+        ));
+    }
+    if let RunEnd::Unimplemented {
+        service,
+        return_address,
+    } = &e.end
+    {
+        lines.push(harness_line(&ServiceUnimplemented {
+            execution_id: id(),
+            service: service.clone(),
+            guest_address: u(*return_address),
+            instructions_executed: u(e.executed),
+        }));
+    }
+    let (exit_status, exit_code) = match &e.end {
+        RunEnd::Exited(code) => (ExitStatus::Exited, Some(*code)),
+        RunEnd::TimedOut => (ExitStatus::TimedOut, None),
+        RunEnd::Unimplemented { .. } => (ExitStatus::Killed, None),
+        RunEnd::Faulted => (ExitStatus::Faulted, None),
+    };
+    let elapsed =
+        FiniteF64::new((e.elapsed.as_secs_f64() * 1000.0).round() / 1000.0).expect("a measured duration is finite");
+    // `guest_trace` false (0.12, P22): the Rust host writes no guest-plane trace, so the trace is the empty one and its
+    // lines 0; the call stream, which `batch_run.rs` judges, is named in `unobserved`
+    lines.push(harness_line(&ExecutionCompleted {
+        execution_id: id(),
+        exit_status,
+        trace_sha256: empty(),
+        guest_line_count: u(0),
+        exit_code: exit_code.map(|c| HarnessI64::new(i64::from(c)).expect("a 32-bit code")),
+        elapsed_seconds: Some(elapsed),
+        unobserved: Some(format!(
+            "no guest-plane trace: the Rust host writes the traced images' calls, {} rows, sha256 {}; the run \
+             stopped: {}",
+            e.calls.1, e.calls.0, e.stop
+        )),
+        guest_trace: Some(false),
+    }));
+    let zero = u(0);
+    lines.push(harness_line(&SessionCompleted {
+        outcome: SessionOutcome::Completed,
+        discrepancy_count: zero,
+        accepted_count: zero,
+        elapsed_seconds: elapsed,
     }));
     lines
 }
@@ -222,5 +411,119 @@ mod tests {
                 .unwrap_err()
                 .contains("3 w2m events where the stored record has 4")
         );
+    }
+
+    /// `execution_lines`' four ends (run_frontier.py 400-407) and its ids (Sprint 210): an exit code is exited, the
+    /// time limit timed_out, an unserved request killed after its SERVICE_UNIMPLEMENTED, anything else faulted; each
+    /// measurement's id is the run's, the metric's and the variant's, its application the program's slug.
+    #[test]
+    fn a_run_ends_as_the_frozen_host_names_it() {
+        let run = |end: RunEnd| {
+            events(&execution_lines(&Execution {
+                id: "frontier-643a6283510c-1",
+                subject_sha256: "643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974",
+                program_stem: "Hail to the Rainbow",
+                timeout_seconds: 10_800,
+                kill_grace_seconds: 60,
+                executed: 3_541_969,
+                run_seconds: 0.25,
+                host_seconds: 0.75,
+                exits: vec![(8, 779)],
+                end,
+                calls: (IMAGE, 925),
+                stop: "a stop",
+                elapsed: Duration::from_millis(1536),
+            }))
+        };
+        let status = |events: &[(String, Value)]| {
+            let done = events.iter().find(|(k, _)| k == "EXECUTION_COMPLETED").unwrap();
+            done.1["exit_status"].as_str().unwrap().to_string()
+        };
+        let kinds = |events: &[(String, Value)]| events.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>();
+        let exited = run(RunEnd::Exited(0));
+        assert_eq!(status(&exited), "exited");
+        assert!(!kinds(&exited).contains(&"SERVICE_UNIMPLEMENTED".to_string()));
+        assert_eq!(status(&run(RunEnd::TimedOut)), "timed_out");
+        assert_eq!(status(&run(RunEnd::Faulted)), "faulted");
+        let killed = run(RunEnd::Unimplemented {
+            service: "KERNEL32.dll!MapViewOfFile".into(),
+            return_address: 0x11_8002_72bf,
+        });
+        assert_eq!(status(&killed), "killed");
+        // P22: no guest trace, so the empty one and 0 lines; the call stream's rows named
+        let done = &killed.iter().find(|(k, _)| k == "EXECUTION_COMPLETED").unwrap().1;
+        assert_eq!(
+            (done["trace_sha256"].as_str(), done["guest_line_count"].as_u64()),
+            (Some(EMPTY_SHA256), Some(0))
+        );
+        assert!(done["unobserved"].as_str().unwrap().contains("925 rows"));
+        assert_eq!(
+            kinds(&killed),
+            [
+                "SESSION_INIT",
+                "EXECUTION_STARTED",
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
+                "SERVICE_UNIMPLEMENTED",
+                "EXECUTION_COMPLETED",
+                "SESSION_COMPLETED"
+            ]
+        );
+        // the rate over the VM's and the host's seconds: 3,541,969 instructions in 1 s
+        assert_eq!(killed[3].1["value"], 3_541_969.0);
+        let exit_row = &killed[5].1;
+        assert_eq!(exit_row["measurement_id"], "frontier-643a6283510c-1-vm_exits-hvc_8");
+        assert_eq!(exit_row["application_profile_id"], "hail-to-the-rainbow-643a6283510c");
+        assert_eq!(killed[6].1["instructions_executed"], 3_541_969);
+        assert_eq!(killed[6].1["guest_address"], 0x11_8002_72bfu64);
+    }
+
+    /// `RunEnd::of`: an unserved request names the Windows call, or the refusal's words when the call does not
+    /// resolve; a failure in serving a request, an unserved one with no readable return address, and any other stop are
+    /// faults; ExitProcess and the time limit are their own ends.
+    #[test]
+    fn a_stop_is_the_end_its_kind_names() {
+        use crate::run::Stop;
+        let unserved = Stop::HostRequest {
+            op: 29,
+            pc: 0,
+            why: "host request 29: not served by the Rust host yet".into(),
+        };
+        let call = Some((0x11_8002_72bf, Some("KERNEL32.dll!MapViewOfFile".to_string())));
+        assert_eq!(
+            RunEnd::of(&unserved, call),
+            RunEnd::Unimplemented {
+                service: "KERNEL32.dll!MapViewOfFile".into(),
+                return_address: 0x11_8002_72bf
+            }
+        );
+        assert_eq!(
+            RunEnd::of(&unserved, Some((0x40, None))),
+            RunEnd::Unimplemented {
+                service: "host request 29: not served by the Rust host yet".into(),
+                return_address: 0x40
+            }
+        );
+        assert_eq!(RunEnd::of(&unserved, None), RunEnd::Faulted);
+        let failed = Stop::HostFailure {
+            op: 29,
+            pc: 0,
+            why: "a guest write".into(),
+        };
+        assert_eq!(
+            RunEnd::of(
+                &failed,
+                Some((0x11_8002_72bf, Some("KERNEL32.dll!MapViewOfFile".into())))
+            ),
+            RunEnd::Faulted
+        );
+        assert_eq!(RunEnd::of(&Stop::ExitProcess { code: 3 }, None), RunEnd::Exited(3));
+        assert_eq!(
+            RunEnd::of(&Stop::Exit("the run's time limit".into()), None),
+            RunEnd::TimedOut
+        );
+        assert_eq!(RunEnd::of(&Stop::Hvc { number: 9, pc: 0 }, None), RunEnd::Faulted);
     }
 }

@@ -16,6 +16,12 @@ gates_start=$(date +%s)
 # the tree this run tests, read at its start: the sprint (the newest card with `status: active`), HEAD, and the sha256
 # of `git diff HEAD` (Sprint 184; reviewer-2's Medium 3 of its review of 178-181)
 gates_sprint=$(grep -l '^status: active$' sprints/sprint-*.md | sort | tail -1 | sed -E 's|.*/sprint-([0-9]{3})-.*|\1|')
+# one sprint at a time: with two cards active the run is booked to the newer (reviewer-3's High 1 of its review of
+# Sprint 210, when card 211 was active beside 210)
+if [ "$(grep -l '^status: active$' sprints/sprint-*.md | wc -l)" -gt 1 ]; then
+  echo "gates: more than one card has status: active: $(grep -l '^status: active$' sprints/sprint-*.md | tr '\n' ' ')"
+  exit 1
+fi
 gates_head=$(git rev-parse HEAD)
 gates_diff=$(git diff HEAD | shasum -a 256 | cut -c1-64)
 # and the trees this run tests (Sprint 187; reviewer-2's Medium 2 of its review of 182-184: the line's HEAD and diff were
@@ -132,15 +138,20 @@ cargo clippy --all-targets -- -D warnings
 # crates/w2m_vm/tests/batch_run.rs holds to store/batch_run/first-stop-2026-10-28.tsv; the game is the batch run's
 # depot, ~/w2m-depots/hail-to-the-rainbow
 if [ $rust != none ]; then
-  cargo build --release --quiet --bin w2m-vm
+  cargo build --release --quiet --bin w2m-vm --bin check_records
   mkdir -p build/batch_run
   rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv
   # with the exit ledger crates/w2m_vm/tests/exit_ledger.rs holds to the frozen host's (Sprint 206)
   mkdir -p build/exit_ledger
   rm -f build/exit_ledger/rust.tsv build/exit_ledger/rust.tsv.*
-  echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm --game "$HOME/w2m-depots/hail-to-the-rainbow" \
-    "Hail to the Rainbow.exe" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv \
-    --exit-ledger build/exit_ledger/rust.tsv > /dev/null
+  # the game under harness/w2m-vm-game.toml, its execution record at build/batch_run/record-<ns>, which
+  # crates/w2m_vm/tests/batch_record.rs holds and check_records and substrate's replay read (Sprint 210); the suffix
+  # dates the record, without which check_records reports a violation and exits 0
+  rm -rf build/batch_run/record-*
+  record=build/batch_run/record-$(date +%s)000000000
+  uv run substrate run --file harness/w2m-vm-game.toml --root "$record" --strict > /dev/null
+  target/release/check_records --since 2026-10-17 --show 3 "$record" > /dev/null || { echo "gates: the batch run's record breaks a rule"; target/release/check_records --since 2026-10-17 --show 3 "$record"; exit 1; }
+  uv run substrate replay "$record" --level 2 > /dev/null
   for p in tests/data/timed_waits/*.exe; do
     n=$(basename "$p" .exe)
     # w2m-vm writes the guest's stop by name (Sprint 191); a guest that fails before its run leaves none, and its

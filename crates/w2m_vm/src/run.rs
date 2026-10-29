@@ -127,6 +127,9 @@ pub enum Stop {
     /// a host request (`hvc #8`) this run does not serve: the transport page's op (Sprint 155), and why: the host's
     /// refusal, naming the request (Sprint 156)
     HostRequest { op: u64, pc: u64, why: String },
+    /// a host request the host serves that failed in the serving: guest memory or the framework refused (Sprint 210;
+    /// reviewer-3's High 2 of its review of Sprint 210: such a failure had been recorded as a service not implemented)
+    HostFailure { op: u64, pc: u64, why: String },
     /// the guest ended its process (HOST_EXIT) with `code`
     ExitProcess { code: u32 },
     /// a block the host could not compile (Sprint 155): an instruction the Rust rules do not lift, a CompileError
@@ -257,6 +260,9 @@ pub struct Outcome {
     pub run_ns: Vec<u64>,
     /// the exits, by hvc number (0 for a non-hvc exit)
     pub exits: BTreeMap<u16, u64>,
+    /// the instructions executed at the stop, the monitor's count the exit ledger's executed column reads
+    /// (`vm.instructions_executed()`; Sprint 210, SERVICE_UNIMPLEMENTED's `instructions_executed`)
+    pub executed: u64,
     /// each thread the guest created, as CreateThread's host half left it (Sprint 156)
     pub created: Vec<Created>,
     /// each thread request THREAD_EXIT_STUB, THREAD_END and THREAD_EXIT_CODE the host served, in order (Sprint 157)
@@ -509,6 +515,7 @@ fn run(
         runtime_word: RuntimeWordTimes::default(),
         run_ns: Vec::new(),
         exits: BTreeMap::new(),
+        executed: 0,
         created: Vec::new(),
         thread_requests: Vec::new(),
         handovers: Vec::new(),
@@ -579,6 +586,9 @@ fn run(
         }
         let started = Instant::now();
         let exit = vcpu.run()?;
+        // the run's time ends here, before the ledger hashes the process area (reviewer-3's Medium 1 of its review of
+        // Sprint 210: `run_seconds` had counted the hashing)
+        let returned = Instant::now();
         // the exit ledger's row for the last exit, the count and warp as this exit finds them, before its own refresh,
         // as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into the word as
         // the guest enters a service, so the word read before the resume lags it (Sprint 207)
@@ -589,7 +599,6 @@ fn run(
                 break Stop::Exit(format!("the exit ledger: {why}"));
             }
         }
-        let returned = Instant::now();
         if guest.time_runtime_word {
             // the exit counted where the guest's timing reads it, so a taking that spans an exit says so (Sprint 164)
             let at = (LOCK_TIMING + LOCK_EXITS) as usize;
@@ -710,8 +719,11 @@ fn run(
             match served {
                 Ok(crate::host_request::Served::Answered) => continue,
                 Ok(crate::host_request::Served::Exit(code)) => break Stop::ExitProcess { code },
+                // a request refused (the Python's Unimplemented) stops as unserved; a failure in serving one stops as
+                // such
+                Err(crate::host_request::HostError::Unserved(why)) => break Stop::HostRequest { op, pc, why },
                 Err(e) => {
-                    break Stop::HostRequest {
+                    break Stop::HostFailure {
                         op,
                         pc,
                         why: e.to_string(),
@@ -901,6 +913,7 @@ fn run(
         out.counts
             .insert(name, read_u64(mem, VM_COMPILER + VMC_COUNTS + 8 * i as u64));
     }
+    out.executed = read_u64(mem, md);
     out.stop = stop;
     if guest.time_runtime_word {
         out.runtime_word = read_runtime_word(guest.memory.as_slice()); // Sprint 164: read once, at the stop

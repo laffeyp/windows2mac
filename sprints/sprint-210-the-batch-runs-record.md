@@ -98,3 +98,46 @@ host's record of 2026-10-21 and in count against the run's own stop file; GetPro
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and four plants, each reaching a named judge.
 - [x] One concept: the batch run's record (the thunks' test is Sprint 209's owed judge, carried here by its tail).
+
+## result
+
+- **The producer:** `w2m_vm::record::execution_lines` writes `run_frontier.py`'s session from an `Execution` whose end
+  is one `RunEnd` (exited with a code, timed out, a service not implemented with its return address, faulted);
+  `w2m-vm --game` writes it on standard output after the stop file, and `harness/w2m-vm-game.toml` runs it as a
+  Producer, its record at build/batch_run/record-<ns>. The game runs under GAME_SECONDS, 10,800 s, the bound
+  EXECUTION_STARTED states; `Outcome::executed` carries the monitor's count at the stop. A request the host does not
+  serve stops as `Stop::HostRequest`, a failure in serving one as `Stop::HostFailure` (a fault, not a service not
+  implemented); `Guest::called_service` reads the return address at the guest's saved RSP and, through the `call
+  [rip+disp32]` before it, the Windows function called.
+- **The record:** SESSION_INIT; EXECUTION_STARTED equal to the 10-21 record's but `execution_id`; seven measurements,
+  `instructions_retired` and `instructions_per_second` process, `run_seconds` vm (0.087 s, the VM's time alone),
+  `vm_exits` hvc 1 227, hvc 4 9, hvc 8 779, hvc 11 9; SERVICE_UNIMPLEMENTED "KERNEL32.dll!MapViewOfFile" at return
+  address 0x11800272bf and 3,541,969 instructions; EXECUTION_COMPLETED killed, `guest_trace` false with the empty
+  trace and 0 lines (P22), the call stream's 925 rows and sha256 in `unobserved`; SESSION_COMPLETED. `check_records`
+  (E1, T1, T2, T3 applied, 0 violations) and `substrate replay --level 2` pass; gates.sh runs both.
+- **Where the frozen host is not followed:** it names an unserved request's service by its refusal's words
+  (vm_backend 3802-3805), where vocabulary 0.12 names "DLL!Function"; the record names the function, the words kept
+  only when the call does not resolve.
+- **The judges:** `tests/batch_record.rs` holds the record's kinds, EXECUTION_STARTED's fields, the measurements'
+  metrics, units and conventions to the 10-21 record; `vm_exits` and the stop's instructions to the frozen host's own
+  run to the same stop (the exit ledger fixture); the end to the stop's kind; the service to the Windows call in
+  flight at the stop; the trace fields to P22. `a_moved_field_is_named` runs in CI, as does
+  `record::tests::a_run_ends_as_the_frozen_host_names_it`, which holds the four ends, the rate and the measurement ids
+  (a plant, the faulted branch answering killed, failed it).
+  `modules::tests::getprocaddress_keeps_its_thunks_apart_from_the_imports` holds GetProcAddress's split on the Mac.
+- **Plant 1** (EXECUTION_COMPLETED left out): `check_records` exited 1, "held: T3 record-1793299278000000000:
+  frontier-643a6283510c-1793299280526627000: 0 completions". Restored byte for byte.
+- **Plant 2** (the service named by the refusal's words): the record test failed, "SERVICE_UNIMPLEMENTED \"host
+  request 29: not served by the Rust host yet\" where the calls in flight are [\"KERNEL32.dll!MapViewOfFile\"]".
+  Restored byte for byte.
+- **Plant 3** (`kill_grace_seconds` dropped): the record test failed, "EXECUTION_STARTED kill_grace_seconds: null where
+  the reference has 60". Restored byte for byte.
+- **Plant 4** (`proc` answering a name not imported through `import_thunk`): the unit test failed at modules.rs:635,
+  "Sleep's thunk is GetProcAddress's own". Restored byte for byte.
+- **Closed partial:** the done criteria name every guest run, and a guest run writes no record (BLACKBOARD Deferred
+  "(Sprint 210, partial)").
+- **Departures:** a guest run writes no execution record: its standard output carries the skeleton's translation
+  record, which `skeleton_gate.rs` holds to the Python's, and the Python's `run_guest` writes none; census row 14 says
+  so. The measurements the frozen host takes by thread, by the host's time per exit, of switches, wakes, load and the
+  VM compiler's causes are not written, not written as 0. Plant 3 drops `kill_grace_seconds`, as the observation
+  contract names; the record test names it, not the vocabulary's validation (the field is optional).

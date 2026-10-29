@@ -774,3 +774,28 @@ image's halfwords 1 and 2 are never zero (Medium 1, correcting the reviewer's ow
 had accepted). In both, the check was built from the finding's words without reading the code the finding was about
 (`a64_encoder.c` 25-32; the line that reads the columns back). A check is planted against the defect it names, at an
 input the system can produce, before it is held.
+
+### 2026-10-29 — Sprints 205-210: a reference older than the code it judged, and a pass graded past its card
+
+**Finding (#77):** a reference agreeing with itself is not a reference agreeing with the oracle. Sprint 205 read the
+mono cookie at row 924 as a Rust clock fault because the four frozen-host streams of 2026-10-17 agreed with each other;
+they all predated Sprint 120's catch-up of a child at its start, and the frozen host's own run of 2026-10-21 gave the
+Rust host's value. Sprint 205's "the Python makes no warp" was inferred from a formula and refuted by the exit ledger
+(warp 609 on both). A reference is pinned to the oracle's commit, and a repeat is run against it before a difference is
+read as the port's.
+
+**Finding (#78):** an insert can split a Decision. Sprint 207's work commit placed the Decision "Step 4's reference
+run" inside "Sequence after Sprint 205", leaving the first entry's decision and revisit clauses under the second;
+reviewer-2 found it from the diff. Sprint 209 made it a check: `--check` fails an agent-resolved Decision from
+2026-10-25 that holds other than one "Decision:" and one "Revisit if:". H5 again: the rule went into code at its first
+recurrence the review could name.
+
+**Finding (#79):** a grade written before the result was read. Sprint 209's tail said "observation pass" while its own
+result said the arena's writes, an expected value, were logged nowhere, and its plant for that gap had been swapped
+for one that reached a judge (reviewer-3, review of 205-209, High 1). `--check` reads a heading against a card's status
+but not a grade against the result's departures. A departure that leaves an expected value unmet makes the close
+partial, with its Deferred entry, before the grade is written.
+
+**Finding (#80):** a rule's exit is checked, not its count. Sprint 210's first planted fault left EXECUTION_COMPLETED out,
+and `check_records` printed the T3 violation and exited 0, since it dates a record by a nanosecond suffix the record's
+directory lacked. A judge wired into the gates is planted against through the gates' own invocation, exit code read.
