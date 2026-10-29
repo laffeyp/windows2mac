@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 218
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -124,8 +124,11 @@ names its next stop by its true kind.
 - **Plant 1** (the index one too high): the probe 960385e1… ended with an access violation, and `family_runs.rs`
   named it: "stopped at \"ExitProcess { code: 3221225477 }\", which store/family_runs/module-stops-2026-10-28.tsv
   does not hold". Restored byte for byte.
-- **Plant 2** (blocks only for the first thread): the same stop, named the same way, since the worker started before
-  the load read an empty slot. Restored byte for byte.
+- **Plant 2** (blocks only for the first thread): the same stop, since the worker started before the load read an
+  empty slot; `family_runs.rs` named it, on the exit-code filter and again on the state filter after the review,
+  "windows.loader.late_tls binary 960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6 stopped at
+  \"ExitProcess { code: 3221225477 }\", which store/family_runs/module-stops-2026-10-28.tsv does not hold". Restored
+  byte for byte.
 - **Plant 3** (a module refusal mapped to `Failed`): the unit test `a_module_refusal_is_not_served_and_a_failure_is_a_fault`
   failed, "assertion failed: matches!(refused, HostError::NotServed(m) if m.contains(\"does not model\"))". Restored
   byte for byte.
