@@ -141,3 +141,7 @@ host's record of 2026-10-21 and in count against the run's own stop file; GetPro
   so. The measurements the frozen host takes by thread, by the host's time per exit, of switches, wakes, load and the
   VM compiler's causes are not written, not written as 0. Plant 3 drops `kill_grace_seconds`, as the observation
   contract names; the record test names it, not the vocabulary's validation (the field is optional).
+- **CI (annotated 2026-10-29, reviewer-3's High 2 of its review of Sprint 211):** the only CI run of this sprint's
+  commits, 40936387557 on 5df96be60, failed: `record.rs` named the Mac-only `run` module, which Linux does not build.
+  This close stood on that red run until Sprint 211's repair (`record::StopKind`, `Stop::kind`, and the gates'
+  Linux type-check; tail 211, Observation 5).

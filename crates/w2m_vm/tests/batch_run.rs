@@ -153,7 +153,7 @@ fn the_varying_cells_are_where_the_python_runs_differ() {
 }
 
 /// The Rust run's call stream is the Python's, row for row, every cell but the varying ones, up to the stop; the call
-/// in flight at the stop is the Python's next row but its return and error.
+/// in flight at the stop, when there is one, is the Python's next row but its return and error.
 #[test]
 fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     let root = root();
@@ -185,9 +185,15 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
             "row {row} of the call stream differs from the Python batch run's"
         );
     }
+    // a stop inside a traced call leaves it in flight; a stop between calls (a created thread's stack growing, Sprint
+    // 211) leaves none, and the stream's rows are all that is held
     let in_flight = written(&root, "first-stop.in-flight.tsv").unwrap_or_default();
     let Some(first) = in_flight.lines().next() else {
-        panic!("no call in flight at the stop");
+        println!(
+            "the Rust stream equals the Python's rows 0-{}, and no call is in flight at the stop",
+            ours.len() - 1
+        );
+        return;
     };
     let row = ours.len();
     let p: Vec<&str> = python[row].split('\t').collect();

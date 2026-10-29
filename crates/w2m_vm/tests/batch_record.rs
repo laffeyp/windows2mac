@@ -20,17 +20,24 @@ use serde_json::Value;
 use w2m_vm::record::w2m_events;
 
 const REFERENCE: &str = "store/runs/frontier-643a6283510c-1792623423346201000";
-/// The frozen host's exits to the game's first MAP_VIEW, the Rust run's stop (WORKING_AGREEMENT gives its generator)
+/// The frozen host's exits to the game's first MAP_VIEW (WORKING_AGREEMENT gives its generator): the independent
+/// count when the Rust run stops at that request; past it (Sprint 211) no frozen-host count is on disk until the
+/// fixture runs further, and `exit_ledger.rs` holds the Rust ledger's rows to it up to MAP_VIEW
 const FIXTURE: &str = "build/exit_ledger/python.tsv";
+/// The run's held stop, whose exit counts hold the record's past the fixture
+const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
 /// The empty trace's sha256 (P22)
 const EMPTY: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
-/// What the record is held to besides the reference: the run's stop line, the frozen host's exits by kind and its
-/// instructions at the stop, the Windows calls in flight at the stop ("DLL!Function"), and the calls traced.
+/// What the record is held to besides the reference: the run's stop line, the exits by kind and the instructions at
+/// the stop (the frozen host's where its fixture stops at the same request, else the held stop file's exits and no
+/// instruction count), the Windows calls in flight at the stop ("DLL!Function"), and the calls traced.
 struct Facts {
     stop: String,
     exits: BTreeMap<String, f64>,
-    executed: u64,
+    /// the source of `exits`, named in a failure
+    exits_from: &'static str,
+    executed: Option<u64>,
     in_flight: Vec<String>,
     traced: u64,
 }
@@ -155,14 +162,20 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
         .collect();
     if exits != facts.exits {
         found.push(format!(
-            "vm_exits {exits:?} where the frozen host's run made {:?}",
-            facts.exits
+            "vm_exits {exits:?} where {} holds {:?}",
+            facts.exits_from, facts.exits
         ));
     }
-    // the end, by the stop's kind; a service not implemented is the Windows call in flight at the stop
+    // the end, by the stop's kind; a service not implemented is the Windows call in flight at the stop, and a stop with
+    // no call in flight (a created thread's stack growing, Sprint 211) names none
     let status = expected_status(&facts.stop);
     let unimplemented = of(ours, "SERVICE_UNIMPLEMENTED");
     match (status, unimplemented.as_slice()) {
+        ("killed", []) if facts.in_flight.is_empty() => {}
+        ("killed", [_]) if facts.in_flight.is_empty() => found.push(format!(
+            "a SERVICE_UNIMPLEMENTED where no Windows call is in flight at the stop {:?}",
+            facts.stop
+        )),
         ("killed", [u]) => {
             let named = u["service"].as_str().unwrap_or("");
             if !facts.in_flight.iter().any(|c| c == named) {
@@ -171,10 +184,12 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
                     facts.in_flight
                 ));
             }
-            if u["instructions_executed"].as_u64() != Some(facts.executed) {
+            if let Some(executed) = facts.executed
+                && u["instructions_executed"].as_u64() != Some(executed)
+            {
                 found.push(format!(
-                    "SERVICE_UNIMPLEMENTED instructions_executed {} where the frozen host's run had {}",
-                    u["instructions_executed"], facts.executed
+                    "SERVICE_UNIMPLEMENTED instructions_executed {} where the frozen host's run had {executed}",
+                    u["instructions_executed"]
                 ));
             }
         }
@@ -218,8 +233,9 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
 }
 
 /// The facts from the gates' files: the stop line and the calls traced from the run's stop file, the calls in flight
-/// beside it, and the frozen host's exits and instructions from the ledger fixture's rows.
-fn facts(root: &Path, stop_file: &str, fixture: &str) -> Facts {
+/// beside it, and the exits and instructions: the ledger fixture's when its last row is the request the run stopped at
+/// (its op, the fifth column, hex), else the held stop file's exits.
+fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str) -> Facts {
     let row = |name: &str| {
         stop_file
             .lines()
@@ -227,13 +243,34 @@ fn facts(root: &Path, stop_file: &str, fixture: &str) -> Facts {
             .unwrap_or("")
             .to_string()
     };
-    let mut exits = BTreeMap::new();
-    let mut executed = 0;
-    for line in fixture.lines() {
-        let cells: Vec<&str> = line.split('\t').collect();
-        *exits.entry(cells[1].to_string()).or_insert(0.0) += 1.0;
-        executed = cells[3].parse().unwrap();
-    }
+    let stop = row("stop");
+    let stop_op = stop
+        .strip_prefix("HostRequest op ")
+        .and_then(|s| s.split(':').next())
+        .and_then(|op| op.parse::<u64>().ok());
+    let fixture_op = fixture
+        .lines()
+        .last()
+        .and_then(|l| l.split('\t').nth(5))
+        .and_then(|op| u64::from_str_radix(op, 16).ok());
+    let (exits, exits_from, executed) = if stop_op.is_some() && stop_op == fixture_op {
+        let mut exits = BTreeMap::new();
+        let mut executed = 0;
+        for line in fixture.lines() {
+            let cells: Vec<&str> = line.split('\t').collect();
+            *exits.entry(cells[1].to_string()).or_insert(0.0) += 1.0;
+            executed = cells[3].parse().unwrap();
+        }
+        (exits, "the frozen host's run to the same stop", Some(executed))
+    } else {
+        let exits = held
+            .lines()
+            .filter(|l| l.starts_with("hvc "))
+            .filter_map(|l| l.split_once('\t'))
+            .map(|(k, v)| (k.to_string(), v.parse().unwrap()))
+            .collect();
+        (exits, "the held stop file", None)
+    };
     let in_flight = fs::read_to_string(root.join("build/batch_run/first-stop.in-flight.tsv"))
         .unwrap_or_default()
         .lines()
@@ -243,8 +280,9 @@ fn facts(root: &Path, stop_file: &str, fixture: &str) -> Facts {
         })
         .collect();
     Facts {
-        stop: row("stop"),
+        stop,
         exits,
+        exits_from,
         executed,
         in_flight,
         traced: row("calls traced").parse().unwrap_or(0),
@@ -283,7 +321,8 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     };
     let ours = w2m_events(&record);
     let reference = w2m_events(&root.join(REFERENCE));
-    let found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture));
+    let held = fs::read_to_string(root.join(HELD)).unwrap();
+    let found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
 }
 
@@ -313,7 +352,8 @@ fn a_moved_field_is_named() {
     let facts = Facts {
         stop: "HostRequest op 29: host request 29: not served by the Rust host yet".into(),
         exits: BTreeMap::from([("hvc 8".to_string(), 779.0)]),
-        executed: 3_541_969,
+        exits_from: "the frozen host's run to the same stop",
+        executed: Some(3_541_969),
         in_flight: vec!["KERNEL32.dll!MapViewOfFile".into()],
         traced: 925,
     };
@@ -367,4 +407,19 @@ fn a_moved_field_is_named() {
         "{found:?}"
     );
     assert!(found.iter().any(|f| f.contains("says faulted")), "{found:?}");
+    // a request unserved with no Windows call in flight names no service (Sprint 211's stop)
+    let between_calls = Facts {
+        stop: "HostRequest op 30: thread 8's stack grown to 0x1180dce5f0".into(),
+        exits: BTreeMap::from([("hvc 8".to_string(), 779.0)]),
+        exits_from: "the frozen host's run to the same stop",
+        executed: Some(3_541_969),
+        in_flight: Vec::new(),
+        traced: 925,
+    };
+    let found = problems(&good, &reference, &between_calls);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].starts_with("a SERVICE_UNIMPLEMENTED where no Windows call is in flight"),
+        "{found:?}"
+    );
 }

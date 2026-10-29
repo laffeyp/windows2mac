@@ -143,6 +143,20 @@ pub enum Stop {
     Exit(String),
 }
 
+impl Stop {
+    /// The kind a record's end is read from (`record::RunEnd::of`): a request not served, a failure in serving one
+    /// (Other), ExitProcess, the time limit (`Exit("the run's time limit")`, w2m-vm's GUEST_SECONDS and GAME_SECONDS).
+    pub fn kind(&self) -> crate::record::StopKind {
+        use crate::record::StopKind;
+        match self {
+            Stop::ExitProcess { code } => StopKind::ExitProcess(*code),
+            Stop::Exit(why) if why == "the run's time limit" => StopKind::TimeLimit,
+            Stop::HostRequest { .. } => StopKind::Unserved,
+            _ => StopKind::Other,
+        }
+    }
+}
+
 /// `x86_address_at` (vm_backend 4861-4863): the guest address of the host code at `pc`, from the reconstruction table
 /// (the entry with the largest host address at or below `pc`, as `bisect_right` over the sorted marks finds it); 0
 /// when none is (Sprint 181). The count is the guest's to write, so a count past the table's `RECON_ENTRIES` or the
@@ -719,9 +733,9 @@ fn run(
             match served {
                 Ok(crate::host_request::Served::Answered) => continue,
                 Ok(crate::host_request::Served::Exit(code)) => break Stop::ExitProcess { code },
-                // a request refused (the Python's Unimplemented) stops as unserved; a failure in serving one stops as
-                // such
-                Err(crate::host_request::HostError::Unserved(why)) => break Stop::HostRequest { op, pc, why },
+                // a request w2m does not serve stops as unserved; a failure in serving one, as a failure (reviewer-3's
+                // High 1 of its review of Sprint 211)
+                Err(crate::host_request::HostError::NotServed(why)) => break Stop::HostRequest { op, pc, why },
                 Err(e) => {
                     break Stop::HostFailure {
                         op,

@@ -130,6 +130,9 @@ fi
 # release build, then the session check under substrate: a Rust binary's events on a record, replayed
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+# the workspace type-checked as CI's Linux builds it, where the Mac-only modules (lib.rs's `cfg`s) are absent (Sprint
+# 211: CI run 40936387557 failed to compile record.rs, which named the Mac-only `run` module, after these gates passed)
+CARGO_TARGET_DIR=build/target-linux cargo check -q --target x86_64-unknown-linux-gnu --workspace --all-targets
 # the case runner (crates/w2m_vm/tests/case_runner.rs) fails rather than skips when its inputs are missing: the
 # downloaded Windows results (build/probe-runs) and the Python words fixture (build/case_runner) (Sprint 149; the
 # review of link 3 found it could pass having judged nothing). CI, on Linux, does not compile it.

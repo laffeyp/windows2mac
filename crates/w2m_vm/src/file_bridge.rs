@@ -308,6 +308,20 @@ impl FileBridge {
         Ok((kind == IS_FILE).then_some(path))
     }
 
+    /// A file view's bytes (vm_backend 3859-3862, Sprint 211): `os.pread(fd, size, 0)`, the file's first `size` bytes
+    /// or fewer at its end; None when `fd` is not open.
+    pub fn view(&self, fd: u64, size: u64) -> Option<Result<Vec<u8>, String>> {
+        let file = self.fds.get(&fd)?;
+        let mut data = vec![0u8; size as usize];
+        Some(match file.read_at(&mut data, 0) {
+            Ok(n) => {
+                data.truncate(n);
+                Ok(data)
+            }
+            Err(e) => Err(e.to_string()),
+        })
+    }
+
     /// `_resolve` (225-239): (kind, host path), each existing component matched ASCII case-folded; C:\w2m\app is root.
     pub fn resolve(&self, parts: &[String]) -> (u64, PathBuf) {
         let mut here = self.drive.clone();

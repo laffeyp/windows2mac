@@ -5,12 +5,15 @@
 //! load before Sprint 207, which loads mono on the Rust host), compared row by row. The
 //! frozen host's ledger is a fixture (`build/exit_ledger/python.tsv` and a child's `.<pid>` beside it, pinned by
 //! `store/exit_ledger/python.sha256`; WORKING_AGREEMENT gives its generator); `scripts/gates.sh` writes the Rust host's
-//! (`w2m-vm --exit-ledger build/exit_ledger/rust.tsv`). The first difference of each process is held to
-//! `store/exit_ledger/first-difference-2026-10-28.tsv`, so a change in where the hosts part fails by name until the
-//! file is rewritten with the card that moved it.
+//! (`w2m-vm --exit-ledger build/exit_ledger/rust.tsv`). Every differing (process, row, column) is held to
+//! `store/exit_ledger/differences-2026-10-29.tsv` (Sprint 209), so a change in where the hosts part fails by name until
+//! the file is rewritten with the card that moved it.
 //!
 //! The last row is the stop, the game's first MAP_VIEW request, which the fixture records as it arrives, before the
-//! request's answer exists: it is compared without its site and answer columns.
+//! request's answer exists: it is compared without its site and answer columns. From Sprint 211 the Rust host serves
+//! MAP_VIEW and runs on: the game's rows past the fixture's stop are not held, and the stop row is compared without
+//! the columns read when the guest resumes (the executed count, the warp, the process area), until the fixture runs
+//! further.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,6 +25,10 @@ const COLUMNS: [&str; 14] = [
 ];
 /// The stop row's columns that the fixture cannot know: the site, the second, the result and the written ranges.
 const UNKNOWN_AT_STOP: [usize; 4] = [2, 10, 11, 12];
+/// The columns a row takes when the guest resumes after it (`Ledger::resume`): the executed count, the warp, the
+/// process area's sha256. The fixture's stop row reads them at its stop; a Rust run that goes past that stop (Sprint
+/// 211, MAP_VIEW served) reads them at its next exit, so they too are unknown there.
+const READ_AT_RESUME: [usize; 3] = [3, 4, 13];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -41,11 +48,14 @@ fn rows(path: &Path) -> Vec<Vec<String>> {
 /// 209; reviewer-2's High 1 of its review of 206-209: the held file had named each column's first difference only).
 fn differences(process: &str, python: &[Vec<String>], rust: &[Vec<String>]) -> Vec<String> {
     let last = python.len().saturating_sub(1);
+    // the Rust run went past the fixture's stop: its rows beyond are not held (the Decision "Sequence after Sprint 210":
+    // the ledger stays at the first MAP_VIEW until the fixture runs further), nor the stop row's resume columns
+    let past = rust.len() > python.len();
     let cell = |row: &Vec<String>, c: usize| row.get(c).map_or("-", |s| s).to_string();
     let mut out = Vec::new();
     for (i, (p, r)) in python.iter().zip(rust).enumerate() {
         for (c, column) in COLUMNS.iter().enumerate().skip(1) {
-            let unknown = i == last && UNKNOWN_AT_STOP.contains(&c);
+            let unknown = i == last && (UNKNOWN_AT_STOP.contains(&c) || (past && READ_AT_RESUME.contains(&c)));
             if !unknown && p.get(c).is_none_or(|v| v != "*") && p.get(c) != r.get(c) {
                 out.push(format!(
                     "{process}\t{i}\t{column}\t{}\t{}\t{}",
@@ -59,8 +69,11 @@ fn differences(process: &str, python: &[Vec<String>], rust: &[Vec<String>]) -> V
     for (i, p) in python.iter().enumerate().skip(rust.len()) {
         out.push(format!("{process}\t{i}\tmissing\t{}", cell(p, 1)));
     }
-    for (i, r) in rust.iter().enumerate().skip(python.len()) {
-        out.push(format!("{process}\t{i}\textra\t{}", cell(r, 1)));
+    if past && process != "main" {
+        // only the game's process may run past the fixture's stop: a child's stop is its own
+        for (i, r) in rust.iter().enumerate().skip(python.len()) {
+            out.push(format!("{process}\t{i}\textra\t{}", cell(r, 1)));
+        }
     }
     out
 }
@@ -166,10 +179,32 @@ fn a_difference_is_named_by_its_row_and_column() {
             "main\t1\tprocess\taa\tcc\thvc 1"
         ]
     );
-    // the stop row's answer is not compared; a short ledger names its missing row by its kind
+    // the stop row's answer is not compared, its executed count is when the Rust run stops there too; a short ledger
+    // names its missing row by its kind
     let mut rust = python.clone();
     rust[2][11] = "10".into();
     assert!(found(&rust).is_empty());
+    rust[2][3] = "35".into();
+    assert_eq!(found(&rust), ["main\t2\texecuted\t30\t35\thvc 8"]);
+    rust[2][3] = "30".into();
     rust.pop();
     assert_eq!(found(&rust), ["main\t2\tmissing\thvc 8"]);
+    // a Rust run past the fixture's stop (Sprint 211): its later rows and the stop row's resume columns (executed,
+    // warp, process) are not held, a difference before the stop still is, and its other columns at the stop too
+    let mut rust = python.clone();
+    rust.push(row("3\thvc 1\t40\t31\t0\t-\t-\t-\t-\t-\t-\t-\t-\tdd"));
+    rust[2][3] = "35".into();
+    rust[2][4] = "1".into();
+    rust[2][13] = "ee".into();
+    assert!(found(&rust).is_empty(), "{:?}", found(&rust));
+    rust[1][3] = "28".into();
+    rust[2][6] = "9".into();
+    assert_eq!(
+        found(&rust),
+        ["main\t1\texecuted\t29\t28\thvc 1", "main\t2\ta0\t1\t9\thvc 8"]
+    );
+    // a child stops at its own stop: a row past the fixture's is extra
+    let mut child = python.clone();
+    child.push(row("3\thvc 1\t40\t31\t0\t-\t-\t-\t-\t-\t-\t-\t-\tdd"));
+    assert_eq!(differences("4100", &python, &child), ["4100\t3\textra\thvc 1"]);
 }

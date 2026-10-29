@@ -80,3 +80,44 @@ The Rust host serves HOST_MAP_VIEW as the frozen host does, and the batch run's 
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and four plants, each reaching a named judge.
 - [x] One concept: one host request served.
+
+## result
+
+- **The request:** `host_request::map_view` serves HOST_MAP_VIEW 29 as vm_backend 3857-3864 does: `FileBridge::view`
+  reads the descriptor's first bytes with one positional read at offset 0 (a descriptor not open stops by the frozen
+  host's words), `Arena::map_view` takes the 64 KB-aligned MEM_MAPPED region, the bytes are copied in without the exit
+  ledger's log (the frozen host's `self.mem.write` is the loader's memory, which its fixture does not wrap), and
+  `serve` writes the answer (second 0, the base).
+- **The run:** the stream equals the reference rows 0-1354, 430 rows past Sprint 210's 925, and stops between calls:
+  HOST_THREAD 30's stack growth of thread 8, a created thread, "a created thread's growth, not carried yet", exits
+  hvc 1 268, hvc 4 9, hvc 8 801, hvc 11 9, hvc 13 18; the held stop file's run rows rewritten with the Edit tool.
+- **The record:** killed, with no SERVICE_UNIMPLEMENTED. `Guest::called_service` read the word at the guest's RSP and
+  named KERNEL32.dll!RtlUnwindEx at a return address in mono; the reference's thread 8 never calls RtlUnwindEx (0 of
+  its rows), so the word was older code's, left on the stack of a thread stopped by a fault. `RunEnd::of` names a
+  service only when the call resolved there is also in flight in the call trace, else the run is `RunEnd::Unserved`;
+  the frozen host reads the word for every refusal (vm_backend 3804-3805), which is not followed.
+- **The judges:** `batch_run.rs` holds the stream and, when a call is in flight at the stop, that call; at a stop
+  between calls it holds the rows alone. `batch_record.rs` holds the counts to the frozen host's fixture when the run
+  stops at the fixture's request and to the held stop file past it, and holds that a stop with no call in flight names
+  no service. `exit_ledger.rs` compares the game's rows to the fixture's stop, its stop row without the columns read
+  at resume, and does not hold the rows past it (the Decision keeps the ledger at the first MAP_VIEW); its held file is
+  unchanged.
+- **Plant 1** (the bytes read from offset 1): the unit test failed, "the file's first byte at the base, left: 2 right:
+  1". Restored byte for byte.
+- **Plant 2** (the second word 1): "the second word, left: 1 right: 0". Restored byte for byte.
+- **Plant 3** (the protection ignored, PAGE_READWRITE always): "left: (262144, 4, 4) right: (262144, 2, 2)", the
+  query's kind, protection and allocation protection. Restored byte for byte.
+- **Plant 4** (MAP_VIEW unserved again): `batch_run.rs` failed, "the batch run's first stop or a guest's stop moved
+  from store/batch_run/first-stop-2026-10-28.tsv". Restored byte for byte.
+- **Departures:** the card named census row 4; the stream's edge is row 5a's, which is where it was written. The card's
+  files did not name `record.rs`, `bin/w2m-vm.rs`, `tests/batch_record.rs`, `tests/batch_run.rs` and
+  `tests/exit_ledger.rs`: the new stop, between calls, showed that the record named a service from a stale stack word
+  and that two judges assumed a stop inside a call or at the fixture's request. Those were changed here, each named
+  above, rather than left wrong under a passing run. Sprint 210's CI run failed on Linux, `record.rs` naming the
+  Mac-only `run` module: `record::StopKind` and `Stop::kind` now carry the stop's kind, and gates.sh type-checks the
+  workspace for Linux (a plant, the Mac-only type again, failed it). reviewer-3's review of this sprint found a failure
+  in serving a request still read as not served: `HostError` is now `NotServed` (the frozen host's `Unimplemented`
+  cases and the requests the Rust host has not carried) and `Failed` (a fault); a read error in MAP_VIEW, an OSError
+  and so a fault on the frozen host, is `Failed` here too. `RunEnd::of` trusts only the stopping thread's calls in
+  flight. The sprint carried four concepts, the service, Sprint 210's CI repair, the end rule and three judges, against
+  the one-concept rule; each is named here.

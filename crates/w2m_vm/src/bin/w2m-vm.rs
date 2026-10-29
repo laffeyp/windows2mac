@@ -563,7 +563,18 @@ mod run {
             .map_err(|e| e.to_string())?
             .as_nanos();
         let id = format!("frontier-{}-{nanos}", &subject[..12]);
-        let end = w2m_vm::record::RunEnd::of(&out.stop, guest.called_service());
+        // the stopping thread's calls in flight at the stop, "DLL!Function" (`write_tsv`'s columns 2, 4 and 5): another
+        // thread's call of the same function does not vouch for the word on this thread's stack (reviewer-3's Medium 1
+        // of its review of Sprint 211)
+        let stopped = w2m_vm::threads::current_tid(&guest).to_string();
+        let flying: Vec<String> = in_flight
+            .lines()
+            .filter_map(|l| {
+                let cells: Vec<&str> = l.split('\t').collect();
+                (*cells.get(1)? == stopped).then(|| format!("{}!{}", cells[3], cells[4]))
+            })
+            .collect();
+        let end = w2m_vm::record::RunEnd::of(&out.stop.kind(), guest.called_service(), &flying);
         let stem = Path::new(program)
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())

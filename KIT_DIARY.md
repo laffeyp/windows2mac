@@ -799,3 +799,22 @@ partial, with its Deferred entry, before the grade is written.
 **Finding (#80):** a rule's exit is checked, not its count. Sprint 210's first planted fault left EXECUTION_COMPLETED out,
 and `check_records` printed the T3 violation and exited 0, since it dates a record by a nanosecond suffix the record's
 directory lacked. A judge wired into the gates is planted against through the gates' own invocation, exit code read.
+
+### 2026-10-29 — Sprints 210-211: an oracle's defect copied twice, a red run read as green
+
+**Finding (#81):** the frozen host is the oracle where it agrees with Windows, not where it is wrong. Sprint 210's record
+copied its way of naming an unserved request (the refusal's words as the "service"), and Sprint 211's first record
+copied its way of finding the call (the word at the guest's stack top as a return address), which named
+KERNEL32.dll!RtlUnwindEx at a stop no call made: the reference's thread never calls it. The user's rule of
+2026-10-29: "if the python implementation is wrong, do not reproduce the wrong parts." A port step reads the frozen
+host's code against Windows, the specs and the vocabulary before matching it, and names each departure.
+
+**Finding (#82):** a result is read from the thing that holds it. A watch of CI run 40936387557 ended in `echo`, whose
+exit 0 was read as the run's; the run had failed, and Sprint 210 stood closed on it while a reply said CI had passed.
+WORKING_AGREEMENT already said a sprint closes on its own run's success; the tail wrote "closed" before that run
+existed. H5 again: the next card puts the run's conclusion in a tracked file and the rule in `--check`.
+
+**Finding (#83):** a substitution over a file that quotes substitutions rewrites the quotes. A `sed` that added a path
+to a tail entry's Files line also matched the same text inside an earlier quoted command and changed the record of
+what ran. Edits to BLACKBOARD use the Edit tool on a string unique to the target, or check the count of matches
+before the write.

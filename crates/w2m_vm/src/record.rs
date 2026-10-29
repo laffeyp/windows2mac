@@ -118,33 +118,53 @@ pub enum RunEnd {
     Exited(u32),
     /// the run's time limit: timed_out
     TimedOut,
-    /// a request the host does not serve (the Python's Unimplemented, vm_backend 3802-3805): SERVICE_UNIMPLEMENTED
-    /// with the refusal's words and the call's return address, then killed
+    /// a request the host does not serve, made inside a Windows call: SERVICE_UNIMPLEMENTED with the call ("DLL!Function")
+    /// and its return address, then killed
     Unimplemented { service: String, return_address: u64 },
+    /// a request the host does not serve outside any Windows call it can name (a created thread's stack growing, Sprint
+    /// 211): killed, with no SERVICE_UNIMPLEMENTED, which vocabulary 0.12 keeps for a Windows service the guest called;
+    /// the frozen host writes one for any refusal (vm_backend 3802-3805), which is not followed
+    Unserved,
     /// anything else: faulted
     Faulted,
 }
 
 impl RunEnd {
-    /// The end a stop is (Sprint 210; reviewer-3's High 2 of its review of 210): a request the host does not serve is a
-    /// service not implemented, named by the Windows call it stopped in (`called`, `Guest::called_service`'s return
-    /// address and function) or, when that does not resolve, by the refusal's words; a failure in serving a request is
-    /// a fault, as is any stop but ExitProcess and the time limit.
-    pub fn of(stop: &crate::run::Stop, called: Option<(u64, Option<String>)>) -> RunEnd {
-        use crate::run::Stop;
+    /// The end a stop is (Sprint 210; reviewer-3's High 2 of its review of 210; Sprint 211): a request the host does
+    /// not serve inside a Windows call is a service not implemented, one outside any is unserved; a failure in serving
+    /// a request is a fault, as is any stop but ExitProcess and the time limit. The call is the one `called` resolves
+    /// at the word on the guest's stack (`Guest::called_service`) only when the call trace has that call in flight
+    /// (`in_flight`, "DLL!Function"): a stop from a fault (a stack growing) leaves an older word there, which named
+    /// KERNEL32.dll!RtlUnwindEx at Sprint 211's stop, a call the frozen host's run of that thread never made. The frozen
+    /// host reads the word for every refusal (vm_backend 3804-3805), which is not followed.
+    pub fn of(stop: &StopKind, called: Option<(u64, Option<String>)>, in_flight: &[String]) -> RunEnd {
         match stop {
-            Stop::ExitProcess { code } => RunEnd::Exited(*code),
-            Stop::Exit(why) if why == "the run's time limit" => RunEnd::TimedOut,
-            Stop::HostRequest { why, .. } => match called {
-                Some((ret, name)) => RunEnd::Unimplemented {
-                    service: name.unwrap_or_else(|| why.clone()),
+            StopKind::ExitProcess(code) => RunEnd::Exited(*code),
+            StopKind::TimeLimit => RunEnd::TimedOut,
+            StopKind::Unserved => match called {
+                Some((ret, Some(name))) if in_flight.contains(&name) => RunEnd::Unimplemented {
+                    service: name,
                     return_address: ret,
                 },
-                None => RunEnd::Faulted,
+                _ => RunEnd::Unserved,
             },
-            _ => RunEnd::Faulted,
+            StopKind::Other => RunEnd::Faulted,
         }
     }
+}
+
+/// A run's stop by the kind its record needs, apart from `run::Stop`, which needs Hypervisor.framework and so is built
+/// on the Mac only, so `RunEnd::of` and its test build on CI's Linux too (Sprint 211: CI run 40936387557 failed to
+/// compile `record.rs`, "unresolved import `crate::run`").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopKind {
+    ExitProcess(u32),
+    /// the run's time limit
+    TimeLimit,
+    /// a host request the host does not serve
+    Unserved,
+    /// anything else, a failure in serving a request among them
+    Other,
 }
 
 /// `profile_slug` (run_frontier.py 371): the stem lowercased, each run of other characters one hyphen, then the
@@ -237,7 +257,7 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     let (exit_status, exit_code) = match &e.end {
         RunEnd::Exited(code) => (ExitStatus::Exited, Some(*code)),
         RunEnd::TimedOut => (ExitStatus::TimedOut, None),
-        RunEnd::Unimplemented { .. } => (ExitStatus::Killed, None),
+        RunEnd::Unimplemented { .. } | RunEnd::Unserved => (ExitStatus::Killed, None),
         RunEnd::Faulted => (ExitStatus::Faulted, None),
     };
     let elapsed =
@@ -445,6 +465,9 @@ mod tests {
         assert!(!kinds(&exited).contains(&"SERVICE_UNIMPLEMENTED".to_string()));
         assert_eq!(status(&run(RunEnd::TimedOut)), "timed_out");
         assert_eq!(status(&run(RunEnd::Faulted)), "faulted");
+        let unserved = run(RunEnd::Unserved);
+        assert_eq!(status(&unserved), "killed");
+        assert!(!kinds(&unserved).contains(&"SERVICE_UNIMPLEMENTED".to_string()));
         let killed = run(RunEnd::Unimplemented {
             service: "KERNEL32.dll!MapViewOfFile".into(),
             return_address: 0x11_8002_72bf,
@@ -480,50 +503,29 @@ mod tests {
         assert_eq!(killed[6].1["guest_address"], 0x11_8002_72bfu64);
     }
 
-    /// `RunEnd::of`: an unserved request names the Windows call, or the refusal's words when the call does not
-    /// resolve; a failure in serving a request, an unserved one with no readable return address, and any other stop are
-    /// faults; ExitProcess and the time limit are their own ends.
+    /// `RunEnd::of`: an unserved request inside a Windows call names the call; one outside any call it can name (no
+    /// call resolved, or no readable return address) is unserved, with no service; a failure in serving a request and
+    /// any other stop are faults; ExitProcess and the time limit are their own ends.
     #[test]
     fn a_stop_is_the_end_its_kind_names() {
-        use crate::run::Stop;
-        let unserved = Stop::HostRequest {
-            op: 29,
-            pc: 0,
-            why: "host request 29: not served by the Rust host yet".into(),
-        };
-        let call = Some((0x11_8002_72bf, Some("KERNEL32.dll!MapViewOfFile".to_string())));
+        let unserved = StopKind::Unserved;
+        let call = || Some((0x11_8002_72bf, Some("KERNEL32.dll!MapViewOfFile".to_string())));
+        let flying = ["KERNEL32.dll!MapViewOfFile".to_string()];
         assert_eq!(
-            RunEnd::of(&unserved, call),
+            RunEnd::of(&unserved, call(), &flying),
             RunEnd::Unimplemented {
                 service: "KERNEL32.dll!MapViewOfFile".into(),
                 return_address: 0x11_8002_72bf
             }
         );
-        assert_eq!(
-            RunEnd::of(&unserved, Some((0x40, None))),
-            RunEnd::Unimplemented {
-                service: "host request 29: not served by the Rust host yet".into(),
-                return_address: 0x40
-            }
-        );
-        assert_eq!(RunEnd::of(&unserved, None), RunEnd::Faulted);
-        let failed = Stop::HostFailure {
-            op: 29,
-            pc: 0,
-            why: "a guest write".into(),
-        };
-        assert_eq!(
-            RunEnd::of(
-                &failed,
-                Some((0x11_8002_72bf, Some("KERNEL32.dll!MapViewOfFile".into())))
-            ),
-            RunEnd::Faulted
-        );
-        assert_eq!(RunEnd::of(&Stop::ExitProcess { code: 3 }, None), RunEnd::Exited(3));
-        assert_eq!(
-            RunEnd::of(&Stop::Exit("the run's time limit".into()), None),
-            RunEnd::TimedOut
-        );
-        assert_eq!(RunEnd::of(&Stop::Hvc { number: 9, pc: 0 }, None), RunEnd::Faulted);
+        // the word on the stack names a call the trace does not have in flight: Sprint 211's stop, a stack growing
+        let stale = Some((0x11_8032_a699, Some("KERNEL32.dll!RtlUnwindEx".to_string())));
+        assert_eq!(RunEnd::of(&unserved, stale, &[]), RunEnd::Unserved);
+        assert_eq!(RunEnd::of(&unserved, Some((0x40, None)), &flying), RunEnd::Unserved);
+        assert_eq!(RunEnd::of(&unserved, None, &flying), RunEnd::Unserved);
+        // a failure in serving a request is `Other` (`Stop::HostFailure`'s kind), a fault even inside a call in flight
+        assert_eq!(RunEnd::of(&StopKind::Other, call(), &flying), RunEnd::Faulted);
+        assert_eq!(RunEnd::of(&StopKind::ExitProcess(3), None, &[]), RunEnd::Exited(3));
+        assert_eq!(RunEnd::of(&StopKind::TimeLimit, None, &[]), RunEnd::TimedOut);
     }
 }

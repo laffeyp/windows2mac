@@ -30,6 +30,8 @@ use crate::file_bridge::{
 };
 /// vm_backend 287: a0 bytes of the host's CSPRNG at guest address a1 (bcrypt.c, com.c)
 pub const HOST_RANDOM: u64 = 23;
+/// vm_backend 288: a view of a0 bytes of file descriptor a1 with protection a2 (file.c)
+pub const HOST_MAP_VIEW: u64 = 29;
 
 unsafe extern "C" {
     /// `sys/random.h` 38
@@ -56,10 +58,17 @@ pub enum Served {
     Exit(u32),
 }
 
-/// A request the host does not serve, or could not.
+/// A request the host does not serve, or could not (reviewer-3's High 1 of its review of Sprint 211: one variant had
+/// carried both, so a failure read as a service not implemented).
 #[derive(Debug)]
 pub enum HostError {
-    Unserved(String),
+    /// a request w2m does not serve: one the Rust host has not carried yet, or one the frozen host refuses with
+    /// `Unimplemented` (a descriptor not open, the arena's refusals); the run stops as unserved
+    NotServed(String),
+    /// a request w2m serves that failed in the serving (an unmapped buffer, a host call refused, a helper's error); the
+    /// run stops as a fault. The helpers in `modules`, `kernel`, `threads` and `file_bridge` return their refusals and
+    /// failures as one string, so theirs land here until they carry typed errors
+    Failed(String),
     Guest(GuestError),
     Hv(HvError),
 }
@@ -67,7 +76,7 @@ pub enum HostError {
 impl fmt::Display for HostError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HostError::Unserved(m) => f.write_str(m),
+            HostError::NotServed(m) | HostError::Failed(m) => f.write_str(m),
             HostError::Guest(e) => write!(f, "{e:?}"),
             HostError::Hv(e) => write!(f, "{e:?}"),
         }
@@ -114,7 +123,7 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
     let Some(crate::turns::Link::Child(link)) = &guest.link else {
         return Ok(None);
     };
-    let (result, second, wake) = link.request(a, &guest.layout.maps).map_err(HostError::Unserved)?;
+    let (result, second, wake) = link.request(a, &guest.layout.maps).map_err(HostError::Failed)?;
     if wake {
         wake_blocked(guest);
     }
@@ -267,6 +276,34 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
     0
 }
 
+/// HOST_MAP_VIEW (vm_backend 3857-3864; Sprint 211): a view of `size` bytes of descriptor `fd` with `protect`, the
+/// arena's pages for it, then the file's first `size` bytes copied in; the answer (second word 0, the view's base). A
+/// descriptor not open stops by the frozen host's words. The copy is not in the exit ledger's written column: the
+/// frozen host writes it with `self.mem.write` (vm_backend 3862), the loader's memory (2407), which its fixture does not
+/// wrap (reviewer-3's Low 6 of its review of Sprint 210).
+pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(u64, u64), HostError> {
+    let bytes = guest
+        .files
+        .as_ref()
+        .and_then(|f| f.view(fd, size))
+        .ok_or_else(|| HostError::NotServed(format!("a file view of descriptor {fd}, which is not open")))?
+        .map_err(HostError::Failed)?;
+    let mut view = GuestView {
+        mem: guest.memory.as_mut_slice(),
+        layout: &guest.layout,
+    };
+    let base = guest
+        .arena
+        .map_view(&mut view, size, protect as u32)
+        .map_err(|e| HostError::NotServed(format!("{e:?}")))?;
+    let at = guest
+        .layout
+        .offset(base)
+        .ok_or_else(|| HostError::Failed(format!("a file view at unmapped 0x{base:x}")))? as usize;
+    guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+    Ok((0, base))
+}
+
 /// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT, HOST_EXCEPTION, and
 /// HOST_THREAD's THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_EXIT_CODE and THREAD_STACK_GROW (the main
 /// thread's).
@@ -288,14 +325,14 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             let at = guest
                 .layout
                 .offset(a0)
-                .ok_or_else(|| HostError::Unserved(format!("a write from unmapped 0x{a0:x}")))?
+                .ok_or_else(|| HostError::Failed(format!("a write from unmapped 0x{a0:x}")))?
                 as usize;
             let bytes = guest.memory.as_slice()[at..at + a1 as usize].to_vec();
             guest.stdout.extend(bytes);
             a1
         }
         HOST_RUNTIME_FAULT => {
-            return Err(HostError::Unserved(format!(
+            return Err(HostError::Failed(format!(
                 "guest runtime fault: ELR 0x{a0:x} ESR 0x{a1:x} (EC 0x{:x}), not in translated code or not a data abort",
                 a1 >> 26 & 0x3F
             )));
@@ -315,7 +352,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 let at = guest
                     .layout
                     .offset(va)
-                    .ok_or_else(|| HostError::Unserved(format!("a module request's name at unmapped 0x{va:x}")))?
+                    .ok_or_else(|| HostError::Failed(format!("a module request's name at unmapped 0x{va:x}")))?
                     as usize;
                 Ok(guest.memory.as_slice()[at..at + n as usize].to_vec())
             };
@@ -328,13 +365,13 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                         .map(|c| u16::from_le_bytes(*c))
                         .collect();
                     crate::modules::module(guest, &String::from_utf16_lossy(&units), a2 != 0)
-                        .map_err(HostError::Unserved)?
+                        .map_err(HostError::Failed)?
                 }
                 HOST_PROC => {
                     // latin-1: each byte its own code point (vm_backend 3895)
                     let name: String = read(guest, a1, a2)?.iter().map(|b| char::from(*b)).collect();
                     // GetProcAddress's answer as the capture's process sees it (`_traced_proc`, vm_backend 3895)
-                    let va = crate::modules::proc(guest, a0, &name).map_err(HostError::Unserved)?;
+                    let va = crate::modules::proc(guest, a0, &name).map_err(HostError::Failed)?;
                     guest.traced_proc(va)?
                 }
                 _ => match crate::modules::file_name(guest, a0) {
@@ -345,7 +382,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                         let n = raw.len().min(2 * a2 as usize);
                         if a2 != 0 {
                             let at = guest.layout.offset(a1).ok_or_else(|| {
-                                HostError::Unserved(format!("a module path's buffer at unmapped 0x{a1:x}"))
+                                HostError::Failed(format!("a module path's buffer at unmapped 0x{a1:x}"))
                             })? as usize;
                             guest.memory.as_mut_slice()[at..at + n].copy_from_slice(&raw[..n]);
                             // the Python writes it through `_GuestView` (vm_backend 3904): the ledger's written ranges
@@ -370,7 +407,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 mem: guest.memory.as_mut_slice(),
                 layout: &guest.layout,
             };
-            let refused = |e: virtual_memory::Unimplemented| HostError::Unserved(format!("{e:?}"));
+            let refused = |e: virtual_memory::Unimplemented| HostError::NotServed(format!("{e:?}"));
             let (result, second) = match op {
                 HOST_VIRTUAL_ALLOC => {
                     let (address, err) = guest
@@ -395,7 +432,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                     let at = guest
                         .layout
                         .offset(a1)
-                        .ok_or_else(|| HostError::Unserved(format!("VirtualQuery's buffer at unmapped 0x{a1:x}")))?
+                        .ok_or_else(|| HostError::Failed(format!("VirtualQuery's buffer at unmapped 0x{a1:x}")))?
                         as usize;
                     guest.memory.as_mut_slice()[at..at + raw.len()].copy_from_slice(&raw);
                     (raw.len() as u64, 0)
@@ -418,18 +455,18 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 objects.add(pid);
                 let answered = objects.request(pid, [a0, a1, a2, a3], &mut KernelMemory(guest));
                 guest.kernel = objects;
-                let answer = answered.map_err(HostError::Unserved)?;
+                let answer = answered.map_err(HostError::Failed)?;
                 if let Some(child) = &answer.spawn {
                     // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
-                    let start = child_start(guest, child).map_err(HostError::Unserved)?;
+                    let start = child_start(guest, child).map_err(HostError::Failed)?;
                     if guest.link.is_none() {
                         guest.link = Some(crate::turns::Link::Supervisor(
                             crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
-                                .map_err(HostError::Unserved)?,
+                                .map_err(HostError::Failed)?,
                         ));
                     }
                     if let Some(crate::turns::Link::Supervisor(s)) = &mut guest.link {
-                        s.spawn(child, start).map_err(HostError::Unserved)?;
+                        s.spawn(child, start).map_err(HostError::Failed)?;
                     }
                     // a parent shares the vCPU with its children from here: time slices (`_set_budget`)
                     crate::threads::set_budget(guest);
@@ -454,13 +491,13 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             ) =>
         {
             let Some(mut files) = guest.files.take() else {
-                return Err(HostError::Unserved(
+                return Err(HostError::Failed(
                     "a file call in a run with no file-system root".into(),
                 ));
             };
             let served = files.request(&mut KernelMemory(guest), op, [a0, a1, a2, a3]);
             guest.files = Some(files);
-            let (result, second) = served.map_err(HostError::Unserved)?;
+            let (result, second) = served.map_err(HostError::Failed)?;
             let mem = guest.memory.as_mut_slice();
             mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
             result
@@ -476,7 +513,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                     for chunk in b.chunks_mut(256) {
                         // getentropy(2): 256 bytes at most a call
                         if unsafe { getentropy(chunk.as_mut_ptr().cast(), chunk.len()) } != 0 {
-                            return Err(HostError::Unserved(format!(
+                            return Err(HostError::Failed(format!(
                                 "getentropy: {}",
                                 std::io::Error::last_os_error()
                             )));
@@ -485,8 +522,14 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                     b
                 }
             };
-            crate::kernel::Memory::write(&mut KernelMemory(guest), a1, &bytes).map_err(HostError::Unserved)?;
+            crate::kernel::Memory::write(&mut KernelMemory(guest), a1, &bytes).map_err(HostError::Failed)?;
             a0
+        }
+        HOST_MAP_VIEW => {
+            let (second, base) = map_view(guest, a0, a1, a2)?;
+            let mem = guest.memory.as_mut_slice();
+            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+            base
         }
         HOST_EXCEPTION if a0 == EXCEPTION_STUBS => guest.guest_stubs()?,
         HOST_EXCEPTION if a0 == EXCEPTION_CAPTURE_XMM => {
@@ -497,13 +540,13 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             let at = guest
                 .layout
                 .offset(a1)
-                .ok_or_else(|| HostError::Unserved(format!("XMM capture to unmapped 0x{a1:x}")))?
+                .ok_or_else(|| HostError::Failed(format!("XMM capture to unmapped 0x{a1:x}")))?
                 as usize;
             guest.memory.as_mut_slice()[at..at + 256].copy_from_slice(&bytes);
             0
         }
         HOST_EXCEPTION => {
-            return Err(HostError::Unserved(format!(
+            return Err(HostError::Failed(format!(
                 "guest runtime: unknown exception request {a0}"
             )));
         }
@@ -514,7 +557,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             let current = crate::threads::current_tid(guest);
             let stack = guest.threads.get(&current).map_or(guest.process.stack, |t| t.stack);
             if guest.arena.reservations.contains_key(&stack.0) {
-                return Err(HostError::Unserved(format!(
+                return Err(HostError::NotServed(format!(
                     "thread {current}'s stack grown to 0x{a1:x}: a created thread's growth, not carried yet"
                 )));
             }
@@ -523,25 +566,25 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         // `_thread_request` (3190-3192, 3845-3847): the transport's a0 the sub-request, its a1-a3 the request's a0-a2
         HOST_THREAD if a0 == THREAD_CREATE => {
             crate::threads::create_thread(guest, a1, a2, (a3 & 0xFFFF_FFFF) as u32, a3 >> 32)
-                .map_err(HostError::Unserved)?
+                .map_err(HostError::Failed)?
         }
         // `_thread_request` (3200-3211, Sprint 157): ExitThread's detach stub, W2mThreadEnd's exit code, a thread's
         // exit code by id
-        HOST_THREAD if a0 == THREAD_EXIT_STUB => crate::threads::exit_stub(guest).map_err(HostError::Unserved)?,
+        HOST_THREAD if a0 == THREAD_EXIT_STUB => crate::threads::exit_stub(guest).map_err(HostError::Failed)?,
         HOST_THREAD if a0 == THREAD_END => {
-            crate::threads::end_thread(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Unserved)?;
+            crate::threads::end_thread(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Failed)?;
             0
         }
         HOST_THREAD if a0 == THREAD_EXIT_CODE => {
-            u64::from(crate::threads::exit_code(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Unserved)?)
+            u64::from(crate::threads::exit_code(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Failed)?)
         }
         HOST_THREAD => {
-            return Err(HostError::Unserved(format!(
+            return Err(HostError::NotServed(format!(
                 "thread request {a0}: not served by the Rust host yet"
             )));
         }
         _ => {
-            return Err(HostError::Unserved(format!(
+            return Err(HostError::NotServed(format!(
                 "host request {op}: not served by the Rust host yet"
             )));
         }
@@ -579,5 +622,82 @@ mod tests {
         want.extend(0x2_0000u32.to_le_bytes());
         want.extend([0u8; 4]);
         assert_eq!(memory_basic_information(&info).to_vec(), want);
+    }
+
+    /// HOST_MAP_VIEW as the batch run asks it at row 925 (Sprint 211; vm_backend 3857-3864): 0x3b9a00 bytes of an open
+    /// file, PAGE_READONLY. The answer is a 64 KB-aligned base holding the file's first bytes, second word 0, and
+    /// VirtualQuery there gives MEM_MAPPED with the protection; a descriptor not open stops by the frozen host's words.
+    /// The guest needs the runtime image clang builds, so the test runs on the Mac.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_file_view_holds_the_files_bytes_in_a_mapped_region() {
+        use super::{Guest, GuestView, KernelMemory, map_view};
+        use crate::file_bridge::{FILE_OPEN, FileBridge};
+        use crate::guest::vm_compiler_symbols;
+        use crate::process::Start;
+        use guest_runtime::layout::{HEAP_VA, RUNTIME_IMAGE_VA, runtime_defines};
+        use std::path::Path;
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let data = std::fs::read(root.join("tests/data/timed_waits/qpc.exe")).unwrap();
+        let loaded = pe_loader::load(&data, None, "probe.exe").unwrap();
+        let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+        let services = guest_runtime::services::services(&guest_runtime::texts(&root).unwrap()).unwrap();
+        let table = std::fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap();
+        let symbols = vm_compiler_symbols(&table).unwrap();
+        let mut g = Guest::new(
+            &loaded,
+            &image,
+            &services,
+            &Start::console("probe.exe"),
+            &std::collections::BTreeSet::new(),
+            &symbols,
+        )
+        .unwrap();
+        // the file: 0x3b9a00 bytes, each its offset's low byte plus one, so offset 0 holds 1
+        let app = std::env::temp_dir().join(format!("w2m-map-view-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&app);
+        std::fs::create_dir_all(&app).unwrap();
+        let size = 0x3b_9a00u64;
+        let bytes: Vec<u8> = (0..size).map(|i| (i as u8).wrapping_add(1)).collect();
+        std::fs::write(app.join("data.unity3d"), &bytes).unwrap();
+        g.files = Some(FileBridge::new(&app, true, None).unwrap());
+        let name: Vec<u8> = "data.unity3d".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        crate::kernel::Memory::write(&mut KernelMemory(&mut g), HEAP_VA, &name).unwrap();
+        let mut files = g.files.take().unwrap();
+        let (fd, _) = files
+            .request(&mut KernelMemory(&mut g), FILE_OPEN, [HEAP_VA, 12, 0, 0])
+            .unwrap();
+        g.files = Some(files);
+        let refused = map_view(&mut g, size, fd + 1, 2).unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            format!("a file view of descriptor {}, which is not open", fd + 1)
+        );
+        // the frozen host's Unimplemented: a request not served, not a failure (reviewer-3's High 1 of its review of 211)
+        assert!(matches!(refused, super::HostError::NotServed(_)), "{refused:?}");
+        let (second, base) = map_view(&mut g, size, fd, 2).unwrap();
+        assert_eq!(base % 0x1_0000, 0, "64 KB-aligned");
+        assert_eq!(second, 0, "the second word");
+        let at = g.layout.offset(base).unwrap() as usize;
+        assert_eq!(g.memory.as_slice()[at], 1, "the file's first byte at the base");
+        assert_eq!(&g.memory.as_slice()[at..at + size as usize], &bytes[..]);
+        let view = GuestView {
+            mem: g.memory.as_mut_slice(),
+            layout: &g.layout,
+        };
+        let info = g.arena.query(&view, base).unwrap();
+        assert_eq!(
+            (info.kind, info.protect, info.allocation_protect),
+            (
+                virtual_memory::MEM_MAPPED,
+                virtual_memory::PAGE_READONLY,
+                virtual_memory::PAGE_READONLY
+            )
+        );
+        let _ = std::fs::remove_dir_all(&app);
     }
 }

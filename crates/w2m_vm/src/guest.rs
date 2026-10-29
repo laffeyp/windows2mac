@@ -963,7 +963,9 @@ impl Guest {
     /// block's slot 4, as vm_backend 3804-3805 reads it), and the function it called when the instruction before it is
     /// `call [rip+disp32]` (FF 15) through an import slot holding one of the thunks; None when RSP is unmapped. The
     /// frozen host names the refusal's words as the service, where vocabulary 0.12 names "DLL!Function"; the name is
-    /// read here instead, the words kept when the call does not resolve.
+    /// read here instead, the words kept when the call does not resolve. Only `call [rip+disp32]` resolves: a call
+    /// through a register or a jump into a thunk gives no name (reviewer-3's Low 3 of its review of Sprint 211), and
+    /// `record::RunEnd::of` trusts a name only when the stopping thread has that call in flight.
     pub fn called_service(&self) -> Option<(u64, Option<String>)> {
         let mem = self.memory.as_slice();
         let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
