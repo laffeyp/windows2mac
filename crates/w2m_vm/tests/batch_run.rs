@@ -88,10 +88,12 @@ fn the_batch_run_and_the_guests_stop_where_held() {
         .collect();
     ours.extend(guests.lines().map(|l| format!("guest\t{l}")));
     let (lines, _) = held(&root);
-    // a time limit is a hang, never an expected stop (Sprint 199; reviewer-2's Medium 3 of its review of 196-198)
+    // a time limit is a hang, never an expected stop (Sprint 199; reviewer-2's Medium 3 of its review of 196-198); and
+    // once the batch run ends where its reference did (Sprint 219), a step-budget stop is a game that never filled its
+    // log, not an end (reviewer-3's Concern 3 of its review of Sprint 218)
     for l in &lines {
         assert!(
-            !l.contains("the run's time limit"),
+            !l.contains("the run's time limit") && !l.starts_with("stop\tStepLimit"),
             "{HELD} holds a hang as a stop: {l}"
         );
     }
@@ -188,25 +190,28 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
             "row {row} of the call stream differs from the Python batch run's"
         );
     }
-    if past {
-        println!(
-            "the Rust stream equals the Python's rows 0-{} and runs {} rows past them",
-            python.len() - 1,
-            ours.len() - python.len()
-        );
-        return;
-    }
     // a stop inside a traced call leaves it in flight; a stop between calls (a created thread's stack growing, Sprint
-    // 211) leaves none, and the stream's rows are all that is held
+    // 211) leaves none, and the stream's rows are all that is held; checked whether or not the stream reaches the
+    // Python's end (reviewer-3's Low 2 of its review of Sprint 218), and the row count is the held stop file's
     let in_flight = written(&root, "first-stop.in-flight.tsv").unwrap_or_default();
     let Some(first) = in_flight.lines().next() else {
         println!(
-            "the Rust stream equals the Python's rows 0-{}, and no call is in flight at the stop",
-            ours.len() - 1
+            "the Rust stream equals the Python's rows 0-{}{}, and no call is in flight at the stop",
+            python.len().min(ours.len()) - 1,
+            if ours.len() > python.len() {
+                format!(" and runs {} rows past them", ours.len() - python.len())
+            } else {
+                String::new()
+            }
         );
         return;
     };
     let row = ours.len();
+    assert!(
+        !past,
+        "a call is in flight at row {row}, past the Python's {} rows",
+        python.len()
+    );
     let p: Vec<&str> = python[row].split('\t').collect();
     assert_eq!(
         first.split('\t').collect::<Vec<_>>(),
@@ -217,6 +222,48 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
         "the Rust stream equals the Python's rows 0-{}, and row {row} is in flight",
         row - 1
     );
+}
+
+/// A line with each run of digits, decimal point included, as one mark: the numbers a log line carries vary by run
+/// (reload and unload times), the words do not.
+fn without_numbers(line: &str) -> String {
+    let mut out = String::new();
+    let mut in_number = false;
+    for c in line.trim_end_matches('\r').chars() {
+        let digit = c.is_ascii_digit() || (in_number && c == '.');
+        if digit && !in_number {
+            out.push('#');
+        } else if !digit {
+            out.push(c);
+        }
+        in_number = digit;
+    }
+    out
+}
+
+/// The batch run's unity.log, which the run ends by, equals the reference's line for line, numbers the varying cells
+/// (Sprint 219; reviewer-3's High 1 of its review of Sprint 218: the log reached the reference's 168 lines and nothing
+/// read it). `run_frontier.py` counts the lines only; 168 wrong lines would pass that.
+#[test]
+fn the_batch_runs_log_is_the_references_line_for_line() {
+    let root = root();
+    let Some(ours) = written(&root, "first-stop.unity.log") else {
+        return;
+    };
+    let reference = fs::read_to_string(root.join("store/game-runs/38216081440/unity.log")).unwrap();
+    let (ours, reference): (Vec<String>, Vec<String>) = (
+        ours.lines().map(without_numbers).collect(),
+        reference.lines().map(without_numbers).collect(),
+    );
+    for (n, (a, b)) in ours.iter().zip(&reference).enumerate() {
+        assert_eq!(
+            a,
+            b,
+            "line {} of the batch run's unity.log differs from the reference's",
+            n + 1
+        );
+    }
+    assert_eq!(ours.len(), reference.len(), "the batch run's unity.log lines");
 }
 
 /// Each guest that ends at ExitProcess prints what the frozen Python host's run printed (Sprint 191).

@@ -836,3 +836,10 @@ its kind, and the compiler lists the sites.
 wrong TLS index and its missing block both crashed the probe before it printed a row, and both read "stopped at
 ExitProcess { code: 3221225477 }". Each plant names the judge text it expects before it runs, and a pair that shares
 one is recorded as such, or given a judge that survives the fault.
+
+**Finding (#87):** what the code already says is looked up, all of it at once, before a run is asked to find it.
+HOST_FILETIME stopped Sprint 218's probes only after a run reached it, and the batch run's missing end showed only
+after a 486.7 s run, while the frozen host's dispatch and `run_frontier.py` 284-310 named both. One pass over every
+dispatch line of the two hosts then found three more unserved requests in seconds (HOST_CLOCK, HOST_UNIMPLEMENTED,
+THREAD_WAKE). The user's rule of 2026-10-29: "no searching for already knowable answers that you can look up at
+once". A lookup that can be a test becomes one (`host_requests.rs`); a run is kept for what only a run can show.

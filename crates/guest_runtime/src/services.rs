@@ -120,9 +120,10 @@ pub fn services(texts: &BTreeMap<String, String>) -> Result<Vec<Service>, String
 /// The ring's entries that are not services (`guest_runtime.py` `INTERNAL_APIS`).
 const INTERNAL_APIS: [&str; 2] = ["Cpuid", "Exception"];
 
-/// `api_ids.h`: `#define W2M_API_<name> <n>`, 1 up in name order (`guest_runtime.api_header`).
-pub fn api_header(texts: &BTreeMap<String, String>) -> Result<String, String> {
-    let mut names: Vec<String> = services(texts)?.into_iter().map(|s| s.name).collect();
+/// The runtime's API names in id order: id n is the n-th, from 1 (`guest_runtime.api_ids`), the services' import names
+/// and the ring's internal entries, sorted; two services of one name are an error, their ids colliding.
+pub fn api_names(services: &[Service]) -> Result<Vec<String>, String> {
+    let mut names: Vec<String> = services.iter().map(|s| s.name.clone()).collect();
     names.extend(INTERNAL_APIS.iter().map(|n| n.to_string()));
     let count = names.len();
     names.sort();
@@ -130,7 +131,12 @@ pub fn api_header(texts: &BTreeMap<String, String>) -> Result<String, String> {
     if names.len() != count {
         return Err("two services share an import name: their W2M_API_ ids would collide".to_string());
     }
-    Ok(names
+    Ok(names)
+}
+
+/// `api_ids.h`: `#define W2M_API_<name> <n>`, 1 up in name order (`guest_runtime.api_header`).
+pub fn api_header(texts: &BTreeMap<String, String>) -> Result<String, String> {
+    Ok(api_names(&services(texts)?)?
         .iter()
         .enumerate()
         .map(|(i, n)| format!("#define W2M_API_{n} {}\n", i + 1))
@@ -185,5 +191,8 @@ mod tests {
             api_header(&t).unwrap(),
             "#define W2M_API_Beep 1\n#define W2M_API_Cpuid 2\n#define W2M_API_Exception 3\n#define W2M_API_Sleep 4\n"
         );
+        // HOST_UNIMPLEMENTED's id n names the n-th of `api_names` (Sprint 219): the list `api_ids.h` is written from
+        let names = api_names(&services(&t).unwrap()).unwrap();
+        assert_eq!(names, ["Beep", "Cpuid", "Exception", "Sleep"]);
     }
 }

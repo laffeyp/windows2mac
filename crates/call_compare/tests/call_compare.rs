@@ -156,3 +156,27 @@ fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
         v.defects().iter().map(|d| d.text()).collect::<Vec<_>>()
     );
 }
+
+/// The main-thread calls `w2m-vm --game` stops by are the ones `call_compare` derives from the ending run (Sprint 219):
+/// the stored file cannot drift from the reference it is read from.
+#[test]
+fn the_stored_main_thread_calls_are_the_ending_runs() {
+    let root = root();
+    let stored: Vec<(String, String, u64)> =
+        fs::read_to_string(root.join("store/batch_run/main-thread-calls-2026-10-29.tsv"))
+            .unwrap()
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .map(|l| {
+                let c: Vec<&str> = l.split('\t').collect();
+                (c[0].to_string(), c[1].to_string(), c[2].parse().unwrap())
+            })
+            .collect();
+    let derived = call_compare::main_thread_calls(&root).unwrap();
+    assert_eq!(stored, derived);
+    assert_eq!(
+        derived.iter().map(|r| r.2).sum::<u64>(),
+        2999,
+        "the Windows main thread's calls"
+    );
+}

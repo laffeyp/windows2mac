@@ -1107,6 +1107,34 @@ mod tests {
         assert!(!ended(&g, index));
     }
 
+    /// HOST_UNIMPLEMENTED (request 4) names the service by its API id and form and keeps the call's return address, the
+    /// word at the saved RSP, for the record; an RSP that is not mapped is a failure. HOST_CLOCK (request 3) answers the
+    /// host's monotonic count in mode 0, `counter_now` (Sprint 219; reviewer-3's Medium 2 of its review of Sprint 219).
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn requests_three_and_four_answer_as_the_frozen_host() {
+        use crate::host_request::{HostError, unimplemented};
+        use guest_runtime::layout::{HEAP_VA, MONITOR_SIZE, STATE_OFF};
+
+        let (mut g, _) = guest_with_a_thread();
+        let names = guest_runtime::services::api_names(&g.services).unwrap();
+        let at = g.layout.offset(HEAP_VA).unwrap() as usize;
+        let slot = (MONITOR_SIZE + STATE_OFF + 8 * 4) as usize;
+        let mem = g.memory.as_mut_slice();
+        mem[slot..slot + 8].copy_from_slice(&HEAP_VA.to_le_bytes());
+        mem[at..at + 8].copy_from_slice(&0x1_4000_1234u64.to_le_bytes());
+        let stop = unimplemented(&mut g, 2, 7);
+        let service = format!("{} argument form 0x7", names[1]);
+        assert!(matches!(&stop, HostError::NotServed(m) if *m == service), "{stop:?}");
+        assert_eq!(g.unimplemented, Some((service, 0x1_4000_1234)));
+        g.memory.as_mut_slice()[slot..slot + 8].copy_from_slice(&0x10u64.to_le_bytes());
+        g.unimplemented = None;
+        assert!(matches!(unimplemented(&mut g, 2, 7), HostError::Failed(_)));
+        assert_eq!(g.unimplemented, None);
+        let (a, b) = (super::counter_now(&g), super::counter_now(&g));
+        assert!(a > 0 && b >= a, "the host's monotonic count: {a}, then {b}");
+    }
+
     /// A late DLL whose index would pass each thread's array (`TLS_SLOTS`) is refused, a request not served, as the
     /// frozen host raises it Unimplemented (vm_backend 3961; reviewer-3's Medium 3 of its review of Sprint 218).
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

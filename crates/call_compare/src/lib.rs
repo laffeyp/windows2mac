@@ -1127,6 +1127,36 @@ fn verdict(
     }
 }
 
+/// The game run whose log and main thread end the batch run (`run_frontier.py` 74, `REFERENCE`)
+const ENDING_RUN: &str = "store/game-runs/38216081440";
+
+/// The Windows main thread's calls in the run the batch run ends by (`run_frontier.py` 289-292): the calls of the
+/// thread that makes the run's first call, the capture's own thread left out by the contract's `excluded_threads`,
+/// counted by (calling image in lower case, function), in that order. Python takes the thread as
+/// `min(reference_calls)[1]`, the first call by tuple order, whose first element is the seq; this names the rule
+/// (Sprint 219; reviewer-3's Concern 5 of its review of Sprint 218).
+pub fn main_thread_calls(root: &Path) -> Result<Vec<(String, String, u64)>, String> {
+    let read = |p: &Path| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    let contract: Value = serde_json::from_str(&read(&root.join(CONTRACT))?).map_err(|e| format!("{CONTRACT}: {e}"))?;
+    let run = load_reference(&root.join(ENDING_RUN), &contract)?;
+    let calls: Vec<&Call> = run.calls.iter().filter(|c| !run.excluded.contains(&c.tid)).collect();
+    let main = calls
+        .iter()
+        .min_by_key(|c| c.seq)
+        .ok_or("the ending run traces no call")?
+        .tid;
+    let mut counts: Vec<(String, String, u64)> = Vec::new();
+    for c in calls.iter().filter(|c| c.tid == main) {
+        let key = (c.image.to_lowercase(), c.function.clone());
+        match counts.iter_mut().find(|(i, f, _)| (i, f) == (&key.0, &key.1)) {
+            Some(row) => row.2 += 1,
+            None => counts.push((key.0, key.1, 1)),
+        }
+    }
+    counts.sort();
+    Ok(counts)
+}
+
 /// The frozen host's run of 2026-10-21, whose record names the reference set (`reference_runs`)
 const REFERENCE_RECORD: &str = "store/runs/frontier-643a6283510c-1792623423346201000/events-000001.open.jsonl";
 /// The contract the calls are judged under

@@ -44,7 +44,7 @@ struct Facts {
 
 /// The end a stop names, as `run_frontier.py` 400-407 maps it.
 fn expected_status(stop: &str) -> &'static str {
-    if stop.starts_with("HostRequest op ") || stop.starts_with("StepLimit: ") {
+    if stop.starts_with("HostRequest op ") || stop.starts_with("StepLimit: ") || stop.starts_with("ReferenceEnd: ") {
         "killed"
     } else if stop.starts_with("ExitProcess") {
         "exited"
@@ -193,6 +193,14 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
     // the end, by the stop's kind; a service not implemented is the Windows call in flight at the stop, and a stop with
     // no call in flight (a created thread's stack growing, Sprint 211) names none
     let status = expected_status(&facts.stop);
+    // the batch run ends where its reference did (Sprint 219); a step-budget stop is a game that never filled its log
+    // (reviewer-3's Concern 3 of its review of Sprint 218)
+    if facts.stop.starts_with("StepLimit: ") {
+        found.push(format!(
+            "the batch run spent the step budget, {:?}, before its log held the reference's lines",
+            facts.stop
+        ));
+    }
     let unimplemented = of(ours, "SERVICE_UNIMPLEMENTED");
     match (status, unimplemented.as_slice()) {
         ("killed", []) if facts.in_flight.is_empty() => {}

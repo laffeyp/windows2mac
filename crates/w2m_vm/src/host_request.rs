@@ -51,6 +51,12 @@ pub const THREAD_RESUME: u64 = 5;
 pub const THREAD_CONTEXT: u64 = 6;
 pub const THREAD_EXIT_CODE: u64 = 7;
 pub const THREAD_STACK_GROW: u64 = 9;
+/// vm_backend 333 (Sprint 121): threads.c readied a thread while a vCPU waits (8, the retired signal request, unused)
+pub const THREAD_WAKE: u64 = 10;
+/// runtime.h 69: the host's clock (`W2M_HOST_CLOCK`, 3), and a service the runtime does not implement
+/// (`W2M_HOST_UNIMPLEMENTED`, 4)
+pub const HOST_CLOCK: u64 = 3;
+pub const HOST_UNIMPLEMENTED: u64 = 4;
 pub const EXCEPTION_STUBS: u64 = 1;
 pub const EXCEPTION_CAPTURE_XMM: u64 = 2;
 
@@ -316,6 +322,29 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
         .ok_or_else(|| HostError::Failed(format!("a file view at unmapped 0x{base:x}")))? as usize;
     guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
     Ok((0, base))
+}
+
+/// HOST_UNIMPLEMENTED (vm_backend 3878-3883; Sprint 219): runtime.c 56's report that service id `a0` does not run
+/// in argument form `a1`. The service is named from the runtime's API ids (`api_names`, id n the n-th, from 1) and
+/// the form, its call's return address read from the word at the saved RSP; both are kept in `Guest::unimplemented`
+/// for the record's SERVICE_UNIMPLEMENTED, and the run stops as a request not served. An RSP that is not mapped is a
+/// failure, where the frozen host's read raises (reviewer-3's Medium 2 of its review of Sprint 219).
+pub fn unimplemented(guest: &mut Guest, a0: u64, a1: u64) -> HostError {
+    let names = match guest_runtime::services::api_names(&guest.services) {
+        Ok(names) => names,
+        Err(why) => return HostError::Failed(why),
+    };
+    let name = (a0 as usize)
+        .checked_sub(1)
+        .and_then(|i| names.get(i))
+        .cloned()
+        .unwrap_or_else(|| format!("api {a0}"));
+    let service = format!("{name} argument form 0x{a1:x}");
+    let Some((ret, _)) = guest.called_service() else {
+        return HostError::Failed(format!("{service}: the saved RSP is not a mapped address"));
+    };
+    guest.unimplemented = Some((service.clone(), ret));
+    HostError::NotServed(service)
 }
 
 /// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT, HOST_EXCEPTION, and
@@ -601,11 +630,21 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         HOST_THREAD if a0 == THREAD_EXIT_CODE => {
             u64::from(crate::threads::exit_code(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Failed)?)
         }
+        // vm_backend 3196-3199: threads.c readied a thread while a vCPU waits; the frozen host counts the wake and
+        // notifies the vCPUs that wait, and one vCPU has none to notify (Sprint 219: found by comparing the two hosts'
+        // request lists, not by a run)
+        HOST_THREAD if a0 == THREAD_WAKE => 0,
         HOST_THREAD => {
             return Err(HostError::NotServed(format!(
                 "thread request {a0}: not served by the Rust host yet"
             )));
         }
+        // vm_backend 3838-3839: the host's clock in 100 ns units, which process.c 43 asks when the clock is the host's
+        // (mode 1), the monotonic count `counter_now` gives outside the instruction clock (Sprint 219)
+        HOST_CLOCK => crate::threads::counter_now(guest),
+        // vm_backend 3878-3883: runtime.c 56's report of a service the runtime does not implement in this argument
+        // form; the run stops on the service's name and the form (Sprint 219: it stopped on "host request 4")
+        HOST_UNIMPLEMENTED => return Err(unimplemented(guest, a0, a1)),
         _ => {
             return Err(HostError::NotServed(format!(
                 "host request {op}: not served by the Rust host yet"

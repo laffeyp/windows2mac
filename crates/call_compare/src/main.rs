@@ -117,8 +117,24 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
+/// `call_compare main-thread-calls ROOT`: the Windows main thread's calls in the run the batch run ends by, the rows
+/// `store/batch_run/main-thread-calls-2026-10-29.tsv` holds (`call_compare::main_thread_calls`; Sprint 219), on
+/// standard output: image, function, count.
+fn main_thread_calls(root: &str) -> Result<(), String> {
+    let mut out = io::stdout().lock();
+    for (image, function, n) in call_compare::main_thread_calls(Path::new(root))? {
+        writeln!(out, "{image}\t{function}\t{n}").map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn main() {
-    if let Err(why) = run() {
+    let args: Vec<String> = std::env::args().collect();
+    let done = match args.get(1).map(String::as_str) {
+        Some("main-thread-calls") => main_thread_calls(args.get(2).map_or(".", String::as_str)),
+        _ => run(),
+    };
+    if let Err(why) = done {
         eprintln!("call_compare: {why}");
         std::process::exit(1);
     }

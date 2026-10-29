@@ -17,7 +17,7 @@ reference = "the frozen Python host's batch run of 2026-10-21, store/runs/fronti
 kind = "w2m_vm_game"
 # sh for the depot's $HOME, in harness/, where substrate runs a Producer; w2m-vm reads its paths from the root; signed
 # with the Hypervisor entitlement first
-command = ["sh", "-c", "exec ../scripts/sign_and_run.sh ../target/release/w2m-vm --game \"$HOME/w2m-depots/hail-to-the-rainbow\" \"Hail to the Rainbow.exe\" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv --exit-ledger build/exit_ledger/rust.tsv"]
+command = ["sh", "-c", "exec ../scripts/sign_and_run.sh ../target/release/w2m-vm --game \"$HOME/w2m-depots/hail-to-the-rainbow\" \"Hail to the Rainbow.exe\" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv --exit-ledger build/exit_ledger/rust.tsv --log-lines 168 --main-thread-calls store/batch_run/main-thread-calls-2026-10-29.tsv"]
 schemas = "schemas/harness-events.json"
 
 [[producer]]

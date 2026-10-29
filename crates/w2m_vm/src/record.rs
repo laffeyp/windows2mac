@@ -123,6 +123,9 @@ pub enum RunEnd {
     /// the VM's step budget spent (`max_steps`), a limit the harness chose and not the guest's fault: killed, as
     /// `run_frontier.py` 71 and 405 class it (`HARNESS_STOPS`; Sprint 218)
     StepLimit,
+    /// the batch run's end by its reference's rule (`run_frontier.py` 306-310, "the log holds"): killed, a stop the
+    /// harness chose (`HARNESS_STOPS`; Sprint 219)
+    ReferenceEnd,
     /// a request the host does not serve, made inside a Windows call: SERVICE_UNIMPLEMENTED with the call ("DLL!Function")
     /// and its return address, then killed
     Unimplemented { service: String, return_address: u64 },
@@ -147,6 +150,7 @@ impl RunEnd {
             StopKind::ExitProcess(code) => RunEnd::Exited(*code),
             StopKind::TimeLimit => RunEnd::TimedOut,
             StopKind::StepLimit => RunEnd::StepLimit,
+            StopKind::ReferenceEnd => RunEnd::ReferenceEnd,
             StopKind::Unserved => match called {
                 Some((ret, Some(name))) if in_flight.contains(&name) => RunEnd::Unimplemented {
                     service: name,
@@ -169,6 +173,8 @@ pub enum StopKind {
     TimeLimit,
     /// the VM's step budget
     StepLimit,
+    /// the batch run's end by its reference's rule
+    ReferenceEnd,
     /// a host request the host does not serve
     Unserved,
     /// anything else, a failure in serving a request among them
@@ -265,7 +271,9 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     let (exit_status, exit_code) = match &e.end {
         RunEnd::Exited(code) => (ExitStatus::Exited, Some(*code)),
         RunEnd::TimedOut => (ExitStatus::TimedOut, None),
-        RunEnd::Unimplemented { .. } | RunEnd::Unserved | RunEnd::StepLimit => (ExitStatus::Killed, None),
+        RunEnd::Unimplemented { .. } | RunEnd::Unserved | RunEnd::StepLimit | RunEnd::ReferenceEnd => {
+            (ExitStatus::Killed, None)
+        }
         RunEnd::Faulted => (ExitStatus::Faulted, None),
     };
     let elapsed =

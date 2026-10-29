@@ -168,12 +168,32 @@ mod run {
             Some(_) => return Err("--exit-ledger <tsv>".into()),
             None => None,
         };
+        // the batch run's end (Sprint 219): the reference log's line count and the Windows main thread's calls
+        let log_lines = match args.iter().position(|a| a == "--log-lines") {
+            Some(i) if args.len() >= i + 2 => {
+                let n = args.drain(i..i + 2).nth(1).unwrap();
+                Some(n.parse::<usize>().map_err(|e| format!("--log-lines {n}: {e}"))?)
+            }
+            Some(_) => return Err("--log-lines <count>".into()),
+            None => None,
+        };
+        let main_calls = match args.iter().position(|a| a == "--main-thread-calls") {
+            Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
+            Some(_) => return Err("--main-thread-calls <tsv>".into()),
+            None => None,
+        };
+        let end = match (log_lines, main_calls) {
+            (Some(lines), Some(file)) => Some((lines, file)),
+            (None, None) => None,
+            _ => return Err("--log-lines and --main-thread-calls go together".into()),
+        };
         if args == ["--wfe-probe"] {
             return wfe_probe();
         }
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | --stop \
                      <tsv>] [--beside <name> <file>] [--exit-ledger <tsv>] [--instruction-clock] \
-                     | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> | w2m-vm --wfe-probe";
+                     | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> [--log-lines <count> \
+                     --main-thread-calls <tsv>] | w2m-vm --wfe-probe";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
         {
@@ -185,7 +205,7 @@ mod run {
             && out_flag == "--output"
             && stop_flag == "--stop"
         {
-            return game(Path::new(directory), program, output, stop_file, ledger.as_deref());
+            return game(Path::new(directory), program, output, stop_file, ledger.as_deref(), end);
         }
         // (guest, output, the measure asked for and its file); every path relative to the repository root
         let (guest_path, output, measure) = match args.as_slice() {
@@ -337,6 +357,7 @@ mod run {
             Stop::Model { rip, why } => format!("Model at 0x{rip:x}: {why}"),
             Stop::TimeLimit => "the run's time limit".into(),
             Stop::StepLimit { count, max, pc } => format!("StepLimit: {count} of {max} steps at pc 0x{pc:x}"),
+            Stop::ReferenceEnd(why) => format!("ReferenceEnd: {why}"),
             other => format!("{other:?}"),
         }
     }
@@ -468,6 +489,7 @@ mod run {
         output: &str,
         stop_file: &str,
         ledger: Option<&str>,
+        end: Option<(usize, String)>,
     ) -> Result<(), String> {
         let root = root();
         let started = Instant::now();
@@ -496,7 +518,19 @@ mod run {
         if let Some(path) = ledger {
             guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&root.join(path))?);
         }
+        // the game's log, C:\w2m\unity.log on the bridge's drive (`run_frontier.py` 288, `files.drive / "w2m" /
+        // "unity.log"`); the run ends where its reference did (Sprint 219)
+        let log = guest.files.as_ref().map(|f| f.drive.join("w2m").join("unity.log"));
+        if let (Some((lines, file)), Some(log)) = (&end, &log) {
+            let calls = w2m_vm::batch_stop::read_calls(&text(&root.join(file))?)?;
+            guest.batch_stop = Some(w2m_vm::batch_stop::BatchStop::new(log.clone(), *lines, calls));
+        }
         let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS))?;
+        // the log beside the stop file, which `batch_run.rs` holds to the reference's, line for line (Sprint 219)
+        if let Some(log) = &log {
+            let beside = format!("{}.unity.log", stop_file.trim_end_matches(".tsv"));
+            fs::write(root.join(&beside), fs::read(log).unwrap_or_default()).map_err(|e| format!("{beside}: {e}"))?;
+        }
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
         let mut tsv = format!(
             "stop\t{}\nseconds\t{:.1}\n",
@@ -585,7 +619,15 @@ mod run {
                 (*cells.get(1)? == stopped).then(|| format!("{}!{}", cells[3], cells[4]))
             })
             .collect();
-        let end = w2m_vm::record::RunEnd::of(&out.stop.kind(), guest.called_service(), &flying);
+        // a service the runtime reported unimplemented names itself (HOST_UNIMPLEMENTED, Sprint 219), whatever image
+        // called it; any other unserved request is named from the call the trace has in flight
+        let end = match guest.unimplemented.clone() {
+            Some((service, return_address)) => w2m_vm::record::RunEnd::Unimplemented {
+                service,
+                return_address,
+            },
+            None => w2m_vm::record::RunEnd::of(&out.stop.kind(), guest.called_service(), &flying),
+        };
         let stem = Path::new(program)
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())

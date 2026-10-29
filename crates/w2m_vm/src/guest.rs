@@ -577,6 +577,20 @@ fn bridge(
     a.branch(a64::b, Target::Va(switch_va)); // threads.c w2m_switch, or hvc #12
 }
 
+/// One traced call (`Guest::trace_record`): whether it has returned, its seq and thread, the calling image's label
+/// ("GetProcAddress" for its hook), the DLL and function, eight arguments, the return value and the last error.
+pub struct TraceRecord<'a> {
+    pub ready: bool,
+    pub seq: u64,
+    pub tid: u64,
+    pub label: &'a str,
+    pub dll: &'a str,
+    pub function: &'a str,
+    pub args: [u64; 8],
+    pub ret: u64,
+    pub error: u64,
+}
+
 /// What call_trace.c recorded at a stop (`Guest::traced`), in `scripts/call_compare.py`'s file forms.
 pub struct Traced {
     /// the returned calls, `write_tsv`'s lines
@@ -669,6 +683,11 @@ pub struct Guest {
     pub limited: bool,
     /// one row per host exit, for the comparison with the frozen host's (`w2m-vm --exit-ledger`; Sprint 206)
     pub exit_ledger: Option<crate::exit_ledger::Ledger>,
+    /// where the batch run ends, asked after each host request answered (`w2m-vm --game --log-lines`; Sprint 219)
+    pub batch_stop: Option<crate::batch_stop::BatchStop>,
+    /// the service HOST_UNIMPLEMENTED named and the call's return address, read from the saved RSP (`self.unimplemented`,
+    /// vm_backend 3880-3882), which the record's SERVICE_UNIMPLEMENTED names whatever image made the call (Sprint 219)
+    pub unimplemented: Option<(String, u64)>,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -857,6 +876,8 @@ impl Guest {
             files: None,
             limited: false,
             exit_ledger: None,
+            batch_stop: None,
+            unimplemented: None,
         }
         .with_trace(start)
     }
@@ -1192,6 +1213,32 @@ impl Guest {
     /// ready, the calls in flight, as (seq, tid, image, dll, function, a0..a7), and a thunk with no name is an error,
     /// as the Python's `self.ld.thunks[...]` raises.
     fn traced_calls(&self) -> Result<(String, String, u64), String> {
+        let (count, dropped) = self.trace_count()?;
+        let (mut tsv, mut in_flight) = (String::new(), String::new());
+        for k in 0..count {
+            let r = self.trace_record(k)?;
+            let args: Vec<String> = r.args.iter().map(|a| format!("{a:x}")).collect();
+            let call = format!(
+                "{}\t{}\t{}\t{}\t{}\t{}",
+                r.seq,
+                r.tid,
+                r.label,
+                r.dll,
+                r.function,
+                args.join("\t")
+            );
+            if r.ready {
+                tsv += &format!("{call}\t{:x}\t{}\n", r.ret, r.error);
+            } else {
+                in_flight += &format!("{call}\n");
+            }
+        }
+        Ok((tsv, in_flight, dropped))
+    }
+
+    /// The trace area's record count and the count the full area left out; a count past the area's `capacity` or the
+    /// guest's memory is an error, not a read past it.
+    pub fn trace_count(&self) -> Result<(u64, u64), String> {
         use guest_runtime::layout::{TRACE_OFF, TRACE_RECORD, TRACE_RECORDS_OFF};
         let mem = self.memory.as_slice();
         let t = (MONITOR_SIZE + TRACE_OFF) as usize;
@@ -1203,30 +1250,44 @@ impl Guest {
                 "the trace holds {count} records, past its capacity {capacity} or the guest's memory"
             ));
         }
-        let (mut tsv, mut in_flight) = (String::new(), String::new());
-        for k in 0..count as usize {
-            let r = t + (TRACE_RECORDS_OFF + TRACE_RECORD * k as u64) as usize;
-            let f: Vec<u64> = (0..15).map(|i| word(r + 8 * i)).collect();
-            let thunk = THUNK_BASE + 16 * f[4];
-            let Some((dll, function)) = self.thunks.get(&thunk).and_then(|n| n.split_once('!')) else {
-                return Err(format!(
-                    "trace record {k} (seq {}) names thunk {thunk:#x}, which has no name",
-                    f[1]
-                ));
-            };
-            let label = self
+        Ok((count, dropped))
+    }
+
+    /// Trace record `k` (call_trace.c's `w2m_trace_record`): an index at or past the count `trace_count` gives is an
+    /// error, not a read of whatever lies there (reviewer-3's Low 2 of its review of Sprint 219); a thunk with no name is
+    /// an error, as the Python's `self.ld.thunks[...]` raises.
+    pub fn trace_record(&self, k: u64) -> Result<TraceRecord<'_>, String> {
+        use guest_runtime::layout::{TRACE_OFF, TRACE_RECORD, TRACE_RECORDS_OFF};
+        let (count, _) = self.trace_count()?;
+        if k >= count {
+            return Err(format!("trace record {k}: the trace holds {count}"));
+        }
+        let mem = self.memory.as_slice();
+        let r = (MONITOR_SIZE + TRACE_OFF + TRACE_RECORDS_OFF + TRACE_RECORD * k) as usize;
+        let f: Vec<u64> = (0..15)
+            .map(|i| u64::from_le_bytes(mem[r + 8 * i..r + 8 * i + 8].try_into().unwrap()))
+            .collect();
+        let thunk = THUNK_BASE + 16 * f[4];
+        let (dll, function) = self.thunks.get(&thunk).and_then(|n| n.split_once('!')).ok_or_else(|| {
+            format!(
+                "trace record {k} (seq {}) names thunk {thunk:#x}, which has no name",
+                f[1]
+            )
+        })?;
+        Ok(TraceRecord {
+            ready: f[0] != 0,
+            seq: f[1],
+            tid: f[2],
+            label: self
                 .call_trace
                 .get(f[3] as usize)
-                .map_or("GetProcAddress", String::as_str);
-            let args: Vec<String> = f[5..13].iter().map(|a| format!("{a:x}")).collect();
-            let call = format!("{}\t{}\t{label}\t{dll}\t{function}\t{}", f[1], f[2], args.join("\t"));
-            if f[0] == 0 {
-                in_flight += &format!("{call}\n");
-            } else {
-                tsv += &format!("{call}\t{:x}\t{}\n", f[13], f[14]);
-            }
-        }
-        Ok((tsv, in_flight, dropped))
+                .map_or("GetProcAddress", String::as_str),
+            dll,
+            function,
+            args: f[5..13].try_into().unwrap(),
+            ret: f[13],
+            error: f[14],
+        })
     }
 
     /// `_code_page` (vm_backend): x86 code the host writes, on fresh pages of the arena, an address never translated

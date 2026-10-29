@@ -112,3 +112,75 @@ Its unity.log is held line for line to the reference's.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and four plants.
 - [x] One concept: where the batch run ends, and what it has written by then.
+
+## result
+
+- **The stop:** `w2m_vm::batch_stop` ports `stop_when` (`run_frontier.py` 284-310) as `decide`: the log's line count
+  first, then the main thread's calls, else `REACH_AFTER_LOG` instructions after the log. It is asked after each host
+  request the run answers (`run.rs`, before the `Served::Answered` arm). The log's lines are counted again only when
+  its size changes, as Python's `splitlines` counts them. The main thread's returned calls are counted from the trace
+  record by record; a record still in flight is kept and read again. The main thread is the run's first thread
+  (`guest.start.tid`). `Stop::ReferenceEnd`, `StopKind::ReferenceEnd` and `RunEnd::ReferenceEnd` record it as killed.
+- **The inputs:** `w2m-vm --game` takes `--log-lines 168 --main-thread-calls
+  store/batch_run/main-thread-calls-2026-10-29.tsv` and reads no contract or reference run. `call_compare
+  main-thread-calls` derives the file from game run 38216081440: the thread of its first call, the capture's thread
+  excluded, 217 functions and 2,999 calls. `tests/call_compare.rs` holds the stored file equal to that output.
+- **The run:** it stops on "the log holds the reference's 168 lines and the main thread its calls" after 92.0 s, then
+  93.4 s on a second run of the same tree. Both runs give the same stop file. The stream is 10,505 calls, every
+  reference row and none past it; no call is in flight and none was dropped. The comparison against Windows conforms.
+  The log, copied beside the stop file, equals the reference's 168 lines once numbers are stripped.
+- **The judges:**
+  - `batch_run.rs` holds the log line for line, numbers being the varying cells.
+  - The in-flight file is checked on both branches.
+  - A held stop of the step budget fails `batch_run.rs`, and a step-budget record fails `batch_record.rs`.
+  - `batch_stop`'s unit tests hold the line count, the decision and the calls file's reading.
+- **Plant 1** (`--log-lines 167` in the harness): the run stopped at 10,505 calls, its main thread not yet done at
+  167 lines, and `batch_run.rs` named it: "the batch run's first stop or a guest's stop moved from
+  store/batch_run/first-stop-2026-10-28.tsv". Restored byte for byte.
+- **Plant 2** (`guest.start.tid + 1` as the main thread): no counted function is short, so the run stopped at 10,394
+  calls. `batch_run.rs` named the stop moved, and `batch_record.rs` named "vm_exits {\"hvc 1\": 1067.0, …} where the
+  held stop file holds {\"hvc 1\": 1091.0, …}". Restored byte for byte.
+- **Plant 3** (line 20 of the run's log changed): "line 20 of the batch run's unity.log differs from the reference's".
+  Restored byte for byte.
+- **Plant 4** (the instruction bound removed from `decide`): the unit test failed, "left: None right: Some(\"the log
+  holds the reference's 168 lines; the main thread short of 1 functions' calls 20000000000 instructions later\")".
+  Restored byte for byte.
+- **Departures:**
+  1. **The lookup.** On the user's word that discovering by running what the code already says is a failure ("no
+     searching for already knowable answers that you can look up at once"), one lookup compared every dispatch line of
+     the frozen host (vm_backend.py, kernel.py, file_bridge.py) with the Rust host's arms. It found three requests with
+     no arm: HOST_CLOCK (3), HOST_UNIMPLEMENTED (4) and THREAD_WAKE (thread request 10). All three are served as
+     vm_backend 3838-3839, 3878-3883 and 3196-3199 serve them. HOST_UNIMPLEMENTED's name comes from
+     `guest_runtime::services::api_names`, which `api_header` now uses too.
+  2. **The gate.** `crates/w2m_vm/tests/host_requests.rs` reads those dispatch lines (56 requests) and fails on any with
+     no Rust arm. A plant that removed THREAD_WAKE's arm was named: "THREAD_WAKE (src/w2m/vm_backend.py, not in
+     crates/w2m_vm/src/host_request.rs)".
+  3. **Files outside the list:** `crates/w2m_vm/src/guest.rs` (`trace_count`, `trace_record`, the `batch_stop` field;
+     `traced_calls` reads through them), `crates/w2m_vm/src/host_request.rs`, `crates/guest_runtime/src/services.rs`,
+     and the new `crates/w2m_vm/src/batch_stop.rs` and `tests/host_requests.rs`.
+  4. **The run's length.** The run takes 92-93 s against the frozen host's 34.9 s; the Rust host's speed is outside
+     this card.
+  5. **HOST_UNIMPLEMENTED's record.** The stop's text named the service, but the record's SERVICE_UNIMPLEMENTED named one
+     only when a traced image's call was in flight (`RunEnd::of`). The frozen host keeps the name and the return address,
+     read from the saved RSP, in `self.unimplemented` (vm_backend 3880-3882), whatever image called. `Guest::unimplemented`
+     now holds them, and `w2m-vm --game` writes SERVICE_UNIMPLEMENTED from it. A unit test holds `api_names`' order,
+     id n the n-th name. The gates run then going was stopped with no pass line and run again.
+- **After reviewer-3's review of Sprint 219** (the gates run then going was stopped with no pass line, and run again):
+  - **Medium 1:** `host_requests.rs` reads the guest's own enums (runtime.h 69-73, 298-330) as the requests it can
+    ask, and the frozen host's dispatch as its answer. It matches a name as a whole word outside comments, so `CLOSE`
+    is not met by `FILE_CLOSE`. It names its one deliberate refusal, `THREAD_SIGNAL_RETIRED`. 56 requests pass; an arm
+    that refuses still passes, which its doc says. The THREAD_WAKE plant, run again, was named from both sources:
+    "THREAD_WAKE (runtime.h W2M_THREAD_)", "THREAD_WAKE (src/w2m/vm_backend.py)".
+  - **Medium 2:** `host_request::unimplemented` holds HOST_UNIMPLEMENTED's rule. An RSP that is not mapped is a
+    failure, not a return address of 0. The unit test `requests_three_and_four_answer_as_the_frozen_host` holds the
+    name, the form, the return address from a planted stack word, the unmapped case, and HOST_CLOCK's count.
+  - **Low 2:** `trace_record` refuses an index at or past the count.
+  - **Low 3:** `batch_stop`'s doc says the bound is measured only at a request.
+  - **Why the lookup rode in this card** (reviewer-3's Medium 6 of its project review; WORKING_AGREEMENT 293, a card
+    over 10 files names why it is not two sprints): the user ruled mid-sprint that finding by a run what the code
+    states is a failure, to be fixed then, "ok, so fix that. that is failure". The three unserved requests were defects
+    of the host this card's run exercises, and the gate keeps the next run from finding the next one. It is a second
+    concept all the same, about 20 files with the stop's; had it been carded apart, it would have been its own sprint
+    between 219 and 220.
+  - **High 1, Medium 3, Low 1:** draft card 220 is rewritten to the index's 68 families and 273 runs, each run's
+    contract version, a fuller lookup, a per-run budget, and a like-for-like instructions-a-second line.

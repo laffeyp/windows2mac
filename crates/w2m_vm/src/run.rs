@@ -144,6 +144,8 @@ pub enum Stop {
     /// the VM's step budget spent, `count` of `max` steps, at host `pc` (Sprint 218; reviewer-3's Low 1 of its review of
     /// Sprint 218: it had been an `Exit` read back from its text)
     StepLimit { count: u64, max: u64, pc: u64 },
+    /// the batch run's end by its reference's rule (`batch_stop`, Sprint 219), and which part of it held
+    ReferenceEnd(String),
     /// any other exit
     Exit(String),
 }
@@ -157,6 +159,7 @@ impl Stop {
             Stop::ExitProcess { code } => StopKind::ExitProcess(*code),
             Stop::TimeLimit => StopKind::TimeLimit,
             Stop::StepLimit { .. } => StopKind::StepLimit,
+            Stop::ReferenceEnd(_) => StopKind::ReferenceEnd,
             Stop::HostRequest { .. } => StopKind::Unserved,
             _ => StopKind::Other,
         }
@@ -740,6 +743,18 @@ fn run(
                     count: read_u64(mem, md),
                     limit: read_u64(mem, md + 8),
                 });
+            }
+            // the batch run's end, asked at each answered request, a point on the instruction clock (Sprint 219)
+            if matches!(served, Ok(crate::host_request::Served::Answered))
+                && let Some(mut end) = guest.batch_stop.take()
+            {
+                let asked = end.check(guest, read_u64(guest.memory.as_slice(), md));
+                guest.batch_stop = Some(end);
+                match asked {
+                    Ok(None) => {}
+                    Ok(Some(why)) => break Stop::ReferenceEnd(why),
+                    Err(why) => break Stop::Exit(format!("the batch run's end: {why}")),
+                }
             }
             match served {
                 Ok(crate::host_request::Served::Answered) => continue,
