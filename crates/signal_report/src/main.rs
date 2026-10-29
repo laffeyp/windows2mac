@@ -655,6 +655,7 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
     // the passing gates runs `scripts/gates.sh` keeps (Sprint 179), tracked from Sprint 187, so CI and a fresh clone
     // read them (reviewer-2's Medium 2 of its review of 182-184)
     let passes = fs::read_to_string(root.join(PASSES)).ok();
+    let ci = fs::read_to_string(root.join(CI_RUNS)).ok();
     let mut gates_unread = false;
     let card_status = |n: u32| -> Result<Option<String>, String> {
         let prefix = format!("sprint-{n:03}-");
@@ -750,6 +751,11 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         if n >= FIRST_QUOTED_EDIT_SPRINT {
             wrong.extend(quoted_edits(n, body));
         }
+        // from Sprint 199 the run a later entry cites for this sprint's close concluded success, or this entry names
+        // it failed (Sprint 212)
+        if n >= FIRST_CI_HELD_SPRINT {
+            wrong.extend(ci_held(n, body, tail, ci.as_deref()));
+        }
         for token in ["GATES-LINE", "CI-LINE"] {
             if body.contains(token) {
                 wrong.push(format!(
@@ -781,6 +787,53 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(wrong)
+}
+
+/// The CI runs read with `gh run view` (run id, head, conclusion, time read), tracked from Sprint 212.
+const CI_RUNS: &str = "store/gates/ci.tsv";
+/// The first sprint whose close is held to its CI run's conclusion (Sprint 212; reviewer-3's High 2 of its review of
+/// Sprint 211: Sprint 210 stood closed on a failed run, read once from a watch's trailing `echo`).
+const FIRST_CI_HELD_SPRINT: u32 = 199;
+
+/// Sprint `n`'s close against its CI run: the run a later tail entry cites as "Sprint N's CI run <id>" (or "(<id>")
+/// must be in `ci` and conclude success, or `body`, the sprint's own entry, names the run and "failed". No later entry
+/// citing a run: the close's CI is pending, and nothing is held yet. WORKING_AGREEMENT's "CI on the closing commit".
+fn ci_held(n: u32, body: &str, tail: &str, ci: Option<&str>) -> Vec<String> {
+    let cited = format!("Sprint {n}'s CI run ");
+    let Some(at) = tail.find(&cited) else {
+        return Vec::new();
+    };
+    let digits: String = tail[at + cited.len()..]
+        .trim_start_matches('(')
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    if digits.is_empty() {
+        return vec![format!(
+            "sprint {n:03}: a later entry cites its CI run without the run's id"
+        )];
+    }
+    let Some(ci) = ci else {
+        return vec![format!(
+            "{CI_RUNS} does not exist: sprint {n:03}'s CI run {digits} cannot be read"
+        )];
+    };
+    match ci
+        .lines()
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .find(|c| c[0] == digits)
+    {
+        None => vec![format!(
+            "sprint {n:03}: its CI run {digits} is not in {CI_RUNS} (`gh run view {digits} --json conclusion`)"
+        )],
+        Some(cols) if cols.get(2) == Some(&"success") => Vec::new(),
+        Some(_) if body.contains(&digits) && body.contains("failed") => Vec::new(),
+        Some(cols) => vec![format!(
+            "sprint {n:03}: its tail entry is headed closed and its CI run {digits} concluded {}, which the entry does not \
+             name",
+            cols.get(2).unwrap_or(&"nothing")
+        )],
+    }
 }
 
 /// The first sprint whose close commit is held to bookkeeping paths and whose multi-vCPU claim to the stage's record
@@ -936,18 +989,54 @@ const FIRST_QUOTED_EDIT_SPRINT: u32 = 199;
 /// What an entry says of a quoted command `edit_guard` refuses, when it owns the breach.
 const OWNED_BREACH: &str = "multi-line edit outside the Edit tool";
 
-/// Each backticked span of `body` that begins `sed -i` and `edit_guard::refusal` refuses, named, unless the entry owns a
-/// multi-line edit outside the Edit tool: the classifier the hook would run judges the record of what ran.
+/// Each quoted `sed -i` command of `body` (start, end, the command as the shell ran it): a backticked span, or a span in
+/// double quotes whose inner `\"` and `\\` are the shell's (Sprint 212; reviewer-3's Medium 5 of its review of Sprint
+/// 211: Sprints 210's and 211's multi-line commands were quoted in double quotes, which the backtick scan never read).
+fn quoted_commands(body: &str) -> Vec<(usize, usize, String)> {
+    let mut found = Vec::new();
+    let mut at = 0;
+    for (i, span) in body.split('`').enumerate() {
+        if i % 2 == 1 && span.starts_with("sed -i") {
+            found.push((at, at + span.len(), span.to_string()));
+        }
+        at += span.len() + 1;
+    }
+    let bytes = body.as_bytes();
+    let mut from = 0;
+    while let Some(i) = body[from..].find("\"sed -i") {
+        let start = from + i + 1;
+        let mut end = start;
+        while end < bytes.len() && !(bytes[end] == b'"' && bytes[end - 1] != b'\\') {
+            end += 1;
+        }
+        // a double-quoted `"sed -i` inside a backticked command is part of it
+        if !found.iter().any(|(s, e, _)| *s <= start && start <= *e) {
+            found.push((start, end, body[start..end].replace("\\\"", "\"").replace("\\\\", "\\")));
+        }
+        from = end.max(start);
+    }
+    found.sort();
+    found
+}
+
+/// Each quoted `sed -i` command `edit_guard::refusal` refuses, named, unless the clause that quotes it owns it: the text
+/// from the command to the next quoted command holds "a multi-line edit outside the Edit tool" (Sprint 212: before,
+/// one owning phrase anywhere in the entry passed every command in it). The classifier the hook would run judges the
+/// record of what ran.
 fn quoted_edits(n: u32, body: &str) -> Vec<String> {
-    let owned = body.contains(OWNED_BREACH);
-    body.split('`')
-        .skip(1)
-        .step_by(2)
-        .filter(|span| span.starts_with("sed -i"))
-        .filter_map(|span| edit_guard::refusal(span).map(|why| (span, why)))
-        .filter(|_| !owned)
-        .map(|(span, why)| {
-            format!("sprint {n:03}: its tail entry quotes `{span}`, a multi-line edit ({why}), and owns no breach")
+    let commands = quoted_commands(body);
+    commands
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (_, end, command))| {
+            let why = edit_guard::refusal(command)?;
+            let next = commands.get(i + 1).map_or(body.len(), |c| c.0);
+            let clause = body.get(*end..next).unwrap_or("");
+            (!clause.contains(OWNED_BREACH)).then(|| {
+                format!(
+                    "sprint {n:03}: its tail entry quotes `{command}`, a multi-line edit ({why}), and owns no breach"
+                )
+            })
         })
         .collect()
 }
@@ -1300,6 +1389,59 @@ mod tests {
         );
         let old = "- **2026-10-09 agent-resolved** — Old. Revisit if: never.";
         assert!(decisions_split(old).is_empty());
+    }
+
+    /// Sprint 212 (reviewer-3's Medium 5 of its review of Sprint 211): a command quoted in double quotes is read as the
+    /// shell ran it and classed; Sprint 211's owned breach, quoted so, is found and passes; an unowned one is named,
+    /// and an owning phrase in another command's clause does not pass it.
+    #[test]
+    fn every_quoted_sed_is_classed_and_owned_where_it_is_quoted() {
+        let breach = "on batch_record.rs, \"sed -i '' 's/^        executed: 3_541_969,$/        exits_from: \\\"the frozen \
+                      host'\\\"'\\\"'s run to the same stop\\\",\\\\n        executed: Some(3_541_969),/' \
+                      crates/w2m_vm/tests/batch_record.rs\", which made each of two lines two: a multi-line edit \
+                      outside the Edit tool";
+        let commands = quoted_commands(breach);
+        assert_eq!(commands.len(), 1, "{commands:?}");
+        assert!(
+            commands[0].2.contains("exits_from: \"the frozen host'\"'\"'s run"),
+            "{:?}",
+            commands[0].2
+        );
+        assert!(
+            edit_guard::refusal(&commands[0].2).is_some(),
+            "the command makes one line two"
+        );
+        assert!(quoted_edits(211, breach).is_empty());
+        // unowned, in double quotes
+        let unowned = "\"sed -i '' '5a\\\\ x' f.rs\", one line added";
+        assert_eq!(quoted_edits(212, unowned).len(), 1, "{:?}", quoted_edits(212, unowned));
+        // owned in the first command's clause only: the second breach is named
+        let two = "`sed -i '' '5a\\ x' f.rs`, a multi-line edit outside the Edit tool; then `sed -i '' '9a\\ y' g.rs`";
+        let named = quoted_edits(212, two);
+        assert_eq!(named.len(), 1, "{named:?}");
+        assert!(named[0].contains("9a"), "{named:?}");
+        // a one-line substitution passes unowned
+        assert!(quoted_edits(212, "\"sed -i '' 's/a/b/' f.rs\"").is_empty());
+    }
+
+    /// Sprint 212 (reviewer-3's High 2 of its review of Sprint 211): the run a later entry cites for a close must have
+    /// concluded success, or the close's own entry names it failed; a run not on file is named; no citation, pending.
+    #[test]
+    fn a_close_is_held_to_the_conclusion_of_its_ci_run() {
+        let ci = "# header\n11\taaa\tsuccess\tt\n22\tbbb\tfailure\tt\n";
+        let tail = "### Sprint 211\n- **Closed:** Sprint 210's CI run 11 (head aaa) passed.\n\
+                    ### Sprint 212\n- **Closed:** Sprint 211's CI run (22, head bbb) failed.\n";
+        assert!(ci_held(210, "an entry", tail, Some(ci)).is_empty());
+        let named = ci_held(211, "an entry", tail, Some(ci));
+        assert_eq!(named.len(), 1, "{named:?}");
+        assert!(named[0].contains("its CI run 22 concluded failure"), "{named:?}");
+        assert!(ci_held(211, "its run 22 failed, repaired later", tail, Some(ci)).is_empty());
+        let unread = ci_held(210, "an entry", "Sprint 210's CI run 33 passed", Some(ci));
+        assert!(unread[0].contains("33 is not in"), "{unread:?}");
+        assert!(
+            ci_held(212, "an entry", tail, Some(ci)).is_empty(),
+            "no later entry cites 212's run: pending"
+        );
     }
 
     /// A partial close is a close (Sprint 206: Sprint 205's "closed-partial:" commit failed the walk on CI).

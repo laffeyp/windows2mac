@@ -131,10 +131,24 @@ fn free(path: &str) -> bool {
         .any(|f| path.starts_with(f) || path == f.trim_end_matches('/'))
 }
 
-/// A `sed` script that changes more than one line: `a\`, `i\` or `c\`, an address range, or a newline.
+/// A `sed` script that changes more than one line: `a\`, `i\` or `c\`, an address range, a newline, or a `\n` escape,
+/// which macOS's sed writes as a newline in a replacement (Sprint 212: Sprint 211's substitution made two lines one
+/// each by `\n`, and the classifier passed it).
 fn multi_line_script(script: &str) -> Option<&'static str> {
     if script.contains('\n') {
         return Some("a newline in its script");
+    }
+    let bytes = script.as_bytes();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'\\' {
+            if bytes[i + 1] == b'n' {
+                return Some("a \\n escape in its script");
+            }
+            i += 2; // an escaped character, `\\` among them
+            continue;
+        }
+        i += 1;
     }
     for command in script.split(';') {
         let command = command.trim_start();
@@ -291,6 +305,14 @@ mod tests {
         );
         assert!(refusal("sed -i '' '/^### A/,/^### B/d' BLACKBOARD.md").is_some());
         assert!(refusal("sed -i '' 's/a/b\\\nc/' f.rs").is_some());
+        // a `\n` escape in a replacement: macOS's sed writes a newline (Sprint 212)
+        assert!(
+            refusal("sed -i '' 's/^x$/x\\n        y/' f.rs")
+                .unwrap()
+                .contains("\\n escape")
+        );
+        // an escaped backslash before n is a backslash and an n
+        assert!(refusal("sed -i '' 's/a/b\\\\n/' f.rs").is_none());
     }
 
     #[test]

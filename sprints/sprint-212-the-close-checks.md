@@ -82,3 +82,30 @@ and owned where it is quoted.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the close's own checks.
+
+## result
+
+- **The CI rule:** `store/gates/ci.tsv` holds the 12 runs the tail cites for Sprints 199-210, each read with
+  `gh run view --json databaseId,headSha,conclusion`; two concluded failure, 40814306282 (Sprint 205) and 40936387557
+  (Sprint 210). `ci_held` holds a closed entry from Sprint 199 to the run a later entry cites for it: on file, success,
+  or named failed in the entry itself; no citation yet, the close's CI is pending. Run over BLACKBOARD, it named
+  "sprint 205: its tail entry is headed closed and its CI run 40814306282 concluded failure, which the entry does not
+  name"; Sprint 205's entry now carries that annotation, and Sprint 210's annotation of 2026-10-29 passes.
+  WORKING_AGREEMENT's "CI on the closing commit" says so.
+- **Every quoted `sed`:** `quoted_commands` reads backticked spans and double-quoted spans, unescaping the shell's `\"`
+  and `\\`; `quoted_edits` passes a refused command only when the clause from it to the next quoted command owns it.
+  Sprint 211's double-quoted breach is found and passes as owned. `edit_guard` refused a script with a newline but
+  not a `\n` escape, which macOS's sed writes as a newline in a replacement, the form of Sprints 201's and 211's
+  breaches; it refuses it now.
+- **Plant 1** (any conclusion accepted): `a_close_is_held_to_the_conclusion_of_its_ci_run` failed, "left: 0", the
+  failed run passing unnamed. Restored byte for byte. On the board itself, before the annotation, `--check` named
+  Sprint 205, as quoted above.
+- **Plant 2** (double quotes not read): `every_quoted_sed_is_classed_and_owned_where_it_is_quoted` failed, "left: 0",
+  the unowned double-quoted breach unnamed. Restored byte for byte.
+- **Plant 3** (ownership anywhere in the entry): the same test failed, "left: 0", the second breach unnamed. Restored
+  byte for byte.
+- **Plant 4** (the `\n` escape not refused): `edit_guard`'s `sed_append_insert_change_range_and_newline_are_refused`
+  failed at lib.rs 311. Restored byte for byte.
+- **Departures:** the card's files named neither `crates/edit_guard` nor Sprint 205's tail entry; the classifier's gap
+  and Sprint 205's unnamed failed run were found by the checks this card wrote, and fixed here. The heading "closed
+  (CI pending)" was not needed: a close is pending until a later entry cites its run.
