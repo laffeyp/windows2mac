@@ -1,0 +1,12 @@
+[package]
+name = "call_compare"
+description = "The batch run's calls judged against the game's on Windows; run as a Producer after the run's EXECUTION_COMPLETED (Sprint 214, its own crate from Sprint 217)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+# the vocabulary's types: the verdict, and the Producer's two events
+events = { path = "../events" }

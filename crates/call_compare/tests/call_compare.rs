@@ -8,20 +8,13 @@
 //! - the run: the Rust host's stream, as far as it reaches, has the divergences the frozen host's stream has over the
 //!   same rows, and no defect past the cut a stopped run makes (`call_compare::verdict`).
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
-use w2m_vm::call_compare::{
-    Call, Reference, Signature, Verdict, contract_rules, load_reference, read_strings, read_tsv, reference_runs,
-    signatures, verdict,
-};
+use call_compare::{Stream, Verdict, Windows};
 
 /// The frozen host's recorded run of 2026-10-21 (`batch_run.rs`'s STREAM) and its string arguments
 const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792623423346201000";
-/// That run's record, whose RunStarted baseline names the reference set
-const RECORD: &str = "store/runs/frontier-643a6283510c-1792623423346201000/events-000001.open.jsonl";
 /// The values Windows varies over the frozen host's stream of 2026-10-21 (docs/postmortem-2026-10-21.md 56)
 const VARIES: usize = 24;
 
@@ -32,48 +25,19 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-struct Set {
-    references: Vec<Reference>,
-    sigs: BTreeMap<String, Signature>,
-    undecided: BTreeSet<(String, String)>,
-}
-
-fn set(root: &Path) -> Set {
-    let runs = reference_runs(&fs::read_to_string(root.join(RECORD)).unwrap()).unwrap();
-    let contract: Value =
-        serde_json::from_str(&fs::read_to_string(root.join("contracts/windows.game.calls/0.1.0.json")).unwrap())
-            .unwrap();
-    let references = runs
-        .iter()
-        .map(|r| load_reference(&root.join("store/game-runs").join(r), &contract).unwrap())
-        .collect();
-    let sigs = signatures(&fs::read_to_string(root.join("specs/signatures.json")).unwrap()).unwrap();
-    Set {
-        references,
-        sigs,
-        undecided: contract_rules(&contract, "").1,
-    }
-}
-
-fn judge(s: &Set, calls: &[Call], strings: &str, stopped: bool) -> Verdict {
-    verdict(
-        &s.references,
-        calls,
-        &s.sigs,
-        &read_strings(strings),
-        &s.undecided,
-        stopped,
-    )
+/// A trace's calls, its non-empty lines
+fn calls(text: &str) -> Vec<&str> {
+    text.lines().filter(|l| !l.is_empty()).collect()
 }
 
 /// Every divergence a verdict holds, the scheduling ones too: a stopped run's paired threads end early, so their tails
 /// read as scheduling, where a defect that stopped a thread early would also land (reviewer-3's Medium 2 of its review
 /// of Sprints 212-214); held whole to the frozen host's same rows, none can hide
 fn texts(v: &Verdict) -> Vec<String> {
-    v.defects
+    v.defects()
         .iter()
-        .chain(&v.past_cut)
-        .chain(&v.scheduling)
+        .chain(v.past_cut())
+        .chain(v.scheduling())
         .map(|d| d.text())
         .collect()
 }
@@ -81,26 +45,44 @@ fn texts(v: &Verdict) -> Vec<String> {
 #[test]
 fn the_frozen_hosts_stream_conforms_to_windows_as_its_record_says() {
     let root = root();
-    let s = set(&root);
-    let calls = read_tsv(&fs::read_to_string(root.join(format!("{STREAM}.tsv"))).unwrap()).unwrap();
+    let windows = Windows::load(&root).unwrap();
+    let trace = fs::read_to_string(root.join(format!("{STREAM}.tsv"))).unwrap();
     let strings = fs::read_to_string(root.join(format!("{STREAM}.strings.tsv"))).unwrap();
-    let v = judge(&s, &calls, &strings, false);
+    let stream = |calls, strings, stopped| Stream {
+        calls,
+        strings,
+        stopped,
+        dropped: 0,
+    };
+    let v = windows.judge(&stream(&trace, &strings, false)).unwrap();
+    assert_eq!((v.verdict().as_str(), v.first_divergence()), ("conforms", None));
+    let left_out = windows
+        .judge(&Stream {
+            dropped: 3,
+            ..stream(&trace, &strings, false)
+        })
+        .unwrap();
+    assert_eq!(
+        (left_out.verdict().as_str(), left_out.first_divergence().as_deref()),
+        ("inconclusive", Some("the trace left out 3 calls")),
+        "a trace that left calls out cannot show the calls conform"
+    );
     println!(
         "the frozen host's {} calls: {}, {} defects, {} scheduling, {} values Windows varies",
-        calls.len(),
-        v.verdict(),
-        v.defects.len(),
-        v.scheduling.len(),
-        v.varies.len()
+        calls(&trace).len(),
+        v.verdict().as_str(),
+        v.defects().len(),
+        v.scheduling().len(),
+        v.varies().len()
     );
     assert!(
-        v.defects.is_empty(),
+        v.defects().is_empty(),
         "the frozen host's stream against Windows:\n{:#?}",
         texts(&v)
     );
     // a capture thread left in, or a varying value held fixed, moves the count
     assert_eq!(
-        v.varies.len(),
+        v.varies().len(),
         VARIES,
         "values Windows varies over the frozen host's stream"
     );
@@ -117,20 +99,27 @@ fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
         eprintln!("{what}: the Rust host's run is not compared here");
         return;
     };
-    let s = set(&root);
+    let windows = Windows::load(&root).unwrap();
     let stopped = !fs::read_to_string(root.join("build/batch_run/first-stop.tsv"))
         .unwrap()
         .starts_with("stop\tExitProcess");
-    let ours = read_tsv(&ours).unwrap();
     let our_strings = fs::read_to_string(root.join("build/batch_run/first-stop.calls.strings.tsv")).unwrap();
-    let v = judge(&s, &ours, &our_strings, stopped);
+    let stream = |calls, strings| Stream {
+        calls,
+        strings,
+        stopped,
+        dropped: 0,
+    };
+    let v = windows.judge(&stream(&ours, &our_strings)).unwrap();
+    let ours = calls(&ours);
     // the frozen host's stream over the same rows
-    let theirs: Vec<Call> = read_tsv(&fs::read_to_string(root.join(format!("{STREAM}.tsv"))).unwrap())
-        .unwrap()
-        .into_iter()
-        .take(ours.len())
-        .collect();
-    let last = theirs.last().map_or(0, |c| c.seq);
+    let trace = fs::read_to_string(root.join(format!("{STREAM}.tsv"))).unwrap();
+    let theirs: Vec<&str> = calls(&trace).into_iter().take(ours.len()).collect();
+    let last: u64 = theirs
+        .last()
+        .and_then(|l| l.split('\t').next())
+        .map_or(0, |s| s.parse().unwrap());
+    let theirs: String = theirs.iter().map(|l| format!("{l}\n")).collect();
     let their_strings: String = fs::read_to_string(root.join(format!("{STREAM}.strings.tsv")))
         .unwrap()
         .lines()
@@ -142,17 +131,17 @@ fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
         })
         .map(|l| format!("{l}\n"))
         .collect();
-    let w = judge(&s, &theirs, &their_strings, stopped);
+    let w = windows.judge(&stream(&theirs, &their_strings)).unwrap();
     println!(
         "the Rust host's {} calls: {}, {} defects, {} past the cut ({} for the frozen host's same rows), {} \
          scheduling, {} values Windows varies",
         ours.len(),
-        v.verdict(),
-        v.defects.len(),
-        v.past_cut.len(),
-        w.past_cut.len(),
-        v.scheduling.len(),
-        v.varies.len()
+        v.verdict().as_str(),
+        v.defects().len(),
+        v.past_cut().len(),
+        w.past_cut().len(),
+        v.scheduling().len(),
+        v.varies().len()
     );
     let (ours_all, theirs_all) = (texts(&v), texts(&w));
     let only_ours: Vec<&String> = ours_all.iter().filter(|d| !theirs_all.contains(d)).collect();
@@ -162,8 +151,8 @@ fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
         "divergences only the Rust host shows: {only_ours:#?}\nonly the frozen host's same rows show: {only_theirs:#?}"
     );
     assert!(
-        v.defects.is_empty(),
+        v.defects().is_empty(),
         "the Rust host's stream against Windows:\n{:#?}",
-        v.defects.iter().map(|d| d.text()).collect::<Vec<_>>()
+        v.defects().iter().map(|d| d.text()).collect::<Vec<_>>()
     );
 }

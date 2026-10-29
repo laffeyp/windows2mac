@@ -98,7 +98,7 @@ The plan is `windows_to_macos_research_direction_v0_2.md` (user decision 2026-10
 | The work list: the game's unserved functions as families, in the game's order | `scripts/work_list.py`; `specs/work_list.json` |
 | Game runs on Windows runners (call traces, imports, unity.log) | `store/game-runs/<run>/` (`.github/workflows/windows-game.yml`, `tools/jit_capture/`); each on the record as `game-run-<run>` (`scripts/record_game_run.py`) |
 | The frontier and its records | `scripts/run_frontier.py`; `store/runs/frontier-*` from a committed tree; its call streams `store/frontier-calls/`, guest traces `store/traces/` |
-| The game's calls as a judge (comparison, signatures) | `scripts/call_compare.py`; `specs/signatures.json` from `scripts/signatures.py` (win32metadata 71.0.30-preview); contract `windows.game.calls`; guest side `tools/guest_runtime/call_trace.c` |
+| The game's calls as a judge (comparison, signatures) | `crates/call_compare` (Sprint 214's port, its own crate and the batch run's second Producer from Sprint 217), which writes the record's COMPARISON_COMPLETED; `scripts/call_compare.py` the frozen host's, kept as the reference the port is held to; `specs/signatures.json` from `scripts/signatures.py` (win32metadata 71.0.30-preview); contract `windows.game.calls`; guest side `tools/guest_runtime/call_trace.c` |
 | Reviews and specs | `docs/`, each file named `<name>-YYYY-MM-DD.md` (user, 2026-10-22; the old names are mapped in that Decision) |
 
 Rows are added as types stabilize.

@@ -460,45 +460,6 @@ mod run {
         Ok(())
     }
 
-    /// The frozen host's run whose record names the reference set (`call_compare::reference_runs`)
-    const REFERENCE_RECORD: &str = "store/runs/frontier-643a6283510c-1792623423346201000/events-000001.open.jsonl";
-
-    /// The batch run's calls against Windows (Sprint 214; census row 7): the reference set's runs under
-    /// store/game-runs, contracts/windows.game.calls and specs/signatures.json, a stopped run's cut left out
-    /// (`call_compare::verdict`).
-    fn comparison(
-        root: &Path,
-        calls: &str,
-        strings: &str,
-        stopped: bool,
-    ) -> Result<w2m_vm::record::Comparison, String> {
-        use w2m_vm::call_compare as cc;
-        let contract: serde_json::Value =
-            serde_json::from_str(&text(&root.join("contracts/windows.game.calls/0.1.0.json"))?)
-                .map_err(|e| format!("the calls contract: {e}"))?;
-        let runs = cc::reference_runs(&text(&root.join(REFERENCE_RECORD))?)?;
-        let references = runs
-            .iter()
-            .map(|r| cc::load_reference(&root.join("store/game-runs").join(r), &contract))
-            .collect::<Result<Vec<_>, _>>()?;
-        let sigs = cc::signatures(&text(&root.join("specs/signatures.json"))?)?;
-        let v = cc::verdict(
-            &references,
-            &cc::read_tsv(calls)?,
-            &sigs,
-            &cc::read_strings(strings),
-            &cc::contract_rules(&contract, "").1,
-            stopped,
-        );
-        Ok(w2m_vm::record::Comparison {
-            contract_id: contract["contract_id"].as_str().unwrap_or("windows.game.calls").into(),
-            contract_version: contract["version"].as_str().unwrap_or("0.1.0").into(),
-            reference_ref: cc::reference_ref(&references),
-            conforms: v.defects.is_empty(),
-            first_divergence: v.defects.first().map(|d| d.text().chars().take(500).collect()),
-        })
-    }
-
     fn game(
         directory: &Path,
         program: &str,
@@ -583,13 +544,18 @@ mod run {
         }
         tsv += &format!("blocks the host compiled\t{}\n", out.translations.len());
         // the call stream at the stop, in `scripts/call_compare.py` `write_tsv`'s form, beside the stop file (Sprint 191)
-        let (calls, in_flight, dropped) = guest.traced_calls()?;
+        let w2m_vm::guest::Traced {
+            calls,
+            in_flight,
+            dropped,
+            strings,
+        } = guest.traced()?;
         let calls_file = format!("{}.calls.tsv", stop_file.trim_end_matches(".tsv"));
         fs::write(root.join(&calls_file), &calls).map_err(|e| format!("{calls_file}: {e}"))?;
         // the calls' string arguments beside them, as run_frontier.py writes `<run>.strings.tsv` (Sprint 214): the
         // comparison against Windows names the game's threads by them
         let strings_file = format!("{}.calls.strings.tsv", stop_file.trim_end_matches(".tsv"));
-        fs::write(root.join(&strings_file), guest.traced_strings()).map_err(|e| format!("{strings_file}: {e}"))?;
+        fs::write(root.join(&strings_file), strings).map_err(|e| format!("{strings_file}: {e}"))?;
         // the calls not yet returned at the stop (Sprint 194), without their return and error
         let in_flight_file = format!("{}.in-flight.tsv", stop_file.trim_end_matches(".tsv"));
         fs::write(root.join(&in_flight_file), &in_flight).map_err(|e| format!("{in_flight_file}: {e}"))?;
@@ -637,12 +603,6 @@ mod run {
             calls: (&sha256(calls.as_bytes()), calls.lines().count() as u64),
             stop: &stop,
             elapsed: started.elapsed(),
-            comparison: Some(comparison(
-                &root,
-                &calls,
-                &guest.traced_strings(),
-                !matches!(out.stop, Stop::ExitProcess { .. }),
-            )?),
         });
         let mut stdout = io::stdout().lock();
         for line in record {

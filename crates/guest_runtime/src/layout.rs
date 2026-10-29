@@ -109,6 +109,8 @@ pub const TRACE_RECORD: u64 = 120;
 /// +16, 136 bytes: the call's seq, the argument's index, 60 UTF-16 units ending in 0
 pub const TRACE_STRINGS_OFF: u64 = 0x308300;
 pub const TRACE_STRING: u64 = 136;
+/// call_trace.c 31 (`W2M_TRACE_STRINGS`): the strings the area holds
+pub const TRACE_STRINGS: u64 = 2048;
 pub const TRACE_THUNKS: u64 = 16384;
 pub const TRACE_OWNER_OFF: u64 = 0x80;
 pub const TRACE_WIDE_OFF: u64 = 0x4300;

@@ -20,8 +20,21 @@ kind = "w2m_vm_game"
 command = ["sh", "-c", "exec ../scripts/sign_and_run.sh ../target/release/w2m-vm --game \"$HOME/w2m-depots/hail-to-the-rainbow\" \"Hail to the Rainbow.exe\" --output build/batch_run/stdout.txt --stop build/batch_run/first-stop.tsv --exit-ledger build/exit_ledger/rust.tsv"]
 schemas = "schemas/harness-events.json"
 
+[[producer]]
+kind = "call_compare"
+# the run's calls against Windows, from the files w2m-vm wrote under the root (Sprint 217): the judge outside the host,
+# which writes COMPARISON_COMPLETED and the session's SESSION_COMPLETED
+command = ["../target/release/call_compare", "--root", "..", "--calls", "build/batch_run/first-stop.calls.tsv", "--strings", "build/batch_run/first-stop.calls.strings.tsv", "--stop", "build/batch_run/first-stop.tsv"]
+schemas = "schemas/harness-events.json"
+
 [[initial]]
 kind = "w2m_vm_game"
+
+[[trigger]]
+id = "judge-the-run"
+on = "EXECUTION_COMPLETED"
+starts = "call_compare"
+policy = "once"
 
 [termination]
 recipe = "all_completed"

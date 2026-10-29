@@ -8,7 +8,6 @@
 /// The assembler moved to `a64_encoder` (Sprint 151), where the translator reaches it too.
 pub use a64_encoder::assembler;
 pub mod built_from;
-pub mod call_compare;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod case_inputs;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

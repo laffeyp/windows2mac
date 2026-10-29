@@ -16,8 +16,10 @@
 //! A run's execution record (Sprint 210) is `run_frontier.py`'s (262-266, 380-407): one session, purpose
 //! `application`: SESSION_INIT, EXECUTION_STARTED, MEASUREMENT_RECORDED for what the Rust host measures (the
 //! instructions, the seconds in the VM, the exits by hvc), SERVICE_UNIMPLEMENTED at a host request it does not serve,
-//! EXECUTION_COMPLETED, SESSION_COMPLETED. The frozen host's measurements by thread, by the host's time per exit, of
-//! switches, wakes and load have no Rust counterpart yet and are left out, not written as 0.
+//! EXECUTION_COMPLETED. The frozen host's measurements by thread, by the host's time per exit, of switches, wakes and
+//! load have no Rust counterpart yet and are left out, not written as 0. From Sprint 217 the session goes on in a second
+//! Producer, `call_compare`, which a trigger on EXECUTION_COMPLETED starts: COMPARISON_COMPLETED and
+//! SESSION_COMPLETED are its, as the judge is not the host's (reviewer-3's Medium 5 of its review of Sprints 212-214).
 
 use std::path::Path;
 use std::time::Duration;
@@ -109,18 +111,6 @@ pub struct Execution<'a> {
     pub calls: (&'a str, u64),
     pub stop: &'a str,
     pub elapsed: Duration,
-    /// the call stream against Windows (`call_compare::verdict`; Sprint 214), written as COMPARISON_COMPLETED
-    pub comparison: Option<Comparison>,
-}
-
-/// COMPARISON_COMPLETED's facts, as `call_compare.py`'s `record` writes them: the contract, the reference set, the
-/// verdict and the first divergence.
-pub struct Comparison {
-    pub contract_id: String,
-    pub contract_version: String,
-    pub reference_ref: String,
-    pub conforms: bool,
-    pub first_divergence: Option<String>,
 }
 
 /// How a run ended, as `run_frontier.py` 400-407 names it.
@@ -290,31 +280,6 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
         )),
         guest_trace: Some(false),
     }));
-    // the call stream against Windows (Sprint 214), after the completion, as run_frontier.py writes its comparison
-    if let Some(c) = &e.comparison {
-        lines.push(harness_line(&events::ComparisonCompleted {
-            comparison_id: Id::new(format!("cmp-set-{}", e.id)).expect("not empty"),
-            contract_id: events::ContractId::new(c.contract_id.clone()).expect("the contract's own id"),
-            contract_version: Version::new(c.contract_version.clone()).expect("the contract's own version"),
-            relation: events::Relation::StateRelation,
-            reference_ref: Id::new(c.reference_ref.clone()).expect("a reference set is not empty"),
-            target_execution_id: id(),
-            verdict: if c.conforms {
-                events::Verdict::Conforms
-            } else {
-                events::Verdict::Discrepancy
-            },
-            rule_ref: None,
-            first_divergence: c.first_divergence.clone(),
-        }));
-    }
-    let zero = u(0);
-    lines.push(harness_line(&SessionCompleted {
-        outcome: SessionOutcome::Completed,
-        discrepancy_count: zero,
-        accepted_count: zero,
-        elapsed_seconds: elapsed,
-    }));
     lines
 }
 
@@ -483,7 +448,6 @@ mod tests {
                 calls: (IMAGE, 925),
                 stop: "a stop",
                 elapsed: Duration::from_millis(1536),
-                comparison: None,
             }))
         };
         let status = |events: &[(String, Value)]| {
@@ -521,9 +485,9 @@ mod tests {
                 "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
                 "SERVICE_UNIMPLEMENTED",
-                "EXECUTION_COMPLETED",
-                "SESSION_COMPLETED"
-            ]
+                "EXECUTION_COMPLETED"
+            ],
+            "the session's close is the judge's Producer's (Sprint 217)"
         );
         // the rate over the VM's and the host's seconds: 3,541,969 instructions in 1 s
         assert_eq!(killed[3].1["value"], 3_541_969.0);

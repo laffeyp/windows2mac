@@ -54,8 +54,8 @@ fn expected_status(stop: &str) -> &'static str {
         "faulted"
     }
 }
-/// The reference's kinds the Rust host does not write: it has no guest-plane trace to ingest (its call stream is
-/// compared from Sprint 214, COMPARISON_COMPLETED)
+/// The reference's kinds the batch run's record does not hold: the Rust host has no guest-plane trace to ingest (its
+/// call stream is compared from Sprint 214, COMPARISON_COMPLETED, by the second Producer from Sprint 217)
 const NOT_WRITTEN: [&str; 1] = ["TRACE_INGESTED"];
 /// The measurement fields both hosts set alike (run_frontier.py 174-177)
 const CONVENTIONS: [&str; 5] = [
@@ -99,11 +99,34 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
         "SESSION_INIT",
         "EXECUTION_STARTED",
         "EXECUTION_COMPLETED",
+        "COMPARISON_COMPLETED",
         "SESSION_COMPLETED",
     ] {
         if of(ours, k).len() != 1 {
             found.push(format!("{} {k} where the reference has one", of(ours, k).len()));
         }
+    }
+    // the session closes after the comparison, which the second Producer writes after the run's completion (Sprint
+    // 217), and the comparison judges this run
+    let order: Vec<&str> = ours.iter().map(|(k, _)| k.as_str()).collect();
+    if order.last() != Some(&"SESSION_COMPLETED")
+        || order.iter().position(|k| *k == "COMPARISON_COMPLETED")
+            < order.iter().position(|k| *k == "EXECUTION_COMPLETED")
+    {
+        found.push(format!(
+            "the record's events end {:?}",
+            &order[order.len().saturating_sub(3)..]
+        ));
+    }
+    if let (Some(c), Some(done)) = (
+        of(ours, "COMPARISON_COMPLETED").first(),
+        of(ours, "EXECUTION_COMPLETED").first(),
+    ) && c["target_execution_id"] != done["execution_id"]
+    {
+        found.push(format!(
+            "COMPARISON_COMPLETED judges {} where the run is {}",
+            c["target_execution_id"], done["execution_id"]
+        ));
     }
     // EXECUTION_STARTED, field for field but the run's id
     if let (Some(a), Some(b)) = (
@@ -379,6 +402,14 @@ fn a_moved_field_is_named() {
         in_flight: vec!["KERNEL32.dll!MapViewOfFile".into()],
         traced: 925,
     };
+    // the reference's comparison, judging this record's run
+    let mut comparison = reference
+        .iter()
+        .find(|(k, _)| k == "COMPARISON_COMPLETED")
+        .unwrap()
+        .1
+        .clone();
+    comparison["target_execution_id"] = "frontier-643a6283510c-1".into();
     let record = |exits: f64, started: Value, service: &str, status: &str| {
         vec![
             ("SESSION_INIT".to_string(), Value::Null),
@@ -390,15 +421,30 @@ fn a_moved_field_is_named() {
             ),
             (
                 "EXECUTION_COMPLETED".to_string(),
-                serde_json::json!({ "exit_status": status, "guest_line_count": 0, "guest_trace": false,
-                    "trace_sha256": EMPTY, "unobserved": "no guest-plane trace: the Rust host writes the traced \
-                    images' calls, 925 rows, sha256 …; the run stopped: …" }),
+                serde_json::json!({ "execution_id": "frontier-643a6283510c-1", "exit_status": status,
+                    "guest_line_count": 0, "guest_trace": false, "trace_sha256": EMPTY,
+                    "unobserved": "no guest-plane trace: the Rust host writes the traced images' calls, 925 rows, \
+                    sha256 …; the run stopped: …" }),
             ),
+            ("COMPARISON_COMPLETED".to_string(), comparison.clone()),
             ("SESSION_COMPLETED".to_string(), Value::Null),
         ]
     };
     let good = record(779.0, started.clone(), "KERNEL32.dll!MapViewOfFile", "killed");
     assert_eq!(problems(&good, &reference, &facts), Vec::<String>::new());
+    // the judge's Producer not started: no comparison, the session closed by nothing after the run
+    let unjudged: Vec<(String, Value)> = good
+        .iter()
+        .filter(|(k, _)| k != "COMPARISON_COMPLETED")
+        .cloned()
+        .collect();
+    assert_eq!(
+        problems(&unjudged, &reference, &facts),
+        [
+            "0 COMPARISON_COMPLETED where the reference has one",
+            "the record's events end [\"SERVICE_UNIMPLEMENTED\", \"EXECUTION_COMPLETED\", \"SESSION_COMPLETED\"]"
+        ]
+    );
     let mut moved = started.clone();
     moved.as_object_mut().unwrap().remove("kill_grace_seconds");
     let found = problems(&record(780.0, moved, "host request 29", "faulted"), &reference, &facts);

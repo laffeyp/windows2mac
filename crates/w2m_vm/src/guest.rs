@@ -577,6 +577,18 @@ fn bridge(
     a.branch(a64::b, Target::Va(switch_va)); // threads.c w2m_switch, or hvc #12
 }
 
+/// What call_trace.c recorded at a stop (`Guest::traced`), in `scripts/call_compare.py`'s file forms.
+pub struct Traced {
+    /// the returned calls, `write_tsv`'s lines
+    pub calls: String,
+    /// the calls not yet returned, without their return and error
+    pub in_flight: String,
+    /// the calls the full area left out
+    pub dropped: u64,
+    /// the kept string arguments, `write_strings`' lines
+    pub strings: String,
+}
+
 /// A program's guest memory, laid out and written up to its first instruction.
 pub struct Guest {
     pub memory: hypervisor::GuestMemory,
@@ -1122,17 +1134,35 @@ impl Guest {
         Ok(quiet)
     }
 
+    /// The trace area at a stop, read once (Sprint 217; reviewer-3's Low 3 of its review of Sprints 212-214: the strings
+    /// were read by a second reader whose count nothing bounded): the calls, the calls in flight, the count the full
+    /// area left out, and the string arguments. A count past the area's (the records' `capacity`, the strings'
+    /// `W2M_TRACE_STRINGS`) is an error, not a read past it.
+    pub fn traced(&self) -> Result<Traced, String> {
+        let (calls, in_flight, dropped) = self.traced_calls()?;
+        Ok(Traced {
+            calls,
+            in_flight,
+            dropped,
+            strings: self.traced_strings()?,
+        })
+    }
+
     /// `traced_strings` (vm_backend 4149-4161; Sprint 214): the string arguments call_trace.c kept, in the capture's
     /// `<capture>.strings.tsv` form, one line each: seq, argument, the text with ASCII as is and every other unit as
     /// `\uXXXX` (`scripts/call_compare.py` `write_strings`). The comparison against Windows names the game's threads by
     /// them (SetThreadDescription).
-    pub fn traced_strings(&self) -> String {
-        use guest_runtime::layout::{TRACE_OFF, TRACE_STRING, TRACE_STRINGS_OFF};
+    fn traced_strings(&self) -> Result<String, String> {
+        use guest_runtime::layout::{TRACE_OFF, TRACE_STRING, TRACE_STRINGS, TRACE_STRINGS_OFF};
         let mem = self.memory.as_slice();
         let t = (MONITOR_SIZE + TRACE_OFF + TRACE_STRINGS_OFF) as usize;
         let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let count = word(t);
+        if count > TRACE_STRINGS {
+            return Err(format!("the trace holds {count} strings, past its {TRACE_STRINGS}"));
+        }
         let mut out = String::new();
-        for k in 0..word(t) as usize {
+        for k in 0..count as usize {
             let at = t + 16 + TRACE_STRING as usize * k;
             let (seq, arg) = (word(at), word(at + 8));
             let text: String = mem[at + 16..at + 16 + 120]
@@ -1151,7 +1181,7 @@ impl Guest {
                 .collect();
             out += &format!("{seq}\t{arg}\t{text}\n");
         }
-        out
+        Ok(out)
     }
 
     /// `traced_calls` (4133-4147; Sprint 191): the calls call_trace.c recorded, in `scripts/call_compare.py`
@@ -1161,12 +1191,18 @@ impl Guest {
     /// From Sprint 194 (reviewer-2's Medium 2 and Low 1 of its review of 190-192) it also returns the records not yet
     /// ready, the calls in flight, as (seq, tid, image, dll, function, a0..a7), and a thunk with no name is an error,
     /// as the Python's `self.ld.thunks[...]` raises.
-    pub fn traced_calls(&self) -> Result<(String, String, u64), String> {
+    fn traced_calls(&self) -> Result<(String, String, u64), String> {
         use guest_runtime::layout::{TRACE_OFF, TRACE_RECORD, TRACE_RECORDS_OFF};
         let mem = self.memory.as_slice();
         let t = (MONITOR_SIZE + TRACE_OFF) as usize;
         let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
-        let (count, dropped) = (word(t + 16), word(t + 32));
+        let (count, capacity, dropped) = (word(t + 16), word(t + 24), word(t + 32));
+        let end = t as u64 + TRACE_RECORDS_OFF + TRACE_RECORD * count;
+        if count > capacity || end > mem.len() as u64 {
+            return Err(format!(
+                "the trace holds {count} records, past its capacity {capacity} or the guest's memory"
+            ));
+        }
         let (mut tsv, mut in_flight) = (String::new(), String::new());
         for k in 0..count as usize {
             let r = t + (TRACE_RECORDS_OFF + TRACE_RECORD * k as u64) as usize;

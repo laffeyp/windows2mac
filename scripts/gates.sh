@@ -141,7 +141,8 @@ CARGO_TARGET_DIR=build/target-linux cargo check -q --target x86_64-unknown-linux
 # crates/w2m_vm/tests/batch_run.rs holds to store/batch_run/first-stop-2026-10-28.tsv; the game is the batch run's
 # depot, ~/w2m-depots/hail-to-the-rainbow
 if [ $rust != none ]; then
-  cargo build --release --quiet --bin w2m-vm --bin check_records
+  # call_compare, the harness's second Producer, judges the game's calls against Windows (Sprint 217)
+  cargo build --release --quiet --bin w2m-vm --bin check_records --bin call_compare
   mkdir -p build/batch_run
   rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv
   # with the exit ledger crates/w2m_vm/tests/exit_ledger.rs holds to the frozen host's (Sprint 206)
