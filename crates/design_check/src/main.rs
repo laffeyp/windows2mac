@@ -126,9 +126,49 @@ fn sourced(item: &str, system: &str) -> bool {
     })
 }
 
+/// An amendment's date and an added step's gate (Sprint 220): each amendment marker, `*Amended ` and `(amended `,
+/// names its date, `YYYY-MM-DD`, next ("amended by the rows below" in a sentence is no marker); and a step of
+/// `## Order` added by amendment states its `Gate:`. Sprint 208's undated amendment and Sprint 220's two plants passed
+/// the check before it read either.
+fn amendment_faults(file: &str, text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let dated = |rest: &str| {
+        let b = rest.as_bytes();
+        b.len() >= 10
+            && b[..10].iter().enumerate().all(|(i, c)| {
+                if i == 4 || i == 7 {
+                    *c == b'-'
+                } else {
+                    c.is_ascii_digit()
+                }
+            })
+    };
+    for (n, line) in text.lines().enumerate() {
+        for marker in ["*Amended ", "(amended "] {
+            for (i, _) in line.match_indices(marker) {
+                if !dated(&line[i + marker.len()..]) {
+                    out.push(format!("{file}:{}: an amendment with no date after it", n + 1));
+                }
+            }
+        }
+    }
+    if let Some(lines) = section(text, "## Order") {
+        for item in items(&lines) {
+            let head = item.split(". ").next().unwrap_or("");
+            let numbered = !head.is_empty() && head.bytes().all(|b| b.is_ascii_digit());
+            if numbered && item.to_lowercase().contains("(amended") && !item.contains("Gate:") {
+                out.push(format!(
+                    "{file}: \"## Order\" step {head}, added by amendment, states no gate"
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// What one document lacks, one line each; empty when it passes.
 fn faults(file: &str, text: &str) -> Vec<String> {
-    let mut out = Vec::new();
+    let mut out = amendment_faults(file, text);
     match section(text, GOAL_SECTION) {
         None => out.push(format!("{file}: no \"{GOAL_SECTION}\" section")),
         Some(lines) => {
@@ -313,6 +353,22 @@ mod tests {
         assert!(names_whole("FEX-Emu: https://x", "FEX"));
         assert!(!names_whole("the wineserver and Winelib", "Wine"));
         assert!(!names_whole("FEXCore", "FEX"));
+    }
+
+    /// An amendment names its date next; a step added by amendment states its gate; older steps are not held to it.
+    #[test]
+    fn an_amendment_is_dated_and_an_added_step_has_a_gate() {
+        let good = "*Amended 2026-10-29 (Sprint 220):* text.\n## Order\n\n1. **Old.** No gate here.\n2. **New** \
+                    (amended 2026-10-29). Gate: it runs.\n";
+        assert_eq!(amendment_faults("p", good), Vec::<String>::new());
+        let bad = "*Amended (Sprint 220):* text.\n## Order\n\n2. **New** (amended 2026-10-29). It runs.\n";
+        assert_eq!(
+            amendment_faults("p", bad),
+            [
+                "p:1: an amendment with no date after it",
+                "p: \"## Order\" step 2, added by amendment, states no gate"
+            ]
+        );
     }
 
     #[test]

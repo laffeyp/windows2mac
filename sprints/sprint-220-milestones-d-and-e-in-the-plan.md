@@ -78,3 +78,25 @@ The plan carries milestones D and E after C, each with its step, its facts and i
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: the plan's milestones past C.
+
+## result
+
+- **The plan:** `docs/rust-port-plan-2026-10-24.md` names milestones D and E in its goal section, in an amendment dated
+  2026-10-29. Its order gains step 11 (milestone D, the product slice) and step 12 (milestone E, the Steam session),
+  after step 10, each with its facts and its gate; steps 1 to 10 keep their text. Step 11 cites the state's two homes
+  (`file_bridge.rs` 573, `registry.c` 30), SteamCMD's acquisition (WORKING_AGREEMENT 120) and v0.2 §4.3 and §12.1.
+  Step 12 cites the bridge's design (`docs/solution-2026-10-16.md` §4.7) and the 17 interface versions, and makes its
+  reference a laptop run with the Steam client, which the runner cannot make. Each names when it moves ahead of C.
+- **The check:** before this card, `design_check` read the goal's figures and the systems' sources only.
+  `amendment_faults` adds two rules. Each amendment marker (`*Amended `, `(amended `) names its date next. A step of
+  `## Order` added by amendment states its `Gate:`. The unit test `an_amendment_is_dated_and_an_added_step_has_a_gate`
+  holds both. Its first form read every "amended", and named a sentence in `docs/design-rust-host-2026-10-24.md` 21
+  ("amended by the rows below"), which is no marker; it reads the two markers since. The tree's three checked
+  documents pass.
+- **Plant 1** (the goal section's amendment undated): before the check changed, `design_check` passed it, and the plant
+  reached no judge. Run again on the new check: "docs/rust-port-plan-2026-10-24.md:23: an amendment with no date after
+  it". Restored byte for byte.
+- **Plant 2** (step 11's "Gate:" removed): before, it reached no judge. Run again: "docs/rust-port-plan-2026-10-24.md:
+  \"## Order\" step 11, added by amendment, states no gate". Restored byte for byte.
+- **Departure:** `crates/design_check/src/main.rs`, outside the card's file list. The plants found the gap, which
+  Sprint 208 had met too (its plant 2), a rule recurring; so it goes into code here.

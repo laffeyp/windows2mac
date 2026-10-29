@@ -20,6 +20,14 @@ from today passes `target/release/design_check` (Sprint 128) before it lands.
 game drawing its first frame through Metal; milestone C is play (`docs/plan-2026-10-09.md` 17-21). The first scene
 closes B's path: the laptop reaches it after 325.4 billion instructions, in 62 s (`docs/recentering-2026-10-14.md`
 35).
+*Amended 2026-10-29 (Sprint 220; BLACKBOARD Decision 2026-10-29 user, "Milestones for the product slice, after
+milestone C"):* the plan ended at play, and the research direction's goal is the product (v0.2 §1, §12.1): the game
+obtained from the Mac command line under the user's account, prepared, run in its Steam session, its state kept,
+closed and relaunched. Two milestones follow C. Milestone D is the product slice, `w2m steam run 1699230` (step 11).
+Milestone E is the Steam session through the bridge (step 12). Neither changes steps 1 to 10. The game does not need a
+session before C: it runs on when `SteamAPI_Init` fails, as the Windows runner, with no Steam client, shows
+(`docs/review-2026-10-09-progress.md` 174, 208). Its exe has no SteamStub wrapper (sections `.text .rdata .data .pdata
+.rsrc .reloc`), and the bridge's seam is the one step 8b builds.
 
 **The figures every step is held to** (the laptop running the game under Windows, and the Windows runner's batch run):
 
@@ -187,6 +195,27 @@ quotes were copied from the sources on 2026-10-24.
     Rust, `no_std` for `aarch64-unknown-none`, each with its judges (the stencil judges with S6); and Microsoft's DLLs
     over a w2m kernel inside the VM (Decision 2026-10-16 user, order item 7), each family moved to that path when its
     system-call trace conforms to the laptop's. Then milestone C.
+11. **Milestone D, the product slice** (amended 2026-10-29, Sprint 220). `w2m steam run 1699230` from the Mac command
+    line performs v0.2 §12.1's operation: it resolves the Steam distribution and obtains the depot under the user's
+    account, in Rust (SteamCMD's acquisition today, WORKING_AGREEMENT 120). It prepares the game, runs it, keeps its
+    state, closes it and relaunches it. Update and removal are checked under the same lifecycle. The state has two homes
+    that keep nothing today: the C: drive, which the file bridge removes when its run ends (`crates/w2m_vm/src/
+    file_bridge.rs` 573), and the registry, of which `tools/guest_runtime/registry.c` 30 says "nothing persists between
+    runs". Both are kept per game and user across runs. The output is a Mac application bundle (v0.2 §4.3), holding the
+    launcher, the host signed with the Hypervisor entitlement, the guest runtime and the translated code. Gate: the
+    slice end to end on this Mac: install, run to the first scene, save, close, relaunch to the saved state, update,
+    remove. A local launch is recorded apart from Steam acquisition and launch (§12.1).
+12. **Milestone E, the Steam session** (amended 2026-10-29, Sprint 220). A guest `steamclient64.dll` whose interfaces
+    forward to the Mac Steam client, the wrappers generated from the Steamworks SDK headers as Proton's `lsteamclient`
+    generates them (`docs/solution-2026-10-16.md` §4.7). The guest DLL calls the host through the seam step 8b builds
+    for winemetal. The game's steam_api64.dll names 17 interface versions, which the generator covers: SteamClient017
+    and 020, SteamController008, SteamFriends017, SteamGameServer014, SteamGameServerStats001, SteamInput005,
+    SteamMatchGameSearch001, SteamMatchMaking009, SteamMatchMakingServers002, SteamNetworking006,
+    SteamNetworkingMessages002, SteamNetworkingSockets011, SteamNetworkingUtils004, SteamParties002, SteamUser021,
+    SteamUtils010. Gate: `SteamAPI_Init` succeeds under w2m. The session's calls conform to a Windows run of the game
+    with the Steam client running, a reference the runner, with no client, cannot make; it is captured on the laptop.
+    A step moves ahead of C, with its reason, if the play path at step 7 needs `SteamAPI_Init` to succeed, or a save
+    must persist within milestone C's play.
 
 Steps 1 and 2 are documents and the vocabulary; step 3 is the first Rust code that runs a guest. Each step runs as a
 chain of sprints, one concept each (WORKING_AGREEMENT's hard rule 6 override). New code inside the VM before step 10
