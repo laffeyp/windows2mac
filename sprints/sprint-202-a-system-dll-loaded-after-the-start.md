@@ -72,3 +72,21 @@ A LoadLibrary of a System32 DLL the program did not import answers as the Python
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: a system DLL loaded after the start.
+
+## result
+
+- **The load:** `module_in` answers a LoadLibrary of a System32 DLL whose exports the spec lists with the next free
+  system slot's address (`Handles::next_system`), a stop by name when the slots are full; `module` writes the synthetic
+  page there (`process::synthetic_image`) and records the DLL, an API set's host when one was asked, under System32's
+  spelling. Unit cases: dbghelp.dll and the winrt API set load in the next slot, aphostclient.dll (not in the spec) is
+  a DLL w2m does not model, full slots stop.
+- **The run:** the batch run's stream equals the Python's rows 0-256, row 257 in flight, and stops at row 257, RANDOM
+  23.
+- **Plant 1** (the page one slot off): the stream test failed, "row 49 of the call stream differs from the Python batch
+  run's". Restored byte for byte.
+- **Plant 2** (the canonical name recorded) did not compile and reached no judge; its replacement 2b (the spelling
+  uppercased) failed the stream test, "row 52 of the call stream differs from the Python batch run's". Restored byte for
+  byte.
+- **Plant 3** (a DLL the spec lacks loaded anyway): `a_load_of_a_name_found_nowhere_is_0` failed, "called
+  `Result::unwrap_err()` on an `Ok` value: 20480". Restored byte for byte.
+- **Departures:** plant 2 replaced as above.

@@ -182,8 +182,9 @@ fn synthetic_optional_header(page: &mut [u8]) {
     d(page, 0x80 + 0x18 + 0x38, 0x1000);
 }
 
-/// A synthetic module page: DOS and PE headers, x64, no sections (vm_backend 2909-2915, 2946-2951).
-fn synthetic_image(process: &mut [u8], off: u64) {
+/// A synthetic module page: DOS and PE headers, x64, no sections (vm_backend 2909-2915, 2946-2951); `process` is the
+/// process area, `off` the page's offset in it (Sprint 202: a LoadLibrary after the start writes one too).
+pub fn synthetic_image(process: &mut [u8], off: u64) {
     let page = &mut process[off as usize..off as usize + 0x1000];
     page[..2].copy_from_slice(b"MZ");
     d(page, 0x3C, 0x80);

@@ -1,13 +1,13 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
-stop	HostRequest op 15: LoadLibrary combase.dll: a system DLL not imported at the start, not served by the Rust host yet
-arguments	0x1814d1a00 0x20 0x1
-module asked for	api-ms-win-core-winrt-l1-1-0.dll (loading 1)
+stop	HostRequest op 23: host request 23: not served by the Rust host yet
+arguments	0x10 0x10b0017ff0 0x0
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	107
-hvc 8	101
+hvc 1	113
+hvc 4	4
+hvc 8	144
 hvc 11	7
 code cache full	0
-compiled	7237
+compiled	7986
 cut by decode	9
 cut by encoder	0
 cut by guarded	1
@@ -23,14 +23,14 @@ key size	0
 log full	0
 no choice	0
 no stencil	2
-not a code page	90
+not a code page	96
 page needs a split	0
-pages protected	166
+pages protected	189
 pause	0
 recon full	0
 scan pages	0
-blocks the host compiled	7254
-calls traced	49
+blocks the host compiled	8003
+calls traced	257
 calls in flight	1
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n

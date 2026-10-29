@@ -85,9 +85,13 @@ fn dlls(guest: &Guest) -> impl Iterator<Item = (String, u64, u64, usize)> + '_ {
 /// `module` (94-132): the handle `name` means, 0 when it is found nowhere; `loading` is LoadLibrary, which would load
 /// a DLL not yet in the process, where GetModuleHandle reports only loaded ones. Err is the Python's Unimplemented: a
 /// stop by name.
-pub fn module(guest: &Guest, name: &str, loading: bool) -> Result<u64, String> {
+pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, String> {
+    use guest_runtime::layout::{MONITOR_SIZE, PROCESS_VA, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF};
     let p = &guest.process;
+    let used = p.system.len() as u64;
+    let next_system = (used < SYSTEM_IMAGES).then_some(PROCESS_VA + SYSTEM_IMAGES_OFF + 0x1000 * used);
     let handles = Handles {
+        next_system,
         kernel32: p.kernel32,
         kernelbase: p.kernelbase,
         ntdll: p.ntdll,
@@ -99,7 +103,26 @@ pub fn module(guest: &Guest, name: &str, loading: bool) -> Result<u64, String> {
             program: guest.images.first().map_or(String::new(), |i| i.name.clone()),
         },
     };
-    module_in(&handles, name, loading)
+    let handle = module_in(&handles, name, loading)?;
+    // `load_system` (vm_backend `system_image`): the synthetic page written and kept under System32's spelling
+    if Some(handle) == next_system {
+        // the DLL loaded: an API set's host (`API_SET_HOSTS`), else the name itself
+        let asked = canonical(name);
+        let c = API_SET_HOSTS
+            .iter()
+            .find(|(set, _)| *set == asked)
+            .map_or(asked.clone(), |(_, host)| canonical(host));
+        let spelling = spec()
+            .system32
+            .get(&c)
+            .ok_or_else(|| format!("{c}: loaded as a system DLL, and System32 holds no such file"))?
+            .clone();
+        let off = handle - PROCESS_VA;
+        let process = &mut guest.memory.as_mut_slice()[MONITOR_SIZE as usize..];
+        crate::process::synthetic_image(process, off);
+        guest.process.system.insert(c, (handle, spelling));
+    }
+    Ok(handle)
 }
 
 /// C:\w2m\app on the host (Sprint 196; reviewer-2's High 2 of its review of 193-196): the directory w2m-vm was given,
@@ -198,6 +221,8 @@ struct Handles {
     dlls: Vec<(String, u64)>,
     system: BTreeMap<String, u64>,
     app: AppDirectory,
+    /// the next free system slot's address, None when the process area's slots are full (Sprint 202)
+    next_system: Option<u64>,
 }
 
 /// `module` over the handles alone, in modules.py 97-132's order.
@@ -244,12 +269,18 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
             "LoadLibrary {name}: a DLL file after the start, not served by the Rust host yet (it has no file bridge)"
         ));
     }
-    if spec().system32.contains_key(&c) {
-        return Err(format!(
-            "LoadLibrary {name}: a system DLL not imported at the start, not served by the Rust host yet"
-        ));
+    // modules.py 124-129: a System32 DLL whose exports the spec lists is a synthetic system image in the next free
+    // slot, as one imported at the start has (Sprint 202: combase.dll at the batch run's row 49)
+    if spec().system32.contains_key(&c) && spec().exports.contains_key(&c[..c.len() - 4]) {
+        return h.next_system.ok_or_else(|| {
+            format!(
+                "{c}: the process area holds {} system DLLs",
+                guest_runtime::layout::SYSTEM_IMAGES
+            )
+        });
     }
-    if h.app.contains(&c) {
+    // modules.py 130-131
+    if spec().system32.contains_key(&c) || h.app.contains(&c) {
         return Err(format!("LoadLibrary {name}: a Windows DLL w2m does not model"));
     }
     // modules.py 132: a name found nowhere (Sprint 196; reviewer-2's Medium 1 of its review of 185-189)
@@ -353,6 +384,7 @@ mod tests {
                 root: Some(app_root()),
                 program: "Game.exe".into(),
             },
+            next_system: Some(0x5000),
         }
     }
 
@@ -397,10 +429,23 @@ mod tests {
                 .unwrap_err()
                 .contains("a DLL file after the start")
         );
+        // modules.py 124-131 (Sprint 202): a System32 DLL whose exports the spec lists loads in the next system slot,
+        // the winrt API set's host combase.dll too; one the spec lacks is a DLL w2m does not model; full slots stop
+        assert_eq!(module_in(&h, "dbghelp.dll", true), Ok(0x5000));
+        assert_eq!(module_in(&h, "api-ms-win-core-winrt-l1-1-0.dll", true), Ok(0x5000));
         assert!(
-            module_in(&h, "dbghelp.dll", true)
+            module_in(&h, "aphostclient.dll", true)
                 .unwrap_err()
-                .contains("a system DLL not imported")
+                .contains("a Windows DLL w2m does not model")
+        );
+        let full = Handles {
+            next_system: None,
+            ..handles()
+        };
+        assert!(
+            module_in(&full, "dbghelp.dll", true)
+                .unwrap_err()
+                .contains("system DLLs")
         );
     }
 
