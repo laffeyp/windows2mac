@@ -18,15 +18,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
-/// The Python batch run's calls, in `scripts/call_compare.py` `write_tsv`'s form (Sprint 108's frontier run)
-const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792267359516238000.tsv";
+/// The Python batch run's calls, in `scripts/call_compare.py` `write_tsv`'s form: the frozen host's recorded run of
+/// 2026-10-21 (store/runs/frontier-643a6283510c-1792623423346201000, whose COMPARISON_COMPLETED against the Windows
+/// references has no divergence; 10,505 rows). Sprint 207: the stream held before, Sprint 108's run of 2026-10-17,
+/// predates Sprint 120's catch-up of a child at its start (2026-10-18), and its mono cookie (row 939) was
+/// 0x13fc8e8cff34 where the frozen host gives 0x165d8e8cc734.
+const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792623423346201000.tsv";
 /// The cells at which the Python's own runs differ (Sprint 194)
 const VARYING: &str = "store/batch_run/stream-varying-2026-10-28.tsv";
-/// The Python batch run repeated on the same code (2026-10-28), each 10,516 rows
+/// The frozen host's batch run run again on 2026-10-28 (`scripts/run_frontier.py --scratch --max-steps
+/// 1000000000000`), each 10,505 rows and equal to `STREAM` but in the varying cells (Sprint 207)
 const REPEATS: [&str; 3] = [
-    "store/frontier-calls/frontier-643a6283510c-1792269281973223000.tsv",
-    "store/frontier-calls/frontier-643a6283510c-1792273674526334000.tsv",
-    "store/frontier-calls/frontier-643a6283510c-1792300672353112000.tsv",
+    "store/frontier-calls/frontier-643a6283510c-1793247683722736000.tsv",
+    "store/frontier-calls/frontier-643a6283510c-1793247683722772000.tsv",
+    "store/frontier-calls/frontier-643a6283510c-1793247803946454000.tsv",
 ];
 /// Guests whose output is a clock's reading, 16 hex digits and a newline
 const CLOCK_GUESTS: [&str; 2] = ["qpc", "qpc2"];

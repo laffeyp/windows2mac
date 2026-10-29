@@ -338,9 +338,27 @@ pub fn write(
     };
     if !loaded.images.is_empty() {
         // a program from the loader (vm_backend 2966-2967: tests build bare ones)
-        write_loader_data(areas, loaded, start, &area)?;
+        let list = LoaderList {
+            images: &loaded.images,
+            image_entry: loaded.image_entry,
+            image_name: &start.image_name,
+            dependency_order: &loaded.dependency_order,
+            paths: &BTreeMap::new(),
+        };
+        write_loader_data(areas.process, &list, &area)?;
     }
     Ok(area)
+}
+
+/// What PEB.Ldr lists (vm_backend 2978-2983): the images in load order, the program first; its entry and name; every
+/// DLL dependencies first; and a DLL's full path where it is not C:\w2m\app\<name>, by its lowercase name
+/// (`Modules.dll_paths`: a DLL loaded after the start from a folder; Sprint 205).
+pub struct LoaderList<'a> {
+    pub images: &'a [pe_loader::Image],
+    pub image_entry: u64,
+    pub image_name: &'a str,
+    pub dependency_order: &'a [usize],
+    pub paths: &'a BTreeMap<String, String>,
 }
 
 /// vm_backend 2861-2903: PEB.ProcessParameters as the rows of `contracts/windows.process.parameters` show Windows
@@ -477,21 +495,16 @@ fn system_images(
 /// initialization order ntdll.dll, KERNELBASE.dll, KERNEL32.DLL, then the DLLs dependencies first. PEB.Ldr 0x18;
 /// PEB_LDR_DATA Length 0, Initialized 4, the list heads at 0x10, 0x20, 0x30; LDR_DATA_TABLE_ENTRY links at 0x00, 0x10,
 /// 0x20, DllBase 0x30, EntryPoint 0x38, SizeOfImage 0x40, FullDllName 0x48, BaseDllName 0x58.
-fn write_loader_data(
-    areas: &mut Areas<'_>,
-    loaded: &Loaded,
-    start: &Start,
-    area: &ProcessArea,
-) -> Result<(), ProcessError> {
+pub fn write_loader_data(process: &mut [u8], list: &LoaderList<'_>, area: &ProcessArea) -> Result<(), ProcessError> {
     let (base, va0) = (LOADER_DATA_OFF, PROCESS_VA + LOADER_DATA_OFF);
     let system32 = "C:\\Windows\\System32\\";
     type Entry = (u64, u64, u64, String, String);
     let program: Entry = (
-        loaded.images[0].base,
-        loaded.image_entry,
-        loaded.image.as_ref().map_or(0, |i| u64::from(i.size_of_image)),
-        format!("{APP_DIRECTORY}{}", start.image_name),
-        start.image_name.clone(),
+        list.images[0].base,
+        list.image_entry,
+        u64::from(list.images[0].pe.size_of_image),
+        format!("{APP_DIRECTORY}{}", list.image_name),
+        list.image_name.to_string(),
     );
     let k32: Entry = (
         area.kernel32,
@@ -515,19 +528,22 @@ fn write_loader_data(
         "ntdll.dll".into(),
     );
     let dll = |i: usize| -> Entry {
-        let d = &loaded.images[i];
+        let d = &list.images[i];
         (
             d.base,
             d.entry().unwrap_or(0),
             u64::from(d.pe.size_of_image),
-            format!("{APP_DIRECTORY}{}", d.name),
+            list.paths
+                .get(&d.name.to_lowercase())
+                .cloned()
+                .unwrap_or_else(|| format!("{APP_DIRECTORY}{}", d.name)),
             d.name.clone(),
         )
     };
     let mut entries = vec![program, nt.clone(), k32.clone(), kb.clone()];
-    entries.extend((1..loaded.images.len()).map(dll));
+    entries.extend((1..list.images.len()).map(dll));
     let mut init = vec![nt, kb, k32];
-    init.extend(loaded.dependency_order.iter().map(|&i| dll(i)));
+    init.extend(list.dependency_order.iter().map(|&i| dll(i)));
     if 0x58 + LDR_ENTRY_SIZE * entries.len() as u64 > LOADER_DATA_SIZE / 2 {
         return Err(ProcessError(format!(
             "{} loader entries: the area holds fewer",
@@ -544,17 +560,17 @@ fn write_loader_data(
     let mut strings = LOADER_DATA_SIZE / 2;
     for (i, (dll_base, entry, size, full, leaf)) in entries.iter().enumerate() {
         let e = base + 0x58 + LDR_ENTRY_SIZE * i as u64;
-        q(areas.process, e + 0x30, *dll_base);
-        q(areas.process, e + 0x38, *entry);
-        q(areas.process, e + 0x40, *size);
+        q(process, e + 0x30, *dll_base);
+        q(process, e + 0x38, *entry);
+        q(process, e + 0x40, *size);
         for (field, text) in [(0x48, full), (0x58, leaf)] {
             let raw = utf16(text);
             if strings + raw.len() as u64 + 2 > LOADER_DATA_SIZE {
                 return Err(ProcessError("loader names: the area is full".into()));
             }
-            put(areas.process, base + strings, &raw);
+            put(process, base + strings, &raw);
             unicode_string(
-                areas.process,
+                process,
                 e + field,
                 raw.len() as u16,
                 raw.len() as u16 + 2,
@@ -569,15 +585,15 @@ fn write_loader_data(
             .collect();
         for (i, node) in nodes.iter().enumerate() {
             let off = base + (node - va0);
-            q(areas.process, off, nodes[(i + 1) % nodes.len()]);
-            q(areas.process, off + 8, nodes[(i + nodes.len() - 1) % nodes.len()]);
+            q(process, off, nodes[(i + 1) % nodes.len()]);
+            q(process, off + 8, nodes[(i + nodes.len() - 1) % nodes.len()]);
         }
     };
     link(0x10, 0x00, &entries);
     link(0x20, 0x10, &entries);
     link(0x30, 0x20, &init);
-    d(areas.process, base, 0x58);
-    d(areas.process, base + 4, 1);
-    q(areas.process, PEB_OFF + 0x18, va0);
+    d(process, base, 0x58);
+    d(process, base + 4, 1);
+    q(process, PEB_OFF + 0x18, va0);
     Ok(())
 }

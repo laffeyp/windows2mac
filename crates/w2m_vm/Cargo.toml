@@ -15,6 +15,8 @@ events = { path = "../events" }
 translator = { path = "../translator" }
 serde_json.workspace = true
 pe_loader = { path = "../pe_loader" }
+# a DLL loaded after the start is parsed by the host (`modules::load_dll`, Sprint 205)
+pe_image = { path = "../pe_image" }
 virtual_memory = { path = "../virtual_memory" }
 x86_decoder = { path = "../x86_decoder" }
 # the x87 model's exact arithmetic, x87.py's Fraction (Sprint 175)
@@ -22,6 +24,3 @@ num-bigint = "0.4"
 num-integer = "0.1"
 num-rational = "0.4.2"
 num-traits = "0.2"
-
-[dev-dependencies]
-pe_image = { path = "../pe_image" }

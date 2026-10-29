@@ -348,15 +348,51 @@ pub fn dispatch_insert(mem: &mut [u8], target: u64, va: u64) {
     }
 }
 
-/// `_vm_compiled` (vm_backend 2559-2580), the blocks only: each log entry's start and code address, then the log
-/// emptied.
-fn vm_compiled(mem: &mut [u8], blocks: &mut BTreeMap<u64, u64>, translations: &mut Vec<Translation>) {
+/// `_vm_compiled` (vm_backend 2559-2580): each block block_compiler.c compiled since the last exit, from its log entry
+/// (start, end, code, then u32s first, nmarks, count, cut, live_out, live_used, npages, and the pages at 56), noted as
+/// the host notes its own compiles: the marks' tails (`_note_tails`, so a model step's give-back counts the block's
+/// unrun instructions; Sprint 207: before, a model step in a block the VM compiled gave nothing back, and the count ran
+/// 7 instructions ahead of the frozen host's at the batch run's first `hvc 11`), the block, the pages it covers and the
+/// pages it lists, and the translation; then the log emptied.
+fn vm_compiled(
+    mem: &mut [u8],
+    blocks: &mut BTreeMap<u64, u64>,
+    translations: &mut Vec<Translation>,
+    mut host: Option<&mut HostCompiler>,
+) {
+    use guest_runtime::layout::{PAGE, RECON_TABLE};
     let n = read_u64(mem, VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
         let (start, end, code) = (read_u64(mem, at), read_u64(mem, at + 8), read_u64(mem, at + 16));
         blocks.insert(start, code);
         translations.push(Translation { start, end, code });
+        let Some(h) = host.as_deref_mut() else {
+            continue;
+        };
+        let u32_at = |off: u64| {
+            u64::from(u32::from_le_bytes(
+                mem[(at + off) as usize..(at + off + 4) as usize].try_into().unwrap(),
+            ))
+        };
+        let (first, count, npages) = (u32_at(24), u32_at(32), u32_at(48));
+        let hosts: Vec<u64> = (1..=count)
+            .map(|k| read_u64(mem, RECON_TABLE + 16 * (first + k)))
+            .collect();
+        h.tails.note(&hosts);
+        h.blocks.insert(start, code);
+        let mut page = start & !(PAGE - 1);
+        while page < end {
+            h.code_pages.entry(page).or_default().insert(start);
+            page += PAGE;
+        }
+        for k in 0..npages {
+            h.code_pages
+                .entry(read_u64(mem, at + 56 + 8 * k))
+                .or_default()
+                .insert(start);
+        }
+        h.translations.push((start, end));
     }
     write_u64(mem, VM_COMPILER + VMC_LOG_COUNT, 0);
 }
@@ -535,7 +571,11 @@ fn run(
             out.serve_ns.push(ns);
             out.serve_by_kind.entry(kind.clone()).or_default().push(ns);
         }
-        // the exit ledger's row for the last exit, the count and warp as the guest resumes with them (Sprint 206)
+        let started = Instant::now();
+        let exit = vcpu.run()?;
+        // the exit ledger's row for the last exit, the count and warp as this exit finds them, before its own refresh,
+        // as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into the word as
+        // the guest enters a service, so the word read before the resume lags it (Sprint 207)
         if let Some(l) = &mut guest.exit_ledger {
             let mem = guest.memory.as_slice();
             let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
@@ -543,8 +583,6 @@ fn run(
                 break Stop::Exit(format!("the exit ledger: {why}"));
             }
         }
-        let started = Instant::now();
-        let exit = vcpu.run()?;
         let returned = Instant::now();
         if guest.time_runtime_word {
             // the exit counted where the guest's timing reads it, so a taking that spans an exit says so (Sprint 164)
@@ -565,7 +603,7 @@ fn run(
         };
         marked = Some(Instant::now());
         let mem = guest.memory.as_mut_slice();
-        vm_compiled(mem, &mut out.blocks, &mut out.translations);
+        vm_compiled(mem, &mut out.blocks, &mut out.translations, host.as_deref_mut());
         let pc = vcpu.reg(Reg::Pc)?;
         if !runtime.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
@@ -845,6 +883,12 @@ fn run(
         let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
         let _ = l.resume(read_u64(mem, md), warp);
         let _ = l.flush();
+        // the blocks both compilers made (Sprint 207)
+        let mut blocks: Vec<(u64, u64)> = out.translations.iter().map(|t| (t.start, t.end)).collect();
+        if let Some(h) = host.as_deref() {
+            blocks.extend(h.translations.iter().copied());
+        }
+        let _ = l.blocks(&blocks);
     }
     let mem = guest.memory.as_slice();
     for (i, name) in VMC_COUNT_NAMES.iter().enumerate() {

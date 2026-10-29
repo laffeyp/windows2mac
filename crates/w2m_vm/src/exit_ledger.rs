@@ -96,6 +96,17 @@ impl Ledger {
         Ok(())
     }
 
+    /// Every block compiled in the run, the VM's and the host's, as (start, end) sorted, to the ledger's path and
+    /// ".blocks" (Sprint 207: the frozen host's `vm.translations` beside it): where the two hosts cut blocks, which sets
+    /// the count a service reads between exits.
+    pub fn blocks(&self, blocks: &[(u64, u64)]) -> Result<(), String> {
+        let mut sorted = blocks.to_vec();
+        sorted.sort_unstable();
+        let text: String = sorted.iter().map(|(s, e)| format!("{s:x}\t{e:x}\n")).collect();
+        let path = std::path::PathBuf::from(format!("{}.blocks", self.path.display()));
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))
+    }
+
     pub fn flush(&mut self) -> Result<(), String> {
         self.out.flush().map_err(|e| e.to_string())
     }

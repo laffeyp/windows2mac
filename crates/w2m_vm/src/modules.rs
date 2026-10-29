@@ -100,9 +100,13 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Strin
         app: AppDirectory {
             root: guest.app_root.clone(),
             program: guest.images.first().map_or(String::new(), |i| i.name.clone()),
+            files: guest.files.as_ref(),
         },
     };
     let handle = module_in(&handles, name, loading)?;
+    if handle == FILE_FOUND {
+        return load_dll(guest, name);
+    }
     // `load_system` (vm_backend `system_image`): the synthetic page written and kept under System32's spelling
     if Some(handle) == next_system {
         // the DLL loaded: an API set's host (`API_SET_HOSTS`), else the name itself
@@ -124,18 +128,117 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Strin
     Ok(handle)
 }
 
-/// C:\w2m\app on the host (Sprint 196; reviewer-2's High 2 of its review of 193-196): the directory w2m-vm was given,
-/// or for a probe run a directory holding only the program, as family_run.py's `run_in_vm` makes it.
-struct AppDirectory {
-    root: Option<PathBuf>,
-    program: String,
+/// `_load_dll` (vm_backend 3906-3951; Sprint 205): the DLL file `name` finds through the process's file bridge, placed
+/// in the VirtualAlloc arena at its preferred base or relocated (`place_image`), mapped, its imports bound (a loaded
+/// DLL's export, else the import thunk), snapshotted, and added to the module table under the file's own name and full
+/// path, PEB.Ldr and the trace ranges; its DllMain, if it has an entry, left to the init stub that the module request's
+/// second answer gives the guest runtime. 0: no file. A DLL with TLS callbacks stops by name as the Python's does; one
+/// with static TLS stops by name too, `_late_static_tls` not being ported (no row loads one).
+fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, String> {
+    use crate::guest::PROCESS_SIZE;
+    use guest_runtime::layout::MONITOR_SIZE;
+    let Some(files) = guest.files.as_ref() else {
+        return Ok(0);
+    };
+    let Some(host) = files.host_file(name)? else {
+        return Ok(0);
+    };
+    let root = files.root.clone();
+    let raw = std::fs::read(&host).map_err(|e| format!("LoadLibrary {name}: {}: {e}", host.display()))?;
+    let pe = pe_image::parse(&raw, false).map_err(|e| format!("LoadLibrary {name}: {e:?}"))?;
+    if !pe.tls_callbacks.is_empty() {
+        return Err(format!(
+            "LoadLibrary {name}: TLS callbacks in a DLL loaded after the start"
+        ));
+    }
+    if pe.tls.is_some() {
+        return Err(format!(
+            "LoadLibrary {name}: static TLS in a DLL loaded after the start, not served by the Rust host yet"
+        ));
+    }
+    let file = host
+        .file_name()
+        .map_or(String::new(), |f| f.to_string_lossy().to_string());
+    let base = guest.arena.place_image(pe.clone()).map_err(|e| e.0)?;
+    let mut staging = pe_loader::Memory::default();
+    pe_loader::map_image(&mut staging, &raw, &pe, base, &file).map_err(|e| format!("{file}: {e:?}"))?;
+    let data = &staging.regions[0].data;
+    let at = guest
+        .layout
+        .offset(base)
+        .ok_or_else(|| format!("{file} placed at 0x{base:x}, which is not mapped"))? as usize;
+    guest.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+    for (&slot, target) in &pe.iat {
+        let (dll, function) = target.split_once('!').unwrap_or((target, ""));
+        let leaf = canonical(dll);
+        let found = dlls(guest).find(|(n, ..)| *n == leaf).map(|(_, b, _, i)| (b, i));
+        let va = match found {
+            Some((dll_base, i)) => guest.images[i]
+                .pe
+                .exports
+                .iter()
+                .find(|(n, _)| n == function)
+                .map(|(_, rva)| dll_base + u64::from(*rva))
+                .ok_or_else(|| format!("{file} imports {target}, which {leaf} does not export"))?,
+            None => guest.import_thunk(target).map_err(|e| format!("{e:?}"))?,
+        };
+        let s = at + slot as usize;
+        guest.memory.as_mut_slice()[s..s + 8].copy_from_slice(&va.to_le_bytes());
+    }
+    let view = crate::guest::GuestView {
+        mem: guest.memory.as_mut_slice(),
+        layout: &guest.layout,
+    };
+    guest.arena.snapshot_image(&view, base, &pe);
+    // `Modules.dll_paths` (vm_backend 3944-3945): below C:\w2m\app by its components, else the host path
+    let path = match host.strip_prefix(&root) {
+        Ok(rel) => {
+            let parts: Vec<String> = rel.iter().map(|p| p.to_string_lossy().to_string()).collect();
+            format!("{APP_DIRECTORY}{}", parts.join("\\"))
+        }
+        Err(_) => host.display().to_string(),
+    };
+    guest.dll_paths.insert(file.to_lowercase(), path);
+    guest.dll_ranges.push((base, u64::from(pe.size_of_image)));
+    let entry_rva = pe.entry_rva;
+    guest.images.push(pe_loader::Image { name: file, pe, base });
+    // PEB.Ldr lists it, as EnumProcessModules reads (`_write_loader_data`, Sprint 063)
+    let list = crate::process::LoaderList {
+        images: &guest.images,
+        image_entry: guest.image_entry,
+        image_name: &guest.start.image_name,
+        dependency_order: &guest.dependency_order,
+        paths: &guest.dll_paths,
+    };
+    let process = &mut guest.memory.as_mut_slice()[MONITOR_SIZE as usize..(MONITOR_SIZE + PROCESS_SIZE) as usize];
+    crate::process::write_loader_data(process, &list, &guest.process).map_err(|e| e.0)?;
+    guest.trace_ranges().map_err(|e| format!("{e:?}"))?;
+    if entry_rva != 0 {
+        guest.pending_init = guest
+            .init_stub(base, base + u64::from(entry_rva))
+            .map_err(|e| format!("{e:?}"))?;
+    }
+    Ok(base)
 }
 
-impl AppDirectory {
+/// C:\w2m\app on the host (Sprint 196; reviewer-2's High 2 of its review of 193-196): the directory w2m-vm was given,
+/// or for a probe run a directory holding only the program, as family_run.py's `run_in_vm` makes it.
+struct AppDirectory<'a> {
+    root: Option<PathBuf>,
+    program: String,
+    /// the process's file bridge, whose resolution LoadLibrary shares with the file requests (Sprint 204's departure,
+    /// Sprint 205); None in a run without one
+    files: Option<&'a crate::file_bridge::FileBridge>,
+}
+
+impl AppDirectory<'_> {
     /// `host_file` (file_bridge.py 202-240): whether a file is where the guest name points, a full C:\ path or a path
-    /// relative to C:\w2m\app, each component matched case-folded; a path the bridge refuses is Err, as it raises. A
-    /// full path outside C:\w2m\app finds no file: the bridge's drive holds only empty system folders.
+    /// relative to C:\w2m\app, each component matched case-folded; a path the bridge refuses is Err, as it raises.
+    /// Without a bridge, a full path outside C:\w2m\app finds no file.
     fn host_file(&self, name: &str) -> Result<bool, String> {
+        if let Some(files) = self.files {
+            return Ok(files.host_file(name)?.is_some());
+        }
         match &self.root {
             Some(root) => Ok(host_file(root, name)?.is_some()),
             None => Ok(matches!(app_parts(name)?.as_deref(), Some([p]) if p.eq_ignore_ascii_case(&self.program))),
@@ -211,15 +314,19 @@ fn split(path: &str) -> Vec<&str> {
     path.split(['\\', '/']).filter(|p| !p.is_empty() && *p != ".").collect()
 }
 
+/// `module_in`'s answer for a DLL file it found and `module` maps (Sprint 205): no handle w2m hands out is odd, so 1
+/// is never one.
+const FILE_FOUND: u64 = 1;
+
 /// What `module` reads: the handles w2m hands out, by canonical name.
-struct Handles {
+struct Handles<'a> {
     kernel32: u64,
     kernelbase: u64,
     ntdll: u64,
     image: Option<(String, u64)>,
     dlls: Vec<(String, u64)>,
     system: BTreeMap<String, u64>,
-    app: AppDirectory,
+    app: AppDirectory<'a>,
     /// the next free system slot's address, None when the process area's slots are full (Sprint 202)
     next_system: Option<u64>,
 }
@@ -262,11 +369,10 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
     if !loading {
         return Ok(0);
     }
-    // `_load_dll` (vm_backend 3906-3918): a file the name finds, full or relative to C:\w2m\app, would be mapped
+    // `_load_dll` (vm_backend 3906-3918): a file the name finds, full or relative to C:\w2m\app, is mapped (`module`
+    // does it, Sprint 205); FILE_FOUND marks it here
     if h.app.host_file(name)? {
-        return Err(format!(
-            "LoadLibrary {name}: a DLL file after the start, not mapped by the Rust host yet (no `_load_dll`)"
-        ));
+        return Ok(FILE_FOUND);
     }
     // modules.py 124-129: a System32 DLL whose exports the spec lists is a synthetic system image in the next free
     // slot, as one imported at the start has (Sprint 202: combase.dll at the batch run's row 49)
@@ -300,8 +406,15 @@ pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
     if handle == p.kernelbase {
         return Some("C:\\Windows\\System32\\KERNELBASE.dll".into());
     }
-    if let Some((_, _, _, i)) = dlls(guest).find(|(_, base, ..)| *base == handle) {
-        return Some(format!("{APP_DIRECTORY}{}", guest.images[i].name));
+    if let Some((c, _, _, i)) = dlls(guest).find(|(_, base, ..)| *base == handle) {
+        // a DLL loaded after the start by its full path (`dll_paths`, modules.py 143; Sprint 205)
+        return Some(
+            guest
+                .dll_paths
+                .get(&c)
+                .cloned()
+                .unwrap_or_else(|| format!("{APP_DIRECTORY}{}", guest.images[i].name)),
+        );
     }
     p.system
         .values()
@@ -368,10 +481,10 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppDirectory, Handles, canonical, module_in};
+    use super::{AppDirectory, FILE_FOUND, Handles, canonical, module_in};
 
     /// A process of the program, one DLL beside it and one system image; the synthetic pages at 0x1000 steps.
-    fn handles() -> Handles {
+    fn handles() -> Handles<'static> {
         Handles {
             kernel32: 0x1000,
             kernelbase: 0x2000,
@@ -382,6 +495,7 @@ mod tests {
             app: AppDirectory {
                 root: Some(app_root()),
                 program: "Game.exe".into(),
+                files: None,
             },
             next_system: Some(0x5000),
         }
@@ -404,7 +518,7 @@ mod tests {
     }
 
     /// LoadLibrary of a name not in the process (modules.py 117-132, file_bridge.py 202-240): a DLL file the name finds,
-    /// beside the program or below it by a full or relative path, stops by name (no `_load_dll` yet); a system DLL not
+    /// beside the program or below it by a full or relative path, is a file to map (Sprint 205); a system DLL not
     /// imported stops by name; and a name found nowhere is 0 (Sprint 196; reviewer-2's High 2 of its review of 193-196).
     #[test]
     fn a_load_of_a_name_found_nowhere_is_0() {
@@ -413,21 +527,12 @@ mod tests {
             "C:\\w2m\\app\\MonoBleedingEdge\\EmbedRuntime\\mono-2.0-bdwgc.dll",
             "monobleedingedge/embedruntime/MONO-2.0-BDWGC.DLL",
         ] {
-            assert!(
-                module_in(&h, found, true)
-                    .unwrap_err()
-                    .contains("a DLL file after the start"),
-                "{found}"
-            );
+            assert_eq!(module_in(&h, found, true), Ok(FILE_FOUND), "{found}");
         }
         assert_eq!(module_in(&h, "C:\\Windows\\System32\\w2m-none.dll", true), Ok(0));
         assert!(module_in(&h, "D:\\x.dll", true).unwrap_err().contains("other than C:"));
         assert_eq!(module_in(&h, "w2m-no-such-module.dll", true), Ok(0));
-        assert!(
-            module_in(&h, "Plugin.dll", true)
-                .unwrap_err()
-                .contains("a DLL file after the start")
-        );
+        assert_eq!(module_in(&h, "Plugin.dll", true), Ok(FILE_FOUND));
         // modules.py 124-131 (Sprint 202): a System32 DLL whose exports the spec lists loads in the next system slot,
         // the winrt API set's host combase.dll too; one the spec lacks is a DLL w2m does not model; full slots stop
         assert_eq!(module_in(&h, "dbghelp.dll", true), Ok(0x5000));

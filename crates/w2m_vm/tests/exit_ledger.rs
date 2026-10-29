@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 //! The exit ledger's judge (Sprint 206; reviewer-2's High 1 and Medium 1 of its review of Sprints 199-205): the frozen
-//! Python host's batch run and the Rust host's, each process's host exits to mono's load, compared row by row. The
+//! Python host's batch run and the Rust host's, each process's host exits to the game's first MAP_VIEW 29 (to mono's
+//! load before Sprint 207, which loads mono on the Rust host), compared row by row. The
 //! frozen host's ledger is a fixture (`build/exit_ledger/python.tsv` and a child's `.<pid>` beside it, pinned by
 //! `store/exit_ledger/python.sha256`; WORKING_AGREEMENT gives its generator); `scripts/gates.sh` writes the Rust host's
 //! (`w2m-vm --exit-ledger build/exit_ledger/rust.tsv`). The first difference of each process is held to
 //! `store/exit_ledger/first-difference-2026-10-28.tsv`, so a change in where the hosts part fails by name until the
 //! file is rewritten with the card that moved it.
 //!
-//! The last row is the stop, mono's LoadLibrary, which the fixture records at `_load_dll` before the request's answer
-//! exists: it is compared without its site and answer columns.
+//! The last row is the stop, the game's first MAP_VIEW request, which the fixture records as it arrives, before the
+//! request's answer exists: it is compared without its site and answer columns.
 
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -1,21 +1,20 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
-stop	HostRequest op 15: LoadLibrary C:\w2m\app\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll: a DLL file after the start, not mapped by the Rust host yet (no `_load_dll`)
-arguments	0x10b001b710 0x3b 0x1
-module asked for	C:\w2m\app\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll (loading 1)
+stop	HostRequest op 29: host request 29: not served by the Rust host yet
+arguments	0x3b9a00 0x7 0x2
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	143
-hvc 4	6
-hvc 8	201
-hvc 11	7
+hvc 1	227
+hvc 4	9
+hvc 8	779
+hvc 11	9
 code cache full	0
-compiled	14018
-cut by decode	17
+compiled	19177
+cut by decode	22
 cut by encoder	0
 cut by guarded	1
 cut by key size	0
 cut by no choice	0
-cut by no stencil	6
-decode	23
+cut by no stencil	13
+decode	29
 encoder	0
 full	0
 guarded	1
@@ -23,15 +22,15 @@ host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	7
-not a code page	111
-page needs a split	0
-pages protected	467
+no stencil	13
+not a code page	180
+page needs a split	3
+pages protected	646
 pause	0
 recon full	0
 scan pages	0
-blocks the host compiled	14050
-calls traced	500
+blocks the host compiled	19224
+calls traced	925
 calls in flight	1
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n

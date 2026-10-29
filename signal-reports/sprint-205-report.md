@@ -40,3 +40,7 @@ Made by `signal_report 205` from 0 records under store/runs/ whose baseline name
 ## 4. Hypothesis
 
 See the BLACKBOARD tail entry for Sprint 205: its Rubber Duck Pass and close.
+
+> status: failed; reason: the stream's row 924 differed (mono's /GS cookie), first read as the clock's warp, then found a stale reference stream; rescoped-as: 207
+
+*(Annotated 2026-10-28, reviewer-2's Low of its corrections to the 205 dispositions: the card's artifact contract did not land in Sprint 205, so the template's "failed; rescoped-as" status, not a partial pass; the card stays `closed-partial` for `--check`'s Deferred rule. The load landed in Sprint 207, whose card names it.)*

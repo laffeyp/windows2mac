@@ -317,6 +317,44 @@ impl CodeCache<'_> {
 /// stands for (a slice's end returns to the block's `hvc #4` in x30, a bridge's hand-over makes `hvc #12`).
 /// `timed`: the runtime word's takings timed (Sprint 164), the taking recorded before the guest registers are reloaded
 /// (x18, x25 and x26 are reloaded there; x16 holds the entry they come from).
+/// The x86 `_init_stub` writes (vm_backend 4002-4021): with `trace` (the trace header's address) the trace closed
+/// around the call; DllMain(base, DLL_PROCESS_ATTACH, NULL) under the shadow space; a FALSE return calls `failed`;
+/// then RAX = base and a jump through the caller's return address, which module.c writes at +INIT_STUB_SLOT.
+pub fn init_stub_code(base: u64, entry: u64, failed: u64, trace: Option<u64>) -> Vec<u8> {
+    use guest_runtime::layout::INIT_STUB_SLOT;
+    let mut code = Vec::new();
+    let trace_word = |code: &mut Vec<u8>, value: u8| {
+        if let Some(t) = trace {
+            code.extend([0x48, 0xb9]); // mov rcx, the trace header
+            code.extend(t.to_le_bytes());
+            code.extend([0x48, 0xc7, 0x01, value, 0, 0, 0]); // mov qword [rcx], value
+        }
+    };
+    trace_word(&mut code, 0); // closed
+    code.extend([0x48, 0x83, 0xec, 0x20]); // sub rsp, 0x20
+    code.extend([0x48, 0xb9]); // mov rcx, instance
+    code.extend(base.to_le_bytes());
+    code.extend([0xba, 0x01, 0, 0, 0]); // mov edx, DLL_PROCESS_ATTACH
+    code.extend([0x45, 0x31, 0xc0]); // xor r8d, r8d: a dynamic load
+    code.extend([0x48, 0xb8]); // mov rax, DllMain
+    code.extend(entry.to_le_bytes());
+    code.extend([0xff, 0xd0]); // call rax
+    code.extend([0x48, 0x83, 0xc4, 0x20]); // add rsp, 0x20
+    trace_word(&mut code, 1); // open again
+    code.extend([0x85, 0xc0]); // test eax, eax
+    code.extend([0x75, 0x0c]); // jnz past the failure call
+    code.extend([0x48, 0xb8]);
+    code.extend(failed.to_le_bytes());
+    code.extend([0xff, 0xd0]);
+    code.extend([0x48, 0xb8]); // mov rax, the module's handle
+    code.extend(base.to_le_bytes());
+    let disp = INIT_STUB_SLOT as i64 - (code.len() as i64 + 6);
+    code.extend([0xff, 0x25]); // jmp [the caller's return]
+    code.extend((disp as i32).to_le_bytes());
+    assert!(code.len() as u64 <= INIT_STUB_SLOT);
+    code
+}
+
 fn switch_stub(a: &mut Assembler, from_slice: bool, switch: u64, dispatch_va: u64, timed: bool) {
     let entry_in_x16 = |a: &mut Assembler| {
         a.emit(&a64::mov_imm(16, MONITOR_VA + MONITOR_DATA));
@@ -578,6 +616,15 @@ pub struct Guest {
     /// `self.ld.init_order`): what a created thread's stack, static TLS and attach stub read (Sprint 156)
     pub images: Vec<pe_loader::Image>,
     pub init_order: Vec<usize>,
+    /// what PEB.Ldr is written again from after a late load (`_write_loader_data`; Sprint 205): the program's entry,
+    /// every DLL dependencies first (`ld.dependency_order`, which a late load leaves), and a late DLL's full path by
+    /// its lowercase name (`Modules.dll_paths`)
+    pub image_entry: u64,
+    pub dependency_order: Vec<usize>,
+    pub dll_paths: BTreeMap<String, String>,
+    /// the DllMain stub of a DLL LoadLibrary just mapped, the module request's second answer (`_pending_init`,
+    /// vm_backend 2381, 3873-3874; Sprint 205); 0: none
+    pub pending_init: u64,
     /// the images whose calls call_trace.c records (`Start::call_trace`; Sprint 191)
     pub call_trace: Vec<String>,
     /// the host directory that is C:\w2m\app (`Start::app_root`; Sprint 196)
@@ -796,6 +843,10 @@ impl Guest {
             time_runtime_word: timed,
             images: loaded.images.clone(),
             init_order: loaded.init_order.clone(),
+            image_entry: loaded.image_entry,
+            dependency_order: loaded.dependency_order.clone(),
+            dll_paths: BTreeMap::new(),
+            pending_init: 0,
             call_trace: start.call_trace.clone(),
             app_root: start.app_root.clone(),
             trace_from: 0,
@@ -1094,6 +1145,23 @@ impl Guest {
         Ok(va)
     }
 
+    /// `_init_stub` (vm_backend 3988-4023; Sprint 205): the page LoadLibrary returns through for a DLL just mapped,
+    /// which runs its DllMain(base, DLL_PROCESS_ATTACH, NULL) with the call trace closed around a traced image's
+    /// DllMain (Sprint 060) and returns the module's handle to the caller module.c left at +INIT_STUB_SLOT.
+    pub fn init_stub(&mut self, base: u64, entry: u64) -> Result<u64, GuestError> {
+        use guest_runtime::layout::{PROCESS_VA, TRACE_OFF};
+        let traced = self.call_trace.iter().any(|n| {
+            self.images
+                .iter()
+                .skip(1)
+                .any(|d| d.name.eq_ignore_ascii_case(n) && d.base == base)
+        });
+        let open = read_u64(self.memory.as_slice(), Self::process_off(TRACE_OFF) as u64) == 1;
+        let trace = (traced && open).then_some(PROCESS_VA + TRACE_OFF);
+        let failed = self.make_thunk(pe_loader::DLL_INIT_FAILED)?;
+        self.code_page(&init_stub_code(base, entry, failed, trace))
+    }
+
     /// `_guest_stubs`: the x86 stubs services call guest code and resume contexts through (guest_stubs.rs), on a page
     /// of the arena written at the first use, so a process that needs none keeps its address space.
     pub fn guest_stubs(&mut self) -> Result<u64, GuestError> {
@@ -1140,5 +1208,46 @@ impl Guest {
     pub fn clear_exception(&mut self) {
         let at = Self::process_off(guest_runtime::layout::EXCEPTION_OFF);
         self.memory.as_mut_slice()[at..at + 8].fill(0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::init_stub_code;
+
+    /// vm_backend 4002-4021's bytes, instruction by instruction, for mono's base and entry as the batch run maps
+    /// them (0x1180010000, RVA 0x31953c), a failure thunk and the trace header (Sprint 205's card; Sprint 207).
+    #[test]
+    fn the_init_stub_is_the_pythons() {
+        let (base, entry, failed, trace) = (
+            0x11_8001_0000u64,
+            0x11_8034_953cu64,
+            0x7ffe_0000_6670u64,
+            0x7ffe_0007_b000u64,
+        );
+        let q = |v: u64| v.to_le_bytes().to_vec();
+        let mut body = vec![0x48, 0x83, 0xec, 0x20, 0x48, 0xb9]; // sub rsp, 0x20; mov rcx, base
+        body.extend(q(base));
+        body.extend([0xba, 1, 0, 0, 0, 0x45, 0x31, 0xc0, 0x48, 0xb8]); // mov edx, 1; xor r8d, r8d; mov rax, entry
+        body.extend(q(entry));
+        body.extend([0xff, 0xd0, 0x48, 0x83, 0xc4, 0x20]); // call rax; add rsp, 0x20
+        let mut tail = vec![0x85, 0xc0, 0x75, 0x0c, 0x48, 0xb8]; // test eax, eax; jnz; mov rax, failed
+        tail.extend(q(failed));
+        tail.extend([0xff, 0xd0, 0x48, 0xb8]); // call rax; mov rax, base
+        tail.extend(q(base));
+        let word = |value: u8| {
+            let mut w = vec![0x48, 0xb9];
+            w.extend(q(trace));
+            w.extend([0x48, 0xc7, 0x01, value, 0, 0, 0]);
+            w
+        };
+        // no trace: 64 bytes, then jmp [rip + 0x80 - 70]
+        let mut plain = [body.clone(), tail.clone()].concat();
+        plain.extend([0xff, 0x25, 0x3a, 0, 0, 0]);
+        assert_eq!(init_stub_code(base, entry, failed, None), plain);
+        // the trace closed around the call: 98 bytes, then jmp [rip + 0x80 - 104]
+        let mut traced = [word(0), body, word(1), tail].concat();
+        traced.extend([0xff, 0x25, 0x18, 0, 0, 0]);
+        assert_eq!(init_stub_code(base, entry, failed, Some(trace)), traced);
     }
 }

@@ -301,14 +301,15 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             )));
         }
         HOST_MODULE_AT => {
-            // the second answer: a DLL just loaded leaves its DllMain stub (`_pending_init`); none here
+            // the second answer: a DLL just loaded leaves its DllMain stub (`_pending_init`, vm_backend 3873-3874)
             let r = containing(guest, a0);
+            let init = std::mem::take(&mut guest.pending_init);
             let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].fill(0);
+            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&init.to_le_bytes());
             r
         }
         // `_module_request` (vm_backend 3889-3904; Sprint 189): the name or the path through guest memory, the answer
-        // `crate::modules` gives, a refusal a stop by name; DllMain's stub word 0, no DLL being loaded here
+        // `crate::modules` gives, a refusal a stop by name; the second word a just-loaded DLL's DllMain stub, else 0
         HOST_MODULE | HOST_PROC | HOST_MODULE_PATH => {
             let read = |guest: &Guest, va: u64, n: u64| -> Result<Vec<u8>, HostError> {
                 let at = guest
@@ -356,8 +357,10 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                     }
                 },
             };
+            // a DLL just loaded: its DllMain stub (vm_backend 3873-3874; Sprint 205)
+            let init = std::mem::take(&mut guest.pending_init);
             let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].fill(0);
+            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&init.to_le_bytes());
             r
         }
         // `_virtual_request` (vm_backend 4028-4047) and its dispatch (3865-3869; Sprint 190): the arena's answer, the

@@ -1,21 +1,21 @@
-# where the Rust host's exit ledger first departs from the frozen Python host's, the batch run to mono's load, per process and column (Sprint 206): process, column, row, the frozen host's value, the Rust host's, the row's kind; "none" for a column that agrees throughout; then the row counts. Written by crates/w2m_vm/tests/exit_ledger.rs and held by it.
+# where the Rust host's exit ledger first departs from the frozen Python host's, the batch run to the game's first MAP_VIEW 29, per process and column (Sprint 206; Sprint 207): process, column, row, the frozen host's value, the Rust host's, the row's kind; "none" for a column that agrees throughout; then the row counts. Written by crates/w2m_vm/tests/exit_ledger.rs and held by it.
 main	kind	none
 main	site	0	7ffe00003100	7ffe00003460	hvc 1
-main	executed	4	187	194	hvc 11
-main	warp	318	586	587	hvc 4
+main	executed	none
+main	warp	none
 main	op	none
 main	a0	none
 main	a1	none
 main	a2	none
 main	a3	none
 main	second	none
-main	result	none
+main	result	702	7ffe00006670	7ffe000065c0	hvc 8
 main	written	none
-main	rows	357	357
+main	rows	1024	1024
 4100	kind	none
-4100	site	44	14004bb5f	14004bb50	hvc 4
-4100	executed	4	129	136	hvc 11
-4100	warp	44	3365	3366	hvc 4
+4100	site	none
+4100	executed	none
+4100	warp	none
 4100	op	none
 4100	a0	none
 4100	a1	none
@@ -24,4 +24,4 @@ main	rows	357	357
 4100	second	none
 4100	result	none
 4100	written	none
-4100	rows	164	163
+4100	rows	191	190
