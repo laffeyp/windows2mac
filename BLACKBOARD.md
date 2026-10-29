@@ -631,7 +631,7 @@
 
 ## Sprint tail
 
-### Sprint 197 (2026-10-28, gates running)
+### Sprint 197 (2026-10-28, closed)
 - **Scope:** the Decision "Sequence after Sprint 196": kernel.Machine in Rust, a second `w2m-vm` process per child, run in turns on one machine clock
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 943 s, kept in `store/gates/passes.tsv` as sprint 197 at 1fe3f982a with root=2659cb4eb; multi-vCPU: 3 of 3 passed); observation pass (twoproc prints "child ended", and busychild, crosswake, handshake, pingpong and spinchild print "done", the Python host's output: 12 of 15 guests end; the batch run passes row 16 (CreateProcessW of UnityCrashHandler64.exe) and its stream equals the Python's rows 0-48 with row 49 in flight, and stops at a LoadLibrary of api-ms-win-core-winrt-l1-1-0.dll whose host combase.dll is a system DLL not imported at the start; the turn's round trip on the shared page median 6,292 ns, p99 12,750 ns over 10,000; plant 2 named "twoproc's output differs from the Python host's" with "child bad code"; plant 1 reached no judge and plant 1b failed `a_process_behind_the_machine_clock_is_caught_up`, "left: 0"; plant 3 stopped handshake and pingpong, "kernel request 2 on 4294967297, which is not an event", and crosswake at the run's time limit, and the stop test failed).
 - **CI does not run:** the guests and the batch run (Hypervisor.framework); CI runs `kernel.rs`'s and `machine.rs`'s unit tests; `shared.rs` and `turns.rs` compile on macOS aarch64 only, and their tests with them.
