@@ -643,12 +643,12 @@
 
 ## Sprint tail
 
-### Sprint 201 (2026-10-28, gates running)
+### Sprint 201 (2026-10-28, closed)
 - **Scope:** reviewer-2's Medium 4 of its review of Sprints 196-198: the record of each sprint's shell edits held to what the commands do, by the classifier the edit hook would run
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 303 s, kept in `store/gates/passes.tsv` as sprint 201 at 70fa378e6 with root=18557f253 and "rust=all python=0 samples=0", the first run under Sprint 200's selection, against 984 s for Sprint 199; multi-vCPU: not run (Python gates not run)); observation pass (from Sprint 199 `signal_report --check` runs `edit_guard::refusal` over each closed tail entry's backticked `sed -i` commands and fails a refused one the entry does not own as a multi-line edit outside the Edit tool; Sprints 199's and 200's quoted commands pass it; plant 1, the check's call dropped, made the unowned case pass, "left: Some(0) right: Some(1)"; plant 2, the owned breach ignored, failed the owned case, "left: Some(1) right: Some(0)"; plant 3, edit_guard's `a\` rule dropped, made the unowned case pass, "left: Some(0) right: Some(1)").
 - **CI does not run:** the gates (macOS); CI runs `signal_report`'s tests, the quoted-edit test among them.
 - **Rubber Duck Pass:** *Sequence narration:* no record. *Observation 1 (the breach the check is for):* writing this sprint's code, a `sed` added the `edit_guard` dependency to `crates/signal_report/Cargo.toml` as a line after another, a multi-line edit outside the Edit tool; the file was restored from the index and the line added with the Edit tool. The `sed` quoted: `sed -i '' 's/^serde_json.workspace = true$/serde_json.workspace = true\nedit_guard = { path = "..\/edit_guard" }/' crates/signal_report/Cargo.toml`, a multi-line edit outside the Edit tool. Disposition: resolved-here. *Observation 2 (numbered after the user's word):* the card was written as Sprint 200 in a worktree and renumbered 201 when the gates' speed became Sprint 200. Disposition: recorded. *Observation 3 (edits):* every other change used the Edit tool, the tail roll on both sides; the plants' one-line `sed`s, each restored by `cp`: `sed -i '' "${n}s/wrong.extend(quoted_edits(n, body));/let _ = quoted_edits(n, body);/" crates/signal_report/src/main.rs`, `sed -i '' "${n}s/.filter(\|_\| !owned)/.filter(\|_\| true)/" crates/signal_report/src/main.rs`, `sed -i '' "${n}s/'a' \| 'i' \| 'c'/'i' \| 'c'/" crates/edit_guard/src/lib.rs`.
-- **Closed:** CI-LINE.
+- **Closed:** Sprint 200's CI run 40805247635 (success on 70fa378e6, whose tree holds Sprint 200's close 4a0a5888e).
 - **Files:** crates/signal_report/ (Cargo.toml, src/main.rs, tests/check.rs), Cargo.lock, store/gates/ (passes.tsv), docs/sprint-tail-archive-2026-10-08.md (Sprint 191's entry), BLACKBOARD.md, sprints/sprint-201-the-edit-record-bound.md, signal-reports/sprint-201-report.md.
 
 ### Sprint 200 (2026-10-28, closed)
