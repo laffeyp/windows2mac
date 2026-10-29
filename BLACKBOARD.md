@@ -631,7 +631,7 @@
 
 ## Sprint tail
 
-### Sprint 198 (2026-10-28, gates running)
+### Sprint 198 (2026-10-28, closed)
 - **Scope:** reviewer-2's Medium 2 and Low 2 of its review of Sprints 193-196: the gates say which stages ran, the multi-vCPU sentence is held to them, and a change to the gates runs every stage
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 969 s, every stage, kept in `store/gates/passes.tsv` as sprint 198 at 5d492a875 with root=d0318ec11 and "rust=all python=1 samples=1"; multi-vCPU: 3 of 3 passed); observation pass (the pass line's eighth column names the stages run; from Sprint 198 `--check` requires "multi-vCPU: not run (Python gates not run)" and no stage row when python=0, and "multi-vCPU: k of 3 passed" with exactly three rows when python=1; `scripts/gates.sh` and `scripts/gated-tree.sh` set all=1; plant 1 named "holds 0 rows in it, not 3" where the skipped stage's sentence was due; plant 2 made `--check` pass a run of two rows, "left: Some(0) right: Some(1)"; plant 3 named "a change to scripts/gated-tree.sh does not run every stage").
 - **CI does not run:** the gates themselves (macOS); CI runs `signal_report`'s tests, the staged-claim and gates-pattern tests among them.
