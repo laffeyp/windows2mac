@@ -599,6 +599,68 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     Ok(Switch::Go { vectors: Some(vectors) })
 }
 
+/// `_stack_grow` (vm_backend 3161-3188; Sprint 213): thread `tid`'s stack committed down to `address`'s page, as
+/// Windows does on a touch of its guard (contracts/windows.memory.created_thread_stack, rows default.grow and
+/// default.grown.*): the pages from it to StackLimit committed read-write and mapped, StackLimit (TEB+0x10) moved to
+/// it, three PAGE_GUARD pages below. Only a page in the guard grows the stack; a `probe` (the runtime placing a frame
+/// below StackLimit) grows it page by page as successive touches would. 0, an access violation, when the address is
+/// outside the reservation, below the guard on a touch (row skip), or would bring the guard to the reservation's last
+/// page; 1 when grown. The main thread's stack, committed whole in the process area, is not grown.
+///
+/// The frozen host checks the last-page bound inside its loop, so a probe that reaches it commits pages and returns 0
+/// with StackLimit unmoved; here the bound is checked first and nothing changes (the user's rule of 2026-10-29).
+pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Result<u64, String> {
+    let Some(thread) = guest.threads.get(&tid) else {
+        return Ok(0);
+    };
+    let (dealloc, _, top) = thread.stack;
+    let teb = thread.teb;
+    if !guest.arena.reservations.contains_key(&dealloc) {
+        return Ok(0);
+    }
+    let mut limit = u64::from_le_bytes(read_guest(guest, teb + 0x10, 8)?.try_into().unwrap());
+    let page = address & !(PAGE - 1);
+    let guard = STACK_GUARD_PAGES * PAGE;
+    if !(dealloc <= page && page < limit)
+        || (!probe && page < limit - guard)
+        || page.saturating_sub(guard) < dealloc + PAGE
+    {
+        return Ok(0);
+    }
+    while limit > page {
+        let new = if probe { limit - PAGE } else { page };
+        let mut view = GuestView {
+            mem: guest.memory.as_mut_slice(),
+            layout: &guest.layout,
+        };
+        guest.arena.commit(
+            &mut view as &mut dyn GuestPages,
+            dealloc,
+            new,
+            limit - new,
+            PAGE_READWRITE,
+        );
+        guest.map_pages(new, limit, true)?;
+        let mut view = GuestView {
+            mem: guest.memory.as_mut_slice(),
+            layout: &guest.layout,
+        };
+        guest.arena.commit(
+            &mut view as &mut dyn GuestPages,
+            dealloc,
+            new - guard,
+            guard,
+            PAGE_READWRITE | PAGE_GUARD,
+        );
+        limit = new;
+    }
+    write_guest(guest, teb + 0x10, &limit.to_le_bytes())?;
+    if let Some(t) = guest.threads.get_mut(&tid) {
+        t.stack = (dealloc, limit, top);
+    }
+    Ok(1)
+}
+
 /// `_create_thread` (3094-3150): CreateThread's host half: a thread id, a stack, a TEB, static TLS, the attach stub and
 /// the first state. Returns the thread id.
 pub fn create_thread(
@@ -791,4 +853,86 @@ pub fn slice_until(guest: &Guest) -> u64 {
     }
     let (ticks, rate) = (ticks as u128, u128::from(rate));
     (ticks / 10_000_000 * rate + ticks % 10_000_000 * rate / 10_000_000) as u64
+}
+
+#[cfg(test)]
+mod tests {
+    /// A created thread's stack grown as contracts/windows.memory.created_thread_stack's rows say (Sprint 213): a touch
+    /// of the first guard page moves StackLimit one page and keeps three guard pages below it (default.grow,
+    /// default.grown.*); a probe two pages below grows two pages; a touch below the guard is an access violation that
+    /// does not move the stack (skip); a probe that would bring the guard to the reservation's last page answers 0 and
+    /// changes nothing. The guest needs the runtime image clang builds, so the test runs on the Mac.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_created_threads_stack_grows_as_windows_rows_say() {
+        use super::{PAGE, create_thread, stack_grow};
+        use crate::guest::{Guest, GuestView, vm_compiler_symbols};
+        use crate::process::Start;
+        use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
+        use std::path::Path;
+        use virtual_memory::{MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE};
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let data = std::fs::read(root.join("tests/data/timed_waits/qpc.exe")).unwrap();
+        let loaded = pe_loader::load(&data, None, "probe.exe").unwrap();
+        let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+        let services = guest_runtime::services::services(&guest_runtime::texts(&root).unwrap()).unwrap();
+        let table = std::fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap();
+        let symbols = vm_compiler_symbols(&table).unwrap();
+        let mut g = Guest::new(
+            &loaded,
+            &image,
+            &services,
+            &Start::console("probe.exe"),
+            &std::collections::BTreeSet::new(),
+            &symbols,
+        )
+        .unwrap();
+        let tid = create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
+        let (dealloc, limit, _) = g.threads[&tid].stack;
+        let teb = g.threads[&tid].teb;
+        let stack_limit = |g: &Guest| {
+            let at = g.layout.offset(teb + 0x10).unwrap() as usize;
+            u64::from_le_bytes(g.memory.as_slice()[at..at + 8].try_into().unwrap())
+        };
+        let query = |g: &mut Guest, va: u64| {
+            let view = GuestView {
+                mem: g.memory.as_mut_slice(),
+                layout: &g.layout,
+            };
+            let info = g.arena.query(&view, va).unwrap();
+            (info.state, info.protect)
+        };
+        let guarded = (MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD);
+        assert_eq!(stack_limit(&g), limit);
+        assert_eq!(query(&mut g, limit - PAGE), guarded, "default.query.limit-1");
+        // a touch of the first guard page: StackLimit one page down, three guard pages below, reserved below them
+        assert_eq!(stack_grow(&mut g, tid, limit - PAGE + 8, false), Ok(1));
+        let one = limit - PAGE;
+        assert_eq!(stack_limit(&g), one, "default.grow moved_1");
+        assert_eq!(g.threads[&tid].stack.1, one);
+        assert_eq!(query(&mut g, one), (MEM_COMMIT, PAGE_READWRITE), "default.grown.limit");
+        for k in 1..=3 {
+            assert_eq!(query(&mut g, one - k * PAGE), guarded, "default.grown.limit-{k}p");
+        }
+        assert_eq!(query(&mut g, one - 4 * PAGE).0, MEM_RESERVE, "default.grown.limit-4p");
+        // a probe two pages below StackLimit: two pages, as two touches would
+        assert_eq!(stack_grow(&mut g, tid, one - 2 * PAGE, true), Ok(1));
+        let three = one - 2 * PAGE;
+        assert_eq!(stack_limit(&g), three, "two pages more");
+        // a probe five pages below, past the guard: a probe grows where a touch may not
+        assert_eq!(stack_grow(&mut g, tid, three - 5 * PAGE, true), Ok(1));
+        let eight = three - 5 * PAGE;
+        assert_eq!(stack_limit(&g), eight, "five pages more");
+        // a touch below the guard: an access violation, the stack unmoved (row skip)
+        assert_eq!(stack_grow(&mut g, tid, eight - 4 * PAGE, false), Ok(0));
+        assert_eq!(stack_limit(&g), eight, "skip: moved 0");
+        // a probe that would bring the guard to the reservation's last page: 0 and nothing changed
+        assert_eq!(stack_grow(&mut g, tid, dealloc + PAGE, true), Ok(0));
+        assert_eq!(stack_limit(&g), eight);
+        assert_eq!(query(&mut g, eight - 4 * PAGE).0, MEM_RESERVE, "no page committed");
+    }
 }

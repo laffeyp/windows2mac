@@ -80,3 +80,34 @@ A created thread's stack grows as Windows's rows say, and the batch run's stream
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and four plants.
 - [x] One concept: one thread request served (the sweep of its file is the user's rule's check, not a second change).
+
+## result
+
+- **The request:** `threads::stack_grow` serves THREAD_STACK_GROW for a created thread as the contract's rows say: a
+  page in the guard commits the pages from it to StackLimit read-write and maps them, StackLimit (TEB+0x10) and the
+  thread's record move to it, three PAGE_GUARD pages go below; a probe grows page by page; a touch below the guard, an
+  address outside the reservation, or a growth that would bring the guard to the reservation's last page answers 0. The
+  frozen host's `_stack_grow` checks the last bound inside its loop, so a probe reaching it commits pages and returns 0
+  with StackLimit unmoved; here the bound is checked first and nothing changes. The contract's rows are one page per
+  touch; a touch that skips a guard page has no row, and the frozen host's rule (every page from it to StackLimit) is
+  followed.
+- **The run:** the stream equals the reference rows 0-3130, 1,776 rows past Sprint 211's 1,354, with row 3131 in
+  flight, mono's SuspendThread on thread 4, and stops at THREAD 30's request 4, "not served by the Rust host yet";
+  exits hvc 1 409, hvc 4 10, hvc 8 1732, hvc 10 256, hvc 11 11, hvc 13 194. The record names
+  KERNEL32.dll!SuspendThread, the stopping thread's call in flight.
+- **The ledger:** the child, UnityCrashHandler64, now runs past its row 190 too, and its row 190 equals the fixture's
+  stop row in every held column: the held file's one line, "4100 190 missing hvc 12", is gone, and the two hosts
+  agree through the first MAP_VIEW in both processes. Sprint 211's rule had held a child's rows past the fixture as
+  extra, taking the fixture's last row for the child's own stop; the fixture's run stops every process at the game's
+  MAP_VIEW, so no process's rows past it are held now.
+- **Plant 1** (StackLimit left unmoved): the unit test failed, "default.grow moved_1". Restored byte for byte.
+- **Plant 2** (two guard pages): "default.grown.limit-3p, left: (8192, 0)". Restored byte for byte.
+- **Plant 3** (a probe treated as a touch): "left: Ok(0)" at the five-page probe. Restored byte for byte.
+- **Plant 4** (the request unserved again): `batch_run.rs` failed, "the batch run's first stop or a guest's stop moved".
+  Restored byte for byte.
+- **Plant 5** (the last-page bound removed): the arena's commit panicked on the reservation's edge
+  (virtual_memory/src/lib.rs 280). Restored byte for byte.
+- **Departures:** the card held the exit ledger's file unchanged; its one line went when the difference did, and the
+  child's rule in `exit_ledger.rs` changed with it. The card's files did not name `tests/exit_ledger.rs` or
+  `store/exit_ledger/differences-2026-10-29.tsv`. The first unit test's probe lay inside the guard, where plant 3
+  could not show; a probe five pages below was added before the plants ran.

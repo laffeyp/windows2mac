@@ -1,38 +1,39 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
-stop	HostRequest op 30: thread 8's stack grown to 0x1180dce5f0: a created thread's growth, not carried yet
-arguments	0x9 0x1180dce5f0 0x1
+stop	HostRequest op 30: thread request 4: not served by the Rust host yet
+arguments	0x4 0x8 0x0
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	268
-hvc 4	9
-hvc 8	801
-hvc 11	9
-hvc 13	18
+hvc 1	409
+hvc 4	10
+hvc 8	1732
+hvc 10	256
+hvc 11	11
+hvc 13	194
 code cache full	0
-compiled	32840
-cut by decode	30
+compiled	70109
+cut by decode	82
 cut by encoder	0
-cut by guarded	1
+cut by guarded	2
 cut by key size	0
 cut by no choice	0
-cut by no stencil	23
-decode	41
+cut by no stencil	43
+decode	107
 encoder	0
 full	0
-guarded	1
+guarded	2
 host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	21
-not a code page	199
-page needs a split	5
-pages protected	909
+no stencil	35
+not a code page	258
+page needs a split	6
+pages protected	2013
 pause	0
 recon full	0
 scan pages	0
-blocks the host compiled	32909
-calls traced	1355
-calls in flight	0
+blocks the host compiled	70259
+calls traced	3131
+calls in flight	1
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	crosswake	ExitProcess { code: 0 }	ExitProcess	done\n

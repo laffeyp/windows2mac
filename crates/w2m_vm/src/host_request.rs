@@ -551,17 +551,11 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             )));
         }
         // `_thread_request` (vm_backend 3190-3195) and `_stack_grow` (3161-3188): the current thread's stack; the main
-        // one's (the process area's TEB) is committed whole and not held in the arena: not grown. A created thread's
-        // growth is not carried yet.
+        // one's (the process area's TEB) is committed whole and not held in the arena: not grown; a created thread's,
+        // `threads::stack_grow` (Sprint 213): 1 grown, 0 an access violation
         HOST_THREAD if a0 == THREAD_STACK_GROW => {
             let current = crate::threads::current_tid(guest);
-            let stack = guest.threads.get(&current).map_or(guest.process.stack, |t| t.stack);
-            if guest.arena.reservations.contains_key(&stack.0) {
-                return Err(HostError::NotServed(format!(
-                    "thread {current}'s stack grown to 0x{a1:x}: a created thread's growth, not carried yet"
-                )));
-            }
-            0
+            crate::threads::stack_grow(guest, current, a1, a2 != 0).map_err(HostError::Failed)?
         }
         // `_thread_request` (3190-3192, 3845-3847): the transport's a0 the sub-request, its a1-a3 the request's a0-a2
         HOST_THREAD if a0 == THREAD_CREATE => {

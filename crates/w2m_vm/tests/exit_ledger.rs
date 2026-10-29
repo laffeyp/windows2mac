@@ -69,12 +69,9 @@ fn differences(process: &str, python: &[Vec<String>], rust: &[Vec<String>]) -> V
     for (i, p) in python.iter().enumerate().skip(rust.len()) {
         out.push(format!("{process}\t{i}\tmissing\t{}", cell(p, 1)));
     }
-    if past && process != "main" {
-        // only the game's process may run past the fixture's stop: a child's stop is its own
-        for (i, r) in rust.iter().enumerate().skip(python.len()) {
-            out.push(format!("{process}\t{i}\textra\t{}", cell(r, 1)));
-        }
-    }
+    // rows past the fixture's end are not held for any process: the fixture's run stops every process when the game
+    // reaches its first MAP_VIEW (Sprint 213: the child, UnityCrashHandler64, ran past its row 190 once the game did;
+    // Sprint 211's rule had held a child's extra rows, taking its fixture's last row for the child's own stop)
     out
 }
 
@@ -203,8 +200,10 @@ fn a_difference_is_named_by_its_row_and_column() {
         found(&rust),
         ["main\t1\texecuted\t29\t28\thvc 1", "main\t2\ta0\t1\t9\thvc 8"]
     );
-    // a child stops at its own stop: a row past the fixture's is extra
+    // a child past the fixture's end is held as the game is: its rows before the end, not after (Sprint 213)
     let mut child = python.clone();
     child.push(row("3\thvc 1\t40\t31\t0\t-\t-\t-\t-\t-\t-\t-\t-\tdd"));
-    assert_eq!(differences("4100", &python, &child), ["4100\t3\textra\thvc 1"]);
+    assert!(differences("4100", &python, &child).is_empty());
+    child[0][2] = "12".into();
+    assert_eq!(differences("4100", &python, &child), ["4100\t0\tsite\t10\t12\thvc 1"]);
 }
