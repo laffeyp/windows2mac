@@ -1,20 +1,20 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
-stop	HostRequest op 23: host request 23: not served by the Rust host yet
-arguments	0x10 0x10b0017ff0 0x0
+stop	HostRequest op 24: host request 24: not served by the Rust host yet
+arguments	0x7f000446f128 0x36 0x7f000416ff68
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	113
+hvc 1	129
 hvc 4	4
-hvc 8	144
+hvc 8	157
 hvc 11	7
 code cache full	0
-compiled	7986
-cut by decode	9
+compiled	12716
+cut by decode	17
 cut by encoder	0
 cut by guarded	1
 cut by key size	0
 cut by no choice	0
-cut by no stencil	2
-decode	13
+cut by no stencil	5
+decode	23
 encoder	0
 full	0
 guarded	1
@@ -22,15 +22,15 @@ host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	2
-not a code page	96
+no stencil	5
+not a code page	99
 page needs a split	0
-pages protected	189
+pages protected	441
 pause	0
 recon full	0
 scan pages	0
-blocks the host compiled	8003
-calls traced	257
+blocks the host compiled	12746
+calls traced	374
 calls in flight	1
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n

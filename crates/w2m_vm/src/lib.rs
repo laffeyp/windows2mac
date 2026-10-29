@@ -28,6 +28,7 @@ pub mod model_step;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod modules;
 pub mod monitor_code;
+pub mod mt19937;
 pub mod process;
 pub mod record;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

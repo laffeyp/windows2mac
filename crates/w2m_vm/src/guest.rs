@@ -596,6 +596,9 @@ pub struct Guest {
     pub link: Option<crate::turns::Link>,
     /// how the process started: a child's start copies its environment, group and clock (`spawner`; Sprint 197)
     pub start: Start,
+    /// the host's random bytes on the instruction clock, `random.Random(0x5EED)` (vm_backend 2357; Sprint 203); None:
+    /// the host's CSPRNG
+    pub random: Option<crate::mt19937::Random>,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -796,6 +799,7 @@ impl Guest {
             kernel: crate::kernel::Objects::new(),
             link: None,
             start: start.clone(),
+            random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
         }
         .with_trace(start)
     }

@@ -75,3 +75,20 @@ The host's random bytes are the Python's on the instruction clock, and the batch
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the host's random bytes.
+
+## result
+
+- **The generator:** `crates/w2m_vm/src/mt19937.rs`, CPython 3.12's MT19937 (`init_genrand`, `init_by_array`,
+  `genrand_uint32`) and `randbytes`. Tests: `the_reference_vector_is_reproduced` (mt19937ar.out's first ten outputs),
+  `randbytes_takes_whole_words_little_endian_and_shifts_the_last`.
+- **The request:** RANDOM 23 writes `a0` bytes at `a1`, on the instruction clock from `Guest::random`, seeded 0x5EED at
+  the start, else from `getentropy` in 256-byte calls.
+- **The run:** the stream equals the Python's rows 0-373, row 374 in flight, and stops at row 374, FILE_STAT 24.
+- **Plant 1** (a tempering bit) first changed bit 0 of 0x9d2c5680, which `y << 7` clears, and reached no judge; its
+  replacement 1b, bit 8, failed the reference test, "left: [1059206915, 955945823, 477289528, ...]". Restored byte for
+  byte.
+- **Plant 2** (the seed's words from the other end) cannot move the one-word seed 0x5EED; its replacement 2b, seed
+  0x5EEE, reached no judge: no row through 373 reads the bytes. Restored byte for byte.
+- **Plant 3** (the last word unshifted): the `randbytes` test failed, "left: [12, 51, 74, 36, 189, 142]". Restored
+  byte for byte.
+- **Departures:** plants 1 and 2 replaced as above; the seed has no run-level judge yet.

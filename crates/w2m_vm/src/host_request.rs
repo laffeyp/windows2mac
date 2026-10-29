@@ -25,6 +25,13 @@ pub const HOST_VIRTUAL_FREE: u64 = 20;
 pub const HOST_VIRTUAL_PROTECT: u64 = 21;
 pub const HOST_VIRTUAL_QUERY: u64 = 22;
 pub const HOST_EXCEPTION: u64 = 31;
+/// vm_backend 287: a0 bytes of the host's CSPRNG at guest address a1 (bcrypt.c, com.c)
+pub const HOST_RANDOM: u64 = 23;
+
+unsafe extern "C" {
+    /// `sys/random.h` 38
+    fn getentropy(buffer: *mut std::ffi::c_void, size: usize) -> i32;
+}
 pub const HOST_THREAD: u64 = 30;
 /// processes.c's and sync_objects.c's requests to `kernel.py` (vm_backend 314; Sprint 193)
 pub const HOST_KERNEL: u64 = 33;
@@ -405,6 +412,29 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&answer.second.to_le_bytes());
                 answer.result
             }
+        }
+        // vm_backend 3840-3842 (Sprint 203): a0 bytes at a1, on the instruction clock from the process's generator
+        // seeded 0x5EED (`random.Random(0x5EED).randbytes`), else from the host's CSPRNG as `os.urandom` reads it
+        HOST_RANDOM => {
+            let n = a0 as usize;
+            let bytes = match &mut guest.random {
+                Some(r) => r.randbytes(n),
+                None => {
+                    let mut b = vec![0u8; n];
+                    for chunk in b.chunks_mut(256) {
+                        // getentropy(2): 256 bytes at most a call
+                        if unsafe { getentropy(chunk.as_mut_ptr().cast(), chunk.len()) } != 0 {
+                            return Err(HostError::Unserved(format!(
+                                "getentropy: {}",
+                                std::io::Error::last_os_error()
+                            )));
+                        }
+                    }
+                    b
+                }
+            };
+            crate::kernel::Memory::write(&mut KernelMemory(guest), a1, &bytes).map_err(HostError::Unserved)?;
+            a0
         }
         HOST_EXCEPTION if a0 == EXCEPTION_STUBS => guest.guest_stubs()?,
         HOST_EXCEPTION if a0 == EXCEPTION_CAPTURE_XMM => {
