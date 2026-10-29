@@ -74,3 +74,19 @@ A sprint's record of its shell edits is held to what the commands do, by the cla
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the edit record bound.
+
+## result
+
+- **The quoted commands checked:** `quoted_edits` (from `FIRST_QUOTED_EDIT_SPRINT` 199) runs `edit_guard::refusal` over
+  each backticked span that begins `sed -i` in a closed tail entry; a refused one fails unless the entry owns "a
+  multi-line edit outside the Edit tool". Test `a_quoted_multi_line_sed_must_be_owned`, three cases. Sprints 199's and
+  200's quoted commands pass.
+- **The library shared:** `signal_report` depends on `edit_guard`'s library.
+- **Plant 1** (the check's call dropped): the test failed, "left: Some(0) right: Some(1)" for the unowned `a\`.
+  Restored byte for byte.
+- **Plant 2** (the owned breach ignored): the test failed, "left: Some(1) right: Some(0)" for the owned case. Restored
+  byte for byte.
+- **Plant 3** (edit_guard's `a\` rule dropped): the test failed, "left: Some(0) right: Some(1)". Restored byte for
+  byte.
+- **Departures:** the card was written as Sprint 200 and renumbered 201; one `sed` added a line while the code was
+  written, restored and redone with the Edit tool (Observation 1).

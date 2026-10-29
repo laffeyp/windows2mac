@@ -746,6 +746,10 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                 }
             }
         }
+        // from Sprint 199 the entry's quoted `sed` commands are held to what they do (Sprint 200)
+        if n >= FIRST_QUOTED_EDIT_SPRINT {
+            wrong.extend(quoted_edits(n, body));
+        }
         for token in ["GATES-LINE", "CI-LINE"] {
             if body.contains(token) {
                 wrong.push(format!(
@@ -920,6 +924,28 @@ fn multi_vcpu_count(root: &Path, n: u32, body: &str, pass: &str) -> Option<Strin
 /// (Sprint 198; reviewer-2's Medium 2 of its review of 193-196: "0 of 3 passed" passed alike for a stage skipped and for
 /// three failures).
 const FIRST_STAGED_SPRINT: u32 = 198;
+
+/// The first sprint whose tail entry quotes every `sed` it ran (Sprint 200; reviewer-2's Medium 4 of its review of
+/// 196-198: the rule that a multi-line edit goes through the Edit tool rested on each sprint's own account).
+const FIRST_QUOTED_EDIT_SPRINT: u32 = 199;
+/// What an entry says of a quoted command `edit_guard` refuses, when it owns the breach.
+const OWNED_BREACH: &str = "multi-line edit outside the Edit tool";
+
+/// Each backticked span of `body` that begins `sed -i` and `edit_guard::refusal` refuses, named, unless the entry owns a
+/// multi-line edit outside the Edit tool: the classifier the hook would run judges the record of what ran.
+fn quoted_edits(n: u32, body: &str) -> Vec<String> {
+    let owned = body.contains(OWNED_BREACH);
+    body.split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|span| span.starts_with("sed -i"))
+        .filter_map(|span| edit_guard::refusal(span).map(|why| (span, why)))
+        .filter(|_| !owned)
+        .map(|(span, why)| {
+            format!("sprint {n:03}: its tail entry quotes `{span}`, a multi-line edit ({why}), and owns no breach")
+        })
+        .collect()
+}
 
 /// From Sprint 198: with `python=0` in the pass line's stages, "multi-vCPU: not run (Python gates not run)" and no
 /// stage row in the run's window; with `python=1`, "multi-vCPU: k of 3 passed", exactly three rows in the window, k of

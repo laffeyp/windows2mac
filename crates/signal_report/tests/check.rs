@@ -519,3 +519,28 @@ fn a_change_to_the_gates_runs_every_stage() {
         assert!(status.success(), "a change to {path} does not run every stage");
     }
 }
+
+/// Sprint 200's plants 1 and 2 (reviewer-2's Medium 4 of its review of 196-198): from Sprint 199 a tail entry's quoted
+/// `sed` commands are run through edit_guard's classifier: a quoted `a\` insertion the entry does not own as a
+/// multi-line edit fails, named; owned, it passes; a one-line substitution passes.
+#[test]
+fn a_quoted_multi_line_sed_must_be_owned() {
+    let not_run = "multi-vCPU: not run (Python gates not run)";
+    let stages = "rust=all python=0 samples=0";
+    let (code, stderr) = staged(
+        "unowned",
+        &format!("{not_run}; one-line `sed -i '' '5a\\ x' f.rs`"),
+        stages,
+        "",
+    );
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 199: its tail entry quotes `sed -i '' '5a\\ x' f.rs`, a multi-line edit (sed -i with an a\\, i\\ or c\\ \
+         command: a multi-line edit goes through the Edit tool), and owns no breach"
+    );
+    let owned = format!("{not_run}; `sed -i '' '5a\\ x' f.rs`, a multi-line edit outside the Edit tool");
+    assert_eq!(staged("owned", &owned, stages, "").0, Some(0));
+    let one_line = format!("{not_run}; `sed -i '' '3s/a/b/' f.rs`");
+    assert_eq!(staged("oneline", &one_line, stages, "").0, Some(0));
+}

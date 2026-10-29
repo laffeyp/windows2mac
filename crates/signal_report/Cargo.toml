@@ -8,3 +8,5 @@ publish.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+# the classifier the edit hook would run, which `--check` runs over each tail's quoted `sed` commands (Sprint 200)
+edit_guard = { path = "../edit_guard" }

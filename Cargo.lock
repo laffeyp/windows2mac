@@ -185,6 +185,7 @@ dependencies = [
 name = "signal_report"
 version = "0.1.0"
 dependencies = [
+ "edit_guard",
  "serde_json",
 ]
 
