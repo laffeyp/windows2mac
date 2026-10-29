@@ -643,7 +643,7 @@
 
 ## Sprint tail
 
-### Sprint 203 (2026-10-28, gates running)
+### Sprint 203 (2026-10-28, closed)
 - **Scope:** the Decision "Sequence after Sprint 198", the batch run's stops in row order: row 257's RANDOM 23, which the Python serves on the instruction clock from `random.Random(0x5EED).randbytes`
 - **Dual contract:** signal — none, as the card says; artifact pass (`scripts/gates.sh` exit 0 in 270 s after Observation 5's test, kept in `store/gates/passes.tsv` as sprint 203 at c360ce1a5 with root=884401ffa and "rust=crates python=0 samples=0"; multi-vCPU: not run (Python gates not run); before Observation 5, `scripts/gates.sh` exited 0 in 222 s on the second run (Observation 3), kept in `store/gates/passes.tsv` as sprint 203 at 62be10625 with root=0eef6ab2b and "rust=crates python=0 samples=0"); observation pass (`mt19937.rs` reproduces mt19937ar.out's first ten outputs for `init_by_array({0x123, 0x234, 0x345, 0x456})` and `randbytes`' word order; host request RANDOM 23 is served, on the instruction clock from the generator seeded 0x5EED, else from `getentropy`; the batch run's stream equals the Python's rows 0-373 with row 374 in flight, and stops at row 374, FILE_STAT 24, the file family's first; plant 1 changed a tempering bit the shift clears and reached no judge, and plant 1b, bit 8, named "left: [1059206915, 955945823, ..."; plant 2's word order cannot move a one-word seed, and plant 2b, seed 0x5EEE, reached no judge, no row through 373 reading the bytes; plant 3, the last word unshifted, named "left: [12, 51, 74, 36, 189, 142]").
 - **CI does not run:** the batch run (Hypervisor.framework); CI runs `mt19937.rs`'s two unit tests.
