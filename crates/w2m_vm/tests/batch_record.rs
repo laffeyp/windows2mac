@@ -54,8 +54,9 @@ fn expected_status(stop: &str) -> &'static str {
         "faulted"
     }
 }
-/// The reference's kinds the Rust host does not write: it has no guest-plane trace to ingest or compare
-const NOT_WRITTEN: [&str; 2] = ["TRACE_INGESTED", "COMPARISON_COMPLETED"];
+/// The reference's kinds the Rust host does not write: it has no guest-plane trace to ingest (its call stream is
+/// compared from Sprint 214, COMPARISON_COMPLETED)
+const NOT_WRITTEN: [&str; 1] = ["TRACE_INGESTED"];
 /// The measurement fields both hosts set alike (run_frontier.py 174-177)
 const CONVENTIONS: [&str; 5] = [
     "phase",
@@ -226,6 +227,27 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
             found.push(format!(
                 "EXECUTION_COMPLETED unobserved {} does not name the call stream's {rows}",
                 done["unobserved"]
+            ));
+        }
+    }
+    // the comparison against Windows (Sprint 214): the reference's contract and reference set, a verdict of conforms
+    // (`call_compare.rs` holds the divergences themselves)
+    if let (Some(c), Some(r)) = (
+        of(ours, "COMPARISON_COMPLETED").first(),
+        of(reference, "COMPARISON_COMPLETED").first(),
+    ) {
+        for k in ["contract_id", "contract_version", "relation", "reference_ref"] {
+            if c[k] != r[k] {
+                found.push(format!(
+                    "COMPARISON_COMPLETED {k} {} where the reference has {}",
+                    c[k], r[k]
+                ));
+            }
+        }
+        if c["verdict"] != "conforms" {
+            found.push(format!(
+                "COMPARISON_COMPLETED verdict {}, first divergence {}",
+                c["verdict"], c["first_divergence"]
             ));
         }
     }

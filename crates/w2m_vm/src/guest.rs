@@ -1122,6 +1122,38 @@ impl Guest {
         Ok(quiet)
     }
 
+    /// `traced_strings` (vm_backend 4149-4161; Sprint 214): the string arguments call_trace.c kept, in the capture's
+    /// `<capture>.strings.tsv` form, one line each: seq, argument, the text with ASCII as is and every other unit as
+    /// `\uXXXX` (`scripts/call_compare.py` `write_strings`). The comparison against Windows names the game's threads by
+    /// them (SetThreadDescription).
+    pub fn traced_strings(&self) -> String {
+        use guest_runtime::layout::{TRACE_OFF, TRACE_STRING, TRACE_STRINGS_OFF};
+        let mem = self.memory.as_slice();
+        let t = (MONITOR_SIZE + TRACE_OFF + TRACE_STRINGS_OFF) as usize;
+        let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let mut out = String::new();
+        for k in 0..word(t) as usize {
+            let at = t + 16 + TRACE_STRING as usize * k;
+            let (seq, arg) = (word(at), word(at + 8));
+            let text: String = mem[at + 16..at + 16 + 120]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes(*c))
+                .take_while(|&u| u != 0)
+                .map(|u| {
+                    if (0x20..0x7F).contains(&u) {
+                        char::from(u as u8).to_string()
+                    } else {
+                        format!("\\u{u:04x}")
+                    }
+                })
+                .collect();
+            out += &format!("{seq}\t{arg}\t{text}\n");
+        }
+        out
+    }
+
     /// `traced_calls` (4133-4147; Sprint 191): the calls call_trace.c recorded, in `scripts/call_compare.py`
     /// `write_tsv`'s form (seq, tid, label, DLL, function, eight arguments, return value and last error, hex but for
     /// seq, tid and the error), and the count the full area left out.

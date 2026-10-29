@@ -109,6 +109,18 @@ pub struct Execution<'a> {
     pub calls: (&'a str, u64),
     pub stop: &'a str,
     pub elapsed: Duration,
+    /// the call stream against Windows (`call_compare::verdict`; Sprint 214), written as COMPARISON_COMPLETED
+    pub comparison: Option<Comparison>,
+}
+
+/// COMPARISON_COMPLETED's facts, as `call_compare.py`'s `record` writes them: the contract, the reference set, the
+/// verdict and the first divergence.
+pub struct Comparison {
+    pub contract_id: String,
+    pub contract_version: String,
+    pub reference_ref: String,
+    pub conforms: bool,
+    pub first_divergence: Option<String>,
 }
 
 /// How a run ended, as `run_frontier.py` 400-407 names it.
@@ -278,6 +290,24 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
         )),
         guest_trace: Some(false),
     }));
+    // the call stream against Windows (Sprint 214), after the completion, as run_frontier.py writes its comparison
+    if let Some(c) = &e.comparison {
+        lines.push(harness_line(&events::ComparisonCompleted {
+            comparison_id: Id::new(format!("cmp-set-{}", e.id)).expect("not empty"),
+            contract_id: events::ContractId::new(c.contract_id.clone()).expect("the contract's own id"),
+            contract_version: Version::new(c.contract_version.clone()).expect("the contract's own version"),
+            relation: events::Relation::StateRelation,
+            reference_ref: Id::new(c.reference_ref.clone()).expect("a reference set is not empty"),
+            target_execution_id: id(),
+            verdict: if c.conforms {
+                events::Verdict::Conforms
+            } else {
+                events::Verdict::Discrepancy
+            },
+            rule_ref: None,
+            first_divergence: c.first_divergence.clone(),
+        }));
+    }
     let zero = u(0);
     lines.push(harness_line(&SessionCompleted {
         outcome: SessionOutcome::Completed,
@@ -453,6 +483,7 @@ mod tests {
                 calls: (IMAGE, 925),
                 stop: "a stop",
                 elapsed: Duration::from_millis(1536),
+                comparison: None,
             }))
         };
         let status = |events: &[(String, Value)]| {

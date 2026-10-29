@@ -105,6 +105,10 @@ pub const TRACE_OFF: u64 = CURRENT_DIRECTORY_OFF + 0x1000;
 // bytes of the first 16,384 thunks at 0x80, their string masks at 0x4300; the label GetProcAddress's hook gives
 pub const TRACE_RECORDS_OFF: u64 = 0x34D000;
 pub const TRACE_RECORD: u64 = 120;
+/// vm_backend 251 and call_trace.c 57-63 (Sprint 214): the count of kept string arguments at 0x308300, then each from
+/// +16, 136 bytes: the call's seq, the argument's index, 60 UTF-16 units ending in 0
+pub const TRACE_STRINGS_OFF: u64 = 0x308300;
+pub const TRACE_STRING: u64 = 136;
 pub const TRACE_THUNKS: u64 = 16384;
 pub const TRACE_OWNER_OFF: u64 = 0x80;
 pub const TRACE_WIDE_OFF: u64 = 0x4300;
