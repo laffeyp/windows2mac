@@ -140,6 +140,13 @@ quotes were copied from the sources on 2026-10-24.
    Python's, `store/runs/discrepancy-ledger.json`, over records whose baseline names a `differential`, and the Rust
    judges', `store/case_runner/discrepancy-ledger.json`, over those naming a `judge`. When the Python moves under
    `oracle/`, one Rust ledger reads both keys and the Python's file is its derivation.
+   *Amended 2026-10-28 (Sprint 208; the Decision "Step 4's reference run"):* the gate's reference run is the frozen
+   host's recorded run of 2026-10-21, store/runs/frontier-643a6283510c-1792623423346201000, not Sprint 108's of
+   2026-10-17, which predates Sprints 119-122. Its COMPARISON_COMPLETED (windows.game.calls 0.1.0) has verdict
+   "conforms" and no first divergence; the run stops when the game's log holds the reference's 168 lines (the
+   reference's unity.log, `run_frontier.py`'s `reference_lines`), which is what "168 lines" counts. The instructions a
+   second to move from are its MEASUREMENT_RECORDED `instructions_per_second`, 2,354,295,320 on one vCPU (variant
+   "process"), where Sprint 108's run gave 2,095,145,119.
 5. **The PE images translated ahead of time.** UnityPlayer.dll first: in play it retires 76.9% of the game's
    instructions (Decision 2026-10-14); Mono's run-time code stays with the run-time compiler. Gate: the batch run
    conforms with the cache, and compiles at run time, counted on the record, fall by the share the cache covers.

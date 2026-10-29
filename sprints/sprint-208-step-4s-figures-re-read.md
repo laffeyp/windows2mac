@@ -73,3 +73,24 @@ Step 4's gate figures and census rows 4, 5, 5a and 10 cite the recorded run of 2
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and two plants.
 - [x] One concept: step 4's figures re-read.
+
+## result
+
+- **The plan:** step 4 amended 2026-10-28: the gate's reference run is store/runs/frontier-643a6283510c-
+  1792623423346201000; its COMPARISON_COMPLETED (windows.game.calls 0.1.0) reads verdict "conforms", no first
+  divergence; "168 lines" is the reference unity.log's length, which stops the run (the record holds no line count);
+  the instructions a second to move from are 2,354,295,320 (its `instructions_per_second`), where Sprint 108's run
+  gave 2,095,145,119.
+- **The census:** row 5 gains the record's `vm_exits` (hvc 8 41,299 against the 10-17 run's 44,010; hvc 4 10 against
+  8; no hvc 12 against 2; the rest equal); row 10 gains 2,354,295,320.4; row 4 the record's hvc 10 258 and hvc 11 286
+  and, by class, the same eight lines in the logs of the record's three repeats; row 5a, from those logs (the record
+  holds no counts by op), every op equal to the 10-17 run's but FILE_READ (32,740, 34,797, 33,539, the one op that
+  varies between runs) and VIRTUAL_ALLOC (1,114 against 1,116). The rank order of the ops is unchanged, so the batch
+  run's order needs no new Decision. The 10-17 figures stay beside the new ones.
+- **Plant 1** (a census figure copied from the 10-17 run): the comparison of row 5 with the record's `vm_exits`
+  failed, "census row 5 lacks the record's hvc 8 41,299". Restored byte for byte.
+- **Plant 2** (the amendment without its date) reached no judge: `design_check` reads a plan's two sections, not its
+  amendments' dates. Its replacement 2b, the plan's goal heading renamed, failed `design_check`,
+  "docs/rust-port-plan-2026-10-24.md: no \"## Against the goal\" section". Restored byte for byte.
+- **Departures:** the card's claim that `design_check` names an undated amendment was wrong (plant 2); rows 4 and 5a
+  rest on the repeats' logs, which are under build/ and untracked, since the record does not hold those counts.
