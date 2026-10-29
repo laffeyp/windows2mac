@@ -305,6 +305,132 @@ pub fn exit_code(guest: &Guest, tid: u32) -> Result<u32, String> {
         .ok_or_else(|| format!("a thread request (7) for thread id {tid}, which w2m did not create"))
 }
 
+/// `_thread_request`'s THREAD_SUSPEND and THREAD_RESUME (vm_backend 3212-3223; Sprint 215): thread `tid`'s suspend
+/// count, the run table entry's word the scheduler reads (scheduler.py `suspend`), raised or lowered. SuspendThread
+/// answers the count before it rose, (DWORD)-1 for a thread that has ended; ResumeThread the count before it fell, 0
+/// for a thread not suspended or ended (Microsoft Learn, SuspendThread and ResumeThread: "the thread's previous suspend
+/// count"). A suspended thread is not chosen by the scheduler (`turn_state`, `_switch`), which on the Rust host's one
+/// vCPU is all the frozen host's `_stop_elsewhere` comes to.
+pub fn suspend(guest: &mut Guest, tid: u32, resume: bool) -> Result<u64, String> {
+    let sub = if resume { 5 } else { 4 };
+    let index = guest
+        .threads
+        .get(&u64::from(tid))
+        .map(|t| t.index)
+        .ok_or_else(|| format!("a thread request ({sub}) for thread id {tid}, which w2m did not create"))?;
+    let mem = guest.memory.as_mut_slice();
+    let at = entry(index);
+    let count = read_u64(mem, at + E_SUSPEND);
+    let ended = read_u64(mem, at + E_STATUS) == ENDED;
+    Ok(match (resume, ended, count) {
+        (false, true, _) => u64::MAX,
+        (false, false, n) => {
+            write_u64(mem, at + E_SUSPEND, n + 1);
+            n
+        }
+        (true, true, _) | (true, false, 0) => 0,
+        (true, false, n) => {
+            write_u64(mem, at + E_SUSPEND, n - 1);
+            n
+        }
+    })
+}
+
+/// CONTEXT's parts (scheduler.py 35-36): ContextFlags' bits, and the x64 user-mode selectors (rows context: CS 0x33,
+/// SS 0x2B).
+const CONTEXT_CONTROL: u32 = 0x1;
+const CONTEXT_INTEGER: u32 = 0x2;
+const CONTEXT_SEGMENTS: u32 = 0x4;
+const CONTEXT_FLOATING_POINT: u32 = 0x8;
+const SELECTORS: [(usize, u16); 6] = [(56, 0x33), (58, 0x2B), (60, 0x2B), (62, 0x53), (64, 0x2B), (66, 0x2B)];
+
+/// `_thread_request`'s THREAD_CONTEXT (vm_backend 3224-3253; Sprint 215): GetThreadContext of thread `tid` into the
+/// caller's CONTEXT at `buffer` (1232 bytes, ContextFlags at 48), the parts the flags name written as
+/// scheduler.py `write_context` writes them, from the thread's saved state in its run table entry: the registers,
+/// EFLAGS rebuilt from the flag registers and the monitor's lazy PF and AF (`undefined` flags left clear), IF set and
+/// DF from the monitor, MXCSR and the x87 control word, XMM0-15 from its vector slot. A thread blocked in a wait answers
+/// RIP inside ntdll's page (contracts/windows.thread.running_context, row context.waiting: Windows' NtWait* stub), as
+/// the frozen host does. The calling thread's own context is refused: its saved state is not current, and
+/// GetThreadContext of the calling thread is not in the rows.
+pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, String> {
+    use crate::cases::{DF_BYTE, FLAG_BIT, FLAG_REG};
+    let t = guest
+        .threads
+        .get(&u64::from(tid))
+        .ok_or_else(|| format!("a thread request (6) for thread id {tid}, which w2m did not create"))?;
+    if u64::from(tid) == current_tid(guest) {
+        return Err(format!(
+            "GetThreadContext of the calling thread {tid}, which is not in the rows"
+        ));
+    }
+    let mem = guest.memory.as_slice();
+    let at = entry(t.index);
+    let x: Vec<u64> = (0..31).map(|i| read_u64(mem, at + E_X + 8 * i)).collect();
+    // the monitor ranges the thread keeps: lazy AF and DF (0x20-0x40), MXCSR (0x50), the x87 control word (0x70)
+    let monitor = |range: usize, off: u64| at + E_MONITOR + E_MONITOR_AT[range] + off;
+    let (af_a, af_b, af_r) = (
+        read_u64(mem, monitor(0, 0)),
+        read_u64(mem, monitor(0, 8)),
+        read_u64(mem, monitor(0, 16)),
+    );
+    let df = u32::from(mem[monitor(0, DF_BYTE - 0x20) as usize] & 1);
+    let mxcsr = read_u64(mem, monitor(1, 0)) as u32;
+    let fcw = read_u64(mem, monitor(2, 0)) as u16;
+    let undefined = x[REG_UNDEFINED_FLAGS as usize];
+    let defined = |f: char| undefined >> FLAG_BIT.iter().find(|(k, _)| *k == f).unwrap().1 & 1 == 0;
+    let mut eflags = 0x202 | df << 10;
+    for (f, bit) in [('C', 0), ('Z', 6), ('S', 7), ('O', 11)] {
+        let reg = FLAG_REG.iter().find(|(k, _)| *k == f).unwrap().1;
+        if defined(f) && x[usize::from(reg)] != 0 {
+            eflags |= 1 << bit;
+        }
+    }
+    if defined('P') && (af_r & 0xFF).count_ones() % 2 == 0 {
+        eflags |= 1 << 2;
+    }
+    if defined('A') && (af_a ^ af_b ^ af_r) & 0x10 != 0 {
+        eflags |= 1 << 4;
+    }
+    let ntdll = guest.process.ntdll;
+    let rip = if read_u64(mem, at + E_STATUS) == BLOCKED && ntdll != 0 {
+        ntdll + 0x800
+    } else {
+        x[17]
+    };
+    let slot = read_u64(mem, at + E_VSLOT) as usize;
+    let xmm = mem[slot..slot + 256].to_vec();
+    let mut buf = read_guest(guest, buffer, 1232)?;
+    let flags = u32::from_le_bytes(buf[48..52].try_into().unwrap());
+    let put = |buf: &mut Vec<u8>, off: usize, bytes: &[u8]| buf[off..off + bytes.len()].copy_from_slice(bytes);
+    if flags & CONTEXT_CONTROL != 0 {
+        for (off, sel) in [SELECTORS[0], SELECTORS[5]] {
+            put(&mut buf, off, &sel.to_le_bytes());
+        }
+        put(&mut buf, 68, &eflags.to_le_bytes());
+        put(&mut buf, 120 + 8 * 4, &x[4].to_le_bytes());
+        put(&mut buf, 248, &rip.to_le_bytes());
+    }
+    if flags & CONTEXT_INTEGER != 0 {
+        for (i, r) in x.iter().take(16).enumerate().filter(|(i, _)| *i != 4) {
+            put(&mut buf, 120 + 8 * i, &r.to_le_bytes());
+        }
+    }
+    if flags & CONTEXT_SEGMENTS != 0 {
+        for (off, sel) in &SELECTORS[1..5] {
+            put(&mut buf, *off, &sel.to_le_bytes());
+        }
+    }
+    if flags & CONTEXT_FLOATING_POINT != 0 {
+        put(&mut buf, 52, &mxcsr.to_le_bytes());
+        put(&mut buf, 256, &fcw.to_le_bytes());
+        put(&mut buf, 256 + 24, &mxcsr.to_le_bytes());
+        put(&mut buf, 256 + 28, &0xFFFFu32.to_le_bytes()); // MxCsr_Mask, the runner's
+        put(&mut buf, 256 + 160, &xmm);
+    }
+    write_guest(guest, buffer, &buf)?;
+    Ok(1)
+}
+
 /// `GuestThread.status`'s setter (scheduler.py 83-89): the entry's status, and the header's count of blocked threads,
 /// which threads.c `w2m_signal` reads.
 pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
@@ -857,20 +983,14 @@ pub fn slice_until(guest: &Guest) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    /// A created thread's stack grown as contracts/windows.memory.created_thread_stack's rows say (Sprint 213): a touch
-    /// of the first guard page moves StackLimit one page and keeps three guard pages below it (default.grow,
-    /// default.grown.*); a probe two pages below grows two pages; a touch below the guard is an access violation that
-    /// does not move the stack (skip); a probe that would bring the guard to the reservation's last page answers 0 and
-    /// changes nothing. The guest needs the runtime image clang builds, so the test runs on the Mac.
+    /// A guest of qpc.exe with one created thread; the runtime image clang builds, so the tests that use it run on the
+    /// Mac.
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    #[test]
-    fn a_created_threads_stack_grows_as_windows_rows_say() {
-        use super::{PAGE, create_thread, stack_grow};
-        use crate::guest::{Guest, GuestView, vm_compiler_symbols};
+    fn guest_with_a_thread() -> (crate::guest::Guest, u64) {
+        use crate::guest::{Guest, vm_compiler_symbols};
         use crate::process::Start;
         use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
         use std::path::Path;
-        use virtual_memory::{MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE};
 
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -891,7 +1011,81 @@ mod tests {
             &symbols,
         )
         .unwrap();
-        let tid = create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
+        // two threads: the first takes the current thread's id (4) in a guest no run has started, so the second is the
+        // one a test reads and changes as another thread
+        super::create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
+        let tid = super::create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
+        (g, tid)
+    }
+
+    /// SuspendThread and ResumeThread answer the previous count (Sprint 215; Microsoft Learn: "the thread's previous
+    /// suspend count"), an ended thread (DWORD)-1 and 0; GetThreadContext of a suspended thread writes RIP, RSP, the
+    /// registers and EFLAGS rebuilt from its flag registers, the lazy PF and AF and DF, as contracts/
+    /// windows.thread.running_context's rows read them (IF set).
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_thread_is_suspended_read_and_resumed_as_windows_answers() {
+        use super::{E_MONITOR, E_MONITOR_AT, E_STATUS, E_X, ENDED, entry, suspend, thread_context, write_u64};
+        use crate::run::REG_UNDEFINED_FLAGS;
+        use guest_runtime::layout::HEAP_VA;
+
+        let (mut g, tid) = guest_with_a_thread();
+        let t = tid as u32;
+        assert_eq!(suspend(&mut g, t, false), Ok(0));
+        assert_eq!(suspend(&mut g, t, false), Ok(1));
+        assert_eq!(suspend(&mut g, t, true), Ok(2));
+        assert_eq!(suspend(&mut g, t, true), Ok(1));
+        assert_eq!(suspend(&mut g, t, true), Ok(0), "a thread not suspended");
+        // the thread's saved state: RAX, RSP, RIP, CF set, every flag defined, lazy PF and AF, DF
+        let at = entry(g.threads[&tid].index);
+        let mem = g.memory.as_mut_slice();
+        write_u64(mem, at + E_X, 0x1111);
+        write_u64(mem, at + E_X + 8 * 4, 0x7_0000_1000);
+        write_u64(mem, at + E_X + 8 * 17, 0x1_4000_2000);
+        write_u64(mem, at + E_X + 8 * 19, 1);
+        write_u64(mem, at + E_X + 8 * u64::from(REG_UNDEFINED_FLAGS), 0);
+        let lazy = at + E_MONITOR + E_MONITOR_AT[0];
+        write_u64(mem, lazy, 0x10);
+        write_u64(mem, lazy + 8, 0);
+        write_u64(mem, lazy + 16, 0x03);
+        mem[(lazy + 0x18) as usize] = 1;
+        // a CONTEXT asking for control, integer, segments and floating point (0x10000F)
+        let buffer = HEAP_VA + 0x800;
+        let off = g.layout.offset(buffer).unwrap() as usize;
+        g.memory.as_mut_slice()[off..off + 1232].fill(0);
+        g.memory.as_mut_slice()[off + 48..off + 52].copy_from_slice(&0x0010_000Fu32.to_le_bytes());
+        assert_eq!(thread_context(&mut g, t, buffer), Ok(1));
+        let ctx = &g.memory.as_slice()[off..off + 1232];
+        let q = |o: usize| u64::from_le_bytes(ctx[o..o + 8].try_into().unwrap());
+        let d = |o: usize| u32::from_le_bytes(ctx[o..o + 4].try_into().unwrap());
+        assert_eq!(
+            (q(120), q(152), q(248)),
+            (0x1111, 0x7_0000_1000, 0x1_4000_2000),
+            "RAX, RSP, RIP"
+        );
+        // IF and the reserved bit, CF, PF (0x03 has two ones), AF (0x10 ^ 0 ^ 0x03), DF
+        assert_eq!(d(68), 0x202 | 0x1 | 0x4 | 0x10 | 0x400, "EFLAGS");
+        assert_eq!(u16::from_le_bytes(ctx[56..58].try_into().unwrap()), 0x33, "CS");
+        assert_eq!(d(48), 0x0010_000F, "ContextFlags stays as asked");
+        // an ended thread
+        write_u64(g.memory.as_mut_slice(), at + E_STATUS, ENDED);
+        assert_eq!(suspend(&mut g, t, false), Ok(u64::MAX));
+        assert_eq!(suspend(&mut g, t, true), Ok(0));
+    }
+
+    /// A created thread's stack grown as contracts/windows.memory.created_thread_stack's rows say (Sprint 213): a touch
+    /// of the first guard page moves StackLimit one page and keeps three guard pages below it (default.grow,
+    /// default.grown.*); a probe two pages below grows two pages; a touch below the guard is an access violation that
+    /// does not move the stack (skip); a probe that would bring the guard to the reservation's last page answers 0 and
+    /// changes nothing. The guest needs the runtime image clang builds, so the test runs on the Mac.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_created_threads_stack_grows_as_windows_rows_say() {
+        use super::{PAGE, stack_grow};
+        use crate::guest::{Guest, GuestView};
+        use virtual_memory::{MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE};
+
+        let (mut g, tid) = guest_with_a_thread();
         let (dealloc, limit, _) = g.threads[&tid].stack;
         let teb = g.threads[&tid].teb;
         let stack_limit = |g: &Guest| {

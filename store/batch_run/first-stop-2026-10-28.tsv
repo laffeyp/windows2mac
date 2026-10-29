@@ -1,46 +1,46 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
-stop	HostRequest op 30: thread request 4: not served by the Rust host yet
-arguments	0x4 0x8 0x0
+stop	HostFailure op 15: LoadLibrary C:\w2m\app\Hail to the Rainbow_Data\Plugins\x86_64\steam_api64.dll: static TLS in a DLL loaded after the start, not served by the Rust host yet
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	409
+hvc 1	675
 hvc 4	10
-hvc 8	1732
-hvc 10	256
-hvc 11	11
-hvc 13	194
+hvc 8	18770
+hvc 10	258
+hvc 11	15
+hvc 13	7040
+hvc 14	4
 code cache full	0
-compiled	70109
-cut by decode	82
+compiled	172409
+cut by decode	186
 cut by encoder	0
-cut by guarded	2
+cut by guarded	56
 cut by key size	0
 cut by no choice	0
-cut by no stencil	43
-decode	107
+cut by no stencil	86
+decode	236
 encoder	0
 full	0
-guarded	2
+guarded	62
 host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	35
-not a code page	258
-page needs a split	6
-pages protected	2013
-pause	0
+no stencil	83
+not a code page	282
+page needs a split	10
+pages protected	9921
+pause	1
 recon full	0
 scan pages	0
-blocks the host compiled	70259
-calls traced	3131
+blocks the host compiled	172801
+calls traced	6698
 calls in flight	1
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	crosswake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	handshake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	model_steps	ExitProcess { code: 0 }	ExitProcess	48743d4d4fd79694\nc00000917f800000\n
-guest	mutual_context	HostRequest op 30: thread request 5: not served by the Rust host yet	ExitProcess	done\n
-guest	mutual	HostRequest op 30: thread request 5: not served by the Rust host yet	ExitProcess	done\n
+guest	mutual_context	Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet	ExitProcess	done\n
+guest	mutual	Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet	ExitProcess	done\n
 guest	pingpong	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	qpc	ExitProcess { code: 0 }	ExitProcess	00001abcd9b5ed09\n
 guest	qpc2	ExitProcess { code: 0 }	ExitProcess	00001abcd9c0b5c6\n

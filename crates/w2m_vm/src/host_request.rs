@@ -44,6 +44,9 @@ pub const HOST_KERNEL: u64 = 33;
 pub const THREAD_CREATE: u64 = 1;
 pub const THREAD_EXIT_STUB: u64 = 2;
 pub const THREAD_END: u64 = 3;
+pub const THREAD_SUSPEND: u64 = 4;
+pub const THREAD_RESUME: u64 = 5;
+pub const THREAD_CONTEXT: u64 = 6;
 pub const THREAD_EXIT_CODE: u64 = 7;
 pub const THREAD_STACK_GROW: u64 = 9;
 pub const EXCEPTION_STUBS: u64 = 1;
@@ -568,6 +571,14 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         HOST_THREAD if a0 == THREAD_END => {
             crate::threads::end_thread(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Failed)?;
             0
+        }
+        // `_thread_request` (3212-3223; Sprint 215): SuspendThread and ResumeThread, the previous count
+        HOST_THREAD if a0 == THREAD_SUSPEND || a0 == THREAD_RESUME => {
+            crate::threads::suspend(guest, (a1 & 0xFFFF_FFFF) as u32, a0 == THREAD_RESUME).map_err(HostError::Failed)?
+        }
+        // `_thread_request` (3224-3253; Sprint 215): GetThreadContext into the caller's CONTEXT at a2
+        HOST_THREAD if a0 == THREAD_CONTEXT => {
+            crate::threads::thread_context(guest, (a1 & 0xFFFF_FFFF) as u32, a2).map_err(HostError::Failed)?
         }
         HOST_THREAD if a0 == THREAD_EXIT_CODE => {
             u64::from(crate::threads::exit_code(guest, (a1 & 0xFFFF_FFFF) as u32).map_err(HostError::Failed)?)

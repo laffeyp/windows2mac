@@ -680,6 +680,11 @@ fn run(
             break Stop::Exit(format!("{exit:?} at pc 0x{pc:x}"));
         };
         *out.exits.entry(number).or_default() += 1;
+        // a guest fault left its block (vm_backend 5294-5296; Sprint 215): the unrun instructions were given back with
+        // the count above (`GiveBack::Fault`); on at the hvc's return, to the runtime's exception path
+        if u32::from(number) == HVC_FAULT_GIVE_BACK {
+            continue;
+        }
         if number == HVC_CODE_WRITE as u16
             && let Some(h) = host.as_deref_mut()
         {
