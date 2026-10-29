@@ -75,3 +75,19 @@ stated.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the gates run what the change reaches.
+
+## result
+
+- **nextest for every Rust run:** `rust=all` runs `cargo nextest run` and `cargo test --doc`; measured 188 s against
+  347 s under `cargo test`.
+- **The triggers the readers set:** `store/gates/` runs `signal_report`'s dependants, `store/batch_run/` and
+  `store/family_runs/` `w2m_vm`'s; none of the three runs the Python gates or every Rust test.
+- **The selection:** `gates.sh --plan` with `GATES_CHANGED` set: a usual change (crates/w2m_vm/src/run.rs,
+  store/batch_run, store/gates, BLACKBOARD.md) selects "rdeps(signal_report) | rdeps(w2m_vm)" and "Python gates: not
+  run"; `src/w2m/kernel.py` selects the Python gates; `store/case_runner/expected.tsv` every Rust test and the Python
+  gates.
+- **Plant 1** (store/batch_run/ back in the trigger): the plan for the usual change said "gates: Python gates".
+  Restored byte for byte. The `sed` ran with no address (Observation 2) and changed both trigger lines.
+- **Plants 2 and 3:** not run; the measured times state plant 2's claim, and store/case_runner's selection is shown
+  above.
+- **Departures:** this sprint's own gates run every stage, since it changes `gates.sh` (Sprint 198's rule).

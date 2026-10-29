@@ -51,10 +51,15 @@ touched '^scripts/(gates|gated-tree)\.sh$' && all=1
 
 # the selection, decided before any gate runs, so `--plan` prints it and stops (Sprint 171)
 crates=$(printf '%s\n' "$changed" | sed -n 's|^crates/\([^/]*\)/.*|\1|p' | sort -u)
+# the store paths only one crate's tests read run that crate's dependants, not every test (Sprint 200: every sprint
+# changes one of them, and each made the gates run all): store/gates/ is signal_report's, store/batch_run/ and
+# store/family_runs/ w2m_vm's
+touched '^store/gates/' && crates=$(printf '%s\nsignal_report\n' "$crates" | grep . | sort -u)
+touched '^store/(batch_run|family_runs)/' && crates=$(printf '%s\nw2m_vm\n' "$crates" | grep . | sort -u)
 rust=none
 if [ $all = 1 ]; then
   rust=all; why="--all"
-elif touched '^(Cargo\.(toml|lock)|\.cargo/|rust-toolchain\.toml|scripts/sign_and_run\.sh|corpus/|signals/|harness/|probes/|specs/|tools/|tests/data/|store/|build\.rs)' '^store/runs/'; then
+elif touched '^(Cargo\.(toml|lock)|\.cargo/|rust-toolchain\.toml|scripts/sign_and_run\.sh|corpus/|signals/|harness/|probes/|specs/|tools/|tests/data/|store/|build\.rs)' '^store/(runs|gates|batch_run|family_runs)/'; then
   # the cargo runner, the toolchain and corpus/ (read by crates/pe_image/tests/llvm_objdump.rs 266) are inputs of every
   # test binary (Sprint 171; reviewer-2's Medium 1: Sprint 168 changed the runner and ran no Rust test)
   rust=all; why="an input outside one crate changed"
@@ -82,7 +87,9 @@ for r in $records; do
   [ -d "$r" ] && head -c 4096 "$(ls "$r"/events-*.jsonl | head -1)" | grep -q '"differential"' && differential=1
 done
 python=0
-if [ $all = 1 ] || [ $differential = 1 ] || touched '^(src/|scripts/.*\.py$|tests/|tools/|signals/|specs/|pyproject\.toml$|uv\.lock$|substrate\.commit$|store/)' '^store/runs/'; then
+# (Sprint 200: store/gates/, store/batch_run/ and store/family_runs/ hold the Rust judges' records, which the frozen
+# Python never reads)
+if [ $all = 1 ] || [ $differential = 1 ] || touched '^(src/|scripts/.*\.py$|tests/|tools/|signals/|specs/|pyproject\.toml$|uv\.lock$|substrate\.commit$|store/)' '^store/(runs|gates|batch_run|family_runs)/'; then
   python=1
 fi
 case $rust in
@@ -160,7 +167,11 @@ if [ $rust != none ]; then
   done
 fi
 if [ $rust = all ]; then
-  W2M_REQUIRE_CASE_RUNS=1 cargo test --quiet
+  # a process a test, so the case runner's two passes run side by side (Sprint 200: 347 s under `cargo test`, its two
+  # passes taking turns behind one VM a process; 188 s under nextest, measured 2026-10-28), then the doc tests nextest
+  # does not run
+  W2M_REQUIRE_CASE_RUNS=1 cargo nextest run --cargo-quiet --status-level fail
+  cargo test --quiet --doc
 elif [ $rust = crates ]; then
   filter=$(for c in $crates; do printf 'rdeps(%s) | ' "$c"; done | sed 's/ | $//')
   W2M_REQUIRE_CASE_RUNS=1 cargo nextest run --cargo-quiet --status-level fail -E "$filter"
