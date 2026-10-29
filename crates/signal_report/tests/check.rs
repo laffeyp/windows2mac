@@ -425,3 +425,97 @@ fn every_commit_from_the_card_is_walked_and_the_multi_vcpu_count_is_held() {
         )
     );
 }
+
+/// A one-sprint repository: its card, its work with the pass line and stage rows given, its close; `--check`'s stderr.
+fn staged(name: &str, entry: &str, stages: &str, rows: &str) -> (Option<i32>, String) {
+    let tail = format!(
+        "\n### Sprint 199 (2026-10-28, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in 900 s; {entry}).\n"
+    );
+    let root = scratch_with_tail(name, &[("sprint-199-x.md", "done")], &["sprint-199-report.md"], &tail);
+    fs::create_dir_all(root.join("crates/a")).unwrap();
+    fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
+    git(&root, &["init", "-q"]);
+    commit(&root, "Sprint 199 card: x");
+    let ran = gates_root_tree(&root);
+    fs::create_dir_all(root.join("store/gates")).unwrap();
+    fs::write(
+        root.join("store/gates/passes.tsv"),
+        format!("exit 0 in 900 s\tdefault\t2026-10-28T07:00:00Z\tsprint 199\tabc\tdef\troot={ran}\t{stages}\n"),
+    )
+    .unwrap();
+    fs::write(root.join("store/gates/multi-vcpu.tsv"), rows).unwrap();
+    commit(&root, "Sprint 199: the work");
+    check(&root)
+}
+
+/// Sprint 198's plants 1 and 2 (reviewer-2's Medium 2 of its review of 193-196): from Sprint 198 the multi-vCPU
+/// sentence is held to the stages the pass line records: a skipped stage stated as "0 of 3 passed" fails, so does a run
+/// of the stage with two rows; "not run" with no rows passes, and so do three rows with the count stated.
+#[test]
+fn the_multi_vcpu_sentence_is_held_to_the_stages_that_ran() {
+    let rows = |n: usize| -> String {
+        (0..n)
+            .map(|i| format!("2026-10-28T06:59:0{i}Z\tpassed\tsprint 199\tt{i}\n"))
+            .collect()
+    };
+    let (code, stderr) = staged(
+        "skipped",
+        "multi-vCPU: 0 of 3 passed",
+        "rust=all python=0 samples=0",
+        "",
+    );
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 199: its gates run did not run the Python gates, and its tail entry does not state \
+         \"multi-vCPU: not run (Python gates not run)\""
+    );
+    let (code, stderr) = staged(
+        "two",
+        "multi-vCPU: 2 of 3 passed",
+        "rust=all python=1 samples=0",
+        &rows(2),
+    );
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 199: its gates run ran the multi-vCPU stage, and store/gates/multi-vcpu.tsv holds 2 rows in it, not 3"
+    );
+    let not_run = "multi-vCPU: not run (Python gates not run)";
+    assert_eq!(staged("notrun", not_run, "rust=all python=0 samples=0", "").0, Some(0));
+    assert_eq!(
+        staged(
+            "three",
+            "multi-vCPU: 3 of 3 passed",
+            "rust=all python=1 samples=0",
+            &rows(3)
+        )
+        .0,
+        Some(0)
+    );
+}
+
+/// Sprint 198's plant 3 (reviewer-2's Low 2 of its review of 193-196): a change to `scripts/gates.sh` or
+/// `scripts/gated-tree.sh` runs every stage: the pattern gates.sh sets `all=1` by matches both paths.
+#[test]
+fn a_change_to_the_gates_runs_every_stage() {
+    let gates = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/gates.sh")).unwrap();
+    let line = gates
+        .lines()
+        .find(|l| l.starts_with("touched '") && l.ends_with("&& all=1"))
+        .expect("gates.sh sets all=1 by a touched pattern");
+    let pattern = line.split('\'').nth(1).unwrap();
+    for path in ["scripts/gates.sh", "scripts/gated-tree.sh"] {
+        let status = Command::new("grep")
+            .args(["-Eq", pattern])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut c| {
+                use std::io::Write;
+                c.stdin.take().unwrap().write_all(format!("{path}\n").as_bytes())?;
+                c.wait()
+            })
+            .unwrap();
+        assert!(status.success(), "a change to {path} does not run every stage");
+    }
+}

@@ -44,6 +44,9 @@ changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standa
 # touched PATTERN [EXCEPT]: some changed path matches PATTERN and not EXCEPT
 touched() { printf '%s\n' "$changed" | grep -E "$1" | grep -Ev "${2:-^$}" | grep -q .; }
 said() { echo "gates: $*"; }
+# a change to the gates themselves runs every stage, so no stage it changed is skipped (Sprint 198; reviewer-2's Low 2
+# of its review of 193-196)
+touched '^scripts/(gates|gated-tree)\.sh$' && all=1
 [ $all = 1 ] && said "--all: every gate" || said "the change since $(git rev-parse --short "$base"): $(printf '%s\n' "$changed" | grep -c .) paths"
 
 # the selection, decided before any gate runs, so `--plan` prints it and stops (Sprint 171)
@@ -184,9 +187,10 @@ if [ $samples = 1 ]; then
   session=$(mktemp -d)/session-check
   uv run substrate run --file harness/session-check.toml --root "$session" --strict > /dev/null
   uv run substrate replay "$session" --level 2 > /dev/null
-  samples=$(mktemp -d)/vocabulary-samples
-  uv run substrate run --file harness/vocabulary-samples.toml --root "$samples" --strict > /dev/null
-  uv run substrate replay "$samples" --level 2 > /dev/null
+  # its own name, so `samples` stays the stage's 0 or 1 for the pass line (Sprint 198: the column read the directory)
+  samples_root=$(mktemp -d)/vocabulary-samples
+  uv run substrate run --file harness/vocabulary-samples.toml --root "$samples_root" --strict > /dev/null
+  uv run substrate replay "$samples_root" --level 2 > /dev/null
   # the planted sample: a version ending in a newline, refused by substrate as by the Rust type (Sprint 126)
   planted=$(mktemp -d)/vocabulary-samples-planted
   if uv run substrate run --file harness/vocabulary-samples-planted.toml --root "$planted" --strict > /dev/null 2>&1; then
@@ -260,6 +264,8 @@ echo "gates: all passed"
 # 187: then the trees, compared with the work commit's from Sprint 187, and the file tracked, committed with the work, so
 # a fresh clone's check reads it)
 mkdir -p store/gates
-printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\t%s\n' "$(( $(date +%s) - gates_start ))" \
+# the eighth column, the stages this run ran (Sprint 198; reviewer-2's Medium 2 of its review of 193-196), which
+# `signal_report --check` holds a closed entry's multi-vCPU sentence to
+printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\t%s\trust=%s python=%s samples=%s\n' "$(( $(date +%s) - gates_start ))" \
   "$([ $all = 1 ] && echo all || echo default)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$gates_sprint" "$gates_head" \
-  "$gates_diff" "$gates_trees" >> store/gates/passes.tsv
+  "$gates_diff" "$gates_trees" "$rust" "$python" "$samples" >> store/gates/passes.tsv

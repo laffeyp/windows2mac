@@ -75,3 +75,20 @@ records.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: values and three plants.
 - [x] One concept: the gates say what ran.
+
+## result
+
+- **The stages in the pass line:** `gates.sh` writes an eighth column, `rust=<all|crates|none> python=<0|1>
+  samples=<0|1>`.
+- **The claim held to the stages:** `multi_vcpu_staged` from `FIRST_STAGED_SPRINT` 198: python=0 needs "multi-vCPU: not
+  run (Python gates not run)" and no stage row in the run's window; python=1 needs "multi-vCPU: k of 3 passed", exactly
+  three rows and k passed. Test `the_multi_vcpu_sentence_is_held_to_the_stages_that_ran`, four cases.
+- **gates.sh runs every stage for itself:** `touched '^scripts/(gates|gated-tree)\.sh$' && all=1`; test
+  `a_change_to_the_gates_runs_every_stage` runs the pattern over both paths with `grep -E`.
+- **Plant 1** (the python=0 branch never taken): the test failed, left "its gates run ran the multi-vCPU stage, and
+  store/gates/multi-vcpu.tsv holds 0 rows in it, not 3". Restored byte for byte.
+- **Plant 2** (the row count held only above 3): the test failed, `--check` exiting "left: Some(0) right: Some(1)" for a
+  run of two rows. Restored byte for byte.
+- **Plant 3** (gated-tree.sh dropped from the pattern): the test failed, "a change to scripts/gated-tree.sh does not run
+  every stage". Restored byte for byte.
+- **Departures:** none.

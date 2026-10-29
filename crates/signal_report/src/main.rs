@@ -719,7 +719,9 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                             // multi-vCPU stage is the stage's record
                             if n >= FIRST_CLOSE_BOUND_SPRINT {
                                 wrong.extend(close_moved(root, n)?);
-                                if n >= FIRST_WALKED_SPRINT {
+                                if n >= FIRST_STAGED_SPRINT {
+                                    wrong.extend(multi_vcpu_staged(root, n, body, kept(&run).unwrap()));
+                                } else if n >= FIRST_WALKED_SPRINT {
                                     wrong.extend(multi_vcpu_count(root, n, body, kept(&run).unwrap()));
                                 } else {
                                     wrong.extend(multi_vcpu_claim(root, n, body));
@@ -912,6 +914,77 @@ fn multi_vcpu_count(root: &Path, n: u32, body: &str, pass: &str) -> Option<Strin
              passed in its gates run"
         )
     })
+}
+
+/// The first sprint whose pass line records the stages run (column 8) and whose multi-vCPU claim is held to them
+/// (Sprint 198; reviewer-2's Medium 2 of its review of 193-196: "0 of 3 passed" passed alike for a stage skipped and for
+/// three failures).
+const FIRST_STAGED_SPRINT: u32 = 198;
+
+/// From Sprint 198: with `python=0` in the pass line's stages, "multi-vCPU: not run (Python gates not run)" and no
+/// stage row in the run's window; with `python=1`, "multi-vCPU: k of 3 passed", exactly three rows in the window, k of
+/// them passed. Any other pairing is named.
+fn multi_vcpu_staged(root: &Path, n: u32, body: &str, pass: &str) -> Option<String> {
+    let cols: Vec<&str> = pass.split('\t').collect();
+    let Some(python) = cols
+        .get(7)
+        .and_then(|stages| stages.split(' ').find_map(|s| s.strip_prefix("python=")))
+    else {
+        return Some(format!("sprint {n:03}: its gates run names no stages (column 8)"));
+    };
+    let seconds: i64 = cols[0]
+        .strip_prefix("exit 0 in ")
+        .and_then(|s| s.strip_suffix(" s"))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let end = cols.get(2).and_then(|t| epoch_seconds(t)).unwrap_or(0);
+    let text = fs::read_to_string(root.join(MULTI_VCPU)).unwrap_or_default();
+    let sprint = format!("sprint {n:03}");
+    let rows: Vec<Vec<&str>> = text
+        .lines()
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .filter(|c| c.get(2) == Some(&sprint.as_str()))
+        .filter(|c| {
+            c.first()
+                .and_then(|t| epoch_seconds(t))
+                .is_some_and(|t| end - seconds <= t && t <= end)
+        })
+        .collect();
+    let passed = rows.iter().filter(|c| c.get(1) == Some(&"passed")).count();
+    if python == "0" {
+        if !body.contains("multi-vCPU: not run (Python gates not run)") {
+            return Some(format!(
+                "sprint {n:03}: its gates run did not run the Python gates, and its tail entry does not state \
+                 \"multi-vCPU: not run (Python gates not run)\""
+            ));
+        }
+        return (!rows.is_empty()).then(|| {
+            format!(
+                "sprint {n:03}: its gates run did not run the Python gates, and {MULTI_VCPU} holds {} rows in it",
+                rows.len()
+            )
+        });
+    }
+    let stated = body
+        .split("multi-vCPU: ")
+        .nth(1)
+        .and_then(|rest| rest.split_once(" of 3 passed"))
+        .and_then(|(k, _)| k.parse::<usize>().ok());
+    match stated {
+        None => Some(format!(
+            "sprint {n:03}: its gates run ran the multi-vCPU stage, and its tail entry states no \
+             \"multi-vCPU: k of 3 passed\""
+        )),
+        Some(_) if rows.len() != 3 => Some(format!(
+            "sprint {n:03}: its gates run ran the multi-vCPU stage, and {MULTI_VCPU} holds {} rows in it, not 3",
+            rows.len()
+        )),
+        Some(k) if k != passed => Some(format!(
+            "sprint {n:03}: its tail entry states multi-vCPU {k} of 3 passed, and {MULTI_VCPU} holds {passed} \
+             passed in its gates run"
+        )),
+        Some(_) => None,
+    }
 }
 
 /// Sprint `n`'s commits from its card's to the next card's (or HEAD), each named that is not its work ("Sprint N: "),
