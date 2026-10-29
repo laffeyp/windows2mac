@@ -174,10 +174,13 @@ if [ $rust != none ]; then
   printf '%s\t%s\n' twoproc-ic "$(cat build/batch_run/guest-twoproc-ic.stop 2>/dev/null)" >> build/batch_run/guests.tsv
   # the module families on the Rust host (Sprint 196; census row 6): each runner binary a contract's evidence names,
   # run as probe.exe, its printed rows and stop under build/family_runs/, which crates/w2m_vm/tests/family_runs.rs
-  # holds to the contract's rows or to store/family_runs/module-stops-2026-10-28.tsv
+  # holds to the contract's rows or to store/family_runs/module-stops-2026-10-28.tsv; each family by its short name and
+  # its contract (Sprint 218: the loader's late TLS beside the module families)
   mkdir -p build/family_runs
-  for c in queries system names_ansi search; do
-    for b in $(grep -o 'probe sha256:[0-9a-f]*' "contracts/windows.module.$c/0.1.0.json" | cut -d: -f2 | sort -u); do
+  for family in queries:windows.module.queries system:windows.module.system names_ansi:windows.module.names_ansi \
+    search:windows.module.search late_tls:windows.loader.late_tls; do
+    c=${family%%:*}
+    for b in $(grep -o 'probe sha256:[0-9a-f]*' "contracts/${family#*:}/0.1.0.json" | cut -d: -f2 | sort -u); do
       rm -f "build/family_runs/$c-$b.stop"
       # the file the runner had beside the binary, if any (Sprint 204: store/family_runs/beside-2026-10-28.tsv)
       beside=$(awk -F'\t' -v b="$b" '$2 == b { print "--beside " $3 " store/binaries/" $4 ".dll" }' \

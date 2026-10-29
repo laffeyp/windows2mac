@@ -335,6 +335,8 @@ mod run {
             Stop::Hvc { number, .. } => format!("Hvc {number}"),
             Stop::Handover { why, .. } => format!("Handover: {why}"),
             Stop::Model { rip, why } => format!("Model at 0x{rip:x}: {why}"),
+            Stop::TimeLimit => "the run's time limit".into(),
+            Stop::StepLimit { count, max, pc } => format!("StepLimit: {count} of {max} steps at pc 0x{pc:x}"),
             other => format!("{other:?}"),
         }
     }

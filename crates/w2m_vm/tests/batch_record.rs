@@ -44,7 +44,7 @@ struct Facts {
 
 /// The end a stop names, as `run_frontier.py` 400-407 maps it.
 fn expected_status(stop: &str) -> &'static str {
-    if stop.starts_with("HostRequest op ") {
+    if stop.starts_with("HostRequest op ") || stop.starts_with("StepLimit: ") {
         "killed"
     } else if stop.starts_with("ExitProcess") {
         "exited"

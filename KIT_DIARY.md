@@ -818,3 +818,21 @@ existed. H5 again: the next card puts the run's conclusion in a tracked file and
 to a tail entry's Files line also matched the same text inside an earlier quoted command and changed the record of
 what ran. Edits to BLACKBOARD use the Edit tool on a string unique to the target, or check the count of matches
 before the write.
+
+### 2026-10-29 — Sprints 216-218: judge work ahead of the stream, a default that classed errors, two plants one text
+
+**Finding (#84):** work on the judges can crowd out the work they judge. Sprints 216 and 217 moved no row of the
+batch run's stream, and the draft of 218 would have moved none; reviewer-3's review of 215-217 named it (High 2), and
+the stream then went from 6,698 rows to all 10,505 of the reference in one card. Its review of 218 found the step-4
+gate's other items (classes, 63 families, two guests, the oracle move) on no sequence at all. A sequence Decision
+names the plan's gate items it leaves open, and a judge's refinement waits while its verdict already conforms.
+
+**Finding (#85):** a conversion that defaults hides a classification. `impl From<String> for ModuleError` made every
+`?` on a string a failure, so the full TLS array and the arena's refusals, which the frozen host raises as
+Unimplemented, ended a run as faults with nothing at the site to say so. A typed error has no default: each site names
+its kind, and the compiler lists the sites.
+
+**Finding (#86):** two planted faults that reach one judge text do not show the judge tells them apart. Sprint 218's
+wrong TLS index and its missing block both crashed the probe before it printed a row, and both read "stopped at
+ExitProcess { code: 3221225477 }". Each plant names the judge text it expects before it runs, and a pair that shares
+one is recorded as such, or given a judge that survives the fault.

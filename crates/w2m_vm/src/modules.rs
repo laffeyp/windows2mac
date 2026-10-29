@@ -81,10 +81,20 @@ fn dlls(guest: &Guest) -> impl Iterator<Item = (String, u64, u64, usize)> + '_ {
         .map(|(i, d)| (d.name.to_lowercase(), d.base, u64::from(d.pe.size_of_image), i))
 }
 
+/// Why a module request was not answered (Sprint 218; the Deferred entry on the helpers' errors, reviewer-3's High 1 of
+/// its review of Sprint 211): a case Windows serves that w2m does not serve yet, the Python's Unimplemented, which
+/// ends a run as unserved; or a failure of the host's own (a file unreadable, a PE that does not parse, a mapping
+/// error), which ends it as a fault. Each site names its kind; there is no conversion from a string, so a new error is
+/// classed where it arises (reviewer-3's Medium 3 of its review of Sprint 218).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModuleError {
+    NotServed(String),
+    Failed(String),
+}
+
 /// `module` (94-132): the handle `name` means, 0 when it is found nowhere; `loading` is LoadLibrary, which would load
-/// a DLL not yet in the process, where GetModuleHandle reports only loaded ones. Err is the Python's Unimplemented: a
-/// stop by name.
-pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, String> {
+/// a DLL not yet in the process, where GetModuleHandle reports only loaded ones.
+pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, ModuleError> {
     use guest_runtime::layout::{MONITOR_SIZE, PROCESS_VA, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF};
     let p = &guest.process;
     let used = p.system.len() as u64;
@@ -118,7 +128,9 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Strin
         let spelling = spec()
             .system32
             .get(&c)
-            .ok_or_else(|| format!("{c}: loaded as a system DLL, and System32 holds no such file"))?
+            .ok_or_else(|| {
+                ModuleError::Failed(format!("{c}: loaded as a system DLL, and System32 holds no such file"))
+            })?
             .clone();
         let off = handle - PROCESS_VA;
         let process = &mut guest.memory.as_mut_slice()[MONITOR_SIZE as usize..];
@@ -132,41 +144,38 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Strin
 /// in the VirtualAlloc arena at its preferred base or relocated (`place_image`), mapped, its imports bound (a loaded
 /// DLL's export, else the import thunk), snapshotted, and added to the module table under the file's own name and full
 /// path, PEB.Ldr and the trace ranges; its DllMain, if it has an entry, left to the init stub that the module request's
-/// second answer gives the guest runtime. 0: no file. A DLL with TLS callbacks stops by name as the Python's does; one
-/// with static TLS stops by name too, `_late_static_tls` not being ported (no row loads one).
-fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, String> {
+/// second answer gives the guest runtime. 0: no file. A DLL with TLS callbacks stops by name as the Python's does, a
+/// refusal; one with static TLS gets its index and a block in every thread (`threads::late_static_tls`, Sprint 218).
+fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
     use crate::guest::PROCESS_SIZE;
     use guest_runtime::layout::MONITOR_SIZE;
     let Some(files) = guest.files.as_ref() else {
         return Ok(0);
     };
-    let Some(host) = files.host_file(name)? else {
+    let Some(host) = files.host_file(name).map_err(ModuleError::NotServed)? else {
         return Ok(0);
     };
     let root = files.root.clone();
-    let raw = std::fs::read(&host).map_err(|e| format!("LoadLibrary {name}: {}: {e}", host.display()))?;
-    let pe = pe_image::parse(&raw, false).map_err(|e| format!("LoadLibrary {name}: {e:?}"))?;
+    use ModuleError::{Failed, NotServed};
+    let raw = std::fs::read(&host).map_err(|e| Failed(format!("LoadLibrary {name}: {}: {e}", host.display())))?;
+    let pe = pe_image::parse(&raw, false).map_err(|e| Failed(format!("LoadLibrary {name}: {e:?}")))?;
     if !pe.tls_callbacks.is_empty() {
-        return Err(format!(
+        return Err(ModuleError::NotServed(format!(
             "LoadLibrary {name}: TLS callbacks in a DLL loaded after the start"
-        ));
-    }
-    if pe.tls.is_some() {
-        return Err(format!(
-            "LoadLibrary {name}: static TLS in a DLL loaded after the start, not served by the Rust host yet"
-        ));
+        )));
     }
     let file = host
         .file_name()
         .map_or(String::new(), |f| f.to_string_lossy().to_string());
-    let base = guest.arena.place_image(pe.clone()).map_err(|e| e.0)?;
+    // the arena with no free range: its refusal (`Unimplemented`)
+    let base = guest.arena.place_image(pe.clone()).map_err(|e| NotServed(e.0))?;
     let mut staging = pe_loader::Memory::default();
-    pe_loader::map_image(&mut staging, &raw, &pe, base, &file).map_err(|e| format!("{file}: {e:?}"))?;
+    pe_loader::map_image(&mut staging, &raw, &pe, base, &file).map_err(|e| Failed(format!("{file}: {e:?}")))?;
     let data = &staging.regions[0].data;
     let at = guest
         .layout
         .offset(base)
-        .ok_or_else(|| format!("{file} placed at 0x{base:x}, which is not mapped"))? as usize;
+        .ok_or_else(|| Failed(format!("{file} placed at 0x{base:x}, which is not mapped")))? as usize;
     guest.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
     for (&slot, target) in &pe.iat {
         let (dll, function) = target.split_once('!').unwrap_or((target, ""));
@@ -179,12 +188,17 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, String> {
                 .iter()
                 .find(|(n, _)| n == function)
                 .map(|(_, rva)| dll_base + u64::from(*rva))
-                .ok_or_else(|| format!("{file} imports {target}, which {leaf} does not export"))?,
-            None => guest.import_thunk(target).map_err(|e| format!("{e:?}"))?,
+                .ok_or_else(|| {
+                    // Windows fails the load (ERROR_PROC_NOT_FOUND), an answer w2m does not give yet
+                    ModuleError::NotServed(format!("{file} imports {target}, which {leaf} does not export"))
+                })?,
+            None => guest.import_thunk(target).map_err(|e| Failed(format!("{e:?}")))?,
         };
         let s = at + slot as usize;
         guest.memory.as_mut_slice()[s..s + 8].copy_from_slice(&va.to_le_bytes());
     }
+    // its static TLS in every thread before the snapshot and before it joins the images (vm_backend 3938-3940)
+    crate::threads::late_static_tls(guest, &pe, base)?;
     let view = crate::guest::GuestView {
         mem: guest.memory.as_mut_slice(),
         layout: &guest.layout,
@@ -211,12 +225,13 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, String> {
         paths: &guest.dll_paths,
     };
     let process = &mut guest.memory.as_mut_slice()[MONITOR_SIZE as usize..(MONITOR_SIZE + PROCESS_SIZE) as usize];
-    crate::process::write_loader_data(process, &list, &guest.process).map_err(|e| e.0)?;
-    guest.trace_ranges().map_err(|e| format!("{e:?}"))?;
+    // its only errors are the loader area full (process.rs 548, 569), a capacity, as the system slots are
+    crate::process::write_loader_data(process, &list, &guest.process).map_err(|e| NotServed(e.0))?;
+    guest.trace_ranges().map_err(|e| Failed(format!("{e:?}")))?;
     if entry_rva != 0 {
         guest.pending_init = guest
             .init_stub(base, base + u64::from(entry_rva))
-            .map_err(|e| format!("{e:?}"))?;
+            .map_err(|e| Failed(format!("{e:?}")))?;
     }
     Ok(base)
 }
@@ -332,7 +347,8 @@ struct Handles<'a> {
 }
 
 /// `module` over the handles alone, in modules.py 97-132's order.
-fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
+fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, ModuleError> {
+    use ModuleError::NotServed;
     let c = canonical(name);
     if c == "kernel32.dll" {
         return Ok(h.kernel32);
@@ -352,11 +368,15 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
         return Ok(h.kernelbase);
     }
     if c.starts_with("api-ms-") || c.starts_with("ext-ms-") {
-        return Err(format!("API set {name}: its host module on Windows is not observed"));
+        return Err(NotServed(format!(
+            "API set {name}: its host module on Windows is not observed"
+        )));
     }
     if c == "ntdll.dll" {
         if h.ntdll == 0 {
-            return Err("ntdll.dll: loaded in every Windows process, not modeled".into());
+            return Err(NotServed(
+                "ntdll.dll: loaded in every Windows process, not modeled".into(),
+            ));
         }
         return Ok(h.ntdll);
     }
@@ -371,22 +391,24 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, String> {
     }
     // `_load_dll` (vm_backend 3906-3918): a file the name finds, full or relative to C:\w2m\app, is mapped (`module`
     // does it, Sprint 205); FILE_FOUND marks it here
-    if h.app.host_file(name)? {
+    if h.app.host_file(name).map_err(NotServed)? {
         return Ok(FILE_FOUND);
     }
     // modules.py 124-129: a System32 DLL whose exports the spec lists is a synthetic system image in the next free
     // slot, as one imported at the start has (Sprint 202: combase.dll at the batch run's row 49)
     if spec().system32.contains_key(&c) && spec().exports.contains_key(&c[..c.len() - 4]) {
         return h.next_system.ok_or_else(|| {
-            format!(
+            NotServed(format!(
                 "{c}: the process area holds {} system DLLs",
                 guest_runtime::layout::SYSTEM_IMAGES
-            )
+            ))
         });
     }
     // modules.py 130-131
     if spec().system32.contains_key(&c) || h.app.contains(&c) {
-        return Err(format!("LoadLibrary {name}: a Windows DLL w2m does not model"));
+        return Err(NotServed(format!(
+            "LoadLibrary {name}: a Windows DLL w2m does not model"
+        )));
     }
     // modules.py 132: a name found nowhere (Sprint 196; reviewer-2's Medium 1 of its review of 185-189)
     Ok(0)
@@ -423,7 +445,7 @@ pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
 }
 
 /// `proc` (160-190): GetProcAddress, a thunk or an export's address, 0 when the module does not export `name`.
-pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
+pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, ModuleError> {
     let export = |i: usize| {
         let image = &guest.images[i];
         image
@@ -465,9 +487,9 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
     } else if handle != 0 && handle == p.ntdll {
         "ntdll"
     } else {
-        return Err(format!(
+        return Err(ModuleError::NotServed(format!(
             "GetProcAddress on module 0x{handle:x}, which w2m did not hand out"
-        ));
+        )));
     };
     if !spec().exports.get(module).is_some_and(|names| names.contains(name)) {
         return Ok(0);
@@ -488,18 +510,20 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, String> {
 
 /// GetProcAddress's own thunk for `key` ("DLL!Name" as asked), made once (`Modules._thunks`, modules.py 176, 189;
 /// Sprint 209: before, `import_thunk` reused any thunk of the name, the trace's own among them).
-fn proc_thunk(guest: &mut Guest, key: String) -> Result<u64, String> {
+fn proc_thunk(guest: &mut Guest, key: String) -> Result<u64, ModuleError> {
     if let Some(t) = guest.proc_thunks.get(&key) {
         return Ok(*t);
     }
-    let t = guest.make_thunk(&key).map_err(|e| format!("{e:?}"))?;
+    let t = guest
+        .make_thunk(&key)
+        .map_err(|e| ModuleError::Failed(format!("{e:?}")))?;
     guest.proc_thunks.insert(key, t);
     Ok(t)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AppDirectory, FILE_FOUND, Handles, canonical, module_in};
+    use super::{AppDirectory, FILE_FOUND, Handles, ModuleError, canonical, module_in};
 
     /// A process of the program, one DLL beside it and one system image; the synthetic pages at 0x1000 steps.
     fn handles() -> Handles<'static> {
@@ -548,27 +572,29 @@ mod tests {
             assert_eq!(module_in(&h, found, true), Ok(FILE_FOUND), "{found}");
         }
         assert_eq!(module_in(&h, "C:\\Windows\\System32\\w2m-none.dll", true), Ok(0));
-        assert!(module_in(&h, "D:\\x.dll", true).unwrap_err().contains("other than C:"));
+        // each a refusal, which ends a run as unserved, not a failure (Sprint 218)
+        let refused = |r: Result<u64, ModuleError>, why: &str| {
+            assert!(
+                matches!(&r, Err(ModuleError::NotServed(m)) if m.contains(why)),
+                "{why}: {r:?}"
+            )
+        };
+        refused(module_in(&h, "D:\\x.dll", true), "other than C:");
         assert_eq!(module_in(&h, "w2m-no-such-module.dll", true), Ok(0));
         assert_eq!(module_in(&h, "Plugin.dll", true), Ok(FILE_FOUND));
         // modules.py 124-131 (Sprint 202): a System32 DLL whose exports the spec lists loads in the next system slot,
         // the winrt API set's host combase.dll too; one the spec lacks is a DLL w2m does not model; full slots stop
         assert_eq!(module_in(&h, "dbghelp.dll", true), Ok(0x5000));
         assert_eq!(module_in(&h, "api-ms-win-core-winrt-l1-1-0.dll", true), Ok(0x5000));
-        assert!(
-            module_in(&h, "aphostclient.dll", true)
-                .unwrap_err()
-                .contains("a Windows DLL w2m does not model")
+        refused(
+            module_in(&h, "aphostclient.dll", true),
+            "a Windows DLL w2m does not model",
         );
         let full = Handles {
             next_system: None,
             ..handles()
         };
-        assert!(
-            module_in(&full, "dbghelp.dll", true)
-                .unwrap_err()
-                .contains("system DLLs")
-        );
+        refused(module_in(&full, "dbghelp.dll", true), "system DLLs");
     }
 
     /// modules.py's docstring, row by row: kernel32, kernelbase, the program, its DLLs, the system images, ntdll, an
@@ -587,7 +613,9 @@ mod tests {
         assert_eq!(module_in(&h, "api-ms-win-core-winrt-l1-1-0.dll", false), Ok(0));
         assert_eq!(
             module_in(&h, "api-ms-win-shcore-scaling-l1-1-1", true),
-            Err("API set api-ms-win-shcore-scaling-l1-1-1: its host module on Windows is not observed".into())
+            Err(ModuleError::NotServed(
+                "API set api-ms-win-shcore-scaling-l1-1-1: its host module on Windows is not observed".into()
+            ))
         );
         assert_eq!(module_in(&h, "nothing.dll", false), Ok(0));
     }

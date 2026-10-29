@@ -16,12 +16,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 const STOPS: &str = "store/family_runs/module-stops-2026-10-28.tsv";
-/// The module families: the gates' short name and the contract
-const FAMILIES: [(&str, &str); 4] = [
+/// The families: the gates' short name and the contract; the loader's late TLS from Sprint 218, its rows raw
+/// (`family_run.py`'s late_tls family derives and excludes nothing)
+const FAMILIES: [(&str, &str); 5] = [
     ("queries", "windows.module.queries"),
     ("system", "windows.module.system"),
     ("names_ansi", "windows.module.names_ansi"),
     ("search", "windows.module.search"),
+    ("late_tls", "windows.loader.late_tls"),
 ];
 
 fn root() -> PathBuf {

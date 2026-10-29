@@ -120,6 +120,9 @@ pub enum RunEnd {
     Exited(u32),
     /// the run's time limit: timed_out
     TimedOut,
+    /// the VM's step budget spent (`max_steps`), a limit the harness chose and not the guest's fault: killed, as
+    /// `run_frontier.py` 71 and 405 class it (`HARNESS_STOPS`; Sprint 218)
+    StepLimit,
     /// a request the host does not serve, made inside a Windows call: SERVICE_UNIMPLEMENTED with the call ("DLL!Function")
     /// and its return address, then killed
     Unimplemented { service: String, return_address: u64 },
@@ -143,6 +146,7 @@ impl RunEnd {
         match stop {
             StopKind::ExitProcess(code) => RunEnd::Exited(*code),
             StopKind::TimeLimit => RunEnd::TimedOut,
+            StopKind::StepLimit => RunEnd::StepLimit,
             StopKind::Unserved => match called {
                 Some((ret, Some(name))) if in_flight.contains(&name) => RunEnd::Unimplemented {
                     service: name,
@@ -163,6 +167,8 @@ pub enum StopKind {
     ExitProcess(u32),
     /// the run's time limit
     TimeLimit,
+    /// the VM's step budget
+    StepLimit,
     /// a host request the host does not serve
     Unserved,
     /// anything else, a failure in serving a request among them
@@ -259,7 +265,7 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     let (exit_status, exit_code) = match &e.end {
         RunEnd::Exited(code) => (ExitStatus::Exited, Some(*code)),
         RunEnd::TimedOut => (ExitStatus::TimedOut, None),
-        RunEnd::Unimplemented { .. } | RunEnd::Unserved => (ExitStatus::Killed, None),
+        RunEnd::Unimplemented { .. } | RunEnd::Unserved | RunEnd::StepLimit => (ExitStatus::Killed, None),
         RunEnd::Faulted => (ExitStatus::Faulted, None),
     };
     let elapsed =
@@ -459,6 +465,11 @@ mod tests {
         assert_eq!(status(&exited), "exited");
         assert!(!kinds(&exited).contains(&"SERVICE_UNIMPLEMENTED".to_string()));
         assert_eq!(status(&run(RunEnd::TimedOut)), "timed_out");
+        assert_eq!(
+            status(&run(RunEnd::StepLimit)),
+            "killed",
+            "the step budget is the harness's stop"
+        );
         assert_eq!(status(&run(RunEnd::Faulted)), "faulted");
         let unserved = run(RunEnd::Unserved);
         assert_eq!(status(&unserved), "killed");

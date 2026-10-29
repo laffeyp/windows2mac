@@ -153,7 +153,10 @@ fn the_varying_cells_are_where_the_python_runs_differ() {
 }
 
 /// The Rust run's call stream is the Python's, row for row, every cell but the varying ones, up to the stop; the call
-/// in flight at the stop, when there is one, is the Python's next row but its return and error.
+/// in flight at the stop, when there is one, is the Python's next row but its return and error. From Sprint 218 the
+/// Rust run can trace past the Python's stream, which ends where `run_frontier.py`'s harness stopped its run ("the log
+/// holds the reference's 168 lines and the main thread its calls", 306); then every Python row is held, and the rows
+/// past it are judged against Windows alone (`crates/call_compare/tests/call_compare.rs`).
 #[test]
 fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     let root = root();
@@ -165,7 +168,7 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     let ours: Vec<&str> = calls.lines().collect();
     let python: Vec<&str> = stream.lines().take(ours.len() + 1).collect();
     assert!(!ours.is_empty(), "the Rust run traced no call");
-    assert!(ours.len() < python.len(), "the Rust stream runs past the Python's");
+    let past = ours.len() >= python.len();
     for (row, (r, p)) in ours.iter().zip(&python).enumerate() {
         let cells = |l: &'_ str| -> Vec<String> {
             l.split('\t')
@@ -184,6 +187,14 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
             cells(p),
             "row {row} of the call stream differs from the Python batch run's"
         );
+    }
+    if past {
+        println!(
+            "the Rust stream equals the Python's rows 0-{} and runs {} rows past them",
+            python.len() - 1,
+            ours.len() - python.len()
+        );
+        return;
     }
     // a stop inside a traced call leaves it in flight; a stop between calls (a created thread's stack growing, Sprint
     // 211) leaves none, and the stream's rows are all that is held

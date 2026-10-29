@@ -17,6 +17,7 @@ use pe_loader::TLS_SLOTS;
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
 
 use crate::guest::{Guest, GuestView};
+use crate::modules::ModuleError;
 use crate::process::{CLOCK_MODE, CLOCK_RATE, CLOCK_WARP};
 use crate::run::{FCW_OFF, MXCSR_OFF, REG_UNDEFINED_FLAGS, RUN_END, fpcr_for};
 
@@ -109,18 +110,24 @@ fn read_guest(guest: &Guest, va: u64, n: u64) -> Result<Vec<u8>, String> {
 
 /// `VirtualAlloc` in the arena for the host: the base, or the error named.
 fn alloc(guest: &mut Guest, address: u64, size: u64, kind: u32, what: &str) -> Result<u64, String> {
-    let mut view = GuestView {
-        mem: guest.memory.as_mut_slice(),
-        layout: &guest.layout,
-    };
-    let (va, err) = guest
-        .arena
-        .alloc(&mut view, address, size, kind, PAGE_READWRITE)
-        .map_err(|e| e.0)?;
+    let (va, err) = arena_alloc(guest, address, size, kind)?;
     if err != 0 {
         return Err(format!("{what}: VirtualAlloc error {err}"));
     }
     Ok(va)
+}
+
+/// The arena's answer for the host: the base and VirtualAlloc's error (0, or the error a guest would read), or Err
+/// when the arena itself fails.
+fn arena_alloc(guest: &mut Guest, address: u64, size: u64, kind: u32) -> Result<(u64, u32), String> {
+    let mut view = GuestView {
+        mem: guest.memory.as_mut_slice(),
+        layout: &guest.layout,
+    };
+    guest
+        .arena
+        .alloc(&mut view, address, size, kind, PAGE_READWRITE)
+        .map_err(|e| e.0)
 }
 
 /// `_add_thread` (3328-3344): a new thread's run table entry, after the others (the table's order is the ids', the
@@ -230,6 +237,65 @@ pub fn thread_static_tls(guest: &mut Guest) -> Result<u64, String> {
     Ok(base)
 }
 
+/// Whether the thread at run table entry `index` has ended: its state, as the switch keeps it (`t.status == "ended"`,
+/// vm_backend 3963), not its exit code, which a thread can set to STILL_ACTIVE itself and which THREAD_END sets
+/// while the thread still runs its detach callbacks (reviewer-3's Medium 1 of its review of Sprint 218).
+pub fn ended(guest: &Guest, index: u64) -> bool {
+    read_u64(guest.memory.as_slice(), entry(index) + E_STATUS) == ENDED
+}
+
+/// `_late_static_tls` (3953-3978; Sprint 218): static TLS for a DLL loaded after the start, `pe` placed at `base`, as
+/// `contracts/windows.loader.late_tls` holds Windows doing it. The DLL takes the next index (1 + the DLLs before it
+/// with static TLS), written at its AddressOfIndex. Every thread not ended, those started before the load and the
+/// loading one, gets its own block, the template with its zero fill, in its array's slot; the array does not move
+/// (each holds `TLS_SLOTS`). A thread started later gets the block from `thread_static_tls`, which reads the images.
+/// An ended thread is one whose run table state is ENDED (`ended`).
+///
+/// The full array and the arena's refusals are refusals, as the frozen host raises them Unimplemented (3961, 3971,
+/// 3976); an address not mapped is a failure.
+pub fn late_static_tls(guest: &mut Guest, pe: &pe_image::PeImage, base: u64) -> Result<(), ModuleError> {
+    use ModuleError::{Failed, NotServed};
+    let Some(tls) = &pe.tls else { return Ok(()) };
+    let index = 1 + guest.images[1..].iter().filter(|i| i.pe.tls.is_some()).count() as u64;
+    if index >= TLS_SLOTS as u64 {
+        return Err(NotServed(format!(
+            "static TLS index {index}: each thread's array holds {TLS_SLOTS}"
+        )));
+    }
+    let refused = |what: &str, (va, err): (u64, u32)| {
+        if err == 0 {
+            Ok(va)
+        } else {
+            Err(NotServed(format!("{what}: VirtualAlloc error {err}")))
+        }
+    };
+    let relocate = |v: u64| v - pe.image_base + base;
+    let (start, end) = (relocate(tls.start), relocate(tls.end));
+    write_guest(guest, relocate(tls.index), &(index as u32).to_le_bytes()).map_err(Failed)?;
+    let mut block = read_guest(guest, start, end - start).map_err(Failed)?;
+    block.resize(block.len() + tls.zero_fill as usize, 0);
+    let tebs: Vec<u64> = guest
+        .threads
+        .values()
+        .filter(|t| !ended(guest, t.index))
+        .map(|t| t.teb)
+        .collect();
+    for teb in tebs {
+        let mut array = u64::from_le_bytes(read_guest(guest, teb + 0x58, 8).map_err(Failed)?.try_into().unwrap());
+        if array == 0 {
+            // no module had static TLS: the thread's first array
+            let answer = arena_alloc(guest, 0, 8 * TLS_SLOTS as u64, MEM_COMMIT | MEM_RESERVE).map_err(Failed)?;
+            array = refused("a thread's TLS array", answer)?;
+            write_guest(guest, teb + 0x58, &array.to_le_bytes()).map_err(Failed)?;
+        }
+        let answer = arena_alloc(guest, 0, block.len().max(16) as u64, MEM_COMMIT | MEM_RESERVE).map_err(Failed)?;
+        let va = refused("a thread's TLS block", answer)?;
+        write_guest(guest, va, &block).map_err(Failed)?;
+        write_guest(guest, array + 8 * index, &va.to_le_bytes()).map_err(Failed)?;
+    }
+    Ok(())
+}
+
 /// scheduler.py `_call`: sub rsp, 0x28; mov rcx, rcx; mov edx, edx; xor r8d, r8d; mov rax, fn; call rax; add rsp, 0x28.
 fn call(code: &mut Vec<u8>, function: u64, rcx: u64, edx: u32) {
     code.extend([0x48, 0x83, 0xec, 0x28, 0x48, 0xb9]);
@@ -321,7 +387,8 @@ pub fn suspend(guest: &mut Guest, tid: u32, resume: bool) -> Result<u64, String>
     let mem = guest.memory.as_mut_slice();
     let at = entry(index);
     let count = read_u64(mem, at + E_SUSPEND);
-    let ended = read_u64(mem, at + E_STATUS) == ENDED;
+    let ended = ended(guest, index);
+    let mem = guest.memory.as_mut_slice();
     Ok(match (resume, ended, count) {
         (false, true, _) => u64::MAX,
         (false, false, n) => {
@@ -1016,6 +1083,59 @@ mod tests {
         super::create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
         let tid = super::create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
         (g, tid)
+    }
+
+    /// A thread has ended by its run table state, not its exit code (Sprint 218; reviewer-3's Medium 1): an ended thread
+    /// whose code is 259, STILL_ACTIVE's value, has ended; a running one whose code THREAD_END has set has not.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_thread_has_ended_by_its_state_not_its_exit_code() {
+        use super::{ENDED, READY, STILL_ACTIVE, ended, set_status};
+
+        let (mut g, tid) = guest_with_a_thread();
+        let index = g.threads[&tid].index;
+        assert!(!ended(&g, index));
+        g.threads.get_mut(&tid).unwrap().exit_code = 7;
+        assert!(!ended(&g, index), "THREAD_END's code set, the thread still running");
+        set_status(&mut g, index, ENDED);
+        g.threads.get_mut(&tid).unwrap().exit_code = STILL_ACTIVE;
+        assert!(
+            ended(&g, index),
+            "ExitThread(259): ended, its code reading STILL_ACTIVE"
+        );
+        set_status(&mut g, index, READY);
+        assert!(!ended(&g, index));
+    }
+
+    /// A late DLL whose index would pass each thread's array (`TLS_SLOTS`) is refused, a request not served, as the
+    /// frozen host raises it Unimplemented (vm_backend 3961; reviewer-3's Medium 3 of its review of Sprint 218).
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_late_dll_past_the_tls_array_is_refused() {
+        use super::late_static_tls;
+        use crate::modules::ModuleError;
+
+        let (mut g, _) = guest_with_a_thread();
+        let mut pe = g.images[0].pe.clone();
+        pe.tls = Some(pe_image::Tls {
+            start: pe.image_base,
+            end: pe.image_base,
+            index: pe.image_base,
+            zero_fill: 0,
+        });
+        for n in 0..pe_loader::TLS_SLOTS - 1 {
+            g.images.push(pe_loader::Image {
+                name: format!("late{n}.dll"),
+                pe: pe.clone(),
+                base: 0,
+            });
+        }
+        assert_eq!(
+            late_static_tls(&mut g, &pe, 0),
+            Err(ModuleError::NotServed(
+                "static TLS index 64: each thread's array holds 64".into()
+            ))
+        );
     }
 
     /// SuspendThread and ResumeThread answer the previous count (Sprint 215; Microsoft Learn: "the thread's previous

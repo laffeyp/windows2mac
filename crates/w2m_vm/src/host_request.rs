@@ -28,6 +28,8 @@ pub const HOST_EXCEPTION: u64 = 31;
 use crate::file_bridge::{
     FILE_DUP, FILE_FSTAT, FILE_LIST, FILE_LOOKUP, FILE_MKDIR, FILE_RMDIR, FILE_STAT, FILE_UNLINK,
 };
+/// vm_backend 283: the wall clock as FILETIME (process.c's `w2m_filetime_now`, when the clock is the host's)
+pub const HOST_FILETIME: u64 = 14;
 /// vm_backend 287: a0 bytes of the host's CSPRNG at guest address a1 (bcrypt.c, com.c)
 pub const HOST_RANDOM: u64 = 23;
 /// vm_backend 288: a view of a0 bytes of file descriptor a1 with protection a2 (file.c)
@@ -69,11 +71,20 @@ pub enum HostError {
     /// `Unimplemented` (a descriptor not open, the arena's refusals); the run stops as unserved
     NotServed(String),
     /// a request w2m serves that failed in the serving (an unmapped buffer, a host call refused, a helper's error); the
-    /// run stops as a fault. The helpers in `modules`, `kernel`, `threads` and `file_bridge` return their refusals and
-    /// failures as one string, so theirs land here until they carry typed errors
+    /// run stops as a fault. `modules` tells its refusals from its failures (`ModuleError`, Sprint 218); the helpers in
+    /// `kernel`, `threads` and `file_bridge` return both as one string, so theirs land here until they carry typed errors
     Failed(String),
     Guest(GuestError),
     Hv(HvError),
+}
+
+impl From<crate::modules::ModuleError> for HostError {
+    fn from(e: crate::modules::ModuleError) -> HostError {
+        match e {
+            crate::modules::ModuleError::NotServed(why) => HostError::NotServed(why),
+            crate::modules::ModuleError::Failed(why) => HostError::Failed(why),
+        }
+    }
 }
 
 impl fmt::Display for HostError {
@@ -367,14 +378,13 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                         .iter()
                         .map(|c| u16::from_le_bytes(*c))
                         .collect();
-                    crate::modules::module(guest, &String::from_utf16_lossy(&units), a2 != 0)
-                        .map_err(HostError::Failed)?
+                    crate::modules::module(guest, &String::from_utf16_lossy(&units), a2 != 0)?
                 }
                 HOST_PROC => {
                     // latin-1: each byte its own code point (vm_backend 3895)
                     let name: String = read(guest, a1, a2)?.iter().map(|b| char::from(*b)).collect();
                     // GetProcAddress's answer as the capture's process sees it (`_traced_proc`, vm_backend 3895)
-                    let va = crate::modules::proc(guest, a0, &name).map_err(HostError::Failed)?;
+                    let va = crate::modules::proc(guest, a0, &name)?;
                     guest.traced_proc(va)?
                 }
                 _ => match crate::modules::file_name(guest, a0) {
@@ -528,6 +538,14 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             crate::kernel::Memory::write(&mut KernelMemory(guest), a1, &bytes).map_err(HostError::Failed)?;
             a0
         }
+        // vm_backend 3843-3844 (Sprint 218): the system time, 100 ns intervals since 1601-01-01, as
+        // GetSystemTimeAsFileTime gives it; a probe's static C runtime reads it as it starts
+        HOST_FILETIME => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| HostError::Failed(format!("the wall clock: {e}")))?;
+            (now.as_nanos() / 100) as u64 + crate::file_bridge::FILETIME_UNIX_EPOCH
+        }
         HOST_MAP_VIEW => {
             let (second, base) = map_view(guest, a0, a1, a2)?;
             let mem = guest.memory.as_mut_slice();
@@ -601,7 +619,20 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
 
 #[cfg(test)]
 mod tests {
-    use super::memory_basic_information;
+    use super::{HostError, memory_basic_information};
+    use crate::modules::ModuleError;
+
+    /// A module refusal is a request not served, which ends a run as unserved; a module failure is a fault (Sprint 218;
+    /// before, both were `Failed` and the batch run's steam_api64.dll refusal read as a fault).
+    #[test]
+    fn a_module_refusal_is_not_served_and_a_failure_is_a_fault() {
+        let refused = HostError::from(ModuleError::NotServed(
+            "LoadLibrary x.dll: a Windows DLL w2m does not model".into(),
+        ));
+        assert!(matches!(refused, HostError::NotServed(m) if m.contains("does not model")));
+        let failed = HostError::from(ModuleError::Failed("x.dll: not a PE".into()));
+        assert!(matches!(failed, HostError::Failed(m) if m == "x.dll: not a PE"));
+    }
 
     /// `struct.pack("<QQIHHQIIIi", base, allocation_base, allocation_protect, 0, 0, region_size, state, protect, type,
     /// 0)` (vm_backend 4044-4045) for a committed read-write page of a reservation, its bytes written out by hand.

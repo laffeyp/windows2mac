@@ -139,18 +139,24 @@ pub enum Stop {
     /// a model exit (hvc 10 or 11) the model could not step: an operation it does not run, or a flag read while
     /// undefined (Sprint 181), at guest `rip`
     Model { rip: u64, why: String },
+    /// the run's time limit, `hv_vcpus_exit` from w2m-vm's GUEST_SECONDS or GAME_SECONDS (Sprint 197)
+    TimeLimit,
+    /// the VM's step budget spent, `count` of `max` steps, at host `pc` (Sprint 218; reviewer-3's Low 1 of its review of
+    /// Sprint 218: it had been an `Exit` read back from its text)
+    StepLimit { count: u64, max: u64, pc: u64 },
     /// any other exit
     Exit(String),
 }
 
 impl Stop {
     /// The kind a record's end is read from (`record::RunEnd::of`): a request not served, a failure in serving one
-    /// (Other), ExitProcess, the time limit (`Exit("the run's time limit")`, w2m-vm's GUEST_SECONDS and GAME_SECONDS).
+    /// (Other), ExitProcess, the time limit, the step budget.
     pub fn kind(&self) -> crate::record::StopKind {
         use crate::record::StopKind;
         match self {
             Stop::ExitProcess { code } => StopKind::ExitProcess(*code),
-            Stop::Exit(why) if why == "the run's time limit" => StopKind::TimeLimit,
+            Stop::TimeLimit => StopKind::TimeLimit,
+            Stop::StepLimit { .. } => StopKind::StepLimit,
             Stop::HostRequest { .. } => StopKind::Unserved,
             _ => StopKind::Other,
         }
@@ -675,7 +681,7 @@ fn run(
             *out.exits.entry(0).or_default() += 1;
             if matches!(exit, Exit::Canceled) {
                 // `hv_vcpus_exit` from the run's time limit (w2m-vm's GUEST_SECONDS; Sprint 197)
-                break Stop::Exit("the run's time limit".into());
+                break Stop::TimeLimit;
             }
             break Stop::Exit(format!("{exit:?} at pc 0x{pc:x}"));
         };
@@ -831,7 +837,11 @@ fn run(
             // entry
             let count = read_u64(guest.memory.as_slice(), md);
             if count >= max_steps {
-                break Stop::Exit(format!("max_steps: {count} of {max_steps} at pc 0x{pc:x}"));
+                break Stop::StepLimit {
+                    count,
+                    max: max_steps,
+                    pc,
+                };
             }
             crate::threads::set_budget(guest);
             crate::threads::wake_expired(guest);
