@@ -155,6 +155,15 @@ mod tests {
         );
     }
 
+    /// `random_seed` (`_randommodule.c`) splits the seed's absolute value into 32-bit words, least significant first:
+    /// the reference key `{0x123, 0x234, 0x345, 0x456}` is the seed 0x456_00000345_00000234_00000123.
+    #[test]
+    fn a_seed_is_split_into_words_least_significant_first() {
+        let mut r = Random::new(0x456_0000_0345_0000_0234_0000_0123);
+        let first: Vec<u32> = (0..3).map(|_| r.next_u32()).collect();
+        assert_eq!(first, [1067595299, 955945823, 477289528]);
+    }
+
     /// `randbytes` is `getrandbits(8 n).to_bytes(n, 'little')`: whole words little-endian, and for a byte count that
     /// is not a multiple of 4 the last word shifted right, its low bytes kept.
     #[test]

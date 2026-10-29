@@ -88,7 +88,11 @@ The host's random bytes are the Python's on the instruction clock, and the batch
   replacement 1b, bit 8, failed the reference test, "left: [1059206915, 955945823, 477289528, ...]". Restored byte for
   byte.
 - **Plant 2** (the seed's words from the other end) cannot move the one-word seed 0x5EED; its replacement 2b, seed
-  0x5EEE, reached no judge: no row through 373 reads the bytes. Restored byte for byte.
+  0x5EEE, reached no judge: no row through 373 reads the bytes. Restored byte for byte. Its judge came at the close,
+  when `signal_report --check` refused the card: `a_seed_is_split_into_words_least_significant_first` seeds
+  `Random::new` with the reference key as one integer, 0x456_00000345_00000234_00000123; plant 2c, the key's words
+  reversed before `init_by_array`, failed it, "left: [437836682, 3467647173, 3421896878]". Restored byte for byte.
 - **Plant 3** (the last word unshifted): the `randbytes` test failed, "left: [12, 51, 74, 36, 189, 142]". Restored
   byte for byte.
-- **Departures:** plants 1 and 2 replaced as above; the seed has no run-level judge yet.
+- **Departures:** plants 1 and 2 replaced as above; plant 2's judge, a unit test, was added after the first close
+  attempt and the gates ran again; the seed 0x5EED itself has no run-level judge yet.
