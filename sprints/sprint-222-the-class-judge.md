@@ -143,6 +143,12 @@ holds the Rust index to the frozen one class by class.
   count, the two things the plants moved.
 - **Plant 3** (RET_NEAR dropped from the stored index): the gate failed, "RET_NEAR: not in
   store/case_runner/class-runs-2026-10-29.json". Restored byte for byte.
+- *(Annotated 2026-10-30, Sprint 235; reviewer-3's Medium 1 of its review at 235: the committed
+  `the_rust_index_is_the_frozen_one_or_held`, at this sprint's work commit af30038c7 and until Sprint 235, built its
+  faults and never asserted them. Plants 1 and 3 ran on a version that asserted, an assertion lost before the commit,
+  and were not run again on the committed tree. From this sprint to 234 the gate could not fail on a class's verdict
+  or on a class missing from the Rust index; the ledger's half of the same test did assert. The class verdicts of
+  222-234 are shown by Sprint 235's run, with the assertion restored, and not before.)*
 - **Fixed on the way:**
   - `--index` on a failed record wrote an empty index and exited 0. It now fails: "holds no comparison".
   - The candidate's sha256 was the Python words' for every class. A class the Rust translator compiles now names

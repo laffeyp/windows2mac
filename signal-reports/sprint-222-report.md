@@ -52,3 +52,7 @@ class-* 1 records: SESSION_INIT 1, CANDIDATE_GENERATED 458, COMPARISON_COMPLETED
 ## 4. Hypothesis
 
 See the BLACKBOARD tail entry for Sprint 222: its Rubber Duck Pass and close.
+
+*(Annotated 2026-10-30, Sprint 235; reviewer-3's Medium 1 of its review at 235: the signals above fired as declared,
+but the gate that held the class index to the frozen one asserted nothing at this sprint's work commit; its plants 1
+and 3 ran on an uncommitted version. Card 222's result holds the annotation; the index is shown by Sprint 235's run.)*

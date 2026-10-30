@@ -910,3 +910,12 @@ when a runner ignores one.
 **Finding (#97):** a count is read from structure, not from prose. `family_known` counted a contract's excluded rows by
 splitting its reasons at "; ", and the reasons hold "; " too: 8 of 10 families were miscounted, `windows.file.attributes`
 at 4 for 2. The names stood in the frozen source's dictionaries all along. Prose written for a reader is not a format.
+
+### 2026-10-30 — Sprint 235: a test that gathered its faults and never asserted them
+
+**Finding (#98):** a judge that gathers its faults must fail on them, and its plants must be run against it. The class
+judge's test `the_rust_index_is_the_frozen_one_or_held` built a list of faults from Sprint 222 and ended with a
+`println!`, no assertion; no class could fail it. Sprint 222's plants had reached other judges, the session and the
+case-count test, so this one was never seen to fail. It was found when 17 held classes came to conform and the test
+still passed. A gathering judge ends in one assertion over what it gathered, and each judge in a card's contract is
+planted against itself.
