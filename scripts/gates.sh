@@ -168,15 +168,18 @@ if [ $rust != none ]; then
   # run as probe.exe, its printed rows and stop under build/family_runs/, which crates/w2m_vm/tests/family_runs.rs
   # holds to its contract version's rows or to store/family_runs/sweep-held-2026-10-29.tsv. From Sprint 221 every run
   # the family index judged, 273 in 68 families, from the lookup store/family_runs/known-2026-10-29.tsv: the binary,
-  # its beside DLL (name:sha256), an instruction budget so a hang ends by count
+  # its beside DLL (name:sha256), an instruction budget so a hang ends by count; from Sprint 230 the start option
+  # instruction_clock as --instruction-clock, the one start option w2m-vm takes (tests/family_runs.rs holds a run whose
+  # family needs another)
   rm -rf build/family_runs
   mkdir -p build/family_runs
   tab=$(printf '\t')
-  grep -v '^#' store/family_runs/known-2026-10-29.tsv | while IFS=$tab read -r c run b _contract beside _rest; do
+  grep -v '^#' store/family_runs/known-2026-10-29.tsv | while IFS=$tab read -r c run b _contract beside _imports options _rule; do
     set --
     if [ "$beside" != "-" ] && [ "${beside#*:}" != "$beside" ]; then
       set -- --beside "${beside%%:*}" "store/binaries/${beside#*:}.dll"
     fi
+    case " $options " in *" instruction_clock "*) set -- "$@" --instruction-clock ;; esac
     echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "store/binaries/$b.exe" \
       --output "build/family_runs/$c-$run.txt" --stop "build/family_runs/$c-$run.stop" "$@" \
       --max-steps 20000000000 > /dev/null 2> "build/family_runs/$c-$run.stderr" || true

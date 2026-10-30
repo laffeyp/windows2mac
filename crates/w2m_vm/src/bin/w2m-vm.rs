@@ -148,11 +148,16 @@ mod run {
     pub fn main() -> Result<(), String> {
         let started = Instant::now();
         let mut args: Vec<String> = std::env::args().skip(1).collect();
-        // a guest on the instruction clock, `family_run.INSTRUCTION_CLOCK` as `run_guest` passes it (Sprint 199)
-        let instruction_clock = args.last().is_some_and(|a| a == "--instruction-clock");
-        if instruction_clock {
-            args.pop();
-        }
+        // a guest on the instruction clock, `family_run.INSTRUCTION_CLOCK` as `run_guest` passes it (Sprint 199); taken
+        // wherever it stands, as the other flags are (Sprint 230: read only as the last argument, it was left in the
+        // list behind `--max-steps`, and the run stopped at the usage)
+        let instruction_clock = match args.iter().position(|a| a == "--instruction-clock") {
+            Some(i) => {
+                args.remove(i);
+                true
+            }
+            None => false,
+        };
         // a file beside probe.exe under its name, as `run_in_vm` writes a family's DLL when `dll_on_disk` (Sprint 204)
         let beside = match args.iter().position(|a| a == "--beside") {
             Some(i) if args.len() >= i + 3 => {
