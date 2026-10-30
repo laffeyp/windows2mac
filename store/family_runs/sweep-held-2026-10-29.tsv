@@ -1,23 +1,9 @@
-# The family runs (store/family_runs/known-2026-10-29.tsv) that do not conform on the Rust host, and what each waits on (Sprint 221; Sprints 230-231): family, run, "stop: <stop>" (a temporary drive path and GetTempFileNameW name as fixed marks) or "ended; row <s> differs from <contract>@<version>" (the first contract row its ported row rule does not give); every run starts as its family starts (Sprint 231); written from build/family_runs/ by scripts/gates.sh's family loop, held by crates/w2m_vm/tests/family_runs.rs
-known_folders	38098265812	stop: HostRequest op 4: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1
-known_folders	38098267402	stop: HostRequest op 4: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1
-output_debug_string	38230799629	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
-output_debug_string	38230802984	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
-output_debug_string	38230806738	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
-output_debug_string	38230809940	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
+# The family runs (store/family_runs/known-2026-10-29.tsv) that do not conform on the Rust host, and what each waits on (Sprint 221; Sprints 230-233): family, run, "stop: <stop>" (a temporary drive path and GetTempFileNameW name as fixed marks), or "ended; <divergence> (<contract>@<version>)" and "stopped as expected; <divergence> (...)", the first divergence of the frozen judge's comparison (Sprint 233); every run starts as its family starts (Sprint 231); written from build/family_runs/ by scripts/gates.sh's family loop, held by crates/w2m_vm/tests/family_runs.rs
 running_thread_context	lap-20261013T234642777Z-5cb60b6d	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
 slim_locks	38048676516	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
 slim_locks	38048679185	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
 slim_locks	38048681485	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
 slim_locks	38048683615	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
-thread_storage	38040526466	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040528813	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040531024	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040533511	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040598310	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040600812	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040602719	stop: HostRequest op 4: FlsFree argument form 0x1
-thread_storage	38040604585	stop: HostRequest op 4: FlsFree argument form 0x1
 threads	38207005406	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
 threads	38207007264	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
 time	38173127764	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet

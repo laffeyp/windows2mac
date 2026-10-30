@@ -320,11 +320,94 @@ fn derive(family: &str, rule: &str, printed: Vec<Row>) -> Result<Vec<Row>, Strin
             }
             rows = kept;
         }
+        // 77-81 (Sprint 233): a row numbering one of several exceptions under one name gains ".exception<n>"
+        "numbered_exceptions" => {
+            for r in &mut rows {
+                if let Some(n) = r.get("exception") {
+                    let n = match n {
+                        Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    let s = format!("{}.exception{n}", name(r));
+                    r.insert("s".into(), Value::String(s));
+                }
+            }
+        }
+        // 1683 (Sprint 233): `err` dropped from every row that holds `hr`
+        "known_folders_rows" => {
+            for r in &mut rows {
+                if r.contains_key("hr") {
+                    r.remove("err");
+                }
+            }
+        }
         // 338-390 (Sprint 231): the windows' places as relations to the desktop
         "windows_rows" => rows = windows_rows(rows)?,
         other => return Err(format!("row rule {other} is not ported")),
     }
     Ok(rows)
+}
+
+/// Python's `==` over parsed JSON (Sprint 233): `True == 1`, `1 == 1.0`, lists and dicts element by element, where
+/// `serde_json`'s equality holds a boolean apart from a number and an integer apart from a float.
+fn py_eq(a: &Value, b: &Value) -> bool {
+    let number = |v: &Value| match v {
+        Value::Bool(b) => Some(f64::from(u8::from(*b))),
+        Value::Number(n) => n.as_f64(),
+        _ => None,
+    };
+    match (a, b) {
+        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| py_eq(p, q)),
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| py_eq(v, w)))
+        }
+        (Value::Number(x), Value::Number(y)) if x.is_i64() && y.is_i64() => x.as_i64() == y.as_i64(),
+        (Value::Number(x), Value::Number(y)) if x.is_u64() && y.is_u64() => x.as_u64() == y.as_u64(),
+        _ => match (number(a), number(b)) {
+            (Some(x), Some(y)) => x == y,
+            _ => a == b,
+        },
+    }
+}
+
+/// `compare_exact_rows` (`src/w2m/compare.py` 168-203 at the tag): the contract's rows in order, the first row
+/// missing, a different name in a row's place, a field unequal on either side's keys, or rows past the contract's,
+/// as the divergence; None when the rows conform.
+fn exact_rows(want: &[Value], got: &[Row]) -> Option<String> {
+    let none = Value::Null;
+    for (i, w) in want.iter().enumerate() {
+        let w = w.as_object()?;
+        let name = w.get("s").unwrap_or(&none);
+        let Some(row) = got.get(i) else {
+            return Some(format!(
+                "row {name}: missing ({} rows printed, {} expected)",
+                got.len(),
+                want.len()
+            ));
+        };
+        let theirs = row.get("s").unwrap_or(&none);
+        if !py_eq(theirs, name) {
+            return Some(format!("row {name}: target printed {theirs} in its place"));
+        }
+        let keys: std::collections::BTreeSet<&String> = w.keys().chain(row.keys()).collect();
+        for k in keys {
+            let (a, b) = (w.get(k).unwrap_or(&none), row.get(k).unwrap_or(&none));
+            if !py_eq(a, b) {
+                return Some(format!("row {name}: {k} reference {a}, target {b}"));
+            }
+        }
+    }
+    (got.len() > want.len()).then(|| format!("{} rows past the reference's {}", got.len() - want.len(), want.len()))
+}
+
+/// The frozen host's name for a Rust host's stop (Sprint 233): its `Unimplemented(...)` for a service's argument form
+/// (`HostRequest op 4`, HOST_UNIMPLEMENTED) and for an import no service answers, which a family's `expected_stop`
+/// names by prefix (`family_run.py` 3151 at the tag).
+fn frozen_stop(stop: &str) -> Option<String> {
+    if let Some(why) = stop.strip_prefix("HostRequest op 4: ") {
+        return Some(format!("Unimplemented: {why}"));
+    }
+    stop.starts_with("import ").then(|| format!("Unimplemented: {stop}"))
 }
 
 /// Python's truth of a JSON value: false, 0, "", null, [] and {} are false.
@@ -510,6 +593,59 @@ fn steady(stop: &str) -> String {
     }
     steady.push_str(s);
     steady
+}
+
+/// The comparison is `compare_exact_rows` (Sprint 233): order, a missing row, a field on either side, an extra row,
+/// Python's `==`; and the frozen host's names for the Rust host's two stops.
+#[test]
+fn the_comparison_is_the_frozen_comparison() {
+    let rows = |v: Value| -> Vec<Row> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r.as_object().unwrap().clone())
+            .collect()
+    };
+    let want = serde_json::json!([{"s": "a", "v": 1}, {"s": "b", "v": true}]);
+    let want = want.as_array().unwrap();
+    assert_eq!(
+        exact_rows(
+            want,
+            &rows(serde_json::json!([{"s": "a", "v": 1.0}, {"s": "b", "v": 1}]))
+        ),
+        None
+    );
+    assert_eq!(
+        exact_rows(want, &rows(serde_json::json!([{"s": "b", "v": 1}, {"s": "a", "v": 1}]))),
+        Some("row \"a\": target printed \"b\" in its place".into())
+    );
+    assert_eq!(
+        exact_rows(want, &rows(serde_json::json!([{"s": "a", "v": 1}]))),
+        Some("row \"b\": missing (1 rows printed, 2 expected)".into())
+    );
+    assert_eq!(
+        exact_rows(
+            want,
+            &rows(serde_json::json!([{"s": "a", "v": 1, "w": 2}, {"s": "b", "v": 1}]))
+        ),
+        Some("row \"a\": w reference null, target 2".into())
+    );
+    assert_eq!(
+        exact_rows(
+            want,
+            &rows(serde_json::json!([{"s": "a", "v": 1}, {"s": "b", "v": 1}, {"s": "c"}]))
+        ),
+        Some("1 rows past the reference's 2".into())
+    );
+    assert_eq!(
+        frozen_stop("HostRequest op 4: FlsFree argument form 0x1").as_deref(),
+        Some("Unimplemented: FlsFree argument form 0x1")
+    );
+    assert_eq!(
+        frozen_stop("import KERNEL32.dll!CreateProcessW").as_deref(),
+        Some("Unimplemented: import KERNEL32.dll!CreateProcessW")
+    );
+    assert_eq!(frozen_stop("Handover: no thread ready"), None);
 }
 
 /// Each ported rule on rows the family runs do not print, the expected rows worked by hand from the frozen code's lines
@@ -814,6 +950,54 @@ const SHOWN: &[Shown] = &[
         lines: &[(554, "\"environment_empty\": environment_family("), (556, "(),")],
         expr: "()",
     },
+    // the expected stops (Sprint 233): `Family.expected_stop`, the time parent's through `time_family`'s `child`
+    Shown {
+        family: "time_and_error_mode",
+        key: "expected_stop",
+        start: "parent",
+        lines: &[
+            (1355, "\"time_and_error_mode\": time_family(\"parent\","),
+            (412, "child = start == \"child\""),
+            (
+                438,
+                "expected_stop=None if child else \"Unimplemented: import KERNEL32.dll!CreateProcessW\"",
+            ),
+        ],
+        expr: "\"Unimplemented: import KERNEL32.dll!CreateProcessW\"",
+    },
+    Shown {
+        family: "thread_storage",
+        key: "expected_stop",
+        start: "",
+        lines: &[
+            (749, "name=\"thread_storage\","),
+            (775, "expected_stop=\"Unimplemented: FlsFree\""),
+        ],
+        expr: "\"Unimplemented: FlsFree\"",
+    },
+    Shown {
+        family: "output_debug_string",
+        key: "expected_stop",
+        start: "",
+        lines: &[
+            (1312, "name=\"output_debug_string\","),
+            (
+                1333,
+                "expected_stop=\"Unimplemented: OutputDebugStringW argument form\"",
+            ),
+        ],
+        expr: "\"Unimplemented: OutputDebugStringW argument form\"",
+    },
+    Shown {
+        family: "known_folders",
+        key: "expected_stop",
+        start: "",
+        lines: &[
+            (1674, "name=\"known_folders\","),
+            (1713, "expected_stop=\"Unimplemented: SHGetKnownFolderPath\""),
+        ],
+        expr: "\"Unimplemented: SHGetKnownFolderPath\"",
+    },
 ];
 
 /// The Python string literal at the start of `text` (a quote, then `\\` and `\"` escapes to the closing quote), and
@@ -856,10 +1040,98 @@ fn python_value(expr: &str, start: &str) -> Result<Value, String> {
     }
 }
 
-/// The extract's start options are the tag's: every value of every family's JSON object is shown at the lines `SHOWN`
-/// cites, read from `scripts/family_run.py` at the tag, and every shown value is in the extract (Sprint 231).
+/// Each family's excluded rows at the tag (Sprint 233): its `name=` line, its `excluded={` line, and each row's name
+/// quoted on its cited line, in the dictionary's order.
+struct Excluded {
+    family: &'static str,
+    owner: (usize, &'static str),
+    dict: usize,
+    names: &'static [(usize, &'static str)],
+}
+
+const EXCLUDED: &[Excluded] = &[
+    Excluded {
+        family: "process_queries",
+        owner: (560, "name=\"process_queries\","),
+        dict: 593,
+        names: &[(593, "ipfp.60"), (596, "ipfp.21")],
+    },
+    Excluded {
+        family: "thread_storage",
+        owner: (749, "name=\"thread_storage\","),
+        dict: 772,
+        names: &[(772, "fls.free.with_callback")],
+    },
+    Excluded {
+        family: "heap_in_place",
+        owner: (821, "name=\"heap_in_place\","),
+        dict: 838,
+        names: &[
+            (838, "limit.fresh.800"),
+            (840, "limit.fresh.1000"),
+            (841, "limit.warm.1"),
+        ],
+    },
+    Excluded {
+        family: "output_debug_string",
+        owner: (1312, "name=\"output_debug_string\","),
+        dict: 1331,
+        names: &[
+            (1332, "w.short"),
+            (1332, "w.short.exception0"),
+            (1332, "w.short.exception1"),
+        ],
+    },
+    Excluded {
+        family: "processor_topology",
+        owner: (1460, "name=\"processor_topology\","),
+        dict: 1484,
+        names: &[
+            (1484, "ex.size_query.7"),
+            (1485, "ex.short_buffer.7"),
+            (1486, "ex.query.7"),
+        ],
+    },
+    Excluded {
+        family: "file_attributes",
+        owner: (1497, "name=\"file_attributes\","),
+        dict: 1518,
+        names: &[
+            (1518, "ex.file.trailing_backslash"),
+            (1519, "plain.file.trailing_backslash"),
+        ],
+    },
+    Excluded {
+        family: "paths",
+        owner: (1528, "name=\"paths\","),
+        dict: 1550,
+        names: &[(1550, "full.device_name")],
+    },
+    Excluded {
+        family: "local_free",
+        owner: (1591, "name=\"local_free\","),
+        dict: 1611,
+        names: &[(1611, "exit.safe"), (1612, "exit.argv_plus_2")],
+    },
+    Excluded {
+        family: "known_folders",
+        owner: (1674, "name=\"known_folders\","),
+        dict: 1705,
+        names: &[(1705, "unregistered"), (1708, "unregistered.create"), (1709, "proc")],
+    },
+    Excluded {
+        family: "heap_query",
+        owner: (2035, "name=\"heap_query\","),
+        dict: 2057,
+        names: &[(2057, "query.big")],
+    },
+];
+
+/// The extract's family rows are the tag's: every start option, excluded row and expected stop is shown at the lines
+/// `SHOWN` and `EXCLUDED` cite, read from `scripts/family_run.py` at the tag, and every shown value is in the extract
+/// (Sprint 231; the excluded rows and expected stops from Sprint 233).
 #[test]
-fn the_extract_start_options_are_the_tags() {
+fn the_extracts_family_rows_are_the_tags() {
     let root = root();
     let out = std::process::Command::new("git")
         .arg("-C")
@@ -876,16 +1148,60 @@ fn the_extract_start_options_are_the_tags() {
     let lines: Vec<&str> = source.lines().collect();
     let mut stored: BTreeMap<(String, String), Value> = BTreeMap::new();
     for line in fs::read_to_string(root.join(EXTRACT)).unwrap().lines() {
-        if let ["family", family, _, start] = line.split('\t').collect::<Vec<_>>()[..]
-            && start != "-"
-        {
+        let ["family", family, _, start, ref rest @ ..] = line.split('\t').collect::<Vec<_>>()[..] else {
+            continue;
+        };
+        if start != "-" {
             let options: Value = serde_json::from_str(start).unwrap();
             for (k, v) in options.as_object().unwrap() {
                 stored.insert((family.to_string(), k.clone()), v.clone());
             }
         }
+        if let [excluded, stop] = rest {
+            if *excluded != "-" {
+                let names = excluded.split(' ').map(|n| Value::String(n.to_string())).collect();
+                stored.insert((family.to_string(), "excluded".into()), Value::Array(names));
+            }
+            if *stop != "-" {
+                stored.insert(
+                    (family.to_string(), "expected_stop".into()),
+                    Value::String(stop.to_string()),
+                );
+            }
+        }
     }
     let mut wrong = Vec::new();
+    for e in EXCLUDED {
+        let mut cited = vec![e.owner, (e.dict, "excluded={")];
+        cited.extend(e.names.iter().map(|(n, name)| (*n, *name)));
+        for (n, text) in cited {
+            let quoted = if text == e.owner.1 || text == "excluded={" {
+                text.to_string()
+            } else {
+                format!("\"{text}\"")
+            };
+            if !lines.get(n - 1).is_some_and(|l| l.contains(&quoted)) {
+                wrong.push(format!(
+                    "{} excluded: family_run.py {n} at {TAG} does not hold {quoted:?}",
+                    e.family
+                ));
+            }
+        }
+        let want = Value::Array(
+            e.names
+                .iter()
+                .map(|(_, name)| Value::String(name.to_string()))
+                .collect(),
+        );
+        match stored.remove(&(e.family.to_string(), "excluded".to_string())) {
+            Some(got) if got == want => {}
+            Some(got) => wrong.push(format!("{} excluded: {EXTRACT} has {got}, {TAG} {want}", e.family)),
+            None => wrong.push(format!(
+                "{} excluded: {TAG} shows {want}, and {EXTRACT} has none",
+                e.family
+            )),
+        }
+    }
     for s in SHOWN {
         for (n, text) in s.lines {
             if !lines.get(n - 1).is_some_and(|l| l.contains(text)) {
@@ -981,9 +1297,14 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
         };
         let stop = stop.lines().next().unwrap_or("").to_string();
         let key = (family.to_string(), run.to_string());
-        // from Sprint 231 every run starts as its family starts (column 7, given to `w2m-vm` as --start), so every run
-        // that ends is judged
-        let state = if stop != "ExitProcess { code: 0 }" {
+        // from Sprint 231 every run starts as its family starts (column 7, given to `w2m-vm` as --start). From Sprint 233
+        // a run is judged as the frozen judge judges it (`family_run.py` 3141-3153 at the tag): one that ends, or stops
+        // on its family's expected stop (column 10, a prefix of the frozen host's name for the stop), on its rows after
+        // its rule with its excluded rows (column 9) dropped, by `exact_rows`; any other stop is held as a stop
+        let (excluded, expected) = (c[8], c[9]);
+        let ended = stop == "ExitProcess { code: 0 }";
+        let as_expected = expected != "-" && frozen_stop(&stop).is_some_and(|frozen| frozen.starts_with(expected));
+        let state = if !ended && !as_expected {
             format!("stop: {}", steady(&stop))
         } else {
             let (id, version) = contract.split_once('@').unwrap();
@@ -997,20 +1318,17 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
                     _ => None,
                 })
                 .collect();
-            // the rule's name, less " excluded <n>": an excluded row is not among the contract's rows
             let name = rule.split(" excluded ").next().unwrap();
-            let derived = derive(family, name, printed).unwrap_or_else(|e| panic!("{family} run {run}: {e}"));
-            let got: BTreeMap<String, Value> = derived
-                .into_iter()
-                .filter_map(|r| Some((r.get("s")?.as_str()?.to_string(), Value::Object(r))))
-                .collect();
-            let differs = contract["acceptance"]["rows"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|want| got.get(want["s"].as_str().unwrap()) != Some(want));
-            if let Some(want) = differs {
-                format!("ended; row {} differs from {id}@{version}", want["s"].as_str().unwrap())
+            let mut derived = derive(family, name, printed).unwrap_or_else(|e| panic!("{family} run {run}: {e}"));
+            derived.retain(|r| {
+                !excluded
+                    .split(' ')
+                    .any(|x| x != "-" && r.get("s").and_then(Value::as_str) == Some(x))
+            });
+            let want = contract["acceptance"]["rows"].as_array().unwrap();
+            if let Some(divergence) = exact_rows(want, &derived) {
+                let how = if ended { "ended" } else { "stopped as expected" };
+                format!("{how}; {divergence} ({id}@{version})")
             } else {
                 if held.contains_key(&key) {
                     wrong.push(format!("{family} run {run} conforms, and {HELD} still holds it"));

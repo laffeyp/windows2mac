@@ -12,7 +12,8 @@
 //! "<name>:<sha256>" (its name alone where the run names no file, "-" where there is none), the imports no runtime
 //! service answers (`service_for` is None: `hvc #9` at the call), the family's start options (`vm_inputs`, 2889-2902:
 //! a JSON object of their values from Sprint 231, `START_KEYS`, "-" for none), and its row rule (the contract's
-//! derivation or "raw", and its excluded rows' count); lists space-separated or "-". An import is not a call: a run
+//! derivation or "raw", and its excluded rows' count), from Sprint 233 the excluded rows' names and the expected stop
+//! (`Family.excluded`, `Family.expected_stop`); lists space-separated or "-". An import is not a call: a run
 //! stops on one only if it calls it. `store/family_runs/known-2026-10-29.tsv`
 //! holds the output; `tests/family_runs.rs` holds the file to it.
 //!
@@ -54,18 +55,35 @@ mod known {
     /// frozen-python-2026-10-29 (Sprint 226): the Python has left the tree, and its data is read here.
     const EXTRACT: &str = "store/frozen_python/family-run-2026-10-29.tsv";
 
-    /// The extract's rows: `family <key> <beside DLL or -> <start options or ->` and `run <id> <binary> <DLL or ->`.
+    /// The extract's rows: `family <key> <beside DLL or -> <start options or -> [<excluded rows or -> <expected stop
+    /// or ->]` and `run <id> <binary> <DLL or ->`; the last two family columns from Sprint 233, where a family has
+    /// either.
     fn families(text: &str) -> Result<Families, String> {
         let dash = |s: &str| (s != "-").then(|| s.to_string());
         let (mut dll_names, mut runs, mut options) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
+        let mut judged = BTreeMap::new();
         for line in text.lines().filter(|l| !l.starts_with('#')) {
             match line.split('\t').collect::<Vec<_>>()[..] {
-                ["family", key, dll, start] => {
+                ["family", key, dll, start, ref rest @ ..] => {
                     if let Some(dll) = dash(dll) {
                         dll_names.insert(key.to_string(), dll);
                     }
                     if let Some(start) = dash(start) {
                         options.insert(key.to_string(), start_options(key, &start)?);
+                    }
+                    match rest {
+                        [] => {}
+                        [excluded, stop] => {
+                            let names =
+                                dash(excluded).map_or_else(Vec::new, |e| e.split(' ').map(str::to_string).collect());
+                            judged.insert(key.to_string(), (names, dash(stop)));
+                        }
+                        _ => {
+                            return Err(format!(
+                                "{EXTRACT}: {key}'s row has {} columns, not 4 or 6",
+                                4 + rest.len()
+                            ));
+                        }
                     }
                 }
                 ["run", id, binary, dll] => {
@@ -84,6 +102,7 @@ mod known {
             dll_names,
             runs,
             options,
+            judged,
         })
     }
 
@@ -119,10 +138,13 @@ mod known {
         dll_names: BTreeMap<String, String>,
         runs: BTreeMap<String, Run>,
         options: BTreeMap<String, Value>,
+        /// each family's excluded rows (`Family.excluded`'s keys) and expected stop (`Family.expected_stop`)
+        judged: BTreeMap<String, (Vec<String>, Option<String>)>,
     }
 
     /// The row rule a contract states: its derivation's name (`acceptance.derivation`, "scripts/family_run.py <name>:
-    /// ...") or "raw", and the rows it excludes (`sections.excluded`, "<row>: <why>; ..." or "none").
+    /// ...") or "raw". Its excluded rows are the extract's, not the contract's text, whose reasons hold "; " too
+    /// (Sprint 233: `windows.file.attributes`' 2 rows were counted 4).
     fn rule(root: &Path, contract: &str) -> Result<String, String> {
         let (id, version) = contract.split_once('@').ok_or(format!("{contract}: no version"))?;
         let path = root.join(format!("contracts/{id}/{version}.json"));
@@ -134,11 +156,7 @@ mod known {
             .and_then(|d| d.strip_prefix("scripts/family_run.py "))
             .and_then(|d| d.split(':').next())
             .unwrap_or("raw");
-        let excluded = match c["sections"]["excluded"].as_str() {
-            None | Some("none") => 0,
-            Some(e) => e.split("; ").count(),
-        };
-        Ok(format!("{derivation} excluded {excluded}"))
+        Ok(derivation.to_string())
     }
 
     /// The contract id and version a family record's first COMPARISON_COMPLETED names.
@@ -188,6 +206,7 @@ mod known {
             dll_names,
             runs: all_runs,
             options,
+            judged: excluded_and_stops,
         } = families(&read(EXTRACT)?)?;
         let texts = guest_runtime::texts(&root)?;
         let services = guest_runtime::services::services(&texts)?;
@@ -202,7 +221,14 @@ mod known {
         for (family, entry) in index {
             let record = entry["record"].as_str().ok_or(format!("{family}: no record"))?;
             let contract = contract(&root, record)?;
-            let rule = rule(&root, &contract)?;
+            let (excluded, stop) = excluded_and_stops.get(family).cloned().unwrap_or_default();
+            let rule = format!("{} excluded {}", rule(&root, &contract)?, excluded.len());
+            let excluded = if excluded.is_empty() {
+                "-".to_string()
+            } else {
+                excluded.join(" ")
+            };
+            let stop = stop.unwrap_or_else(|| "-".to_string());
             let start = options.get(family).map_or_else(|| "-".to_string(), Value::to_string);
             let dll_name = dll_names.get(family);
             let judged = entry["divergence"]
@@ -232,7 +258,7 @@ mod known {
                     _ => "-".to_string(),
                 };
                 println!(
-                    "{family}\t{run_id}\t{}\t{contract}\t{beside_file}\t{}\t{start}\t{rule}",
+                    "{family}\t{run_id}\t{}\t{contract}\t{beside_file}\t{}\t{start}\t{rule}\t{excluded}\t{stop}",
                     run.binary,
                     list(&unserved),
                 );

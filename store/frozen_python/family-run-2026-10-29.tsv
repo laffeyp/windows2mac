@@ -1,4 +1,4 @@
-# scripts/family_run.py's families and runs as family_known read them, from the tag frozen-python-2026-10-29 (Sprint 226): family <key> <beside DLL> <start options>; run <id> <binary> <DLL>. From Sprint 231 the start options are a JSON object of their values, read from the families' definitions at the tag (console 1381, the environment families 200 and 214-215, local_free 1598, processes 2681, time_and_error_mode_child 439, windows 2580), entered by hand from those lines and held to them by crates/w2m_vm/tests/family_runs.rs the_extract_start_options_are_the_tags (reviewer-3's Medium 1 of its review at 231)
+# scripts/family_run.py's families and runs as family_known read them, from the tag frozen-python-2026-10-29 (Sprint 226): family <key> <beside DLL> <start options>; run <id> <binary> <DLL>. From Sprint 231 the start options are a JSON object of their values, read from the families' definitions at the tag (console 1381, the environment families 200 and 214-215, local_free 1598, processes 2681, time_and_error_mode_child 439, windows 2580), entered by hand from those lines and held to them by crates/w2m_vm/tests/family_runs.rs the_extracts_family_rows_are_the_tags (reviewer-3's Medium 1 of its review at 231). From Sprint 233 a family row may carry two more columns, its excluded rows and its expected stop, entered from the dictionaries and lines that test cites
 family	code_pages	-	-
 family	code_rewrite	-	-
 family	com	-	-
@@ -17,7 +17,7 @@ family	environment_set	-	{"arguments":"child-set","environment":["ZED=last","alp
 family	exception_filter	-	-
 family	exceptions	-	-
 family	file_access	-	-
-family	file_attributes	-	-
+family	file_attributes	-	-	ex.file.trailing_backslash plain.file.trailing_backslash	-
 family	file_mapping	-	-
 family	file_search	-	-
 family	file_security	-	-
@@ -28,16 +28,16 @@ family	function_tables	-	-
 family	generate_random	-	-
 family	handle_check_swapped	-	-
 family	heap	-	-
-family	heap_in_place	-	-
-family	heap_query	-	-
+family	heap_in_place	-	-	limit.fresh.800 limit.fresh.1000 limit.warm.1	-
+family	heap_query	-	-	query.big	-
 family	inner_dots_kept	-	-
 family	integrity_level	-	-
 family	interlocked_lists	-	-
-family	known_folders	-	-
+family	known_folders	-	-	unregistered unregistered.create proc	Unimplemented: SHGetKnownFolderPath
 family	late_tls	late_tls_dll.dll	-
 family	length_checked	-	-
 family	loader	loader_dll.dll	-
-family	local_free	-	{"arguments":"safe"}
+family	local_free	-	{"arguments":"safe"}	exit.safe exit.argv_plus_2	-
 family	locale	-	-
 family	module_names_ansi	-	-
 family	module_search	module_search_dll.dll	-
@@ -45,13 +45,13 @@ family	modules	-	-
 family	network	-	-
 family	no_sixteen_byte_floor	-	-
 family	null_buffer_with_zero_length_succeeds	-	-
-family	output_debug_string	-	-
-family	paths	-	-
+family	output_debug_string	-	-	w.short w.short.exception0 w.short.exception1	Unimplemented: OutputDebugStringW argument form
+family	paths	-	-	full.device_name	-
 family	pointer_encoding	-	-
 family	process_parameters	-	-
-family	process_queries	-	-
+family	process_queries	-	-	ipfp.60 ipfp.21	-
 family	processes	-	{"instruction_clock":true}
-family	processor_topology	-	-
+family	processor_topology	-	-	ex.size_query.7 ex.short_buffer.7 ex.query.7	-
 family	program_name_honours_quotes	-	-
 family	read_handle_writes	-	-
 family	registry	-	-
@@ -73,10 +73,10 @@ family	thread_handles	-	-
 family	thread_queries	-	-
 family	thread_stack	-	-
 family	thread_stacks	-	-
-family	thread_storage	-	-
+family	thread_storage	-	-	fls.free.with_callback	Unimplemented: FlsFree
 family	threads	threads_dll.dll	-
 family	time	-	-
-family	time_and_error_mode	-	-
+family	time_and_error_mode	-	-	-	Unimplemented: import KERNEL32.dll!CreateProcessW
 family	time_and_error_mode_child	-	{"arguments":"child","gui":true,"output_file":"w2m-error-mode-child.jsonl"}
 family	vectored_handlers	-	-
 family	version	-	-
