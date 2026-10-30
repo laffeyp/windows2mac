@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 250
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -88,3 +88,26 @@ batch run ever took the old path.
 - [x] One concept: the blocks a write drops.
 
 ## result
+
+- **The measurement:** one batch run from 3a6edf954 with a temporary line in the `hvc 1` arm, alone, then the line
+  removed and `run.rs` restored by `cp` and checked by `cmp`: the old order answered one lookup from a dropped block,
+  "w2m-250 dropped block 1222ee5fff", an address in the VirtualAlloc arena where Mono writes its run-time code. Once a
+  run, the Rust host handed back a block's old code after its page was written; the run still exited 0, its call
+  stream unchanged by it.
+- **The fix:** `known_block` (d3dd37eb2) reads the host's map alone when the host compiles, the in-VM compiler's
+  without it, as the frozen host read its one map; `a_block_a_write_dropped_is_not_handed_back` holds it.
+- **The held stop moved:** the gates on d3dd37eb2 failed in `batch_run.rs`, the batch run's stop file off
+  `store/batch_run/first-stop-2026-10-28.tsv` on three lines: compiled 274,834 to 274,837, pages protected 17,087 to
+  17,086, blocks the host compiled 275,555 to 275,559. The in-VM compiler now compiles afresh what the old order
+  reused; the three are outside any image (82,019 to 82,022), UnityPlayer.dll's 149,308 unchanged, the stop and
+  COMPARISON_COMPLETED "conforms" unchanged. The frozen reference's counts already differ from the Rust run's
+  (275,303 compiled), so the held file is the Rust run's own; its three lines moved in a1f6305a0, by one-line `sed`s.
+- **The gates:** `scripts/gates.sh` exit 0 in 414 s on a1f6305a0, copied from `store/gates/passes.tsv`; the timing stage 667 ns an exit at load 3.80.
+- **Plants,** run on d3dd37eb2, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `a_block_a_write_dropped_is_not_handed_back` failed, "assertion `left == right` failed: the dropped
+  block's old code": `known_block` reading the VM's map first, then the host's.
+- **Plant 2,** the same test failed, "assertion `left == right` failed: the dropped block's old code": `known_block`
+  reading the VM's map alone. A departure: the card expected the host-compiled block's assertion to name it; the
+  dropped block's, first in the test, fails before it.
+- **The lookup's breach:** the research agent that gathered the cache's facts ran `python3 -c 1`, a no-op, before a
+  `jq` call, against the Decision "No Python runs"; it said so in its report.

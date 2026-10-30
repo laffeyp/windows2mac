@@ -983,3 +983,12 @@ C: drive by process id and a counter, and failed on "File exists" when a process
 name and a later one got the same id; the gates met it in one family run of 273. Of the five paths outside tests named
 by process id, the two made with `create_new` and no removal first had the fault; both now take the next number.
 
+### 2026-10-30 — Sprint 250: one map split in two, its remover kept for one
+
+**Finding (#107):** a port that splits one structure into two carries every writer and every remover to both, or
+reads only the one they keep. The frozen host kept one map of both compilers' blocks; a write to a code page popped
+from it, and an `hvc 1` read it. The Rust host kept the in-VM compiler's blocks in a second map that no remover
+touched, and its `hvc 1` read that map first, so a block over a written page got its old code back, once a batch run,
+in Mono's run-time code. Found by a design's lookup, not by a judge: the run conformed, the stale code doing no
+visible harm that time. A search for each removal of the frozen structure, matched against the port's, finds it.
+
