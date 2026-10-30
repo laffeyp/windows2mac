@@ -92,6 +92,16 @@ pub enum ModuleError {
     Failed(String),
 }
 
+/// The file bridge's kind kept (Sprint 239): LoadLibrary resolves its name through the bridge.
+impl From<crate::file_bridge::FileError> for ModuleError {
+    fn from(e: crate::file_bridge::FileError) -> ModuleError {
+        match e {
+            crate::file_bridge::FileError::NotServed(why) => ModuleError::NotServed(why),
+            crate::file_bridge::FileError::Failed(why) => ModuleError::Failed(why),
+        }
+    }
+}
+
 /// `module` (94-132): the handle `name` means, 0 when it is found nowhere; `loading` is LoadLibrary, which would load
 /// a DLL not yet in the process, where GetModuleHandle reports only loaded ones.
 pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, ModuleError> {
@@ -152,7 +162,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
     let Some(files) = guest.files.as_ref() else {
         return Ok(0);
     };
-    let Some(host) = files.host_file(name).map_err(ModuleError::NotServed)? else {
+    let Some(host) = files.host_file(name)? else {
         return Ok(0);
     };
     let root = files.root.clone();
@@ -250,13 +260,17 @@ impl AppDirectory<'_> {
     /// `host_file` (file_bridge.py 202-240): whether a file is where the guest name points, a full C:\ path or a path
     /// relative to C:\w2m\app, each component matched case-folded; a path the bridge refuses is Err, as it raises.
     /// Without a bridge, a full path outside C:\w2m\app finds no file.
-    fn host_file(&self, name: &str) -> Result<bool, String> {
+    fn host_file(&self, name: &str) -> Result<bool, ModuleError> {
         if let Some(files) = self.files {
             return Ok(files.host_file(name)?.is_some());
         }
+        // without a bridge, `app_parts` refuses the names the bridge refuses, each a refusal
         match &self.root {
-            Some(root) => Ok(host_file(root, name)?.is_some()),
-            None => Ok(matches!(app_parts(name)?.as_deref(), Some([p]) if p.eq_ignore_ascii_case(&self.program))),
+            Some(root) => Ok(host_file(root, name).map_err(ModuleError::NotServed)?.is_some()),
+            None => {
+                let parts = app_parts(name).map_err(ModuleError::NotServed)?;
+                Ok(matches!(parts.as_deref(), Some([p]) if p.eq_ignore_ascii_case(&self.program)))
+            }
         }
     }
 
@@ -391,7 +405,7 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, ModuleError>
     }
     // `_load_dll` (vm_backend 3906-3918): a file the name finds, full or relative to C:\w2m\app, is mapped (`module`
     // does it, Sprint 205); FILE_FOUND marks it here
-    if h.app.host_file(name).map_err(NotServed)? {
+    if h.app.host_file(name)? {
         return Ok(FILE_FOUND);
     }
     // modules.py 124-129: a System32 DLL whose exports the spec lists is a synthetic system image in the next free

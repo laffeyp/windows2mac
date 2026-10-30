@@ -77,8 +77,9 @@ pub enum HostError {
     /// `Unimplemented` (a descriptor not open, the arena's refusals); the run stops as unserved
     NotServed(String),
     /// a request w2m serves that failed in the serving (an unmapped buffer, a host call refused, a helper's error); the
-    /// run stops as a fault. `modules` tells its refusals from its failures (`ModuleError`, Sprint 218); the helpers in
-    /// `kernel`, `threads` and `file_bridge` return both as one string, so theirs land here until they carry typed errors
+    /// run stops as a fault. `modules` (`ModuleError`, Sprint 218) and `file_bridge` (`FileError`, Sprint 239) tell
+    /// their refusals from their failures; the helpers in `kernel` and `threads` return both as one string, so theirs
+    /// land here until they carry typed errors
     Failed(String),
     Guest(GuestError),
     Hv(HvError),
@@ -89,6 +90,15 @@ impl From<crate::modules::ModuleError> for HostError {
         match e {
             crate::modules::ModuleError::NotServed(why) => HostError::NotServed(why),
             crate::modules::ModuleError::Failed(why) => HostError::Failed(why),
+        }
+    }
+}
+
+impl From<crate::file_bridge::FileError> for HostError {
+    fn from(e: crate::file_bridge::FileError) -> HostError {
+        match e {
+            crate::file_bridge::FileError::NotServed(why) => HostError::NotServed(why),
+            crate::file_bridge::FileError::Failed(why) => HostError::Failed(why),
         }
     }
 }
@@ -306,8 +316,7 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
         .files
         .as_ref()
         .and_then(|f| f.view(fd, size))
-        .ok_or_else(|| HostError::NotServed(format!("a file view of descriptor {fd}, which is not open")))?
-        .map_err(HostError::Failed)?;
+        .ok_or_else(|| HostError::NotServed(format!("a file view of descriptor {fd}, which is not open")))??;
     let mut view = GuestView {
         mem: guest.memory.as_mut_slice(),
         layout: &guest.layout,
@@ -539,7 +548,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             };
             let served = files.request(&mut KernelMemory(guest), op, [a0, a1, a2, a3]);
             guest.files = Some(files);
-            let (result, second) = served.map_err(HostError::Failed)?;
+            let (result, second) = served?;
             let mem = guest.memory.as_mut_slice();
             mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
             result
@@ -671,6 +680,20 @@ mod tests {
         assert!(matches!(refused, HostError::NotServed(m) if m.contains("does not model")));
         let failed = HostError::from(ModuleError::Failed("x.dll: not a PE".into()));
         assert!(matches!(failed, HostError::Failed(m) if m == "x.dll: not a PE"));
+    }
+
+    /// A file bridge refusal is a request not served and its failure a fault, through `HostError` and through
+    /// `ModuleError`, LoadLibrary's path (Sprint 239; before, every file request's error was `Failed` and every
+    /// LoadLibrary name's `NotServed`).
+    #[test]
+    fn a_file_refusal_is_not_served_and_a_failure_is_a_fault() {
+        use crate::file_bridge::FileError;
+        let refusal = || FileError::NotServed("file path with '..': \"a\\\\..\\\\b\"".into());
+        let failure = || FileError::Failed("file primitive 9 on descriptor 99, which is not open".into());
+        assert!(matches!(HostError::from(refusal()), HostError::NotServed(m) if m.contains("'..'")));
+        assert!(matches!(HostError::from(failure()), HostError::Failed(m) if m.contains("not open")));
+        assert!(matches!(ModuleError::from(refusal()), ModuleError::NotServed(m) if m.contains("'..'")));
+        assert!(matches!(ModuleError::from(failure()), ModuleError::Failed(m) if m.contains("not open")));
     }
 
     /// `struct.pack("<QQIHHQIIIi", base, allocation_base, allocation_protect, 0, 0, region_size, state, protect, type,

@@ -6,7 +6,8 @@
 //! folders `specs/recorded_folders.json` records from the runners, and C:\w2m\app, where `root` (the program's
 //! directory) is mounted, read-only for the game's depot. Names compare ASCII case-folded, as NTFS compares ASCII names.
 //! A request no Windows path can mean, another drive, a UNC name, a ".." the guest did not resolve, or a change the
-//! run must not make stops the run by name (the Python's Unimplemented and BridgeRequestError).
+//! run must not make stops the run by name (the Python's Unimplemented and BridgeRequestError), each by its kind,
+//! `FileError` (Sprint 239).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{File, OpenOptions};
@@ -45,6 +46,32 @@ const PROFILE_FOLDERS: [&str; 4] = [
     "Users/runneradmin/AppData/Roaming",
     "Users/w2m/AppData/Local/Temp",
 ];
+
+/// Why a request was not answered, by the kind the frozen bridge raises (Sprint 239; Deferred 2026-10-29, the helpers'
+/// errors): `host_request` stops a refusal as a request not served and a failure as a fault.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileError {
+    /// a path or change w2m does not serve, the frozen bridge's `Unimplemented`: another drive, a rooted or UNC name,
+    /// "..", a change under the read-only C:\w2m\app or in a recorded folder, a recorded file it holds by name only
+    NotServed(String),
+    /// a request that failed: one no Windows path or descriptor can mean (`BridgeRequestError`: a NUL in a path, a
+    /// descriptor not open), an unknown primitive, a host call's or the guest memory's error
+    Failed(String),
+}
+
+impl FileError {
+    fn failed(e: impl std::fmt::Display) -> FileError {
+        FileError::Failed(e.to_string())
+    }
+}
+
+impl std::fmt::Display for FileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileError::NotServed(why) | FileError::Failed(why) => f.write_str(why),
+        }
+    }
+}
 
 /// `-errno` as the request answers it.
 fn neg(errno: i32) -> u64 {
@@ -168,15 +195,18 @@ impl FileBridge {
         path == self.root || path.starts_with(&self.root)
     }
 
-    fn writable(&self, path: &Path) -> Result<(), String> {
+    fn writable(&self, path: &Path) -> Result<(), FileError> {
         if self.read_only && self.under_mount(path) {
-            return Err(format!("a change under the read-only C:\\w2m\\app: {}", path.display()));
+            return Err(FileError::NotServed(format!(
+                "a change under the read-only C:\\w2m\\app: {}",
+                path.display()
+            )));
         }
         if self.recorded_parent(path).is_some() {
-            return Err(format!(
+            return Err(FileError::NotServed(format!(
                 "a change in a folder recorded from the runners: {}",
                 path.display()
-            ));
+            )));
         }
         Ok(())
     }
@@ -204,21 +234,23 @@ impl FileBridge {
     }
 
     /// `_open_recorded` (150-170): a recorded file's bytes, the folder's copy, read-only, its sha256 the row's.
-    fn open_recorded(&mut self, path: &Path, row: &Value, name: &str, create: bool) -> Result<(u64, u64), String> {
-        let parts = self.components(path).ok_or("a recorded file outside the drive")?;
+    fn open_recorded(&mut self, path: &Path, row: &Value, name: &str, create: bool) -> Result<(u64, u64), FileError> {
+        let parts = self
+            .components(path)
+            .ok_or_else(|| FileError::failed("a recorded file outside the drive"))?;
         let folder = &self.recorded[&parts[..parts.len() - 1]];
+        let by_name_only = || {
+            FileError::NotServed(format!(
+                "the contents of a file recorded from the runners by name only: {}",
+                path.display()
+            ))
+        };
         let (Some(contents), Some(sha)) = (folder.get("contents").filter(|c| !c.is_null()), row["sha256"].as_str())
         else {
-            return Err(format!(
-                "the contents of a file recorded from the runners by name only: {}",
-                path.display()
-            ));
+            return Err(by_name_only());
         };
         if create {
-            return Err(format!(
-                "the contents of a file recorded from the runners by name only: {}",
-                path.display()
-            ));
+            return Err(by_name_only());
         }
         let root = contents["root"].as_str().unwrap_or("");
         let root = match root.strip_prefix("~/") {
@@ -227,21 +259,19 @@ impl FileBridge {
         };
         let copy = root.join(name);
         if !self.checked.contains(&copy) {
-            let bytes = std::fs::read(&copy).map_err(|_| {
-                format!(
+            let not_the_runners = || {
+                FileError::NotServed(format!(
                     "the copy of {name} at {} is missing or not the runner's (sha256 {sha})",
                     copy.display()
-                )
-            })?;
+                ))
+            };
+            let bytes = std::fs::read(&copy).map_err(|_| not_the_runners())?;
             if guest_runtime::sha256::hex(&bytes) != sha {
-                return Err(format!(
-                    "the copy of {name} at {} is missing or not the runner's (sha256 {sha})",
-                    copy.display()
-                ));
+                return Err(not_the_runners());
             }
             self.checked.insert(copy.clone());
         }
-        let file = File::open(&copy).map_err(|e| format!("{}: {e}", copy.display()))?;
+        let file = File::open(&copy).map_err(|e| FileError::Failed(format!("{}: {e}", copy.display())))?;
         let fd = self.next_fd;
         self.next_fd += 1;
         self.fds.insert(fd, file);
@@ -251,7 +281,7 @@ impl FileBridge {
 
     /// `_recorded_row` (172-189): (kind, the recording's row and the file's recorded name) for a path in or of a
     /// recorded folder; (kind, None) elsewhere.
-    fn recorded_row(&self, kind: u64, path: &Path) -> Result<(u64, Option<(Value, String)>), String> {
+    fn recorded_row(&self, kind: u64, path: &Path) -> Result<(u64, Option<(Value, String)>), FileError> {
         let Some(parts) = self.components(path) else {
             return Ok((kind, None));
         };
@@ -260,10 +290,10 @@ impl FileBridge {
                 && above["files"].is_null()
                 && !self.recorded.contains_key(&parts[..=i])
             {
-                return Err(format!(
+                return Err(FileError::NotServed(format!(
                     "a name in a folder whose listing is not recorded: {}",
                     path.display()
-                ));
+                )));
             }
         }
         if let Some(folder) = self.recorded.get(&parts) {
@@ -290,27 +320,27 @@ impl FileBridge {
     }
 
     /// `_path` (195-200): the components a request's path names.
-    fn path(&self, mem: &dyn Memory, va: u64, chars: u64) -> Result<Vec<String>, String> {
-        let raw = mem.read(va, 2 * chars as usize)?;
+    fn path(&self, mem: &dyn Memory, va: u64, chars: u64) -> Result<Vec<String>, FileError> {
+        let raw = mem.read(va, 2 * chars as usize).map_err(FileError::Failed)?;
         let units: Vec<u16> = raw.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
         let name = String::from_utf16_lossy(&units);
         if let Some(at) = units.iter().position(|&u| u == 0) {
-            return Err(format!(
+            return Err(FileError::Failed(format!(
                 "path of {chars} characters has a NUL at character {at}: {name:?}"
-            ));
+            )));
         }
         parts(&name)
     }
 
     /// `host_file` (202-206): the host file a guest name means, None when no file is there.
-    pub fn host_file(&self, name: &str) -> Result<Option<PathBuf>, String> {
+    pub fn host_file(&self, name: &str) -> Result<Option<PathBuf>, FileError> {
         let (kind, path) = self.resolve(&parts(name)?);
         Ok((kind == IS_FILE).then_some(path))
     }
 
     /// A file view's bytes (vm_backend 3859-3862, Sprint 211): `os.pread(fd, size, 0)`, the file's first `size` bytes
     /// or fewer at its end; None when `fd` is not open.
-    pub fn view(&self, fd: u64, size: u64) -> Option<Result<Vec<u8>, String>> {
+    pub fn view(&self, fd: u64, size: u64) -> Option<Result<Vec<u8>, FileError>> {
         let file = self.fds.get(&fd)?;
         let mut data = vec![0u8; size as usize];
         Some(match file.read_at(&mut data, 0) {
@@ -318,7 +348,7 @@ impl FileBridge {
                 data.truncate(n);
                 Ok(data)
             }
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(FileError::failed(e)),
         })
     }
 
@@ -356,8 +386,8 @@ impl FileBridge {
         fd
     }
 
-    /// `request` (241-360): one primitive; (result, arg[5]). Err stops the run.
-    pub fn request(&mut self, mem: &mut dyn Memory, op: u64, arg: [u64; 4]) -> Result<(u64, u64), String> {
+    /// `request` (241-360): one primitive; (result, arg[5]). A refusal stops the run as unserved, a failure as a fault.
+    pub fn request(&mut self, mem: &mut dyn Memory, op: u64, arg: [u64; 4]) -> Result<(u64, u64), FileError> {
         match op {
             FILE_LOOKUP => {
                 let (kind, path) = self.resolve(&self.path(mem, arg[0], arg[1])?);
@@ -369,7 +399,7 @@ impl FileBridge {
                     return Ok((kind, name_id(&name)));
                 }
                 let ino = if kind == IS_FILE || kind == IS_DIRECTORY {
-                    std::fs::metadata(&path).map_err(|e| e.to_string())?.ino()
+                    std::fs::metadata(&path).map_err(FileError::failed)?.ino()
                 } else {
                     0
                 };
@@ -396,7 +426,7 @@ impl FileBridge {
                     Ok(f) => f,
                     Err(e) => return Ok((errno_of(&e), 0)),
                 };
-                let ino = file.metadata().map_err(|e| e.to_string())?.ino();
+                let ino = file.metadata().map_err(FileError::failed)?.ino();
                 let under = self.under_mount(&path);
                 let fd = self.new_fd(file);
                 if under {
@@ -412,12 +442,12 @@ impl FileBridge {
                         .iter()
                         .flat_map(|k| row[*k].as_u64().unwrap_or(0).to_le_bytes())
                         .collect();
-                    mem.write(arg[2], &bytes)?;
+                    mem.write(arg[2], &bytes).map_err(FileError::Failed)?;
                     return Ok((kind, row["attributes"].as_u64().unwrap_or(0)));
                 }
                 if kind == IS_FILE || kind == IS_DIRECTORY {
-                    let m = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-                    mem.write(arg[2], &stat_bytes(&m, false))?;
+                    let m = std::fs::metadata(&path).map_err(FileError::failed)?;
+                    mem.write(arg[2], &stat_bytes(&m, false)).map_err(FileError::Failed)?;
                 }
                 Ok((kind, 0))
             }
@@ -429,17 +459,17 @@ impl FileBridge {
                 let folder = self.components(&path).and_then(|p| self.recorded.get(&p));
                 let mut entries: BTreeSet<String> = match folder {
                     Some(f) if f["files"].is_null() => {
-                        return Err(format!(
+                        return Err(FileError::NotServed(format!(
                             "the listing of a folder recorded without one: {}",
                             path.display()
-                        ));
+                        )));
                     }
                     Some(f) => f["files"]
                         .as_object()
                         .map(|m| m.keys().cloned().collect())
                         .unwrap_or_default(),
                     None => std::fs::read_dir(&path)
-                        .map_err(|e| e.to_string())?
+                        .map_err(FileError::failed)?
                         .flatten()
                         .map(|e| e.file_name().to_string_lossy().to_string())
                         .collect(),
@@ -455,7 +485,7 @@ impl FileBridge {
                 }
                 names.extend([0, 0]);
                 if names.len() as u64 <= arg[3] {
-                    mem.write(arg[2], &names)?;
+                    mem.write(arg[2], &names).map_err(FileError::Failed)?;
                 }
                 Ok((names.len() as u64, kind))
             }
@@ -491,10 +521,12 @@ impl FileBridge {
     }
 
     /// The primitives on an open descriptor (313-360).
-    fn descriptor_request(&mut self, mem: &mut dyn Memory, op: u64, arg: [u64; 4]) -> Result<(u64, u64), String> {
+    fn descriptor_request(&mut self, mem: &mut dyn Memory, op: u64, arg: [u64; 4]) -> Result<(u64, u64), FileError> {
         let fd = arg[0];
         let Some(file) = self.fds.get(&fd) else {
-            return Err(format!("file primitive {op} on descriptor {fd}, which is not open"));
+            return Err(FileError::Failed(format!(
+                "file primitive {op} on descriptor {fd}, which is not open"
+            )));
         };
         match op {
             FILE_CLOSE => {
@@ -505,23 +537,27 @@ impl FileBridge {
             }
             FILE_READ => {
                 let mut data = vec![0u8; arg[2] as usize];
-                let n = file.read_at(&mut data, arg[3]).map_err(|e| e.to_string())?;
-                mem.write(arg[1], &data[..n])?;
+                let n = file.read_at(&mut data, arg[3]).map_err(FileError::failed)?;
+                mem.write(arg[1], &data[..n]).map_err(FileError::Failed)?;
                 Ok((n as u64, 0))
             }
             FILE_WRITE => {
                 if self.recorded_fds.contains_key(&fd) {
-                    return Err("a write to a file recorded from the runners".into());
+                    return Err(FileError::NotServed(
+                        "a write to a file recorded from the runners".into(),
+                    ));
                 }
                 if self.read_only && self.read_only_fds.contains(&fd) {
-                    return Err("a write to a file under the read-only C:\\w2m\\app".into());
+                    return Err(FileError::NotServed(
+                        "a write to a file under the read-only C:\\w2m\\app".into(),
+                    ));
                 }
-                let data = mem.read(arg[1], arg[2] as usize)?;
-                let n = file.write_at(&data, arg[3]).map_err(|e| e.to_string())?;
+                let data = mem.read(arg[1], arg[2] as usize).map_err(FileError::Failed)?;
+                let n = file.write_at(&data, arg[3]).map_err(FileError::failed)?;
                 Ok((n as u64, 0))
             }
             FILE_DUP => {
-                let copy = file.try_clone().map_err(|e| e.to_string())?;
+                let copy = file.try_clone().map_err(FileError::failed)?;
                 let new = self.new_fd(copy);
                 if let Some(row) = self.recorded_fds.get(&fd).cloned() {
                     self.recorded_fds.insert(new, row);
@@ -537,31 +573,37 @@ impl FileBridge {
                         .iter()
                         .flat_map(|k| row[*k].as_u64().unwrap_or(0).to_le_bytes())
                         .collect();
-                    mem.write(arg[1], &bytes)?;
+                    mem.write(arg[1], &bytes).map_err(FileError::Failed)?;
                     return Ok((0, 0));
                 }
-                let m = file.metadata().map_err(|e| e.to_string())?;
-                mem.write(arg[1], &stat_bytes(&m, true))?;
+                let m = file.metadata().map_err(FileError::failed)?;
+                mem.write(arg[1], &stat_bytes(&m, true)).map_err(FileError::Failed)?;
                 Ok((0, 0))
             }
             FILE_SIZE => {
-                let m = file.metadata().map_err(|e| e.to_string())?;
+                let m = file.metadata().map_err(FileError::failed)?;
                 if !m.is_file() {
-                    return Err(format!("FILE_SIZE on descriptor {fd}, which is not a regular file"));
+                    return Err(FileError::Failed(format!(
+                        "FILE_SIZE on descriptor {fd}, which is not a regular file"
+                    )));
                 }
                 Ok((m.size(), 0))
             }
             FILE_TRUNCATE => {
                 if self.recorded_fds.contains_key(&fd) {
-                    return Err("a truncation of a file recorded from the runners".into());
+                    return Err(FileError::NotServed(
+                        "a truncation of a file recorded from the runners".into(),
+                    ));
                 }
                 if self.read_only && self.read_only_fds.contains(&fd) {
-                    return Err("a truncation of a file under the read-only C:\\w2m\\app".into());
+                    return Err(FileError::NotServed(
+                        "a truncation of a file under the read-only C:\\w2m\\app".into(),
+                    ));
                 }
-                file.set_len(arg[1]).map_err(|e| e.to_string())?;
+                file.set_len(arg[1]).map_err(FileError::failed)?;
                 Ok((0, 0))
             }
-            _ => Err(format!("unknown file primitive {op}")),
+            _ => Err(FileError::Failed(format!("unknown file primitive {op}"))),
         }
     }
 }
@@ -585,19 +627,22 @@ fn name_id(name: &str) -> u64 {
     u64::from_le_bytes(w) | 1 << 60
 }
 
-/// `_parts` (208-223): the components from C:\ (a full path) or from C:\w2m\app (a relative name).
-pub fn parts(name: &str) -> Result<Vec<String>, String> {
+/// `_parts` (208-223): the components from C:\ (a full path) or from C:\w2m\app (a relative name); another drive, a
+/// rooted or UNC name and ".." refused, as the frozen bridge refuses them (`Unimplemented`, 213-222).
+pub fn parts(name: &str) -> Result<Vec<String>, FileError> {
     let name = name.strip_prefix("\\\\?\\").unwrap_or(name);
     let b = name.as_bytes();
     let (mut out, rest): (Vec<String>, &str) = if b.len() > 1 && b[1] == b':' {
         if !matches!(b[0], b'c' | b'C') || (b.len() > 2 && !matches!(b[2], b'\\' | b'/')) {
-            return Err(format!(
+            return Err(FileError::NotServed(format!(
                 "file path on a drive other than C: or drive-relative: {name:?}"
-            ));
+            )));
         }
         (Vec::new(), name.get(3..).unwrap_or(""))
     } else if name.starts_with(['\\', '/']) {
-        return Err(format!("file path rooted without a drive, or UNC: {name:?}"));
+        return Err(FileError::NotServed(format!(
+            "file path rooted without a drive, or UNC: {name:?}"
+        )));
     } else {
         (vec!["w2m".into(), "app".into()], name)
     };
@@ -606,7 +651,7 @@ pub fn parts(name: &str) -> Result<Vec<String>, String> {
             continue;
         }
         if p == ".." {
-            return Err(format!("file path with '..': {name:?}"));
+            return Err(FileError::NotServed(format!("file path with '..': {name:?}")));
         }
         out.push(p.to_string());
     }
@@ -681,10 +726,67 @@ mod tests {
         let mut mem = Region(vec![0; 0x2000]);
         let n = with_path(&mut mem, "C:\\w2m\\app\\Data\\new");
         let refused = b.request(&mut mem, FILE_MKDIR, [0x1000, n, 0, 0]).unwrap_err();
-        assert!(refused.contains("read-only"), "{refused}");
+        assert!(refused.to_string().contains("read-only"), "{refused}");
         let n = with_path(&mut mem, "C:\\Users\\w2m\\AppData\\Local\\Temp\\x");
         assert_eq!(b.request(&mut mem, FILE_MKDIR, [0x1000, n, 0, 0]).unwrap().0, 0);
         assert_eq!(b.request(&mut mem, FILE_MKDIR, [0x1000, n, 0, 0]).unwrap().0, neg(17));
+        drop(b);
+        let _ = std::fs::remove_dir_all(&r);
+    }
+
+    /// Each error the kind the frozen bridge raises (Sprint 239): `Unimplemented` (213-222, 135, 326-328, 355-357) a
+    /// refusal; `BridgeRequestError` (199, 314), the unknown primitive's `ValueError` (360) and FILE_SIZE's `assert`
+    /// (351) failures.
+    #[test]
+    fn each_error_is_the_kind_the_frozen_bridge_raises() {
+        let r = root("kinds");
+        let mut b = FileBridge::new(&r, true, None).unwrap();
+        let mut mem = Region(vec![0; 0x2000]);
+        let mut refusals = Vec::new();
+        for (path, op) in [
+            ("D:\\x", FILE_LOOKUP),
+            ("\\\\server\\x", FILE_LOOKUP),
+            ("a\\..\\b", FILE_LOOKUP),
+            ("C:\\w2m\\app\\Data\\new", FILE_MKDIR),
+            ("C:\\w2m\\app\\Data\\Level0.bin", FILE_UNLINK),
+        ] {
+            let n = with_path(&mut mem, path);
+            refusals.push((path, b.request(&mut mem, op, [0x1000, n, 0, 0]).unwrap_err()));
+        }
+        let n = with_path(&mut mem, "Data\\Level0.bin");
+        let (fd, _) = b.request(&mut mem, FILE_OPEN, [0x1000, n, 0, 0]).unwrap();
+        refusals.push((
+            "write",
+            b.request(&mut mem, FILE_WRITE, [fd, 0x1000, 1, 0]).unwrap_err(),
+        ));
+        refusals.push((
+            "truncate",
+            b.request(&mut mem, FILE_TRUNCATE, [fd, 0, 0, 0]).unwrap_err(),
+        ));
+        for (what, e) in &refusals {
+            assert!(
+                matches!(e, FileError::NotServed(_)),
+                "{what}: the frozen bridge refuses it, and here {e:?}"
+            );
+        }
+
+        let mut failures = Vec::new();
+        let n = with_path(&mut mem, "a\0b");
+        failures.push(("NUL", b.request(&mut mem, FILE_LOOKUP, [0x1000, n, 0, 0]).unwrap_err()));
+        failures.push((
+            "not open",
+            b.request(&mut mem, FILE_READ, [fd + 9, 0x1900, 1, 0]).unwrap_err(),
+        ));
+        failures.push(("unknown", b.request(&mut mem, 99, [fd, 0, 0, 0]).unwrap_err()));
+        let n = with_path(&mut mem, "Data");
+        let (dir, _) = b.request(&mut mem, FILE_OPEN, [0x1000, n, 0, 0]).unwrap();
+        failures.push(("size", b.request(&mut mem, FILE_SIZE, [dir, 0, 0, 0]).unwrap_err()));
+        for (what, e) in &failures {
+            assert!(
+                matches!(e, FileError::Failed(_)),
+                "{what}: the frozen bridge fails it, and here {e:?}"
+            );
+        }
         drop(b);
         let _ = std::fs::remove_dir_all(&r);
     }
