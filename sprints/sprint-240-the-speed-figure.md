@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 240
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -116,3 +116,50 @@ configuration it ran.
 - [x] One concept: the speed figure.
 
 ## result
+
+- **The figure:** three records from 15d04a031 by `scripts/batch-run-record.sh`, each conforming, `check_records` 0
+  violations, 80,306,813,574 instructions each:
+
+  | record | load at start (1, 5, 15 min) | busy | instructions a second |
+  |---|---|---|---|
+  | `store/runs/w2m-vm-game-1793364171000000000` | 1.82 2.78 3.08 | none | 2,932,723,144 |
+  | `store/runs/w2m-vm-game-1793364267000000000` | 2.58 2.73 3.02 | python 100% | 2,868,493,560 |
+  | `store/runs/w2m-vm-game-1793364362000000000` | 2.51 2.68 2.97 | python 100% | 2,875,199,872 |
+
+  2.2% apart; 21.8% to 24.6% above the reference's 2,354,295,320, which ran at load 2.58, 3.29, 3.30 beside five
+  idle w2m VMs, warm. No other w2m process ran beside these; the busy `python` process was not w2m's. Every Rust
+  measurement is cold, QoS user-interactive, inherited, no core pinned. Census row 10 is met and says so in these
+  terms.
+- **The label:** `measurement_line` writes `cold`; WORKING_AGREEMENT's measurement row says the Rust records before
+  this sprint say `warm` falsely (reviewer-3's Low 1 of its review at 240).
+- **The record's arithmetic:** `run_seconds` "host" joins "vm", so the rate checks against the record: each record's
+  rate times its seconds is its instructions to one part in a million (`rate_problems`, carried from
+  `measurement_problems`).
+- **The conditions (reviewer-3's Medium 1, after the card's commit):** `scripts/batch-run-record.sh` writes
+  `load_at_start`, `qos` and `cores` into a transient run file's baseline, `harness/.w2m-vm-game-<pid>.toml` (ignored,
+  removed on exit), since substrate runs Producers from the run file's directory; the gates use it. `w2m-vm` writes
+  `load_average` at the end (`w2m_vm::host_state`, `getloadavg` and `qos_class_self`, declared from the SDK's
+  `_stdlib.h` 328 and `sys/qos.h` 130-172). A first trial wrote `load_at_start` as an inline table, which substrate
+  stored as Python's repr of a dict; it is one string now. A second trial's `awk` failed on a ternary across lines
+  (BSD awk); the empty lists are set in the shell. Both trials wrote under `build/`, never committed.
+- **Runs set aside:** three runs before the review lacked the conditions; two finished, 2,858,003,072 and
+  2,849,235,541 at load 1.61 and 3.48, and the third was stopped. Their records, never committed, were removed.
+- **Breaches:** a lookup command held `uv run python -c 1`, an empty Python program, against the Decision "No Python
+  runs", as Sprint 238's `python3 -c 1` was. A `printf >>` added three lines to `.gitignore`; `git checkout` undid it
+  and the Edit tool made the change. The card's commit ran a `sed` that replaced a line with itself.
+- **A test not run in time:** after 506c03702 changed the record's rows, `record.rs`' unit test, which counts them,
+  was not run; it failed when run before the gates, and was fixed in 15d04a031.
+- **Departures, files:** `crates/w2m_vm/src/host_state.rs` new, `lib.rs`, `bin/w2m-vm.rs`, `scripts/batch-run-record.sh`
+  new, `scripts/gates.sh`, `harness/w2m-vm-game.toml`, `.gitignore`, `WORKING_AGREEMENT.md`, the Drift watchlist.
+- **The gates:** `scripts/gates.sh` exit 0 in 658 s on 13a9b584a, "rust=all python=0 samples=1", 247 tests, the
+  three records replayed and checked ("records: 3 new").
+- **Plant 1** (`measurement_line`'s `ArtifactState::Cold` back to `Warm`): `record.rs`' unit test failed, "left:
+  String("warm") right: "cold"", at the exit row's `artifact_state`; the card had named `batch_record.rs`, which reads
+  stored records, not the code.
+- **Plant 2** (the second record's `instructions_per_second` 2,868,493,559.68 to 2,871,362,053.24, one part in a
+  thousand): "instructions_per_second 2871362053.242637 over 27.996163109 s is 80387120387.57402 instructions, where
+  80306813574 retired".
+- **Plant 3** (the second record's COMPARISON_COMPLETED verdict to "diverges"): "COMPARISON_COMPLETED verdict
+  "diverges"", from `every_stored_rust_batch_record_holds_its_rate`.
+- Each plant's `git diff --stat` showed its one line changed before its test ran; each was restored by `cp`, and
+  `cmp` found the files equal to their copies.
