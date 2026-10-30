@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 234
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -41,7 +41,7 @@ The Decision "Sequence after Sprint 214" as annotated at Sprint 233: the warp to
 
 ## context_files
 
-- `src/w2m/vm_backend.py` at the tag (`_switch` 3521-3580, `warp_to_deadline` 3614-3628)
+- `src/w2m/vm_backend.py` at the tag (`_switch` 3521-3580, its no-ready branch 3565-3580, `warp_to_deadline` 3614-3628)
 - `crates/w2m_vm/src/threads.rs` (`switch`, `counter_now`, `wake_expired`)
 - `store/family_runs/sweep-held-2026-10-29.tsv`, `store/batch_run/first-stop-2026-10-28.tsv`
 
@@ -90,3 +90,38 @@ family run and guest is judged.
 - [x] One concept: the switch with no thread ready.
 
 ## result
+
+- **The switch:** with no thread ready, `switch` collects the threads blocked, unsuspended and waiting with a
+  deadline, in rotation order. With none it refuses as a deadlock, as before. Otherwise `timed_waiter` readies one as
+  the frozen `_switch` (3565-3580 at the tag; the card first cited 3570) and `warp_to_deadline` (3614-3628) do:
+  - on the instruction clock, the earliest deadline, then the lowest id, the warp moving the clock to that deadline
+    if it is still ahead;
+  - on the host's clock, a sleep of 1 ms and the first timed waiter in rotation, which checks its own wait in guest
+    code and blocks again if its time has not come.
+  - A machine of several processes still returns Idle.
+- **The runs:**
+  - All 10 family runs end and conform: running_thread_context 1, slim_locks 4, threads 2, time 2, wait_handoff 1.
+    Every family run now conforms, 273 of 273, and 68 of 68 families in every run.
+  - `mutual` and `mutual_context` end and print "done", the frozen host's output: the guests are 16 of 16.
+  - None of the 12 starts on the instruction clock, so the runs took the sleep. The warp is held by the unit test
+    only.
+- **Census rows 6 and 8** are met.
+- **The unit test,** `a_timed_waiter_is_readied_as_the_frozen_host_readies_one`, uses a guest with two created
+  threads. It covers the earliest deadline (warp 10,000,000 ticks), a tie to the lower id, a passed deadline with no
+  warp, and the host's clock taking the first in rotation. Its first form wrote BLOCKED into the entries directly, and
+  `set_status` overflowed the run table's count of blocked threads (threads.rs 509). It now blocks through
+  `set_status`, as the host does.
+- **My first rerun of the held runs** gave the two `threads` runs no beside DLL. They stopped at "import
+  threads_dll.dll!threads_dll_count", a fault of the script, and ended once given their DLL as the gates give it.
+- **Plant 1** (the warp one tick short): the unit test failed, "left: (9999999, 0, 1)".
+- **Plant 2** (the last timed waiter readied, not the first): "the host's clock: the first in rotation", "left: 8, right: 4".
+- **Plant 3** (the chosen thread not readied): the card expected the runs to stop again; they did not, since `switch` hands the vCPU to the chosen thread whatever its status, and both guests ended. The unit test named it: "left: (10000000, 1, 1)", the thread still blocked.
+- Each plant was restored by `cp`, and `cmp` found `threads.rs` equal to its copy.
+- **Reviewer-3's review at 234,** which came as the first gates run passed (457 s), on the tree before this change:
+  - *Low 1* (the switch hands the vCPU to a thread without checking it is ready): `switch` now refuses a chosen
+    thread whose status is not READY, on every path into it. Plant 3 run again, the waiter unreadied, stops both
+    guests: "Handover: thread 4 given vCPU 0 while not ready (status 1)". Unplanted, both end with "done". The gates
+    ran again on this tree.
+  - Low 2 (the three argument forms neither host serves), Low 3 (the `sed` replacement with a newline) and the
+    ledgers' join are dispositions in BLACKBOARD: a Deferred entry and census row 6's wording, a sentence in
+    WORKING_AGREEMENT's edit rule, and the Decision's order.
