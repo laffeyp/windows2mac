@@ -49,7 +49,7 @@ Of the other rows, 4, 5, 5a, 12 and 14 are met by the records and tests their ce
 event that re-visits it. `crates/signal_report/tests/census.rs` holds every path this census names to the tree or its
 history, and every row not met to that Deferred entry.
 
-## What the counts say
+## What the counts say (the census's opening analysis, 2026-10-28; superseded by "Step 4 closed" above)
 
 Of the step's gate, the Rust side holds 2 of 14 guests (row 8) and none of the three judges' gates (rows 3, 6, 7). The
 three judges the gate names have no Rust form. The Rust host cannot reach the batch run while hvc 4, 10, 11 and 14 end
