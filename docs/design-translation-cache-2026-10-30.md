@@ -155,11 +155,14 @@ words in the real run; the VM's follows once the host's conforms.
    range to the host before the in-VM compiler, and the host installs it from the cache, or compiles it as today when
    the cache does not hold it. Gate: the plan's, the batch run conforming with the cache, "compiled in UnityPlayer.dll"
    falling by the starts installed, at most 128,523 distinct starts and their repeats (reviewer-3's Low 1 at 253); the
-   installs counted on the record; the whole-block judge and the frozen-word tests unchanged with no cache; a guest
-   write to an installed block's page planted.
+   installs counted on the record; and the time beside the counts (amended 2026-10-30, reviewer-3's Medium 1 at 256):
+   the VM's compile time and the host's seconds on `hvc 1` on timed records run alone, against Sprint 248's 1,351 to
+   1,362 ms, a slower run named, not hidden by a falling count; the whole-block judge and the frozen-word tests
+   unchanged with no cache. A guest write to the image's code stops the cache's use for the rest of the run (the batch
+   run makes none: Sprint 257's count), so no cached word or liveness outlives the bytes it came from.
 5. **The install inside the VM.** The copy and the re-encoding in the miss stub's path, no exit. Gate: card 4's counts
-   unchanged, and the run's compile time and its most in a 60 Hz frame on timed records, run alone, against Sprint
-   248's.
+   unchanged, and the run's compile time falling below Sprint 248's 1,351 to 1,362 ms and its most in a 60 Hz frame
+   below 248's 10.9 to 12.0 ms, on timed records run alone. Step 5 is met at this card's close.
 
 Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
 where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.
