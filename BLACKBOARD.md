@@ -860,7 +860,7 @@
 
 ## Sprint tail
 
-### Sprint 223 (2026-10-29, gates running)
+### Sprint 223 (2026-10-29, closed)
 - **Scope:** the Decision "Sequence after Sprint 214" as annotated at Sprint 222's close (reviewer-3's Medium 1 of its review at it, and Medium 2 and Low 1 of its refreshed review): the judges' ledger keyed by defect, not by report
 - **Dual contract:** signal — none new, the ledger rebuilt from the records' DISCREPANCY_REPORTED, DISCREPANCY_ROUTED and DISCREPANCY_RESOLVED; artifact pass (`scripts/gates.sh` exit 0 in 900 s on the third run (Observations 2b, 2c), every gate, Rust only, kept in `store/gates/passes.tsv` as sprint 223 at 27269e4dd with root=7e4169ab7 and "rust=all python=0 samples=1"; multi-vCPU: not run (Python gates not run)); observation pass (20 reports in 4 defects, all open: FCOS st0 9, FSIN st0 9, FCOS FSW 1, FSIN FSW 1, against 20 entries; plant 1, "the ledger's entries are not the defects the records report", left `{"FCOS", "FSIN"}`; plant 2, "left: Null, right: \"case-runner-2\""; plant 3, "a report is in no entry", 19 against 20; plant 4, "a defect another judge reported stays open", left `[]`; plant 5, "ledger entry \"FCOS: FCOS st0: 10 cases; … \" is not \"FCOS <field>\"")
 - **CI does not run:** nothing beyond what it ran; CI runs `ledger.rs`' unit tests and `tests/ledger.rs` over the records it holds.
