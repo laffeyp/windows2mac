@@ -646,7 +646,7 @@ mod run {
         let tree = w2m_vm::built_from::crates_tree(root)?;
         let key = cache_file::key(&data, image.base, &tree, &exits);
         let started = Instant::now();
-        let cache = cache_file::make(&image.pe, &data, image.base, &exits, key);
+        let (cache, refused) = cache_file::make(&image.pe, &data, image.base, &exits, key);
         let made_in = started.elapsed().as_secs_f64();
         let uncovered = cache_file::uncovered_reads(&image.pe, &data, &cache);
         let bytes = cache_file::to_bytes(&cache);
@@ -664,7 +664,7 @@ mod run {
             "key": cache.key,
             "base": format!("0x{:x}", image.base),
             "blocks": cache.blocks.len(),
-            "refused": cache.refused,
+            "refused": refused,
             "code_bytes": code_bytes,
             "code_region": CACHE_CODE_SIZE,
             "data_bytes": data_bytes,

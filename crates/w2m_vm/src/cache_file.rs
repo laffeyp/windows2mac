@@ -52,9 +52,10 @@ pub struct CacheFile {
     pub marks: Vec<(u32, u32)>,
     /// each page an RVA's 4 KB page, and the indices into `blocks` of every block whose bytes touch it
     pub pages: BTreeMap<u32, Vec<u32>>,
-    /// walked starts not made, by why
-    pub refused: BTreeMap<String, u32>,
 }
+
+/// The walked starts `make` did not make, by why: the maker's report, not part of the file.
+pub type Refused = BTreeMap<String, u32>;
 
 /// The key: the image, its base, the translator's tree, and the addresses the words embed.
 pub fn key(image: &[u8], base: u64, translator_tree: &str, exits: &Exits) -> String {
@@ -79,7 +80,7 @@ fn lifted(img: &PeImage, data: &[u8], base: u64, exec: &[(u64, u64)], va: u64) -
 }
 
 /// The cache of `img` loaded at `base`, from its walk's block starts, until the code region is full.
-pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -> CacheFile {
+pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -> (CacheFile, Refused) {
     let walk = image_walk::walk(img, data);
     let exec: Vec<(u64, u64)> = img
         .sections
@@ -93,7 +94,7 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
         })
         .collect();
     let at = |va: u64| lifted(img, data, base, &exec, va);
-    let mut refused: BTreeMap<String, u32> = BTreeMap::new();
+    let mut refused = Refused::new();
     let mut refuse = |why: &str| *refused.entry(why.to_string()).or_default() += 1;
     let mut blocks = Vec::new();
     let (mut words, mut marks) = (Vec::new(), Vec::new());
@@ -157,15 +158,15 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
             page += PAGE;
         }
     }
-    CacheFile {
+    let cache = CacheFile {
         key,
         base,
         blocks,
         words,
         marks,
         pages,
-        refused,
-    }
+    };
+    (cache, refused)
 }
 
 /// The blocks whose live flags miss a flag a direct successor's first instruction reads (the design's card 3 check,
