@@ -135,7 +135,11 @@ mod tests {
                     let path = path.unwrap_or_else(|e| panic!("{}: {named}: {e}", file.display()));
                     let rel = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
                     let covered = INPUTS.iter().any(|i| rel == *i || rel.starts_with(&format!("{i}/")));
-                    assert!(covered, "{} compiles in {rel}, which INPUTS does not name", file.display());
+                    assert!(
+                        covered,
+                        "{} compiles in {rel}, which INPUTS does not name",
+                        file.display()
+                    );
                     includes += 1;
                 }
             }

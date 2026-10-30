@@ -50,9 +50,7 @@ mod run {
         SessionOutcome, SessionPurpose, Sha256, VOCAB_VERSION, Verdict, Version, harness_line,
     };
     use serde_json::{Value, json};
-    use w2m_vm::case_inputs::{
-        CaseCompiler, case_runtime_calls, runs, translator_sha, with_case_vm,
-    };
+    use w2m_vm::case_inputs::{CaseCompiler, case_runtime_calls, runs, translator_sha, with_case_vm};
     use w2m_vm::cases::run_cases;
 
     const INDEX: &str = "store/runs/class-runs.json";

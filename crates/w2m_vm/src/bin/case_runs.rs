@@ -56,9 +56,7 @@ mod run {
         ReductionCompleted, Relation, RepairPath, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose,
         Sha256, VOCAB_VERSION, Verdict, Version, harness_line,
     };
-    use w2m_vm::case_inputs::{
-        CaseCompiler, case_runtime_calls, runs, translator_sha, with_case_vm,
-    };
+    use w2m_vm::case_inputs::{CaseCompiler, case_runtime_calls, runs, translator_sha, with_case_vm};
     use w2m_vm::cases::run_cases;
     use w2m_vm::ledger;
 

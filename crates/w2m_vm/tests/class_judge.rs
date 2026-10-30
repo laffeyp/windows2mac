@@ -194,7 +194,10 @@ fn the_class_index_and_the_case_harnesses_name_no_python_words() {
     let root = root();
     let named = |what: &str, text: &str| {
         for word in ["Python", "python-words"] {
-            assert!(!text.contains(word), "{what} names the frozen Python lowering's words: {text}");
+            assert!(
+                !text.contains(word),
+                "{what} names the frozen Python lowering's words: {text}"
+            );
         }
     };
     for harness in ["class-judge.toml", "case-runs-rust.toml", "case-runs-planted.toml"] {
@@ -222,5 +225,9 @@ fn the_class_index_and_the_case_harnesses_name_no_python_words() {
             }
         }
     }
-    assert!(events > 456, "{} holds {events} baselines and candidates", record.display());
+    assert!(
+        events > 456,
+        "{} holds {events} baselines and candidates",
+        record.display()
+    );
 }
