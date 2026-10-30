@@ -775,7 +775,7 @@ mod run {
             .iter()
             .map(|i| (i.name.as_str(), i.base, u64::from(i.pe.size_of_image)))
             .collect();
-        let compiles_by_image = w2m_vm::record::compiles_by_image(&images, out.vm_compile_starts.iter().copied());
+        let compiles_by_image = w2m_vm::record::compiles_by_image(&images, out.vm_compile_starts.iter().copied())?;
         let by_image: u64 = compiles_by_image.iter().map(|(_, n)| n).sum();
         let compiled = out.counts.get("compiled").copied().unwrap_or(0);
         if by_image != compiled {

@@ -97,8 +97,22 @@ pub const COMPILED_OUTSIDE: &str = "compiled outside any image";
 
 /// The compiles whose block starts are `starts`, counted by the image whose range, `[base, base + size)`, holds each,
 /// as (`COMPILED_IN` and the image's name, count) in the images' order, those with none left out, and then
-/// (`COMPILED_OUTSIDE`, count) for the starts in no image.
-pub fn compiles_by_image(images: &[(&str, u64, u64)], starts: impl IntoIterator<Item = u64>) -> Vec<(String, u64)> {
+/// (`COMPILED_OUTSIDE`, count) for the starts in no image. Two images whose ranges overlap are refused: no image is
+/// unloaded today (FreeLibrary unmaps nothing), and a range reused by a later image would credit its compiles to the
+/// first (reviewer-3's Low 2 at 249).
+pub fn compiles_by_image(
+    images: &[(&str, u64, u64)],
+    starts: impl IntoIterator<Item = u64>,
+) -> Result<Vec<(String, u64)>, String> {
+    for (i, (a, a_base, a_size)) in images.iter().enumerate() {
+        for (b, b_base, b_size) in &images[i + 1..] {
+            if a_base < &(b_base + b_size) && b_base < &(a_base + a_size) {
+                return Err(format!(
+                    "{a} at 0x{a_base:x} and {b} at 0x{b_base:x} overlap; their compiles cannot be told apart"
+                ));
+            }
+        }
+    }
     let mut counts = vec![0u64; images.len()];
     let mut outside = 0;
     for start in starts {
@@ -110,13 +124,13 @@ pub fn compiles_by_image(images: &[(&str, u64, u64)], starts: impl IntoIterator<
             None => outside += 1,
         }
     }
-    images
+    Ok(images
         .iter()
         .zip(counts)
         .filter(|(_, n)| *n > 0)
         .map(|((name, ..), n)| (format!("{COMPILED_IN}{name}"), n))
         .chain([(COMPILED_OUTSIDE.to_string(), outside)])
-        .collect()
+        .collect())
 }
 
 /// The variants of `compile_critical_path_ms` beside "vm" (Sprint 248), which `batch_record.rs` reads by these names.
@@ -507,14 +521,25 @@ mod tests {
             0x10_0000_0000,
         ];
         assert_eq!(
-            compiles_by_image(&images, starts),
+            compiles_by_image(&images, starts).unwrap(),
             [
                 ("compiled in Game.exe".to_string(), 2),
                 ("compiled in UnityPlayer.dll".to_string(), 2),
                 (COMPILED_OUTSIDE.to_string(), 2),
             ]
         );
-        assert_eq!(compiles_by_image(&images, []), [(COMPILED_OUTSIDE.to_string(), 0)]);
+        assert_eq!(
+            compiles_by_image(&images, []).unwrap(),
+            [(COMPILED_OUTSIDE.to_string(), 0)]
+        );
+        // a range reused by a later image is refused; ranges that touch are not
+        let reused = [("a.dll", 0x1000, 0x2000), ("b.dll", 0x2000, 0x1000)];
+        assert_eq!(
+            compiles_by_image(&reused, []).unwrap_err(),
+            "a.dll at 0x1000 and b.dll at 0x2000 overlap; their compiles cannot be told apart"
+        );
+        let touching = [("a.dll", 0x1000, 0x1000), ("b.dll", 0x2000, 0x1000)];
+        assert!(compiles_by_image(&touching, [0x1fff, 0x2000]).is_ok());
     }
 
     /// Nearest rank: of four, the median is the second, not the third an index of n·q would take.
