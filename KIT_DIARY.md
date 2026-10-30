@@ -919,3 +919,11 @@ judge's test `the_rust_index_is_the_frozen_one_or_held` built a list of faults f
 case-count test, so this one was never seen to fail. It was found when 17 held classes came to conform and the test
 still passed. A gathering judge ends in one assertion over what it gathered, and each judge in a card's contract is
 planted against itself.
+
+### 2026-10-30 — Sprints 235-237: two cards split after their work began
+
+**Finding (#99):** #94 applies to a card's scope, not only to a removal's code. Card 235 named "the 17 classes and the
+6" and found three of the six needed a 121-line lowering; card 237 named the fixture's retirement and found the
+fixture's header and sha256 in three binaries and every record's baseline. Both were split, honestly, after the work
+began, on readers a search before the commit would have listed. A card that removes or retires a thing names that
+thing's readers before it is committed (WORKING_AGREEMENT, 2026-10-30).

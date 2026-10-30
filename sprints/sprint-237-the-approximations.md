@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 237
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -89,3 +89,28 @@ the Python words fixture.
 - [x] One concept: the case runner on Rust alone.
 
 ## result
+
+- **The approximations:** `crates/w2m_vm/src/approximate.rs` is `approximate.py`'s `rcp`, `rsqrt` and `_special`,
+  reading the three 4,096-entry tables of `specs/approximations.json`, compiled in, once. Python's floor `%` and `//`
+  are `rem_euclid` and `div_euclid`. The model serves RCPPS, RSQRTPS, RCPSS and RSQRTSS from them as `runtime.py`
+  859-864 does, and VRCPPS and VRSQRTPS reach them through their base classes.
+  - Its unit test holds every special input the reference CPU was measured on (`specials`) to the CPU's RCP and
+    RSQRT.
+- **The cases:** set 049b is judged whole, 46,970 cases, where 1,258 went to the model unjudged; VRCPPS's 675 and
+  VRSQRTPS's 639 agree with Windows. `expected.tsv`'s row by the Edit tool, the per-class counts by the writer.
+- **The session:** record `store/runs/class-judge-1793359177000000000`, `check_records` 0 violations, 456
+  CANDIDATE_ACCEPTED. The index was written from it: 456 of 458 conform, every one on Rust-compiled words, none held;
+  FCOS and FSIN discrepancies as in the frozen index. **Step 4's class gate, "456 of 458", is met.** The held class
+  file keeps its header alone, and the ledger was rebuilt, 4 defects.
+- **A plant during a session:** plants 1 and 2 ran while the session ran. `class_judge` compiles the table in, and its
+  start check covers `crates/` only, so a plant to `specs/` could have reached a session still building. The binary
+  was built at 04:19:41, before plant 1, and the session accepted RCPPS, which plant 1 failed. So the session judged
+  the true table.
+- **Departure, the scope split:** the fixture's retirement is not this card's. The fixture supplies the block base,
+  the exit, and the symbol and layout checks, and its sha256 is in every class-judge and case-runs record's
+  baseline. Retiring it changes three binaries, their tests and their records' meaning: card 238.
+- **Departures, files:** `crates/w2m_vm/src/lib.rs`, the expected counts, the ledger.
+- **Plant 1** (the first RCP entry changed, 1065349120 to 1065349121, in `specs/approximations.json`): set 049b showed 29 difference classes, "RCPPS xmm5: case 24: [2e, 0f, 53, e8] vm 3d91c0002ffff001b65fb800affff001, cpu 3d91c0002ffff000b65fb800affff000".
+- **Plant 2** (a zero or denormal input given a signed zero): "RCP of 00000000: 0x00000000, the CPU 0x7f800000".
+- **Plant 3** (VRCPPS put back in the held file, by the Edit tool): "VRCPPS: conforms as the frozen index, and store/case_runner/class-held-2026-10-29.tsv holds it".
+- Each plant was restored by `cp`, and `cmp` found the files equal to their copies.
