@@ -104,6 +104,12 @@ pub struct Execution<'a> {
     /// the seconds in the VM, `hv_vcpu_run`'s calls summed, and in the host serving the exits
     pub run_seconds: f64,
     pub host_seconds: f64,
+    /// the host's seconds by the exit's kind (`hvc <k>`, `vtimer`, `ec 0x<class>`), summing to `host_seconds`, as
+    /// `run_frontier.py` 167-168 wrote them by hvc (Sprint 246)
+    pub host_by_kind: Vec<(String, f64)>,
+    /// the in-VM compiler's counts at the stop, `VMC_COUNT_NAMES` in order (`block_compiler.c` 25-27), as
+    /// `vm_compile_counts` read them (vm_backend 2604-2607; Sprint 246)
+    pub compile_counts: Vec<(&'a str, u64)>,
     /// the exits by hvc number (0: an exit other than an hvc)
     pub exits: Vec<(u16, u64)>,
     pub end: RunEnd,
@@ -244,9 +250,15 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
             "instructions/s",
         ),
         (Metric::RunSeconds, "vm".to_string(), e.run_seconds, "s"),
-        // the host's seconds, which the rate divides by (Sprint 240): one total, where the frozen host wrote one a kind
-        (Metric::RunSeconds, "host".to_string(), e.host_seconds, "s"),
     ];
+    // the host's seconds, which the rate divides by (Sprint 240), by kind as the frozen host wrote them (Sprint 246)
+    for (kind, seconds) in &e.host_by_kind {
+        rows.push((Metric::RunSeconds, format!("host {kind}"), *seconds, "s"));
+    }
+    // the compiles at run time, step 5's baseline (Sprint 246; `run_frontier.py` 385-390)
+    for (cause, n) in &e.compile_counts {
+        rows.push((Metric::VmCompileBlocks, cause.to_string(), *n as f64, "blocks"));
+    }
     for (k, n) in &e.exits {
         rows.push((Metric::VmExits, format!("hvc {k}"), *n as f64, "exits"));
     }
@@ -470,6 +482,8 @@ mod tests {
                 executed: 3_541_969,
                 run_seconds: 0.25,
                 host_seconds: 0.75,
+                host_by_kind: vec![("hvc 8".into(), 0.75)],
+                compile_counts: vec![("compiled", 40), ("not a code page", 2)],
                 exits: vec![(8, 779)],
                 end,
                 calls: (IMAGE, 925),
@@ -513,7 +527,10 @@ mod tests {
             [
                 "SESSION_INIT",
                 "EXECUTION_STARTED",
-                // instructions, the rate, the VM's and the host's seconds, the exits, the three load averages
+                // instructions, the rate, the VM's seconds, the host's on hvc 8, two compile counts, the exits, the
+                // three load averages
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
@@ -529,26 +546,36 @@ mod tests {
         );
         // the rate over the VM's and the host's seconds: 3,541,969 instructions in 1 s
         assert_eq!(killed[3].1["value"], 3_541_969.0);
-        // the host's seconds the rate divides by, and the load at the end (Sprint 240)
+        // the host's seconds the rate divides by, by kind (Sprints 240, 246), the compile counts (Sprint 246), and the
+        // load at the end (Sprint 240)
         assert_eq!(
             killed[5].1["measurement_id"],
-            "frontier-643a6283510c-1-run_seconds-host"
+            "frontier-643a6283510c-1-run_seconds-host_hvc_8"
         );
         assert_eq!(killed[5].1["value"], 0.75);
-        let exit_row = &killed[6].1;
+        assert_eq!(
+            (
+                killed[7].1["metric"].as_str(),
+                killed[7].1["variant"].as_str(),
+                killed[7].1["value"].as_f64()
+            ),
+            (Some("vm_compile_blocks"), Some("not a code page"), Some(2.0))
+        );
+        assert_eq!(killed[7].1["unit"], "blocks");
+        let exit_row = &killed[8].1;
         assert_eq!(exit_row["measurement_id"], "frontier-643a6283510c-1-vm_exits-hvc_8");
         assert_eq!(exit_row["application_profile_id"], "hail-to-the-rainbow-643a6283510c");
         assert_eq!(exit_row["artifact_state"], "cold");
         assert_eq!(
             (
-                killed[9].1["metric"].as_str(),
-                killed[9].1["variant"].as_str(),
-                killed[9].1["value"].as_f64()
+                killed[11].1["metric"].as_str(),
+                killed[11].1["variant"].as_str(),
+                killed[11].1["value"].as_f64()
             ),
             (Some("load_average"), Some("15 min"), Some(3.0))
         );
-        assert_eq!(killed[10].1["instructions_executed"], 3_541_969);
-        assert_eq!(killed[10].1["guest_address"], 0x11_8002_72bfu64);
+        assert_eq!(killed[12].1["instructions_executed"], 3_541_969);
+        assert_eq!(killed[12].1["guest_address"], 0x11_8002_72bfu64);
     }
 
     /// `RunEnd::of`: an unserved request inside a Windows call names the call; one outside any call it can name (no

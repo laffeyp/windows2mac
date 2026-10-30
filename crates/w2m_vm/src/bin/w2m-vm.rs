@@ -739,6 +739,15 @@ mod run {
             executed: out.executed,
             run_seconds: out.run_ns.iter().sum::<u64>() as f64 / 1e9,
             host_seconds: out.serve_ns.iter().sum::<u64>() as f64 / 1e9,
+            host_by_kind: out
+                .serve_by_kind
+                .iter()
+                .map(|(k, ns)| (k.clone(), ns.iter().sum::<u64>() as f64 / 1e9))
+                .collect(),
+            compile_counts: w2m_vm::guest::VMC_COUNT_NAMES
+                .iter()
+                .map(|n| (*n, out.counts.get(n).copied().unwrap_or(0)))
+                .collect(),
             exits: out.exits.iter().map(|(k, n)| (*k, *n)).collect(),
             end,
             calls: (&sha256(calls.as_bytes()), calls.lines().count() as u64),

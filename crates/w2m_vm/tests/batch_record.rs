@@ -417,6 +417,7 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     let mut found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
     found.extend(rate_problems(&measurements(&ours)));
     found.extend(condition_problems(&record));
+    found.extend(compile_problems(&measurements(&ours), &measurements(&reference)));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
 }
 
@@ -461,6 +462,44 @@ fn condition_problems(record: &Path) -> Vec<String> {
     found
 }
 
+/// The records written before the compile counts reached the record (Sprint 240's three), which hold none.
+const BEFORE_COMPILE_COUNTS: [&str; 3] = [
+    "w2m-vm-game-1793364171000000000",
+    "w2m-vm-game-1793364267000000000",
+    "w2m-vm-game-1793364362000000000",
+];
+
+/// The compiles at run time, step 5's baseline (Sprint 246): a `vm_compile_blocks` row for each of the reference's
+/// variants and none other, and the "compiled" count above zero.
+fn compile_problems(ours: &[Value], reference: &[Value]) -> Vec<String> {
+    let variants = |ms: &[Value]| -> BTreeMap<String, f64> {
+        ms.iter()
+            .filter(|m| m["metric"] == "vm_compile_blocks")
+            .map(|m| {
+                (
+                    m["variant"].as_str().unwrap_or("").to_string(),
+                    m["value"].as_f64().unwrap_or(0.0),
+                )
+            })
+            .collect()
+    };
+    let (have, want) = (variants(ours), variants(reference));
+    let mut found = Vec::new();
+    let (h, w): (BTreeSet<&String>, BTreeSet<&String>) = (have.keys().collect(), want.keys().collect());
+    for missing in w.difference(&h) {
+        found.push(format!("no vm_compile_blocks {missing:?}, which the reference counts"));
+    }
+    for extra in h.difference(&w) {
+        found.push(format!(
+            "vm_compile_blocks {extra:?}, which the reference does not count"
+        ));
+    }
+    if have.get("compiled").copied().unwrap_or(0.0) <= 0.0 {
+        found.push(format!("vm_compile_blocks \"compiled\" is {:?}", have.get("compiled")));
+    }
+    found
+}
+
 fn measurements(events: &[(String, Value)]) -> Vec<Value> {
     events
         .iter()
@@ -483,6 +522,11 @@ fn every_stored_rust_batch_record_holds_its_rate() {
         let ours = w2m_events(&dir);
         let mut found = rate_problems(&measurements(&ours));
         found.extend(condition_problems(&dir));
+        let name = dir.file_name().unwrap().to_string_lossy().to_string();
+        if !BEFORE_COMPILE_COUNTS.contains(&name.as_str()) {
+            let reference = measurements(&w2m_events(&root.join(REFERENCE)));
+            found.extend(compile_problems(&measurements(&ours), &reference));
+        }
         for (k, p) in &ours {
             if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {
                 found.push(format!("COMPARISON_COMPLETED verdict {}", p["verdict"]));
@@ -494,6 +538,23 @@ fn every_stored_rust_batch_record_holds_its_rate() {
     assert!(
         held >= 3,
         "{held} records store/runs/w2m-vm-game-<ns>, where Sprint 240 committed three"
+    );
+}
+
+/// The compile check names a count the reference has and the record lacks, one it does not count, and a "compiled" of 0.
+#[test]
+fn a_missing_extra_or_empty_compile_count_is_named() {
+    let m = |variant: &str, value: f64| serde_json::json!({"metric": "vm_compile_blocks", "variant": variant, "value": value});
+    let reference = vec![m("compiled", 275303.0), m("decode", 304.0)];
+    assert_eq!(compile_problems(&reference, &reference), Vec::<String>::new());
+    let ours = vec![m("compiled", 0.0), m("pause", 2.0)];
+    assert_eq!(
+        compile_problems(&ours, &reference),
+        [
+            "no vm_compile_blocks \"decode\", which the reference counts",
+            "vm_compile_blocks \"pause\", which the reference does not count",
+            "vm_compile_blocks \"compiled\" is Some(0.0)",
+        ]
     );
 }
 
