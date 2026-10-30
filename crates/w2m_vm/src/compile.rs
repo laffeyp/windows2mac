@@ -13,7 +13,7 @@ use guest_runtime::layout::{
     IPA_BASE, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE, STATE_OFF, VM_COMPILER,
 };
 use translator::lift::{LiftError, Lifted, Op, lift};
-use translator::lower::{ALL_FLAGS, assemble_block, insn_flags, nzcv_setter};
+use translator::lower::assemble_block;
 
 use crate::guest::{Guest, VMC_CURSOR};
 use crate::monitor_code::{EMPTY_TARGET, dispatch_slot};
@@ -21,8 +21,6 @@ use crate::run::Tails;
 
 /// vm_backend 372: a block's instructions at most.
 pub const MAX_BLOCK_INSNS: usize = 64;
-/// vm_backend 861: the instructions a successor is scanned for, at most.
-pub const LIVENESS_SCAN: usize = 8;
 
 fn read_u64(mem: &[u8], off: u64) -> u64 {
     u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
@@ -138,89 +136,33 @@ impl HostCompiler {
         Ok(base)
     }
 
-    /// `_flags_live_out` (4778-4788): the flags a block read after it ends, from its direct successors; a successor
-    /// not known when compiling reads all.
-    fn flags_live_out(&mut self, guest: &Guest, start: u64, last: &Lifted, end: u64) -> Result<u32, String> {
-        let constant: BTreeMap<u32, u64> = last
-            .ops
-            .iter()
-            .filter_map(|op| match op {
-                Op::Imm { t, value } => Some((*t, *value)),
-                _ => None,
-            })
-            .collect();
-        let Some((cond, t)) = last.ops.iter().find_map(|op| match op {
-            Op::Br { cond, t } => Some((*cond, *t)),
-            _ => None,
-        }) else {
-            return self.flags_live_in(guest, start, end);
-        };
-        let Some(target) = constant.get(&t) else {
-            return Ok(ALL_FLAGS);
-        };
-        let taken = self.flags_live_in(guest, start, *target)?;
-        Ok(taken
-            | if cond == "always" {
-                0
-            } else {
-                self.flags_live_in(guest, start, end)?
-            })
-    }
-
-    /// `_flags_live_in` (4790-4825): the flags code at `addr` reads before writing them, from at most LIVENESS_SCAN
-    /// instructions on its straight path; only pages already behind translated code are read, and `owner` joins each
-    /// such page's blocks.
-    fn flags_live_in(&mut self, guest: &Guest, owner: u64, mut addr: u64) -> Result<u32, String> {
-        let (mut live, mut undecided) = (0u32, ALL_FLAGS);
-        let mut previous: Option<Lifted> = None;
-        for _ in 0..LIVENESS_SCAN {
-            if guest.thunks.contains_key(&addr)
-                || addr >= PROCESS_VA
-                || !self.code_pages.contains_key(&(addr & !(PAGE - 1)))
+    /// `_flags_live_out` (4778-4825), by `translator::liveness`: the scan reads only pages already behind translated
+    /// code, outside the thunks and the process area, and `owner` joins each page it reads.
+    fn flags_live_out(&mut self, guest: &Guest, owner: u64, last: &Lifted, end: u64) -> Result<u32, String> {
+        let code_pages = &mut self.code_pages;
+        let mut code = |addr: u64| {
+            if guest.thunks.contains_key(&addr) || addr >= PROCESS_VA || !code_pages.contains_key(&(addr & !(PAGE - 1)))
             {
-                break;
+                return None;
             }
-            let Ok(ins) = lift_at(guest, addr) else {
-                break;
-            };
+            let ins = lift_at(guest, addr).ok()?;
             let pages = [addr & !(PAGE - 1), (addr + ins.length - 1) & !(PAGE - 1)];
-            if !pages.iter().all(|p| self.code_pages.contains_key(p)) {
-                break;
+            if !pages.iter().all(|p| code_pages.contains_key(p)) {
+                return None;
             }
             for p in pages {
-                self.code_pages.get_mut(&p).unwrap().insert(owner);
+                code_pages.get_mut(&p).unwrap().insert(owner);
             }
-            // a condition the lowering does not name ends the compile by name, as the Python's KeyError leaves
-            // `_flags_live_in` (4812), `_compile` and `serve_exit` (5242) uncaught and ends the run (Sprint 171)
-            let (read, written) = insn_flags(&ins, previous.as_ref().and_then(nzcv_setter))
-                .map_err(|e| format!("0x{addr:x}, scanning the flags block 0x{owner:x} leaves live: {e}"))?;
-            live |= read & undecided;
-            undecided &= !(read | written);
-            if undecided == 0 {
-                return Ok(live);
-            }
-            let br = ins.ops.iter().find_map(|op| match op {
-                Op::Br { cond, t } => Some((*cond, *t)),
-                _ => None,
-            });
-            let Some((cond, t)) = br else {
-                addr += ins.length;
-                previous = Some(ins);
-                continue;
-            };
-            let target = ins.ops.iter().find_map(|op| match op {
-                Op::Imm { t: it, value } if *it == t => Some(*value),
-                _ => None,
-            });
-            match (cond, target) {
-                ("always", Some(target)) => {
-                    addr = target;
-                    previous = None;
-                }
-                _ => break,
-            }
-        }
-        Ok(live | undecided)
+            Some(ins)
+        };
+        // a condition the lowering does not name ends the compile by name, as the Python's KeyError leaves
+        // `_flags_live_in` (4812), `_compile` and `serve_exit` (5242) uncaught and ends the run (Sprint 171)
+        translator::liveness::live_out(last, end, &mut code).map_err(|e| {
+            format!(
+                "0x{:x}, scanning the flags block 0x{owner:x} leaves live: {}",
+                e.address, e.error
+            )
+        })
     }
 
     /// `_protect_code` (4535-4551): the pages under guest bytes [start, end) read-only, and the block over them noted

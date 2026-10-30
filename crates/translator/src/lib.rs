@@ -6,5 +6,6 @@
 //! lowering in groups; group 1 is the integer and control-flow core.
 
 pub mod lift;
+pub mod liveness;
 pub mod lower;
 pub mod rules;
