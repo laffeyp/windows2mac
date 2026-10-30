@@ -9,7 +9,7 @@ hvc 11	286
 hvc 13	13639
 hvc 14	167
 code cache full	0
-compiled	274834
+compiled	274837
 cut by decode	243
 cut by encoder	0
 cut by guarded	210
@@ -27,11 +27,11 @@ no choice	0
 no stencil	123
 not a code page	366
 page needs a split	15
-pages protected	17087
+pages protected	17086
 pause	2
 recon full	0
 scan pages	0
-blocks the host compiled	275555
+blocks the host compiled	275559
 calls traced	10505
 calls in flight	0
 calls dropped	0
