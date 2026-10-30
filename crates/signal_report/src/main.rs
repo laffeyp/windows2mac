@@ -1163,6 +1163,14 @@ fn multi_vcpu_staged(root: &Path, n: u32, body: &str, pass: &str) -> Option<Stri
     }
 }
 
+/// The commits made between one sprint's close and the next card, each named with why, which `commits_walked` lets
+/// pass; history on `main` is pushed and not rewritten, so a lapse stands here by name rather than by a looser rule.
+/// From Sprint 247 a review's dispositions between sprints go in the next sprint's card commit (WORKING_AGREEMENT).
+const BETWEEN_SPRINTS: [(&str, &str); 1] = [(
+    "c2fe0bbc8",
+    "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
+)];
+
 /// Sprint `n`'s commits from its card's to the next card's (or HEAD), each named that is not its work ("Sprint N: "),
 /// its close ("Sprint N closed:", bookkeeping only, held by `close_moved`) or the card itself (Sprint 195; reviewer-2's
 /// Medium 4 of its review of 190-192: a commit under another subject between a pass and a close went unchecked).
@@ -1182,7 +1190,8 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
         if is_card(subject, n + 1) {
             break;
         }
-        if !(subject.starts_with(&work) || is_close(subject, n)) {
+        let named = BETWEEN_SPRINTS.iter().any(|(h, _)| hash.starts_with(h));
+        if !(subject.starts_with(&work) || is_close(subject, n) || named) {
             wrong.push(format!(
                 "sprint {n:03}: commit {} \"{subject}\" stands between its card and the next card, and is neither its \
                  work nor its close",

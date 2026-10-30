@@ -954,3 +954,19 @@ batch run met became the next card (Decision "Sequence after Sprint 185"), and e
 whole once a weaker one was found (#95). What held it back: scope found after a card's commit (#94, #99, #100), plants
 that did not reach their judge (#98, #101), and a measurement taken before its conditions (#100). Eight census rows
 outside the gate are carried in Deferred, each with what re-visits it.
+
+### 2026-10-30 — Sprint 247: a probe inside the judged artifact, and a fact the tree held
+
+**Finding (#103):** in a system held byte for byte to a reference, a probe placed inside the referenced artifact changes
+what is judged. Sprint 247 timed the in-VM compiler by editing `block_compiler.c`; the runtime image grew 80 bytes and
+every runtime address after it moved, so the image test and the batch run's call stream, both held to the frozen host,
+failed. The probe now lives in the monitor code the project writes, off by default, as Sprint 164's runtime-word timing
+did. A review of 2026-10-27 had named it (item 15), in the Surfaced archive the card's lookup did not search; and the
+reviewer's own review at 247 called the C wrapper sound, having checked the slots' place and not the code's size.
+Probes belong in the layer outside the judged artifact, behind a switch whose default writes the reference's bytes.
+
+**Finding (#104):** a fact the tree already holds is read before code that depends on it is written. The C bracket's
+first figure was 762 trillion ms: `"isb; mrs …"` lost its `mrs` to Apple's assembler, where `;` begins a comment, as
+`process.c` 27 says beside its own counter read. An experiment found it, a print of the raw sum and a count of backward
+reads matching the hvc 1 exits; a search for the tree's other counter reads would have found it before the code.
+
