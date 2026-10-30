@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 249
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -99,3 +99,25 @@ Three records carry the compiles by image, adding up to "compiled", and UnityPla
 - [x] One concept: where the compiles come from.
 
 ## result
+
+- **The count:** `run.rs` keeps each in-VM compile's start, `Outcome::vm_compile_starts`, apart from `translations`,
+  which holds the host's compiles too (line 955: "the C's and the host's"); counting `translations` would have added
+  the host's 1,091 and failed the sum on every run. `record::compiles_by_image` counts the starts by the image whose
+  `[base, base + size_of_image)` holds each; `w2m-vm` refuses a count that does not add up to "compiled", and, after
+  reviewer-3's Low 2 at 249 (4536bbea9), two images whose ranges overlap.
+- **The records:** from e6b0bd61c, run alone, load at start 2.01 to 3.37, nothing busy:
+  `store/runs/w2m-vm-game-1793388575000000000`, `-1793388671000000000`, `-1793388768000000000`; each conforms,
+  `check_records` 0 violations, and each holds the same counts: of 274,834 in-VM compiles, UnityPlayer.dll 149,308
+  (54.3%), mono-2.0-bdwgc.dll 41,840 (15.2%), steam_api64.dll 897, Hail to the Rainbow.exe 770, outside any image
+  82,019 (29.8%). 4536bbea9 came after them and changes no count where no ranges overlap.
+- **The gates:** `scripts/gates.sh` exit 0 in 547 s on 4536bbea9, copied from `store/gates/passes.tsv`; the timing stage 702 ns an exit at load 4.38.
+- **Plants,** run on 4536bbea9, each restored by `cp` and checked by `cmp`. The gates' last batch record, made before
+  the count, also fails the record test's due rule until the next gates run replaces it; the stored-record test is
+  the judge quoted.
+- **Plant 1,** `batch_record.rs` failed, "the compiles by image add up to 273937, where vm_compile_blocks "compiled" is
+  274834": the "compiled in steam_api64.dll" line deleted from `w2m-vm-game-1793388768000000000`.
+- **Plant 2,** `a_compile_counts_in_the_image_that_holds_its_start` failed, "left: [Game.exe 3, UnityPlayer.dll 2,
+  outside 1] right: [Game.exe 2, UnityPlayer.dll 2, outside 2]" (abridged): the range's end taken as inside,
+  `record.rs` 121's `..` made `..=`.
+- **Plant 3,** `batch_record.rs` failed, "no vm_compile_blocks "compiled outside any image": the compiles by image are
+  due on a record after Sprint 248's": that line deleted from the same record.
