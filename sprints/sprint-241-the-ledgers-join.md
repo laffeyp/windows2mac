@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 241
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -93,3 +93,31 @@ One Rust ledger module reads both keys, and the frozen file is its derivation, c
 - [x] One concept: the ledgers' join.
 
 ## result
+
+- **The join:** `ledger::started` reads every record's first frame once and gives each record whose baseline names a
+  `judge` or a `differential`, in run-start order, then by root, as the frozen `sorted(started)` orders them.
+  `rebuild_judged` is the judges' ledger by defect, unchanged; `rebuild` is it over `started`.
+  `rebuild_differential` is `differential.rebuild_ledger`: a report keyed by its id, overwriting one of the same id as
+  the frozen dict assignment does, a route or resolution read only for an id already reported.
+- **The derivation:** over `store/runs/`, `rebuild_differential` gives the frozen file's 3 entries from the 10
+  `differential` records, byte for byte: `case_runs --check-ledger` returned 0 on the first build, and
+  `--write-ledger` rewrote both files with `cmp` finding each equal to its copy ("4 discrepancies in the judges'
+  ledger, 3 in the differentials'").
+- **The gate:** `case_runs --check-ledger` holds both files, the differentials' at `<runs>/discrepancy-ledger.json`
+  beside its records, as `differential.LEDGER` (44) put it; no script sets `W2M_RUNS`, so the gates read the store's.
+- **The test:** `a_differentials_report_is_resolved_as_the_frozen_ledger_resolves_it`: a report and its route in one
+  record, a judge's record between, the resolution in a later record; the entry's fields and the file's form.
+- **Records:** census row 9 met; WORKING_AGREEMENT's ledger row (83) names the derivation; `ledger.rs`' module comment
+  no longer names `tests/test_differential.py`, removed in 226.
+- **Departures:** none in files.
+- **The gates:** `scripts/gates.sh` exit 0 in 468 s on ec0ba8905, "rust=crates python=0 samples=0", 107 tests of
+  `w2m_vm` and its dependants, `case_runs --check-ledger` among the gates.
+- **Plant 1** (`"repair_path": "contract_revision"` to `contract_revisioN` in `store/runs/discrepancy-ledger.json`):
+  "store/runs/discrepancy-ledger.json is not the ledger the records give; `case_runs --write-ledger` rebuilds it",
+  exit 1. The `sed` changed the string in all three entries, where the card said one character.
+- **Plant 2** (`rebuild_differential` reading `s.judge` for `s.differential`): the same message, naming the
+  differentials' file, exit 1.
+- **Plant 3** (`rebuild_differential`'s resolution, line 246, dropped): "the later record's resolution closes the
+  report", `resolved_in` null, in `a_differentials_report_is_resolved_as_the_frozen_ledger_resolves_it`.
+- Each plant's `git diff` showed it before its verdict; each was restored by `cp`, and `cmp` found the files equal
+  to their copies.
