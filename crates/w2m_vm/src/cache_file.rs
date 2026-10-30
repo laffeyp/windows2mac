@@ -441,3 +441,28 @@ pub fn from_bytes(b: &[u8]) -> Result<CacheFile, String> {
     }
     Ok(c)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::relocate;
+
+    /// Sprint 256, clang's words (`--target=aarch64-linux-gnu`, 2026-10-30): `b .+0x100` 14000040, `b .-4` 17ffffff
+    /// (back to the block's first word), `b.eq .+0x200` 54001000, `adr x0, .+8` 10000040. Moved from 0x1000 to 0x5000,
+    /// a `B` leaving the block is re-encoded for its target, one inside it kept; a conditional branch leaving it and an
+    /// `ADR` are refused by kind.
+    #[test]
+    fn a_branch_out_of_the_block_is_re_encoded_and_other_kinds_refused() {
+        assert_eq!(
+            relocate(&[0x1400_0040, 0x17FF_FFFF], 0x1000, 0x5000),
+            Ok(vec![0x17FF_F040, 0x17FF_FFFF])
+        );
+        assert_eq!(
+            relocate(&[0x5400_1000], 0x1000, 0x5000).unwrap_err().kind,
+            "a conditional or compare branch"
+        );
+        assert_eq!(
+            relocate(&[0x1000_0040], 0x1000, 0x5000).unwrap_err().kind,
+            "an ADR or ADRP"
+        );
+    }
+}
