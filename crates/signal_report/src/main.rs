@@ -807,7 +807,8 @@ const FIRST_CI_HELD_SPRINT: u32 = 199;
 
 /// Sprint `n`'s close against its CI run: the run a later tail entry cites as "Sprint N's CI run <id>" (or "(<id>")
 /// must be in `ci`, a run of the `ci` workflow whose head holds the sprint's close (`holds_close`: Some(false) when it
-/// does not; Sprint 216, reviewer-3's Medium 3 of its review of 212-214), and conclude success, or the clause of
+/// does not; Sprint 216, reviewer-3's Medium 3 of its review of 212-214; None when no close commit is found, named
+/// from Sprint 232), and conclude success, or the clause of
 /// `body`, the sprint's own entry, that names the run says "failed". No later entry citing a run: the close's CI is
 /// pending, and nothing is held yet. WORKING_AGREEMENT's "CI on the closing commit".
 fn ci_held(
@@ -853,10 +854,16 @@ fn ci_held(
         ));
     }
     let head = cols.get(1).copied().unwrap_or("");
-    if holds_close(head) == Some(false) {
-        wrong.push(format!(
+    match holds_close(head) {
+        Some(true) => {}
+        Some(false) => wrong.push(format!(
             "sprint {n:03}: its CI run {digits} ran on {head}, which does not hold the sprint's close"
-        ));
+        )),
+        // no close commit to hold the run to: named, not passed (Sprint 232; reviewer-3's Low 3 of its review of
+        // 212-214)
+        None => wrong.push(format!(
+            "sprint {n:03}: its CI run {digits} is cited, and no commit \"Sprint {n} closed:\" is found to hold it to"
+        )),
     }
     // the waiver: the clause that names the run's id says it failed (clauses end at ";", ". " or ")")
     let waived = body
@@ -1343,7 +1350,21 @@ fn run() -> Result<bool, String> {
                 "every agent-resolved Decision from {FIRST_CLAUSED_DECISION} holds one decision and one revisit clause"
             );
         }
-        return Ok(missing.is_empty() && unquoted.is_empty() && early.is_empty() && split.is_empty());
+        let archive = fs::read_to_string(root.join(TAIL_ARCHIVE)).map_err(|e| format!("{TAIL_ARCHIVE}: {e}"))?;
+        let unbuilt = unbuilt(&blackboard, &archive);
+        for n in &unbuilt {
+            eprintln!(
+                "sprint {n:03}: its entry has left the tail for {TAIL_ARCHIVE}, and ## Built has no paragraph for it"
+            );
+        }
+        if unbuilt.is_empty() {
+            println!("every sprint from {FIRST_BUILT_SPRINT:03} rolled out of the tail has its paragraph in ## Built");
+        }
+        return Ok(missing.is_empty()
+            && unquoted.is_empty()
+            && early.is_empty()
+            && split.is_empty()
+            && unbuilt.is_empty());
     }
     let n = sprint.ok_or("usage: signal_report NNN [--write] [--backfill YYYY-MM-DD] | --check")?;
     let text = report(&root, n, backfill.as_deref())?;
@@ -1355,6 +1376,29 @@ fn run() -> Result<bool, String> {
         print!("{text}");
     }
     Ok(true)
+}
+
+/// Where a tail entry goes, verbatim, when it leaves the tail.
+const TAIL_ARCHIVE: &str = "docs/sprint-tail-archive-2026-10-08.md";
+
+/// The first sprint whose rolled tail entry must stand in `## Built` as a compressed paragraph (Sprint 232: 183-221
+/// had rolled with none, against the kit's `templates/BLACKBOARD.md` 58).
+const FIRST_BUILT_SPRINT: u32 = 183;
+
+/// The sprints from `FIRST_BUILT_SPRINT` whose entry is in the tail archive and which `## Built` has no paragraph
+/// for: none of its lines holds "— Sprint N (" (Sprint 232).
+fn unbuilt(blackboard: &str, archive: &str) -> Vec<u32> {
+    let built = section(blackboard, "## Built");
+    let mut missing: Vec<u32> = archive
+        .lines()
+        .filter_map(|l| l.strip_prefix("### Sprint "))
+        .filter_map(|l| l.split(' ').next()?.parse::<u32>().ok())
+        .filter(|n| *n >= FIRST_BUILT_SPRINT)
+        .filter(|n| !built.lines().any(|l| l.contains(&format!("— Sprint {n} ("))))
+        .collect();
+    missing.sort_unstable();
+    missing.dedup();
+    missing
 }
 
 /// The first date whose agent-resolved Decisions carry a decision clause and a revisit clause each (most before it
@@ -1473,6 +1517,20 @@ mod tests {
         assert!(quoted_edits(212, "\"sed -i '' 's/a/b/' f.rs\"").is_empty());
     }
 
+    /// Sprint 232: a sprint from 183 whose entry is in the tail archive needs its paragraph in ## Built; one before 183,
+    /// or one still in the tail, does not.
+    #[test]
+    fn a_rolled_sprint_has_its_built_paragraph() {
+        let blackboard =
+            "## Built\n- **d** — Sprint 183 (a). x\n- **d** — Sprint 1840 (b). y\n\n## Deferred\n- Sprint 184 (c)\n";
+        let archive = "# a\n### Sprint 182 (d, closed)\n### Sprint 183 (d, closed)\n### Sprint 184 (d, closed)\n";
+        assert_eq!(
+            unbuilt(blackboard, archive),
+            [184],
+            "Deferred's line and Sprint 1840 do not stand for 184"
+        );
+    }
+
     /// Sprint 212 (reviewer-3's High 2 of its review of Sprint 211): the run a later entry cites for a close must have
     /// concluded success, or the close's own entry names it failed; a run not on file is named; no citation, pending.
     #[test]
@@ -1503,6 +1561,12 @@ mod tests {
         assert!(
             before[0].contains("ran on aaa, which does not hold the sprint's close"),
             "{before:?}"
+        );
+        // Sprint 232: a cited run with no close commit to hold it to is named
+        let unclosed = ci_held(210, "an entry", tail, Some(ci), &|_: &str| None);
+        assert!(
+            unclosed[0].contains("no commit \"Sprint 210 closed:\" is found"),
+            "{unclosed:?}"
         );
         let elsewhere = ci_held(211, "its run 22 passed; the gates failed once", tail, Some(ci), &holds);
         assert_eq!(

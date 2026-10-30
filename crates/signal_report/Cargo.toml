@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+# `cargo run -p signal_report` runs the report and its check; `blackboard_roll` (Sprint 232) is named with --bin
+default-run = "signal_report"
 
 [dependencies]
 serde_json.workspace = true

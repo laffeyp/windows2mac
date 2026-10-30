@@ -31,6 +31,13 @@ fn scratch_with_tail(name: &str, cards: &[(&str, &str)], reports: &[&str], tail:
         format!("# BLACKBOARD\n\n## Sprint tail\n{tail}"),
     )
     .unwrap();
+    // the tail archive `--check` reads for the rolled sprints' Built paragraphs (Sprint 232): none rolled here
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/sprint-tail-archive-2026-10-08.md"),
+        "# Sprint tail archive\n",
+    )
+    .unwrap();
     root
 }
 
