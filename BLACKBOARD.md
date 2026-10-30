@@ -623,7 +623,7 @@
   - census row 15a, guest-written values that panic `w2m-vm` (5 of 6 sites not yet named stops): re-visit with the next card that touches `threads.rs`, `host_request.rs`, `guest.rs` or `virtual_memory`.
   - census row 15b, errors as strings (29 `Result<_, String>` in `threads.rs`, `kernel.rs`, `compile.rs`, `run.rs`): the Deferred entry of 2026-10-29 on the helpers' errors holds it, a card a helper.
   - census row 15c, a full code cache (`compile.rs` 118) ends the run: the batch run fills none; re-visit with step 5 or the play path, whichever compiles more.
-  - census row 15d, compile time per block on the batch run: re-visit with step 5, whose gate is compiles at run time falling. *(Annotated 2026-10-30, Sprint 246: the compiles are counted on the record, 274,834 in the VM in each of three cold runs, and the host's hvc 1 seconds, 49 to 74 µs an exit; the in-VM compiler's time is inside the VM's seconds, not separated; re-visit when the cache's card needs it apart.)*
+  - census row 15d, compile time per block on the batch run: re-visit with step 5, whose gate is compiles at run time falling. *(Annotated 2026-10-30, Sprint 246: the compiles are counted on the record, 274,834 in the VM in each of three cold runs, and the host's hvc 1 seconds, 49 to 74 µs an exit; the in-VM compiler's time is inside the VM's seconds, not separated; re-visit when the cache's card needs it apart.)* *(Resolved 2026-10-30, Sprint 247: the VM's compile time on the record, `compile_critical_path_ms` "vm", about 4.8 µs a block, compiling 5.13% to 5.18% of the run's seconds; census row 15d met.)*
 
 ## Open questions
 
