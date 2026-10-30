@@ -586,6 +586,39 @@ mod tests {
         assert_eq!(killed[12].1["guest_address"], 0x11_8002_72bfu64);
     }
 
+    /// The in-VM compile time (Sprint 247): a timed run writes one `compile_critical_path_ms` "vm" in ms, an untimed
+    /// run none; the gates' run is untimed, so this test is what holds the writer.
+    #[test]
+    fn a_timed_run_writes_its_compile_time() {
+        let times = |compile_ms: Option<f64>| {
+            events(&execution_lines(&Execution {
+                id: "frontier-643a6283510c-1",
+                subject_sha256: "643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974",
+                program_stem: "Hail to the Rainbow",
+                timeout_seconds: 10_800,
+                kill_grace_seconds: 60,
+                executed: 3_541_969,
+                run_seconds: 0.25,
+                host_seconds: 0.75,
+                host_by_kind: vec![("hvc 1".into(), 0.75)],
+                compile_counts: vec![("compiled", 40)],
+                compile_ms,
+                exits: vec![(1, 40)],
+                end: RunEnd::Exited(0),
+                calls: (IMAGE, 925),
+                stop: "a stop",
+                elapsed: Duration::from_millis(1536),
+                load_at_end: None,
+            }))
+            .into_iter()
+            .filter(|(k, p)| k == "MEASUREMENT_RECORDED" && p["metric"] == "compile_critical_path_ms")
+            .map(|(_, p)| (p["variant"].clone(), p["value"].clone(), p["unit"].clone()))
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(times(Some(1725.5)), vec![("vm".into(), 1725.5.into(), "ms".into())]);
+        assert_eq!(times(None), vec![]);
+    }
+
     /// `RunEnd::of`: an unserved request inside a Windows call names the call; one outside any call it can name (no
     /// call resolved, or no readable return address) is unserved, with no service; a failure in serving a request and
     /// any other stop are faults; ExitProcess and the time limit are their own ends.
