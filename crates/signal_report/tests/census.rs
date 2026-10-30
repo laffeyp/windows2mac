@@ -69,6 +69,20 @@ fn every_path_the_census_names_exists_or_existed() {
         "{CENSUS} names {} path(s) never in the tree: {missing:?}",
         missing.len()
     );
+    // a record withdrawn to store/superseded/ is not evidence (Sprint 247; reviewer-3's Low 2 of its review of the
+    // rework: its history keeps the old path, so the check above passes it)
+    let withdrawn: Vec<&String> = named
+        .iter()
+        .filter(|p| {
+            p.strip_prefix("store/runs/")
+                .and_then(|rest| rest.split('/').next())
+                .is_some_and(|record| root.join("store/superseded").join(record).exists())
+        })
+        .collect();
+    assert!(
+        withdrawn.is_empty(),
+        "{CENSUS} cites record(s) withdrawn to store/superseded/: {withdrawn:?}"
+    );
     assert!(named.len() > 20, "{} paths named", named.len());
 }
 
