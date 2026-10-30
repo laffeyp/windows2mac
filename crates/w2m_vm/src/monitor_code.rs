@@ -444,3 +444,41 @@ pub fn insert(mem: &mut [u8], target: u64, code: u64, second: bool) {
     mem[at..at + 8].copy_from_slice(&target.to_le_bytes());
     mem[at + 8..at + 16].copy_from_slice(&code.to_le_bytes());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{MONITOR_VA, Timing, VM_COMPILER, VMC_COMPILE_TICKS, dispatcher};
+    use a64_encoder as a64;
+    use std::collections::BTreeMap;
+
+    /// The compile probe (Sprint 247; reviewer-3's Low 1 of its review of the rework): the default dispatcher reads no
+    /// counter, so it is the words the gates' runs judge against the frozen host; the timed one adds the probe alone,
+    /// two counter reads, a subtraction and the sum's load, add, store and address, and its miss stub stays where it
+    /// was, the probe falling after it.
+    #[test]
+    fn the_compile_probe_is_off_by_default_and_its_size_known() {
+        let symbols: BTreeMap<String, u64> = [("w2m_vm_compile".to_string(), 0x7f00_0418_0000)].into();
+        let (plain, plain_miss) = dispatcher(&symbols, Timing::default());
+        let (timed, timed_miss) = dispatcher(
+            &symbols,
+            Timing {
+                compile: true,
+                ..Timing::default()
+            },
+        );
+        let counter = a64::mrs(26, a64::CNTVCT_EL0);
+        assert!(!plain.contains(&counter), "the default dispatcher reads the counter");
+        assert!(
+            timed.contains(&counter),
+            "the timed dispatcher does not read the counter"
+        );
+        let address = a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_COMPILE_TICKS).len();
+        let probe = 2 + 3 + 3 + address;
+        assert_eq!(timed.len() - plain.len(), probe, "the probe's words");
+        assert_eq!(
+            timed_miss - plain_miss,
+            4 * probe as u64,
+            "the miss stub moves by the probe"
+        );
+    }
+}
