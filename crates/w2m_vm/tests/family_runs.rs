@@ -301,9 +301,159 @@ fn derive(family: &str, rule: &str, printed: Vec<Row>) -> Result<Vec<Row>, Strin
         "file_mapping_rows" => drop_keys(&mut rows, &["query.after_view", "query.granule_end"], &["region_size"]),
         // 2217: the dump rows dropped
         "format_message_rows" => rows.retain(|r| name(r) != "dump"),
+        // 168-183 (Sprint 231): the start's rows, unprefixed; the other start's dropped, the rest kept
+        "child_rows.derive" => {
+            let prefix = match family {
+                "environment_set" => "set.",
+                "environment_empty" => "empty.",
+                other => return Err(format!("child_rows: no start for family {other}")),
+            };
+            let mut kept = Vec::new();
+            for mut r in rows {
+                let s = name(&r).to_string();
+                if let Some(rest) = s.strip_prefix(prefix) {
+                    r.insert("s".into(), Value::String(rest.to_string()));
+                    kept.push(r);
+                } else if !s.starts_with("set.") && !s.starts_with("empty.") {
+                    kept.push(r);
+                }
+            }
+            rows = kept;
+        }
+        // 338-390 (Sprint 231): the windows' places as relations to the desktop
+        "windows_rows" => rows = windows_rows(rows)?,
         other => return Err(format!("row rule {other} is not ported")),
     }
     Ok(rows)
+}
+
+/// Python's truth of a JSON value: false, 0, "", null, [] and {} are false.
+fn truthy(v: Option<&Value>) -> bool {
+    match v {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(n)) => n.as_f64() != Some(0.0),
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(a)) => !a.is_empty(),
+        Some(Value::Object(o)) => !o.is_empty(),
+    }
+}
+
+/// `without_message_0x60` (311-335): each drain's rows (queue.<drain>.<NN> and their "after" rows) without message
+/// 0x60, renumbered; an empty queue's `noremove_err` kept only for the first drain.
+fn without_message_0x60(printed: Vec<Row>) -> Result<Vec<Row>, String> {
+    let mut dropped = std::collections::BTreeSet::new();
+    let mut kept: BTreeMap<String, usize> = BTreeMap::new();
+    let mut out = Vec::new();
+    for mut r in printed {
+        let s = name(&r).to_string();
+        let parts: Vec<&str> = s.split('.').collect();
+        if parts[0] != "queue" || parts.len() != 3 {
+            out.push(r);
+            continue;
+        }
+        let drain = parts[1];
+        if truthy(r.get("after")) {
+            if dropped.contains(&s) {
+                continue;
+            }
+            let n = kept
+                .get(&s)
+                .ok_or(format!("row {s}: an after row with no row before it"))?;
+            r.insert("s".into(), Value::String(format!("queue.{drain}.{n:02}")));
+            out.push(r);
+            continue;
+        }
+        if r.get("msg").and_then(Value::as_i64) == Some(0x60) {
+            dropped.insert(s);
+            continue;
+        }
+        let n = kept
+            .keys()
+            .filter(|k| k.starts_with(&format!("queue.{drain}.")))
+            .count();
+        kept.insert(s.clone(), n);
+        if drain != "first" && !truthy(r.get("noremove")) {
+            r.remove("noremove_err");
+        }
+        r.insert("s".into(), Value::String(format!("queue.{drain}.{n:02}")));
+        out.push(r);
+    }
+    Ok(out)
+}
+
+/// `windows_rows` (338-390): message 0x60 out of the drains; each window's geometry from its own origin, positions as
+/// relations (x = y, on the cascade of 26), the default-sized windows' heights as their excess over 3/4 of the work
+/// area less 21, and the work area's bottom as lying above the screen's.
+fn windows_rows(printed: Vec<Row>) -> Result<Vec<Row>, String> {
+    let printed = without_message_0x60(printed)?;
+    let default_height = match printed.iter().find(|r| name(r) == "screen.work_area") {
+        // Python's `(bottom - top) * 3 // 4 - 21`: `//` floors, as `div_euclid` does by a positive divisor
+        Some(w) => ((int(w, "rect_bottom")? - int(w, "rect_top")?) * 3).div_euclid(4) - 21,
+        None => 0,
+    };
+    let windows = ["batch", "play", "game", "other"];
+    let mut origin: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+    for r in &printed {
+        let s = name(r);
+        if ["msg.batch.1", "msg.play.1", "msg.game.1", "msg.other.1"].contains(&s) && r.contains_key("x") {
+            origin.insert(s.split('.').nth(1).unwrap().to_string(), (int(r, "x")?, int(r, "y")?));
+        }
+    }
+    let mut out = Vec::new();
+    for mut r in printed {
+        if truthy(r.get("after")) {
+            r.remove("after");
+            let s = format!("{}.after", name(&r));
+            r.insert("s".into(), Value::String(s));
+        }
+        let s = name(&r).to_string();
+        if s == "screen.work_area" {
+            let mut w = Row::new();
+            w.insert("s".into(), Value::String(s));
+            w.insert("left".into(), r.get("rect_left").cloned().unwrap_or(Value::Null));
+            w.insert("top".into(), r.get("rect_top").cloned().unwrap_or(Value::Null));
+            w.insert("right".into(), r.get("rect_right").cloned().unwrap_or(Value::Null));
+            w.insert("bottom_above_768".into(), Value::Bool(int(&r, "rect_bottom")? < 768));
+            out.push(w);
+            continue;
+        }
+        let which = windows
+            .iter()
+            .find(|w| s.starts_with(&format!("msg.{w}.")) || s.starts_with(&format!("{w}.")));
+        let Some((x, y)) = which.and_then(|w| origin.get(*w)).copied() else {
+            out.push(r);
+            continue;
+        };
+        let tall = which != Some(&"play");
+        if r.contains_key("x") {
+            r.retain(|k, v| k != "x" && k != "y" && !v.is_null());
+            r.insert("x_equals_y".into(), Value::Bool(x == y));
+            r.insert("x_in_cascade".into(), Value::Bool(x > 0 && x % 26 == 0));
+        }
+        for prefix in ["in", "out", "rect"] {
+            if !r.contains_key(&format!("{prefix}_left")) {
+                continue;
+            }
+            let mut take = |k: &str| -> Result<i64, String> {
+                let v = int(&r, &format!("{prefix}_{k}"))?;
+                r.remove(&format!("{prefix}_{k}"));
+                Ok(v)
+            };
+            let (left, top, right, bottom) = (take("left")?, take("top")?, take("right")?, take("bottom")?);
+            let (left0, top0) = if s.ends_with(".client_rect") { (0, 0) } else { (x, y) };
+            let height = bottom - top0;
+            r.insert(format!("{prefix}_left"), (left - left0).into());
+            r.insert(format!("{prefix}_top"), (top - top0).into());
+            r.insert(format!("{prefix}_right"), (right - left0).into());
+            r.insert(
+                format!("{prefix}_bottom"),
+                (if tall { height - default_height } else { height }).into(),
+            );
+        }
+        out.push(r);
+    }
+    Ok(out)
 }
 
 /// `re.sub(r"\{[0-9A-F-]{36}\}", "{GUID}", key)` (display_rows, 271-272).
@@ -440,8 +590,333 @@ fn the_row_rules_derive_as_the_frozen_code_does() {
         ),
         serde_json::json!([{"s": "error_mode.child_inherited", "mode": 3}])
     );
-    let unknown = derive("windows", "windows_rows", Vec::new()).unwrap_err();
-    assert_eq!(unknown, "row rule windows_rows is not ported");
+    // Sprint 231: child_rows keeps its start's rows unprefixed; windows_rows renumbers the drains without message
+    // 0x60 and places a window from its origin (default height 720 * 3 // 4 - 21 = 519)
+    assert_eq!(
+        derived(
+            "environment_set",
+            "child_rows.derive",
+            serde_json::json!([{"s": "set.count", "n": 5}, {"s": "empty.count", "n": 0}, {"s": "start", "ok": 1}])
+        ),
+        serde_json::json!([{"s": "count", "n": 5}, {"s": "start", "ok": 1}])
+    );
+    assert_eq!(
+        derived(
+            "windows",
+            "windows_rows",
+            serde_json::json!([
+                {"s": "screen.work_area", "rect_left": 0, "rect_top": 0, "rect_right": 1024, "rect_bottom": 720},
+                {"s": "msg.batch.1", "x": 52, "y": 52, "rect_left": 52, "rect_top": 52, "rect_right": 852,
+                    "rect_bottom": 571},
+                {"s": "queue.first.00", "msg": 96},
+                {"s": "queue.first.00", "after": true},
+                {"s": "queue.first.01", "msg": 15, "noremove_err": 0},
+                {"s": "queue.first.01", "after": true, "x": 1},
+                {"s": "queue.later.00", "msg": 15, "noremove_err": 5}
+            ])
+        ),
+        serde_json::json!([
+            {"s": "screen.work_area", "left": 0, "top": 0, "right": 1024, "bottom_above_768": true},
+            {"s": "msg.batch.1", "x_equals_y": true, "x_in_cascade": true, "rect_left": 0, "rect_top": 0,
+                "rect_right": 800, "rect_bottom": 0},
+            {"s": "queue.first.00", "msg": 15, "noremove_err": 0},
+            {"s": "queue.first.00.after", "x": 1},
+            {"s": "queue.later.00", "msg": 15}
+        ])
+    );
+    let unknown = derive("threads", "thread_rows", Vec::new()).unwrap_err();
+    assert_eq!(unknown, "row rule thread_rows is not ported");
+}
+
+/// The extract the start options are read from, and the tag that holds the families they were read from.
+const EXTRACT: &str = "store/frozen_python/family-run-2026-10-29.tsv";
+const TAG: &str = "frozen-python-2026-10-29";
+
+/// One start option's value at the tag: the lines of `scripts/family_run.py` that show it, each with text it holds,
+/// and the Python expression of the value, which one of those texts contains (Sprint 231; reviewer-3's Medium 1 of
+/// its review at 231: the extract's seven start rows were entered by hand). `start` is the factory's argument where
+/// the family is built by one (`environment_family`, `time_family`), else "".
+struct Shown {
+    family: &'static str,
+    key: &'static str,
+    start: &'static str,
+    lines: &'static [(usize, &'static str)],
+    expr: &'static str,
+}
+
+const SHOWN: &[Shown] = &[
+    Shown {
+        family: "console",
+        key: "gui",
+        start: "",
+        lines: &[(1362, "name=\"console\","), (1381, "gui=True")],
+        expr: "True",
+    },
+    Shown {
+        family: "console",
+        key: "arguments",
+        start: "",
+        lines: &[(1362, "name=\"console\","), (1381, "arguments=\"child\"")],
+        expr: "\"child\"",
+    },
+    Shown {
+        family: "console",
+        key: "output_file",
+        start: "",
+        lines: &[
+            (1362, "name=\"console\","),
+            (1381, "output_file=\"w2m-console-child.jsonl\""),
+        ],
+        expr: "\"w2m-console-child.jsonl\"",
+    },
+    Shown {
+        family: "local_free",
+        key: "arguments",
+        start: "",
+        lines: &[(1591, "name=\"local_free\","), (1598, "arguments=\"safe\"")],
+        expr: "\"safe\"",
+    },
+    Shown {
+        family: "windows",
+        key: "environment",
+        start: "",
+        lines: &[
+            (2566, "name=\"windows\","),
+            (
+                2580,
+                "environment=(\"TEMP=C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp\", \"TMP=C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp\")",
+            ),
+        ],
+        expr: "(\"TEMP=C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp\", \"TMP=C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp\")",
+    },
+    Shown {
+        family: "processes",
+        key: "instruction_clock",
+        start: "",
+        lines: &[(2667, "name=\"processes\","), (2681, "instruction_clock=True")],
+        expr: "True",
+    },
+    Shown {
+        family: "time_and_error_mode_child",
+        key: "gui",
+        start: "child",
+        lines: &[
+            (1359, "\"time_and_error_mode_child\": time_family(\"child\","),
+            (412, "child = start == \"child\""),
+            (439, "gui=child"),
+        ],
+        expr: "child",
+    },
+    Shown {
+        family: "time_and_error_mode_child",
+        key: "arguments",
+        start: "child",
+        lines: &[
+            (1359, "\"time_and_error_mode_child\": time_family(\"child\","),
+            (439, "arguments=\"child\" if child"),
+        ],
+        expr: "\"child\"",
+    },
+    Shown {
+        family: "time_and_error_mode_child",
+        key: "output_file",
+        start: "child",
+        lines: &[
+            (1359, "\"time_and_error_mode_child\": time_family(\"child\","),
+            (439, "output_file=\"w2m-error-mode-child.jsonl\" if child"),
+        ],
+        expr: "\"w2m-error-mode-child.jsonl\"",
+    },
+    Shown {
+        family: "environment_set",
+        key: "gui",
+        start: "set",
+        lines: &[
+            (543, "\"environment_set\": environment_family("),
+            (544, "\"set\","),
+            (214, "gui=True"),
+        ],
+        expr: "True",
+    },
+    Shown {
+        family: "environment_set",
+        key: "arguments",
+        start: "set",
+        lines: &[
+            (543, "\"environment_set\": environment_family("),
+            (544, "\"set\","),
+            (214, "arguments=f\"child-{start}\""),
+        ],
+        expr: "f\"child-{start}\"",
+    },
+    Shown {
+        family: "environment_set",
+        key: "output_file",
+        start: "set",
+        lines: &[
+            (543, "\"environment_set\": environment_family("),
+            (544, "\"set\","),
+            (215, "output_file=f\"w2m-environment-{start}.jsonl\""),
+        ],
+        expr: "f\"w2m-environment-{start}.jsonl\"",
+    },
+    Shown {
+        family: "environment_set",
+        key: "environment",
+        start: "set",
+        lines: &[
+            (543, "\"environment_set\": environment_family("),
+            (546, "ENVIRONMENT_SET,"),
+            (
+                200,
+                "ENVIRONMENT_SET = (\"ZED=last\", \"alpha=1\", \"=C:=C:\\\\w2m\", \"SteamAppId=480\", \"Path=C:\\\\Windows\\\\system32\")",
+            ),
+        ],
+        expr: "(\"ZED=last\", \"alpha=1\", \"=C:=C:\\\\w2m\", \"SteamAppId=480\", \"Path=C:\\\\Windows\\\\system32\")",
+    },
+    Shown {
+        family: "environment_empty",
+        key: "gui",
+        start: "empty",
+        lines: &[
+            (554, "\"environment_empty\": environment_family("),
+            (555, "\"empty\","),
+            (214, "gui=True"),
+        ],
+        expr: "True",
+    },
+    Shown {
+        family: "environment_empty",
+        key: "arguments",
+        start: "empty",
+        lines: &[
+            (554, "\"environment_empty\": environment_family("),
+            (555, "\"empty\","),
+            (214, "arguments=f\"child-{start}\""),
+        ],
+        expr: "f\"child-{start}\"",
+    },
+    Shown {
+        family: "environment_empty",
+        key: "output_file",
+        start: "empty",
+        lines: &[
+            (554, "\"environment_empty\": environment_family("),
+            (555, "\"empty\","),
+            (215, "output_file=f\"w2m-environment-{start}.jsonl\""),
+        ],
+        expr: "f\"w2m-environment-{start}.jsonl\"",
+    },
+    Shown {
+        family: "environment_empty",
+        key: "environment",
+        start: "empty",
+        lines: &[(554, "\"environment_empty\": environment_family("), (556, "(),")],
+        expr: "()",
+    },
+];
+
+/// The Python string literal at the start of `text` (a quote, then `\\` and `\"` escapes to the closing quote), and
+/// the text after it.
+fn python_literal(text: &str) -> Result<(String, &str), String> {
+    let body = text.strip_prefix('"').ok_or(format!("not a string literal: {text}"))?;
+    let (mut out, mut chars) = (String::new(), body.char_indices());
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '"' => return Ok((out, &body[i + 1..])),
+            '\\' => out.push(chars.next().ok_or("a literal ends in a backslash")?.1),
+            c => out.push(c),
+        }
+    }
+    Err(format!("an unclosed string literal: {text}"))
+}
+
+/// The value of the few Python expressions a start option is written as: `True`, `child` (the time family's
+/// `start == "child"`), a string literal, an f-string over `{start}`, a tuple of string literals.
+fn python_value(expr: &str, start: &str) -> Result<Value, String> {
+    match expr {
+        "True" => Ok(Value::Bool(true)),
+        "child" => Ok(Value::Bool(start == "child")),
+        _ if expr.starts_with("f\"") => Ok(Value::String(python_literal(&expr[1..])?.0.replace("{start}", start))),
+        _ if expr.starts_with('"') => Ok(Value::String(python_literal(expr)?.0)),
+        _ if expr.starts_with('(') => {
+            let mut items = Vec::new();
+            let mut rest = expr[1..].trim_start();
+            while rest.starts_with('"') {
+                let (item, after) = python_literal(rest)?;
+                items.push(Value::String(item));
+                rest = after.trim_start().trim_start_matches(',').trim_start();
+            }
+            if rest != ")" {
+                return Err(format!("not a tuple of string literals: {expr}"));
+            }
+            Ok(Value::Array(items))
+        }
+        _ => Err(format!("an expression this reader does not evaluate: {expr}")),
+    }
+}
+
+/// The extract's start options are the tag's: every value of every family's JSON object is shown at the lines `SHOWN`
+/// cites, read from `scripts/family_run.py` at the tag, and every shown value is in the extract (Sprint 231).
+#[test]
+fn the_extract_start_options_are_the_tags() {
+    let root = root();
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["show", &format!("{TAG}:scripts/family_run.py")])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git show: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let source = String::from_utf8(out.stdout).unwrap();
+    let lines: Vec<&str> = source.lines().collect();
+    let mut stored: BTreeMap<(String, String), Value> = BTreeMap::new();
+    for line in fs::read_to_string(root.join(EXTRACT)).unwrap().lines() {
+        if let ["family", family, _, start] = line.split('\t').collect::<Vec<_>>()[..]
+            && start != "-"
+        {
+            let options: Value = serde_json::from_str(start).unwrap();
+            for (k, v) in options.as_object().unwrap() {
+                stored.insert((family.to_string(), k.clone()), v.clone());
+            }
+        }
+    }
+    let mut wrong = Vec::new();
+    for s in SHOWN {
+        for (n, text) in s.lines {
+            if !lines.get(n - 1).is_some_and(|l| l.contains(text)) {
+                wrong.push(format!(
+                    "{} {}: family_run.py {n} at {TAG} does not hold {text:?}",
+                    s.family, s.key
+                ));
+            }
+        }
+        if !s.lines.iter().any(|(_, text)| text.contains(s.expr)) {
+            wrong.push(format!(
+                "{} {}: {:?} is in none of its cited texts",
+                s.family, s.key, s.expr
+            ));
+        }
+        let want = python_value(s.expr, s.start).unwrap_or_else(|e| panic!("{} {}: {e}", s.family, s.key));
+        match stored.remove(&(s.family.to_string(), s.key.to_string())) {
+            Some(got) if got == want => {}
+            Some(got) => wrong.push(format!("{} {}: {EXTRACT} has {got}, {TAG} {want}", s.family, s.key)),
+            None => wrong.push(format!(
+                "{} {}: {TAG} shows {want}, and {EXTRACT} has none",
+                s.family, s.key
+            )),
+        }
+    }
+    wrong.extend(
+        stored
+            .keys()
+            .map(|(family, key)| format!("{family} {key}: in {EXTRACT}, shown at no line of {TAG}")),
+    );
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 /// The table of what each run of the family index will ask is the lookup's output, not a file that drifts from it
@@ -506,16 +981,10 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
         };
         let stop = stop.lines().next().unwrap_or("").to_string();
         let key = (family.to_string(), run.to_string());
-        // the family's start options (column 7) that `scripts/gates.sh` does not give `w2m-vm`: all but the
-        // instruction clock (Sprint 230); a run started without them is not the family's run, and is not judged
-        let unapplied: Vec<&str> = c[6]
-            .split(' ')
-            .filter(|o| !["-", "instruction_clock"].contains(o))
-            .collect();
+        // from Sprint 231 every run starts as its family starts (column 7, given to `w2m-vm` as --start), so every run
+        // that ends is judged
         let state = if stop != "ExitProcess { code: 0 }" {
             format!("stop: {}", steady(&stop))
-        } else if !unapplied.is_empty() {
-            format!("ended; start options {} not applied", unapplied.join(" "))
         } else {
             let (id, version) = contract.split_once('@').unwrap();
             let text = fs::read_to_string(root.join(format!("contracts/{id}/{version}.json"))).unwrap();

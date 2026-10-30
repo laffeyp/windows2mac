@@ -10,8 +10,8 @@
 //! `store/frozen_python/family-run-2026-10-29.tsv` when the Python left the tree (Sprint 226). For each
 //! run it prints, tab-separated: the family, the run, the binary, the contract and version, the beside DLL as
 //! "<name>:<sha256>" (its name alone where the run names no file, "-" where there is none), the imports no runtime
-//! service answers (`service_for` is None: `hvc #9` at the call), the family's start options (`vm_inputs`, 2888-2905:
-//! gui, foreground_held, instruction_clock, arguments, output_file, environment), and its row rule (the contract's
+//! service answers (`service_for` is None: `hvc #9` at the call), the family's start options (`vm_inputs`, 2889-2902:
+//! a JSON object of their values from Sprint 231, `START_KEYS`, "-" for none), and its row rule (the contract's
 //! derivation or "raw", and its excluded rows' count); lists space-separated or "-". An import is not a call: a run
 //! stops on one only if it calls it. `store/family_runs/known-2026-10-29.tsv`
 //! holds the output; `tests/family_runs.rs` holds the file to it.
@@ -64,10 +64,9 @@ mod known {
                     if let Some(dll) = dash(dll) {
                         dll_names.insert(key.to_string(), dll);
                     }
-                    let set: BTreeSet<String> = dash(start)
-                        .map(|s| s.split(' ').map(str::to_string).collect())
-                        .unwrap_or_default();
-                    options.insert(key.to_string(), set);
+                    if let Some(start) = dash(start) {
+                        options.insert(key.to_string(), start_options(key, &start)?);
+                    }
                 }
                 ["run", id, binary, dll] => {
                     runs.insert(
@@ -88,11 +87,38 @@ mod known {
         })
     }
 
+    /// The start options `vm_inputs` gives a family's run (`family_run.py` 2889-2902 at the tag), each key the
+    /// `Family` field it comes from (Sprint 231): `arguments` after the quoted module path, `environment` the block,
+    /// `gui`, `foreground_held`, `instruction_clock`, and `output_file`, the file in the program's directory its rows
+    /// are read from. `w2m-vm --start` takes the same object.
+    const START_KEYS: [&str; 6] = [
+        "arguments",
+        "environment",
+        "foreground_held",
+        "gui",
+        "instruction_clock",
+        "output_file",
+    ];
+
+    /// A family's start options from the extract: a JSON object of `START_KEYS` only.
+    fn start_options(family: &str, text: &str) -> Result<Value, String> {
+        let options: Value = serde_json::from_str(text).map_err(|e| format!("{EXTRACT}: {family}'s start: {e}"))?;
+        let keys = options
+            .as_object()
+            .ok_or(format!("{EXTRACT}: {family}'s start is not an object"))?;
+        match keys.keys().find(|k| !START_KEYS.contains(&k.as_str())) {
+            Some(k) => Err(format!(
+                "{EXTRACT}: {family}'s start names {k}, which vm_inputs does not give"
+            )),
+            None => Ok(options),
+        }
+    }
+
     /// `family_run.py`'s families as the lookup reads them: each family's beside DLL and start options, every run by id.
     struct Families {
         dll_names: BTreeMap<String, String>,
         runs: BTreeMap<String, Run>,
-        options: BTreeMap<String, BTreeSet<String>>,
+        options: BTreeMap<String, Value>,
     }
 
     /// The row rule a contract states: its derivation's name (`acceptance.derivation`, "scripts/family_run.py <name>:
@@ -177,9 +203,7 @@ mod known {
             let record = entry["record"].as_str().ok_or(format!("{family}: no record"))?;
             let contract = contract(&root, record)?;
             let rule = rule(&root, &contract)?;
-            let start = options.get(family).map_or_else(BTreeSet::new, |o| {
-                o.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>()
-            });
+            let start = options.get(family).map_or_else(|| "-".to_string(), Value::to_string);
             let dll_name = dll_names.get(family);
             let judged = entry["divergence"]
                 .as_object()
@@ -208,10 +232,9 @@ mod known {
                     _ => "-".to_string(),
                 };
                 println!(
-                    "{family}\t{run_id}\t{}\t{contract}\t{beside_file}\t{}\t{}\t{rule}",
+                    "{family}\t{run_id}\t{}\t{contract}\t{beside_file}\t{}\t{start}\t{rule}",
                     run.binary,
                     list(&unserved),
-                    list(&start)
                 );
             }
         }

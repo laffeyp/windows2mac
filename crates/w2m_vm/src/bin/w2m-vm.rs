@@ -145,6 +145,40 @@ mod run {
         Ok(())
     }
 
+    /// A family's start options into `start`, as `vm_inputs` gives them (`family_run.py` 2889-2902 at the tag; Sprint
+    /// 231): the command line `"C:\w2m\app\probe.exe" <arguments>`, the environment block, the GUI start, the
+    /// foreground held, the instruction clock. Answers the output file the rows are read from. A key `vm_inputs` does
+    /// not give is an error: a run must start as its family starts, or not at all.
+    fn family_options(start: &mut Start, options: &serde_json::Value) -> Result<Option<String>, String> {
+        let options = options.as_object().ok_or("--start: not a JSON object")?;
+        let text = |v: &serde_json::Value, k: &str| {
+            v.as_str()
+                .map(str::to_string)
+                .ok_or(format!("--start: {k} is not a string"))
+        };
+        let flag = |v: &serde_json::Value, k: &str| v.as_bool().ok_or(format!("--start: {k} is not true or false"));
+        let mut output_file = None;
+        for (k, v) in options {
+            match k.as_str() {
+                "arguments" => start.command_line = Some(format!("\"C:\\w2m\\app\\probe.exe\" {}", text(v, k)?)),
+                "environment" => {
+                    let block = v.as_array().ok_or("--start: environment is not a list")?;
+                    start.environment = block.iter().map(|e| text(e, k)).collect::<Result<_, _>>()?;
+                }
+                "gui" => start.gui = flag(v, k)?,
+                "foreground_held" => start.foreground_held = flag(v, k)?,
+                "instruction_clock" => {
+                    if flag(v, k)? {
+                        start.instruction_clock = Some((CLOCK_RATE, REFERENCE_START));
+                    }
+                }
+                "output_file" => output_file = Some(text(v, k)?),
+                other => return Err(format!("--start: {other} is not a start option vm_inputs gives")),
+            }
+        }
+        Ok(output_file)
+    }
+
     pub fn main() -> Result<(), String> {
         let started = Instant::now();
         let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -157,6 +191,15 @@ mod run {
                 true
             }
             None => false,
+        };
+        // a family's start (Sprint 231): the JSON object `family_known` prints in the lookup's column 7
+        let family_start = match args.iter().position(|a| a == "--start") {
+            Some(i) if args.len() >= i + 2 => {
+                let text = args.drain(i..i + 2).nth(1).unwrap();
+                Some(serde_json::from_str::<serde_json::Value>(&text).map_err(|e| format!("--start {text}: {e}"))?)
+            }
+            Some(_) => return Err("--start <json>".into()),
+            None => None,
         };
         // a file beside probe.exe under its name, as `run_in_vm` writes a family's DLL when `dll_on_disk` (Sprint 204)
         let beside = match args.iter().position(|a| a == "--beside") {
@@ -237,6 +280,10 @@ mod run {
         if instruction_clock {
             start.instruction_clock = Some((CLOCK_RATE, REFERENCE_START));
         }
+        let output_file = match &family_start {
+            Some(options) => family_options(&mut start, options)?,
+            None => None,
+        };
         let root = root();
         start.program_path = Some(root.join(guest_path));
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes
@@ -272,10 +319,20 @@ mod run {
         guest.limited = true;
         let out = on_one_vcpu(&mut guest, &loaded, Some(GUEST_SECONDS), max_steps.unwrap_or(MAX_STEPS));
         drop(guest.files.take());
+        // a family's rows from the file its probe writes in the program's directory, empty if it wrote none
+        // (`run_in_vm`, family_run.py 2949-2952 at the tag), read before the directory goes; a file not written is
+        // named on stderr, so a held run's cause is not only its missing rows (reviewer-3's Low 1 of its review at 231)
+        let rows = match &output_file {
+            Some(name) => fs::read(app.join(name)).unwrap_or_else(|_| {
+                eprintln!("w2m-vm: the output file {name} was not written; its rows are empty");
+                Vec::new()
+            }),
+            None => guest.stdout.clone(),
+        };
         let _ = fs::remove_dir_all(&app);
         let out = out?;
 
-        fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
+        fs::write(root.join(output), &rows).map_err(|e| format!("{output}: {e}"))?;
         if let Some(("--stop", file)) = measure {
             // the guest's stop by name, as the game's is written (Sprint 191; reviewer-2's Medium 4 of its review of
             // 185-189: `gates.sh` had read it from stderr with `sed`)

@@ -1,9 +1,9 @@
-# scripts/family_run.py's families and runs as family_known read them, from the tag frozen-python-2026-10-29 (Sprint 226): family <key> <beside DLL> <start options>; run <id> <binary> <DLL>
+# scripts/family_run.py's families and runs as family_known read them, from the tag frozen-python-2026-10-29 (Sprint 226): family <key> <beside DLL> <start options>; run <id> <binary> <DLL>. From Sprint 231 the start options are a JSON object of their values, read from the families' definitions at the tag (console 1381, the environment families 200 and 214-215, local_free 1598, processes 2681, time_and_error_mode_child 439, windows 2580), entered by hand from those lines and held to them by crates/w2m_vm/tests/family_runs.rs the_extract_start_options_are_the_tags (reviewer-3's Medium 1 of its review at 231)
 family	code_pages	-	-
 family	code_rewrite	-	-
 family	com	-	-
 family	command_line_args	-	-
-family	console	-	arguments gui output_file
+family	console	-	{"arguments":"child","gui":true,"output_file":"w2m-console-child.jsonl"}
 family	critical_section_flags	-	-
 family	critical_sections	-	-
 family	current_directory_ansi	-	-
@@ -12,8 +12,8 @@ family	display	-	-
 family	dotdot_past_root	-	-
 family	doubled_quote_toggles	-	-
 family	dxgi	-	-
-family	environment_empty	-	arguments environment gui output_file
-family	environment_set	-	arguments environment gui output_file
+family	environment_empty	-	{"arguments":"child-empty","environment":[],"gui":true,"output_file":"w2m-environment-empty.jsonl"}
+family	environment_set	-	{"arguments":"child-set","environment":["ZED=last","alpha=1","=C:=C:\\w2m","SteamAppId=480","Path=C:\\Windows\\system32"],"gui":true,"output_file":"w2m-environment-set.jsonl"}
 family	exception_filter	-	-
 family	exceptions	-	-
 family	file_access	-	-
@@ -37,7 +37,7 @@ family	known_folders	-	-
 family	late_tls	late_tls_dll.dll	-
 family	length_checked	-	-
 family	loader	loader_dll.dll	-
-family	local_free	-	arguments
+family	local_free	-	{"arguments":"safe"}
 family	locale	-	-
 family	module_names_ansi	-	-
 family	module_search	module_search_dll.dll	-
@@ -50,7 +50,7 @@ family	paths	-	-
 family	pointer_encoding	-	-
 family	process_parameters	-	-
 family	process_queries	-	-
-family	processes	-	instruction_clock
+family	processes	-	{"instruction_clock":true}
 family	processor_topology	-	-
 family	program_name_honours_quotes	-	-
 family	read_handle_writes	-	-
@@ -77,12 +77,12 @@ family	thread_storage	-	-
 family	threads	threads_dll.dll	-
 family	time	-	-
 family	time_and_error_mode	-	-
-family	time_and_error_mode_child	-	arguments gui output_file
+family	time_and_error_mode_child	-	{"arguments":"child","gui":true,"output_file":"w2m-error-mode-child.jsonl"}
 family	vectored_handlers	-	-
 family	version	-	-
 family	virtual_memory	-	-
 family	wait_handoff	-	-
-family	windows	-	environment
+family	windows	-	{"environment":["TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp","TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"]}
 family	winrt	-	-
 family	working_directory_removed	-	-
 run	38039204088	dc5dc17938bc5d6fe90630cea27d2ecd92dc37d1c3055cc2ff971d4d235d8803	-
