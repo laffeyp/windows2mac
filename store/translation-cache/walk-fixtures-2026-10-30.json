@@ -1,0 +1,2522 @@
+{
+  "0006234b83e841523632a42e8e331b054e7d24824d38b398bf6b1628b5b4a3f6.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "02d2a70a032a9fd6a7de0cc2ee8dc72010e3fea08855091655de2c68610c038c.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "0407e57fcef44dd02237f541b902804fe843d8e6cef4f76163811c7331893c87.exe": {
+    "reachable_instructions": 909,
+    "walked": 909,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 207,
+    "undecodable": 0
+  },
+  "05310917f137b890e6e9c7cc147e380260ccca50af2ae9311d0b76be5e76ea47.exe": {
+    "reachable_instructions": 1749,
+    "walked": 1749,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 307,
+    "undecodable": 0
+  },
+  "05aab19d035c00a13cfb0216748ff247e743da60b2b9319d9bc787004601a77f.exe": {
+    "reachable_instructions": 939,
+    "walked": 939,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 181,
+    "undecodable": 0
+  },
+  "05c9676dc734a6f070ab9dcb49f596149be9695652e02991d59165e50fc8238e.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "06e41e1e27336675a83949d6e2956998ed18b60a11742e5c006577a58091aac5.exe": {
+    "reachable_instructions": 1761,
+    "walked": 1761,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 319,
+    "undecodable": 0
+  },
+  "07bbc435b060c6444a9aae4376590def7cc2f7de561ccee5be5a85fe03e59164.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "07bfa9e5709c4d41c7ea02ab298b4c1c92df5e68159b782325b0eb00bfd9d653.exe": {
+    "reachable_instructions": 604,
+    "walked": 604,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 150,
+    "undecodable": 0
+  },
+  "08535c336744784880cc5ec5e18747bfc5f09086b736267403278c05afc25124.exe": {
+    "reachable_instructions": 2176,
+    "walked": 2176,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 555,
+    "undecodable": 0
+  },
+  "08c6d99a46b15f2ad89a85bf766ae843280d1cd47ac30ec2e5a65920d65cd1ef.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "08e3d2c9420d640bff4a643fe57eefbbde28da5e2933e5348c5a1b3a792c5f72.exe": {
+    "reachable_instructions": 3220,
+    "walked": 3220,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 571,
+    "undecodable": 0
+  },
+  "08fd4d30db6ca50556d9543ce274921c6a447adf1c3b4f0682477953b119dc75.exe": {
+    "reachable_instructions": 3220,
+    "walked": 3220,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 571,
+    "undecodable": 0
+  },
+  "09f0d8199eb9748f2ebd1855df859eeed84a7028982ffc6fe7091e7ccfb44091.exe": {
+    "reachable_instructions": 844,
+    "walked": 844,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 155,
+    "undecodable": 0
+  },
+  "0a7dee14806cbd16d021e138fbd6f13186f9386af6d0aa051062e146f6c7646c.exe": {
+    "reachable_instructions": 333,
+    "walked": 333,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 81,
+    "undecodable": 0
+  },
+  "0b7bc93d8c5d8fc730ccb613a581c8dbdf86565d666563f32d1b54e9ac67ae70.exe": {
+    "reachable_instructions": 772,
+    "walked": 772,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 147,
+    "undecodable": 0
+  },
+  "0d52d859179333ea3b5d4ad9e0a722398cdce401d050f531800ff07a33488f6d.exe": {
+    "reachable_instructions": 2907,
+    "walked": 2907,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 515,
+    "undecodable": 0
+  },
+  "0e380e63488ae0166d4ba694b9ce3e7a9e3821c693bc8dad5fbdbdf81f362dba.exe": {
+    "reachable_instructions": 297,
+    "walked": 297,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 73,
+    "undecodable": 0
+  },
+  "0ee5b17f1b2961169e640617187689155381e46c2a8207c2966ffd6a76aa885e.exe": {
+    "reachable_instructions": 879,
+    "walked": 879,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 159,
+    "undecodable": 0
+  },
+  "0f7bb5f8e79380972f0ac6bf0f5927de765185a0fdc08abf01c1bb1d64fcd867.exe": {
+    "reachable_instructions": 711,
+    "walked": 711,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 165,
+    "undecodable": 0
+  },
+  "101395b58178b3fc6fbda6647f30e73123f1728782a9b92c59d5925ecd777a4a.exe": {
+    "reachable_instructions": 883,
+    "walked": 883,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 159,
+    "undecodable": 0
+  },
+  "111a16ac4849950896efb41851003c6ee840734fb8e82fce280a6df0348bba1e.exe": {
+    "reachable_instructions": 3065,
+    "walked": 3065,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 547,
+    "undecodable": 0
+  },
+  "11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d.exe": {
+    "reachable_instructions": 1433,
+    "walked": 1433,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 376,
+    "undecodable": 0
+  },
+  "134d6dcd5c311dc80a7fab92f1eff20cd1ff7932c8de8964c18909ad65d482de.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "14227c1ca1c7c637a41ab779cf64c1a94aae17c1ab7062c0a212f264b3e3d9ee.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "15d1d468c6c4e878e6eb1d5d5d20fde4dd250f793eb65915a75117026c5e1d0d.exe": {
+    "reachable_instructions": 804,
+    "walked": 804,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 170,
+    "undecodable": 0
+  },
+  "15e0aa0873454d1bbacd5b9c343b730970d6df7b776afeeccdf273caf9168dc9.exe": {
+    "reachable_instructions": 1722,
+    "walked": 1722,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 450,
+    "undecodable": 0
+  },
+  "163bc530b9d847695908078706280e35db359c03bafb77cb6421fa3678e046d0.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "16fa45b585275647ae802b8e735675f6aae2a9781e06b3d57deea0700c7f8826.exe": {
+    "reachable_instructions": 2914,
+    "walked": 2914,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 537,
+    "undecodable": 0
+  },
+  "1751988b3f82681ecb66379b3dfccf23172c3a89d0269ad9740c78d41af26155.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "17761236925f2c5da4380aa83b7e598b5e670e1248b75c2f04c763f20ee3260c.exe": {
+    "reachable_instructions": 2831,
+    "walked": 2831,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 774,
+    "undecodable": 0
+  },
+  "17d996052924c712ba56fb559c8b0f851988187a4ee4da56c368ac66ee9b02f0.exe": {
+    "reachable_instructions": 2077,
+    "walked": 2077,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 458,
+    "undecodable": 0
+  },
+  "18132de8c453d0f2b319cef8e53346b35e086dba9602e6cc468607eb7ea923f5.exe": {
+    "reachable_instructions": 588,
+    "walked": 588,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 146,
+    "undecodable": 0
+  },
+  "18b6b5578edac5e100c6178f78a9a434a34c933f3ebf43705232f71fa69bab1c.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "18bc0b75bddcd43735c3ed96fce554679a8ea3c27c21bb7be61cf04f96c45b58.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "18f05aa94197233ae3ce6f043e61758474ed8020677785fbc878554d1aa7b99c.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "18f721e66de4b57e59330135d7c137c03890c94180455210cf979b8ae35074c8.exe": {
+    "reachable_instructions": 217,
+    "walked": 217,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 47,
+    "undecodable": 0
+  },
+  "1924070efea39f066a9859354c9c77138e32db51f26e5426e51b669140ea016d.exe": {
+    "reachable_instructions": 2224,
+    "walked": 2224,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 436,
+    "undecodable": 0
+  },
+  "192a0193f82793ec087362117d2a941713e66f621ad33db257c61f647c6ae769.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "1b698e3368137855d06cd3c766a405d481bf145de4013e26529f9623144c6f39.exe": {
+    "reachable_instructions": 8059,
+    "walked": 8059,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 2037,
+    "undecodable": 0
+  },
+  "1cf7cd174b0d69d52daad13ed35910d25b68d8dcf389f3d104d15d097e0ab334.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "1d665ea1088f700c8e027a5cb18d7f18d7c5b2352fa84c84695616063a153f08.exe": {
+    "reachable_instructions": 1648,
+    "walked": 1648,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 291,
+    "undecodable": 0
+  },
+  "1f99c34664447d076e17c4cbb02a3225abcf4cec1c55eaa32fd56f06b0b5676f.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "2023b96471cb2f483ce8f0f7b1fd644897c39820e6de2a53df8c6093a7315fc2.exe": {
+    "reachable_instructions": 2914,
+    "walked": 2914,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 537,
+    "undecodable": 0
+  },
+  "202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815.exe": {
+    "reachable_instructions": 623,
+    "walked": 623,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "206c9bad8f5ba0031d2ab50a9bbf8f95acc31ae11e399479476a9057fa2ad697.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "211f7359ab2c0f1ec20e90467c863a345a9b66130dda3d37521ae19ea2133e91.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "214581358977175f87eac5e82de8663bdcc29d83433e1b23493583324645703b.exe": {
+    "reachable_instructions": 3065,
+    "walked": 3065,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 547,
+    "undecodable": 0
+  },
+  "2154008644b78e654ecfc54ee6d668ae5737eb4d94bdc1178c4c3fcf1df719f6.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "220412c9aaa756201ef395b341336f0260bc3f634643ab7e7f005b626b412966.exe": {
+    "reachable_instructions": 4318,
+    "walked": 4318,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1087,
+    "undecodable": 0
+  },
+  "2214b9352c627faedd3c2aed012096cb1adc924ccaf7d08fbdc91d37065224a1.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "22e3d64701297ce3aa758740cfd378a143b49475321683ed7bfbf2d4e29ba2a4.exe": {
+    "reachable_instructions": 1952,
+    "walked": 1952,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 399,
+    "undecodable": 0
+  },
+  "232d481b305e92488da79d45bd0bb1b13409d74b268fb7ee0c536bb5e665a0d3.exe": {
+    "reachable_instructions": 4219,
+    "walked": 4219,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1087,
+    "undecodable": 0
+  },
+  "23a70c5de442cb5ebd8d6415efaf87b330d7e453ad9463651f0ff915a5f425a4.exe": {
+    "reachable_instructions": 631,
+    "walked": 631,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 119,
+    "undecodable": 0
+  },
+  "24d23cef6fda9c3543ea90bfc43c527c3b1cf309c2eeecda5058fc0d7db5e60e.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "25376298d8c925e49c8362f51f2ec9830e8cff395952ee380ab83bc5e8171704.exe": {
+    "reachable_instructions": 711,
+    "walked": 711,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 165,
+    "undecodable": 0
+  },
+  "25a1985962c3cb2ec2f1b8d08bebf5c1415dd341dc2408a077e1089e53555962.exe": {
+    "reachable_instructions": 718,
+    "walked": 718,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "28c318a01ba9543409d7a8493722e2df045a3ae528132b00727376a4e71b2169.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "28cb58d08437a23643ec9661d294e90a72617def99961475c27e11c04516e248.exe": {
+    "reachable_instructions": 1045,
+    "walked": 1045,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 185,
+    "undecodable": 0
+  },
+  "298c4f783acb7f1bd199f95118728cc8465837fa3130ea0692d645a05339b2f8.exe": {
+    "reachable_instructions": 1109,
+    "walked": 1109,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 270,
+    "undecodable": 0
+  },
+  "2997768ba33f5c1acf33aef96e588e39216db887037b78693243ccfc290e9722.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "2bc372b71143f8a74323f8ecac7f5a73ec622d6a329e9000647f5e779d6d8e04.exe": {
+    "reachable_instructions": 1452,
+    "walked": 1452,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "2dc24b52d929259b223fdd69df721779b652416d8ad58edbbed39ece4b68147e.exe": {
+    "reachable_instructions": 3309,
+    "walked": 3309,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 851,
+    "undecodable": 0
+  },
+  "2f52e248f92990807fc2222c28b5f50a4ca83372c70c0016cddd76cbdeda92cb.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "2f63103bfa140d4a20dd320a8992fb92ec5860a31a39c0edf2c17f489a96b5bc.exe": {
+    "reachable_instructions": 3688,
+    "walked": 3688,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 656,
+    "undecodable": 0
+  },
+  "2f99a59a6f85d897db00e24e2091f488dad95a554b6c50c3f2aa8d68774a3825.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bba172.exe": {
+    "reachable_instructions": 7833,
+    "walked": 7833,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1992,
+    "undecodable": 0
+  },
+  "306d0d2ade5c08a2ed7dad9f327f09d978792cc1e545256790701bd3089a363f.exe": {
+    "reachable_instructions": 648,
+    "walked": 648,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "30a17799849fecb415ae48da8d6a5ca42c71478579f4b263c9b007c5f245d8e8.exe": {
+    "reachable_instructions": 479,
+    "walked": 479,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 83,
+    "undecodable": 0
+  },
+  "35692e390c4e8f8baae67fed1239a419c7a609ad0b0ddb13f1a4af2a5fb6ed35.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5.exe": {
+    "reachable_instructions": 1433,
+    "walked": 1433,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 376,
+    "undecodable": 0
+  },
+  "37c57ae86ef7f369d3e524e23dc049208e839f194930f3a2c6e33fcb18cd5986.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "37cd0420619adb06f4e2500a8003be37f0c97f197e3e04ed86eb8802001949ed.exe": {
+    "reachable_instructions": 5062,
+    "walked": 5062,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1252,
+    "undecodable": 0
+  },
+  "38c8574d348d5d900fbf24ad1546d4dbd8772d6f9a9af5ccdc964ea03d6d706e.exe": {
+    "reachable_instructions": 2604,
+    "walked": 2604,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 477,
+    "undecodable": 0
+  },
+  "397c3cb472085b1bc1b455fb2fb312a37bf9ea2cc4990fbf8165a988299aad7f.exe": {
+    "reachable_instructions": 785,
+    "walked": 785,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 137,
+    "undecodable": 0
+  },
+  "39a6cda432228ad4f72af4aa44f85ca5bfe508397108df9cf3676ba3d3fe8cff.exe": {
+    "reachable_instructions": 2800,
+    "walked": 2800,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 510,
+    "undecodable": 0
+  },
+  "39e501bce923469a19ac478de13b430949a8eb4719e2ca96a3785aba09468034.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "3a49efbae6b80ad79bc6226b6d41c39241097745e032f0848118c10d034fef4f.exe": {
+    "reachable_instructions": 2389,
+    "walked": 2389,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 581,
+    "undecodable": 0
+  },
+  "3a51f28b7d6f9bef3dacbf83abce8a0020a43432201e9dbcfd3cdfc8662cc38a.exe": {
+    "reachable_instructions": 1648,
+    "walked": 1648,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 291,
+    "undecodable": 0
+  },
+  "3a7f8c7172fb18d1450fa0c32b01836246c5b21c045a4a25f639108f787ccbfb.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97.exe": {
+    "reachable_instructions": 2720,
+    "walked": 2720,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 486,
+    "undecodable": 0
+  },
+  "3ab0c9d0351bc7663c61f28495315b4f3678935002714dac15a90a51774423a3.exe": {
+    "reachable_instructions": 2172,
+    "walked": 2172,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "3abc1dda8bd487b482edf712053378c0e9261509132a1e4c4fed0b57ce757cab.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "3cf5e2998c1778dc7f8e5d54fb9b55d9c0c59cc127649782e6a4987f95206c81.exe": {
+    "reachable_instructions": 1180,
+    "walked": 1180,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 303,
+    "undecodable": 0
+  },
+  "41a21702e0b1221714f5a14316f411d69970d7febef9837c879943514ace910b.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "421b2d96ab2e1155cad7c91dfc32b62357544c5d38280a34da7b5c2e103af110.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "4224a823b406642df21fc8778e5fbd0182890b8063d6a1c28e0861c0dcabb926.exe": {
+    "reachable_instructions": 681,
+    "walked": 681,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 162,
+    "undecodable": 0
+  },
+  "42e42696025a5ee2c71994db9a47d4be2fe667d8b769e65a617b68359cf65703.exe": {
+    "reachable_instructions": 2407,
+    "walked": 2407,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 419,
+    "undecodable": 0
+  },
+  "4426a716a6a15990383d970d2ee20c6b14b651128b6866fd5f70e4f7fda5a10c.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8.exe": {
+    "reachable_instructions": 2077,
+    "walked": 2077,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 458,
+    "undecodable": 0
+  },
+  "457d94e7c517df5a63f65a4ea3e0dae4bd815b96a87f356c0b94961e3f2c3af6.exe": {
+    "reachable_instructions": 2974,
+    "walked": 2974,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 540,
+    "undecodable": 0
+  },
+  "459c45e187bc43eeddcb361c58b4fd2c50e0461af5b4afaffd463880df33c662.exe": {
+    "reachable_instructions": 3631,
+    "walked": 3631,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 920,
+    "undecodable": 0
+  },
+  "461ddfc01643127ffc9d5a2c43f276d41624d0b480aeb6de9721dce3c9add5b1.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "46c86fd1558cf48b36dc5d6ff12061091baad08937f94615692724417884c186.exe": {
+    "reachable_instructions": 2918,
+    "walked": 2918,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 517,
+    "undecodable": 0
+  },
+  "48adf0825a3ee8c73e31dab819bab113800bf33035414536cf90891e48ae293f.exe": {
+    "reachable_instructions": 2604,
+    "walked": 2604,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 477,
+    "undecodable": 0
+  },
+  "4c25a456e35e5b7cf5461baa1e2a1dba6c79451c8e5b6fbc3e932ef36d3f3e20.exe": {
+    "reachable_instructions": 1489,
+    "walked": 1489,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 383,
+    "undecodable": 0
+  },
+  "4fb5e3ac666bfe211b8fdd30d94a94c9617ec850291c646c439b676aa6d64934.exe": {
+    "reachable_instructions": 648,
+    "walked": 648,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "507a0e6a98c81073524c343faa63a8dc9d82baef1c2fa52c1bb96feb52bd3031.exe": {
+    "reachable_instructions": 661,
+    "walked": 661,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 122,
+    "undecodable": 0
+  },
+  "51d95fba138a0f0e8d6e891f911ea46ec32526334d8dc276cb97c115eb989e4a.exe": {
+    "reachable_instructions": 3127,
+    "walked": 3127,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 569,
+    "undecodable": 0
+  },
+  "52652cd8134c6cdc19210278612344d78672a460adbf04b439b616721932a83f.exe": {
+    "reachable_instructions": 2604,
+    "walked": 2604,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 477,
+    "undecodable": 0
+  },
+  "52b48e35e6e37d0a3bd29a9f27075b9b4c1904ee595c45b9c0f5cafe984889f4.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c.exe": {
+    "reachable_instructions": 1082,
+    "walked": 1082,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 236,
+    "undecodable": 0
+  },
+  "5419841125b5d6e9725bc821eb9c8d2d9ff50d992513aaeeaafd5ff596c3d1fb.exe": {
+    "reachable_instructions": 685,
+    "walked": 685,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 129,
+    "undecodable": 0
+  },
+  "54f99a38848d08f519159a5e922708481f6859da345febe832e457e753c46364.exe": {
+    "reachable_instructions": 479,
+    "walked": 479,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 83,
+    "undecodable": 0
+  },
+  "552490a3ed425d2f5d6ff271dea0823312fa003843907eb0ce8100d07010c970.exe": {
+    "reachable_instructions": 1563,
+    "walked": 1563,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "55369a03c431c6c2448a9ddbe99ebcfe452227a2fcb79c184015697bc57cb6b3.exe": {
+    "reachable_instructions": 3986,
+    "walked": 3984,
+    "swept_only": 2,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 655,
+    "undecodable": 0
+  },
+  "55ad3c33bdb286d61686fdd87b9243b3a5a0536f2e3710fa7475c4bdecf825aa.exe": {
+    "reachable_instructions": 324,
+    "walked": 324,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 71,
+    "undecodable": 0
+  },
+  "55c0b9c2fd822fac38e77d4c913d1206fc7c2a5f84bc217ff431a616bdf0616f.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "56daafe12cec36befc6e503ae5e61a778f3c0d9da921b78e4093cc147696fef1.exe": {
+    "reachable_instructions": 541,
+    "walked": 541,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 98,
+    "undecodable": 0
+  },
+  "5b2e6d18b8335848996effd91796cf03bc4e055ddc6e740f0d696a4c2f05b871.exe": {
+    "reachable_instructions": 824,
+    "walked": 824,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "5b9775dd1e1878ccb61334b584054ca1f631a3e9b6ebdb6b8ccc0e8fa6a65d02.exe": {
+    "reachable_instructions": 623,
+    "walked": 623,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 167,
+    "undecodable": 0
+  },
+  "5bc8d3151e5456a719d636b5a6076c0ff3daadbaab931b73e2d7a4f9c2dce311.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "5c2a1271b0fd34fb03eef5dd2219421a63dedc8a3ce1572e189318b7e24a1ad9.exe": {
+    "reachable_instructions": 2914,
+    "walked": 2914,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 537,
+    "undecodable": 0
+  },
+  "5c868e4e261844ac774eed443abbdc66dce5a1f618b9b6de7e6c040b03c34fe2.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "5cffb57fa38d5a97fb95f46607823da0d42a4ec3232e9cff9b797f1a282828c6.exe": {
+    "reachable_instructions": 1916,
+    "walked": 1916,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 465,
+    "undecodable": 0
+  },
+  "5e2d2107d657a04f095b2d27d26d204e35ef691662e8d233ede9d3205dc77787.exe": {
+    "reachable_instructions": 939,
+    "walked": 939,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 181,
+    "undecodable": 0
+  },
+  "62adbf5d647a07f02182ceecc86b535ee508163913152ea86b9ffe9e82d7bc18.exe": {
+    "reachable_instructions": 1568,
+    "walked": 1568,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 272,
+    "undecodable": 0
+  },
+  "633b3805e0728521601077960f85586735b8903c6898acec962c42b255935be8.exe": {
+    "reachable_instructions": 2752,
+    "walked": 2752,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 751,
+    "undecodable": 0
+  },
+  "63b928e7a8ef496bd3c5139ed3c05e333eece5b42fced2cdf9dc6908e93e2f38.exe": {
+    "reachable_instructions": 718,
+    "walked": 718,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "65be44ec24c28c50af187b11a3c2dd9cae1a1363c7d057320a58a2d64cf56531.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "664269b73531514ae7e205d5f4f0f2ba62b5c2d6f6351779f6ed39fa015e86f2.exe": {
+    "reachable_instructions": 1182,
+    "walked": 1182,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 283,
+    "undecodable": 0
+  },
+  "666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d.exe": {
+    "reachable_instructions": 367,
+    "walked": 367,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 67,
+    "undecodable": 0
+  },
+  "6693106bb1ace5cfc627e407d4832df41fd79689dfac1c86b97c3050d811e033.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "6902502708041214181579d816ae4098ce8dd360315f13a19a8680658d1dc8bc.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "6a37ef1f1ea85d0e2fbc5bb09c1b1daae97c78729d65796f3ffea7d2de96fce9.exe": {
+    "reachable_instructions": 4219,
+    "walked": 4219,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1087,
+    "undecodable": 0
+  },
+  "6b75ead1c4597d8c4b1ec8426c3e775e4b8fbd9e859d861ef6a249f8a51c56a6.exe": {
+    "reachable_instructions": 2407,
+    "walked": 2407,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 419,
+    "undecodable": 0
+  },
+  "6d2b9e3251a94d6241bb2bf36450686c2b4fe649bae0abab0aea9c79d98178c5.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65.exe": {
+    "reachable_instructions": 367,
+    "walked": 367,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 67,
+    "undecodable": 0
+  },
+  "6d84a44be6a006613661b693b1677cb0b096a17ceca4c5773975f329822f7456.exe": {
+    "reachable_instructions": 1761,
+    "walked": 1761,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 319,
+    "undecodable": 0
+  },
+  "6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7.exe": {
+    "reachable_instructions": 7833,
+    "walked": 7833,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1992,
+    "undecodable": 0
+  },
+  "70dc13b7c0dbdbc4a4ddbe167a3f737e10c469d9e27e3055b8254f28cfb58bae.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "73c18f39bd61a10312d657b439fd27519beceddbb5b382dd07f9609b390d9dc2.exe": {
+    "reachable_instructions": 933,
+    "walked": 933,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 215,
+    "undecodable": 0
+  },
+  "77693426a875153bdbf03f4930875bdb62c3e6b382aa02a4160415cad9c14cd5.exe": {
+    "reachable_instructions": 588,
+    "walked": 588,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 146,
+    "undecodable": 0
+  },
+  "78f7203b0f64375e7a55f06cbadde9d67f2a91c32ab0674d0775934545c69a3f.exe": {
+    "reachable_instructions": 550,
+    "walked": 550,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 96,
+    "undecodable": 0
+  },
+  "798e17f634c9adc4af0322029392232251034c3eeae7565db318ed0278b85fdb.exe": {
+    "reachable_instructions": 2248,
+    "walked": 2248,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 434,
+    "undecodable": 0
+  },
+  "7a4202f7c2e7f4e8be8f2c48e89e8663f2dbff41b6de3a2c9ac5fd550b6f10a7.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "7a54f8eddbaa4ce5b16a615833b0d70075656cf4396ae4bd15126758d16637a4.exe": {
+    "reachable_instructions": 5062,
+    "walked": 5062,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1252,
+    "undecodable": 0
+  },
+  "7a74e31d3b1bbcec1289858f22e4af691ffab6f29c81dc2c5cff2d6a21751f5f.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "7b7cb9155af9c2e1c981e0124d26fc64701b827fc583770daebee553d7af3714.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "7bddfdfb38be9ebb35220a9a9df48dc0f3e6453158cb613db62b337680caea99.exe": {
+    "reachable_instructions": 1563,
+    "walked": 1563,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "7d7b1d3ff3e5a081473d9b629c7434893e7aa42042a7e0029d9edf75985f4c61.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "7fab6a8cd044ff50178627a246c8826ffe5cec0b9e40961b1ca3f792b5cf1e20.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "8040095534464f89c17d296986bd6cf2433e532b05b269bac3bc7072c4fc3e17.exe": {
+    "reachable_instructions": 1098,
+    "walked": 1098,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 256,
+    "undecodable": 0
+  },
+  "82c8ad6ef3f4dd191bcf0011c113e6e6cf2cb3e6919f5ca553f737c76c8be1b1.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "82d608691d4201d62b3fe2f93504429d969a156a34c8759a4e0836edc194de58.exe": {
+    "reachable_instructions": 2172,
+    "walked": 2172,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "82d7d53cf6046d5dc6ce1250fa32c2ad6374cd5fed028e22d419f5d5998d9b1c.exe": {
+    "reachable_instructions": 3595,
+    "walked": 3595,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 912,
+    "undecodable": 0
+  },
+  "8385bc74e8db79d6ef5c62d4ebd0dc161e7985f85f4d763dc73dd42bed2a137d.exe": {
+    "reachable_instructions": 1682,
+    "walked": 1682,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 298,
+    "undecodable": 0
+  },
+  "845b240e2d35ba8c4cb102a65fc665b53e3369262747cca46b83db5b7e75d9b0.exe": {
+    "reachable_instructions": 2914,
+    "walked": 2914,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 537,
+    "undecodable": 0
+  },
+  "8507070b2d998afb5db7a307bf6f3e428f2bf29df24d094e71fce47bcfb88c09.exe": {
+    "reachable_instructions": 2176,
+    "walked": 2176,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 555,
+    "undecodable": 0
+  },
+  "858b8ebb308ec8906279d302a3ececb2d4634a15185decfa7a31d00bf10c892a.exe": {
+    "reachable_instructions": 3688,
+    "walked": 3688,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 656,
+    "undecodable": 0
+  },
+  "85d227c34bee19a6b6f6e22642937ba35e906c5aa3a5d499e0fa2a4c9c47bfb1.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "88100e479bb25c1a9c3f0efc985d6d7d74888b65b6a3b9aecd3866d757181c8a.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "88e8478288b4dc4e444a32fdcd6882e966a8fcb060d744e84f2331d18c1bca57.exe": {
+    "reachable_instructions": 711,
+    "walked": 711,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 165,
+    "undecodable": 0
+  },
+  "8ab37a462d1a658a2e983372c45fde028a1dfae3ed7b321a0fb744ba3dce704e.exe": {
+    "reachable_instructions": 1109,
+    "walked": 1109,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 270,
+    "undecodable": 0
+  },
+  "8b7a25e1116431096c9107a08cd288591e4b1ac3032d3cbf41cb7807c7f94a5b.exe": {
+    "reachable_instructions": 843,
+    "walked": 843,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 157,
+    "undecodable": 0
+  },
+  "8eccd431a501af88d2ec8f73f6bd7ca87b8c69ef81fa9f6b6d323e0671a7b7e8.exe": {
+    "reachable_instructions": 324,
+    "walked": 324,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 71,
+    "undecodable": 0
+  },
+  "8fa545b798033b50b3254efc6919816129e168d774fe7041270fc653cf4d3445.exe": {
+    "reachable_instructions": 1722,
+    "walked": 1722,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 450,
+    "undecodable": 0
+  },
+  "90374fedfe0602d20ca0cab4e4cab1bb5ef0da0dea4e6ff7ebb0087b957cdde9.exe": {
+    "reachable_instructions": 824,
+    "walked": 824,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "92685e0bbb89b5196a8850cc15157f9b499d598eac4cb4d74e6dbf257797cb40.exe": {
+    "reachable_instructions": 2248,
+    "walked": 2248,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 434,
+    "undecodable": 0
+  },
+  "926fe1ad5ba0fcc1fcb235f1e3a107d52191993581edad53c53e388bacde59c3.exe": {
+    "reachable_instructions": 888,
+    "walked": 888,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 213,
+    "undecodable": 0
+  },
+  "9289dc8bfe06771ffa5434e170798322cafb71f9eeb959bc12301f05b37bfd00.exe": {
+    "reachable_instructions": 711,
+    "walked": 711,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 165,
+    "undecodable": 0
+  },
+  "935656ca40b18f2a0d88775e8343d5f793c110ef33572ed4de02bc315ed92c52.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "9395509bfe645a3c33c322e88efdd81285f919b9897020d7a134db5e8cbd45bf.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "93a5ae454dab7f3c50cdada62a5d07e2f56791937fba8d500b727304b98fed96.exe": {
+    "reachable_instructions": 1452,
+    "walked": 1452,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "93fdcb0f8270b50ff9a2b03c38926f3ab49945806eca0c43fc4d53302cb2309a.exe": {
+    "reachable_instructions": 804,
+    "walked": 804,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 170,
+    "undecodable": 0
+  },
+  "941e12ceffef0b42e0d84b33ba0e473d7086a7b2efd3c86bdbb1b7508a0e416f.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "95fc2b0f7a3d423ffe8720f27c41018cd61532504d6009d1f34197bc7ca27677.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "960385e12284c9f19802c7c086fe4c6da26a9a5d3a5a18d16701e18c9306ded6.exe": {
+    "reachable_instructions": 843,
+    "walked": 843,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 157,
+    "undecodable": 0
+  },
+  "9669215f8cf17a60d82a487c2b7a11a938b26399505554a9dba7a112b951e5d3.exe": {
+    "reachable_instructions": 711,
+    "walked": 711,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 165,
+    "undecodable": 0
+  },
+  "96768777a67d8dbe5a1d436fc3987b9e04cb0306e7212f5600b82901311a41e6.exe": {
+    "reachable_instructions": 541,
+    "walked": 541,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 98,
+    "undecodable": 0
+  },
+  "96bb232d78a05bf731dde8f6eba9671e7d06bcdf1ef95524aebf39923c3af8da.exe": {
+    "reachable_instructions": 879,
+    "walked": 879,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 159,
+    "undecodable": 0
+  },
+  "9708e64870986543ce858d6c60f17cd40845c0d9a3ba2793504315ba199c1396.exe": {
+    "reachable_instructions": 26523,
+    "walked": 26522,
+    "swept_only": 1,
+    "jump_tables": 12,
+    "jump_table_entries": 294,
+    "block_starts": 7574,
+    "undecodable": 0
+  },
+  "97ad55015dfa144bb7322a90a651722686d5bb1df8d8e1df74180ac8afcdc09f.exe": {
+    "reachable_instructions": 4938,
+    "walked": 4938,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1241,
+    "undecodable": 0
+  },
+  "98e74d001990c3a46f5e0dd687bd24f8a370334fa53ac29d24f4b97935a8f0c0.exe": {
+    "reachable_instructions": 26912,
+    "walked": 26911,
+    "swept_only": 1,
+    "jump_tables": 12,
+    "jump_table_entries": 294,
+    "block_starts": 7630,
+    "undecodable": 0
+  },
+  "9a2591f53214278bb3dde9694dc09f63a74fa4f155102c24ec056b229ab5b078.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "9cafe66a6c848f58271ae1ce9c5152c8daa8c683d8935402830d778d64c7ed41.exe": {
+    "reachable_instructions": 2800,
+    "walked": 2800,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 510,
+    "undecodable": 0
+  },
+  "9de03e8427a1c25d4b18220e6312cb348059e168e5a439497885dbc6054d52bc.exe": {
+    "reachable_instructions": 711,
+    "walked": 711,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 165,
+    "undecodable": 0
+  },
+  "9f874e107a0b22eb469d2fb7a80aef286c8060202f6d19bb644d815bd3d8f348.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "a2ecf6240cd728247b4cd842f563485d3124b0e20573b702a12da4bca9d5a31e.exe": {
+    "reachable_instructions": 681,
+    "walked": 681,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 162,
+    "undecodable": 0
+  },
+  "a327c26be301ea1c7b4b6a5864ff37dc6b6a6a5808781f748eed82fbe99ebea6.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "a4f1490cbd7485c120dd20a7125c7d90e99e8c8e8e292039e290c19e53b69af3.exe": {
+    "reachable_instructions": 785,
+    "walked": 785,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 137,
+    "undecodable": 0
+  },
+  "a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c11f7.exe": {
+    "reachable_instructions": 2389,
+    "walked": 2389,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 581,
+    "undecodable": 0
+  },
+  "a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6.exe": {
+    "reachable_instructions": 1082,
+    "walked": 1082,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 236,
+    "undecodable": 0
+  },
+  "a6e5f68b6d7b952199acac0418054346609592ff7cd382c32d6608d6d9e8c229.exe": {
+    "reachable_instructions": 2073,
+    "walked": 2073,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 549,
+    "undecodable": 0
+  },
+  "a71f491c4e8b9c1a563597497a004b74add2cf9caca0c7a9d3b36b041f34553a.exe": {
+    "reachable_instructions": 3986,
+    "walked": 3984,
+    "swept_only": 2,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 655,
+    "undecodable": 0
+  },
+  "a720b00e8a38dcb0482217ade8c02b84281782fa011fafcd9f8fa613ef59bdd1.exe": {
+    "reachable_instructions": 1952,
+    "walked": 1952,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 399,
+    "undecodable": 0
+  },
+  "ab263ddf08e75bacbcf705e3c3a7edecf949dec9dd752cfa9afa087fd39ef06a.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "ac655d2145982f7850a7e9c30d8afab979bcc651e15faf68f3bb8d9c99be395d.exe": {
+    "reachable_instructions": 513,
+    "walked": 513,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 120,
+    "undecodable": 0
+  },
+  "ac9257dab2fa346fe224a45462b87a9d2ad1ad687f37f4b065a9fb336906f44c.exe": {
+    "reachable_instructions": 513,
+    "walked": 513,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 120,
+    "undecodable": 0
+  },
+  "acbe1c6e43d39d53f83d838bf64f81750c95b6b45302c98238e58e4b1c15785d.exe": {
+    "reachable_instructions": 1003,
+    "walked": 1003,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 210,
+    "undecodable": 0
+  },
+  "af77fd8015671e678be7df19b74160d4cc93ce8691c64127412da3572cf73955.exe": {
+    "reachable_instructions": 1682,
+    "walked": 1682,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 298,
+    "undecodable": 0
+  },
+  "b08ba1fef04feddc4e5dad53663c5873a0322e162316b54247fa0565c9f05c4b.exe": {
+    "reachable_instructions": 2831,
+    "walked": 2831,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 774,
+    "undecodable": 0
+  },
+  "b09fabb79d02b8a7b9923776e8c1072ddc833b122aad85bff7b064e2783f3279.exe": {
+    "reachable_instructions": 8059,
+    "walked": 8059,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 2037,
+    "undecodable": 0
+  },
+  "b0b1701bbf805f61625eddd12d29382f9e59a311c04cab4440bbb46e31a78f44.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "b1d571baf3562ff9cf5c32951ab6654124865314a2e1db9ae68c3df84fe928d3.exe": {
+    "reachable_instructions": 727,
+    "walked": 727,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 137,
+    "undecodable": 0
+  },
+  "b5a4a5e85883bc29f7f7765b0630090d2bc50484645e45bfdf70c6352f0c0a9b.exe": {
+    "reachable_instructions": 623,
+    "walked": 623,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 167,
+    "undecodable": 0
+  },
+  "b5d610d864cb7a1a7a5c09fd5aec8e2d39291b5831c765f283911c97ec205e5d.exe": {
+    "reachable_instructions": 2800,
+    "walked": 2800,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 510,
+    "undecodable": 0
+  },
+  "b7bf8ad48559ced781c1ab5424f817337aeee0c14b76e9902ffb4aa44a844df7.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "b7c76bb07b75b708f02b637ad0c47b8cc11eda44540f95f3eb0e61f1f0b68a3c.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "b96af5861876df13a97b0e822e3c03134b5ebedf40f6b027b8ec792e510239c6.exe": {
+    "reachable_instructions": 1180,
+    "walked": 1180,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 303,
+    "undecodable": 0
+  },
+  "b9b66037b6a7f2f230bb3009c2dc5f1a083234466555848cbfd6d9a1311685af.exe": {
+    "reachable_instructions": 604,
+    "walked": 604,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 150,
+    "undecodable": 0
+  },
+  "ba552c63ffe0fceef05c663c390ce1dd3a3c6670bab915e9165b13c6951e7a21.exe": {
+    "reachable_instructions": 2722,
+    "walked": 2722,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 741,
+    "undecodable": 0
+  },
+  "ba6093588e24a272274818fbf0391490897e7e4bf224859ad123b65bcb8179fb.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "bd4cb3db57c693ffa810b711cd6b873ce8394565cb19f17688708783d78abc44.exe": {
+    "reachable_instructions": 1182,
+    "walked": 1182,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 283,
+    "undecodable": 0
+  },
+  "c131bd9f752c01b7966c229dc45cc0c7986bdb904a118c55ce10168e9493695c.exe": {
+    "reachable_instructions": 883,
+    "walked": 883,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 159,
+    "undecodable": 0
+  },
+  "c21b5b4c918cff9a51e8e4b2e2e0216328936c89c1900645a8e731377920e40b.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "c319ac016f85d9bb6e7104cef6987ea4fd6069740e743ae8900eca6d418ceeb0.exe": {
+    "reachable_instructions": 3309,
+    "walked": 3309,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 851,
+    "undecodable": 0
+  },
+  "c377564a0a4fcdc2bdbe0da644438588c485bfcb1735a8727a0e7fb38263fe8c.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "c45bd6f706ee778fe35f45c6d81a006c5e517822a65d9c1efb3eb9f2aaacb7f6.exe": {
+    "reachable_instructions": 1276,
+    "walked": 1276,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 302,
+    "undecodable": 0
+  },
+  "c4f024890f252f5daa25820ab16dd3f416c23061af88d259b7da0c322d8ab0ce.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "c55937d3093f350470555f967a97f91000266bbaf2c3ef404a4d232630cc9c81.exe": {
+    "reachable_instructions": 2752,
+    "walked": 2752,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 751,
+    "undecodable": 0
+  },
+  "c560b178aa6e68c0b37ddf59f16feb181fe47b6cade16234896b04f7a4b3a225.exe": {
+    "reachable_instructions": 1916,
+    "walked": 1916,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 465,
+    "undecodable": 0
+  },
+  "c58957575b4a1cc5aaaf0ea64e6819ed5df4da20d85159d8473dd9a636add1a5.exe": {
+    "reachable_instructions": 369,
+    "walked": 369,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 86,
+    "undecodable": 0
+  },
+  "c703c133a5a032adc6d13b8579bc11584de037354ccd7e23e8ce1cbf6d76bad2.exe": {
+    "reachable_instructions": 1563,
+    "walked": 1563,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "c816bb72de67ec46cb89bb91868742818027e65ea4fcc194a2215b4a04b8fecc.exe": {
+    "reachable_instructions": 1563,
+    "walked": 1563,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "c84986d33aa1d315085644597e8316b6a8c101d250cba7b687bf5869f5975405.exe": {
+    "reachable_instructions": 661,
+    "walked": 661,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 122,
+    "undecodable": 0
+  },
+  "cc344b3608f76dfe67851701a49772a4f967fb08ff02defe066c43367758c03d.exe": {
+    "reachable_instructions": 1003,
+    "walked": 1003,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 210,
+    "undecodable": 0
+  },
+  "cdd51d3d7615d2da5df59c1f0f49b81e5f6f01ed7a224204ec74bf564aed780f.exe": {
+    "reachable_instructions": 2604,
+    "walked": 2604,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 477,
+    "undecodable": 0
+  },
+  "cea66797b99bdfd85df7a2a6ffd04eaf42d3e06c61f6758b2a60d9de1b30e211.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "d0b53af3e88d3166ce9915839932692e02a93041cccd274e9d06d17c7cf121cf.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "d1b4bbaa68f38a42a29c9bb3df5c1debcb150795f6bbf16a9bbe957d93839a9b.exe": {
+    "reachable_instructions": 3595,
+    "walked": 3595,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 912,
+    "undecodable": 0
+  },
+  "d210df33adce2f0807fefba2e572cc48bddf9649b8b2474658c92fb46f7b1210.exe": {
+    "reachable_instructions": 410,
+    "walked": 410,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 71,
+    "undecodable": 0
+  },
+  "d228185b9db008604eab043294136e6eb76bded19fa5e4ce724156145356fc5f.exe": {
+    "reachable_instructions": 772,
+    "walked": 772,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 147,
+    "undecodable": 0
+  },
+  "d233c8440737eb0e6ddb8ddae518df8d65d8778f5afc0de37a8b2124074a8c10.exe": {
+    "reachable_instructions": 1749,
+    "walked": 1749,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 307,
+    "undecodable": 0
+  },
+  "d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4.exe": {
+    "reachable_instructions": 2720,
+    "walked": 2720,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 486,
+    "undecodable": 0
+  },
+  "d289f28d9c8c03b406e6a171cc3eb45795a076a1f6fb962e56de40df5704cc27.exe": {
+    "reachable_instructions": 2914,
+    "walked": 2914,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 537,
+    "undecodable": 0
+  },
+  "d2ef3d81a631342e54608afa86566fda2424f197ae096a6b116e774fb52febdd.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "d34bcc7a94ddb6aee2801fb82c460489037b2a6f3dd1a5b4e8f16cc1fd4d4715.exe": {
+    "reachable_instructions": 1226,
+    "walked": 1226,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 264,
+    "undecodable": 0
+  },
+  "d39ae9f9aa57c21fdc3a440f5e0acc4df8b073df4def00ef03b21a5ad047e7dd.exe": {
+    "reachable_instructions": 844,
+    "walked": 844,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 155,
+    "undecodable": 0
+  },
+  "d4b4751fefdeb2b8ebecaba82e8d4670e561f7a422f428b713860141b3197564.exe": {
+    "reachable_instructions": 3631,
+    "walked": 3631,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 920,
+    "undecodable": 0
+  },
+  "d513171aa16ebe3810bbcc4ffc887dfb4336894d13cd1e68f5523f7a1c9d9dbf.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "d56766303006e73f0f83635a753c141efcf2a74b176ad9f564c768a876cc2f72.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "d59934c1891538e6f2768682fa34e034a9d494acf546babd422ff294d4beee9c.exe": {
+    "reachable_instructions": 1563,
+    "walked": 1563,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 276,
+    "undecodable": 0
+  },
+  "d71257aef7dfcfdf8322e786141a3620cc445f876d428e94cab2e145e0d65b18.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "d71917e00b97b4728718da9129095dabe8929c3c01e6e07f6e5d1bba8c28d7eb.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "d71f0b8e07328ab48fb4e9023a07174c087dddd55d9654111c741513e202af8e.exe": {
+    "reachable_instructions": 2722,
+    "walked": 2722,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 741,
+    "undecodable": 0
+  },
+  "da1c3fb886c954bcd0a89ca706c279bc1d62a2d4bd30ce059311425836d78b47.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "da7ca465e5f2b4e226c8f49a2d20f159c20e88b37d89e449dacf621fab691f09.exe": {
+    "reachable_instructions": 2073,
+    "walked": 2073,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 549,
+    "undecodable": 0
+  },
+  "db079f8142eb749edada1614469f9d12c97c2a3bf45ff3756923bac2490a2c45.exe": {
+    "reachable_instructions": 2974,
+    "walked": 2974,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 540,
+    "undecodable": 0
+  },
+  "dc5dc17938bc5d6fe90630cea27d2ecd92dc37d1c3055cc2ff971d4d235d8803.exe": {
+    "reachable_instructions": 2914,
+    "walked": 2914,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 537,
+    "undecodable": 0
+  },
+  "df6ca688fd04c4599788e7c9ce2ff311246e6d96bb2273edaa87282ece84c023.exe": {
+    "reachable_instructions": 2224,
+    "walked": 2224,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 436,
+    "undecodable": 0
+  },
+  "e182a66ebffa41eb86b7b12f9ef4256945ac1110c0d22b8289d7cc1ee1ebe139.exe": {
+    "reachable_instructions": 3127,
+    "walked": 3127,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 569,
+    "undecodable": 0
+  },
+  "e3b1209130abbd3551afd0de5afd8bfc50c1f035606cfafff9375e55230a1ec8.exe": {
+    "reachable_instructions": 1985,
+    "walked": 1985,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 349,
+    "undecodable": 0
+  },
+  "e42c82c80d83bed0a8a41ca735c0c0d854348a5384340c484c993c4b88281878.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "e7ae9797cfdc4288c533b3d3dd2344822dcb2f084554bd7eb800330136ceadaf.exe": {
+    "reachable_instructions": 210,
+    "walked": 210,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 42,
+    "undecodable": 0
+  },
+  "e7fb99c56d54a14900958c01086b96c1bc2bc90ee617cfec97d4891c9edb92ff.exe": {
+    "reachable_instructions": 2907,
+    "walked": 2907,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 515,
+    "undecodable": 0
+  },
+  "e8636f8cc0657e52431d57380477f3ee148f3842bdda1064466fc9d621e2995c.exe": {
+    "reachable_instructions": 4318,
+    "walked": 4318,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1087,
+    "undecodable": 0
+  },
+  "e8a6346e7051fd4f169b7aaddb5c8e7231f59e91e933ca96888e4887e2aba2e9.exe": {
+    "reachable_instructions": 685,
+    "walked": 685,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 129,
+    "undecodable": 0
+  },
+  "e989ea6b47e0bc74b60cb091ca7c4b07ed066e29df8d5cd2d31cc6b647356431.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "eab7ad8bdc971a686c4cd9ba5dddb919be7207ae1e2a18d00ad415498eb23c38.exe": {
+    "reachable_instructions": 550,
+    "walked": 550,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 96,
+    "undecodable": 0
+  },
+  "eb67963eaa57d1ef2a10470f9d79f5622e8f67087ba74248c283c77a307d97f9.exe": {
+    "reachable_instructions": 1572,
+    "walked": 1572,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 278,
+    "undecodable": 0
+  },
+  "ed4a550f6f9221d7c450db23190e60ffb312dde21ecf282fa1c9f3ca01b40ae5.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "ee140359e6683f4072a35535c52483aa788b381c6f44f9cdf883e45e48a03682.exe": {
+    "reachable_instructions": 1568,
+    "walked": 1568,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 272,
+    "undecodable": 0
+  },
+  "f1655d9fd40c36838ab28f1d1de7aea5839ca99ea55fd91ed8e5c23408befdcd.exe": {
+    "reachable_instructions": 4938,
+    "walked": 4938,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 1241,
+    "undecodable": 0
+  },
+  "f33dc6b8d8585dc19bb5c9e79cef000d12216c955e660a26304ddc544856d9d2.exe": {
+    "reachable_instructions": 1472,
+    "walked": 1472,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 255,
+    "undecodable": 0
+  },
+  "f4f14814713c4e7ebbb495466dbac26666a57852b33bf382c69359c876dd7191.exe": {
+    "reachable_instructions": 1181,
+    "walked": 1181,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 254,
+    "undecodable": 0
+  },
+  "f566a7d163bcbecf6b005e9e7abe9e6e02f6a1d8e242342c4bd6bbced32a934f.exe": {
+    "reachable_instructions": 933,
+    "walked": 933,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 215,
+    "undecodable": 0
+  },
+  "f6f0e51889a8351333cf5c471489640d23e300e36538e85842fcfa8b5b0fc93c.exe": {
+    "reachable_instructions": 2028,
+    "walked": 2028,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 397,
+    "undecodable": 0
+  },
+  "f7c82e7ade1ebdbea2207111490e87681ba1d74256df2a614cc5237d41e9a334.exe": {
+    "reachable_instructions": 1045,
+    "walked": 1045,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 185,
+    "undecodable": 0
+  },
+  "f8ec2085c159f9663eb52f25b2df9eef541af13bc3c8a1008d1865d5fd13b3c6.exe": {
+    "reachable_instructions": 297,
+    "walked": 297,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 73,
+    "undecodable": 0
+  },
+  "f9d9233c10ced3784aecdeba7de1de96b7931296d3548217383c4f6529069ada.exe": {
+    "reachable_instructions": 727,
+    "walked": 727,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 137,
+    "undecodable": 0
+  },
+  "fa3540a10d0b61f3c0ce0e96dfca6caca497edb8208b9ebf9040a0cddd382e51.exe": {
+    "reachable_instructions": 909,
+    "walked": 909,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 207,
+    "undecodable": 0
+  },
+  "fa8a0a92909c7a93daf637d488820eba033c9de650a2f201d6c15e3b21769da2.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff.exe": {
+    "reachable_instructions": 623,
+    "walked": 623,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 133,
+    "undecodable": 0
+  },
+  "fb32f84609c92f406c2e1196e530e09e5ff5887d16b259b2597785122274a031.exe": {
+    "reachable_instructions": 2715,
+    "walked": 2715,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 502,
+    "undecodable": 0
+  },
+  "fc3b0c25fbaf64daf486791fb26572dd3998058832d9e3f0fb8a2c66fb272957.exe": {
+    "reachable_instructions": 2918,
+    "walked": 2918,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 517,
+    "undecodable": 0
+  },
+  "fd3d5c379120837747c1f35ebfd8540ab1f93308ab20f3c305fc3a760c09aabb.exe": {
+    "reachable_instructions": 2800,
+    "walked": 2800,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 510,
+    "undecodable": 0
+  },
+  "ff7714fa701c3870ceac7080865aaac604719f71d7318a1ca00b371236dfdba1.exe": {
+    "reachable_instructions": 1489,
+    "walked": 1489,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 383,
+    "undecodable": 0
+  },
+  "14dc071ae4f8c7321ae556b887ea440281eb7070c3ae9b8998aba1ce195ee192.dll": {
+    "reachable_instructions": 4,
+    "walked": 4,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 2,
+    "undecodable": 0
+  },
+  "37a2ee1b08bfcdc6962a9b6138bac5d758eb3fe2eb3ddbdda866f80e981fef47.dll": {
+    "reachable_instructions": 13903,
+    "walked": 13902,
+    "swept_only": 1,
+    "jump_tables": 12,
+    "jump_table_entries": 294,
+    "block_starts": 4087,
+    "undecodable": 0
+  },
+  "3afacd2a2ecb363b36139ac04034ff5c35482e6906dd29f0b6ba049d2a9cc42e.dll": {
+    "reachable_instructions": 13838,
+    "walked": 13837,
+    "swept_only": 1,
+    "jump_tables": 12,
+    "jump_table_entries": 294,
+    "block_starts": 4071,
+    "undecodable": 0
+  },
+  "3f6b51cc422038c706dda36ef9d49002c8869402d7161f6d31e8f46aa0ba1ff2.dll": {
+    "reachable_instructions": 13978,
+    "walked": 13977,
+    "swept_only": 1,
+    "jump_tables": 11,
+    "jump_table_entries": 289,
+    "block_starts": 4113,
+    "undecodable": 0
+  },
+  "6a3dd26e2da2b4f25525c3f0940e7d03b6c3b1bf3ce325808d738ce2a0c62ff7.dll": {
+    "reachable_instructions": 28,
+    "walked": 28,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 5,
+    "undecodable": 0
+  },
+  "735a3c71d68c4329e287bd1730b1bae07a5f448c80312daefd34f624f40d79cb.dll": {
+    "reachable_instructions": 4,
+    "walked": 4,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 2,
+    "undecodable": 0
+  },
+  "8848e2031be46c16d060b7bf7dfcc855f0fc0d6ca0d3d565cc278dfd3aa42765.dll": {
+    "reachable_instructions": 28,
+    "walked": 28,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 5,
+    "undecodable": 0
+  },
+  "b679fd7f4c488095f5f03ae3516795b499b100556c15af1f4d8e0efdc4340063.dll": {
+    "reachable_instructions": 14047,
+    "walked": 14046,
+    "swept_only": 1,
+    "jump_tables": 11,
+    "jump_table_entries": 289,
+    "block_starts": 4130,
+    "undecodable": 0
+  },
+  "b8e8ccaaa31a472a4f845004cca183336414bd99cf8515f4efb4e4eb479cebce.dll": {
+    "reachable_instructions": 13875,
+    "walked": 13874,
+    "swept_only": 1,
+    "jump_tables": 12,
+    "jump_table_entries": 294,
+    "block_starts": 4078,
+    "undecodable": 0
+  },
+  "f119bb2d52de7ed7f7763790c0b4304796d2fb26fa42789c552dbf4f546f3dac.dll": {
+    "reachable_instructions": 14019,
+    "walked": 14018,
+    "swept_only": 1,
+    "jump_tables": 11,
+    "jump_table_entries": 289,
+    "block_starts": 4121,
+    "undecodable": 0
+  },
+  "f32fa39b489c9525ee73ea52d9ae0916eb6368ef027f156c665eb54e7e4a0695.dll": {
+    "reachable_instructions": 13982,
+    "walked": 13981,
+    "swept_only": 1,
+    "jump_tables": 11,
+    "jump_table_entries": 289,
+    "block_starts": 4114,
+    "undecodable": 0
+  },
+  "f4815320beb098eabba19eccfdb720cee5291af84ce1ccc5d784217383c329d5.dll": {
+    "reachable_instructions": 13834,
+    "walked": 13833,
+    "swept_only": 1,
+    "jump_tables": 12,
+    "jump_table_entries": 294,
+    "block_starts": 4070,
+    "undecodable": 0
+  }
+}
