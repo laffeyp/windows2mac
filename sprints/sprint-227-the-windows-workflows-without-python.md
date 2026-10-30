@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 227
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -126,6 +126,18 @@ holds the rule.
     - The runs' printed rows hold three: `files_more`'s `w2m12AB.tmp`, `w2m2345.tmp` and `w2m3.tmp`. Each is a
       number the guest passes, not one drawn from the clock, so the held rows' sha256 stays fixed.
     - Sprint 221's check of the rows searched for four digits and missed `w2m3.tmp`, the same width assumption.
+- **The dispatched runs:**
+  - `windows-probe` on set 065c, run 41018967302, concluded success: "probes/semantics_065c/cases.bin matches run
+    38238041162's sha256".
+  - `windows-game`, run 41018970831, failed in "fetch and unpack": "no assets match the file pattern". The native
+    `jq.exe` writes CRLF under Git Bash, so each part name read from `release.json` ended in `\r`. jq's manual names
+    `--binary` (`-b`) for this case.
+  - Every `jq` call in the step now passes `-b`. The fix was gated, committed and pushed, and the game run dispatched
+    again: run 41019280283 succeeded on ef9cb19fd, "parts verified" and "297 files verified against files.json; no other file present".
+- **Reviewer-3's Low 1 of its review at 227:** `no_python.rs`' readers missed a versioned interpreter, the
+  `setup-python` action, and a `.py` at the end of a probe value. The workflow reader now takes `python` with digits
+  and dots and `setup-python`. Probes are parsed as JSON, and every string value with a word ending in `.py` is named.
+  Three cases were added to the reader's test.
 - **An expected value corrected:** the card expected a probe run to reproduce its stored result's sha256. The stored
   runs were on an Intel Xeon 8573C, and a runner's CPU is assigned per job, AMD or Intel, so a result can differ for
   that reason alone. The test is the input: the run fetches the case file and its sha256 equals the recorded one.
