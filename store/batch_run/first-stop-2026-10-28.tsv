@@ -39,8 +39,8 @@ guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	crosswake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	handshake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	model_steps	ExitProcess { code: 0 }	ExitProcess	48743d4d4fd79694\nc00000917f800000\n
-guest	mutual_context	Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet	ExitProcess	done\n
-guest	mutual	Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet	ExitProcess	done\n
+guest	mutual_context	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	mutual	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	pingpong	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	qpc	ExitProcess { code: 0 }	ExitProcess	00001abcd9b5ed09\n
 guest	qpc2	ExitProcess { code: 0 }	ExitProcess	00001abcd9c0b5c6\n

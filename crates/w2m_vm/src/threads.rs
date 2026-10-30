@@ -699,9 +699,33 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
     switch(guest, x, &cur, bits)
 }
 
+/// `_switch` with no thread ready and `timed`, in rotation order, waiting with a deadline (3565-3580 at the tag),
+/// readied as the frozen host readies one (Sprint 234). On the instruction clock, `warp_to_deadline` (3614-3628): the
+/// earliest deadline, then the lowest thread id, and the clock's warp moved so the clock reads that deadline if it is
+/// still ahead. Else the host sleeps `pause` (1 ms there) and readies the first timed waiter, which checks its own
+/// wait again in guest code and blocks again if its deadline has not come.
+fn timed_waiter(guest: &mut Guest, timed: &[Thread], pause: std::time::Duration) -> Thread {
+    let mem = guest.memory.as_slice();
+    let deadline = |t: &Thread| read_u64(mem, entry(t.index) + E_DEADLINE);
+    let chosen = if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
+        let first = timed.iter().min_by_key(|t| (deadline(t), t.tid)).unwrap().clone();
+        let (at, now) = (deadline(&first), counter_now(guest));
+        if at > now {
+            let warp = read_u64(mem, RUN_TABLE + CLOCK_WARP);
+            write_u64(guest.memory.as_mut_slice(), RUN_TABLE + CLOCK_WARP, warp + at - now);
+        }
+        first
+    } else {
+        std::thread::sleep(pause);
+        timed[0].clone()
+    };
+    set_status(guest, chosen.index, READY);
+    chosen
+}
+
 /// `_switch` (3521-3580) for vCPU 0 of one process, the thread not yet put down: the next ready, unsuspended thread
-/// after `cur` in id order, round robin, `cur` last. With none ready the host would warp the instruction clock to a
-/// deadline or sleep 1 ms for a timed wait; neither is carried yet, and the switch refuses by name.
+/// after `cur` in id order, round robin, `cur` last. With none ready and one waiting with a deadline, `timed_waiter`
+/// readies one (Sprint 234); with none waiting with a deadline the threads are deadlocked.
 fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Result<Switch, String> {
     let mem = guest.memory.as_slice();
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
@@ -715,20 +739,29 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     if next.is_none() && guest.link.is_some() {
         return Ok(Switch::Idle);
     }
-    let Some(next) = next else {
-        let timed = rotation
-            .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
-            .count();
-        return Err(if timed == 0 {
-            "every thread waits with no timeout and nothing can wake one (a deadlock)".into()
-        } else {
-            format!(
-                "no thread ready after thread {}'s hand-over and {timed} waiting with a deadline: the warp to a \
-                 deadline is not served by the Rust host yet",
-                cur.tid
-            )
-        });
+    let next = match next {
+        Some(next) => next,
+        None => {
+            let timed: Vec<Thread> = rotation
+                .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
+                .map(|t| (*t).clone())
+                .collect();
+            if timed.is_empty() {
+                return Err("every thread waits with no timeout and nothing can wake one (a deadlock)".into());
+            }
+            timed_waiter(guest, &timed, std::time::Duration::from_millis(1))
+        }
     };
+    // the thread given vCPU 0 is ready, whichever path chose it: the frozen `_switch` only ever takes a ready one, and a
+    // blocked one run anyway leaves the run table's state and blocked count wrong for the rest of the run, unseen by
+    // any run's output (Sprint 234; reviewer-3's Low 1 of its review at 234)
+    let status = read_u64(guest.memory.as_slice(), entry(next.index) + E_STATUS);
+    if status != READY {
+        return Err(format!(
+            "thread {} given vCPU 0 while not ready (status {status})",
+            next.tid
+        ));
+    }
     if bits & SCHEDULE_ANSWER != 0 {
         x[0] = u64::from(next.tid != cur.tid); // SwitchToThread: nonzero when another thread runs
     }
@@ -1105,6 +1138,66 @@ mod tests {
         );
         set_status(&mut g, index, READY);
         assert!(!ended(&g, index));
+    }
+
+    /// With no thread ready, a timed waiter is readied as `_switch` and `warp_to_deadline` ready one (Sprint 234): on the
+    /// instruction clock the earliest deadline, then the lowest id, its warp moving the clock to that deadline, and no
+    /// warp for a deadline already passed; on the host's clock the first waiter in rotation.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_timed_waiter_is_readied_as_the_frozen_host_readies_one() {
+        use super::{BLOCKED, CLOCK_MODE, CLOCK_RATE, CLOCK_WARP, E_DEADLINE, E_STATUS, READY, entry, timed_waiter};
+        use super::{MONITOR_DATA, RUN_TABLE, read_u64, write_u64};
+        use std::time::Duration;
+
+        let (mut g, _) = guest_with_a_thread();
+        let mut ts: Vec<super::Thread> = g.threads.values().cloned().collect();
+        ts.sort_by_key(|t| t.tid);
+        let (a, b) = (ts[ts.len() - 2].clone(), ts[ts.len() - 1].clone());
+        let set = |g: &mut crate::guest::Guest, da: u64, db: u64| {
+            // blocked through `set_status`, which keeps the run table's count of blocked threads
+            for (t, d) in [(&a, da), (&b, db)] {
+                super::set_status(g, t.index, BLOCKED);
+                write_u64(g.memory.as_mut_slice(), entry(t.index) + E_DEADLINE, d);
+            }
+            let mem = g.memory.as_mut_slice();
+            write_u64(mem, MONITOR_DATA + CLOCK_MODE, 2);
+            write_u64(mem, MONITOR_DATA + CLOCK_RATE, 1_400_000_000);
+            write_u64(mem, MONITOR_DATA, 1_400_000_000); // one second: the clock reads 10,000,000
+            write_u64(mem, RUN_TABLE + CLOCK_WARP, 0);
+        };
+        let status =
+            |g: &crate::guest::Guest, t: &super::Thread| read_u64(g.memory.as_slice(), entry(t.index) + E_STATUS);
+        let warp = |g: &crate::guest::Guest| read_u64(g.memory.as_slice(), RUN_TABLE + CLOCK_WARP);
+        let both = [a.clone(), b.clone()];
+
+        set(&mut g, 30_000_000, 20_000_000);
+        assert_eq!(
+            timed_waiter(&mut g, &both, Duration::ZERO).tid,
+            b.tid,
+            "the earliest deadline"
+        );
+        assert_eq!((warp(&g), status(&g, &b), status(&g, &a)), (10_000_000, READY, BLOCKED));
+
+        set(&mut g, 20_000_000, 20_000_000);
+        assert_eq!(
+            timed_waiter(&mut g, &both, Duration::ZERO).tid,
+            a.tid,
+            "a tie goes to the lower id"
+        );
+
+        set(&mut g, 5_000_000, 20_000_000);
+        assert_eq!(timed_waiter(&mut g, &both, Duration::ZERO).tid, a.tid);
+        assert_eq!(warp(&g), 0, "a deadline already passed moves no clock");
+
+        set(&mut g, 30_000_000, 20_000_000);
+        write_u64(g.memory.as_mut_slice(), MONITOR_DATA + CLOCK_MODE, 0);
+        assert_eq!(
+            timed_waiter(&mut g, &both, Duration::ZERO).tid,
+            a.tid,
+            "the host's clock: the first in rotation"
+        );
+        assert_eq!(warp(&g), 0);
     }
 
     /// HOST_UNIMPLEMENTED (request 4) names the service by its API id and form and keeps the call's return address, the
