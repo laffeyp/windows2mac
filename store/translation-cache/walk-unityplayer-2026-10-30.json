@@ -1,0 +1,27 @@
+{
+  "block_starts": 1004561,
+  "file": "UnityPlayer.dll",
+  "jump_table_entries": 14885,
+  "jump_tables": 649,
+  "reachable_instructions": 4992554,
+  "run_starts": 132359,
+  "run_starts_block_starts": 128523,
+  "run_starts_walked": 129278,
+  "swept_only": 7,
+  "undecodable": 48,
+  "undecodable_first": [
+    "0x1b147 NoEntry(\"XOP map field 28\")",
+    "0x1e500 NoEntry(\"no entry for map 1 opcode 0xc6 modrm 0x63 w 0 l None\")",
+    "0x1ed0c NoEntry(\"no entry for map 1 opcode 0xfe modrm 0xd7 w 0 l None\")",
+    "0x1f134 NoEntry(\"no entry for map 1 opcode 0xfe modrm 0xfe w 0 l None\")",
+    "0x1f90f NoEntry(\"no entry for map 1 opcode 0xde modrm 0xd8 w 0 l None\")",
+    "0x1f95a InvalidEncoding(\"REX 44 before VEX/EVEX/XOP\")",
+    "0x20c51 NoEntry(\"no entry for map 1 opcode 0x07\")",
+    "0x20c60 NoEntry(\"no entry for map 0f opcode 0x0f\")",
+    "0x20d34 NoEntry(\"no entry for map 1 opcode 0x07\")",
+    "0x20d76 NoEntry(\"no entry for map 1 opcode 0x06\")",
+    "0x20dd3 NoEntry(\"no entry for map 1 opcode 0xd6\")",
+    "0x20dfe NoEntry(\"no entry for map 1 opcode 0xfe modrm 0x1d w 0 l None\")"
+  ],
+  "walked": 4992547
+}

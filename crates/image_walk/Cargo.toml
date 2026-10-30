@@ -1,0 +1,12 @@
+[package]
+name = "image_walk"
+description = "UnityPlayer.dll's code found statically, as the frozen census found it, for the translation cache (Sprint 253)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pe_image = { path = "../pe_image" }
+x86_decoder = { path = "../x86_decoder" }
+serde_json.workspace = true
