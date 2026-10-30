@@ -95,3 +95,33 @@ reading stored extracts.
 - [x] One concept: the Python's removal.
 
 ## result
+
+- **The tag:** `frozen-python-2026-10-29` (annotated) is pushed on 6a036a236, the last commit holding the Python.
+- **The extracts** (`store/frozen_python/`):
+  - `family-run-2026-10-29.tsv`, 86 families and 259 runs, written by `family_known`'s own text reader from
+    `family_run.py`. `family_known` then read it, and `the_stored_lookup_is_family_knowns_output` passed on it, the
+    273-row table unchanged. The text reader and its writing mode were removed.
+  - `host-dispatch-2026-10-29.tsv`, 56 names (`vm_backend.py` 30, `kernel.py` 12, `file_bridge.py` 14), written by
+    `host_requests.rs`' own `dispatched` reader through a temporary ignored test. The test then read the extract and
+    still counted 56 requests, each with a Rust arm. The writer and `dispatched` were removed.
+- **The removal:** 454 `.py` files and `src/w2m/py.typed` left the tree with `git rm`. `git ls-files '*.py'` lists 13,
+  all in `sdd-kit-3/`. `crates/signal_report/tests/no_python.rs` fails on any `.py` tracked outside the kit.
+- **A dependency the lookup missed:** `case_inputs.rs`' fixture check ran `git log -1 -- src/w2m` to hold the Python
+  words fixture to the commit it was made at. Deleting `src/w2m` would have moved that commit and refused the fixture.
+  It now reads the log at the tag. The fixture's `src` and the tag's last `src/w2m` commit are both 37784f1a7.
+- **`pyproject.toml`:** `[tool.uv] package = false`, only `substrate-kernel` as a dependency. The build system, the
+  dev tools, the `reference` extra and the pytest, ruff and mypy settings are gone, and `uv.lock` lost 548 lines.
+  `uv sync` and `uv run substrate` work.
+- **`.gitattributes`:** `sdd-kit-3/** linguist-vendored` (`git check-attr` reads "set" on `sdd-kit-3/lib/sdd.py`).
+- **Kept, not Python:**
+  - the 5 comments citing a `.py` in `scripts/` and `harness/`, as citations of the tag;
+  - `tests/data/` (the guests the gates run);
+  - `tests/fixtures/steamcmd-app-info-409720.txt`, a Steam record no Rust reads yet and data for milestone D.
+- **WORKING_AGREEMENT** no longer lists Python commands or dependencies, and names the tag and `no_python.rs`.
+- **Plant 1** (a run's binary changed in the family extract): `the_stored_lookup_is_family_knowns_output` failed,
+  "store/binaries/0c5dc179…exe: No such file or directory". Restored byte for byte.
+- **Plant 2** (`tools/plant.py` tracked): `no_python_is_tracked_outside_the_kit` failed, "Python tracked outside
+  sdd-kit-3/: [\"tools/plant.py\"". Removed.
+- **Plant 3** (`substrate-kernel` dropped from `pyproject.toml`, then `uv sync`): `uv run substrate` failed, "Failed to
+  spawn: `substrate`". Restored byte for byte, and `uv sync` brought it back.
+- **Departure:** `case_inputs.rs`, outside the card's file list (above).

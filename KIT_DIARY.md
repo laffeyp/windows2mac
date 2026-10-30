@@ -882,3 +882,12 @@ rule. The user's answer went further, "there is no python running": a check over
 figure, which the machine's load moved from 4,062 ns to 56,333 ns, and its failure stopped 152 tests behind it. A
 measurement belongs in its own stage, kept with the conditions it was taken under, and judged against them; and a stage
 that reads "did not run" as "slow" hides a broken test under a busy machine (reviewer-3's Low 1 of its review at 224).
+
+### 2026-10-29 — Sprints 224-226: a dependency the file extension did not show
+
+**Finding (#94):** a dependency is found by what reads or runs a thing, not by its file's extension. Removing the
+Python, the project counted 467 `.py` files and two Rust readers of their text; it then found a third reader by
+searching string literals (`case_inputs.rs`' `git log -- src/w2m`), CI's own count of 21 case files in `round_trip.rs`
+after its run had failed, and, in reviewer-3's review at 226, the Python a YAML `run:` line executes and the generator
+21 `probe.json` strings name. Before a component leaves, every consumer is listed whole: code that opens its files,
+scripts and workflows that run it, configuration that names it, and tests that count what it produced.

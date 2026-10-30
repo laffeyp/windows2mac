@@ -153,11 +153,12 @@ impl Fixture {
             layout: p[8].to_string(),
             src: p[10].to_string(),
         };
-        // the words are the frozen Python's at this commit of src/w2m, the last that touched it
+        // the words are the frozen Python's at this commit of src/w2m, the last that touched it before the Python left
+        // the tree (Sprint 226): read at the tag that keeps it, since src/w2m's removal is its last change on HEAD
         let at = std::process::Command::new("git")
             .arg("-C")
             .arg(root)
-            .args(["log", "-1", "--format=%H", "--", "src/w2m"])
+            .args(["log", "-1", "--format=%H", "frozen-python-2026-10-29", "--", "src/w2m"])
             .output()
             .map_err(|e| e.to_string())?;
         let src_now = String::from_utf8_lossy(&at.stdout).trim().to_string();

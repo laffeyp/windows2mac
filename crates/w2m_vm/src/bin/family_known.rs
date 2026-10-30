@@ -6,7 +6,8 @@
 //!
 //! The population is the gate's (plan step 4, "68 of 68 families"): every run `store/runs/family-runs.json` judged,
 //! 273 in 68 families, each with the contract id and version its family record's COMPARISON_COMPLETED names, its
-//! binary and the DLL beside it from `scripts/family_run.py`'s `Run` (read as text, the frozen host's data). For each
+//! binary and the DLL beside it from `scripts/family_run.py`'s `Run`, the frozen host's data, stored in
+//! `store/frozen_python/family-run-2026-10-29.tsv` when the Python left the tree (Sprint 226). For each
 //! run it prints, tab-separated: the family, the run, the binary, the contract and version, the beside DLL as
 //! "<name>:<sha256>" (its name alone where the run names no file, "-" where there is none), the imports no runtime
 //! service answers (`service_for` is None: `hvc #9` at the call), the family's start options (`vm_inputs`, 2888-2905:
@@ -15,8 +16,8 @@
 //! stops on one only if it calls it. `store/family_runs/known-2026-10-29.tsv`
 //! holds the output; `tests/family_runs.rs` holds the file to it.
 //!
-//! `family_run.py` is read as text: it is the frozen host's, fixed at `python-final` (Sprint 123), so its form does not
-//! move under this reader. A column of the imported services whose C body refuses some argument form was tried and
+//! The extract was written by this binary's text reader from `family_run.py` at the tag frozen-python-2026-10-29, and the
+//! table it gives was held equal to the stored one before the Python went. A column of the imported services whose C body refuses some argument form was tried and
 //! dropped: it named `WriteFile` and `GetStdHandle` on all 273 runs, the 14 that conform among them, so it told no run
 //! from another; whether a refused form is reached depends on the arguments, which only a run shows.
 
@@ -49,85 +50,49 @@ mod known {
         dll: Option<String>,
     }
 
-    /// The value of `key="..."` in `text`, from `at`.
-    fn quoted_after<'a>(text: &'a str, key: &str) -> Option<&'a str> {
-        let rest = &text[text.find(key)? + key.len()..];
-        rest.split('"').next()
-    }
+    /// The frozen host's families and runs, stored once from `scripts/family_run.py`'s text at the tag
+    /// frozen-python-2026-10-29 (Sprint 226): the Python has left the tree, and its data is read here.
+    const EXTRACT: &str = "store/frozen_python/family-run-2026-10-29.tsv";
 
-    /// `family_run.py`'s families (by the index's key) and their runs: each `"<key>": Family(` block's
-    /// `dll_name="..."` and its `"<run>": Run("<os>", "<sha256>", ..., dll="<sha256>")` lines.
-    /// Run ids are unique across the file, so every `Run` line is kept by its id, whether its family is a literal
-    /// `Family(` block or made by a helper (`environment_family`, `time_family`) from a module-level table of runs; a
-    /// family's beside DLL is its block's `dll_name`, and a helper's families name none.
-    fn families(text: &str) -> Families {
-        let (mut dll_names, mut runs) = (BTreeMap::new(), BTreeMap::new());
-        let mut options: BTreeMap<String, BTreeSet<&'static str>> = BTreeMap::new();
-        let mut current: Option<String> = None;
-        for line in text.lines() {
-            let t = line.trim();
-            if let Some((key, call)) = t.strip_prefix('"').and_then(|t| t.split_once("\": "))
-                && (call.ends_with('(') || call.starts_with("time_family("))
-                && !call.starts_with("Run(")
-            {
-                current = Some(key.to_string());
-                // the two helpers' settings, fixed in their source: environment_family (family_run.py 203-217) starts
-                // a GUI child with arguments, an environment block and an output file; time_family("child") (423-435)
-                // a GUI child with arguments and an output file; time_family("parent") none
-                let set = options.entry(key.to_string()).or_default();
-                if call.starts_with("environment_family(") {
-                    set.extend(["gui", "arguments", "output_file", "environment"]);
-                } else if call.starts_with("time_family(\"child\"") {
-                    set.extend(["gui", "arguments", "output_file"]);
-                }
-                continue;
-            }
-            if let Some(key) = &current {
-                let set = options.entry(key.clone()).or_default();
-                for (pattern, name) in [
-                    ("gui=True", "gui"),
-                    ("foreground_held=True", "foreground_held"),
-                    ("instruction_clock=True", "instruction_clock"),
-                    ("arguments=\"", "arguments"),
-                    ("output_file=\"", "output_file"),
-                    ("environment=(", "environment"),
-                ] {
-                    if t.contains(pattern) && !t.contains("arguments=\"\"") {
-                        set.insert(name);
+    /// The extract's rows: `family <key> <beside DLL or -> <start options or ->` and `run <id> <binary> <DLL or ->`.
+    fn families(text: &str) -> Result<Families, String> {
+        let dash = |s: &str| (s != "-").then(|| s.to_string());
+        let (mut dll_names, mut runs, mut options) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
+        for line in text.lines().filter(|l| !l.starts_with('#')) {
+            match line.split('\t').collect::<Vec<_>>()[..] {
+                ["family", key, dll, start] => {
+                    if let Some(dll) = dash(dll) {
+                        dll_names.insert(key.to_string(), dll);
                     }
+                    let set: BTreeSet<String> = dash(start)
+                        .map(|s| s.split(' ').map(str::to_string).collect())
+                        .unwrap_or_default();
+                    options.insert(key.to_string(), set);
                 }
+                ["run", id, binary, dll] => {
+                    runs.insert(
+                        id.to_string(),
+                        Run {
+                            binary: binary.to_string(),
+                            dll: dash(dll),
+                        },
+                    );
+                }
+                _ => return Err(format!("{EXTRACT}: a row of neither form: {line:?}")),
             }
-            if let (Some(name), Some(key)) = (quoted_after(t, "dll_name=\""), &current) {
-                dll_names.insert(key.clone(), name.to_string());
-            }
-            // `"<id>": Run("` anywhere on the line, `runs={"<id>": Run(` included
-            let Some((before, rest)) = t.split_once("\": Run(\"") else {
-                continue;
-            };
-            let Some(id) = before.rsplit('"').next() else { continue };
-            // after the os: `", "<sha256>", ...`
-            let Some(binary) = rest.split('"').nth(2) else { continue };
-            let dll = quoted_after(rest, "dll=\"").map(str::to_string);
-            runs.insert(
-                id.to_string(),
-                Run {
-                    binary: binary.to_string(),
-                    dll,
-                },
-            );
         }
-        Families {
+        Ok(Families {
             dll_names,
             runs,
             options,
-        }
+        })
     }
 
     /// `family_run.py`'s families as the lookup reads them: each family's beside DLL and start options, every run by id.
     struct Families {
         dll_names: BTreeMap<String, String>,
         runs: BTreeMap<String, Run>,
-        options: BTreeMap<String, BTreeSet<&'static str>>,
+        options: BTreeMap<String, BTreeSet<String>>,
     }
 
     /// The row rule a contract states: its derivation's name (`acceptance.derivation`, "scripts/family_run.py <name>:
@@ -197,7 +162,7 @@ mod known {
             dll_names,
             runs: all_runs,
             options,
-        } = families(&read("scripts/family_run.py")?);
+        } = families(&read(EXTRACT)?)?;
         let texts = guest_runtime::texts(&root)?;
         let services = guest_runtime::services::services(&texts)?;
         let list = |s: &BTreeSet<String>| {
@@ -222,7 +187,7 @@ mod known {
             for run_id in judged.keys() {
                 let run = all_runs
                     .get(run_id)
-                    .ok_or(format!("{family} run {run_id}: no Run in scripts/family_run.py"))?;
+                    .ok_or(format!("{family} run {run_id}: no run in {EXTRACT}"))?;
                 let mut asked = imports(&root.join(format!("store/binaries/{}.exe", run.binary)))?;
                 if let Some(dll) = &run.dll {
                     asked.extend(imports(&root.join(format!("store/binaries/{dll}.dll")))?);

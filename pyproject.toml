@@ -1,59 +1,19 @@
-# w2m harness: contract construction, probes, and verification orchestrated on substrate.
-# Plan: windows_to_macos_research_direction_v0_2.md. Vocabulary: signals/0.1.json.
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
+# w2m is a Rust project; no project Python runs (BLACKBOARD Decision 2026-10-29, "No Python runs"). This file exists so
+# `uv` can install and run substrate, the harness each record is written under (`uv run substrate`). The frozen
+# Python host, its tests and scripts are at the tag frozen-python-2026-10-29 (Sprint 226).
 [project]
 name = "w2m"                        # the repository is laffeyp/windows2mac (user 2026-10-10)
 version = "0.0.1"
-description = "Runs unmodified Windows x86-64 programs on Apple silicon Macs."
+description = "w2m will one day (hopefully) run unmodified Windows x86-64 programs on an Apple silicon Mac."
 requires-python = ">=3.12"          # substrate-kernel's floor
 license = "PolyForm-Noncommercial-1.0.0"  # LICENSE, copied verbatim from laffeyp/substrate (user 2026-10-10)
-readme = "README.md"
 authors = [{ name = "Green Rose Systems" }]
 dependencies = [
   "substrate-kernel[openai-compat]",  # the local clone ./substrate on branch w2m, editable (tool.uv.sources); orchestration harness (BLACKBOARD 2026-10-03); brings msgspec>=0.21,<0.22; the extra brings httpx for OllamaResponder (Sprint 031)
 ]
 
-[project.optional-dependencies]
-dev = ["ruff==0.15.17", "mypy", "pytest", "pytest-asyncio", "pytest-timeout", "hypothesis==6.168.5"]  # ruff pinned to substrate's pin
-reference = [
-    "capstone==5.0.9",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/w2m"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-timeout = 30
-# a test past its timeout ends the run with every thread's stack (pytest-timeout's thread method, os._exit): the
-# signal method raises pytest's Failed, a BaseException, inside the test, and in a substrate producer that task
-# then dies unrecorded (runtime.py catches Exception) and the run waits forever (Sprint 106: gates hung 8 h 59 min)
-timeout_method = "thread"
-
-[tool.ruff]
-target-version = "py312"
-line-length = 100
-extend-exclude = ["sdd-kit-3", "substrate"]
-
-[tool.mypy]
-python_version = "3.12"
-strict = true
-files = ["src/w2m", "scripts", "tests"]
-mypy_path = "scripts:tests"
-
-# Capstone ships no type stubs (reference decoder, optional extra `reference`).
-[[tool.mypy.overrides]]
-module = "capstone.*"
-ignore_missing_imports = true
-
-[dependency-groups]
-dev = [
-    "numpy>=2.5.3",
-]
+[tool.uv]
+package = false                     # no Python package is built: the project's code is Rust
 
 [tool.uv.sources]
 substrate-kernel = { path = "substrate", editable = true }   # laffeyp/substrate, branch w2m (user 2026-10-10: clone, own branch, never push to main)

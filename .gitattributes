@@ -1,0 +1,4 @@
+# sdd-kit-3 is the read-only SDD kit (CLAUDE.md: changes to it land as a new folder, never as edits). Its 13 Python
+# files are the kit's example and library, not this project's code, so GitHub's language count leaves them out
+# (Sprint 226; no project Python, BLACKBOARD Decision 2026-10-29).
+sdd-kit-3/** linguist-vendored

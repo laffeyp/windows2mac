@@ -7,7 +7,9 @@
 //!
 //! Two sources (reviewer-3's Medium 1 of its review of Sprint 219): the requests the guest can ask, the enums of
 //! tools/guest_runtime/runtime.h (`W2M_HOST_*`, `W2M_FILE_*`, `W2M_KERNEL_*`, `W2M_EXCEPTION_*`, `W2M_THREAD_*`); and
-//! the frozen host's answer to them, its `if`/`elif` dispatch lines that test `op`, `sub` or `a0`. A name the Rust host
+//! the frozen host's answer to them, its `if`/`elif` dispatch lines that test `op`, `sub` or `a0`, read once from its
+//! Python and stored in `store/frozen_python/host-dispatch-2026-10-29.tsv` before the Python left the tree (Sprint 226;
+//! the tag frozen-python-2026-10-29). A name the Rust host
 //! serves is matched as a whole word (`NAME =>`, `| NAME`, `NAME |`, `== NAME`) outside comments, in the file that
 //! holds those requests. `REFUSED` names the requests the Rust host refuses on purpose. An arm that matches the name
 //! and then refuses passes here; the record of a run names such a refusal.
@@ -18,6 +20,9 @@ use std::path::{Path, PathBuf};
 
 /// Requests the guest's enums still name that no code asks: thread request 8, retired at Sprint 069.
 const REFUSED: [&str; 1] = ["THREAD_SIGNAL_RETIRED"];
+
+/// The frozen host's dispatch names by file, stored from its Python (Sprint 226).
+const DISPATCH: &str = "store/frozen_python/host-dispatch-2026-10-29.tsv";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -40,36 +45,6 @@ fn enumerated(header: &str, group: &str, keep_group: bool) -> BTreeSet<String> {
                 } else {
                     rest.to_string()
                 });
-            }
-        }
-    }
-    out
-}
-
-/// The upper-case names on the dispatch lines of `text` that test one of `vars`, with one of `prefixes`.
-fn dispatched(text: &str, vars: &[&str], prefixes: &[&str]) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    for line in text.lines() {
-        let t = line.trim_start();
-        if !(t.starts_with("if ") || t.starts_with("elif ")) {
-            continue;
-        }
-        for v in vars {
-            for form in [format!("{v} == "), format!("{v} in (")] {
-                let Some(at) = t.find(&form) else { continue };
-                let rest = &t[at + form.len()..];
-                let rest = if form.ends_with('(') {
-                    rest.split(')').next().unwrap_or("")
-                } else {
-                    rest.split([':', ' ']).next().unwrap_or("")
-                };
-                for name in rest.split(',').map(str::trim) {
-                    if prefixes.iter().any(|p| name.starts_with(p))
-                        && name.chars().all(|c| c.is_ascii_uppercase() || c == '_')
-                    {
-                        out.insert(name.to_string());
-                    }
-                }
             }
         }
     }
@@ -135,22 +110,22 @@ fn every_request_the_guest_can_ask_has_a_rust_arm() {
         ),
         (enumerated(&header, "FILE", true), "runtime.h W2M_FILE_".into(), &files),
     ];
-    for (python, vars, prefixes, rust) in [
-        (
-            "src/w2m/vm_backend.py",
-            &["op", "sub", "a0"][..],
-            &["HOST_", "THREAD_", "EXCEPTION_"][..],
-            &host_request,
-        ),
-        (
-            "src/w2m/kernel.py",
-            &["sub"][..],
-            &["EVENT_", "PIPE_", "PROCESS_", "CLOSE", "REF"][..],
-            &kernel,
-        ),
-        ("src/w2m/file_bridge.py", &["op"][..], &["FILE_"][..], &files),
+    // the frozen host's dispatch names, stored once from its Python by `dispatched` before the Python left the tree
+    // (Sprint 226; the tag frozen-python-2026-10-29)
+    let extract = read(DISPATCH);
+    for (python, rust) in [
+        ("src/w2m/vm_backend.py", &host_request),
+        ("src/w2m/kernel.py", &kernel),
+        ("src/w2m/file_bridge.py", &files),
     ] {
-        sources.push((dispatched(&read(python), vars, prefixes), python.into(), rust));
+        let names: BTreeSet<String> = extract
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .filter_map(|l| l.split_once('\t'))
+            .filter(|(file, _)| *file == python)
+            .map(|(_, name)| name.to_string())
+            .collect();
+        sources.push((names, format!("{python} ({DISPATCH})"), rust));
     }
     let mut missing = Vec::new();
     let mut checked = BTreeSet::new();
@@ -173,7 +148,7 @@ fn every_request_the_guest_can_ask_has_a_rust_arm() {
     );
 }
 
-/// The readers: an enum's names by group; a dispatch line's `==` and `in (...)` forms; a whole word in code, not a
+/// The readers: an enum's names by group; a whole word in code, not a
 /// longer name's tail and not a comment.
 #[test]
 fn the_readers_take_whole_names_only() {
@@ -186,9 +161,6 @@ fn the_readers_take_whole_names_only() {
         enumerated(header, "KERNEL", false).into_iter().collect::<Vec<_>>(),
         ["CLOSE"]
     );
-    let text = "        if op == HOST_A:\n        elif op in (HOST_B, HOST_C):\n        if kind == HOST_D:\n";
-    let names: Vec<String> = dispatched(text, &["op"], &["HOST_"]).into_iter().collect();
-    assert_eq!(names, ["HOST_A", "HOST_B", "HOST_C"]);
     assert!(served("    CLOSE => 0,", "CLOSE"));
     assert!(!served("    FILE_CLOSE => 0,", "CLOSE"), "a longer name's tail");
     assert!(!served(&code("    x => 0, // CLOSE =>"), "CLOSE"), "a comment");
