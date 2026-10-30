@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 238
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -132,4 +132,15 @@ The case runner, the case-runs judge and the class judge read no Python output.
   finished.
 - **Departures, files:** `scripts/gates.sh` (a comment), `store/case_runner/build-inputs.sha256`,
   `rust-compiled-codes-by-class.tsv`, `crates/w2m_vm/build.rs`, `crates/w2m_vm/tests/class_judge.rs`, the ledger.
-PLANTS-PLACEHOLDER
+- **The gates:** `scripts/gates.sh` exit 0 in 622 s on 5d773cd6d, "rust=all python=0 samples=1", with no file under
+  `build/case_runner/` and `W2M_REQUIRE_CASE_RUNS=1`. The search for `python-words` in `crates/`, `scripts/` and
+  `harness/` finds only the new test's list of words it refuses.
+- **Plant 1** (`assemble_one`'s base `MONITOR_VA + cursor0` given `+ 0x1000`, in `cases.rs`): the case runner failed,
+  run 38011858047 with 107 difference classes, the first "ADD host request: case 0: [66, 4e, 00, b5, 72, 79, 92, e6]
+  guest runtime fault: ELR 0x7f0000000928". The first two runs of the plant kept the count but not the line; the
+  third kept the line.
+- **Plant 2** (the fixture absent, no other change): the state the gates passed in, above.
+- **Plant 3** (the indexed record's baseline given Sprint 237's implementation line, which names the fixture): "…'s
+  baseline names the frozen Python lowering's words: the Rust translator, the frozen Python lowering's words where it
+  does not lift, run by the Rust case runner".
+- Plants 1 and 3 were restored by `cp`, and `cmp` found each file equal to its copy.
