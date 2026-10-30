@@ -39,16 +39,32 @@ const F_SETFD: i32 = 2;
 /// OS_SYNC_WAIT_ON_ADDRESS_SHARED and OS_SYNC_WAKE_BY_ADDRESS_SHARED
 const SHARED: u32 = 1;
 
+/// The number in the next anonymous file's name.
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
 /// A file of `len` bytes (sparse), created in the temporary directory and unlinked before it is returned.
 pub fn anonymous_file(len: u64) -> io::Result<File> {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("w2m-shared-{}-{n}", std::process::id()));
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&path)?;
+    anonymous_file_in(&std::env::temp_dir(), len)
+}
+
+/// `anonymous_file` in `dir`, which a test gives its own.
+fn anonymous_file_in(dir: &std::path::Path, len: u64) -> io::Result<File> {
+    // the next name when one is taken, left by a process of the same id killed between the open and the unlink, as
+    // `FileBridge::new` passes over a drive left behind (Sprint 247)
+    let (file, path) = loop {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path = dir.join(format!("w2m-shared-{}-{n}", std::process::id()));
+        match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => break (file, path),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    };
     std::fs::remove_file(&path)?;
     file.set_len(len)?;
     Ok(file)
@@ -137,6 +153,22 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A name left by a killed process of the same id is passed over, not an error (Sprint 247).
+    #[test]
+    fn a_name_left_behind_is_passed_over() {
+        // a directory of its own, so the names it leaves are not the other tests' to count
+        let dir = std::env::temp_dir().join(format!("w2m-shared-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir(&dir).unwrap();
+        let from = NEXT.load(Ordering::Relaxed);
+        for k in from..from + 1024 {
+            std::fs::write(dir.join(format!("w2m-shared-{}-{k}", std::process::id())), b"").unwrap();
+        }
+        let made = anonymous_file_in(&dir, 4096);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(made.unwrap().metadata().unwrap().len(), 4096);
+    }
 
     /// The turn's round trip (the Decision "Sequence after Sprint 196" revisits the transport above 10 µs median): two
     /// threads, each with its own mapping, hand the turn word back and forth 10,000 times; the median is printed

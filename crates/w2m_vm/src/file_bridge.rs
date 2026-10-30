@@ -155,9 +155,18 @@ impl FileBridge {
         let (drive, owns_drive) = match drive {
             Some(d) => (d.to_path_buf(), false),
             None => {
-                let n = NEXT.fetch_add(1, Ordering::Relaxed);
-                let d = std::env::temp_dir().join(format!("w2m-drive-c-{}-{n}", std::process::id()));
-                std::fs::create_dir(&d).map_err(|e| format!("{}: {e}", d.display()))?;
+                // the next name when one is taken: a process killed before its bridge removed its drive leaves the
+                // name, and a later process given the same id meets it (Sprint 247's gates met w2m-drive-c-8915-0,
+                // left at 05:33, in a family run)
+                let d = loop {
+                    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+                    let d = std::env::temp_dir().join(format!("w2m-drive-c-{}-{n}", std::process::id()));
+                    match std::fs::create_dir(&d) {
+                        Ok(()) => break d,
+                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                        Err(e) => return Err(format!("{}: {e}", d.display())),
+                    }
+                };
                 let d = d.canonicalize().map_err(|e| e.to_string())?;
                 std::fs::create_dir(d.join("w2m")).map_err(|e| e.to_string())?;
                 for folder in PROFILE_FOLDERS {
@@ -689,6 +698,24 @@ mod tests {
         std::fs::create_dir_all(r.join("Data")).unwrap();
         std::fs::write(r.join("Data").join("Level0.bin"), b"0123456789").unwrap();
         r
+    }
+
+    /// A drive's name left by a killed process of the same id is passed over, not an error (Sprint 247).
+    #[test]
+    fn a_drive_left_behind_is_passed_over() {
+        let r = root("left");
+        let name = |k: u64| std::env::temp_dir().join(format!("w2m-drive-c-{}-{k}", std::process::id()));
+        let left: Vec<PathBuf> = (0..1024)
+            .map(name)
+            .filter_map(|d| std::fs::create_dir(&d).ok().map(|()| d.canonicalize().unwrap()))
+            .collect();
+        let b = FileBridge::new(&r, true, None).unwrap();
+        assert!(!left.contains(&b.drive), "{}", b.drive.display());
+        drop(b);
+        for d in &left {
+            let _ = std::fs::remove_dir(d);
+        }
+        let _ = std::fs::remove_dir_all(&r);
     }
 
     /// file_bridge.py 225-239, 268-278, 320-323: a name found case-folded under C:\w2m\app, its size and FILETIMEs
