@@ -57,14 +57,47 @@ fn expected_status(stop: &str) -> &'static str {
 /// The reference's kinds the batch run's record does not hold: the Rust host has no guest-plane trace to ingest (its
 /// call stream is compared from Sprint 214, COMPARISON_COMPLETED, by the second Producer from Sprint 217)
 const NOT_WRITTEN: [&str; 1] = ["TRACE_INGESTED"];
-/// The measurement fields both hosts set alike (run_frontier.py 174-177)
-const CONVENTIONS: [&str; 5] = [
-    "phase",
-    "backend",
-    "application_profile_id",
-    "artifact_state",
-    "destination_profile_id",
-];
+/// The measurement fields both hosts set alike (run_frontier.py 174-177); not `artifact_state`, "warm" on the
+/// reference, whose translation cache had hits, and "cold" on the Rust host, which keeps none (Sprint 240)
+const CONVENTIONS: [&str; 4] = ["phase", "backend", "application_profile_id", "destination_profile_id"];
+
+/// `measurement_problems` (run_frontier.py 189-200), the rate's half (Sprint 240): `instructions_per_second` times the
+/// record's `run_seconds`, every variant, is its `instructions_retired`, to one part in a million; and each measurement
+/// is `cold`, the Rust host having no translation cache.
+fn rate_problems(measurements: &[Value]) -> Vec<String> {
+    let mut found = Vec::new();
+    let value = |metric: &str, variant: &str| {
+        measurements
+            .iter()
+            .find(|m| m["metric"] == metric && m["variant"] == variant)
+            .and_then(|m| m["value"].as_f64())
+    };
+    let seconds: f64 = measurements
+        .iter()
+        .filter(|m| m["metric"] == "run_seconds")
+        .filter_map(|m| m["value"].as_f64())
+        .sum();
+    match (
+        value("instructions_per_second", "process"),
+        value("instructions_retired", "process"),
+    ) {
+        (Some(rate), Some(instructions)) if (rate * seconds - instructions).abs() <= 1e-6 * instructions => {}
+        (Some(rate), Some(instructions)) => found.push(format!(
+            "instructions_per_second {rate} over {seconds} s is {} instructions, where {instructions} retired",
+            rate * seconds
+        )),
+        _ => found.push("no instructions_per_second or instructions_retired for the process".into()),
+    }
+    for m in measurements {
+        if m["artifact_state"] != "cold" {
+            found.push(format!(
+                "{} {}: artifact_state {}, where the Rust host keeps no translation cache",
+                m["metric"], m["variant"], m["artifact_state"]
+            ));
+        }
+    }
+    found
+}
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -375,8 +408,67 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     let ours = w2m_events(&record);
     let reference = w2m_events(&root.join(REFERENCE));
     let held = fs::read_to_string(root.join(HELD)).unwrap();
-    let found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
+    let mut found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
+    found.extend(rate_problems(&measurements(&ours)));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
+}
+
+fn measurements(events: &[(String, Value)]) -> Vec<Value> {
+    events
+        .iter()
+        .filter(|(k, _)| k == "MEASUREMENT_RECORDED")
+        .map(|(_, p)| p.clone())
+        .collect()
+}
+
+/// Every committed batch-run record of the Rust host (baseline `host` `w2m-vm`, under `store/runs/`; Sprint 240's speed
+/// records): its rate is its instructions over its seconds, every measurement cold, and its comparison conforms.
+#[test]
+fn every_stored_rust_batch_record_holds_its_rate() {
+    let root = root();
+    let mut held = 0;
+    for entry in fs::read_dir(root.join("store/runs")).unwrap() {
+        let dir = entry.unwrap().path();
+        if !dir.file_name().unwrap().to_string_lossy().starts_with("w2m-vm-game-") {
+            continue;
+        }
+        let ours = w2m_events(&dir);
+        let mut found = rate_problems(&measurements(&ours));
+        for (k, p) in &ours {
+            if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {
+                found.push(format!("COMPARISON_COMPLETED verdict {}", p["verdict"]));
+            }
+        }
+        assert!(found.is_empty(), "{}:\n{}", dir.display(), found.join("\n"));
+        held += 1;
+    }
+    assert!(
+        held >= 3,
+        "{held} records store/runs/w2m-vm-game-<ns>, where Sprint 240 committed three"
+    );
+}
+
+/// The rate check names a rate that is not the instructions over the seconds, and a warm measurement.
+#[test]
+fn a_rate_off_by_a_part_in_a_thousand_is_named() {
+    let m = |metric: &str, variant: &str, value: f64| serde_json::json!({"metric": metric, "variant": variant, "value": value, "artifact_state": "cold"});
+    let good = vec![
+        m("instructions_retired", "process", 3.0e9),
+        m("instructions_per_second", "process", 1.0e9),
+        m("run_seconds", "vm", 2.5),
+        m("run_seconds", "host", 0.5),
+    ];
+    assert_eq!(rate_problems(&good), Vec::<String>::new());
+    let mut off = good.clone();
+    off[1]["value"] = 1.001e9.into();
+    off[2]["artifact_state"] = "warm".into();
+    let found = rate_problems(&off);
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert!(
+        found[0].starts_with("instructions_per_second 1001000000 over 3 s"),
+        "{found:?}"
+    );
+    assert!(found[1].contains("artifact_state \"warm\""), "{found:?}");
 }
 
 /// The judge names what it finds: a record that agrees, then one with its exits, its start and its stop each moved.

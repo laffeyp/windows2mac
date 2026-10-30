@@ -241,6 +241,8 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
             "instructions/s",
         ),
         (Metric::RunSeconds, "vm".to_string(), e.run_seconds, "s"),
+        // the host's seconds, which the rate divides by (Sprint 240): one total, where the frozen host wrote one a kind
+        (Metric::RunSeconds, "host".to_string(), e.host_seconds, "s"),
     ];
     for (k, n) in &e.exits {
         rows.push((Metric::VmExits, format!("hvc {k}"), *n as f64, "exits"));
@@ -305,7 +307,9 @@ pub fn quantile(sorted: &[u64], q: f64) -> u64 {
 }
 
 /// One MEASUREMENT_RECORDED line of the step-3 measurements' record (Sprint 163), in a Python batch run's conventions
-/// (`destination_profile_id` `w2m-vm`, `backend` `managed_vm`, `phase` `discovery`, `artifact_state` `warm`).
+/// (`destination_profile_id` `w2m-vm`, `backend` `managed_vm`, `phase` `discovery`). `artifact_state` is `cold` by the
+/// frozen host's rule, "warm" only when its translation cache had hits (`run_frontier.py` 383): the Rust host keeps no
+/// translation cache, so every block of every run is compiled afresh (Sprint 240; the records before it say `warm`).
 pub fn measurement_line(
     measurement_id: &str,
     metric: events::Metric,
@@ -322,7 +326,7 @@ pub fn measurement_line(
         phase: events::MeasurementPhase::Discovery,
         backend: events::Backend::ManagedVm,
         application_profile_id: Id::new(application).expect("not empty"),
-        artifact_state: events::ArtifactState::Warm,
+        artifact_state: events::ArtifactState::Cold,
         destination_profile_id: Id::new("w2m-vm").expect("not empty"),
         variant: variant.map(str::to_string),
     })
