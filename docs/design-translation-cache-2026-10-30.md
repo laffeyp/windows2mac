@@ -33,13 +33,23 @@ meet the batch run's gate by construction and miss the play path the cache exist
 of the game's instructions in play, Decision 2026-10-14); the walk's cover is measured against the batch run's 132,110
 starts, and a start the walk misses is compiled at run time as today.
 
-**B. Where the code lives: its own region at a fixed address.** Translated code is position-dependent (exits are
-`B`/`BL` to the dispatcher, runtime symbols absolute), so the cache is placed where it was made: a region of its own
-in the monitor area, beside the 64 MiB code area, sized from the walk (at 4.6 bytes a guest byte, the whole image's
-reachable code is several times the run's 14.3 MB); the run's compilers keep the 64 MiB area to themselves. The key
-holds everything a word depends on (D), so a cache made under another dispatcher or runtime is never loaded. The
-frozen host relocated each entry instead (`vm_backend.py` at `python-final` 4662-4752); a fixed place needs no
-relocation code to judge.
+**B. Where the code lives: its own region at a fixed address, just below the monitor area.** Translated code is
+position-dependent (exits are `B`/`BL` to the dispatcher, runtime symbols absolute), so the cache is placed where it
+was made. Two bounds fix where. Inside the monitor area there is no room: `layout.rs` packs `CODE_CACHE` (0x60000,
+64 MiB), `RUNTIME_STACK` and the vCPU areas up to `MONITOR_SIZE`, 0xAA0_0000, and the runtime image links against
+those addresses (`W2M_*`, `layout.rs` 167-200) while the exit ledger hashes the process area from `MONITOR_SIZE`
+(`run.rs` 392), so a region there would move judged bytes, KIT_DIARY #103's fault (reviewer-3's Medium 1 at 251).
+And a `B` or `BL` reaches ±128 MiB, so a cached block must lie within that of the dispatcher's `exit_va`
+(`MONITOR_VA + 0x1800`) and the slice stub, the code area's first stub after the bridges (`guest.rs` 926). The region
+is therefore `[MONITOR_VA − 0x780_0000, MONITOR_VA)`, 120 MiB, whose lowest byte lies about 120.4 MiB below the slice
+stub; no constant of `layout.rs`, `pe_loader` (`DLL_BASE` 0x7FF8_0000_0000) or the arena (to 0x90_0000_0000) names an
+address in it (2026-10-30). It is mapped only when a cache loads, so the monitor area, the runtime image and the
+process area are the frozen host's whether or not a cache is used; card 3's gate holds that by a test that every
+`W2M_*` value and `MONITOR_SIZE` is unchanged and that the region overlaps nothing the loader or the arena maps. The
+walk's code at 4.6 bytes a guest byte may exceed 120 MiB; card 3 measures it, and if it does, the cache holds the
+walk's blocks in order of their reach from the image's entries up to the region's end (Revisit if). The run's
+compilers keep the 64 MiB area to themselves. The frozen host relocated each entry instead (`vm_backend.py` at
+`python-final` 4662-4752); a fixed place needs no relocation code to judge.
 
 **C. The lookup: a second level the miss stub reads before the compiler.** The dispatch table stays the first level.
 On a miss whose target lies in UnityPlayer.dll's range, the miss stub probes the cache's own table, open-addressed,
@@ -55,9 +65,17 @@ every flag, as the run-time scan takes an unscanned page. The key is the sha256 
 translator's source tree id, the monitor code's words and the runtime image's sha256; the cache file lives under
 `build/translation-cache/<key>`, made by a Rust tool on first need, as Rosetta 2 translates at install.
 
-**E. A write to the image.** A write to a page of UnityPlayer.dll that holds cached code marks that page in a bitmap
-the probe reads; a marked page's starts fall through to the run-time compiler, whose blocks the existing write
-handling drops (Sprint 250). The cache file is never changed by a run.
+**E. A write to the image.** The run-time path sees a write because the in-VM compiler makes read-only each page it
+compiles from (17,086 pages a run), and the fault reaches the host as `hvc 13` (`monitor_code.rs` 404, `compile.rs`
+304-330); cached blocks are never compiled at run time, so that path alone would not see a write to their pages
+(reviewer-3's Medium 2 at 251). So at load the host makes read-only, by the same stage-1 descriptor bit, every 4 KB
+page of UnityPlayer.dll that holds a cached block, splitting a 2 MB block descriptor where one covers it, as the
+compiler's "page needs a split" does; a write then faults to the same `hvc 13`, whose handler sets the page's bit in a
+bitmap the probe reads, empties the dispatch slots of the page's cached starts, and makes the page writable. A marked
+page's starts fall through to the run-time compiler, whose blocks the existing write handling drops (Sprint 250). The
+cache file is never changed by a run. Card 4's gate carries a plant: a guest that writes into a cached page and then
+calls the written code must run the new code, not the cached; card 4's lookup searches `tests/data`'s guests for one
+that writes its own code first.
 
 **F. The compiler and its judge.** The Rust translator makes the cache's words. Today its words equal the C
 compiler's instruction by instruction over 1,186,511 calls (`crates/translator/tests/c_words.rs`); no judge compares
@@ -77,11 +95,16 @@ first level); the C runtime holding the probe (it changes the judged image); the
    instruction count equals the census's 4,996,593 or each difference is named, and its cover of the batch run's
    132,110 starts is on the record.
 3. **The cache file.** The walk's blocks translated into a file under its key, at the region's addresses, with the
-   walk's liveness. Gate: every block's words equal the judge's (1) at the same liveness; its size and the time to make
-   it on the record.
-4. **The probe.** The second-level lookup and the write bitmap in the monitor code, the cache loaded at start. Gate:
-   the plan's, the batch run conforming with the cache and "compiled in UnityPlayer.dll" falling from 149,308 by the
-   blocks the cache holds, "compiled" by as many; the frozen-word tests unchanged with no cache.
+   walk's liveness. Gate: every block's words equal the judge's (1) at the same liveness; for every cached block, the
+   flags its words leave live cover every flag any of its walked successors reads, computed from the successors' own
+   lifted operations, so a dropped flag write is caught on blocks no run reaches (reviewer-3's Low 1 at 251); the
+   layout test of B; its size and the time to make it on the record.
+4. **The probe.** The second-level lookup and the write bitmap in the monitor code, the cache loaded at start, its
+   pages made read-only (E). Gate: the plan's, the batch run conforming with the cache and "compiled in
+   UnityPlayer.dll" falling from 149,308 by the blocks the cache holds, "compiled" by as many; E's plant; the
+   frozen-word tests unchanged with no cache. The fall has a ceiling: 82,022 compiles a run lie outside any image,
+   Mono's run-time code, so "compiled" can fall by at most 192,815 of 274,837 with every image cached, and by
+   149,308 with UnityPlayer.dll alone.
 
 Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
 where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.
@@ -131,3 +154,6 @@ path, and its new code is the play path's; the walk reaches it without a run hav
   tool for this image, and a cover from recorded runs, FEX's, is weighed again.
 - The whole-block judge finds differences it cannot name: the cache's words are then not the run-time compiler's, and
   the cache waits on them.
+- The walk's code exceeds the 120 MiB within a branch's reach of the dispatcher: the cache then holds part of the
+  image, and exits that reach farther (a veneer, or a long branch through a register) are weighed against the
+  words they would change.
