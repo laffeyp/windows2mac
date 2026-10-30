@@ -110,6 +110,9 @@ pub struct Execution<'a> {
     /// the in-VM compiler's counts at the stop, `VMC_COUNT_NAMES` in order (`block_compiler.c` 25-27), as
     /// `vm_compile_counts` read them (vm_backend 2604-2607; Sprint 246)
     pub compile_counts: Vec<(&'a str, u64)>,
+    /// the in-VM compiler's time on the critical path, ms (Sprint 247: `w2m_vm_compile` bracketed by the virtual
+    /// counter); None when it compiled nothing
+    pub compile_ms: Option<f64>,
     /// the exits by hvc number (0: an exit other than an hvc)
     pub exits: Vec<(u16, u64)>,
     pub end: RunEnd,
@@ -258,6 +261,10 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     // the compiles at run time, step 5's baseline (Sprint 246; `run_frontier.py` 385-390)
     for (cause, n) in &e.compile_counts {
         rows.push((Metric::VmCompileBlocks, cause.to_string(), *n as f64, "blocks"));
+    }
+    // compilation on the critical path (v0.2 456; Sprint 247), the VM's part; the host's is `run_seconds` "host hvc 1"
+    if let Some(ms) = e.compile_ms {
+        rows.push((Metric::CompileCriticalPathMs, "vm".to_string(), ms, "ms"));
     }
     for (k, n) in &e.exits {
         rows.push((Metric::VmExits, format!("hvc {k}"), *n as f64, "exits"));
@@ -484,6 +491,7 @@ mod tests {
                 host_seconds: 0.75,
                 host_by_kind: vec![("hvc 8".into(), 0.75)],
                 compile_counts: vec![("compiled", 40), ("not a code page", 2)],
+                compile_ms: None,
                 exits: vec![(8, 779)],
                 end,
                 calls: (IMAGE, 925),

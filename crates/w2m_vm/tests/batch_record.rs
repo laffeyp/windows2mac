@@ -200,6 +200,7 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
     for m in of(ours, "MEASUREMENT_RECORDED") {
         let metric = m["metric"].as_str().unwrap_or("");
         match units.get(metric) {
+            None if RUST_ONLY.contains(&(metric, m["unit"].as_str().unwrap_or(""))) => {}
             None => found.push(format!(
                 "a measurement of {metric}, which the reference does not measure"
             )),
@@ -418,6 +419,7 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     found.extend(rate_problems(&measurements(&ours)));
     found.extend(condition_problems(&record));
     found.extend(compile_problems(&measurements(&ours), &measurements(&reference)));
+    found.extend(compile_time_problems(&measurements(&ours)));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
 }
 
@@ -460,6 +462,35 @@ fn condition_problems(record: &Path) -> Vec<String> {
         }
     }
     found
+}
+
+/// The metrics the Rust record writes and the reference does not measure, with their unit: the in-VM compiler's time
+/// on the critical path (Sprint 247), which the frozen host never timed.
+const RUST_ONLY: [(&str, &str); 1] = [("compile_critical_path_ms", "ms")];
+
+/// The records written before the in-VM compile time reached the record (Sprints 240 and 246), which hold none.
+const BEFORE_COMPILE_TIME: [&str; 6] = [
+    "w2m-vm-game-1793364171000000000",
+    "w2m-vm-game-1793364267000000000",
+    "w2m-vm-game-1793364362000000000",
+    "w2m-vm-game-1793369487000000000",
+    "w2m-vm-game-1793369623000000000",
+    "w2m-vm-game-1793369737000000000",
+];
+
+/// The in-VM compiler's time on the critical path (Sprint 247): one `compile_critical_path_ms` "vm", above zero.
+fn compile_time_problems(ours: &[Value]) -> Vec<String> {
+    let times: Vec<f64> = ours
+        .iter()
+        .filter(|m| m["metric"] == "compile_critical_path_ms" && m["variant"] == "vm")
+        .filter_map(|m| m["value"].as_f64())
+        .collect();
+    match times.as_slice() {
+        [ms] if *ms > 0.0 => Vec::new(),
+        _ => vec![format!(
+            "compile_critical_path_ms \"vm\" is {times:?}, where one time above zero is due"
+        )],
+    }
 }
 
 /// The records written before the compile counts reached the record (Sprint 240's three), which hold none.
@@ -526,6 +557,9 @@ fn every_stored_rust_batch_record_holds_its_rate() {
         if !BEFORE_COMPILE_COUNTS.contains(&name.as_str()) {
             let reference = measurements(&w2m_events(&root.join(REFERENCE)));
             found.extend(compile_problems(&measurements(&ours), &reference));
+        }
+        if !BEFORE_COMPILE_TIME.contains(&name.as_str()) {
+            found.extend(compile_time_problems(&measurements(&ours)));
         }
         for (k, p) in &ours {
             if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {

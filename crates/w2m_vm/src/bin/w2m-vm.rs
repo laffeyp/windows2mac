@@ -730,6 +730,17 @@ mod run {
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
         let stop = stop_name(&out.stop);
+        // the in-VM compiler's time (Sprint 247): ticks over the frequency the guest read; ticks with no frequency is a
+        // compiler that counted and never wrote it, named rather than divided by
+        let compile_ms = match out.compile_ticks {
+            (0, _) => None,
+            (ticks, 0) => {
+                return Err(format!(
+                    "the in-VM compiler counted {ticks} ticks with a counter frequency of 0"
+                ));
+            }
+            (ticks, frequency) => Some(ticks as f64 * 1000.0 / frequency as f64),
+        };
         let record = w2m_vm::record::execution_lines(&w2m_vm::record::Execution {
             id: &id,
             subject_sha256: &subject,
@@ -748,6 +759,7 @@ mod run {
                 .iter()
                 .map(|n| (*n, out.counts.get(n).copied().unwrap_or(0)))
                 .collect(),
+            compile_ms,
             exits: out.exits.iter().map(|(k, n)| (*k, *n)).collect(),
             end,
             calls: (&sha256(calls.as_bytes()), calls.lines().count() as u64),

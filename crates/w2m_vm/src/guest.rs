@@ -73,6 +73,10 @@ pub const VMC_COUNT_NAMES: [&str; 23] = [
     "pages protected",
     "pause",
 ];
+/// VM_COMPILER + these, past the counts (Sprint 247; `block_compiler.c`'s C_TICKS and C_FREQUENCY): the virtual
+/// counter's ticks spent in `w2m_vm_compile`, and the counter's frequency the guest read.
+pub const VMC_COMPILE_TICKS: u64 = VMC_COUNTS + 8 * VMC_COUNT_NAMES.len() as u64;
+pub const VMC_COUNTER_FREQUENCY: u64 = VMC_COMPILE_TICKS + 8;
 
 const DXGI_OBJECT: [&str; 7] = [
     "QueryInterface",
