@@ -5,7 +5,7 @@
 id: 251
 status: active
 phase: 6
-pass_kind: design
+pass_kind: architecture
 ---
 ```
 
