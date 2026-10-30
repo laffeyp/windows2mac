@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 244
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -85,3 +85,24 @@ The class gate's comparison is a function that returns its faults, and a test sh
 - [x] One concept: the class gate's faults bound.
 
 ## result
+
+- **The helper:** `class_faults(frozen, rust, held) -> Result<(), Vec<String>>` is the comparison that stood in the
+  test's body, unchanged rule for rule; `held` reads the held file; `the_rust_index_is_the_frozen_one_or_held` panics
+  with the faults when it is `Err`, then checks the ledger and prints the count as before.
+- **The test:** `each_kind_of_class_fault_is_named` passes equal indexes, then names four faults in order: "ADD: 11
+  cases, the frozen index 10", "FCOS: conforms, the frozen index discrepancy", "MUL: conforms as the frozen index, and
+  store/case_runner/class-held-2026-10-29.tsv holds it", "NEW: not in the frozen index".
+- **The comment:** the printed list is named `uncompiled`, its comment no longer naming the Python words Sprint 238
+  retired.
+- **Deferred:** the entry of Sprint 235 resolved. The entry of Sprint 222 annotated: its re-visit, due at Sprint 226
+  and Sprints 238 and 241, was missed each time and found by this card's search of Deferred for its file; card 245
+  takes it, and the Decision "Sequence for step 5" is annotated with the new order, the compile counts at 246.
+- **The gates:** `scripts/gates.sh` exit 0 in 474 s on b5c915fe7, the class tests among them.
+- **Plant 1** (`class_faults` returning `Ok(())` whatever it found, line 121): `each_kind_of_class_fault_is_named`
+  panicked at its `unwrap_err`, line 201, the faults it expected not returned.
+- **Plant 2** (the case-count comparison off, line 99): "left: [\"FCOS: conforms, …\", \"MUL: …\", \"NEW: …\"] right:
+  [\"ADD: 11 cases, the frozen index 10\", …]".
+- **Plant 3** (the held file given "ADD inconclusive a plant" by the Edit tool): the class gate, "1 classes differ: ADD:
+  conforms as the frozen index, and store/case_runner/class-held-2026-10-29.tsv holds it".
+- Each plant's `git diff --stat` showed its one line first; each was restored by `cp`, and `cmp` found the file equal
+  to its copy.
