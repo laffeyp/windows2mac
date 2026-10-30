@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 251
-status: active
+status: done
 phase: 6
 pass_kind: architecture
 ---
@@ -110,3 +110,22 @@ The design passes `design_check`, its Decision names it, and reviewer-3's review
 - [x] One concept: how the cache is built.
 
 ## result
+
+- **The facts:** one batch run from 9622bb579 with temporary lines at the stop, removed and checked by `cmp`:
+  UnityPlayer.dll at 0x180000000, size 0x19db000; mono-2.0-bdwgc.dll at 0x1180010000, steam_api64.dll at
+  0x1222ff0000; in UnityPlayer.dll 132,110 distinct starts for 149,308 compiles, 3,098,064 guest bytes, 14,340,616
+  code bytes; the code area 29.3 MB full for 275,559 blocks.
+- **The design:** `docs/design-translation-cache-2026-10-30.md` (43ea83c64), revised by reviewer-3's review at 251
+  (dfcf29cd8): the region `[MONITOR_VA − 0x780_0000, MONITOR_VA)`, within a `B`'s reach of the dispatcher and outside
+  every judged area; the cached pages read-only at load, a write faulting to `hvc 13`; four cards, each with a gate.
+  `design_check` counts four plans and designs. The Decision "The translation cache's shape" names it.
+- **A slip:** the card was first marked `pass_kind: design`, not among the kit's kinds (TECHNIQUES.md #14); 9622bb579
+  made it `architecture`, the first `sed` having named the wrong line and changed nothing, which the empty commit
+  showed.
+- **The gates:** `scripts/gates.sh` exit 0 in 219 s on dfcf29cd8, copied from `store/gates/passes.tsv`; the timing stage 699 ns an exit at load 5.01.
+- **Plants,** run on dfcf29cd8 after the design's last edit, as on 43ea83c64 before it, each restored by `cp` and checked
+  by `cmp`.
+- **Plant 1,** `design_check` failed, "docs/design-translation-cache-2026-10-30.md: "## Against the systems that solved
+  it" names FEX with no source": FEX's link removed.
+- **Plant 2,** `design_check` failed, "BLACKBOARD.md: the Decision of 2026-10-30 marked "Architecture:" names no
+  checked plan or design": the Decision's pointer removed.
