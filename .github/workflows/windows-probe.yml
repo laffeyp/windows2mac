@@ -4,8 +4,9 @@
 # Windows, runs it `repeat` times, and uploads the guest traces and role maps for ingest on the Mac.
 # Dispatch: gh workflow run windows-probe.yml -f probe=<dir> -f execution_id=<id> [-f repeat=N]
 # Probe CLI: <probe>.exe <execution_id> <trace_path> <roles_path>; mode stdout: no arguments;
-# mode file: <probe>.exe probes/<probe>/cases.bin out/result-<i>.bin (cases.bin built on the runner when
-# probe.json names a `generate` command; its sha256 lands in out/cases.sha256)
+# mode file: <probe>.exe probes/<probe>/cases.bin out/result-<i>.bin (cases.bin tracked, or fetched from the release
+# probe.json's `cases_asset` names and checked by hash; its sha256 lands in out/cases.sha256). No Python runs here
+# (BLACKBOARD Decision 2026-10-29, "No Python runs"; Sprint 227).
 name: windows-probe
 run-name: "probe ${{ inputs.probe }} ${{ inputs.execution_id }}"   # the dispatcher matches its own runs by this name
 
@@ -40,27 +41,28 @@ jobs:
         id: cfg
         shell: pwsh
         run: |
-          # probes/<probe>/probe.json `generate` (Sprint 039): a command that writes the input file on
-          # the runner, so a large derived file is built from the seeded generator, not committed
+          # probes/<probe>/probe.json `cases_asset` (Sprint 227): "<release>/<run>-cases.bin", a case set too large to
+          # commit, built once and kept on its release (Sprint 225), in place of Sprint 039's Python `generate`
           $cfg = "probes/${{ inputs.probe }}/probe.json"
-          $gen = ""
-          if (Test-Path $cfg) { $c = Get-Content $cfg -Raw | ConvertFrom-Json; if ($c.generate) { $gen = $c.generate } }
-          "generate=$gen" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
-        if: steps.cfg.outputs.generate != ''
-      - name: substrate (substrate.commit; review 2026-10-10 D1)
-        if: steps.cfg.outputs.generate != ''
+          $asset = ""
+          if (Test-Path $cfg) { $c = Get-Content $cfg -Raw | ConvertFrom-Json; if ($c.cases_asset) { $asset = $c.cases_asset } }
+          "cases_asset=$asset" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+      - name: case file
+        if: steps.cfg.outputs.cases_asset != ''
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git clone --quiet --filter=blob:none https://github.com/laffeyp/substrate.git substrate
-          git -C substrate checkout --quiet (Get-Content substrate.commit -Raw).Trim()
-          git -C substrate log --oneline -1
-      - name: generate
-        if: steps.cfg.outputs.generate != ''
-        shell: pwsh
-        run: |
-          uv run --no-dev python ${{ steps.cfg.outputs.generate }}
+          # the asset, then its sha256 against the run that recorded it (store/probe-runs/<run>/cases.sha256)
+          $tag, $name = "${{ steps.cfg.outputs.cases_asset }}" -split "/", 2
+          $run = $name -replace "-cases\.bin$", ""
+          $out = "probes/${{ inputs.probe }}/cases.bin"
+          gh release download $tag --pattern $name --output $out --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $want = (Get-Content "store/probe-runs/$run/cases.sha256" -Raw).Substring(0, 64).ToLower()
+          $have = (Get-FileHash -Algorithm SHA256 $out).Hash.ToLower()
+          if ($have -ne $want) { Write-Error "$out is $have, and run $run recorded $want"; exit 1 }
+          "$out matches run $run's sha256"
       - name: build
         shell: pwsh
         run: |

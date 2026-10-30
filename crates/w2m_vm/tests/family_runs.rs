@@ -61,15 +61,17 @@ fn steady(stop: &str) -> String {
         rest = after.find('/').map_or("", |j| &after[j..]);
     }
     out.push_str(rest);
-    // w2m<4 hex digits>.tmp
+    // w2m<1 to 4 hex digits>.tmp: GetTempFileNameW writes its 16-bit number in hex without leading zeros
+    // (tools/guest_runtime/file.c 475-479; Sprint 227 met `w2m417.tmp`, which a mask of exactly four missed)
     let mut steady = String::new();
     let mut s = out.as_str();
     while let Some(i) = s.find("w2m") {
         steady.push_str(&s[..i]);
         let tail = &s[i + 3..];
-        if tail.len() >= 8 && tail[..4].bytes().all(|b| b.is_ascii_hexdigit()) && &tail[4..8] == ".tmp" {
+        let digits = tail.bytes().take(4).take_while(u8::is_ascii_hexdigit).count();
+        if digits >= 1 && tail[digits..].starts_with(".tmp") {
             steady.push_str("w2m<tmp>.tmp");
-            s = &tail[8..];
+            s = &tail[digits + 4..];
         } else {
             steady.push_str("w2m");
             s = tail;
@@ -106,6 +108,10 @@ fn a_moving_stop_is_written_steadily() {
         "HostFailure op 6: a name in a folder whose listing is not recorded: <drive>/Windows/w2m<tmp>.tmp"
     );
     assert_eq!(steady("import a.dll!b"), "import a.dll!b");
+    // fewer than four digits, as the runtime writes a small number (Sprint 227), and five, which is not its name
+    assert_eq!(steady("x <drive>/Windows/w2m417.tmp"), "x <drive>/Windows/w2m<tmp>.tmp");
+    assert_eq!(steady("w2mA.tmp"), "w2m<tmp>.tmp");
+    assert_eq!(steady("w2m12345.tmp"), "w2m12345.tmp");
 }
 
 #[test]

@@ -66,47 +66,37 @@ jobs:
         run: |
           set -euo pipefail
           meta="games/${{ inputs.game }}"
-          tag=$(python -c "import json;print(json.load(open('$meta/release.json'))['tag'])")
+          # jq, sha256sum and df, no Python (BLACKBOARD Decision 2026-10-29, "No Python runs"; Sprint 227): the runner
+          # images list jq 1.8.2 and zstd 1.5.7 (actions/runner-images, Windows2025-Readme.md)
+          tag=$(jq -r .tag "$meta/release.json")
           base=/c/w2m; [ -d /d ] && base=/d/w2m                      # the drive with room, when present
           # GitHub documents 14 GB for this runner; run 37979176570 measured 118 GB free on D:.
           # Parts and the unpacked tree need about 24 GB at the peak: stop early if that is gone.
           need=$((26 * 1024 * 1024 * 1024))
-          free=$(python -c "import shutil, sys; print(shutil.disk_usage(sys.argv[1]).free)" "${base%/w2m}/")   # Git Bash converts the argument to D:/
+          free=$(df -B1 --output=avail "${base%/w2m}/" | tail -1 | tr -d ' ')
           echo "free on ${base%/w2m}: $free bytes; need $need"
           [ "$free" -ge "$need" ] || { echo "not enough disk"; exit 1; }
           mkdir -p $base/parts $base/game
           echo "GAME_DIR=$(cygpath -w $base/game)" >> "$GITHUB_ENV"
           # only the parts release.json names: the release also holds other assets (Sprint 033's capture)
-          for part in $(python -c "import json;print(' '.join(p['name'] for p in json.load(open('$meta/release.json'))['parts']))"); do
+          for part in $(jq -r '.parts[].name' "$meta/release.json"); do
             gh release download "$tag" --repo "${{ github.repository }}" --dir $base/parts --pattern "$part"
           done
-          python - "$meta/release.json" "$base/parts" <<'EOF'
-          import hashlib, json, sys
-          for p in json.load(open(sys.argv[1]))["parts"]:
-              h = hashlib.sha256()
-              with open(sys.argv[2] + "/" + p["name"], "rb") as f:
-                  while c := f.read(1 << 22): h.update(c)
-              assert h.hexdigest() == p["sha256"], p["name"]
-          print("parts verified")
-          EOF
+          # each part's sha256 against release.json
+          jq -r '.parts[] | "\(.sha256)  \(.name)"' "$meta/release.json" | (cd $base/parts && sha256sum -c --quiet -)
+          echo "parts verified"
           zstd --version || choco install zstandard -y --no-progress
-          for part in $(python -c "import json;print(' '.join(p['name'] for p in json.load(open('$meta/release.json'))['parts']))"); do
+          for part in $(jq -r '.parts[].name' "$meta/release.json"); do
             cat "$base/parts/$part"; rm "$base/parts/$part"
           done | zstd -d -c | tar -xf - -C $base/game
-          python - "$meta/files.json" "$base/game" <<'EOF'
-          import hashlib, json, os, sys
-          m = json.load(open(sys.argv[1])); n = 0
-          for f in m["listing"]:
-              h = hashlib.sha256()
-              with open(sys.argv[2] + "/" + f["path"], "rb") as fh:
-                  while c := fh.read(1 << 22): h.update(c)
-              assert h.hexdigest() == f["sha256"], f["path"]; n += 1
-          listed = {f["path"] for f in m["listing"]}
-          present = {os.path.relpath(os.path.join(r, x), sys.argv[2]).replace(os.sep, "/")
-                     for r, _, xs in os.walk(sys.argv[2]) for x in xs}
-          assert present == listed, f"unlisted {sorted(present - listed)[:5]} missing {sorted(listed - present)[:5]}"
-          print(f"{n} files verified against files.json; no other file present")
-          EOF
+          # each file's sha256 against files.json, and no file present that it does not list
+          jq -r '.listing[] | "\(.sha256)  \(.path)"' "$meta/files.json" > "$RUNNER_TEMP/files.sha256"
+          (cd $base/game && sha256sum -c --quiet "$RUNNER_TEMP/files.sha256")
+          jq -r '.listing[].path' "$meta/files.json" | sort > "$RUNNER_TEMP/listed"
+          (cd $base/game && find . -type f | sed 's|^\./||' | sort) > "$RUNNER_TEMP/present"
+          extra=$(comm -13 "$RUNNER_TEMP/listed" "$RUNNER_TEMP/present" | head -5)
+          [ -z "$extra" ] || { echo "unlisted: $extra"; exit 1; }
+          echo "$(wc -l < "$RUNNER_TEMP/listed") files verified against files.json; no other file present"
       - name: install launcher
         shell: pwsh
         run: |

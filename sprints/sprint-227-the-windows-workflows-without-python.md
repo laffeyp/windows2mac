@@ -90,3 +90,42 @@ holds the rule.
 - [x] One concept: the Windows workflows' Python.
 
 ## result
+
+- **The runner's tools, looked up first:** the Windows 2025 and 2022 images list `jq` 1.8.2 and `zstd` 1.5.7
+  (`actions/runner-images`, `images/windows/Windows2025-Readme.md` and `Windows2022-Readme.md`).
+- **The probes:**
+  - The 13 sets tracked in git lost their `generate` line.
+  - The 8 asset sets name `cases_asset`, "<release>/<run>-cases.bin" (set 039 `semantics-039/38011862284-cases.bin`
+    and so on).
+  - All 33 `probe.json` parse, and none names a `.py`.
+- **`windows-probe.yml`:** the `uv` setup, the substrate clone and the `generate` step are gone. A `case file` step
+  downloads the asset with `gh release download` and checks it with `Get-FileHash` against the run's `cases.sha256`.
+  A tracked `cases.bin` needs no step.
+- **`windows-game.yml`:** its six Python uses are `jq` (the tag, the part names, the listings), `df -B1 --output=avail`
+  (free bytes) and `sha256sum -c` (each part, each file). A `find` against the listing, with `sort` and `comm`,
+  requires that no unlisted file is present.
+- **`no_python.rs`:** `no_workflow_runs_python_and_no_probe_names_it` fails on a Python command in a workflow line,
+  and on a `probe.json` naming a `.py`. A command is a token `python`, `python3`, `python.exe`, `py`, `pip` or `pip3`
+  outside a `#` comment. Its unit test holds the reader: `corpus/python-3.14.8` is a path, and a comment's "python
+  -c" is not run.
+- **Plant 1** (`tag=$(python -c "print(1)")` in `windows-game.yml`): the test failed, "windows-game.yml:71: python".
+  Restored byte for byte.
+- **Plant 2** (a probe's `source` set to `scripts/gen.py`): the test failed, "probes/semantics_042/probe.json: names
+  a .py". Restored byte for byte.
+- **Plant 3** (part `p2`'s sha256 zeroed in a scratch `release.json`, the step's own `jq` and `sha256sum` lines run
+  over it): "p2: FAILED", exit 1.
+- **A fault from Sprint 221, met in this sprint's gates** (the first run exited 100 in 530 s):
+  - `family_runs.rs`' `steady` masked a temporary name only as `w2m` and four hex digits. This run's windows family
+    drew `w2m417.tmp`, and the held line no longer matched.
+  - GetTempFileNameW writes its number "in upper-case hex without leading zeros" (`tools/guest_runtime/file.c`
+    475-479), so the mask now takes one to four.
+  - `a_moving_stop_is_written_steadily` gains three cases: `w2m417.tmp` and `w2mA.tmp` masked, `w2m12345.tmp` not.
+  - Departure: `crates/w2m_vm/tests/family_runs.rs`, outside the card's file list.
+  - The class, checked whole:
+    - `steady` is the only Rust code that reads a temporary name.
+    - The runs' printed rows hold three: `files_more`'s `w2m12AB.tmp`, `w2m2345.tmp` and `w2m3.tmp`. Each is a
+      number the guest passes, not one drawn from the clock, so the held rows' sha256 stays fixed.
+    - Sprint 221's check of the rows searched for four digits and missed `w2m3.tmp`, the same width assumption.
+- **An expected value corrected:** the card expected a probe run to reproduce its stored result's sha256. The stored
+  runs were on an Intel Xeon 8573C, and a runner's CPU is assigned per job, AMD or Intel, so a result can differ for
+  that reason alone. The test is the input: the run fetches the case file and its sha256 equals the recorded one.

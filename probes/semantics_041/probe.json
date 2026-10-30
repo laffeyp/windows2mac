@@ -3,5 +3,5 @@
  "libs": "-lkernel32",
  "mode": "file",
  "source": "probes/semantics/semantics.c",
- "generate": "scripts/semantics_differential.py --cases --set 041 --out probes/semantics_041/cases.bin"
+ "cases_asset": "semantics-041/38029980267-cases.bin"
 }

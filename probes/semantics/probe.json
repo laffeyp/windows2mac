@@ -2,5 +2,5 @@
  "cflags": "-O1 -Wall -Werror -D_CRT_SECURE_NO_WARNINGS",
  "libs": "-lkernel32",
  "mode": "file",
- "generate": "scripts/semantics_differential.py --cases"
+ "cases_asset": "semantics-039/38011862284-cases.bin"
 }
