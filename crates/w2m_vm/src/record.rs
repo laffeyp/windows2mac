@@ -111,6 +111,9 @@ pub struct Execution<'a> {
     pub calls: (&'a str, u64),
     pub stop: &'a str,
     pub elapsed: Duration,
+    /// the 1, 5 and 15 minute load averages at the run's end, as `run_frontier.py` 173 writes them (Sprint 240); the
+    /// state at its start is the baseline's `load_at_start`, which `scripts/batch-run-record.sh` writes
+    pub load_at_end: Option<[f64; 3]>,
 }
 
 /// How a run ended, as `run_frontier.py` 400-407 names it.
@@ -246,6 +249,12 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     ];
     for (k, n) in &e.exits {
         rows.push((Metric::VmExits, format!("hvc {k}"), *n as f64, "exits"));
+    }
+    for (span, load) in ["1 min", "5 min", "15 min"]
+        .iter()
+        .zip(e.load_at_end.into_iter().flatten())
+    {
+        rows.push((Metric::LoadAverage, span.to_string(), load, "load"));
     }
     for (metric, variant, value, unit) in rows {
         let slug = variant.to_lowercase().replace(' ', "_");
@@ -466,6 +475,7 @@ mod tests {
                 calls: (IMAGE, 925),
                 stop: "a stop",
                 elapsed: Duration::from_millis(1536),
+                load_at_end: Some([1.5, 2.25, 3.0]),
             }))
         };
         let status = |events: &[(String, Value)]| {
@@ -503,6 +513,11 @@ mod tests {
             [
                 "SESSION_INIT",
                 "EXECUTION_STARTED",
+                // instructions, the rate, the VM's and the host's seconds, the exits, the three load averages
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
+                "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
                 "MEASUREMENT_RECORDED",
@@ -514,11 +529,26 @@ mod tests {
         );
         // the rate over the VM's and the host's seconds: 3,541,969 instructions in 1 s
         assert_eq!(killed[3].1["value"], 3_541_969.0);
-        let exit_row = &killed[5].1;
+        // the host's seconds the rate divides by, and the load at the end (Sprint 240)
+        assert_eq!(
+            killed[5].1["measurement_id"],
+            "frontier-643a6283510c-1-run_seconds-host"
+        );
+        assert_eq!(killed[5].1["value"], 0.75);
+        let exit_row = &killed[6].1;
         assert_eq!(exit_row["measurement_id"], "frontier-643a6283510c-1-vm_exits-hvc_8");
         assert_eq!(exit_row["application_profile_id"], "hail-to-the-rainbow-643a6283510c");
-        assert_eq!(killed[6].1["instructions_executed"], 3_541_969);
-        assert_eq!(killed[6].1["guest_address"], 0x11_8002_72bfu64);
+        assert_eq!(exit_row["artifact_state"], "cold");
+        assert_eq!(
+            (
+                killed[9].1["metric"].as_str(),
+                killed[9].1["variant"].as_str(),
+                killed[9].1["value"].as_f64()
+            ),
+            (Some("load_average"), Some("15 min"), Some(3.0))
+        );
+        assert_eq!(killed[10].1["instructions_executed"], 3_541_969);
+        assert_eq!(killed[10].1["guest_address"], 0x11_8002_72bfu64);
     }
 
     /// `RunEnd::of`: an unserved request inside a Windows call names the call; one outside any call it can name (no

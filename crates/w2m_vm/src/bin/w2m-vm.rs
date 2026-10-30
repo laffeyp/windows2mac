@@ -182,6 +182,12 @@ mod run {
     pub fn main() -> Result<(), String> {
         let started = Instant::now();
         let mut args: Vec<String> = std::env::args().skip(1).collect();
+        // the QoS class this process runs at, for a measurement's baseline (Sprint 240): what the run that follows
+        // from the same shell inherits
+        if args.first().is_some_and(|a| a == "--qos-class") {
+            println!("{}", w2m_vm::host_state::qos_class());
+            return Ok(());
+        }
         // a guest on the instruction clock, `family_run.INSTRUCTION_CLOCK` as `run_guest` passes it (Sprint 199); taken
         // wherever it stands, as the other flags are (Sprint 230: read only as the last argument, it was left in the
         // list behind `--max-steps`, and the run stopped at the usage)
@@ -738,6 +744,7 @@ mod run {
             calls: (&sha256(calls.as_bytes()), calls.lines().count() as u64),
             stop: &stop,
             elapsed: started.elapsed(),
+            load_at_end: w2m_vm::host_state::load_average(),
         });
         let mut stdout = io::stdout().lock();
         for line in record {

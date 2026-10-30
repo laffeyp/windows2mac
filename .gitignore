@@ -41,3 +41,6 @@ probes/semantics_065c/cases.bin
 # the stencil table's inputs (Sprint 079): the 140 MB record and the table pickle, kept local; sha256 in the sprint cards
 store/stencil-inputs/
 /target/
+
+# the batch run's run file with the machine's state in its baseline, written and removed by scripts/batch-run-record.sh
+/harness/.*.toml

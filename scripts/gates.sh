@@ -145,7 +145,7 @@ if [ $rust != none ]; then
   # dates the record, without which check_records reports a violation and exits 0
   rm -rf build/batch_run/record-*
   record=build/batch_run/record-$(date +%s)000000000
-  uv run substrate run --file harness/w2m-vm-game.toml --root "$record" --strict > /dev/null
+  scripts/batch-run-record.sh "$record" > /dev/null  # the machine's state in its baseline (Sprint 240)
   target/release/check_records --since 2026-10-17 --show 3 "$record" > /dev/null || { echo "gates: the batch run's record breaks a rule"; target/release/check_records --since 2026-10-17 --show 3 "$record"; exit 1; }
   uv run substrate replay "$record" --level 2 > /dev/null
   for p in tests/data/timed_waits/*.exe; do

@@ -24,6 +24,8 @@ pub mod guest;
 pub mod guest_stubs;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod host_request;
+#[cfg(target_os = "macos")]
+pub mod host_state;
 pub mod kernel;
 pub mod ledger;
 pub mod machine;

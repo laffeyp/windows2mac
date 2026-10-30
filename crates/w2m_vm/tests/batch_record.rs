@@ -88,6 +88,12 @@ fn rate_problems(measurements: &[Value]) -> Vec<String> {
         )),
         _ => found.push("no instructions_per_second or instructions_retired for the process".into()),
     }
+    // the load at the end, as run_frontier.py 173 writes it
+    for span in ["1 min", "5 min", "15 min"] {
+        if value("load_average", span).is_none() {
+            found.push(format!("no load_average {span} at the run's end"));
+        }
+    }
     for m in measurements {
         if m["artifact_state"] != "cold" {
             found.push(format!(
@@ -410,7 +416,49 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     let held = fs::read_to_string(root.join(HELD)).unwrap();
     let mut found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
     found.extend(rate_problems(&measurements(&ours)));
+    found.extend(condition_problems(&record));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
+}
+
+/// The machine's state at the run's start, in the baseline `scripts/batch-run-record.sh` writes (Sprint 240; reviewer-3's
+/// Medium 1 of its review at 240): `load_at_start`, run_frontier.py's three parts as one string ("load averages 5.10
+/// 3.65 3.39; busy: …; other w2m: …"), the QoS class and the cores.
+fn condition_problems(record: &Path) -> Vec<String> {
+    let first = fs::read_dir(record)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().unwrap().to_string_lossy().starts_with("events-"))
+        .min()
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|t| t.lines().next().map(str::to_string))
+        .unwrap_or_default();
+    let first: Value = serde_json::from_str(&first).unwrap_or(Value::Null);
+    let b = &first["payload"]["baseline"];
+    let mut found = Vec::new();
+    let load = b["load_at_start"].as_str().unwrap_or("");
+    let parts: Vec<&str> = load.split("; ").collect();
+    let averages = parts.first().and_then(|p| p.strip_prefix("load averages ")).map(|p| {
+        p.split(' ')
+            .filter(|n| n.parse::<f64>().is_ok_and(|v| v >= 0.0))
+            .count()
+    });
+    if parts.len() != 3
+        || averages != Some(3)
+        || !parts[1].starts_with("busy: ")
+        || !parts[2].starts_with("other w2m: ")
+    {
+        found.push(format!(
+            "load_at_start is {:?}, not \"load averages <1> <5> <15>; busy: …; other w2m: …\"",
+            b["load_at_start"]
+        ));
+    }
+    for k in ["qos", "cores"] {
+        if !b[k].as_str().is_some_and(|s| !s.is_empty()) {
+            found.push(format!("the baseline's {k} is {}", b[k]));
+        }
+    }
+    found
 }
 
 fn measurements(events: &[(String, Value)]) -> Vec<Value> {
@@ -434,6 +482,7 @@ fn every_stored_rust_batch_record_holds_its_rate() {
         }
         let ours = w2m_events(&dir);
         let mut found = rate_problems(&measurements(&ours));
+        found.extend(condition_problems(&dir));
         for (k, p) in &ours {
             if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {
                 found.push(format!("COMPARISON_COMPLETED verdict {}", p["verdict"]));
@@ -457,6 +506,9 @@ fn a_rate_off_by_a_part_in_a_thousand_is_named() {
         m("instructions_per_second", "process", 1.0e9),
         m("run_seconds", "vm", 2.5),
         m("run_seconds", "host", 0.5),
+        m("load_average", "1 min", 1.5),
+        m("load_average", "5 min", 2.0),
+        m("load_average", "15 min", 2.5),
     ];
     assert_eq!(rate_problems(&good), Vec::<String>::new());
     let mut off = good.clone();

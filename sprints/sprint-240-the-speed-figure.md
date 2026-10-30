@@ -44,9 +44,18 @@ measured in the configuration the stored record ran, read beside the stored figu
   - `batch_record.rs`: `artifact_state` leaves `CONVENTIONS`; the record's is "cold", held as the Rust host's own. The
     rate check carried from `measurement_problems`, over the gates' record and every committed record whose baseline
     names the host `w2m-vm`.
-  - The batch run measured three times in a row, nothing else running, each by `harness/w2m-vm-game.toml` into
-    `store/runs/`, the load average read before each.
-  - Census row 10 from the three records, beside 2,354,295,320 and its configuration.
+  - The machine's state on the record (reviewer-3's Medium 1 of its review at 240, after this card was committed: the
+    reference's baseline holds `load_at_start`, load 2.58 with five other w2m VMs, none busy, and three
+    `load_average` measurements; the Rust record held none; the Drift watchlist's "Absolute timings drift between
+    runs" asks for the QoS class and the cores beside a cross-run comparison). `scripts/batch-run-record.sh` writes
+    `load_at_start` (the frozen `host_load`'s three parts, as one string: a run file's baseline holds text), `qos`
+    (`w2m-vm --qos-class`) and `cores` (no process on Apple silicon can pin one: `THREAD_AFFINITY_POLICY` returns
+    `KERN_NOT_SUPPORTED`) into a transient run file's baseline; the gates use it. `w2m-vm` writes the three
+    `load_average` rows at the run's end (`w2m_vm::host_state`), and `batch_record.rs` holds both.
+  - The batch run measured three times in a row by the script into `store/runs/`.
+  - Census row 10 from the three records, each with its conditions, beside 2,354,295,320 and the reference's, the
+    claim worded to the conditions; WORKING_AGREEMENT says the Rust records before 240 say "warm" falsely (Low 1);
+    the watchlist entry annotated.
 - **Not here:** the ledgers' join, card 241 (the Decision "Sequence after Sprint 214" grouped it with this card;
   it is its own concept). The plan is the user's and is not edited.
 

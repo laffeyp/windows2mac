@@ -3,8 +3,10 @@
 # record, run_frontier.py's session, on a substrate record (its root named by a nanosecond suffix, which dates it for
 # check_records); the stop, the call stream and the exit ledger under build/.
 # crates/w2m_vm/tests/batch_record.rs holds the record to the frozen host's of 2026-10-21 and to the stop file. Run by
-# scripts/gates.sh from the repository root after `cargo build --release`, on this Mac (Hypervisor.framework):
-#   uv run substrate run --file harness/w2m-vm-game.toml --root build/batch_run/record-<ns> --strict
+# scripts/gates.sh from the repository root after `cargo build --release`, on this Mac (Hypervisor.framework), through
+# scripts/batch-run-record.sh, which adds the machine's state at the start to the baseline (Sprint 240):
+#   scripts/batch-run-record.sh build/batch_run/record-<ns>
+# A record run from this file directly lacks those fields, and crates/w2m_vm/tests/batch_record.rs names it.
 
 [baseline]
 harness = "w2m"

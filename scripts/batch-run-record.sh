@@ -1,0 +1,47 @@
+#!/bin/sh
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
+# The batch run's record with the machine's state at its start in its baseline (Sprint 240; reviewer-3's Medium 1 of
+# its review at 240: a speed figure read beside another run's needs both runs' conditions on their records). As
+# run_frontier.py's `host_load` (118-148 at the tag frozen-python-2026-10-29) put them in its baseline: `load_at_start`,
+# the load averages to two places, the processes outside this run's tree above 50% of a CPU ("busy") and the w2m
+# processes outside it ("other w2m"), as one string, since a run file's baseline holds text (an inline table became
+# Python's repr of a dict on the record); and, for the Drift watchlist's "Absolute timings drift between runs", the QoS
+# class the run inherits (`w2m-vm --qos-class`) and the cores, which no process on Apple silicon can pin
+# (`thread_policy_set` with THREAD_AFFINITY_POLICY returns KERN_NOT_SUPPORTED). Substrate reads a run file's baseline
+# and runs its Producers from the file's directory, so the file with these fields is written beside
+# harness/w2m-vm-game.toml, as harness/.w2m-vm-game-<pid>.toml (ignored by git), and removed after the run.
+#   scripts/batch-run-record.sh <root>
+set -eu
+root=$1
+# this script and its ancestors, which the run's tree is; the run's own processes start after the reading
+mine=" $$ "
+p=$$
+while [ "$p" -gt 1 ]; do
+  p=$(ps -o ppid= -p "$p" | tr -d ' ')
+  mine="$mine$p "
+done
+rows=$(ps -axo pid=,%cpu=,command= | awk -v mine="$mine" 'index(mine, " " $1 " ") == 0')
+# a w2m process by its executable, as `is_w2m` takes it (not by text a shell's command holds)
+other=$(printf '%s\n' "$rows" | awk '{
+    n = split($3, path, "/"); exe = path[n]
+    if (exe ~ /^(vm_monitor|w2m-vm|class_judge|case_runs|call_compare|run_measurements)$/) {
+      line = exe; for (i = 4; i <= 5 && i <= NF; i++) { m = split($i, w, "/"); line = line " " w[m] }
+      gsub(/["\\]/, "", line); print line
+    }
+  }' | sort | paste -sd, - | sed 's/,/, /g')
+busy=$(printf '%s\n' "$rows" | awk '$2 > 50 { n = split($3, path, "/"); name = path[n]; gsub(/["\\]/, "", name)
+    printf "%d\t%s %d%%\n", $2 + 0.5, name, $2 + 0.5 }' | sort -rn | cut -f2 | paste -sd, - | sed 's/,/, /g')
+busy=${busy:-none}
+other=${other:-none}
+load=$(sysctl -n vm.loadavg | tr -d '{}' | awk '{ printf "%.2f %.2f %.2f", $1, $2, $3 }')
+qos=$(target/release/w2m-vm --qos-class)
+file=harness/.w2m-vm-game-$$.toml
+trap 'rm -f "$file"' EXIT
+awk -v load="$load" -v busy="$busy" -v other="$other" -v qos="$qos" '{ print }
+  /^\[baseline\]$/ {
+    printf "load_at_start = \"load averages %s; busy: %s; other w2m: %s\"\n", load, busy, other
+    printf "qos = \"%s, inherited from the shell, not set by w2m\"\n", qos
+    print "cores = \"not pinned: Apple silicon refuses THREAD_AFFINITY_POLICY (KERN_NOT_SUPPORTED)\""
+  }' harness/w2m-vm-game.toml > "$file"
+uv run substrate run --file "$file" --root "$root" --strict
