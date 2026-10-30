@@ -705,17 +705,26 @@ mod tests {
     fn a_drive_left_behind_is_passed_over() {
         let r = root("left");
         let name = |k: u64| std::env::temp_dir().join(format!("w2m-drive-c-{}-{k}", std::process::id()));
-        let left: Vec<PathBuf> = (0..1024)
-            .map(name)
-            .filter_map(|d| std::fs::create_dir(&d).ok().map(|()| d.canonicalize().unwrap()))
-            .collect();
-        let b = FileBridge::new(&r, true, None).unwrap();
-        assert!(!left.contains(&b.drive), "{}", b.drive.display());
-        drop(b);
-        for d in &left {
-            let _ = std::fs::remove_dir(d);
+        // the names it leaves are removed when the test ends, a panic included (Sprint 252: a plant's panic at 247
+        // left 1,024 of them in the temporary directory)
+        struct Left(Vec<PathBuf>, PathBuf);
+        impl Drop for Left {
+            fn drop(&mut self) {
+                for d in &self.0 {
+                    let _ = std::fs::remove_dir(d);
+                }
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
         }
-        let _ = std::fs::remove_dir_all(&r);
+        let left = Left(
+            (0..1024)
+                .map(name)
+                .filter_map(|d| std::fs::create_dir(&d).ok().map(|()| d.canonicalize().unwrap()))
+                .collect(),
+            r.clone(),
+        );
+        let b = FileBridge::new(&r, true, None).unwrap();
+        assert!(!left.0.contains(&b.drive), "{}", b.drive.display());
     }
 
     /// file_bridge.py 225-239, 268-278, 320-323: a name found case-folded under C:\w2m\app, its size and FILETIMEs
