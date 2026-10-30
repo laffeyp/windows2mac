@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 254
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -102,3 +102,29 @@ sizes within its regions on the record, and the regions held by the layout test.
 - [x] One concept: the cache file.
 
 ## result
+
+- **The pieces:** the regions' constants and `tests/cache_layout.rs` (e12ce43a7); the fixture walk on every target
+  (201e2f726); the liveness scan moved to `translator::liveness`, one function for the host and the cache (ec6d594ae);
+  `MAX_BLOCK_INSNS` moved to the translator; `cache_file.rs` and `w2m-vm --make-cache` (6bd1bc47f); the fixture test of
+  the file (727b51262).
+- **The file:** UnityPlayer.dll at 0x180000000, key `10625aa1…`, made in 16.7 s: 998,222 blocks of the walk's
+  1,004,561, the other 6,339 starts' first instruction not lifting; code 112,565,508 bytes of the code region's
+  125,829,120 (89.5%), data 37,611,068 of 67,108,864; 0 blocks whose live flags miss a successor's read; 211,190,784
+  bytes under `build/translation-cache/`, not committed; figures in `store/translation-cache/cache-unityplayer-2026-10-30.json`.
+- **The 755:** 351 lie inside a cached block, 101 after a block at the 64-instruction cap and 250 at no cached block's
+  end; 404 inside none. The cache adds no starts beyond the walk's.
+- **Departures:** the key hashes the addresses the words embed (the dispatcher, the slice stub, the state block, the
+  runtime's calls) with the image, its base and the translator's tree, not the monitor code's words whole, which are
+  more than the words depend on. The regions' bound within the 40-bit IPA moves to card 4, where the guest's memory is
+  laid out. The liveness check reads each successor's first instruction, independent of the scan that set the flags.
+- **Two faults on the way:** the first fixture run of the file's test found the refusals map inside `CacheFile` and not
+  in the file, so a cache with refusals read back unequal; `make` returns them beside the file. And the maker's first
+  commit message named a "9 commits' tree" that was not so; amended before any push.
+- **The gates:** `scripts/gates.sh` exit 0 in 759 s on 727b51262, copied from `store/gates/passes.tsv`; the timing stage 655 ns an exit at load 3.29.
+- **Plants,** run on 727b51262, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `every_fixture_cache_covers_its_reads_indexes_its_pages_and_reads_back` failed, "live flags miss a
+  successor's read at [1cff, 398d, …]": a block's stored live flags without ZF.
+- **Plant 2,** `every_exit_is_within_a_branchs_reach_of_the_cache_code` failed, "the dispatcher at 0x7f0000001800": the
+  code region moved 8 MiB lower and larger.
+- **Plant 3,** the fixture test failed, "block 0x2fc8 not in page 0x3000's list": the page index keyed by a block's
+  first page alone.

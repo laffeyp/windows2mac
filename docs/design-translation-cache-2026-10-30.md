@@ -71,8 +71,10 @@ cache is loaded, so the gates' frozen-word tests hold the default words.
 which pages were compiled before (`block_compiler.c` 131-140). The walk knows every successor in the image, so the
 cache's liveness is the walk's, the same on every run; a successor outside the image or unknown is taken as reading
 every flag, as the run-time scan takes an unscanned page. The key is the sha256 of the image file, its base, the
-translator's source tree id, the monitor code's words and the runtime image's sha256; the cache file lives under
-`build/translation-cache/<key>`, made by a Rust tool on first need, as Rosetta 2 translates at install.
+translator's source tree id, and the addresses the words embed: the dispatcher, the slice stub, the state block and
+the runtime's functions (amended 2026-10-30, Sprint 254: the draft named the monitor code's words and the runtime image whole,
+more than a word depends on); the cache file lives under `build/translation-cache/<key>.w2mcache`, made by
+`w2m-vm --make-cache` with a game's setup, as Rosetta 2 translates at install.
 
 **E. A write to the image.** The run-time path sees a write because the in-VM compiler makes read-only each page it
 compiles from (17,086 pages a run), and the fault reaches the host as `hvc 13` (`monitor_code.rs` 404, `compile.rs`
