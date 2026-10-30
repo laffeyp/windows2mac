@@ -81,3 +81,32 @@ run, and a missing set fails CI.
 - [x] One concept: the case sets' source.
 
 ## result
+
+- **Sprint 224's CI run failed** (41012631099, on 0a1c4003d). `cpu_cases`' `case_files_round_trip_and_match_their_runs`
+  asserts 21 case files (round_trip.rs 54) and found 13. Sprint 224 had read that test as reading only the files
+  present, and missed the count. This sprint is the fix.
+- **The class of the error, checked whole:** every Rust file that names `probes/`, `cases.bin`, `third_party` or
+  XED was listed and read for what CI no longer builds.
+  - Only two tests read the 8 sets: `round_trip.rs`, which requires 21, and `class_judge.rs`, which skips without
+    them.
+  - Four other files matched on the word "fixed" or read tracked probe sources (`virtual_memory.rs`).
+  - XED's build, the other thing CI made with Python, is read by no Rust test.
+- **The assets:** each of the 8 `cases.bin` matched its run's recorded hash. Each was uploaded as `<run>-cases.bin`
+  to its release:
+  - `semantics-039`, 23,824,812 bytes;
+  - `semantics-041`, 7,945,812;
+  - `semantics-049`, 20,829,916;
+  - `semantics-049b`, 40,206,332;
+  - `semantics-050`, 7,699,812;
+  - `semantics-065`, 38,056,596;
+  - `semantics-065b`, 15,369,780;
+  - `semantics-065c`, 5,257,596.
+- **CI:** a step before the Rust job downloads each with `gh release download`. It checks each with `sha256sum -c`
+  against `store/probe-runs/<run>/cases.sha256`, and requires 21 case files. Run in a scratch tree laid out as the
+  repository, it left 21.
+- **Departure:** the card set `W2M_REQUIRE_CASE_RUNS=1` in CI. That flag also requires the Mac's run outputs
+  (`family_runs.rs`' stops, `run_loop.rs`' inputs), which CI cannot make. The step's own count of 21 holds the case
+  sets instead, and `class_judge.rs` and `round_trip.rs` then judge all of them.
+- **Plant 1** (set 041's recorded hash zeroed, in the scratch tree): "probes/semantics_041/cases.bin: FAILED".
+- **Plant 2** (set 065c's download dropped): the step exited 1 with 20 files.
+- **Plant 3** (a 1,000-byte truncation of set 041 checked against its hash): "t.bin: FAILED".

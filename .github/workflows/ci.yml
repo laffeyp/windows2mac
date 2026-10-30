@@ -42,6 +42,24 @@ jobs:
           git -C substrate log --oneline -1
       - name: sync
         run: uv sync --all-extras
+      - name: case files (the 8 sets once built here with Python, from their releases, Sprint 225)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while read -r dir run tag; do
+            gh release download "$tag" --pattern "$run-cases.bin" --output "probes/$dir/cases.bin" --clobber
+            echo "$(cut -c1-64 "store/probe-runs/$run/cases.sha256")  probes/$dir/cases.bin" | sha256sum -c -
+          done <<'EOF'
+          semantics 38011862284 semantics-039
+          semantics_041 38029980267 semantics-041
+          semantics_049 38117654018 semantics-049
+          semantics_049b 38118493713 semantics-049b
+          semantics_050 38122967607 semantics-050
+          semantics_065 38222873837 semantics-065
+          semantics_065b 38234338405 semantics-065b
+          semantics_065c 38238041162 semantics-065c
+          EOF
+          test "$(ls probes/semantics*/cases.bin | wc -l)" -eq 21
       - name: rust (rust-toolchain.toml pins 1.99.1; rustup on the runner installs it)
         run: |
           rustup show active-toolchain
