@@ -48,14 +48,14 @@ mod run {
     use std::path::{Path, PathBuf};
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-    use cpu_cases::{case_hashes, read_cases, read_results, sha256};
+    use cpu_cases::{case_hashes, read_cases, read_results};
     use events::{
         CandidateAccepted, CandidateGenerated, CandidateRejected, ComparisonCompleted, ContractId, DiscrepancyReported,
         DiscrepancyResolution, DiscrepancyResolved, DiscrepancyRouted, Event, FiniteF64, HarnessU64, Id,
         ReductionCompleted, Relation, RepairPath, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose,
         Sha256, VOCAB_VERSION, Verdict, Version, harness_line,
     };
-    use w2m_vm::case_inputs::{Fixture, Hybrid, case_runtime_calls, runs, with_case_vm};
+    use w2m_vm::case_inputs::{Fixture, Hybrid, case_runtime_calls, runs, translator_sha, with_case_vm};
     use w2m_vm::cases::run_cases;
     use w2m_vm::ledger;
 
@@ -110,25 +110,6 @@ mod run {
     struct Unit {
         judged: usize,
         differences: Vec<(usize, String, (String, String))>,
-    }
-
-    /// The translator's identity: its sources, in name order.
-    fn translator_sha(root: &Path) -> Result<String, String> {
-        let dir = root.join("crates/translator/src");
-        let mut names: Vec<PathBuf> = fs::read_dir(&dir)
-            .map_err(|e| e.to_string())?
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().is_some_and(|x| x == "rs"))
-            .collect();
-        names.sort();
-        let mut all = Vec::new();
-        for p in names {
-            all.extend(p.file_name().unwrap().to_string_lossy().as_bytes());
-            all.push(0);
-            all.extend(fs::read(&p).map_err(|e| e.to_string())?);
-            all.push(0);
-        }
-        Ok(sha256(&all))
     }
 
     pub fn main() -> Result<(), String> {

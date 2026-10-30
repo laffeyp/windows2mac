@@ -843,3 +843,17 @@ after a 486.7 s run, while the frozen host's dispatch and `run_frontier.py` 284-
 dispatch line of the two hosts then found three more unserved requests in seconds (HOST_CLOCK, HOST_UNIMPLEMENTED,
 THREAD_WAKE). The user's rule of 2026-10-29: "no searching for already knowable answers that you can look up at
 once". A lookup that can be a test becomes one (`host_requests.rs`); a run is kept for what only a run can show.
+
+### 2026-10-29 — Sprints 221-222: a held run with no fingerprint, a refusal counted as a difference
+
+**Finding (#88):** a held result needs its output held too, or it can change unseen while it waits. Sprint 221 held
+80 ended family runs by the name of the row rule each waits on; reviewer-3 found nothing of what they printed was
+kept. Each held row now carries the sha256 of its printed rows, and a one-byte plant was named.
+
+**Finding (#89):** #85 again, in a list: one container for two kinds hides the classification. Sprint 222's class
+judge pushed the cases it never ran into the list of measured differences, and a non-empty list meant
+"discrepancy", so 19 classes nothing was compared on were reported as divergences and would have opened 19 ledger
+entries (reviewer-3's High 1 of its review at 222). The vocabulary already held `inconclusive`. Two fields, and a
+verdict that reads both, make the kind explicit at every reader. Reading the reader (`ledger.rs`) for the fix found
+a second fault the same way: the unit it takes is the text before the first colon, and the judge's began with the
+executor's name.

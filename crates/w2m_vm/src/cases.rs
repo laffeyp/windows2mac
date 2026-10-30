@@ -121,6 +121,10 @@ pub struct Tally {
     pub modelled_by_class: BTreeMap<String, usize>,
     /// by iclass: the cases whose memory Windows left undefined, not run (Sprint 176)
     pub undefined_by_class: BTreeMap<String, usize>,
+    /// by iclass: the cases read and not judged, the compiler's refusals and the model steps the slice refuses, and the
+    /// first such case's index (Sprint 222: the class judge counts them against the class, as `scripts/class_run.py`
+    /// 164-170 counts "not compiled")
+    pub unjudged_by_class: BTreeMap<String, (usize, usize)>,
 }
 
 impl Tally {
@@ -130,6 +134,14 @@ impl Tally {
         *self.by_class.entry(iclass.to_string()).or_default() += 1;
         self.ymm_judged += usize::from(r.ymm_hi.is_some());
         self.x87_judged += usize::from(r.x87.is_some());
+    }
+
+    fn unjudged(&mut self, iclass: &str) {
+        let e = self
+            .unjudged_by_class
+            .entry(iclass.to_string())
+            .or_insert((0, self.case));
+        e.0 += 1;
     }
 
     fn note(&mut self, iclass: &str, key: &str, example: String) {
@@ -447,6 +459,7 @@ pub fn run_cases(
                 Ok(b) => b,
                 Err(why) => {
                     *tally.refused.entry(why).or_default() += 1;
+                    tally.unjudged(&d.iclass);
                     continue;
                 }
             }
@@ -628,6 +641,7 @@ pub fn run_cases(
                 }
                 tally.model += 1;
                 *tally.model_by_class.entry(iclass.to_string()).or_default() += 1;
+                tally.unjudged(iclass);
                 continue;
             }
             other => {

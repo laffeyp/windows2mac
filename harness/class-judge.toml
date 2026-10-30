@@ -1,0 +1,25 @@
+# The class judge on the Rust host (Sprint 222; census row 3): each class of store/runs/class-runs.json judged by the VM
+# on the cases of the reference runs its frozen record names. Run from the repository root on this Mac
+# (Hypervisor.framework, build/probe-runs, the fixture):
+#   uv run substrate run --file harness/class-judge.toml --root store/runs/class-judge-<ns> --strict
+# then `class_judge --index store/runs/class-judge-<ns>` writes the Rust index, store/case_runner/class-runs-<date>.json.
+# The producer is built by cargo from the current sources, signed by the runner (.cargo/config.toml), and refuses to run
+# when the work tree's crates/ is not the one it was built from (`w2m_vm::built_from`).
+
+[baseline]
+harness = "w2m"
+vocabulary = "0.12"
+judge = "class-judge"
+implementation = "the Rust translator, the frozen Python lowering's words where it does not lift, run by the Rust case runner"
+reference = "the 21 Intel runs the frozen class records name (store/runs/class-runs.json)"
+
+[[producer]]
+kind = "class_judge"
+command = ["cargo", "run", "--release", "--quiet", "--bin", "class_judge"]
+schemas = "schemas/harness-events.json"
+
+[[initial]]
+kind = "class_judge"
+
+[termination]
+recipe = "all_completed"

@@ -36,6 +36,25 @@ impl Run {
     }
 }
 
+/// The Rust translator's identity, a candidate's sha256 where it compiled the class: its sources, in name order.
+pub fn translator_sha(root: &Path) -> Result<String, String> {
+    let dir = root.join("crates/translator/src");
+    let mut names: Vec<PathBuf> = fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+        .collect();
+    names.sort();
+    let mut all = Vec::new();
+    for p in names {
+        all.extend(p.file_name().unwrap().to_string_lossy().as_bytes());
+        all.push(0);
+        all.extend(fs::read(&p).map_err(|e| e.to_string())?);
+        all.push(0);
+    }
+    Ok(sha256(&all))
+}
+
 /// The case files by their SHA-256, and each downloaded Intel result whose hash and set are recorded
 /// (`build/probe-runs/<run>/result-1.bin` against `store/probe-runs/<run>/results.sha256` and `cases.sha256`).
 pub fn runs(root: &Path) -> Vec<Run> {

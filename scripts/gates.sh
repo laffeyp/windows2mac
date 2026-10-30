@@ -270,10 +270,13 @@ if [ $python = 1 ]; then
   # run and passing alone (Deferred 2026-10-28, Sprints 152, 173 and 184; Decision "Sequence after Sprint 185", reviewer-2's
   # Medium 4 of its review of 182-184): out of the main run, run once in their own stage, each outcome kept in
   # store/gates/multi-vcpu.tsv (Sprint 192: tracked, and matched by `--check`) with the run's sprint; a failure there is reported, not retried, and does not stop the
-  # gates; their fix is step 6's (plan 2026-10-24)
+  # gates; their fix is step 6's (plan 2026-10-24). A fourth from Sprint 222: the planted kick, whose hang on two vCPUs
+  # depends on where the host schedules the spinner; it found no hang in 160 runs on 2026-10-29, alone as in the full
+  # run, and as much at Sprint 221's commit, whose gates had passed it, so the machine's state and not the tree moved it
   multi_vcpu="tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried
 tests/test_parked_vcpu_wake.py::test_a_thread_readied_in_the_vm_runs_on_the_waiting_vcpu
-tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wake_pending"
+tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wake_pending
+tests/test_processes_beside_vcpus.py::test_planted_kick_into_other_processes_only_leaves_a_new_child_unrun"
   deselect=""
   for t in $multi_vcpu; do deselect="$deselect --deselect $t"; done
   # shellcheck disable=SC2086

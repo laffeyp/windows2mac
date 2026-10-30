@@ -493,6 +493,29 @@ fn the_multi_vcpu_sentence_is_held_to_the_stages_that_ran() {
         .0,
         Some(0)
     );
+    // Sprint 222: the stage's size is the entry's stated N, held to its rows, not a constant 3: four rows stated as
+    // "of 4" pass, and stated as "of 3" are named
+    assert_eq!(
+        staged(
+            "four",
+            "multi-vCPU: 4 of 4 passed",
+            "rust=all python=1 samples=0",
+            &rows(4)
+        )
+        .0,
+        Some(0)
+    );
+    let (code, stderr) = staged(
+        "fourasthree",
+        "multi-vCPU: 3 of 3 passed",
+        "rust=all python=1 samples=0",
+        &rows(4),
+    );
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        "sprint 199: its gates run ran the multi-vCPU stage, and store/gates/multi-vcpu.tsv holds 4 rows in it, not 3"
+    );
 }
 
 /// Sprint 198's plant 3 (reviewer-2's Low 2 of its review of 193-196): a change to `scripts/gates.sh` or

@@ -1131,22 +1131,25 @@ fn multi_vcpu_staged(root: &Path, n: u32, body: &str, pass: &str) -> Option<Stri
             )
         });
     }
+    // "k of N passed": N is the stage's size in that run, 3 until Sprint 222 added a fourth test to it, so the entry
+    // states it and the stage's rows hold it, not a constant
     let stated = body
         .split("multi-vCPU: ")
         .nth(1)
-        .and_then(|rest| rest.split_once(" of 3 passed"))
-        .and_then(|(k, _)| k.parse::<usize>().ok());
+        .and_then(|rest| rest.split_once(" passed"))
+        .and_then(|(claim, _)| claim.split_once(" of "))
+        .and_then(|(k, size)| Some((k.parse::<usize>().ok()?, size.parse::<usize>().ok()?)));
     match stated {
         None => Some(format!(
             "sprint {n:03}: its gates run ran the multi-vCPU stage, and its tail entry states no \
-             \"multi-vCPU: k of 3 passed\""
+             \"multi-vCPU: k of N passed\""
         )),
-        Some(_) if rows.len() != 3 => Some(format!(
-            "sprint {n:03}: its gates run ran the multi-vCPU stage, and {MULTI_VCPU} holds {} rows in it, not 3",
+        Some((_, size)) if rows.len() != size => Some(format!(
+            "sprint {n:03}: its gates run ran the multi-vCPU stage, and {MULTI_VCPU} holds {} rows in it, not {size}",
             rows.len()
         )),
-        Some(k) if k != passed => Some(format!(
-            "sprint {n:03}: its tail entry states multi-vCPU {k} of 3 passed, and {MULTI_VCPU} holds {passed} \
+        Some((k, size)) if k != passed => Some(format!(
+            "sprint {n:03}: its tail entry states multi-vCPU {k} of {size} passed, and {MULTI_VCPU} holds {passed} \
              passed in its gates run"
         )),
         Some(_) => None,
