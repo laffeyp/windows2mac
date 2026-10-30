@@ -881,7 +881,7 @@
 
 ## Sprint tail
 
-### Sprint 226 (2026-10-29, gates running)
+### Sprint 226 (2026-10-29, closed)
 - **Scope:** the Decision "No Python runs" as annotated in Sprint 224 (the user: "the 22% of python into 0"): every `.py` outside the read-only kit out of the tree, the frozen Python kept readable at a tag, its two Rust text readers moved to stored extracts
 - **Dual contract:** signal — none, a change to the tree; artifact pass (`scripts/gates.sh` exit 0 in 673 s on the second run (Observation 2), kept in `store/gates/passes.tsv` as sprint 226 at 6a036a236 with root=dde6bad19 and "rust=all python=0 samples=0"; multi-vCPU: not run (Python gates not run)); observation pass (`.py` files tracked from 467 to 13, all in `sdd-kit-3/`; `uv sync` and `uv run substrate` working; the family table and the 56 requests unchanged on the extracts; plant 1, "store/binaries/0c5dc179…exe: No such file or directory"; plant 2, "Python tracked outside sdd-kit-3/: [\"tools/plant.py\""; plant 3, "Failed to spawn: `substrate`")
 - **CI does not run:** `family_known` (Apple silicon); CI runs `no_python.rs`, `host_requests.rs` on its extract, and its next run shows GitHub's language bar without Python.
