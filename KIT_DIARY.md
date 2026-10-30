@@ -857,3 +857,16 @@ entries (reviewer-3's High 1 of its review at 222). The vocabulary already held 
 verdict that reads both, make the kind explicit at every reader. Reading the reader (`ledger.rs`) for the fix found
 a second fault the same way: the unit it takes is the text before the first colon, and the judge's began with the
 executor's name.
+
+### 2026-10-29 — Sprint 223: a reviewer's fix path taken unchecked, an identity simpler than its facts
+
+**Finding (#90):** a fix path a review proposes is a claim like any other, and the card checks it before it is
+written in. Reviewer-3's Medium 1 at 222's close keyed the ledger's defect by its first case's program hash; card
+223's draft took it, and the next review withdrew it: the first case is whichever one a judge reads first, so a new
+reference run would split one defect. One lookup at drafting time, which runs each judge reads, would have shown it.
+
+**Finding (#91):** an identity rule has to carry what makes two reports the same thing, no less. The first ledger by
+defect closed an entry on any one resolution; a judge that runs one profile a session would then close another judge's
+report from other runs. The interface ("a resolution closes the defect") was simpler than the facts it modelled,
+judges and profiles; resolution per report, and an entry closed by its last report, keeps that complexity inside the
+ledger (reviewer-3's Medium 1 of its review at 223).

@@ -122,7 +122,8 @@ fn the_rust_index_is_the_frozen_one_or_held() {
         serde_json::from_str(&fs::read_to_string(root.join("store/case_runner/discrepancy-ledger.json")).unwrap())
             .unwrap();
     for (id, entry) in ledger.as_object().unwrap() {
-        if entry["judge"] != "class-judge" {
+        let reports = entry["reports"].as_array().unwrap();
+        if !reports.iter().any(|r| r["judge"] == "class-judge") {
             continue;
         }
         let unit = entry["unit"].as_str().unwrap();

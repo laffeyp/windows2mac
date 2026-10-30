@@ -85,26 +85,18 @@ samples=0
 if [ $all = 1 ] || touched '^(crates/(events|vocabulary_generator|vocabulary_samples|session_events)/|harness/|signals/|substrate\.commit)'; then
   samples=1
 fi
-# the new records; the frozen Python's tests read only records whose baseline names `differential`
-# (tests/test_differential.py 99-111), which no Rust Producer writes
+# the new records, replayed and checked below
 records=$(printf '%s\n' "$changed" | sed -n 's|^\(store/runs/[^/]*\)/.*|\1|p' | sort -u)
-differential=0
-for r in $records; do
-  [ -d "$r" ] && head -c 4096 "$(ls "$r"/events-*.jsonl | head -1)" | grep -q '"differential"' && differential=1
-done
+# no Python runs in the gates (BLACKBOARD Decision 2026-10-29, "No Python runs"): the frozen Python is a reference read
+# as stored files, never executed; the pass line keeps its python=0 column, which `signal_report --check` reads
 python=0
-# (Sprint 200: store/gates/, store/batch_run/ and store/family_runs/ hold the Rust judges' records, which the frozen
-# Python never reads)
-if [ $all = 1 ] || [ $differential = 1 ] || touched '^(src/|scripts/.*\.py$|tests/|tools/|signals/|specs/|pyproject\.toml$|uv\.lock$|substrate\.commit$|store/)' '^store/(runs|gates|batch_run|family_runs)/'; then
-  python=1
-fi
 case $rust in
   all) said "Rust tests: all ($why)" ;;
   crates) said "Rust tests: $(for c in $crates; do printf 'rdeps(%s) | ' "$c"; done | sed 's/ | $//')" ;;
   none) said "Rust tests: none (no crate changed)" ;;
 esac
 [ $samples = 1 ] && said "substrate samples and their plants" || said "substrate samples: not run (no vocabulary, harness or event crate changed)"
-[ $python = 1 ] && said "Python gates" || said "Python gates: not run (nothing the frozen Python reads changed)"
+said "Python gates: none (a Rust project)"
 said "records: $(printf '%s\n' "$records" | grep -c .) new"
 [ $plan = 1 ] && exit 0
 
@@ -254,49 +246,11 @@ if [ $samples = 1 ]; then
   fi
   uv run substrate tail "$planted" --format jsonl --no-follow | grep '"kind":"substrate.ProducerFailed"' | grep -q 'at `$.guest_trace`' || { echo "gates: the planted failure does not name guest_trace"; exit 1; }
 fi
-if [ $python = 1 ]; then
-  python3 scripts/check_vocab.py
-  python3 scripts/gen_events.py --check
-  python3 scripts/gen_decoder.py --check
-  uv run python scripts/gen_stencil_table.py --check     # Sprint 080: the C table from store/stencil
-  uv run ruff check src scripts tests
-  uv run mypy
-  # a failing run's output is kept under build/gates-failures/ before the gates exit, so a failure that does not repeat
-  # leaves its evidence (Sprint 176; reviewer-2's Medium 5 of 2026-10-28: Sprint 173's frozen-host failure was re-run
-  # away)
-  mkdir -p build/gates-failures
-  kept=build/gates-failures/pytest-$(date +%Y%m%dT%H%M%S).txt
-  # three frozen-host tests on two vCPUs whose counts or races vary under the suite's load, each failing once in a full
-  # run and passing alone (Deferred 2026-10-28, Sprints 152, 173 and 184; Decision "Sequence after Sprint 185", reviewer-2's
-  # Medium 4 of its review of 182-184): out of the main run, run once in their own stage, each outcome kept in
-  # store/gates/multi-vcpu.tsv (Sprint 192: tracked, and matched by `--check`) with the run's sprint; a failure there is reported, not retried, and does not stop the
-  # gates; their fix is step 6's (plan 2026-10-24). A fourth from Sprint 222: the planted kick, whose hang on two vCPUs
-  # depends on where the host schedules the spinner; it found no hang in 160 runs on 2026-10-29, alone as in the full
-  # run, and as much at Sprint 221's commit, whose gates had passed it, so the machine's state and not the tree moved it
-  multi_vcpu="tests/test_timed_waits.py::test_a_context_read_whose_caller_is_suspended_is_retried
-tests/test_parked_vcpu_wake.py::test_a_thread_readied_in_the_vm_runs_on_the_waiting_vcpu
-tests/test_processes_beside_vcpus.py::test_planted_no_kick_leaves_the_childs_wake_pending
-tests/test_processes_beside_vcpus.py::test_planted_kick_into_other_processes_only_leaves_a_new_child_unrun"
-  deselect=""
-  for t in $multi_vcpu; do deselect="$deselect --deselect $t"; done
-  # shellcheck disable=SC2086
-  uv run pytest -q $deselect > "$kept" 2>&1 || { tail -40 "$kept"; echo "gates: pytest failed; its output is $kept"; exit 1; }
-  tail -3 "$kept"
-  rm "$kept"
-  for t in $multi_vcpu; do
-    if uv run pytest -q "$t" > build/gates-multi-vcpu-last.txt 2>&1; then outcome=passed; else outcome=failed; fi
-    printf '%s\t%s\tsprint %s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$outcome" "$gates_sprint" "$t" >> store/gates/multi-vcpu.tsv
-    echo "gates: multi-vCPU stage: $outcome $t"
-    [ $outcome = passed ] || { tail -5 build/gates-multi-vcpu-last.txt; echo "gates: reported, not retried (store/gates/multi-vcpu.tsv)"; }
-  done
-fi
 if [ $all = 1 ]; then
-  uv run python scripts/check_replay.py
   # the vocabulary's rules over every record; records made from 2026-10-17 on are held to them (Sprint 109), by the
-  # Python and by its Rust port (Sprint 169), whose printed lines must be the Python's
-  py=$(uv run python scripts/check_records.py --since 2026-10-17 --show 0)
-  echo "$py"
-  [ "$(target/release/check_records --since 2026-10-17 --show 0)" = "$py" ] || { echo "gates: the Rust records check differs from the Python's"; exit 1; }
+  # Rust port (Sprint 169), whose printed lines last equalled the Python's in Sprint 222's fourth gates run, 38,650
+  # records; the Python is not run (2026-10-29)
+  target/release/check_records --since 2026-10-17 --show 0
 elif [ -n "$records" ]; then
   for r in $records; do uv run substrate replay "$r" --level 2 > /dev/null; done
   # shellcheck disable=SC2086

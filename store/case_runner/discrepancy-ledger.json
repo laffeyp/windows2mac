@@ -1,200 +1,228 @@
 {
- "case-runner-rust-1793187107144287000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793187102199422000",
+ "FCOS FSW": {
+  "reports": [
+   {
+    "contract_id": "x86.semantics.fcos",
+    "discrepancy_id": "class-judge-1793324073642353000-fcos-d2",
+    "first_divergence": "FCOS: managed_vm: FCOS FSW: 4 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 0x2020, cpu 0x2220 (in 0x2200)",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793324063000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   }
+  ],
   "resolved_in": null,
   "resolving_ref": null,
   "unit": "FCOS"
  },
- "case-runner-rust-1793187107144287000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793187102199422000",
+ "FCOS st0": {
+  "reports": [
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793187107144287000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793187102199422000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793191809115963000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793191799691580000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793193986446468000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793193981524123000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793197274566942000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793197269611612000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793199196678244000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793199191973152000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793201184890072000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793201180225808000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793203182248662000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793203177000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793213026127407000-FCOS",
+    "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793213020000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "x86.semantics.fcos",
+    "discrepancy_id": "class-judge-1793324073642353000-fcos-d1",
+    "first_divergence": "FCOS: managed_vm: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793324063000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   }
+  ],
+  "resolved_in": null,
+  "resolving_ref": null,
+  "unit": "FCOS"
+ },
+ "FSIN FSW": {
+  "reports": [
+   {
+    "contract_id": "x86.semantics.fsin",
+    "discrepancy_id": "class-judge-1793324073642353000-fsin-d2",
+    "first_divergence": "FSIN: managed_vm: FSIN FSW: 4 cases; run 38222873837: case 43839: [67, 45, d9, fe] model 0x2920, cpu 0x2b20 (in 0x2900)",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793324063000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   }
+  ],
   "resolved_in": null,
   "resolving_ref": null,
   "unit": "FSIN"
  },
- "case-runner-rust-1793191809115963000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793191799691580000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793191809115963000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793191799691580000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "case-runner-rust-1793193986446468000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793193981524123000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793193986446468000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793193981524123000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "case-runner-rust-1793197274566942000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793197269611612000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793197274566942000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793197269611612000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "case-runner-rust-1793199196678244000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793199191973152000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793199196678244000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793199191973152000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "case-runner-rust-1793201184890072000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793201180225808000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793201184890072000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793201180225808000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "case-runner-rust-1793203182248662000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793203177000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793203182248662000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793203177000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "case-runner-rust-1793213026127407000-FCOS": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FCOS: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793213020000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "case-runner-rust-1793213026127407000-FSIN": {
-  "contract_id": "w2m.guest_state.fault_context",
-  "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "case-runner-rust",
-  "repair_path": "implementation_repair",
-  "reported_in": "case-runner-rust-1793213020000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "class-judge-1793324073642353000-fcos-d1": {
-  "contract_id": "x86.semantics.fcos",
-  "first_divergence": "FCOS: managed_vm: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
-  "judge": "class-judge",
-  "repair_path": "implementation_repair",
-  "reported_in": "class-judge-1793324063000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "class-judge-1793324073642353000-fcos-d2": {
-  "contract_id": "x86.semantics.fcos",
-  "first_divergence": "FCOS: managed_vm: FCOS FSW: 4 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 0x2020, cpu 0x2220 (in 0x2200)",
-  "judge": "class-judge",
-  "repair_path": "implementation_repair",
-  "reported_in": "class-judge-1793324063000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FCOS"
- },
- "class-judge-1793324073642353000-fsin-d1": {
-  "contract_id": "x86.semantics.fsin",
-  "first_divergence": "FSIN: managed_vm: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
-  "judge": "class-judge",
-  "repair_path": "implementation_repair",
-  "reported_in": "class-judge-1793324063000000000",
-  "resolved_in": null,
-  "resolving_ref": null,
-  "unit": "FSIN"
- },
- "class-judge-1793324073642353000-fsin-d2": {
-  "contract_id": "x86.semantics.fsin",
-  "first_divergence": "FSIN: managed_vm: FSIN FSW: 4 cases; run 38222873837: case 43839: [67, 45, d9, fe] model 0x2920, cpu 0x2b20 (in 0x2900)",
-  "judge": "class-judge",
-  "repair_path": "implementation_repair",
-  "reported_in": "class-judge-1793324063000000000",
+ "FSIN st0": {
+  "reports": [
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793187107144287000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793187102199422000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793191809115963000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793191799691580000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793193986446468000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793193981524123000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793197274566942000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793197269611612000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793199196678244000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793199191973152000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793201184890072000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793201180225808000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793203182248662000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793203177000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "w2m.guest_state.fault_context",
+    "discrepancy_id": "case-runner-rust-1793213026127407000-FSIN",
+    "first_divergence": "FSIN: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "case-runner-rust",
+    "repair_path": "implementation_repair",
+    "reported_in": "case-runner-rust-1793213020000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "x86.semantics.fsin",
+    "discrepancy_id": "class-judge-1793324073642353000-fsin-d1",
+    "first_divergence": "FSIN: managed_vm: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793324063000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   }
+  ],
   "resolved_in": null,
   "resolving_ref": null,
   "unit": "FSIN"

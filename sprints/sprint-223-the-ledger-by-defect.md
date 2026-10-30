@@ -95,3 +95,48 @@ the distinct defects the records give.
 - [x] One concept: the ledger's unit of identity.
 
 ## result
+
+- **The ledger by defect:** `ledger::rebuild` keys an entry by `defect`, the unit and the difference's field. The
+  field is the first colon-ended segment of the first divergence that begins with the unit and a space, so
+  `case_runs`' "FCOS: FCOS st0: …" and `class_judge`'s "FCOS: managed_vm: FCOS st0: …" are both "FCOS st0". Each
+  entry holds its reports (id, judge, contract, record, first divergence, repair path, resolution). A resolution
+  resolves the report it names, and the entry closes when every report in it is resolved. A later report reopens it.
+  `open_on` returns a judge's unresolved report ids on a unit, which its next acceptance resolves.
+  - The first form closed the entry on any one resolution. reviewer-3's Medium 1 of its review at 223 found that one
+    judge's acceptance on its own profile would then close another judge's report from another profile: `case_runs`
+    judges one profile a session, `class_judge` the 21 reference runs. Resolution is per report now, and a judge
+    resolves only what it reported.
+  - The contract is not in the key, and `ledger.rs`' header says why: `case_runs` and `class_judge` report one
+    instruction's result under two contracts (its Low 1).
+- **The count:** 20 reports in 4 defects, all open: FCOS st0 (9 reports), FSIN st0 (9), FCOS FSW (1), FSIN FSW (1).
+  The ledger file had 20 entries.
+- **The gate:** `tests/ledger.rs` reads the judged records' reports without `rebuild` and holds the stored ledger to
+  them: its entries are the distinct defects, and each report is in exactly one entry. `case_runs --check-ledger`
+  still holds the file to `rebuild`. `first_frame` became public, so the test reads only judged records whole (21.7 s
+  from 36.7 s).
+- **Plant 1** (the key the unit alone, `first.split(':')`): the ledger held 2 entries, and the gate failed, "the
+  ledger's entries are not the defects the records report", left `{"FCOS", "FSIN"}`, right `{"FCOS FSW", "FCOS
+  st0", "FSIN FSW", "FSIN st0"}`. Restored byte for byte. Its first `sed` was single-quoted around `':'` and did not
+  compile; nothing ran on it, and it was set again in double quotes.
+- **Plant 2** (a resolution that does not close the entry): `a_discrepancy_is_resolved_by_the_run_that_fixed_it`
+  failed, "left: Null, right: \"case-runner-2\"". Restored byte for byte.
+- **Plant 3** (one of FCOS st0's reports dropped from the stored file): `case_runs --check-ledger` exited 1, "is not
+  the ledger the records give", and the gate failed, "a report is in no entry", 19 against 20. Restored byte for
+  byte.
+- `class_judge.rs`' ledger check reads the class judge's reports inside each entry. WORKING_AGREEMENT's ledger row
+  states the new identity.
+- **A limit recorded, then resolved here:** under the first form, a defect resolved and reported again handed
+  `open_on` its earlier, resolved ids too. With resolution per report, `open_on` returns only reports no record has
+  resolved, and the Deferred entry (Sprint 223) is annotated resolved.
+- **Plant 4** (any one resolution closes the entry, `if true`): `a_discrepancy_is_resolved_by_the_run_that_fixed_it`
+  failed, "a defect another judge reported stays open", left `[]`, right `["ADD CF"]`. Restored byte for byte.
+- **Plant 5** (`defect` finds no field, `{unit}_`): the ledger split into 6 entries, and the gate failed, "ledger entry
+  \"FCOS: FCOS st0: 10 cases; … \" is not \"FCOS <field>\"" (reviewer-3's Low 2: the key's form is held in the gate,
+  since the gate's defects come from `defect` itself). Restored byte for byte.
+- **Departures:** `crates/w2m_vm/tests/ledger.rs` (new) and `crates/w2m_vm/tests/class_judge.rs`, outside the card's
+  file list: the gate and the one other reader of the ledger's shape.
+- **Departure, `scripts/gates.sh`:** the second gates run spent its Python stage on the frozen Python's checks, because
+  the ledger under `store/case_runner/` matched the Python trigger; no Python had changed. On the user's Decision of
+  2026-10-29, "No Python runs", the run was stopped with no pass line, and the gates lost every Python stage: the
+  trigger, ruff, mypy, the 2,547 pytest tests, the multi-vCPU stage's four frozen-host tests, `check_replay.py` and
+  the Python records check. The Rust records check stands alone.

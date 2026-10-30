@@ -4,8 +4,19 @@
 //! `open_on` (105-139) for records whose baseline names a `judge` (the case runner's, Sprint 150). The Python's ledger,
 //! `store/runs/discrepancy-ledger.json`, holds the records whose baseline names a `differential`, and
 //! `tests/test_differential.py` holds it to the Python rebuild; this one is `store/case_runner/discrepancy-ledger.json`.
-//! The ledger is a function of the records: a DISCREPANCY_REPORTED opens an entry, a DISCREPANCY_ROUTED gives its repair
-//! path, a DISCREPANCY_RESOLVED closes it; records are read in run-start order, so a resolution follows its report.
+//! The ledger is a function of the records, read in run-start order so a resolution follows its report. An entry is a
+//! defect, not a report (Sprint 223; reviewer-3's Medium 1 of its review at Sprint 222's close: 20 entries stood for
+//! FCOS and FSIN): its key is the unit and the difference's field ("FCOS st0"), not which judge saw it first or on which
+//! case, which depends on the runs a judge reads and their order (its Medium 2 of the refreshed review). Each
+//! DISCREPANCY_REPORTED adds a report to its defect's entry, opening it, or reopening one a record resolved; a
+//! DISCREPANCY_ROUTED gives its report's repair path; a DISCREPANCY_RESOLVED resolves the report it names, and the entry
+//! closes when every report in it is resolved. A judge resolves only what it reported, on the profile and runs it
+//! judged, so one judge's acceptance on its profile does not close another's report on another (reviewer-3's Medium 1
+//! of its review at Sprint 223).
+//!
+//! The contract is not in the key: `case_runs` reports a class under `w2m.guest_state.fault_context` and `class_judge`
+//! under `x86.semantics.<class>`, two contracts over one instruction's result, and FCOS's last-digit ST0 is one defect
+//! in both. Each report keeps its contract; a judge of another kind of unit names units of its own (reviewer-3's Low 1).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,7 +54,7 @@ pub fn frames(record: &Path) -> Vec<Value> {
 }
 
 /// The record's first frame, if it is seq 0: one line of the first segment.
-fn first_frame(record: &Path) -> Option<Value> {
+pub fn first_frame(record: &Path) -> Option<Value> {
     let mut segments: Vec<PathBuf> = fs::read_dir(record)
         .ok()?
         .flatten()
@@ -61,8 +72,20 @@ fn first_frame(record: &Path) -> Option<Value> {
     (frame.get("seq").and_then(Value::as_i64) == Some(0)).then_some(frame)
 }
 
-/// `rebuild_ledger` (105-134) over the records under `runs` whose baseline names a `judge`: every discrepancy a judge
-/// reported, with the record that resolved it (or null).
+/// A report's defect, from its first divergence: the unit before the first colon, and the field, the first colon-ended
+/// segment after it that begins with the unit and a space ("FCOS: FCOS st0: …" from `case_runs`, "FCOS: managed_vm:
+/// FCOS st0: …" from `class_judge`, both "FCOS st0"); a divergence with no such segment is its own field.
+pub fn defect(first_divergence: &str) -> String {
+    let unit = first_divergence.split(':').next().unwrap_or_default();
+    first_divergence
+        .split(": ")
+        .skip(1)
+        .find(|s| s.starts_with(&format!("{unit} ")))
+        .map_or_else(|| first_divergence.to_string(), str::to_string)
+}
+
+/// `rebuild_ledger` (105-134) over the records under `runs` whose baseline names a `judge`: each defect a judge
+/// reported, keyed by `defect`, with its reports and the record that resolved it (or null).
 pub fn rebuild(runs: &Path) -> Map<String, Value> {
     let mut started: Vec<(f64, PathBuf, String)> = Vec::new();
     for entry in fs::read_dir(runs).into_iter().flatten().flatten() {
@@ -80,6 +103,8 @@ pub fn rebuild(runs: &Path) -> Map<String, Value> {
     }
     started.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     let mut ledger = Map::new();
+    // a discrepancy id -> its defect's key
+    let mut of: std::collections::HashMap<String, String> = Default::default();
     for (_, root, judge) in started {
         let name = root.file_name().unwrap().to_string_lossy().to_string();
         for e in frames(&root) {
@@ -88,29 +113,51 @@ pub fn rebuild(runs: &Path) -> Map<String, Value> {
             match e["kind"].as_str() {
                 Some("DISCREPANCY_REPORTED") => {
                     let first = p["first_divergence"].as_str().unwrap_or_default();
-                    ledger.insert(
-                        id,
+                    let key = defect(first);
+                    let entry = ledger.entry(key.clone()).or_insert_with(|| {
                         json!({
-                            "judge": judge,
                             "unit": first.split(':').next().unwrap_or_default(),
-                            "contract_id": p["contract_id"],
-                            "reported_in": name,
-                            "first_divergence": first,
-                            "repair_path": null,
+                            "reports": [],
                             "resolved_in": null,
                             "resolving_ref": null,
-                        }),
-                    );
+                        })
+                    });
+                    // a defect reported again after a resolution is open again
+                    entry["resolved_in"] = Value::Null;
+                    entry["resolving_ref"] = Value::Null;
+                    entry["reports"].as_array_mut().unwrap().push(json!({
+                        "discrepancy_id": id,
+                        "judge": judge,
+                        "contract_id": p["contract_id"],
+                        "reported_in": name,
+                        "first_divergence": first,
+                        "repair_path": null,
+                        "resolved_in": null,
+                        "resolving_ref": null,
+                    }));
+                    of.insert(id, key);
                 }
                 Some("DISCREPANCY_ROUTED") => {
-                    if let Some(entry) = ledger.get_mut(&id) {
-                        entry["repair_path"] = p["repair_path"].clone();
+                    if let Some(entry) = of.get(&id).and_then(|k| ledger.get_mut(k)) {
+                        for r in entry["reports"].as_array_mut().unwrap() {
+                            if r["discrepancy_id"] == id.as_str() {
+                                r["repair_path"] = p["repair_path"].clone();
+                            }
+                        }
                     }
                 }
                 Some("DISCREPANCY_RESOLVED") => {
-                    if let Some(entry) = ledger.get_mut(&id) {
-                        entry["resolved_in"] = json!(name);
-                        entry["resolving_ref"] = p["resolving_ref"].clone();
+                    if let Some(entry) = of.get(&id).and_then(|k| ledger.get_mut(k)) {
+                        let reports = entry["reports"].as_array_mut().unwrap();
+                        for r in reports.iter_mut().filter(|r| r["discrepancy_id"] == id.as_str()) {
+                            r["resolved_in"] = json!(name);
+                            r["resolving_ref"] = p["resolving_ref"].clone();
+                        }
+                        // the defect closes with its last open report
+                        if reports.iter().all(|r| !r["resolved_in"].is_null()) {
+                            entry["resolved_in"] = json!(name);
+                            entry["resolving_ref"] = p["resolving_ref"].clone();
+                        }
                     }
                 }
                 _ => {}
@@ -120,15 +167,27 @@ pub fn rebuild(runs: &Path) -> Map<String, Value> {
     ledger
 }
 
-/// `open_on` (137-139): the discrepancies `judge` reported on `unit` that no record has resolved, sorted.
+/// `open_on` (137-139): the reports `judge` filed on `unit` that no record has resolved, by discrepancy id, sorted; the
+/// ids that judge's next acceptance of the unit resolves, and no earlier report it already resolved.
 pub fn open_on(ledger: &Map<String, Value>, judge: &str, unit: &str) -> Vec<String> {
     let mut out: Vec<String> = ledger
-        .iter()
-        .filter(|(_, v)| v["judge"] == judge && v["unit"] == unit && v["resolved_in"].is_null())
-        .map(|(k, _)| k.clone())
+        .values()
+        .filter(|v| v["unit"] == unit)
+        .flat_map(|v| v["reports"].as_array().into_iter().flatten())
+        .filter(|r| r["judge"] == judge && r["resolved_in"].is_null())
+        .filter_map(|r| r["discrepancy_id"].as_str().map(str::to_string))
         .collect();
     out.sort();
     out
+}
+
+/// The open defects: the entries no record has resolved.
+pub fn open(ledger: &Map<String, Value>) -> Vec<&String> {
+    ledger
+        .iter()
+        .filter(|(_, v)| v["resolved_in"].is_null())
+        .map(|(k, _)| k)
+        .collect()
 }
 
 /// The ledger as `differential.run` writes its own (281-282): `json.dumps(ledger, indent=1, sort_keys=True)` and a
@@ -260,9 +319,25 @@ mod tests {
             )],
         );
         let ledger = rebuild(&dir);
-        assert_eq!(ledger.keys().collect::<Vec<_>>(), ["d1"]);
+        assert_eq!(ledger.keys().collect::<Vec<_>>(), ["ADD CF"]);
         assert_eq!(open_on(&ledger, "case-runner", "ADD"), ["d1"]);
-        assert_eq!(ledger["d1"]["repair_path"], "implementation_repair");
+        assert_eq!(ledger["ADD CF"]["reports"][0]["repair_path"], "implementation_repair");
+        // the same defect from a second judge, its executor named before the field, joins the entry (Sprint 223)
+        record(
+            &dir,
+            "class-judge-1",
+            1.7,
+            Some("class-judge"),
+            &[event(
+                "DISCREPANCY_REPORTED",
+                json!({"discrepancy_id": "c1", "contract_id": "x86.semantics.add",
+                       "first_divergence": "ADD: managed_vm: ADD CF: 3 cases"}),
+            )],
+        );
+        let ledger = rebuild(&dir);
+        assert_eq!(ledger.keys().collect::<Vec<_>>(), ["ADD CF"]);
+        assert_eq!(ledger["ADD CF"]["reports"].as_array().unwrap().len(), 2);
+        assert_eq!(open(&ledger), ["ADD CF"]);
         record(
             &dir,
             "case-runner-2",
@@ -273,12 +348,40 @@ mod tests {
                 json!({"discrepancy_id": "d1", "resolving_ref": "case-runner:ADD@abc"}),
             )],
         );
+        // one judge's resolution resolves its own report, and the class judge's report keeps the defect open (Sprint
+        // 223, reviewer-3's Medium 1 of its review at it)
         let ledger = rebuild(&dir);
-        assert_eq!(ledger["d1"]["resolved_in"], "case-runner-2");
-        assert_eq!(ledger["d1"]["resolving_ref"], "case-runner:ADD@abc");
+        assert_eq!(ledger["ADD CF"]["reports"][0]["resolved_in"], "case-runner-2");
         assert!(open_on(&ledger, "case-runner", "ADD").is_empty());
-        assert!(text(&ledger).starts_with("{\n \"d1\": {\n  \"contract_id\""));
+        assert_eq!(open_on(&ledger, "class-judge", "ADD"), ["c1"]);
+        assert_eq!(open(&ledger), ["ADD CF"], "a defect another judge reported stays open");
+        record(
+            &dir,
+            "class-judge-2",
+            3.0,
+            Some("class-judge"),
+            &[event(
+                "DISCREPANCY_RESOLVED",
+                json!({"discrepancy_id": "c1", "resolving_ref": "class-judge:ADD@def"}),
+            )],
+        );
+        let ledger = rebuild(&dir);
+        assert_eq!(ledger["ADD CF"]["resolved_in"], "class-judge-2");
+        assert_eq!(ledger["ADD CF"]["resolving_ref"], "class-judge:ADD@def");
+        assert!(
+            open(&ledger).is_empty(),
+            "the last open report's resolution closes the defect"
+        );
+        assert!(text(&ledger).starts_with("{\n \"ADD CF\": {\n  \"reports\""));
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A report's defect: the unit and its field, whichever judge wrote it.
+    #[test]
+    fn a_defect_is_the_unit_and_its_field() {
+        assert_eq!(defect("FCOS: FCOS st0: 10 cases; run 1: case 2"), "FCOS st0");
+        assert_eq!(defect("FCOS: managed_vm: FCOS FSW: 4 cases; run 1: case 2"), "FCOS FSW");
+        assert_eq!(defect("MOV: no"), "MOV: no");
     }
 
     /// `json.dumps(..., indent=1, sort_keys=True)` of this map, as the frozen Python printed it on 2026-10-25.
