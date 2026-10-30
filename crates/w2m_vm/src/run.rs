@@ -663,6 +663,14 @@ fn run(
                 .map_or_else(|| format!("{e:?}"), |c| format!("ec 0x{c:02x}")),
         };
         marked = Some(Instant::now());
+        // the in-VM compiles judged against the Rust translator's, before the drain empties the log (Sprint 252)
+        if let Some(mut judge) = guest.block_judge.take() {
+            let judged = judge.judge(guest);
+            guest.block_judge = Some(judge);
+            if let Err(why) = judged {
+                break Stop::Exit(format!("the block judge: {why}"));
+            }
+        }
         let mem = guest.memory.as_mut_slice();
         vm_compiled(
             mem,

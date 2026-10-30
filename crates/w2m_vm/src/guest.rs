@@ -691,6 +691,8 @@ pub struct Guest {
     pub limited: bool,
     /// one row per host exit, for the comparison with the frozen host's (`w2m-vm --exit-ledger`; Sprint 206)
     pub exit_ledger: Option<crate::exit_ledger::Ledger>,
+    /// each in-VM compile judged against the Rust translator's (`w2m-vm --judge-blocks`; Sprint 252)
+    pub block_judge: Option<crate::block_judge::BlockJudge>,
     /// where the batch run ends, asked after each host request answered (`w2m-vm --game --log-lines`; Sprint 219)
     pub batch_stop: Option<crate::batch_stop::BatchStop>,
     /// the service HOST_UNIMPLEMENTED named and the call's return address, read from the saved RSP (`self.unimplemented`,
@@ -888,6 +890,7 @@ impl Guest {
             files: None,
             limited: false,
             exit_ledger: None,
+            block_judge: None,
             batch_stop: None,
             unimplemented: None,
         }

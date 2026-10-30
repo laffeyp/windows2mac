@@ -10,6 +10,8 @@ pub use a64_encoder::assembler;
 pub mod approximate;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod batch_stop;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod block_judge;
 pub mod built_from;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod case_inputs;

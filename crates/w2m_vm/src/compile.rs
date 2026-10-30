@@ -56,7 +56,7 @@ fn code_at(guest: &Guest, va: u64) -> Option<Vec<u8>> {
 }
 
 /// `_lift`: the instruction at `addr`.
-fn lift_at(guest: &Guest, addr: u64) -> Result<Lifted, LiftError> {
+pub(crate) fn lift_at(guest: &Guest, addr: u64) -> Result<Lifted, LiftError> {
     let code = code_at(guest, addr).ok_or_else(|| LiftError(format!("no guest memory at 0x{addr:x}")))?;
     lift(&code, addr)
 }

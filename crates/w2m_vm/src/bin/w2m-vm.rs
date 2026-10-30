@@ -231,6 +231,12 @@ mod run {
             Some(_) => return Err("--exit-ledger <tsv>".into()),
             None => None,
         };
+        // the whole-block judge (Sprint 252): each in-VM compile against the Rust translator's, written to the path
+        let judge = match args.iter().position(|a| a == "--judge-blocks") {
+            Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
+            Some(_) => return Err("--judge-blocks <tsv>".into()),
+            None => None,
+        };
         // the batch run's end (Sprint 219): the reference log's line count and the Windows main thread's calls
         let log_lines = match args.iter().position(|a| a == "--log-lines") {
             Some(i) if args.len() >= i + 2 => {
@@ -282,9 +288,12 @@ mod run {
                 program,
                 output,
                 stop_file,
-                ledger.as_deref(),
-                end,
-                time_compile,
+                GameOptions {
+                    ledger: ledger.as_deref(),
+                    end,
+                    time_compile,
+                    judge: judge.as_deref(),
+                },
             );
         }
         // (guest, output, the measure asked for and its file); every path relative to the repository root
@@ -597,15 +606,28 @@ mod run {
         Ok(())
     }
 
+    /// How a game run is watched beside its record: the exit ledger (Sprint 206), the batch run's end (Sprint 219),
+    /// the in-VM compiler timed (Sprint 247), the whole-block judge (Sprint 252).
+    struct GameOptions<'a> {
+        ledger: Option<&'a str>,
+        end: Option<(usize, String)>,
+        time_compile: bool,
+        judge: Option<&'a str>,
+    }
+
     fn game(
         directory: &Path,
         program: &str,
         output: &str,
         stop_file: &str,
-        ledger: Option<&str>,
-        end: Option<(usize, String)>,
-        time_compile: bool,
+        options: GameOptions<'_>,
     ) -> Result<(), String> {
+        let GameOptions {
+            ledger,
+            end,
+            time_compile,
+            judge,
+        } = options;
         let root = root();
         let started = Instant::now();
         let data = fs::read(directory.join(program)).map_err(|e| format!("{program}: {e}"))?;
@@ -633,6 +655,9 @@ mod run {
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
         if let Some(path) = ledger {
             guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&root.join(path))?);
+        }
+        if let Some(path) = judge {
+            guest.block_judge = Some(w2m_vm::block_judge::BlockJudge::create(&root.join(path))?);
         }
         // the game's log, C:\w2m\unity.log on the bridge's drive (`run_frontier.py` 288, `files.drive / "w2m" /
         // "unity.log"`); the run ends where its reference did (Sprint 219)
@@ -776,6 +801,14 @@ mod run {
             .map(|i| (i.name.as_str(), i.base, u64::from(i.pe.size_of_image)))
             .collect();
         let compiles_by_image = w2m_vm::record::compiles_by_image(&images, out.vm_compile_starts.iter().copied())?;
+        // the whole-block judge's totals, last in its file (Sprint 252)
+        if let Some(j) = guest.block_judge.as_mut() {
+            j.finish()?;
+            eprintln!(
+                "w2m-vm: the block judge: {} judged, {} equal, {} differing",
+                j.judged, j.equal, j.differing
+            );
+        }
         let by_image: u64 = compiles_by_image.iter().map(|(_, n)| n).sum();
         let compiled = out.counts.get("compiled").copied().unwrap_or(0);
         if by_image != compiled {
