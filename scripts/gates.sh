@@ -136,7 +136,7 @@ if [ $rust != none ]; then
   # call_compare, the harness's second Producer, judges the game's calls against Windows (Sprint 217)
   cargo build --release --quiet --bin w2m-vm --bin check_records --bin call_compare
   mkdir -p build/batch_run
-  rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv
+  rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv build/batch_run/whole-blocks.tsv
   # with the exit ledger crates/w2m_vm/tests/exit_ledger.rs holds to the frozen host's (Sprint 206)
   mkdir -p build/exit_ledger
   rm -f build/exit_ledger/rust.tsv build/exit_ledger/rust.tsv.*
