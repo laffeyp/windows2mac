@@ -578,11 +578,19 @@ fn compile_problems(ours: &[Value], reference: &[Value], by_image_due: bool) -> 
     let want = variants(reference);
     let mut found = Vec::new();
     // the installs from the translation cache (Sprint 257), on a run with one alone: a cache that installs nothing
-    // was not in use
-    if let Some(n) = have.remove(w2m_vm::record::INSTALLED)
-        && n <= 0.0
-    {
-        found.push(format!("vm_compile_blocks {:?} is {n}", w2m_vm::record::INSTALLED));
+    // was not in use, and with one in use the miss stub sends every miss in its image to the host, so the in-VM
+    // compiler compiles none there (Sprint 257's plant 2: the range test planted to send nothing still left 60 installs,
+    // the in-VM compiler's declines)
+    if let Some(n) = have.remove(w2m_vm::record::INSTALLED) {
+        if n <= 0.0 {
+            found.push(format!("vm_compile_blocks {:?} is {n}", w2m_vm::record::INSTALLED));
+        }
+        let cached = format!("{}{}", w2m_vm::record::COMPILED_IN, w2m_vm::cache_file::CACHED_IMAGE);
+        if let Some(n) = images.get(&cached) {
+            found.push(format!(
+                "vm_compile_blocks {cached:?} is {n} beside the installs: the miss stub kept the image from the host"
+            ));
+        }
     }
     if by_image_due && !images.contains_key(w2m_vm::record::COMPILED_OUTSIDE) {
         found.push(format!(
@@ -710,6 +718,15 @@ fn a_missing_extra_or_empty_compile_count_is_named() {
     assert_eq!(
         compile_problems(&installed(0.0), &reference, false),
         ["vm_compile_blocks \"installed from the translation cache\" is 0"]
+    );
+    let mut kept = installed(9.0);
+    kept.push(m("compiled in UnityPlayer.dll", 300.0));
+    assert_eq!(
+        compile_problems(&kept, &reference, false),
+        [
+            "vm_compile_blocks \"compiled in UnityPlayer.dll\" is 300 beside the installs: the miss stub kept the image \
+             from the host"
+        ]
     );
 }
 

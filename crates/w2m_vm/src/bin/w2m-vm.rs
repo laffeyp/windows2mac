@@ -59,8 +59,7 @@ mod run {
     /// states, `KILL_GRACE_SECONDS` (run_frontier.py 73)
     const GAME_SECONDS: u64 = 10_800;
     const KILL_GRACE_SECONDS: u64 = 60;
-    /// the image the translation cache holds (Sprint 254): 149,308 of the batch run's 274,837 compiles (Sprint 249)
-    const CACHED_IMAGE: &str = "UnityPlayer.dll";
+    use w2m_vm::cache_file::CACHED_IMAGE;
 
     fn root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

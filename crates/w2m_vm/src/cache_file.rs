@@ -14,6 +14,9 @@ use pe_image::PeImage;
 use translator::lift::{Lifted, Op, lift};
 use translator::lower::{MAX_BLOCK_INSNS, RuntimeCalls, assemble_block, insn_flags};
 
+/// The image the batch run's cache holds (Sprint 254): 149,308 of its 274,837 compiles (Sprint 249).
+pub const CACHED_IMAGE: &str = "UnityPlayer.dll";
+
 const MAGIC: &[u8; 8] = b"W2MCACHE";
 const VERSION: u32 = 1;
 
