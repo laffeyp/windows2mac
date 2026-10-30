@@ -649,6 +649,9 @@ mod run {
         let (cache, refused) = cache_file::make(&image.pe, &data, image.base, &exits, key);
         let made_in = started.elapsed().as_secs_f64();
         let uncovered = cache_file::uncovered_reads(&image.pe, &data, &cache);
+        // the relocation (Sprint 256): each block moved to an address in the code area and held to its assembly there
+        let to = guest_runtime::layout::MONITOR_VA + guest_runtime::layout::CODE_CACHE + 0x10_0000;
+        let (moved, unmovable, differ) = cache_file::relocation_census(&image.pe, &data, &cache, &exits, to);
         let bytes = cache_file::to_bytes(&cache);
         let out = root.join(dir);
         fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
@@ -671,6 +674,9 @@ mod run {
             "data_region": CACHE_DATA_SIZE,
             "file_bytes": bytes.len(),
             "uncovered_reads": uncovered.len(),
+            "relocated_equal": moved,
+            "relocation_refused": unmovable,
+            "relocated_differing": differ.len(),
             "seconds": (made_in * 10.0).round() / 10.0,
         });
         // the run's starts the walk reaches inside a block (Deferred, Sprint 253), by what ends the block before them

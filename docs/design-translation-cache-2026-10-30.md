@@ -26,6 +26,9 @@ temporary lines at the stop, removed after (Sprint 251's card):
 
 ## The choices
 
+*(Amended 2026-10-30, Sprint 256: B, B', C and E are superseded by "Revised: the cache installed into the code
+area" below; they stand as written, for the record of why.)*
+
 **A. Which blocks: the image's, found statically.** The cache holds every block a walk of UnityPlayer.dll finds from
 its entry, exports, TLS callbacks and `.pdata` starts (`pe_image::code_targets`), following direct branches, calls'
 fall-throughs and jump tables, as the frozen census's walk did. A cache of the blocks one batch run compiled would
@@ -110,7 +113,8 @@ first level); the C runtime holding the probe (it changes the judged image); the
    flags its words leave live cover every flag any of its walked successors reads, computed from the successors' own
    lifted operations, so a dropped flag write is caught on blocks no run reaches (reviewer-3's Low 1 at 251); the
    layout test of B; its size and the time to make it on the record.
-4. **The probe.** The second-level lookup and the write bitmap in the monitor code, the cache loaded at start, its
+4. *(Superseded 2026-10-30, Sprint 256, by "The order from card 4" below.)* **The probe.** The second-level lookup and
+   the write bitmap in the monitor code, the cache loaded at start, its
    pages made read-only (E). Gate: the plan's, the batch run conforming with the cache and "compiled in
    UnityPlayer.dll" falling from 149,308 by the blocks the cache holds, "compiled" by as many; E's plant; the
    frozen-word tests unchanged with no cache. Its expected fall is stated before it runs (reviewer-3's Low 1 at 253):
@@ -119,6 +123,43 @@ first level); the C runtime holding the probe (it changes the judged image); the
    ceiling: 82,022 compiles a run lie outside any image,
    Mono's run-time code, so "compiled" can fall by at most 192,815 of 274,837 with every image cached, and by
    149,308 with UnityPlayer.dll alone.
+
+## Revised: the cache installed into the code area
+
+*(Amended 2026-10-30, Sprint 256.)* Card 4 could not be built as B, C and E have it. Every reader that turns a code
+address into a guest address knows only the 64 MiB code area: the C runtime's exception path (`runtime.c` 245) and
+in-VM slice switch (`threads.c` 258) map any other address to x86 address 0, and the reconstruction table, 4,194,304
+entries kept in cursor order and searched by bisection, cannot hold the cache's 7,828,283 marks; the host's
+give-backs and `code_written` read the same area (KIT_DIARY #108). So a cached block does not run where it was made.
+
+**G. A cached block installed on its first use.** On a miss at a cached start, the block's words are copied to the
+code area's cursor and relocated: a `B` or `BL` whose target lies outside the block is re-encoded for its new address,
+every other word kept. Measured at Sprint 256 on all 998,222 blocks of UnityPlayer.dll's cache, and on every block of
+the 280 fixture images, the relocated words equal the block assembled at its new address, and no block holds another
+kind of address-dependent word (`cache_file::relocate`, `relocation_census`). The install then does what a host
+compile does (`compile.rs` 70-140): the marks appended to the reconstruction table, the tails noted, the pages
+protected, the block recorded, the dispatch slot written; the C runtime, the give-backs, the write path and every
+judge see an ordinary block in the code area. An install is counted apart from a compile, so the plan's gate reads
+"compiled in UnityPlayer.dll" falling. The code area holds the run's own blocks as today; the cache file holds the
+image's.
+
+**H. Who installs, in two steps.** A simple host service takes 4.1 µs a call (`hvc 13`, 56.1 ms over 13,639 on the
+batch run), an in-VM compile 4.93 µs (1,355 ms over 274,834). An install by the host, through an exit, saves a
+compile's count and little of its time; an install inside the VM, a copy and a re-encoding, saves most of both. The
+host's install comes first, since it reuses the host compile's bookkeeping whole and every judge then sees cached
+words in the real run; the VM's follows once the host's conforms.
+
+**The order from card 4** (cards 1 to 3 done):
+
+4. **The install by the host.** The cache file loaded at the start; the miss stub sends a start in UnityPlayer.dll's
+   range to the host before the in-VM compiler, and the host installs it from the cache, or compiles it as today when
+   the cache does not hold it. Gate: the plan's, the batch run conforming with the cache, "compiled in UnityPlayer.dll"
+   falling by the starts installed, at most 128,523 distinct starts and their repeats (reviewer-3's Low 1 at 253); the
+   installs counted on the record; the whole-block judge and the frozen-word tests unchanged with no cache; a guest
+   write to an installed block's page planted.
+5. **The install inside the VM.** The copy and the re-encoding in the miss stub's path, no exit. Gate: card 4's counts
+   unchanged, and the run's compile time and its most in a 60 Hz frame on timed records, run alone, against Sprint
+   248's.
 
 Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
 where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.

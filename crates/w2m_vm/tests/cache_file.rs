@@ -53,6 +53,14 @@ fn every_fixture_cache_covers_its_reads_indexes_its_pages_and_reads_back() {
                 page += PAGE;
             }
         }
+        // the relocation (Sprint 256): every block moved into the code area equals its assembly there
+        let to = MONITOR_VA + CODE_CACHE + 0x10_0000;
+        let (_, unmovable, differ) = cache_file::relocation_census(&img, &data, &cache, &exits(), to);
+        if !unmovable.is_empty() || !differ.is_empty() {
+            wrong.push(format!(
+                "{name}: relocation refused {unmovable:?}, differing at {differ:x?}"
+            ));
+        }
         if cache_file::from_bytes(&cache_file::to_bytes(&cache)).as_ref() != Ok(&cache) {
             wrong.push(format!("{name}: the file does not read back equal"));
         }

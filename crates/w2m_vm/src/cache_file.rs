@@ -79,6 +79,130 @@ fn lifted(img: &PeImage, data: &[u8], base: u64, exec: &[(u64, u64)], va: u64) -
     lift(&img.read_rva(data, rva, 15).ok()?, va).ok()
 }
 
+/// The block at `va` as the host compiles one (`compile.rs`): instructions until a branch or `MAX_BLOCK_INSNS`, one
+/// that does not lift ending it before itself; with the address it ends at.
+fn lift_block(at: &impl Fn(u64) -> Option<Lifted>, va: u64) -> (Vec<Lifted>, u64) {
+    let mut insns: Vec<Lifted> = Vec::new();
+    let mut addr = va;
+    while insns.len() < MAX_BLOCK_INSNS {
+        let Some(ins) = at(addr) else { break };
+        addr += ins.length;
+        let ends = ins.ops.iter().any(|op| matches!(op, Op::Br { .. }));
+        insns.push(ins);
+        if ends {
+            break;
+        }
+    }
+    (insns, addr)
+}
+
+/// A word `relocate` cannot move: its index in the block and its kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Unmovable {
+    pub word: usize,
+    pub kind: &'static str,
+}
+
+/// A block's words moved from `from` to `to` (Sprint 256): a `B` or `BL` whose target lies outside the block keeps its
+/// target, its offset re-encoded; a branch inside the block keeps its offset. Err names the first word of another kind
+/// whose meaning depends on the block's address (a conditional or compare branch, an `ADR`/`ADRP`, a literal load
+/// reaching outside the block), which no re-encoding here moves.
+pub fn relocate(words: &[u32], from: u64, to: u64) -> Result<Vec<u32>, Unmovable> {
+    let end = from + 4 * words.len() as u64;
+    let outside = |target: u64| !(from..end).contains(&target);
+    let mut out = words.to_vec();
+    for (k, w) in words.iter().enumerate() {
+        let pc = from + 4 * k as u64;
+        let field = |bits: u32, shift: u32| -> i64 {
+            let v = (w >> shift) & ((1 << bits) - 1);
+            (i64::from(v) << (64 - bits)) >> (64 - bits)
+        };
+        if w & 0x7C00_0000 == 0x1400_0000 {
+            let target = pc.wrapping_add((field(26, 0) * 4) as u64);
+            if outside(target) {
+                let off = (target.wrapping_sub(to + 4 * k as u64) as i64) / 4;
+                if !(-(1 << 25)..(1 << 25)).contains(&off) {
+                    return Err(Unmovable {
+                        word: k,
+                        kind: "a branch past its reach",
+                    });
+                }
+                out[k] = (w & 0xFC00_0000) | (off as u32 & 0x03FF_FFFF);
+            }
+            continue;
+        }
+        let reach = if w & 0xFF00_0010 == 0x5400_0000 || w & 0x7E00_0000 == 0x3400_0000 {
+            Some((
+                "a conditional or compare branch",
+                pc.wrapping_add((field(19, 5) * 4) as u64),
+            ))
+        } else if w & 0x7E00_0000 == 0x3600_0000 {
+            Some(("a test branch", pc.wrapping_add((field(14, 5) * 4) as u64)))
+        } else if w & 0x1F00_0000 == 0x1000_0000 {
+            Some(("an ADR or ADRP", 0))
+        } else if w & 0x3B00_0000 == 0x1800_0000 {
+            Some(("a literal load", pc.wrapping_add((field(19, 5) * 4) as u64)))
+        } else {
+            None
+        };
+        if let Some((kind, target)) = reach
+            && (kind == "an ADR or ADRP" || outside(target))
+        {
+            return Err(Unmovable { word: k, kind });
+        }
+    }
+    Ok(out)
+}
+
+/// The relocation measured on a cache (Sprint 256): each block's words, made at the code region, relocated to `to`
+/// and held to the block assembled there; the blocks equal, those the relocation refuses by why, those that differ.
+pub fn relocation_census(
+    img: &PeImage,
+    data: &[u8],
+    cache: &CacheFile,
+    exits: &Exits,
+    to: u64,
+) -> (u64, BTreeMap<String, u64>, Vec<u32>) {
+    let exec: Vec<(u64, u64)> = img
+        .sections
+        .iter()
+        .filter(|s| s.characteristics & 0x2000_0000 != 0)
+        .map(|s| {
+            (
+                u64::from(s.virtual_address),
+                u64::from(s.virtual_address) + u64::from(s.virtual_size),
+            )
+        })
+        .collect();
+    let at = |va: u64| lifted(img, data, cache.base, &exec, va);
+    let (mut equal, mut refused, mut differ) = (0, BTreeMap::new(), Vec::new());
+    for b in &cache.blocks {
+        let words = &cache.words[b.word as usize..(b.word + b.nwords) as usize];
+        let from = CACHE_CODE_VA + 4 * u64::from(b.word);
+        let (insns, _) = lift_block(&at, cache.base + u64::from(b.start));
+        let Ok((there, _)) = assemble_block(
+            &insns,
+            to,
+            exits.exit_va,
+            exits.slice_va,
+            exits.state_va,
+            &exits.runtime,
+            b.live,
+        ) else {
+            *refused.entry("the second assembly fails".to_string()).or_default() += 1;
+            continue;
+        };
+        match relocate(words, from, to) {
+            Ok(moved) if moved == there => equal += 1,
+            Ok(_) => differ.push(b.start),
+            Err(why) => {
+                *refused.entry(why.kind.to_string()).or_default() += 1;
+            }
+        }
+    }
+    (equal, refused, differ)
+}
+
 /// The cache of `img` loaded at `base`, from its walk's block starts, until the code region is full.
 pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -> (CacheFile, Refused) {
     let walk = image_walk::walk(img, data);
@@ -99,18 +223,7 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
     let mut blocks = Vec::new();
     let (mut words, mut marks) = (Vec::new(), Vec::new());
     for &start in &walk.block_starts {
-        let va = base + u64::from(start);
-        let mut insns: Vec<Lifted> = Vec::new();
-        let mut addr = va;
-        while insns.len() < MAX_BLOCK_INSNS {
-            let Some(ins) = at(addr) else { break };
-            addr += ins.length;
-            let ends = ins.ops.iter().any(|op| matches!(op, Op::Br { .. }));
-            insns.push(ins);
-            if ends {
-                break;
-            }
-        }
+        let (insns, addr) = lift_block(&at, base + u64::from(start));
         if insns.is_empty() {
             refuse("the first instruction does not lift");
             continue;

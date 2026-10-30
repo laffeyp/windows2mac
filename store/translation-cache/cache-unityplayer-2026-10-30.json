@@ -6,14 +6,17 @@
   "data_bytes": 37611068,
   "data_region": 67108864,
   "file_bytes": 211190784,
-  "key": "10625aa1bc2d486bb15b9acfd82c9262f231fab1880284dad8c5f08eea2c4549",
+  "key": "24c34b0c4009669580e4869aeb9108835f4eed55da631dacc2c6e4640091c1f9",
   "refused": {
     "the first instruction does not lift": 6339
   },
+  "relocated_differing": 0,
+  "relocated_equal": 998222,
+  "relocation_refused": {},
   "run_starts_inside_blocks": {
     "after a block at the 64-instruction cap": 101,
     "inside a cached block, at no block's end": 250
   },
-  "seconds": 16.7,
+  "seconds": 16.8,
   "uncovered_reads": 0
 }
