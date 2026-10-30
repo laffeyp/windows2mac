@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 232
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -88,3 +88,32 @@ The record keeps what the kit says it keeps, and a check holds the rolled summar
 - [x] One concept: the record kept as the kit keeps it.
 
 ## result
+
+- **Built:** 39 paragraphs, Sprints 183-221, each from its archived scope line and observation pass: what changed and
+  the numbers it moved. Sprint 222, rolled at this close, has its paragraph too. The tail archive's header ("each
+  sprint's summary also stands in `## Built`") is true again from 183.
+- **The check:** `signal_report --check` reads `docs/sprint-tail-archive-2026-10-08.md` and fails a sprint from 183
+  (`FIRST_BUILT_SPRINT`) whose entry is there and for which no Built line holds "— Sprint N (". Its unit test,
+  `a_rolled_sprint_has_its_built_paragraph`, holds that a Deferred line naming the sprint and "Sprint 1840" do not
+  count. The integration tests' scratch trees now carry an archive with no entry.
+- **Surfaced:** `blackboard_roll --surfaced 3 docs/surfaced-archive-2026-10-30.md` (new, `crates/signal_report/src/
+  bin/blackboard_roll.rs`) moved 29 reviews, 2026-10-27 to 2026-10-29, verbatim, newest first, and left one line.
+  - A review is an entry whose text opens "reviewer-" or "The user's pasted code review".
+  - The comprehension affirmations stay, which a new session looks for (`sdd-kit-3/AGENTS.md` 27). So do the
+    user-only questions and answers, Sprint 178's partial close, the two defect sweeps and the three newest reviews:
+    20 entries.
+  - The 306 lines that left BLACKBOARD, sorted, equal the archive's entry lines, sorted.
+  - Its unit tests: every character kept or moved, nothing moved when no review is older than the kept ones.
+- **`ci_held`:** a cited CI run whose sprint has no close commit is named, "its CI run <id> is cited, and no commit
+  \"Sprint N closed:\" is found to hold it to", where it passed; the unit test gains the case.
+- **A second binary in the crate** broke `cargo run -p signal_report` ("could not determine which binary to run"),
+  found by plant 1's first run; `default-run = "signal_report"` restores it. CI and the gates call
+  `target/release/signal_report`, which was never affected.
+- **WORKING_AGREEMENT** gains the tail roll: ten entries, the archive, the Built paragraph, the check, and the
+  Surfaced roll's command.
+- **The record's size:** BLACKBOARD from 552,934 bytes to 472,891 at the roll, with the 39 paragraphs added.
+- **Plant 1** (Sprint 200's Built paragraph removed): "sprint 200: its entry has left the tail for docs/sprint-tail-archive-2026-10-08.md, and ## Built has no paragraph for it", exit 1.
+- **Plant 2** (`is_close` reading "shut:" for "closed:"): "sprint 230: its CI run 41026362512 is cited, and no commit \"Sprint 230 closed:\" is found to hold it to", and the same for 229.
+- **Plant 3** (line 5 of the archive copy, "Sprint 224" to "Sprint 225"): the sorted comparison named it, "303c303 < … review at Sprint 224 … > … review at Sprint 225". Its first form matched no text, changed nothing, and was run again by line number.
+- Each plant was restored by `cp`, and `cmp` found the three files equal to their copies.
+- Departures: `crates/signal_report/src/bin/blackboard_roll.rs`, `crates/signal_report/Cargo.toml`, `crates/signal_report/tests/check.rs`, `WORKING_AGREEMENT.md` and the tail archive (Sprint 222's entry), outside the card's file list.
