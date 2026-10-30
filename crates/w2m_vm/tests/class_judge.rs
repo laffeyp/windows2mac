@@ -80,25 +80,18 @@ fn index(root: &Path, path: &str) -> BTreeMap<String, Value> {
         .collect()
 }
 
-/// The Rust class judge's index holds every class the frozen index judged, with its case count and, but for the
-/// classes `HELD` names with what each waits on, its `managed_vm` verdict (plan step 4, "456 of 458 classes"). A held
-/// class whose verdict comes to equal the frozen one fails until the card that moved it rewrites the file.
-#[test]
-fn the_rust_index_is_the_frozen_one_or_held() {
-    let root = root();
-    let frozen = index(&root, "store/runs/class-runs.json");
-    let rust = index(&root, RUST_INDEX);
-    let held: BTreeMap<String, String> = fs::read_to_string(root.join(HELD))
-        .unwrap()
-        .lines()
-        .filter(|l| !l.starts_with('#'))
-        .filter_map(|l| {
-            let mut c = l.splitn(3, '\t');
-            Some((c.next()?.to_string(), c.next()?.to_string()))
-        })
-        .collect();
+/// The class gate's comparison (Sprint 244; reviewer-3's APOSD point at 235: the faults were gathered over 25 lines
+/// and asserted once, and from Sprint 222 to 235 that assertion was missing): every class the frozen index judged is in
+/// the Rust index with its case count and, but for the classes `held` names with what each waits on, its `managed_vm`
+/// verdict; a held class whose verdict comes to equal the frozen one is a fault until its card rewrites the held file;
+/// a class the frozen index lacks is one. `Ok` only when nothing differs.
+fn class_faults(
+    frozen: &BTreeMap<String, Value>,
+    rust: &BTreeMap<String, Value>,
+    held: &BTreeMap<String, String>,
+) -> Result<(), Vec<String>> {
     let mut faults = Vec::new();
-    for (iclass, f) in &frozen {
+    for (iclass, f) in frozen {
         let Some(r) = rust.get(iclass) else {
             faults.push(format!("{iclass}: not in {RUST_INDEX}"));
             continue;
@@ -125,6 +118,32 @@ fn the_rust_index_is_the_frozen_one_or_held() {
             faults.push(format!("{iclass}: not in the frozen index"));
         }
     }
+    if faults.is_empty() { Ok(()) } else { Err(faults) }
+}
+
+fn held(root: &Path) -> BTreeMap<String, String> {
+    fs::read_to_string(root.join(HELD))
+        .unwrap()
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let mut c = l.splitn(3, '\t');
+            Some((c.next()?.to_string(), c.next()?.to_string()))
+        })
+        .collect()
+}
+
+/// The Rust class judge's index holds every class the frozen index judged, as `class_faults` compares them (plan step
+/// 4, "456 of 458 classes"), and the judges' ledger names a class judge's entry only for a discrepancy.
+#[test]
+fn the_rust_index_is_the_frozen_one_or_held() {
+    let root = root();
+    let frozen = index(&root, "store/runs/class-runs.json");
+    let rust = index(&root, RUST_INDEX);
+    let held = held(&root);
+    if let Err(faults) = class_faults(&frozen, &rust, &held) {
+        panic!("{} classes differ:\n{}", faults.len(), faults.join("\n"));
+    }
     // the judges' ledger opens an entry for a measured difference only: every entry the class judge reported names a
     // class whose verdict is a discrepancy, never an inconclusive one (reviewer-3's High 1 of its review at 222)
     let ledger: Value =
@@ -147,23 +166,48 @@ fn the_rust_index_is_the_frozen_one_or_held() {
         .values()
         .filter(|r| r["verdicts"]["managed_vm"] == "conforms")
         .collect();
-    // a conforming class judged on words the Rust translator made for every case it judged, the rest on the frozen
-    // Python lowering's in some case (reviewer-3's Medium 1)
-    let python: Vec<&str> = conform
+    // a conforming class with no case the Rust translator compiled (reviewer-3's Medium 1 at 222); from Sprint 238 the
+    // translator compiles every case, so the list is empty unless a class is judged on no case at all
+    let uncompiled: Vec<&str> = conform
         .iter()
         .filter(|r| r["rust_compiled"] == 0)
         .map(|r| r["iclass"].as_str().unwrap())
         .collect();
     println!(
-        "{} of {} classes conform on Rust, {} on no Rust-compiled case ({python:?}); {} held",
+        "{} of {} classes conform on Rust, {} on no Rust-compiled case ({uncompiled:?}); {} held",
         conform.len(),
         frozen.len(),
-        python.len(),
+        uncompiled.len(),
         held.len()
     );
-    // the faults were collected and never asserted from Sprint 222 to 235, so no class could fail this test; found
-    // when 17 held classes came to conform and the test still passed (Sprint 235)
-    assert!(faults.is_empty(), "{}", faults.join("\n"));
+}
+
+/// `class_faults` names each kind of fault and passes equal indexes (Sprint 244).
+#[test]
+fn each_kind_of_class_fault_is_named() {
+    let class = |cases: u64, verdict: &str| serde_json::json!({"cases": cases, "verdicts": {"managed_vm": verdict}});
+    let frozen: BTreeMap<String, Value> = [
+        ("ADD".to_string(), class(10, "conforms")),
+        ("FCOS".to_string(), class(5, "discrepancy")),
+        ("MUL".to_string(), class(7, "conforms")),
+    ]
+    .into();
+    assert_eq!(class_faults(&frozen, &frozen, &BTreeMap::new()), Ok(()));
+    let mut rust = frozen.clone();
+    rust.insert("ADD".into(), class(11, "conforms"));
+    rust.insert("FCOS".into(), class(5, "conforms"));
+    rust.insert("NEW".into(), class(1, "conforms"));
+    let held: BTreeMap<String, String> = [("MUL".to_string(), "inconclusive".to_string())].into();
+    let faults = class_faults(&frozen, &rust, &held).unwrap_err();
+    assert_eq!(
+        faults,
+        [
+            "ADD: 11 cases, the frozen index 10",
+            "FCOS: conforms, the frozen index discrepancy",
+            "MUL: conforms as the frozen index, and store/case_runner/class-held-2026-10-29.tsv holds it",
+            "NEW: not in the frozen index",
+        ]
+    );
 }
 
 /// The stored Rust index is what `class_judge --index` gives on the record it names.
