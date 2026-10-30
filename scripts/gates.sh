@@ -6,7 +6,7 @@
 # through tail (Sprint 026) and gates chained with ';' before a commit (Sprint 028).
 #
 # Usage: scripts/gates.sh [--all]. By default (Sprint 168; user 2026-10-28: "must use established methods to run tests
-# closer to code, not all tests all the time") the gates the change since origin/sprint-066 reaches, committed or not,
+# closer to code, not all tests all the time") the gates the change since origin/main reaches, committed or not,
 # new files included: the Rust tests by the crate graph (cargo-nextest's rdeps(), nexte.st filterset reference), the
 # substrate samples and the Python gates by the paths they read, and the records checks over the new records. A change
 # the selection cannot map runs those gates whole. --all runs every gate over everything.
@@ -41,9 +41,9 @@ plan=0
 [ "${1:-}" = "--all" ] && all=1
 [ "${1:-}" = "--plan" ] && plan=1
 
-# the change: every path that differs from origin/sprint-066's merge base, and every new file (.claude/ is the
+# the change: every path that differs from origin/main's merge base, and every new file (.claude/ is the
 # session's, never committed)
-base=$(git merge-base HEAD origin/sprint-066)
+base=$(git merge-base HEAD origin/main)
 changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -v '^\.claude/' | sort -u)
 # GATES_CHANGED, newline-separated paths, stands in for the change: the selection's plants set it (Sprint 171)
 [ -n "${GATES_CHANGED:-}" ] && changed=$GATES_CHANGED
@@ -194,6 +194,35 @@ elif [ $rust = crates ]; then
   docs=$(for c in $crates; do [ -f "crates/$c/src/lib.rs" ] && printf -- '-p %s ' "$c"; done; true)
   # nextest does not run doc tests (a compile_fail doc test holds Vcpu to !Send, Sprint 157)
   [ -n "$docs" ] && cargo test --quiet --doc $docs
+fi
+# the timing stage (Sprint 224; reviewer-3's Medium 2 of its review at Sprint 222's close): the exit time, a wall-clock
+# bound ignored in the correctness run above, measured after it with the machine's one-minute load average; the figure,
+# the load and the outcome kept in store/gates/timing.tsv. Three outcomes, kept apart (reviewer-3's Low 1 of its review
+# at Sprint 224): passed; over-bound, a figure over the bound, which stops the gates only on a quiet machine, a load
+# under 6, the performance cores of this Mac (6 of 18), and under load is reported; no-figure, the test did not run to
+# its figure (a build failure, hv_vm_create refused), which stops the gates at any load.
+if [ $rust != none ]; then
+  load=$(sysctl -n vm.loadavg | awk '{print $2}')
+  if cargo nextest run --cargo-quiet -p hypervisor --test exit_time --run-ignored only --no-capture \
+    > build/gates-timing-last.txt 2>&1; then outcome=passed; else outcome=over-bound; fi
+  ns=$(sed -n 's/^exit_time: [0-9]* exits, \([0-9]*\) ns each.*/\1/p' build/gates-timing-last.txt | head -1)
+  [ -n "$ns" ] || outcome=no-figure
+  printf '%s\t%s\tsprint %s\t%s ns\tload %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$outcome" "$gates_sprint" "${ns:-?}" \
+    "$load" >> store/gates/timing.tsv
+  echo "gates: timing stage: $outcome, ${ns:-?} ns an exit at load $load"
+  if [ $outcome = no-figure ]; then
+    tail -5 build/gates-timing-last.txt
+    echo "gates: the exit time test gave no figure"
+    exit 1
+  fi
+  if [ $outcome = over-bound ]; then
+    if awk -v l="$load" 'BEGIN { exit !(l < 6) }'; then
+      tail -5 build/gates-timing-last.txt
+      echo "gates: the exit time is over its bound on a quiet machine (load $load)"
+      exit 1
+    fi
+    echo "gates: reported, not stopping (load $load, store/gates/timing.tsv)"
+  fi
 fi
 cargo build --release --quiet
 # the Rust judges' discrepancy ledger is what their records say (Sprint 154; review of Sprints 151-152)

@@ -870,3 +870,15 @@ defect closed an entry on any one resolution; a judge that runs one profile a se
 report from other runs. The interface ("a resolution closes the defect") was simpler than the facts it modelled,
 judges and profiles; resolution per report, and an entry closed by its last report, keeps that complexity inside the
 ledger (reviewer-3's Medium 1 of its review at 223).
+
+### 2026-10-29 — Sprints 223-224: a trigger keyed to a directory, a gate that tested the machine
+
+**Finding (#92):** a gate's trigger names what reads the change, not where the change sits. `scripts/gates.sh` ran the
+frozen Python's 2,547 tests whenever a path under `store/` changed, so a Rust judge's ledger there cost Sprint 223 about
+25 minutes of tests over Python nothing had touched; four exemptions, added one sprint at a time, had patched the same
+rule. The user's answer went further, "there is no python running": a check over code that cannot change is no check.
+
+**Finding (#93):** a correctness gate holds the code to a property the code controls. `exit_time.rs` bounded a wall-clock
+figure, which the machine's load moved from 4,062 ns to 56,333 ns, and its failure stopped 152 tests behind it. A
+measurement belongs in its own stage, kept with the conditions it was taken under, and judged against them; and a stage
+that reads "did not run" as "slow" hides a broken test under a busy machine (reviewer-3's Low 1 of its review at 224).

@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 //! Sprint 132: the time of one exit and its resume, from Rust, against the C monitor's 0.72 µs
-//! (`scripts/measure_exit.py`, 2026-10-14, quoted in `tools/vm_monitor/vm_monitor.c`).
+//! (`scripts/measure_exit.py`, 2026-10-14, quoted in `tools/vm_monitor/vm_monitor.c`; WORKING_AGREEMENT 115 records
+//! 832 to 873 ns from Rust and 813 to 852 ns from the monitor's `spin`, measured another day).
+//!
+//! A wall-clock bound, so not in the correctness run (Sprint 224; reviewer-3's Medium 2 of its review at Sprint 222's
+//! close: under the machine's load it failed at 56,333 ns and stopped 152 tests behind it). It is ignored there and run
+//! by `scripts/gates.sh`'s timing stage, which keeps its figure and the load in `store/gates/timing.tsv` and stops the
+//! gates only for a figure over the bound on a quiet machine.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 use std::time::Instant;
@@ -12,6 +18,7 @@ const CODE_IPA: u64 = 0x1_0000;
 const EXITS: u32 = 100_000;
 
 #[test]
+#[ignore = "a wall-clock bound: the gates' timing stage runs it (Sprint 224)"]
 fn an_exit_and_its_resume_take_about_a_microsecond() {
     let mut mem = GuestMemory::new(64 * 1024).unwrap();
     mem.write_words(

@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-# Every gate in WORKING_AGREEMENT.md on each push (Sprint 027; review 2026-10-08 §5). The
-# references the tests compare against are present (XED at the pinned commits, llvm-objdump, the
-# Python 3.14.8 corpus at its manifest hash), and W2M_REQUIRE_REFERENCES=1 fails any skipped test.
+# Every gate in WORKING_AGREEMENT.md on each push (Sprint 027; review 2026-10-08 §5): no project Python runs
+# (BLACKBOARD Decision 2026-10-29, "No Python runs"); substrate, the harness, runs under `uv`, as the Decision allows. The references the Rust tests read are present
+# (llvm-objdump, the Python 3.14.8 distribution's Windows binaries as a PE corpus at its manifest hash); the 8 case
+# sets that were built here with Python are not, and the tests that read them skip, the local gates requiring them.
 name: ci
 
 on:
@@ -27,15 +28,6 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends llvm
           llvm-objdump --version | head -2
-      - name: XED (WORKING_AGREEMENT.md pins)
-        run: |
-          mkdir -p third_party && cd third_party
-          git clone --quiet https://github.com/intelxed/xed.git
-          git clone --quiet https://github.com/intelxed/mbuild.git
-          git -C xed checkout --quiet 0bcb6237345c5066726dcc08b3d87928df3b5b26
-          git -C mbuild checkout --quiet 1b437e409221a2b5703b4d8896baa20d43e4ba1a
-          cd xed && python3 mfile.py install --jobs 4 > ../xed-build.log 2>&1 || (tail -40 ../xed-build.log; exit 1)
-          ls kits
       - name: corpus (corpus/python-3.14.8.manifest.json)
         run: |
           url=$(jq -r .source corpus/python-3.14.8.manifest.json)
@@ -50,24 +42,6 @@ jobs:
           git -C substrate log --oneline -1
       - name: sync
         run: uv sync --all-extras
-      - name: case files (sets 039, 041, 049, 049b and 050 are built here, not committed)
-        run: |
-          uv run python scripts/semantics_differential.py --cases --set 039 --out probes/semantics/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 041 --out probes/semantics_041/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 049 --out probes/semantics_049/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 049b --out probes/semantics_049b/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 050 --out probes/semantics_050/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 065 --out probes/semantics_065/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 065b --out probes/semantics_065b/cases.bin
-          uv run python scripts/semantics_differential.py --cases --set 065c --out probes/semantics_065c/cases.bin
-          echo "$(cat store/probe-runs/38011862284/cases.sha256)  probes/semantics/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38029980267/cases.sha256)  probes/semantics_041/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38117654018/cases.sha256)  probes/semantics_049/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38118493713/cases.sha256)  probes/semantics_049b/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38122967607/cases.sha256)  probes/semantics_050/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38222873837/cases.sha256)  probes/semantics_065/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38234338405/cases.sha256)  probes/semantics_065b/cases.bin" | sha256sum -c -
-          echo "$(cat store/probe-runs/38238041162/cases.sha256)  probes/semantics_065c/cases.bin" | sha256sum -c -
       - name: rust (rust-toolchain.toml pins 1.99.1; rustup on the runner installs it)
         run: |
           rustup show active-toolchain
@@ -89,22 +63,3 @@ jobs:
           uv run substrate replay "$RUNNER_TEMP/vocabulary-samples" --level 2
           if uv run substrate run --file harness/vocabulary-samples-planted.toml --root "$RUNNER_TEMP/planted" --strict; then echo "planted sample accepted"; exit 1; fi
           uv run substrate tail "$RUNNER_TEMP/planted" --format jsonl --no-follow | grep -q vocab_version
-      - name: vocabulary
-        run: |
-          python3 scripts/check_vocab.py
-          python3 scripts/gen_events.py --check
-      - name: decoder tables
-        run: python3 scripts/gen_decoder.py --check
-      - name: ruff
-        run: uv run ruff check src scripts tests
-      - name: mypy
-        run: uv run mypy
-      - name: stencil table
-        run: uv run python scripts/gen_stencil_table.py --check   # the C table and samples from store/stencil (Sprint 080)
-      - name: pytest
-        env:
-          W2M_REQUIRE_REFERENCES: "1"
-          GH_TOKEN: ${{ github.token }}     # vm_oracle.result_file fetches a run's results from its case set's release
-        run: uv run pytest -q -rs
-      - name: record replay
-        run: uv run python scripts/check_replay.py

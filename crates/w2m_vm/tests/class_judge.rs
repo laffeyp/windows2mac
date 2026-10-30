@@ -18,8 +18,10 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-/// Each decoded class's case count over the 21 reference sets' case files.
-fn counts(root: &Path) -> BTreeMap<String, usize> {
+/// Each decoded class's case count over the 21 reference sets' case files, or None where some are absent: 13 are
+/// tracked and 8 built on this Mac, and CI, which runs no Python, does not build them (Decision 2026-10-29, "No Python
+/// runs"); the gates require them (`W2M_REQUIRE_CASE_RUNS=1`).
+fn counts(root: &Path) -> Option<BTreeMap<String, usize>> {
     let mut sets: Vec<PathBuf> = fs::read_dir(root.join("probes"))
         .unwrap()
         .map(|e| e.unwrap().path())
@@ -28,7 +30,14 @@ fn counts(root: &Path) -> BTreeMap<String, usize> {
         .filter(|p| p.exists())
         .collect();
     sets.sort();
-    assert_eq!(sets.len(), 21, "class_run.py's REFERENCES name 21 case sets");
+    if sets.len() != 21 {
+        let what = format!("{} of the 21 reference sets' case files", sets.len());
+        if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
+            panic!("{what}, and W2M_REQUIRE_CASE_RUNS=1 requires all");
+        }
+        eprintln!("{what}: the case counts are not judged here");
+        return None;
+    }
     let mut out = BTreeMap::new();
     for set in sets {
         let (_, cases) = cpu_cases::read_cases(&fs::read(&set).unwrap()).unwrap();
@@ -37,7 +46,7 @@ fn counts(root: &Path) -> BTreeMap<String, usize> {
             *out.entry(iclass).or_default() += 1;
         }
     }
-    out
+    Some(out)
 }
 
 /// Every class the frozen index judged has, in the 21 case files, the case count the index records.
@@ -46,7 +55,7 @@ fn every_indexed_class_has_its_frozen_case_count() {
     let root = root();
     let index: Value =
         serde_json::from_str(&fs::read_to_string(root.join("store/runs/class-runs.json")).unwrap()).unwrap();
-    let counts = counts(&root);
+    let Some(counts) = counts(&root) else { return };
     let mut differ = Vec::new();
     for entry in index.as_array().unwrap() {
         let iclass = entry["iclass"].as_str().unwrap();

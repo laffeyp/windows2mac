@@ -86,3 +86,73 @@ load kept, and a figure over the bound on a quiet machine still stops the gates.
 - [x] One concept: where a timing bound is judged.
 
 ## result
+
+- **Departure, CI runs no Python** (BLACKBOARD Decision 2026-10-29, "No Python runs", and the user the same day: "no
+  depeding on pythong"):
+  - `.github/workflows/ci.yml` lost:
+    - XED's build (`python3 mfile.py`), which no Rust test reads;
+    - the eight case sets built with `semantics_differential.py`;
+    - `check_vocab.py` and `gen_events.py`;
+    - `gen_decoder.py`, ruff, mypy and `gen_stencil_table.py`;
+    - pytest and `check_replay.py`.
+  - CI keeps:
+    - the Rust job;
+    - substrate's session and vocabulary samples;
+    - llvm-objdump;
+    - the Python 3.14.8 distribution, downloaded as a corpus of Windows PE files that `pe_image`'s test reads, not
+      run.
+  - `class_judge.rs`' case-count test skips where the 8 built sets are absent, as `run_loop.rs` does. The gates
+    require them (`W2M_REQUIRE_CASE_RUNS=1`). With set 065c's file moved away, the test skipped, "20 of the 21
+    reference sets' case files", and failed under the flag. The file was restored at its 5,257,596 bytes.
+  - Two Rust files read Python source as text, which the Decision's "a reference read as stored files" allows:
+    - `host_requests.rs` reads the frozen host's dispatch;
+    - `family_known.rs` reads `family_run.py`.
+  - The card's line "Not here: the multi-vCPU stage's frozen tests" is moot. That stage left the gates in Sprint 223.
+- **Departure, all work on `main`** (the user's Decision of 2026-10-29): `main` was fast-forwarded from bb7c899be to
+  5f4452b14, 586 commits, and pushed. The checkout moved to `main`, carrying this sprint's uncommitted work.
+  `scripts/gates.sh` (lines 9, 44 and 46) and WORKING_AGREEMENT (lines 13 and 253) measure the change against
+  `origin/main`, not `origin/sprint-066`.
+- **The timing stage:**
+  - `exit_time.rs`' test is `#[ignore = "a wall-clock bound: the gates' timing stage runs it (Sprint 224)"]`, so
+    the correctness run (nextest, and CI's `cargo test`) skips it. Its bound stays 5,000 ns.
+  - `scripts/gates.sh` runs it after the Rust tests (`--run-ignored only`), reads the one-minute load average
+    (`sysctl vm.loadavg`), and appends date, outcome, sprint, figure and load to `store/gates/timing.tsv`.
+  - Over the bound with a load under 6, the performance cores of this Mac (6 of 18), it stops the gates. Under load
+    it reports the figure and the gates go on.
+  - The three figures reconcile: 720 ns is `measure_exit.py`'s of 2026-10-14, and 813 to 852 ns the monitor's
+    `spin` on another day, both the C monitor's. The 832 to 873 ns are Rust's on an idle machine, and 4,062 ns
+    Rust's under a load near 170.
+- **The search:** `crates/hypervisor/tests/no_wall_clock_bound.rs` reads every crate's Rust files. It names any
+  `assert!` that compares `elapsed()`, or a variable bound from it, with `<` or `<=`, and skips the file holding the
+  ignored bound. Its first form skipped itself, because it quotes the ignore marker in a string; the skip now
+  matches only an attribute line. The one other wall-clock assertion, `stop_from_another_thread.rs`' "at least
+  50 ms", is a lower bound, which load cannot fail, and is not named.
+- **Plant 1** (the bound 1 ns, at load 17.62): the stage reported "failed, 1395 ns an exit at load 17.62" and
+  "reported, not stopping", and exited 0.
+- **Plant 2** (the bound 1 ns, the quiet level 1,000 so this load counts as quiet): the stage stopped, exit 1, "the
+  exit time is over its bound on a quiet machine (load 17.71)".
+- Plants 1 and 2 ran the stage's lines (`gates.sh` 202-218) extracted to a scratch script. The first two
+  extractions were empty: a pattern matched two lines, then a `$` was read as an anchor. Nothing ran on them, and
+  `exit_time.rs` was restored after each. The plant rows were removed from `timing.tsv`, which did not exist
+  before. `exit_time.rs` was restored byte for byte.
+- **Departure, the README and the About line** (the user, 2026-10-29, ad hoc): GitHub's About line and the README's
+  first line now read "w2m will one day (hopefully) run unmodified Windows x86-64 programs on an Apple silicon Mac."
+  The README states that w2m is an experiment and not a product, lists its methods (a Hypervisor.framework guest per
+  program, the hardware's TSO bit, which `monitor.rs` 137 sets, translation block by block, a Windows layer inside
+  the guest, every part judged against Windows), and places it among related work: Wine and Proton, Rosetta 2,
+  FEX-Emu and Box64. It names no competitor and makes no comparison of merit. Its Python badge became a Rust one,
+  its plan the Rust port plan, and its status that of 2026-10-29. The README is gated, so this sprint's gates run
+  was stopped before its timing stage, with no pass line, and run again with it.
+- **Reviewer-3's review at 224** (no High), with this sprint's gates running, which were stopped with no pass line:
+  - **Low 1:** the stage read "did not run" as "slow". It now has three outcomes: passed; over-bound, which
+    depends on load; and no-figure, where no figure was read, which stops the gates at any load.
+  - **Low 2:** the search exempted whole files and missed reversed comparisons and `duration_since`. Only the
+    function under the ignore attribute is exempt now. The condition is split at its comparison: time on the left
+    of `<`/`<=` or the right of `>`/`>=` is an upper bound. `duration_since` counts as a time source. The search's
+    own fixture file is excluded by name. A second bound planted in `exit_time.rs` (`assert!(started.elapsed()
+    .as_nanos() < 10)`) was named, and the file restored byte for byte.
+  - **Low 3:** `ci.yml`'s header now says no project Python runs, and that substrate runs under `uv`.
+  - Its Mediums go to Sprint 225 (the 8 case sets as release assets) and to the Deferred speed item, reworded to
+    the stored figure.
+- **Plant 3** (`assert!(started.elapsed() < Duration::from_secs(1), "slow")` added to
+  `stop_from_another_thread.rs`): the search failed, naming the file and the line. Restored byte for byte.
