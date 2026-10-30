@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 236
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -84,3 +84,27 @@ Every MMX form the cases and the batch run hold is compiled by the Rust translat
 - [x] One concept: the MMX lowering.
 
 ## result
+
+- **The port:** `lower_mmx` in `crates/translator/src/lower.rs` is `_mmx.lower` (rules/_mmx.py 54-121 at the tag),
+  with `mmx_native` (36-51), `MMX_LANES`, `MMX_SHIFTS` and `mmx_source_form`. `Op::Mmx` calls it where it was refused
+  as a later group. Every encoding it needs was in the Rust encoder.
+- **The offsets:** the x87 status word's and slots' offsets (158, 768) had two homes in `w2m_vm` and one in
+  `guest_runtime`. `guest_runtime::layout` now holds both, and `cases.rs` re-exports them. The translator, which does
+  not depend on `guest_runtime`, keeps its own copies beside `MXCSR_OFF`, held equal to the layout by the new
+  `tests/layout.rs`.
+- **The batch run:** the C words judge compares the MMX calls too. The census of unlifted and unlowered classes is
+  empty: 1,186,246 of the 1,186,511 calls are compared, in 313 classes, with no difference and no refusal.
+- **The cases:**
+  - The Rust translator compiles every case code, 25,919 of 25,919 in 458 classes, each with the frozen Python's
+    words. The two held lists of Rust-compiled classes were rewritten by the test's writer.
+  - Every judged case agrees with Windows but set 065's four FCOS and FSIN rows, held since Sprint 222. The expected
+    counts did not move: the MMX cases were judged before, on fixture words.
+- **The session:** record `store/runs/class-judge-1793357669000000000`, `check_records` 0 violations, 454
+  CANDIDATE_ACCEPTED. The index was written from it: 454 of 458 conform, every one on Rust-compiled words, 2 held. The
+  judges' ledger was rebuilt by `case_runs --write-ledger`, 4 defects.
+- **Plant 1** (the TOP check narrowed to ES, `ubfx(17, 17, 7, 1)`): the words test named "PMADDUBSW [0f, 38, 04, 74, 8f, d8]: rust [... d3471e31 ...]" against the Python's.
+- **Plant 2** (PADDW's lane operation "sub" for "add"): "PADDW [0f, fd, 58, ba]: rust [... 2e7f87de ...]" against the Python's.
+- **Plant 3** (a form that names an XMM register run natively): its first form, PEXTRW with an XMM source, reached no judge: that form lifts through the SSE path, not `lift_mmx`. Run again on MOVDQ2Q made native: "33 case codes whose Rust words differ from the Python's".
+- Each plant was restored by `cp`, and `cmp` found `lower.rs` equal to its copy. The plants ran while the session ran; its binary had passed its start check and the plants rebuilt only the test profile.
+- **Departures:** `crates/guest_runtime/src/layout.rs`, `crates/w2m_vm/src/cases.rs`, `crates/translator/tests/layout.rs`
+  (new), the judges' ledger.
