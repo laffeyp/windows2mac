@@ -1,1 +1,0 @@
-# the module families' runner binaries that do not end on the Rust host, and where each stops (Sprint 196): family, binary (sha256), stop; written by scripts/gates.sh under build/family_runs/, held by crates/w2m_vm/tests/family_runs.rs; none since Sprint 207

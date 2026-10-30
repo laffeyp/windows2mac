@@ -174,22 +174,20 @@ if [ $rust != none ]; then
   printf '%s\t%s\n' twoproc-ic "$(cat build/batch_run/guest-twoproc-ic.stop 2>/dev/null)" >> build/batch_run/guests.tsv
   # the module families on the Rust host (Sprint 196; census row 6): each runner binary a contract's evidence names,
   # run as probe.exe, its printed rows and stop under build/family_runs/, which crates/w2m_vm/tests/family_runs.rs
-  # holds to the contract's rows or to store/family_runs/module-stops-2026-10-28.tsv; each family by its short name and
-  # its contract (Sprint 218: the loader's late TLS beside the module families)
+  # holds to its contract version's rows or to store/family_runs/sweep-held-2026-10-29.tsv. From Sprint 221 every run
+  # the family index judged, 273 in 68 families, from the lookup store/family_runs/known-2026-10-29.tsv: the binary,
+  # its beside DLL (name:sha256), an instruction budget so a hang ends by count
+  rm -rf build/family_runs
   mkdir -p build/family_runs
-  for family in queries:windows.module.queries system:windows.module.system names_ansi:windows.module.names_ansi \
-    search:windows.module.search late_tls:windows.loader.late_tls; do
-    c=${family%%:*}
-    for b in $(grep -o 'probe sha256:[0-9a-f]*' "contracts/${family#*:}/0.1.0.json" | cut -d: -f2 | sort -u); do
-      rm -f "build/family_runs/$c-$b.stop"
-      # the file the runner had beside the binary, if any (Sprint 204: store/family_runs/beside-2026-10-28.tsv)
-      beside=$(awk -F'\t' -v b="$b" '$2 == b { print "--beside " $3 " store/binaries/" $4 ".dll" }' \
-        store/family_runs/beside-2026-10-28.tsv)
-      # shellcheck disable=SC2086
-      echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "store/binaries/$b.exe" \
-        --output "build/family_runs/$c-$b.txt" --stop "build/family_runs/$c-$b.stop" $beside > /dev/null \
-        2> "build/family_runs/$c-$b.stderr" || true
-    done
+  tab=$(printf '\t')
+  grep -v '^#' store/family_runs/known-2026-10-29.tsv | while IFS=$tab read -r c run b _contract beside _rest; do
+    set --
+    if [ "$beside" != "-" ] && [ "${beside#*:}" != "$beside" ]; then
+      set -- --beside "${beside%%:*}" "store/binaries/${beside#*:}.dll"
+    fi
+    echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "store/binaries/$b.exe" \
+      --output "build/family_runs/$c-$run.txt" --stop "build/family_runs/$c-$run.stop" "$@" \
+      --max-steps 20000000000 > /dev/null 2> "build/family_runs/$c-$run.stderr" || true
   done
 fi
 if [ $rust = all ]; then

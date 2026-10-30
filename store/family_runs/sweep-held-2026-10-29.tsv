@@ -1,0 +1,131 @@
+# The family runs (store/family_runs/known-2026-10-29.tsv) that do not conform on the Rust host, and what each waits on (Sprint 221): family, run, "stop: <stop>" (a temporary drive path and GetTempFileNameW name as fixed marks) or "ended; row rule <rule> not ported; rows sha256 <hex of its printed rows>"; written from build/family_runs/ by scripts/gates.sh's family loop, held by crates/w2m_vm/tests/family_runs.rs
+code_pages	38044061149	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044062619	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044064173	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044065903	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044118023	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044119652	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044121378	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044123237	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044173696	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044175691	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044177324	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044179699	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044229348	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044230916	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044232724	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+code_pages	38044234598	ended; row rule code_page_rows excluded 0 not ported; rows sha256 a837e094d0f6336229c9ba5281e322c9552074e01cd94fa30d65057877713ee9
+console	38210455282	ended; row rule console_rows excluded 0 not ported; rows sha256 95903f486631261b99bb54d0db469b3c082340ae97168de921bfc40033b7d31b
+console	38210458372	ended; row rule console_rows excluded 0 not ported; rows sha256 95903f486631261b99bb54d0db469b3c082340ae97168de921bfc40033b7d31b
+display	38273510163	ended; row rule display_rows excluded 0 not ported; rows sha256 7e0866e260bdcbf6349eeb83a7a9e924748e1f905c5713ea306aaeed40196789
+display	38273513428	ended; row rule display_rows excluded 0 not ported; rows sha256 7e0866e260bdcbf6349eeb83a7a9e924748e1f905c5713ea306aaeed40196789
+environment_empty	38044699077	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044700976	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044703336	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044705168	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044763968	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044766150	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044768224	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044770045	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044810768	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044813152	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044815499	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_empty	38044817343	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044699077	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044700976	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044703336	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044705168	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044763968	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044766150	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044768224	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044770045	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044810768	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044813152	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044815499	stop: HostRequest op 4: CreateProcessW argument form 0x400
+environment_set	38044817343	stop: HostRequest op 4: CreateProcessW argument form 0x400
+file_attributes	38087355443	ended; row rule raw excluded 4 not ported; rows sha256 eaf42b12593582e2ccf376dcbd9bfa60219e0ecc5c2410ece86494bd83f30e1b
+file_attributes	38087357359	ended; row rule raw excluded 4 not ported; rows sha256 eaf42b12593582e2ccf376dcbd9bfa60219e0ecc5c2410ece86494bd83f30e1b
+file_mapping	38120624307	ended; row rule file_mapping_rows excluded 0 not ported; rows sha256 08bff649265216ca8771f0897f5da8f532f8a197b8ef1081e9dbbeb138878f7e
+file_mapping	38120626017	ended; row rule file_mapping_rows excluded 0 not ported; rows sha256 08bff649265216ca8771f0897f5da8f532f8a197b8ef1081e9dbbeb138878f7e
+files_more	38119625685	ended; row rule files_more_rows excluded 0 not ported; rows sha256 ae0cc30d35d0702629908f02cf9c32af0b7331495f774b4a3c50371218b14dec
+files_more	38119627458	ended; row rule files_more_rows excluded 0 not ported; rows sha256 ae0cc30d35d0702629908f02cf9c32af0b7331495f774b4a3c50371218b14dec
+format_message	38120951889	ended; row rule format_message_rows excluded 0 not ported; rows sha256 bc3e68558bd11b5525bad0adc8c34336785915d8c35a453e481a91069324c003
+format_message	38120953179	ended; row rule format_message_rows excluded 0 not ported; rows sha256 bc3e68558bd11b5525bad0adc8c34336785915d8c35a453e481a91069324c003
+heap_in_place	38254640218	ended; row rule no_steps excluded 5 not ported; rows sha256 bf07e22c9faa3afe50f5bb283fbf32b8a67ef45163910ae1916033baef0eb85b
+heap_in_place	38254643501	ended; row rule no_steps excluded 5 not ported; rows sha256 bf07e22c9faa3afe50f5bb283fbf32b8a67ef45163910ae1916033baef0eb85b
+heap_query	38115120174	ended; row rule heap_query_rows excluded 3 not ported; rows sha256 e3a23ddf5a8cf7fe759503c347a56ce197c71c776ba3503f9402b70a03a624ef
+heap_query	38115121838	ended; row rule heap_query_rows excluded 3 not ported; rows sha256 e3a23ddf5a8cf7fe759503c347a56ce197c71c776ba3503f9402b70a03a624ef
+integrity_level	38099150504	ended; row rule integrity_level_rows excluded 0 not ported; rows sha256 c75353863109ff1f874ed54aedbf38ad9eff13f5be744f243af1cdad493828f0
+integrity_level	38099152338	ended; row rule integrity_level_rows excluded 0 not ported; rows sha256 c75353863109ff1f874ed54aedbf38ad9eff13f5be744f243af1cdad493828f0
+interlocked_lists	38210349431	ended; row rule slist_rows excluded 0 not ported; rows sha256 35f38dbdab75bc591bcee6bbfcdbe2d5755c384aac2ecd752ca3849c79346a7c
+interlocked_lists	38210351696	ended; row rule slist_rows excluded 0 not ported; rows sha256 35f38dbdab75bc591bcee6bbfcdbe2d5755c384aac2ecd752ca3849c79346a7c
+known_folders	38098265812	stop: HostRequest op 4: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1
+known_folders	38098267402	stop: HostRequest op 4: SHGetKnownFolderPath argument form 0x4c3b7e9a7732d2e1
+loader	38047927781	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047929442	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047930988	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047932539	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047981900	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047983522	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047984894	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38047987237	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048037669	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048039731	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048041658	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048043520	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048095121	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048097583	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048099528	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+loader	38048101245	ended; row rule loader_rows excluded 0 not ported; rows sha256 2847f23f6f9b98df513d929ea71d347f05914bffcfe2363a0a701df6a437fa34
+local_free	38092775612	ended; row rule raw excluded 2 not ported; rows sha256 f3f6ae82cb5a4515409afe9b791a2354b2259dd4fa24453724fb9b021b89b009
+local_free	38092777429	ended; row rule raw excluded 2 not ported; rows sha256 f3f6ae82cb5a4515409afe9b791a2354b2259dd4fa24453724fb9b021b89b009
+output_debug_string	38230799629	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
+output_debug_string	38230802984	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
+output_debug_string	38230806738	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
+output_debug_string	38230809940	stop: HostRequest op 4: OutputDebugStringW argument form 0x140002070
+paths	38090281974	ended; row rule paths_rows excluded 2 not ported; rows sha256 a006b26f57c2b1667fe211c55736c989d13a03449144e16d828301c79f796fe5
+paths	38090284442	ended; row rule paths_rows excluded 2 not ported; rows sha256 a006b26f57c2b1667fe211c55736c989d13a03449144e16d828301c79f796fe5
+process_parameters	38194049597	ended; row rule parameters_rows excluded 0 not ported; rows sha256 993d1f813b2b2221150a45f9d27156a77da3647a42410b204a8e59456a5605fe
+process_parameters	38194051809	ended; row rule parameters_rows excluded 0 not ported; rows sha256 993d1f813b2b2221150a45f9d27156a77da3647a42410b204a8e59456a5605fe
+process_queries	38041796227	ended; row rule process_query_rows excluded 4 not ported; rows sha256 4e5e77615e4c86dc8827174a99e5dc1c0094d0081f6a5e0fe7c8ccd3e1240ff7
+process_queries	38041797992	ended; row rule process_query_rows excluded 4 not ported; rows sha256 4e5e77615e4c86dc8827174a99e5dc1c0094d0081f6a5e0fe7c8ccd3e1240ff7
+process_queries	38041800459	ended; row rule process_query_rows excluded 4 not ported; rows sha256 4e5e77615e4c86dc8827174a99e5dc1c0094d0081f6a5e0fe7c8ccd3e1240ff7
+process_queries	38041803105	ended; row rule process_query_rows excluded 4 not ported; rows sha256 4e5e77615e4c86dc8827174a99e5dc1c0094d0081f6a5e0fe7c8ccd3e1240ff7
+process_queries	38041805183	ended; row rule process_query_rows excluded 4 not ported; rows sha256 4e5e77615e4c86dc8827174a99e5dc1c0094d0081f6a5e0fe7c8ccd3e1240ff7
+processes	38189162864	ended; row rule processes_rows excluded 0 not ported; rows sha256 ba659bd9410f300d0756fac8b01558dd16c539c80500024cccee3090130c1e10
+processes	38189164581	ended; row rule processes_rows excluded 0 not ported; rows sha256 ba659bd9410f300d0756fac8b01558dd16c539c80500024cccee3090130c1e10
+processor_topology	38206551545	ended; row rule topology_rows excluded 4 not ported; rows sha256 d5296687b99a662a0f9d06154b2e4b281f5aecbe000f3e7430dae01b373bd508
+processor_topology	38206553365	ended; row rule topology_rows excluded 4 not ported; rows sha256 d5296687b99a662a0f9d06154b2e4b281f5aecbe000f3e7430dae01b373bd508
+running_thread_context	lap-20261013T234642777Z-5cb60b6d	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+slim_locks	38048676516	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+slim_locks	38048679185	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+slim_locks	38048681485	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+slim_locks	38048683615	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+temp_path	38098847298	ended; row rule temp_path_rows excluded 0 not ported; rows sha256 23e635b5802f38f759e868b472f854603b958251c695c015ef02055c38d0d5f8
+temp_path	38098848806	ended; row rule temp_path_rows excluded 0 not ported; rows sha256 23e635b5802f38f759e868b472f854603b958251c695c015ef02055c38d0d5f8
+thread_stack	38114444717	ended; row rule thread_stack_rows excluded 0 not ported; rows sha256 f6fd5d0b121c53d60e39ed56e5a1c7e8e39cf6b7cad4d8ffcdd95cc6aecd3687
+thread_stack	38114446614	ended; row rule thread_stack_rows excluded 0 not ported; rows sha256 f6fd5d0b121c53d60e39ed56e5a1c7e8e39cf6b7cad4d8ffcdd95cc6aecd3687
+thread_stacks	lap-20261013T234430841Z-5cb60b6d	ended; row rule thread_stacks_rows excluded 0 not ported; rows sha256 13a14984042dcb238e1f164ae3774c4a8b975f2e5cd76e80926ec0f8db9ab56f
+thread_storage	38040526466	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040528813	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040531024	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040533511	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040598310	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040600812	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040602719	stop: HostRequest op 4: FlsFree argument form 0x1
+thread_storage	38040604585	stop: HostRequest op 4: FlsFree argument form 0x1
+threads	38207005406	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+threads	38207007264	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+time	38173127764	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+time	38173129974	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+time_and_error_mode	38206225386	ended; row rule time_rows.derive excluded 0 not ported; rows sha256 db3079b2540b71b4dbce0af376ab05f2fdb44ef15d311ed09ff566ed3cb073bc
+time_and_error_mode	38206227300	ended; row rule time_rows.derive excluded 0 not ported; rows sha256 db3079b2540b71b4dbce0af376ab05f2fdb44ef15d311ed09ff566ed3cb073bc
+time_and_error_mode_child	38206225386	ended; row rule time_rows.derive excluded 0 not ported; rows sha256 db3079b2540b71b4dbce0af376ab05f2fdb44ef15d311ed09ff566ed3cb073bc
+time_and_error_mode_child	38206227300	ended; row rule time_rows.derive excluded 0 not ported; rows sha256 db3079b2540b71b4dbce0af376ab05f2fdb44ef15d311ed09ff566ed3cb073bc
+version	38173733146	ended; row rule version_rows excluded 0 not ported; rows sha256 3eeb9cbfbcd41570d9cdd8bfe6de1bc38c75562ff541d7a29b8c39097ee2e744
+version	38173735116	ended; row rule version_rows excluded 0 not ported; rows sha256 3eeb9cbfbcd41570d9cdd8bfe6de1bc38c75562ff541d7a29b8c39097ee2e744
+virtual_memory	38172734444	ended; row rule virtual_memory_rows excluded 0 not ported; rows sha256 b9f779cbb0c100206de31563651bbe79781f5b963badb45dc057d19786b6b691
+virtual_memory	38172736319	ended; row rule virtual_memory_rows excluded 0 not ported; rows sha256 b9f779cbb0c100206de31563651bbe79781f5b963badb45dc057d19786b6b691
+wait_handoff	lap-20261017T040446837Z-dc268176	stop: Handover: no thread ready after thread 4's hand-over and 1 waiting with a deadline: the warp to a deadline is not served by the Rust host yet
+windows	38210803867	stop: HostFailure op 6: a name in a folder whose listing is not recorded: <drive>/Windows/w2m<tmp>.tmp
+windows	38210806334	stop: HostFailure op 6: a name in a folder whose listing is not recorded: <drive>/Windows/w2m<tmp>.tmp

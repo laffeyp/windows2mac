@@ -146,6 +146,9 @@ pub enum Stop {
     StepLimit { count: u64, max: u64, pc: u64 },
     /// the batch run's end by its reference's rule (`batch_stop`, Sprint 219), and which part of it held
     ReferenceEnd(String),
+    /// a call to an import no service answers (`hvc #9`), named "DLL!Function" by its thunk, at the hvc's `pc`
+    /// (Sprint 221)
+    Import { name: String, pc: u64 },
     /// any other exit
     Exit(String),
 }
@@ -160,6 +163,7 @@ impl Stop {
             Stop::TimeLimit => StopKind::TimeLimit,
             Stop::StepLimit { .. } => StopKind::StepLimit,
             Stop::ReferenceEnd(_) => StopKind::ReferenceEnd,
+            Stop::Import { .. } => StopKind::Unserved,
             Stop::HostRequest { .. } => StopKind::Unserved,
             _ => StopKind::Other,
         }
@@ -904,6 +908,23 @@ fn run(
                     continue;
                 }
             }
+        }
+        // `hvc #9` (vm_backend 5255-5263): a call to an import no service answers; X17 holds its thunk, which names
+        // it, and the guest's RSP (X4) the call's return address; both kept for the record, as `self.unimplemented`
+        // (Sprint 221: 34 family runs stopped on a bare "Hvc 9", which named nothing)
+        if number == 9 {
+            let thunk = vcpu.reg(Reg::X(17))?;
+            let rsp = vcpu.reg(Reg::X(4))?;
+            let name = guest
+                .thunks
+                .get(&thunk)
+                .cloned()
+                .unwrap_or_else(|| format!("{thunk:#x}"));
+            let Some(at) = guest.layout.offset(rsp) else {
+                break Stop::Exit(format!("import {name}: the guest's RSP 0x{rsp:x} is not mapped"));
+            };
+            guest.unimplemented = Some((name.clone(), read_u64(guest.memory.as_slice(), at)));
+            break Stop::Import { name, pc };
         }
         if number != 1 {
             break Stop::Hvc { number, pc };

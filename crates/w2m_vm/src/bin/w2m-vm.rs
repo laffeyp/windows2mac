@@ -182,6 +182,15 @@ mod run {
             Some(_) => return Err("--main-thread-calls <tsv>".into()),
             None => None,
         };
+        // a guest run's instruction budget (Sprint 221): the family sweep ends a hang by count
+        let max_steps = match args.iter().position(|a| a == "--max-steps") {
+            Some(i) if args.len() >= i + 2 => {
+                let n = args.drain(i..i + 2).nth(1).unwrap();
+                Some(n.parse::<u64>().map_err(|e| format!("--max-steps {n}: {e}"))?)
+            }
+            Some(_) => return Err("--max-steps <instructions>".into()),
+            None => None,
+        };
         let end = match (log_lines, main_calls) {
             (Some(lines), Some(file)) => Some((lines, file)),
             (None, None) => None,
@@ -231,7 +240,18 @@ mod run {
 
         // the guest, as `tests/test_timed_waits.py` `run_guest` loads it: the program's own name probe.exe
         let data = fs::read(root.join(guest_path)).map_err(|e| format!("{guest_path}: {e}"))?;
-        let loaded = pe_loader::load(&data, None, "probe.exe").map_err(|e| format!("{guest_path}: {e:?}"))?;
+        // the DLL beside the program is the loader's to map when the program imports it (`run_in_vm`'s supply; Sprint
+        // 221: static_tls, loader and threads import their own DLL, and with no supply its exports bound to thunks no
+        // service answers, 34 family runs stopping on "import <dll>!<export>")
+        let beside_bytes = match &beside {
+            Some((_, file)) => Some(fs::read(root.join(file)).map_err(|e| format!("--beside {file}: {e}"))?),
+            None => None,
+        };
+        let supply = |dll: &str| match (&beside, &beside_bytes) {
+            (Some((name, _)), Some(bytes)) if name.eq_ignore_ascii_case(dll) => Some(bytes.clone()),
+            _ => None,
+        };
+        let loaded = pe_loader::load(&data, Some(&supply), "probe.exe").map_err(|e| format!("{guest_path}: {e:?}"))?;
         // C:\w2m\app: a fresh directory holding the program as probe.exe, as `run_guest` and `run_in_vm` make it
         // (Sprint 204)
         let app = std::env::temp_dir().join(format!("w2m-app-{}", std::process::id()));
@@ -245,7 +265,7 @@ mod run {
         let mut guest = guest_of(&root, &loaded, &start)?;
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
         guest.limited = true;
-        let out = on_one_vcpu(&mut guest, &loaded, Some(GUEST_SECONDS));
+        let out = on_one_vcpu(&mut guest, &loaded, Some(GUEST_SECONDS), max_steps.unwrap_or(MAX_STEPS));
         drop(guest.files.take());
         let _ = fs::remove_dir_all(&app);
         let out = out?;
@@ -326,8 +346,15 @@ mod run {
         Guest::new(loaded, &image, &services, start, &modules, &symbols).map_err(|e| format!("the guest: {e:?}"))
     }
 
-    /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop or `seconds`.
-    fn on_one_vcpu(guest: &mut Guest, loaded: &pe_loader::Loaded, seconds: Option<u64>) -> Result<Outcome, String> {
+    /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop, `seconds`, or
+    /// `max_steps` instructions (`--max-steps`, Sprint 221: a family run that hangs ends at the same step on every run,
+    /// not at a wall-clock limit).
+    fn on_one_vcpu(
+        guest: &mut Guest,
+        loaded: &pe_loader::Loaded,
+        seconds: Option<u64>,
+        max_steps: u64,
+    ) -> Result<Outcome, String> {
         let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
         vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
             .map_err(|e| format!("{e:?}"))?;
@@ -343,7 +370,7 @@ mod run {
                 let _ = handle.stop();
             });
         }
-        run_compiling(guest, loaded, &vcpu, MAX_STEPS, &mut host).map_err(|e| format!("{e:?}"))
+        run_compiling(guest, loaded, &vcpu, max_steps, &mut host).map_err(|e| format!("{e:?}"))
     }
 
     /// A stop by its kind and reason, without host addresses, which move when the runtime image is rebuilt (Sprint
@@ -358,6 +385,8 @@ mod run {
             Stop::TimeLimit => "the run's time limit".into(),
             Stop::StepLimit { count, max, pc } => format!("StepLimit: {count} of {max} steps at pc 0x{pc:x}"),
             Stop::ReferenceEnd(why) => format!("ReferenceEnd: {why}"),
+            // the frozen host's `Unimplemented(f"import {name}")` (vm_backend 5263)
+            Stop::Import { name, .. } => format!("import {name}"),
             other => format!("{other:?}"),
         }
     }
@@ -471,7 +500,7 @@ mod run {
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
             guest.limited = s["limited"].as_bool().unwrap_or(true);
             let seconds = guest.limited.then_some(GUEST_SECONDS);
-            on_one_vcpu(&mut guest, &loaded, seconds)
+            on_one_vcpu(&mut guest, &loaded, seconds, MAX_STEPS)
         };
         match run() {
             Ok(out) => match out.stop {
@@ -525,7 +554,7 @@ mod run {
             let calls = w2m_vm::batch_stop::read_calls(&text(&root.join(file))?)?;
             guest.batch_stop = Some(w2m_vm::batch_stop::BatchStop::new(log.clone(), *lines, calls));
         }
-        let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS))?;
+        let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS)?;
         // the log beside the stop file, which `batch_run.rs` holds to the reference's, line for line (Sprint 219)
         if let Some(log) = &log {
             let beside = format!("{}.unity.log", stop_file.trim_end_matches(".tsv"));
