@@ -2321,8 +2321,8 @@ fn lower_sse(
         None => Err(CompileError::Refused(format!("sse {ic}: a memory operand expected"))),
     };
     match ic {
-        "MOVAPS" | "MOVAPD" | "MOVUPS" | "MOVUPD" => match (dst, src) {
-            // 368-374
+        "MOVAPS" | "MOVAPD" | "MOVUPS" | "MOVUPD" | "LDDQU" => match (dst, src) {
+            // 368-374; LDDQU, a 16-byte load, memory only (Sprint 065 there, Sprint 235 here)
             (SseLoc::X(d), SseLoc::X(s)) => a.emit(&[a64::mov_v(u32::from(*d), u32::from(*s))]),
             (SseLoc::X(d), _) => a.emit(&[a64::ldr_v(16, u32::from(*d), addr_reg(src)?, 0)]),
             _ => a.emit(&[a64::str_v(16, xmm(src)?, addr_reg(dst)?, 0)]),
@@ -2363,6 +2363,20 @@ fn lower_sse(
                 a.emit(&[a64::fmov_from_v(8, 16, xmm(src)?), a64::fmov_to_v(8, xmm(dst)?, 16)]);
             }
         },
+        "PEXTRW" => {
+            // 361-367 (Sprint 235): word imm & 7 of the XMM source, zero-extended into the general register; a memory
+            // source is #UD in `register_only_rule`, before this
+            let Some(imm) = imm else {
+                return Err(CompileError::Refused("sse PEXTRW: no immediate".into()));
+            };
+            let SseLoc::Loc(r @ Loc::R { .. }) = dst else {
+                return Err(CompileError::Refused(
+                    "sse PEXTRW: a general register destination expected".into(),
+                ));
+            };
+            a.emit(&[a64::umov_h(16, xmm(src)?, (imm & 7) as u32)]);
+            store(a, r, 16, folded, reg)?;
+        }
         "XORPS" | "XORPD" | "ANDPS" | "ANDPD" | "ORPD" => {
             // 397-399 (ORPD from Sprint 182: VORPD's base)
             let v = sse_src(a, src, 16, reg, 31)?;

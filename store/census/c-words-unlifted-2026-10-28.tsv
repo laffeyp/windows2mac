@@ -6,7 +6,6 @@ PACKUSWB	13	lowering refused
 PADDSW	13	lowering refused
 PADDW	22	lowering refused
 PEXTRW	1	lowering refused
-PEXTRW	1	not lifted
 PMADDUBSW	5	lowering refused
 PMULHW	8	lowering refused
 PMULLW	8	lowering refused

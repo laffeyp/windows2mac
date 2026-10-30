@@ -121,7 +121,7 @@ fi
 # the Rust workspace (Sprint 125; docs/rust-port-plan-2026-10-21.md set-up): format, lints as errors, tests, and a
 # release build, then the session check under substrate: a Rust binary's events on a record, replayed
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets -- -D warnings -D clippy::collection_is_never_read  # a gathered list never read (Sprint 235)
 # the workspace type-checked as CI's Linux builds it, where the Mac-only modules (lib.rs's `cfg`s) are absent (Sprint
 # 211: CI run 40936387557 failed to compile record.rs, which named the Mac-only `run` module, after these gates passed)
 CARGO_TARGET_DIR=build/target-linux cargo check -q --target x86_64-unknown-linux-gnu --workspace --all-targets

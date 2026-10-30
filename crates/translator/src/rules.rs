@@ -104,9 +104,37 @@ pub fn rule(iclass: &str) -> Option<Rule> {
         "CMPPS" | "CMPPD" | "CVTDQ2PS" | "CVTPS2PD" | "CVTPD2PS" | "CVTPS2DQ" | "CVTTPS2DQ" | "CVTPD2DQ"
         | "CVTTPD2DQ" | "PMOVSXDQ" => sse_int,
         ic if SSE2_INT_BLOCK.contains(&ic) => sse_int,
+        // Sprint 235: the set-050 classes and two of set 065, each its own module at the tag with `rule =
+        // _sse.int_rule` (store/rules/registry.tsv); PEXTRW's module has `_sse.register_only_rule`
+        ic if SSE_INT_MODULES.contains(&ic) => sse_int,
+        "PEXTRW" => sse_register_only,
         _ => return None,
     })
 }
+
+/// The classes whose own module at the tag frozen-python-2026-10-29 sets `rule = _sse.int_rule` and that no group
+/// above holds (Sprint 235): the 17 legacy classes of set 050 the class judge held, LDDQU and ORPD.
+pub const SSE_INT_MODULES: [&str; 19] = [
+    "CMPSD_XMM",
+    "CMPSS",
+    "MPSADBW",
+    "PABSW",
+    "PALIGNR",
+    "PAVGB",
+    "PCMPGTW",
+    "PINSRB",
+    "PINSRD",
+    "PMADDWD",
+    "PMAXSW",
+    "PMAXUD",
+    "PMAXUW",
+    "PMINSD",
+    "PMOVZXWD",
+    "PSLLW",
+    "SHUFPD",
+    "LDDQU",
+    "ORPD",
+];
 
 /// The classes the registry holds, for the census and the tests.
 pub const GROUP_1: [&str; 38] = [
@@ -2274,6 +2302,16 @@ fn sse_int(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
         imm,
     });
     Ok(())
+}
+
+/// `register_only_rule` (_sse.py 62-67): PEXTRW 66 0F C5, whose source is an XMM register only (SDM: mod 11); a memory
+/// operand is #UD (Sprint 235).
+fn sse_register_only(ctx: &mut Ctx<'_>) -> Result<(), LiftError> {
+    if ctx.ops.iter().any(|o| o.starts_with("M:")) {
+        ctx.b.emit(Op::Ud);
+        return Ok(());
+    }
+    sse_int(ctx)
 }
 
 /// `memory_only_rule` (_sse.py 54-59): MOVLPS, MOVHPD, MOVNTDQ, whose SDM forms are memory only; a register operand

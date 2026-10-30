@@ -65,7 +65,7 @@ jobs:
           rustup show active-toolchain
           rustup component add rustfmt clippy
           cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
+          cargo clippy --all-targets -- -D warnings -D clippy::collection_is_never_read  # a gathered list never read (Sprint 235)
           cargo test --quiet
           cargo build --release --quiet
           target/release/vocabulary_generator --check

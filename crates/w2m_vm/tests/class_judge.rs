@@ -161,6 +161,9 @@ fn the_rust_index_is_the_frozen_one_or_held() {
         python.len(),
         held.len()
     );
+    // the faults were collected and never asserted from Sprint 222 to 235, so no class could fail this test; found
+    // when 17 held classes came to conform and the test still passed (Sprint 235)
+    assert!(faults.is_empty(), "{}", faults.join("\n"));
 }
 
 /// The stored Rust index is what `class_judge --index` gives on the record it names.
