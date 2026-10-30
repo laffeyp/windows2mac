@@ -1,0 +1,133 @@
+# The translation cache: UnityPlayer.dll translated ahead of time (Sprint 251)
+
+Plan step 5 (`docs/rust-port-plan-2026-10-24.md` 158-160): "The PE images translated ahead of time. UnityPlayer.dll
+first … Gate: the batch run conforms with the cache, and compiles at run time, counted on the record, fall by the
+share the cache covers." The Decision "Sequence for step 5" states the gate in counts: the batch run conforming,
+`vm_compile_blocks` "compiled in UnityPlayer.dll" falling from 149,308 by the blocks the cache holds, and "compiled"
+from 274,837 by as many.
+
+## What the run does now
+
+Measured on the batch run (Sprints 246-250, `store/runs/w2m-vm-game-17933*`), and on one run from 9622bb579 with
+temporary lines at the stop, removed after (Sprint 251's card):
+
+- 274,837 compiles inside the VM a run, 5.17% to 5.19% of the run's seconds run alone; the most compiling in one 60 Hz
+  frame's span 10.9 to 12.0 ms of 16.7.
+- UnityPlayer.dll at its preferred base, 0x180000000, size 0x19db000, its bytes the file's (no relocation applied).
+  mono-2.0-bdwgc.dll, which asks the same base, lands at 0x1180010000; steam_api64.dll at 0x1222ff0000.
+- In UnityPlayer.dll: 149,308 compiles of 132,110 distinct block starts; 3,098,064 guest bytes, 23.5 a block; their
+  code 14,340,616 bytes, 108.5 a block, 4.6 bytes of code a byte of x86.
+- The code area, 64 MiB at `MONITOR_VA + 0x60000` and shared by both compilers, ends the run 29.3 MB full for 275,559
+  blocks; nothing in it is ever freed.
+- The 17,198 repeated compiles of a start: the in-VM lookup is the dispatch table alone, two ways of 1<<20 entries,
+  and a block evicted from it, or dropped by a write to its page, is compiled again.
+- The static census of 2026-10-15 counts 4,996,593 instructions reachable in UnityPlayer.dll and 649 jump tables
+  (`store/census/static/instructions-hail-to-the-rainbow.json`): the run reaches about 3.1 MB of the image's code.
+
+## The choices
+
+**A. Which blocks: the image's, found statically.** The cache holds every block a walk of UnityPlayer.dll finds from
+its entry, exports, TLS callbacks and `.pdata` starts (`pe_image::code_targets`), following direct branches, calls'
+fall-throughs and jump tables, as the frozen census's walk did. A cache of the blocks one batch run compiled would
+meet the batch run's gate by construction and miss the play path the cache exists for (UnityPlayer.dll retires 76.9%
+of the game's instructions in play, Decision 2026-10-14); the walk's cover is measured against the batch run's 132,110
+starts, and a start the walk misses is compiled at run time as today.
+
+**B. Where the code lives: its own region at a fixed address.** Translated code is position-dependent (exits are
+`B`/`BL` to the dispatcher, runtime symbols absolute), so the cache is placed where it was made: a region of its own
+in the monitor area, beside the 64 MiB code area, sized from the walk (at 4.6 bytes a guest byte, the whole image's
+reachable code is several times the run's 14.3 MB); the run's compilers keep the 64 MiB area to themselves. The key
+holds everything a word depends on (D), so a cache made under another dispatcher or runtime is never loaded. The
+frozen host relocated each entry instead (`vm_backend.py` at `python-final` 4662-4752); a fixed place needs no
+relocation code to judge.
+
+**C. The lookup: a second level the miss stub reads before the compiler.** The dispatch table stays the first level.
+On a miss whose target lies in UnityPlayer.dll's range, the miss stub probes the cache's own table, open-addressed,
+held to half full, written once at load; a hit is inserted into the dispatch table as a compile's result is, and the
+run goes on with no compile. A miss in the cache's table goes to `w2m_vm_compile` as today. The probe is Rust-written
+monitor code, outside the C runtime, so the runtime image stays the frozen host's (KIT_DIARY #103), and off unless a
+cache is loaded, so the gates' frozen-word tests hold the default words.
+
+**D. Flag liveness and the key.** A block's words depend on its successors' flag use, which at run time depends on
+which pages were compiled before (`block_compiler.c` 131-140). The walk knows every successor in the image, so the
+cache's liveness is the walk's, the same on every run; a successor outside the image or unknown is taken as reading
+every flag, as the run-time scan takes an unscanned page. The key is the sha256 of the image file, its base, the
+translator's source tree id, the monitor code's words and the runtime image's sha256; the cache file lives under
+`build/translation-cache/<key>`, made by a Rust tool on first need, as Rosetta 2 translates at install.
+
+**E. A write to the image.** A write to a page of UnityPlayer.dll that holds cached code marks that page in a bitmap
+the probe reads; a marked page's starts fall through to the run-time compiler, whose blocks the existing write
+handling drops (Sprint 250). The cache file is never changed by a run.
+
+**F. The compiler and its judge.** The Rust translator makes the cache's words. Today its words equal the C
+compiler's instruction by instruction over 1,186,511 calls (`crates/translator/tests/c_words.rs`); no judge compares
+whole blocks, so the first building card adds one: every block the batch run's in-VM compiler made, compiled again
+by the Rust translator from the same bytes and the same liveness, word for word, or each difference named.
+
+Ruled out: a dispatch table enlarged to hold the image's blocks (it would still evict, and every entry costs the
+first level); the C runtime holding the probe (it changes the judged image); the frozen host's per-entry relocation
+(B).
+
+## The order, a gate each
+
+1. **The whole-block judge.** The Rust translator compiles each block the batch run's in-VM compiler made, from the
+   logged bytes and liveness, and its words equal the C's, or each class of difference is named. Gate: the judge on
+   the record, 0 unnamed differences.
+2. **The walk.** UnityPlayer.dll's blocks found in Rust from its code targets, branches and jump tables. Gate: its
+   instruction count equals the census's 4,996,593 or each difference is named, and its cover of the batch run's
+   132,110 starts is on the record.
+3. **The cache file.** The walk's blocks translated into a file under its key, at the region's addresses, with the
+   walk's liveness. Gate: every block's words equal the judge's (1) at the same liveness; its size and the time to make
+   it on the record.
+4. **The probe.** The second-level lookup and the write bitmap in the monitor code, the cache loaded at start. Gate:
+   the plan's, the batch run conforming with the cache and "compiled in UnityPlayer.dll" falling from 149,308 by the
+   blocks the cache holds, "compiled" by as many; the frozen-word tests unchanged with no cache.
+
+Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
+where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.
+Deferred (Sprint 247), the counters on several vCPUs, holds the probe's counts as it holds the compiler's.
+
+## Against the goal
+
+The goal is play at speed: about 37,600 system calls a second in play, 41 million instructions a frame at 112 frames
+a second on six threads, and the first scene, 325.4 billion instructions in 62 s on the laptop
+(`docs/rust-port-plan-2026-10-24.md` 32-40). The cache moves none of the call figures; it moves what compiling takes
+from the frames. On the batch run compiling is 5.2% of the run's seconds, so the cache raises the rate by at most
+about 5.5% there; its larger effect is the bursts, 10.9 to 12.0 ms of compiling inside one 60 Hz frame's span, which
+on the play path would be late frames, and UnityPlayer.dll's share of play, 76.9% of the instructions, is where those
+compiles come from. Six threads compiling at once (step 6) would contend for the one code area and its cursor; a
+cache made before the run takes the image's code out of that contention. The first scene is the end of milestone B's
+path, and its new code is the play path's; the walk reaches it without a run having gone there first.
+
+## Against the systems that solved it
+
+- **Rosetta 2** translates ahead of time and compiles what it meets at run time: it "sets to work right from the moment
+  your application is being installed", and "If Rosetta newly encounters code that haven't been translated at install
+  time, then we'll compile it on the fly" (Apple, WWDC20 session 10686,
+  https://developer.apple.com/videos/play/wwdc2020/10686/, as the plan quotes it). Taken: the image ahead of time,
+  the run-time compiler for what the walk misses and for Mono's generated code.
+- **FEX** keeps the code its JIT makes on disk and looks there first: "when FEX needs to JIT code subsequently, it will
+  attempt to look up code from that FOZ database first" (FEX-2609, https://fex-emu.com/FEX-2609/, as the plan quotes
+  it). Taken: a file under a key, looked up before the compiler; not taken: filling it from what a run compiled, which
+  would cover the batch run alone.
+- **QEMU** looks translations up without a global lock: lookups go through QHT, "designed for lockless lookups"
+  (https://gitlab.com/qemu-project/qemu/-/blob/master/docs/devel/multi-thread-tcg.rst, as the plan quotes it). Taken:
+  the cache's table is written once at load and only read after, so several vCPUs probe it with no lock (step 6).
+- **Wine** loads PE images itself, its server holding the process's objects ("the clients must send requests to the
+  Wine server", Wine Developer's Guide, Architecture Overview,
+  https://gitlab.winehq.org/wine/wine/-/wikis/Wine-Developer's-Guide/Architecture-Overview, as the plan quotes it).
+  Not taken here: on an x86 host Wine runs the image's code natively and translates none, so it has no cache of
+  translations to borrow; the key's base is w2m's own loader's (`pe_loader` 367-372).
+- **Firecracker** runs "one or more vCPU threads (one per guest CPU core)"
+  (https://github.com/firecracker-microvm/firecracker/blob/main/docs/design.md, as the plan quotes it), and **crosvm**
+  locks each device, not the machine: "Each `BusDevice` is reference counted and wrapped in a mutex"
+  (https://github.com/google/crosvm/blob/main/ARCHITECTURE.md, as the plan quotes it). Neither translates code; both
+  bear on step 6, where each vCPU's thread probes the cache's read-only table with no shared lock, as each serves its
+  own exits.
+
+## Revisit if
+
+- The walk covers under half of the batch run's 132,110 starts in UnityPlayer.dll: the static cover is then the wrong
+  tool for this image, and a cover from recorded runs, FEX's, is weighed again.
+- The whole-block judge finds differences it cannot name: the cache's words are then not the run-time compiler's, and
+  the cache waits on them.
