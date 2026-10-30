@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 253
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -101,3 +101,26 @@ batch run's starts is on the record.
 - [x] One concept: the walk.
 
 ## result
+
+- **The walk:** `crates/image_walk` (8d99af9d3), the census's walk, tables and sweep rule for rule, with w2m's decoder;
+  UnityPlayer.dll, sha256 `6f2a1adb…`, the census's image, in 8 s.
+- **Against the census:** 649 tables and 14,885 entries, the census's; 7 instructions found by the sweep alone, the
+  census's; 4,992,554 instructions against 4,996,593, 4,039 fewer. The walk stops at 48 places where w2m's decoder
+  refuses the bytes; LLVM's `objdump` refuses each of the 48 too (the bytes are data, a `lea` of a table's address
+  taken as a root, as the census's rule takes it: 0x1b140's repeating `dc bc 1b 8f`). The census's Capstone decoded
+  on past such bytes; that the 4,039 are those paths is inferred, not shown instruction by instruction, since no
+  Capstone runs here.
+- **The cover:** of the batch run's 132,359 distinct starts in UnityPlayer.dll in the exit ledger's blocks (both
+  compilers'; 132,110 the in-VM compiler's alone at Sprint 251), 129,278 are walked instructions (97.7%) and 128,523
+  block starts (97.1%), of 1,004,561. Kept in `store/translation-cache/walk-unityplayer-2026-10-30.json`, held by
+  `tests/unityplayer.rs`.
+- **A departure:** plant 3 is judged by the depot test, not a unit test, a test PE image with an import table being
+  more than the plant needs.
+- **The gates:** `scripts/gates.sh` exit 0 in 645 s on 8d99af9d3, copied from `store/gates/passes.tsv`; the timing stage 656 ns an exit at load 3.39.
+- **Plants,** run on 8d99af9d3, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `the_depot_image_walks_to_the_stored_counts` failed, "assertion `left == right` failed: block_starts …
+  left: Number(1004561) right: Number(988486)": the switch tables never walked as roots.
+- **Plant 2,** the same test failed, "block_starts … left: Number(1004561) right: Number(724637)": a call's
+  fall-through not a block start.
+- **Plant 3,** the same test failed, "block_starts … left: Number(1004561) right: Number(1004568)": the stop at an
+  import that never returns removed.
