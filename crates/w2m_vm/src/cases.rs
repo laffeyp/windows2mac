@@ -42,9 +42,9 @@ pub const PF_RESULT: u64 = AF_OPERANDS + 16;
 pub const DF_BYTE: u64 = 0x38;
 /// MONITOR_DATA + this: YMM0-15 bits 255:128 (vm_backend 106).
 pub const YMM_HI_OFF: u64 = 0x400;
-/// The state block's x87 status word (the abridged tags after it) and ST0-ST7, 16 bytes apart (vm_backend 108).
-pub const X87_SW_OFF: u64 = 158;
-pub const X87_ST_OFF: u64 = 768;
+/// The state block's x87 status word (the abridged tags after it) and ST0-ST7, 16 bytes apart (vm_backend 108), kept
+/// in the guest layout from Sprint 236, where the translator's MMX lowering reads them too.
+pub use guest_runtime::layout::{X87_ST_OFF, X87_SW_OFF};
 /// The model's exits: an SSE instruction and one instruction run whole (vm_backend 1118, 1125).
 pub const HVC_SLOW_SSE: u16 = 10;
 pub const HVC_SLOW_STEP: u16 = 11;

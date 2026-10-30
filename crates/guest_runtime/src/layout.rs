@@ -19,6 +19,9 @@ pub const MXCSR_OFF: u64 = 0x50;
 pub const CLOCK_WARP: u64 = 0xC8; // RUN_TABLE + this
 pub const FCW_OFF: u64 = 0x70;
 pub const X87_ST_OFF: u64 = 768; // vm_backend 108
+/// the state block's x87 status word, the abridged tags after it (vm_backend 108); one home for the translator's MMX
+/// lowering and the model step (Sprint 236)
+pub const X87_SW_OFF: u64 = 158;
 pub const PAUSE_COUNT: u64 = 0xA8;
 pub const LOCK_OWNER: u64 = 0xB0;
 pub const SLICE_UNTIL: u64 = 0xC0; // vm_backend 119

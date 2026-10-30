@@ -15,7 +15,7 @@ use std::fmt;
 use a64_encoder::assembler::{Assembler, Target};
 use a64_encoder::{self as a64, LSL, LSR, ZR};
 
-use crate::lift::{Lifted, Loc, Op, SseLoc, Temp};
+use crate::lift::{Lifted, Loc, MmxArg, Op, SseLoc, Temp};
 
 /// vm_backend 357-371.
 pub const TEMP_REGS: [u32; 6] = [18, 25, 26, 27, 29, 30];
@@ -49,6 +49,10 @@ const STATE_GS_BASE: u64 = 0xb0;
 const DF_BYTE: u32 = 0x38;
 const MXCSR_OFF: u32 = 0x50;
 const FCW_OFF: u32 = 0x70;
+/// the state block's x87 status word (the abridged tags after it) and ST0-ST7, 16 bytes apart (vm_backend 108;
+/// Sprint 236, the MMX lowering); `tests/layout.rs` holds them equal to `guest_runtime::layout`'s
+pub const X87_SW_OFF: u32 = 158;
+pub const X87_ST_OFF: u32 = 768;
 const SPILL: u32 = 0x78;
 const PAUSE_COUNT: u32 = 0xA8;
 const SLICE_UNTIL: u32 = 0xC0;
@@ -1954,15 +1958,7 @@ pub fn compile_insn(
                 align,
                 imm,
             } => lower_vex(a, base, d, s1.as_ref(), s2, *vl, *align, *imm, &reg, &folded)?,
-            Op::Mmx { ic, .. } => {
-                return Err(CompileError::LaterGroup {
-                    class: ic.clone(),
-                    why: format!(
-                        "mmx {ic} at 0x{:x}: the MMX lowering (rules/_mmx.py) is a later group",
-                        ins.address
-                    ),
-                });
-            }
+            Op::Mmx { ic, dst, src, imm } => lower_mmx(a, ic, *dst, *src, *imm, state_va, &reg)?,
             Op::Mxcsr { store: st, loc } => {
                 let Loc::M { addr, .. } = loc else {
                     return Err(CompileError::Refused(format!(
@@ -2266,6 +2262,155 @@ fn set_flags_from_fcmp(a: &mut Assembler) {
         a64::str(8, 16, 28, AF_OPERANDS + 16),
     ]);
     mark_defined(a, U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF);
+}
+
+/// `_mmx.LANES` (rules/_mmx.py 22-24 at the tag): lane operations on 64 bits, (NEON three-same name, lane size).
+const MMX_LANES: [(&str, &str, u32); 11] = [
+    ("PADDW", "add", 1),
+    ("PADDD", "add", 2),
+    ("PSUBW", "sub", 1),
+    ("PMULLW", "mul", 1),
+    ("PADDSW", "sqadd", 1),
+    ("PUNPCKLBW", "zip1", 0),
+    ("PUNPCKLWD", "zip1", 1),
+    ("PUNPCKLDQ", "zip1", 2),
+    ("PUNPCKHBW", "zip2", 0),
+    ("PUNPCKHWD", "zip2", 1),
+    ("PUNPCKHDQ", "zip2", 2),
+];
+
+/// `_mmx.SHIFTS` (27): the arithmetic right shifts by an immediate, by lane size.
+const MMX_SHIFTS: [(&str, u32); 2] = [("PSRAW", 1), ("PSRAD", 2)];
+
+/// `_mmx.SOURCE_FORMS` (25, 28): the classes whose native form takes an MMX register or memory source.
+fn mmx_source_form(ic: &str) -> bool {
+    MMX_LANES.iter().any(|(c, _, _)| *c == ic)
+        || ["PXOR", "PMULHW", "PACKUSWB", "PSHUFW", "PSADBW", "PMADDUBSW"].contains(&ic)
+}
+
+/// `_mmx.native` (36-51): whether the form runs in A64, MMX-register and memory operands only.
+fn mmx_native(ic: &str, dst: MmxArg, src: MmxArg) -> bool {
+    let (mm, mem, gpr) = (
+        |o: MmxArg| matches!(o, MmxArg::Mm(_)),
+        |o: MmxArg| matches!(o, MmxArg::Loc(Loc::M { .. })),
+        |o: MmxArg| matches!(o, MmxArg::Loc(Loc::R { .. })),
+    );
+    match ic {
+        "MOVQ" | "MOVD" => (mm(dst) && (mm(src) || mem(src) || gpr(src))) || ((mem(dst) || gpr(dst)) && mm(src)),
+        "PEXTRW" => gpr(dst) && mm(src),
+        "EMMS" => true,
+        _ if MMX_SHIFTS.iter().any(|(c, _)| *c == ic) => mm(dst) && matches!(src, MmxArg::Imm),
+        _ if mmx_source_form(ic) => mm(dst) && (mm(src) || mem(src)),
+        _ => false,
+    }
+}
+
+/// `_mmx.lower` (rules/_mmx.py 54-121 at the tag frozen-python-2026-10-29; Sprint 236): an MMX-register form in A64
+/// when x87's TOP is 0 and no x87 exception is pending, MMn being bits 63:0 of state slot n; any other state, and every
+/// form `mmx_native` refuses, a model step (hvc #11). X16 holds the state block, X17 is scratch, V28-V31 the operands.
+fn lower_mmx(
+    a: &mut Assembler,
+    ic: &str,
+    dst: MmxArg,
+    src: MmxArg,
+    imm: u64,
+    state_va: u64,
+    reg: &BTreeMap<Temp, u32>,
+) -> Result<(), CompileError> {
+    let (sw, tags) = (X87_SW_OFF, X87_SW_OFF + 2);
+    let slot = |n: u8| X87_ST_OFF + 16 * u32::from(n);
+    if !mmx_native(ic, dst, src) {
+        a.emit(&[a64::hvc(HVC_SLOW_STEP)]);
+        return Ok(());
+    }
+    let fast = a.label();
+    a.emit(&a64::mov_imm(16, state_va));
+    a.emit(&[
+        a64::ldr(2, 17, 16, sw),
+        a64::ubfx(17, 17, 7, 7), // bit 0: ES; bits 6:4: TOP
+        a64::bfi(17, ZR, 1, 3),  // C0-C2 do not matter
+    ]);
+    a.branch(|off| a64::cbz(17, off), fast);
+    a.emit(&[a64::hvc(HVC_SLOW_STEP)]);
+    a.bind(fast);
+    if ic == "EMMS" {
+        // every tag empty; TOP as it is (SDM EMMS)
+        a.emit(&[a64::str(1, ZR, 16, tags)]);
+        return Ok(());
+    }
+    let get = |a: &mut Assembler, o: MmxArg, v: u32| -> Result<(), CompileError> {
+        match o {
+            MmxArg::Mm(n) => a.emit(&[a64::ldr_v(8, v, 16, slot(n))]),
+            // MOVD r32 (zero-extended), MOVQ r64
+            MmxArg::Loc(Loc::R { idx, bits, .. }) => a.emit(&[a64::fmov_to_v(bits / 8, v, u32::from(idx))]),
+            // 4 bytes (MOVD, a low unpack) zero the rest
+            MmxArg::Loc(Loc::M { addr, bytes }) => a.emit(&[a64::ldr_v(bytes, v, reg_at(reg, addr)?, 0)]),
+            other => return Err(CompileError::Refused(format!("mmx {ic}: operand {other:?}"))),
+        }
+        Ok(())
+    };
+    if matches!(ic, "MOVQ" | "MOVD" | "PEXTRW") {
+        get(a, src, 30)?;
+    } else {
+        get(a, dst, 30)?;
+        if let Some((_, name, size)) = MMX_LANES.iter().find(|(c, _, _)| *c == ic) {
+            get(a, src, 31)?;
+            a.emit(&[a64::three_same_d(name, 30, 30, 31, *size)]);
+        } else if ic == "PXOR" {
+            get(a, src, 31)?;
+            a.emit(&[a64::eor_v(30, 30, 31)]);
+        } else if ic == "PMULHW" {
+            // the four products, then their high halves
+            get(a, src, 31)?;
+            a.emit(&[a64::smull(30, 30, 31, false), a64::three_same("uzp2", 30, 30, 30, 1)]);
+        } else if ic == "PACKUSWB" {
+            // the destination's words, then the source's
+            get(a, src, 31)?;
+            a.emit(&[a64::three_same("zip1", 30, 30, 31, 3), a64::sqxtun(30, 30, false)]);
+        } else if ic == "PSHUFW" {
+            get(a, src, 31)?;
+            for lane in 0..4u32 {
+                a.emit(&[a64::ins_h_element(30, lane, 31, (imm >> (2 * lane) & 3) as u32)]);
+            }
+        } else if let Some((_, size)) = MMX_SHIFTS.iter().find(|(c, _)| *c == ic) {
+            // past the lane's bits, the sign
+            let n = imm.min((8u64 << size) - 1) as u32;
+            if n != 0 {
+                a.emit(&[a64::shift_right(30, 30, n, *size, true)]);
+            }
+        } else if ic == "PMADDUBSW" {
+            // as the XMM form on eight bytes: four saturated words
+            get(a, src, 31)?;
+            a.emit(&[
+                a64::extend_bytes(29, 31, false, true),
+                a64::extend_bytes(28, 30, false, false),
+                a64::three_same("mul", 28, 28, 29, 1),
+                a64::add_pairwise_long(28, 28, 1, true),
+                a64::sqxtn_h(30, 28, false),
+            ]);
+        } else if ic == "PSADBW" {
+            // the absolute differences' sum, bits 63:16 zero
+            get(a, src, 31)?;
+            a.emit(&[a64::three_same_d("uabd", 30, 30, 31, 0), a64::uaddlv_8b(30, 30)]);
+        }
+    }
+    match dst {
+        // word imm & 3, zero-extended into the register
+        MmxArg::Loc(Loc::R { idx, .. }) if ic == "PEXTRW" => {
+            a.emit(&[a64::umov_h(u32::from(idx), 30, (imm & 3) as u32)])
+        }
+        // MOVD r32 (zero-extended), MOVQ r64
+        MmxArg::Loc(Loc::R { idx, bits, .. }) => a.emit(&[a64::fmov_from_v(bits / 8, u32::from(idx), 30)]),
+        MmxArg::Mm(n) => a.emit(&[
+            a64::str_v(8, 30, 16, slot(n)),
+            a64::movz(17, 0xFFFF, 0),
+            a64::str(2, 17, 16, slot(n) + 8),
+        ]),
+        MmxArg::Loc(Loc::M { addr, bytes }) => a.emit(&[a64::str_v(bytes, 30, reg_at(reg, addr)?, 0)]),
+        other => return Err(CompileError::Refused(format!("mmx {ic}: destination {other:?}"))),
+    }
+    a.emit(&[a64::movz(17, 0xFF, 0), a64::str(1, 17, 16, tags)]);
+    Ok(())
 }
 
 /// `_sse.lower` (_sse.py 324-488) for the SSE float core (group 4, Sprint 160): `_sse.rule`'s classes. XMM i is V i;
