@@ -14,7 +14,7 @@ reference = "the Intel runs of store/case_runner/expected.tsv"
 
 [[producer]]
 kind = "case_runs"
-command = ["../scripts/sign_and_run.sh", "../target/release/case_runs", "--rust-translator", "--plant-flip-cf"]
+command = ["../scripts/sign_and_run.sh", "../target/release/case_runs", "--plant-flip-cf"]
 schemas = "schemas/harness-events.json"
 
 [[initial]]

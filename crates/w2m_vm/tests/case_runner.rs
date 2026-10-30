@@ -4,12 +4,13 @@
 //! the Intel run Windows recorded for its set; from Sprint 147, each case Windows ended in a fault too, at the VM's
 //! fault through the guest's exception records; from Sprint 148, on the whole recorded state.
 //!
-//! Sprint 149 binds it (reviewer-2's link-3 review): the instruction's words come only from the frozen Python
-//! lowering's fixture, pinned by its header and its committed sha256 (`w2m_vm::case_inputs`); a refusal fails; each
-//! run's counts equal `store/case_runner/expected.tsv`; and with `W2M_REQUIRE_CASE_RUNS=1` (`scripts/gates.sh`) a
-//! missing input fails rather than skips. CI (Linux) does not compile this test: it needs Hypervisor.framework and the
-//! downloaded results. The test also reports the rule modules the judged cases reach, link 3's revisit measure. The
-//! same verdicts go on a record through `case_runs` (Sprint 150).
+//! Sprint 149 binds it (reviewer-2's link-3 review): a refusal fails; each run's counts equal
+//! `store/case_runner/expected.tsv`; and with `W2M_REQUIRE_CASE_RUNS=1` (`scripts/gates.sh`) a missing input fails
+//! rather than skips. The instruction's words came from the frozen Python lowering's fixture, and from Sprint 151 from
+//! the Rust translator where it lifted; from Sprint 238 the Rust translator compiles every case and the fixture is
+//! retired. CI (Linux) does not compile this test: it needs Hypervisor.framework and the downloaded results. The test
+//! also reports the rule modules the judged cases reach, link 3's revisit measure. The same verdicts go on a record
+//! through `case_runs` (Sprint 150).
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,9 +18,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cpu_cases::{read_cases, read_results};
-use w2m_vm::case_inputs::{
-    Counts, FIXTURE_ABSENT, Fixture, Hybrid, case_runtime_calls, expected, registry, runs, with_case_vm,
-};
+use w2m_vm::case_inputs::{CaseCompiler, Counts, case_runtime_calls, expected, registry, runs, with_case_vm};
 use w2m_vm::cases::run_cases;
 
 /// `OPEN` (tests/test_class_runs.py 33): the open discrepancies' differences, by class and judged part (Sprint 175).
@@ -71,90 +70,20 @@ fn missing(what: &str) {
     eprintln!("{what}: the case runner is not run here");
 }
 
-/// The Python words for every case.
-#[test]
-fn every_judged_case_agrees_with_windows() {
-    judge(false);
-}
-
-/// Sprint 151: the Rust translator for the classes link 5's groups have carried, the Python words for the rest. The
-/// same counts and zero differences, and the Rust words equal the Python's for every code the Rust compiled.
+/// Sprint 151's judge, the Rust translator's words for every case from Sprint 238: the committed counts and zero
+/// differences but the pinned open ones.
 #[test]
 fn every_judged_case_agrees_with_windows_with_the_rust_translator() {
-    judge(true);
-}
-
-/// Sprint 152 (the review of Sprints 149-150 suggested it): with no VM, the Rust words equal the fixture's Python words
-/// for every case code the Rust rules lift, all 25,919 codes walked at the fixture's layout, the classes the C does not
-/// stencil among them.
-#[test]
-fn the_rust_words_equal_the_python_words_on_every_case_code() {
-    let root = root();
-    let Some(fixture) = Fixture::load(&root) else {
-        return missing(FIXTURE_ABSENT);
-    };
-    let fixture = fixture.unwrap();
-    let hybrid = Hybrid::new(&fixture, case_runtime_calls(&root).unwrap());
-    for code in fixture.words.keys() {
-        hybrid
-            .compile(code, cpu_cases::CODE_VA, fixture.header.base, fixture.header.exit)
-            .unwrap_or_else(|e| panic!("{code:02x?}: {e}"));
-    }
-    let rust = hybrid.rust.borrow();
-    let unlike = hybrid.unlike.borrow();
-    println!(
-        "{} case codes; the Rust translator compiled {} of them in {} classes",
-        fixture.words.len(),
-        rust.values().sum::<usize>(),
-        rust.len()
-    );
-    for (code, class, d) in unlike.iter().take(12) {
-        println!("    {class} {code:02x?}: {d}");
-    }
-    assert!(!rust.is_empty(), "the Rust translator compiled no case code");
-    if let Some(moved) = held_rust_compiled(&root, "rust-compiled-codes-by-class.tsv", &rust) {
-        panic!("{moved}");
-    }
-    assert!(
-        unlike.is_empty(),
-        "{} case codes whose Rust words differ from the Python's",
-        unlike.len()
-    );
-}
-
-/// One VM a process (`hv_vm_create`): the two tests run on parallel threads, so each holds this while its VM lives
-/// (the first gates run of Sprint 151 failed the second with HV_BUSY, -85377016).
-static ONE_VM: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-fn judge(use_rust: bool) {
-    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
     let runs = runs(&root);
     if runs.is_empty() {
         return missing("no downloaded Intel results in build/probe-runs");
     }
-    let Some(fixture) = Fixture::load(&root) else {
-        return missing(FIXTURE_ABSENT);
-    };
-    let fixture = fixture.unwrap();
-    println!(
-        "fixture: {} codes, made at src {} (base 0x{:x}, exit 0x{:x})",
-        fixture.words.len(),
-        fixture.header.src,
-        fixture.header.base,
-        fixture.header.exit
-    );
-    let hybrid = Hybrid::new(&fixture, case_runtime_calls(&root).unwrap());
-    let compile = |code: &[u8], address: u64, base: u64, exit_va: u64| {
-        if use_rust {
-            hybrid.compile(code, address, base, exit_va)
-        } else {
-            fixture.compile(code, address, base, exit_va)
-        }
-    };
+    let compiler = CaseCompiler::new(case_runtime_calls(&root).unwrap());
+    let compile = |code: &[u8], address: u64, base: u64, exit_va: u64| compiler.compile(code, address, base, exit_va);
     let expected = expected(&root);
 
-    let (failures, reached, distinct, at_fault, to_model) = with_case_vm(&root, &fixture, |guest, vcpu| {
+    let (failures, reached, distinct, at_fault, to_model) = with_case_vm(&root, |guest, vcpu| {
         let mut failures = Vec::new();
         let mut reached: BTreeMap<String, usize> = BTreeMap::new();
         let (mut at_fault, mut to_model): (BTreeMap<String, usize>, BTreeMap<String, usize>) = Default::default();
@@ -337,38 +266,26 @@ fn judge(use_rust: bool) {
         modules.len(),
         reached.len()
     );
-    if use_rust {
-        let rust = hybrid.rust.borrow();
-        let unlike = hybrid.unlike.borrow();
-        println!(
-            "the Rust translator compiled {} cases in {} classes: {rust:?}",
-            rust.values().sum::<usize>(),
-            rust.len()
-        );
-        for (code, class, d) in unlike.iter().take(12) {
-            println!("    {class} {code:02x?}: {d}");
-        }
-        // per class the Rust compiled: judged whole, of them judged at a fault, and sent to the model (Sprint 154)
-        let per: Vec<String> = rust
-            .keys()
-            .map(|c| {
-                let n = |m: &BTreeMap<String, usize>| m.get(c).copied().unwrap_or(0);
-                format!("{c} {}/{}/{}", n(&reached), n(&at_fault), n(&to_model))
-            })
-            .collect();
-        println!("    judged / at a fault / to the model, per class: {}", per.join(", "));
-        if rust.is_empty() {
-            failures.push("the Rust translator compiled no case".into());
-        }
-        if let Some(moved) = held_rust_compiled(&root, "rust-compiled-by-class.tsv", &rust) {
-            failures.push(moved);
-        }
-        if !unlike.is_empty() {
-            failures.push(format!(
-                "{} cases whose Rust words differ from the Python's",
-                unlike.len()
-            ));
-        }
+    let rust = compiler.compiled.borrow();
+    println!(
+        "the Rust translator compiled {} cases in {} classes: {rust:?}",
+        rust.values().sum::<usize>(),
+        rust.len()
+    );
+    // per class the Rust compiled: judged whole, of them judged at a fault, and sent to the model (Sprint 154)
+    let per: Vec<String> = rust
+        .keys()
+        .map(|c| {
+            let n = |m: &BTreeMap<String, usize>| m.get(c).copied().unwrap_or(0);
+            format!("{c} {}/{}/{}", n(&reached), n(&at_fault), n(&to_model))
+        })
+        .collect();
+    println!("    judged / at a fault / to the model, per class: {}", per.join(", "));
+    if rust.is_empty() {
+        failures.push("the Rust translator compiled no case".into());
+    }
+    if let Some(moved) = held_rust_compiled(&root, "rust-compiled-by-class.tsv", &rust) {
+        failures.push(moved);
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

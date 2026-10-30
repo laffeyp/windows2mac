@@ -11,14 +11,16 @@ use std::process::Command;
 pub const BUILT_FROM: &str = env!("W2M_CRATES_TREE");
 
 /// The build's inputs (Sprint 192; reviewer-2's Medium 3 of its review of 185-189): the crates, the workspace's manifest
-/// and lockfile, the pinned toolchain and cargo's config, as `build.rs` stages them.
+/// and lockfile, the pinned toolchain and cargo's config, as `build.rs` stages them; and `specs/`, whose
+/// `x86_decode.json` a build script reads (Sprint 194) and whose `approximations.json` `approximate.rs` compiles in
+/// (Sprint 238; reviewer-3's Low 1 of its review at 237).
 pub const INPUTS: [&str; 6] = [
     "crates",
     "Cargo.toml",
     "Cargo.lock",
     "rust-toolchain.toml",
     ".cargo",
-    "specs/x86_decode.json",
+    "specs",
 ];
 
 /// The work tree's tree id of `INPUTS`, taken as `build.rs` takes it.
@@ -98,5 +100,46 @@ mod tests {
             }
         }
         assert!(scripts >= 2, "found {scripts} build scripts");
+    }
+
+    /// The `.rs` files under `dir`, `tests/` directories left out: their includes are not in a record-writing binary.
+    fn sources(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                if !["tests", "target"].iter().any(|n| path.ends_with(n)) {
+                    sources(&path, out);
+                }
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// Every file an `include_str!` or `include_bytes!` outside `tests/` compiles in is under one of `INPUTS` (Sprint
+    /// 238; reviewer-3's Low 1 of its review at 237: `approximate.rs` compiled in `specs/approximations.json`, which the
+    /// digest left out, so a changed table reached a record unstamped).
+    #[test]
+    fn every_file_a_source_compiles_in_is_an_input() {
+        let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").canonicalize().unwrap();
+        let root = crates.parent().unwrap();
+        let mut files = Vec::new();
+        sources(&crates, &mut files);
+        let mut includes = 0;
+        for file in files {
+            let text = std::fs::read_to_string(&file).unwrap();
+            for mac in ["include_str!(\"", "include_bytes!(\""] {
+                for piece in text.split(mac).skip(1) {
+                    let named = &piece[..piece.find('"').unwrap()];
+                    let path = file.parent().unwrap().join(named).canonicalize();
+                    let path = path.unwrap_or_else(|e| panic!("{}: {named}: {e}", file.display()));
+                    let rel = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
+                    let covered = INPUTS.iter().any(|i| rel == *i || rel.starts_with(&format!("{i}/")));
+                    assert!(covered, "{} compiles in {rel}, which INPUTS does not name", file.display());
+                    includes += 1;
+                }
+            }
+        }
+        assert!(includes >= 2, "found {includes} includes");
     }
 }

@@ -51,7 +51,7 @@ mod run {
     };
     use serde_json::{Value, json};
     use w2m_vm::case_inputs::{
-        FIXTURE_ABSENT, Fixture, Hybrid, case_runtime_calls, runs, translator_sha, with_case_vm,
+        CaseCompiler, case_runtime_calls, runs, translator_sha, with_case_vm,
     };
     use w2m_vm::cases::run_cases;
 
@@ -242,10 +242,9 @@ mod run {
         let profiles: BTreeSet<String> = runs.iter().map(|r| profile_of(&r.id)).collect();
         let profile = profiles.into_iter().collect::<Vec<_>>().join(" + ");
 
-        let fixture = Fixture::load(&root).ok_or(FIXTURE_ABSENT)??;
-        let hybrid = Hybrid::new(&fixture, case_runtime_calls(&root)?);
+        let compiler = CaseCompiler::new(case_runtime_calls(&root)?);
         let translator = translator_sha(&root)?;
-        let compile = |code: &[u8], a: u64, base: u64, exit: u64| hybrid.compile(code, a, base, exit);
+        let compile = |code: &[u8], a: u64, base: u64, exit: u64| compiler.compile(code, a, base, exit);
         let mut out = io::stdout().lock();
         let w = |e: io::Error| e.to_string();
         let session_ns = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -267,7 +266,7 @@ mod run {
         // the 21 runs through the case runner, each case's class its decoded class
         let mut classes: BTreeMap<String, Class> = BTreeMap::new();
         let runs_ref = &runs;
-        with_case_vm(&root, &fixture, |guest, vcpu| -> Result<(), String> {
+        with_case_vm(&root, |guest, vcpu| -> Result<(), String> {
             for (k, run) in runs_ref.iter().enumerate() {
                 let (fmt, cases) =
                     read_cases(&fs::read(&run.set).map_err(|e| e.to_string())?).map_err(|e| format!("{e:?}"))?;
@@ -317,22 +316,15 @@ mod run {
             v.unjudged.sort_by_key(|u| std::cmp::Reverse(u.0));
             let verdict = v.verdict();
             let differences = v.differences;
-            // the cases whose words the Rust translator made, the rest the frozen Python lowering's (Medium 1)
-            let rust_compiled = hybrid.rust.borrow().get(iclass).copied().unwrap_or(0);
+            // the cases whose words the Rust translator made (Medium 1), every one from Sprint 238
+            let rust_compiled = compiler.compiled.borrow().get(iclass).copied().unwrap_or(0);
             let contract = ContractId::new(format!("x86.semantics.{}", iclass.to_lowercase())).expect("a dotted id");
             let version = Version::new(&f.version).map_err(|e| format!("{iclass}: {e}"))?;
-            // a class the Rust translator compiled is its candidate; any other, the Python words' (as `case_runs`)
-            let (generator, candidate) = if hybrid.rust.borrow().contains_key(iclass) {
-                (
-                    "the Rust translator (crates/translator), run by the Rust case runner",
-                    translator.as_str(),
-                )
-            } else {
-                (
-                    "the frozen Python lowering's words (build/case_runner/python-words.txt), run by the Rust case runner",
-                    fixture.sha256.as_str(),
-                )
-            };
+            // the candidate is the Rust translator (as `case_runs`)
+            let (generator, candidate) = (
+                "the Rust translator (crates/translator), run by the Rust case runner",
+                translator.as_str(),
+            );
             let cand = format!("class-judge:{iclass}@{}", &candidate[..12]);
             emit(
                 &mut out,

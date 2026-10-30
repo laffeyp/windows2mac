@@ -40,6 +40,16 @@
     "reported_in": "class-judge-1793359177000000000",
     "resolved_in": null,
     "resolving_ref": null
+   },
+   {
+    "contract_id": "x86.semantics.fcos",
+    "discrepancy_id": "class-judge-1793360752372029000-fcos-d2",
+    "first_divergence": "FCOS: managed_vm: FCOS FSW: 4 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 0x2020, cpu 0x2220 (in 0x2200)",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793360750000000000",
+    "resolved_in": null,
+    "resolving_ref": null
    }
   ],
   "resolved_in": null,
@@ -167,6 +177,16 @@
     "reported_in": "class-judge-1793359177000000000",
     "resolved_in": null,
     "resolving_ref": null
+   },
+   {
+    "contract_id": "x86.semantics.fcos",
+    "discrepancy_id": "class-judge-1793360752372029000-fcos-d1",
+    "first_divergence": "FCOS: managed_vm: FCOS st0: 10 cases; run 38222873837: case 10258: [64, 4e, d9, ff] model 3ffeff586224bf4706a1, cpu 3ffeff586224bf4706a2",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793360750000000000",
+    "resolved_in": null,
+    "resolving_ref": null
    }
   ],
   "resolved_in": null,
@@ -212,6 +232,16 @@
     "judge": "class-judge",
     "repair_path": "implementation_repair",
     "reported_in": "class-judge-1793359177000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "x86.semantics.fsin",
+    "discrepancy_id": "class-judge-1793360752372029000-fsin-d2",
+    "first_divergence": "FSIN: managed_vm: FSIN FSW: 4 cases; run 38222873837: case 43839: [67, 45, d9, fe] model 0x2920, cpu 0x2b20 (in 0x2900)",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793360750000000000",
     "resolved_in": null,
     "resolving_ref": null
    }
@@ -339,6 +369,16 @@
     "judge": "class-judge",
     "repair_path": "implementation_repair",
     "reported_in": "class-judge-1793359177000000000",
+    "resolved_in": null,
+    "resolving_ref": null
+   },
+   {
+    "contract_id": "x86.semantics.fsin",
+    "discrepancy_id": "class-judge-1793360752372029000-fsin-d1",
+    "first_divergence": "FSIN: managed_vm: FSIN st0: 8 cases; run 38222873837: case 43839: [67, 45, d9, fe] model bffe840e556031273c19, cpu bffe840e556031273c1a",
+    "judge": "class-judge",
+    "repair_path": "implementation_repair",
+    "reported_in": "class-judge-1793360750000000000",
     "resolved_in": null,
     "resolving_ref": null
    }

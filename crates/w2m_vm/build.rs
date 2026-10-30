@@ -15,13 +15,14 @@ const INPUTS: [&str; 6] = [
     "Cargo.lock",
     "rust-toolchain.toml",
     ".cargo",
-    "specs/x86_decode.json",
+    "specs",
 ];
 
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     // the build's inputs (Sprint 192; reviewer-2's Medium 3 of its review of 185-189): the crates, the workspace's
-    // manifest and lockfile (its release profile sets overflow-checks), the pinned toolchain and cargo's config
+    // manifest and lockfile (its release profile sets overflow-checks), the pinned toolchain and cargo's config; and
+    // specs/, which a build script or an `include_str!` reads (Sprint 238)
     for input in INPUTS {
         println!("cargo:rerun-if-changed=../../{input}");
     }

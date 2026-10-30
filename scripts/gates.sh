@@ -72,8 +72,8 @@ elif touched '^(Cargo\.(toml|lock)|\.cargo/|rust-toolchain\.toml|scripts/sign_an
 elif [ -n "$crates" ]; then
   rust=crates
 fi
-# the untracked inputs under build/ (the Windows results the case runner judges against, the Python words fixture)
-# against their committed manifest: a new download is a change no git path shows (Sprint 171; reviewer-2's Medium 2)
+# the untracked inputs under build/ (the Windows results the case runner judges against; the Python words fixture until
+# Sprint 238) against their committed manifest: a new download is a change no git path shows (Sprint 171; reviewer-2's Medium 2)
 if [ $rust != all ] && [ -d build/probe-runs ]; then
   stale=$(shasum -a 256 -c store/case_runner/build-inputs.sha256 2>/dev/null | grep -v ': OK$' | head -1 || true)
   extra=$(ls build/probe-runs/*/result-1.bin build/case_runner/* 2>/dev/null | while read -r f; do grep -q "  $f\$" store/case_runner/build-inputs.sha256 || echo "$f"; done | head -1)

@@ -4,7 +4,7 @@
 //! put them there through `src/w2m/differential.py`: one unit per instruction class, one reference CPU under Windows a
 //! session.
 //!
-//! Substrate runs this binary as a Producer (`harness/case-runs.toml`, `harness/case-runs-rust.toml`; substrate
+//! Substrate runs this binary as a Producer (`harness/case-runs-rust.toml`; substrate
 //! `docs/process-producer.md`). It runs the downloaded Intel runs of the reference profile `W2M_CASE_PROFILE` names
 //! (`<cpu>; <profile>`, as `store/probe-runs/<run>/cpu.txt` and `profile.txt` spell them) through
 //! `w2m_vm::cases::run_cases`, and writes `differential.run`'s sequence (its docstring, 9-19) in the vocabulary's
@@ -17,9 +17,10 @@
 //! made. The Python started each step from the event before it with predicate triggers; a run file's triggers take no
 //! predicate, so one Producer writes the sequence in order.
 //!
-//! `--rust-translator` (Sprint 151) compiles the classes link 5's groups carry with the Rust translator, the rest with
-//! the Python words. `--plant-flip-cf` flips CF in every completed case of the session's first run's Windows results:
-//! the record must then hold discrepancies whose first divergence names a CF class. `--write-ledger` (not a Producer)
+//! The Rust translator compiles every case (Sprint 151 the classes link 5's groups carried, the rest the frozen Python
+//! lowering's words; from Sprint 238 every class, and the Python words' judge, `case-runner`, retired).
+//! `--plant-flip-cf` flips CF in every completed case of the session's first run's Windows results: the record must
+//! then hold discrepancies whose first divergence names a CF class. `--write-ledger` (not a Producer)
 //! rebuilds the judges' ledger from the records and writes `store/case_runner/discrepancy-ledger.json`, after a run;
 //! `--check-ledger` (the gate) fails when that file is not what the records give.
 
@@ -56,14 +57,13 @@ mod run {
         Sha256, VOCAB_VERSION, Verdict, Version, harness_line,
     };
     use w2m_vm::case_inputs::{
-        FIXTURE_ABSENT, Fixture, Hybrid, case_runtime_calls, runs, translator_sha, with_case_vm,
+        CaseCompiler, case_runtime_calls, runs, translator_sha, with_case_vm,
     };
     use w2m_vm::cases::run_cases;
     use w2m_vm::ledger;
 
     /// The judge's name: the record's baseline and the ledger's key.
-    const JUDGE: &str = "case-runner";
-    const JUDGE_RUST: &str = "case-runner-rust";
+    const JUDGE: &str = "case-runner-rust";
     /// vm_oracle's record (325): the guest state at a fault and after an instruction.
     const CONTRACT_ID: &str = "w2m.guest_state.fault_context";
     const CONTRACT_VERSION: &str = "0.2.0";
@@ -149,8 +149,6 @@ mod run {
         // of its review of 182-184)
         w2m_vm::built_from::check(&root, "case_runs")?;
         let plant = flag("--plant-flip-cf");
-        let use_rust = flag("--rust-translator");
-        let judge = if use_rust { JUDGE_RUST } else { JUDGE };
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
@@ -173,20 +171,13 @@ mod run {
         if runs.is_empty() {
             return Err(format!("no downloaded Intel result of a run on {profile}"));
         }
-        let fixture = Fixture::load(&root).ok_or(FIXTURE_ABSENT)??;
-        let hybrid = Hybrid::new(&fixture, case_runtime_calls(&root)?);
-        let compile = |code: &[u8], a: u64, base: u64, exit: u64| {
-            if use_rust {
-                hybrid.compile(code, a, base, exit)
-            } else {
-                fixture.compile(code, a, base, exit)
-            }
-        };
+        let compiler = CaseCompiler::new(case_runtime_calls(&root)?);
+        let compile = |code: &[u8], a: u64, base: u64, exit: u64| compiler.compile(code, a, base, exit);
         let translator_sha = translator_sha(&root)?;
         // the judges' ledger as the records say (differential.run 144)
         let ledger = ledger::rebuild(&runs_dir);
         let session_ns = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let session = format!("{judge}-{session_ns}");
+        let session = format!("{JUDGE}-{session_ns}");
         let mut out = io::stdout().lock();
         let w = |e: io::Error| e.to_string();
 
@@ -206,7 +197,7 @@ mod run {
         let mut units: BTreeMap<String, Unit> = BTreeMap::new();
         let mut per_run = Vec::new();
         let runs_ref = &runs;
-        let outcome = with_case_vm(&root, &fixture, |guest, vcpu| -> Result<(), String> {
+        let outcome = with_case_vm(&root, |guest, vcpu| -> Result<(), String> {
             for (k, run) in runs_ref.iter().enumerate() {
                 let (fmt, cases) =
                     read_cases(&fs::read(&run.set).map_err(|e| e.to_string())?).map_err(|e| format!("{e:?}"))?;
@@ -231,7 +222,7 @@ mod run {
             Ok(())
         })?;
         outcome?;
-        eprintln!("case_runs: {judge} on {profile}: cases judged per run {per_run:?}");
+        eprintln!("case_runs: {JUDGE} on {profile}: cases judged per run {per_run:?}");
 
         // per class (differential.py 156-226): the candidate, its comparison, its decision
         let contract = ContractId::new(CONTRACT_ID).expect("a dotted id");
@@ -240,21 +231,13 @@ mod run {
         let (mut accepted, mut reported) = (0, 0);
         for (unit, v) in units.iter_mut() {
             v.differences.sort_by_key(|a| std::cmp::Reverse(a.0));
-            // a class the Rust translator compiled is its candidate; any other, the Python words' (Sprint 151)
-            let by_rust = hybrid.rust.borrow().contains_key(unit);
-            let (generator, candidate) = if by_rust {
-                (
-                    "the Rust translator (crates/translator), run by the Rust case runner",
-                    translator_sha.as_str(),
-                )
-            } else {
-                (
-                    "the frozen Python lowering's words (build/case_runner/python-words.txt), run by the Rust case runner",
-                    fixture.sha256.as_str(),
-                )
-            };
-            let cid = format!("{judge}:{}@{}", safe(unit), &candidate[..12]);
-            let repairing = ledger::open_on(&ledger, judge, unit);
+            // the candidate is the Rust translator, which compiled every case (Sprint 238)
+            let (generator, candidate) = (
+                "the Rust translator (crates/translator), run by the Rust case runner",
+                translator_sha.as_str(),
+            );
+            let cid = format!("{JUDGE}:{}@{}", safe(unit), &candidate[..12]);
+            let repairing = ledger::open_on(&ledger, JUDGE, unit);
             emit(
                 &mut out,
                 &CandidateGenerated {

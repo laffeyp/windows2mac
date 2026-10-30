@@ -186,3 +186,41 @@ fn the_stored_rust_index_is_its_records() {
         "{RUST_INDEX} is not its record's index"
     );
 }
+
+/// No judge reads the frozen Python lowering's words (Sprint 238): the case runner's harnesses' baselines name the
+/// Rust translator alone, and so do the baseline and the candidates of the record the Rust index is written from.
+#[test]
+fn the_class_index_and_the_case_harnesses_name_no_python_words() {
+    let root = root();
+    let named = |what: &str, text: &str| {
+        for word in ["Python", "python-words"] {
+            assert!(!text.contains(word), "{what} names the frozen Python lowering's words: {text}");
+        }
+    };
+    for harness in ["class-judge.toml", "case-runs-rust.toml", "case-runs-planted.toml"] {
+        let text = fs::read_to_string(root.join("harness").join(harness)).unwrap();
+        let line = text.lines().find(|l| l.starts_with("implementation")).unwrap();
+        named(&format!("harness/{harness}'s baseline"), line);
+    }
+    let rust = index(&root, RUST_INDEX);
+    let record = root.join(rust.values().next().unwrap()["record"].as_str().unwrap());
+    let mut events = 0;
+    for entry in fs::read_dir(&record).unwrap() {
+        let path = entry.unwrap().path();
+        if !path.file_name().unwrap().to_string_lossy().starts_with("events-") {
+            continue;
+        }
+        for line in fs::read_to_string(&path).unwrap().lines() {
+            let e: Value = serde_json::from_str(line).unwrap();
+            if let Some(b) = e.pointer("/payload/baseline/implementation") {
+                named(&format!("{}'s baseline", record.display()), b.as_str().unwrap());
+                events += 1;
+            }
+            if let Some(g) = e.pointer("/payload/generator_ref") {
+                named(&format!("{}'s candidate", record.display()), g.as_str().unwrap());
+                events += 1;
+            }
+        }
+    }
+    assert!(events > 456, "{} holds {events} baselines and candidates", record.display());
+}

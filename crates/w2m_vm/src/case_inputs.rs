@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The case runner's inputs (Sprints 149, 150), shared by its test and by `case_runs`, the binary that puts its
-//! verdicts on a record: the downloaded Intel results whose hashes are recorded, the frozen Python lowering's words
-//! pinned by their header and committed sha256, each run's committed counts, and the VM the cases run in.
+//! The case runner's inputs (Sprints 149, 150), shared by its test and by `case_runs` and `class_judge`, the binaries
+//! that put its verdicts on a record: the downloaded Intel results whose hashes are recorded, the Rust translator that
+//! compiles each case's instruction, each run's committed counts, and the VM the cases run in. From Sprint 238 no
+//! input is the frozen Python lowering's words.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -103,154 +104,34 @@ pub fn runs(root: &Path) -> Vec<Run> {
     out
 }
 
-/// The fixture's header: `# base 0x.. exit 0x.. symbols <sha256> layout <sha256> src <commit>` (layout from Sprint 152).
-pub struct Header {
-    pub base: u64,
-    pub exit: u64,
-    pub symbols: String,
-    /// the sha256 of the guest layout constants the runtime is compiled against (`runtime_defines`), as `symbols`'
-    /// lines: the words may embed them (a load of the process area's 0x7ffe_0000_3000)
-    pub layout: String,
-    pub src: String,
-}
-
-/// What a caller says when the fixture is absent: where it is read and the script that fetches it (Sprint 228).
-pub const FIXTURE_ABSENT: &str =
-    "no Python words fixture (build/case_runner/python-words.txt); scripts/fetch-python-words.sh fetches it";
-
-/// The frozen Python lowering's words for every case instruction (`build/case_runner/python-words.txt`; its generator
-/// is named in WORKING_AGREEMENT, and the file is the asset of release python-words-2026-10-29): code -> (ends, words),
-/// or None where the Python refused.
-pub struct Fixture {
-    pub header: Header,
-    pub sha256: String,
-    pub words: BTreeMap<Vec<u8>, Option<(bool, Vec<u32>)>>,
-}
-
-impl Fixture {
-    /// Reads the fixture and checks it is the one `store/case_runner/python-words.sha256` pins. None when it is absent
-    /// (`FIXTURE_ABSENT`).
-    pub fn load(root: &Path) -> Option<Result<Fixture, String>> {
-        let text = fs::read_to_string(root.join("build/case_runner/python-words.txt")).ok()?;
-        Some(Fixture::parse(root, &text))
-    }
-
-    fn parse(root: &Path, text: &str) -> Result<Fixture, String> {
-        let pinned =
-            fs::read_to_string(root.join("store/case_runner/python-words.sha256")).map_err(|e| e.to_string())?;
-        let got = sha256(text.as_bytes());
-        if got != pinned.trim() {
-            return Err(format!("the fixture is not the one committed by its sha256 ({got})"));
-        }
-        let mut lines = text.lines();
-        let first = lines.next().ok_or("an empty fixture")?;
-        let p: Vec<&str> = first.split_whitespace().collect();
-        let named = ["#", "base", "", "exit", "", "symbols", "", "layout", "", "src", ""];
-        if p.len() != named.len() || named.iter().zip(&p).any(|(n, v)| !n.is_empty() && n != v) {
-            return Err(format!(
-                "the fixture's header is not `# base .. exit .. symbols .. layout .. src ..`: {first}"
-            ));
-        }
-        let hex = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).map_err(|e| e.to_string());
-        let header = Header {
-            base: hex(p[2])?,
-            exit: hex(p[4])?,
-            symbols: p[6].to_string(),
-            layout: p[8].to_string(),
-            src: p[10].to_string(),
-        };
-        // the words are the frozen Python's at this commit of src/w2m, the last that touched it before the Python left
-        // the tree (Sprint 226): read at the tag that keeps it, since src/w2m's removal is its last change on HEAD
-        let at = std::process::Command::new("git")
-            .arg("-C")
-            .arg(root)
-            .args(["log", "-1", "--format=%H", "frozen-python-2026-10-29", "--", "src/w2m"])
-            .output()
-            .map_err(|e| e.to_string())?;
-        let src_now = String::from_utf8_lossy(&at.stdout).trim().to_string();
-        if src_now != header.src {
-            return Err(format!(
-                "the fixture was made at src/w2m {}, and src/w2m is now at {src_now}",
-                header.src
-            ));
-        }
-        let words = lines
-            .map(|l| {
-                let p: Vec<&str> = l.split_whitespace().collect();
-                let code = (0..p[0].len())
-                    .step_by(2)
-                    .map(|i| u8::from_str_radix(&p[0][i..i + 2], 16).unwrap())
-                    .collect();
-                let words = (p[1] == "ok").then(|| {
-                    (
-                        p[2] == "1",
-                        p[3..].iter().map(|w| u32::from_str_radix(w, 16).unwrap()).collect(),
-                    )
-                });
-                (code, words)
-            })
-            .collect();
-        Ok(Fixture {
-            header,
-            sha256: got,
-            words,
-        })
-    }
-
-    /// The compiler the runner takes (`cases::Compile`): the fixture's words for the layout its header names (the
-    /// Python's lockstep compile, vm_backend 4611-4618), refusing any other layout.
-    pub fn compile(&self, code: &[u8], _address: u64, base: u64, exit_va: u64) -> Result<Compiled, String> {
-        assert_eq!(
-            (base, exit_va),
-            (self.header.base, self.header.exit),
-            "the fixture's words were made for another layout"
-        );
-        match self.words.get(code) {
-            Some(Some((ends, words))) => Ok(Compiled {
-                words: words.clone(),
-                ends: *ends,
-            }),
-            Some(None) => Err("the Python refused it".into()),
-            None => Err("not in the fixture".into()),
-        }
-    }
-}
-
-/// The Rust translator for the classes its rules lift, the fixture's Python words for the rest (Sprint 151): the
-/// compiler that judges link 5's groups against Windows while the others are still the Python's. Each class the Rust
-/// compiled is counted, and its words are compared with the fixture's, which were made for the same layout with the
-/// same flag arguments (no NZCV source, every flag live after, no NZCV out).
-pub struct Hybrid<'a> {
-    pub fixture: &'a Fixture,
+/// The compiler the case runner takes (`cases::Compile`): the Rust translator, at the block base and miss stub the
+/// runner chooses (Sprint 151; from Sprint 238 alone, the frozen Python lowering's words retired). A code it does not
+/// lift or lower is a refusal. Each class it compiled is counted.
+pub struct CaseCompiler {
     /// the cases' runtime image's functions the words call (CPUID's from Sprint 159; PCMPISTRI's and the
     /// approximations' from Sprint 161)
     pub runtime: translator::lower::RuntimeCalls,
-    /// iclass -> cases the Rust compiled
-    pub rust: std::cell::RefCell<BTreeMap<String, usize>>,
-    /// a code whose Rust words differ from the Python's: (code, its class, the difference)
-    pub unlike: std::cell::RefCell<Vec<(Vec<u8>, String, String)>>,
+    /// iclass -> cases compiled
+    pub compiled: std::cell::RefCell<BTreeMap<String, usize>>,
 }
 
-impl<'a> Hybrid<'a> {
-    pub fn new(fixture: &'a Fixture, runtime: translator::lower::RuntimeCalls) -> Hybrid<'a> {
-        Hybrid {
-            fixture,
+impl CaseCompiler {
+    pub fn new(runtime: translator::lower::RuntimeCalls) -> CaseCompiler {
+        CaseCompiler {
             runtime,
-            rust: Default::default(),
-            unlike: Default::default(),
+            compiled: Default::default(),
         }
     }
 
-    /// `cases::Compile` (the Python's lockstep compile, vm_backend 4611-4618: `lift(code + bytes(16), CODE_VA)`).
+    /// `cases::Compile` (the Python's lockstep compile, vm_backend 4611-4618: `lift(code + bytes(16), CODE_VA)`), with
+    /// no NZCV source, every flag live after, no NZCV out.
     pub fn compile(&self, code: &[u8], address: u64, base: u64, exit_va: u64) -> Result<Compiled, String> {
         let mut padded = code.to_vec();
         padded.extend([0u8; 16]);
-        let Ok(ins) = translator::lift::lift(&padded, address) else {
-            return self.fixture.compile(code, address, base, exit_va);
-        };
+        let ins = translator::lift::lift(&padded, address).map_err(|e| format!("the Rust lifter: {e:?}"))?;
         let state_va = guest_runtime::layout::PROCESS_VA + guest_runtime::layout::STATE_OFF;
         let mut a = a64_encoder::assembler::Assembler::new(base);
-        let ends = match translator::lower::compile_insn(
+        let ends = translator::lower::compile_insn(
             &mut a,
             &ins,
             exit_va,
@@ -259,40 +140,14 @@ impl<'a> Hybrid<'a> {
             None,
             translator::lower::ALL_FLAGS,
             false,
-        ) {
-            Ok(ends) => ends,
-            // a lowering the Rust refuses by name as a later group (Sprint 177: the MMX ops the one lifter emits) is the
-            // Python's, as a class the Rust does not lift is; any other refusal fails
-            Err(translator::lower::CompileError::LaterGroup { .. }) => {
-                return self.fixture.compile(code, address, base, exit_va);
-            }
-            Err(e) => return Err(format!("the Rust compiler: {e}")),
-        };
-        let words = a.finish();
-        *self.rust.borrow_mut().entry(ins.iclass.clone()).or_default() += 1;
-        if let Ok(python) = self.fixture.compile(code, address, base, exit_va)
-            && (python.words != words || python.ends != ends)
-        {
-            let shown = |w: &[u32]| w.iter().map(|x| format!("{x:08x}")).collect::<Vec<_>>().join(" ");
-            self.unlike.borrow_mut().push((
-                code.to_vec(),
-                ins.iclass.clone(),
-                format!(
-                    "rust [{}] {ends}, python [{}] {}",
-                    shown(&words),
-                    shown(&python.words),
-                    python.ends
-                ),
-            ));
-        }
-        Ok(Compiled { words, ends })
+        )
+        .map_err(|e| format!("the Rust compiler: {e}"))?;
+        *self.compiled.borrow_mut().entry(ins.iclass.clone()).or_default() += 1;
+        Ok(Compiled {
+            words: a.finish(),
+            ends,
+        })
     }
-}
-
-/// The sha256 of a symbol table as the fixture's generator writes it: `name=0x<address>` lines, sorted by name.
-pub fn symbols_sha256(symbols: &BTreeMap<String, u64>) -> String {
-    let text: String = symbols.iter().map(|(n, v)| format!("{n}=0x{v:x}\n")).collect();
-    sha256(text.as_bytes())
 }
 
 /// One run's committed counts (`store/case_runner/expected.tsv`).
@@ -355,30 +210,9 @@ pub fn case_runtime_calls(root: &Path) -> Result<translator::lower::RuntimeCalls
 }
 
 /// The guest the cases run in (`case_memory`, the runtime built for the host, the services, the stencil symbols),
-/// mapped into a VM with one vCPU, handed to `f`. Fails when the fixture was made for another runtime symbol table.
-pub fn with_case_vm<T>(
-    root: &Path,
-    fixture: &Fixture,
-    f: impl FnOnce(&mut Guest, &Vcpu<'_>) -> T,
-) -> Result<T, String> {
+/// mapped into a VM with one vCPU, handed to `f`.
+pub fn with_case_vm<T>(root: &Path, f: impl FnOnce(&mut Guest, &Vcpu<'_>) -> T) -> Result<T, String> {
     let (_, image) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA).map_err(|e| format!("{e:?}"))?;
-    // the words call the runtime's symbols: the fixture was made with this symbol table
-    let have = symbols_sha256(&image.symbols);
-    if have != fixture.header.symbols {
-        return Err(format!(
-            "the fixture's words were made for another runtime symbol table ({have} here, {} in the fixture)",
-            fixture.header.symbols
-        ));
-    }
-    // and the layout constants: the fixture was made with these
-    let layout: BTreeMap<String, u64> = runtime_defines().into_iter().collect();
-    let have = symbols_sha256(&layout);
-    if have != fixture.header.layout {
-        return Err(format!(
-            "the fixture's words were made for another guest layout ({have} here, {} in the fixture)",
-            fixture.header.layout
-        ));
-    }
     let texts = guest_runtime::texts(root).map_err(|e| format!("{e:?}"))?;
     let services = guest_runtime::services::services(&texts).map_err(|e| format!("{e:?}"))?;
     let table = fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).map_err(|e| e.to_string())?;
