@@ -927,3 +927,30 @@ planted against itself.
 fixture's header and sha256 in three binaries and every record's baseline. Both were split, honestly, after the work
 began, on readers a search before the commit would have listed. A card that removes or retires a thing names that
 thing's readers before it is committed (WORKING_AGREEMENT, 2026-10-30).
+
+### 2026-10-30 — Sprints 238-242: step 4 closed; a measurement's conditions, a plant that did not land
+
+**Finding (#100):** a measurement read beside another run's carries both runs' conditions on their records. Sprint
+240's lookup found the Rust record's `warm` label false and its host seconds missing, and still planned to compare a
+rate across runs with neither run's machine state on the record; the reference's baseline held load 2.58 and five w2m
+VMs, the Rust record nothing. Reviewer-3's Medium 1 found it after the card's commit, and three measured runs were set
+aside. The frozen host had made its conditions part of the record's form; a port of a measurement ports its conditions
+with its number, and a cross-run claim is worded to them.
+
+**Finding (#101):** a plant's change is seen before its verdict is read. In Sprint 239 two plants changed nothing, one
+`grep` taking a doc line for the site and one `sed` naming a line rustfmt had split, and both tests passed on unchanged
+files; an empty `git diff --stat` showed it. From then each plant's diff was read first. A plant that does not land
+proves nothing, and a passing test over it looks like a judge that cannot fail.
+
+**Finding (#102):** a re-visit tied to "the next card that touches X" needs the card to look for it. Deferred's entry of
+Sprint 235 named the next card touching `class_judge.rs` or `crates/signal_report`; card 238 touched `class_judge.rs`
+and no one read the entry, and card 242 found it only while writing a Deferred entry of its own. A card's lookup
+searches Deferred for the files it changes, as it searches the tree for a removal's readers (#99).
+
+**Synthesis, step 4 (Sprints 172-242):** the step's gate is met on the Rust host on one vCPU with no Python in the tree:
+the batch run conforms, 456 of 458 classes, 68 of 68 families, 16 of 16 guests, one ledger, and 2.87 to 2.93 billion
+instructions a second against 2.35, each shown by a record or a test the census names. What carried it: each stop the
+batch run met became the next card (Decision "Sequence after Sprint 185"), and each judge was the frozen judge ported
+whole once a weaker one was found (#95). What held it back: scope found after a card's commit (#94, #99, #100), plants
+that did not reach their judge (#98, #101), and a measurement taken before its conditions (#100). Eight census rows
+outside the gate are carried in Deferred, each with what re-visits it.
