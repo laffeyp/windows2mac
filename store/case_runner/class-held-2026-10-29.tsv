@@ -1,3 +1,1 @@
-# The classes the Rust class judge (crates/w2m_vm/src/bin/class_judge.rs; store/case_runner/class-runs-2026-10-29.json) does not judge as the frozen index does (Sprint 222; Sprint 235: the 17 legacy SSE classes lifted, none held for the translator): class, the Rust verdict, what it waits on; held by crates/w2m_vm/tests/class_judge.rs
-VRCPPS	inconclusive	not judged: the model refuses the approximations (BLACKBOARD Deferred, Sprint 183)
-VRSQRTPS	inconclusive	not judged: the model refuses the approximations (BLACKBOARD Deferred, Sprint 183)
+# The classes the Rust class judge (crates/w2m_vm/src/bin/class_judge.rs; store/case_runner/class-runs-2026-10-29.json) does not judge as the frozen index does (Sprint 222; Sprint 235: the 17 legacy SSE classes lifted; Sprint 237: VRCPPS and VRSQRTPS judged by the model's approximations; none held): class, the Rust verdict, what it waits on; held by crates/w2m_vm/tests/class_judge.rs

@@ -2353,9 +2353,28 @@ impl<M: Memory> Step<'_, M> {
                 let v = self.th.xmm[s] >> 64;
                 return self.xwrite(dst, v, 8);
             }
-            // string_compare.py and approximate.py: a later slice, refused by name
-            "PCMPISTRI" | "PCMPISTRI64" | "RCPPS" | "RSQRTPS" | "RCPSS" | "RSQRTSS" => {
+            // string_compare.py: a later slice, refused by name
+            "PCMPISTRI" | "PCMPISTRI64" => {
                 return Err(Fault::Refused(format!("sse {ic}: its model comes with a later slice")));
+            }
+            // runtime.py 859-864: the reference CPU's tables (approximate.py; Sprint 237)
+            "RCPPS" | "RSQRTPS" | "RCPSS" | "RSQRTSS" => {
+                let table = if ic.starts_with("RCP") {
+                    crate::approximate::rcp
+                } else {
+                    crate::approximate::rsqrt
+                };
+                let d = self.xmm(dst)?;
+                if ic.ends_with("PS") {
+                    let v = self.xread(src, 16)?;
+                    self.th.xmm[d] = (0..4).fold(0u128, |acc, i| {
+                        acc | u128::from(table((v >> (32 * i)) as u32)) << (32 * i)
+                    });
+                } else {
+                    let v = self.xread(src, 4)? as u32;
+                    self.th.xmm[d] = self.th.xmm[d] & !mask128(32) | u128::from(table(v));
+                }
+                return Ok(());
             }
             "MOVMSKPS" | "PMOVMSKB" => {
                 let s = self.xmm(src)?;
