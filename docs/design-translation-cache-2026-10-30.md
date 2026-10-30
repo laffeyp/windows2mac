@@ -158,8 +158,10 @@ words in the real run; the VM's follows once the host's conforms.
    installs counted on the record; and the time beside the counts (amended 2026-10-30, reviewer-3's Medium 1 at 256):
    the VM's compile time and the host's seconds on `hvc 1` on timed records run alone, against Sprint 248's 1,351 to
    1,362 ms, a slower run named, not hidden by a falling count; the whole-block judge and the frozen-word tests
-   unchanged with no cache. A guest write to the image's code stops the cache's use for the rest of the run (the batch
-   run makes none: Sprint 257's count), so no cached word or liveness outlives the bytes it came from.
+   unchanged with no cache. A guest write to the image's code stops the cache's use for the rest of the run, so no
+   cached word or liveness outlives the bytes it came from. The batch run makes none (Sprint 257): the card's first
+   count, taken in the `hvc 13` handler, saw only pages already behind code; the run with the cache, every executable
+   page of the image read-only from the load (`HostCompiler::use_cache`), stopped the cache on no write.
 5. **The install inside the VM.** The copy and the re-encoding in the miss stub's path, no exit. Gate: card 4's counts
    unchanged, and the run's compile time falling below Sprint 248's 1,351 to 1,362 ms and its most in a 60 Hz frame
    below 248's 10.9 to 12.0 ms, on timed records run alone. Step 5 is met at this card's close.
