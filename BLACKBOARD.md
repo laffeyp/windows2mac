@@ -61,7 +61,7 @@
   - *Direction:* a census close-out of step 4, each gate item with its record, after 241. Adopted.
   - *On track:* order: close 240; 241 the ledgers' join; step 4's census close-out; step 5.
 
-- **Older reviews** — 33 reviews, 2026-10-27 to 2026-10-30, moved verbatim to `docs/surfaced-archive-2026-10-30.md`, newest first (Sprint 232, 29; Sprint 234, 1; Sprint 235, 1; Sprint 237, 1; Sprint 240, 1; reviewer-2's Medium 5 of its review of 178-181: the last three reviews stay here).
+- **Older reviews** — 33 reviews, 2026-10-27 to 2026-10-30, moved verbatim to `docs/surfaced-archive-2026-10-30.md`, newest first (reviewer-2's Medium 5 of its review of 178-181: the last three reviews stay here).
 
 ## Decisions
 
