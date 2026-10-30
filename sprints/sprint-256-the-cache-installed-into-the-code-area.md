@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 256
-status: active
+status: done
 phase: 6
 pass_kind: architecture
 ---
@@ -102,3 +102,19 @@ needs is measured and held by a test.
 - [x] One concept: how a cached block enters the run.
 
 ## result
+
+- **The relocation:** `cache_file::relocate` and `relocation_census` (ab0f395f8): a `B` or `BL` whose target lies outside
+  the block re-encoded, a branch inside kept, any other address-dependent word refused by kind (`Unmovable`). Measured
+  on UnityPlayer.dll's cache, remade under its new key `24c34b0c…` in 16.8 s: all 998,222 blocks, moved from the cache
+  region to `MONITOR_VA + CODE_CACHE + 0x10_0000`, equal their assembly there, none refused, none differing; every block
+  of the 280 fixtures too (`tests/cache_file.rs`). The rule held by clang's words (1f388ea8e).
+- **The design:** revised, choices G and H, B, B', C and E superseded and kept; the order from card 4: the install by
+  the host, then the install inside the VM, each with its gate; `design_check` counts it. The Decision annotated.
+- **A test corrected:** the unit test's first draft held `b .+4` at a two-word block's last word as inside; it targets
+  the block's end, outside, and `relocate` re-encoded it rightly.
+- **The gates:** `scripts/gates.sh` exit 0 in 675 s on 1f388ea8e, copied from `store/gates/passes.tsv`; the timing stage 653 ns an exit at load 3.80.
+- **Plants,** run on 1f388ea8e, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `a_branch_out_of_the_block_is_re_encoded_and_other_kinds_refused` failed, "assertion `left == right`
+  failed … left: Ok([335544384, 402653183])": the offset re-encoded from the old base, the word left 14000040.
+- **Plant 2,** the same test failed, "called `Result::unwrap_err()` on an `Ok` value: [268435520]": the `ADR` kind left
+  out of the refusals.
