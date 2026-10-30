@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 242
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -97,3 +97,34 @@ Step 4's census says, row by row, what is met and by which record, and where eac
 - [x] One concept: step 4's census closed.
 
 ## result
+
+- **The gate:** the census's "Step 4 closed" table names each of the plan's six gate items with its record or test:
+  the batch run's comparison (row 7, `store/runs/w2m-vm-game-1793364171000000000` and every batch record from Sprint
+  219), 456 of 458 classes (row 3, `store/runs/class-judge-1793360911000000000`), 68 of 68 families (row 6), 16 of 16
+  guests (row 8), the Python out and one ledger (row 9), the speed figure (row 10). Row 7's cell now reads met.
+- **The other rows:** 4, 5, 5a, 12 and 14 read met by lookup, each naming its evidence: the class judge's record and
+  the batch run's hvc 10 and 11; every hvc kind the run makes on `w2m-vm-game-1793364362000000000`, hvc 4 at
+  `run.rs` 852 and hvc 14 at 698; every host request served; the unlifted census header-only, held by `c_words.rs`
+  253-257; the batch record's events, held by `batch_record.rs`. Rows 1, 2, 11, 13 and 15a-15d are carried to
+  Deferred 2026-10-30 (Sprint 242), each with what re-visits it; row 15b's count is today's, 29 string errors.
+- **The judge:** `crates/signal_report/tests/census.rs`: every `store/`, `crates/` or `docs/` path the census names
+  is in the tree or its history, and every row whose status does not begin "met" is named "census row N" in Deferred,
+  the match ending at the id.
+- **KIT_DIARY:** #100 (a measurement's conditions), #101 (a plant's diff before its verdict), #102 (a re-visit tied to
+  "the next card that touches X"), and step 4's synthesis.
+- **Faults found while doing it:** the first row 5 cell said hvc 4 was served "by the run loop" before any lookup;
+  `run.rs` 852 is the site, and the cell cites it. The test's first form read the close-out table as census rows, and
+  counted 18 rows where there are 19; the failing assertions named both. Its first match took "census row 1" from
+  "census row 10". The synthesis first said "what cost it", against the rule that "cost" means money; it reads "what
+  held it back". Deferred's entry of Sprint 235 asked for a re-visit by the next card touching `class_judge.rs`, which
+  card 238 was, unread; card 243 takes it.
+- **The gates:** `scripts/gates.sh` exit 0 in 227 s on f099d887a, "rust=crates python=0 samples=0", 31 tests,
+  `census.rs` among them.
+- **Plant 1** (row 7's record `w2m-vm-game-1793364171000000000` to `…001` in the close-out table): "names 1 path(s)
+  never in the tree: ["store/runs/w2m-vm-game-1793364171000000001"]".
+- **Plant 2** (row 12's `crates/translator/tests/c_words.rs` to `c_word.rs`): "names 1 path(s) never in the tree:
+  ["crates/translator/tests/c_word.rs"]".
+- **Plant 3** (Deferred's "census row 13" to "census row thirteen"): "census rows not met and not in Deferred:
+  ["13"]".
+- Each plant's `git diff --stat` showed its one line before its test ran; each was restored by `cp`, and `cmp` found
+  the files equal to their copies.
