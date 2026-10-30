@@ -399,6 +399,15 @@ fn process_below_trace(mem: &[u8]) -> &[u8] {
 /// unrun instructions; Sprint 207: before, a model step in a block the VM compiled gave nothing back, and the count ran
 /// 7 instructions ahead of the frozen host's at the batch run's first `hvc 11`), the block, the pages it covers and the
 /// pages it lists, and the translation; then the log emptied.
+/// The code an `hvc 1` hands back for `target` without a compile: with the host's compiler present, its map alone,
+/// which holds both compilers' blocks (`vm_compiled` adds the VM's) and from which a guest write drops a page's blocks
+/// (`HostCompiler::code_written`); without it, the in-VM compiler's, which no write handler drops from. The frozen host
+/// read its one map so (`vm_backend.py` 5242, 4568). Sprint 250: reading the VM's map first handed back a block's old
+/// code once a batch run, at 0x1222ee5fff in the run-time code's arena, after its page was written.
+fn known_block(vm_blocks: &BTreeMap<u64, u64>, host_blocks: Option<&BTreeMap<u64, u64>>, target: u64) -> Option<u64> {
+    host_blocks.unwrap_or(vm_blocks).get(&target).copied()
+}
+
 fn vm_compiled(
     mem: &mut [u8],
     blocks: &mut BTreeMap<u64, u64>,
@@ -956,19 +965,19 @@ fn run(
                 *out.bridged.entry(target).or_default() += 1;
                 va
             }
-            None => match (out.blocks.get(&target), host.as_deref_mut()) {
-                (Some(&va), _) => va,
+            None => match (
+                known_block(&out.blocks, host.as_deref().map(|h| &h.blocks), target),
+                host.as_deref_mut(),
+            ) {
+                (Some(va), _) => va,
                 (None, None) => break Stop::Declined { target },
-                (None, Some(h)) => match h.blocks.get(&target) {
-                    Some(&va) => va,
-                    None => match h.compile(guest, target) {
-                        Ok(va) => {
-                            let (start, end) = *h.translations.last().unwrap();
-                            out.translations.push(Translation { start, end, code: va });
-                            va
-                        }
-                        Err(why) => break Stop::Untranslated { target, why },
-                    },
+                (None, Some(h)) => match h.compile(guest, target) {
+                    Ok(va) => {
+                        let (start, end) = *h.translations.last().unwrap();
+                        out.translations.push(Translation { start, end, code: va });
+                        va
+                    }
+                    Err(why) => break Stop::Untranslated { target, why },
                 },
             },
         };
@@ -1005,7 +1014,23 @@ fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::recon_lookup;
+    use super::{known_block, recon_lookup};
+    use std::collections::BTreeMap;
+
+    /// Sprint 250: with the host's compiler present, a block a write dropped from its map is unknown though the
+    /// in-VM compiler's map still holds it, and a host-compiled block is known; without it, the VM's map answers.
+    #[test]
+    fn a_block_a_write_dropped_is_not_handed_back() {
+        let vm: BTreeMap<u64, u64> = [(0x1222ee5fff, 0x7f00_0006_0000)].into();
+        let host: BTreeMap<u64, u64> = [(0x1_8000_1000, 0x7f00_0007_0000)].into();
+        assert_eq!(
+            known_block(&vm, Some(&host), 0x1222ee5fff),
+            None,
+            "the dropped block's old code"
+        );
+        assert_eq!(known_block(&vm, Some(&host), 0x1_8000_1000), Some(0x7f00_0007_0000));
+        assert_eq!(known_block(&vm, None, 0x1222ee5fff), Some(0x7f00_0006_0000));
+    }
 
     /// A table of (host, x86) entries at offset 0, as RECON_TABLE holds them.
     fn table(entries: &[(u64, u64)]) -> Vec<u8> {
