@@ -591,7 +591,8 @@ fn unquoted_plants(root: &Path) -> Result<Vec<u32>, String> {
 }
 
 /// The plants a card's observation contract numbers: "(1)", "(2)" in its "Planted faults" bullet (Sprint 176;
-/// reviewer-2's Medium 3 of 2026-10-28: the rule passed a card whose one plant of two was quoted).
+/// reviewer-2's Medium 3 of 2026-10-28: the rule passed a card whose one plant of two was quoted). Plants count from
+/// 1; a "(0)" is a value the text names, as card 247's "the frequency slot unwritten (0)".
 fn numbered_plants(contract: &str) -> BTreeSet<u32> {
     let Some(at) = contract.find("Planted faults") else {
         return BTreeSet::new();
@@ -601,6 +602,7 @@ fn numbered_plants(contract: &str) -> BTreeSet<u32> {
         .split('(')
         .skip(1)
         .filter_map(|p| p.split_once(')').and_then(|(n, _)| n.parse::<u32>().ok()))
+        .filter(|n| *n >= 1)
         .collect()
 }
 
@@ -1604,6 +1606,8 @@ mod tests {
             [1, 2].into()
         );
         assert!(unquoted_numbers(CARD).is_empty());
+        // a value in parentheses is not a plant's number
+        assert!(numbered_plants("- **Planted faults:**\n  2. The slot unwritten (0): named").is_empty());
         // plant 1's quote removed: the card fails on 1 though plant 2 is quoted
         let one_unquoted = CARD.replace("\"88 RCR CF: case 206\"", "88 RCR CF");
         assert_eq!(unquoted_numbers(&one_unquoted), [1]);
