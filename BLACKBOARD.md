@@ -849,7 +849,7 @@
 
 ## Sprint tail
 
-### Sprint 222 (2026-10-29, gates running)
+### Sprint 222 (2026-10-29, closed)
 - **Scope:** the Decision "Sequence after Sprint 214" as annotated at Sprint 221 (reviewer-3's Medium 3 of its refreshed project review) and plan step 4's gate item "456 of 458 classes": each class of the frozen index judged on Rust over its own reference runs, held to the frozen index class by class
 - **Dual contract:** signal — per class CANDIDATE_GENERATED, COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED, or REDUCTION_COMPLETED, DISCREPANCY_REPORTED and DISCREPANCY_ROUTED per difference, an inconclusive class none of the three; one SESSION_INIT and one SESSION_COMPLETED (record `store/runs/class-judge-1793324063000000000`); artifact pass (`scripts/gates.sh` exit 0 in 2570 s on the fourth run (Observation 3b), every gate, kept in `store/gates/passes.tsv` as sprint 222 at e5795a7e3 with root=0c5cdbb0e and "rust=all python=1 samples=1"; multi-vCPU: 3 of 4 passed, the kick plant failing as Deferred (Sprint 222, the kick plant) records); observation pass (458 classes judged with the frozen case counts; 437 conform, 6 of them on no Rust-compiled case; FCOS and FSIN discrepancies as in the frozen index; 19 inconclusive and held; plant 1, "ADD: discrepancy, the frozen index conforms"; plant 2, "ADD: 2748 cases, the frozen index 1374"; plant 3, "RET_NEAR: not in store/case_runner/class-runs-2026-10-29.json")
 - **CI does not run:** the judge's session (Hypervisor.framework, `build/probe-runs`, the fixture); CI runs `class_judge.rs`'s index test and its case-count test where the case files are.
