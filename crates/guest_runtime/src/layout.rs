@@ -35,6 +35,16 @@ pub const SAVE_AREA: u64 = 0x100; // vm_backend 123
 pub const TRANSLATION_TABLES: u64 = 0x12000;
 pub const CODE_CACHE: u64 = 0x60000;
 pub const CODE_CACHE_SIZE: u64 = 0x400_0000;
+/// The translation cache's code (Sprint 254; `docs/design-translation-cache-2026-10-30.md`, B): just below the monitor
+/// area, so no address the runtime image links against moves, and within a branch's reach of the dispatcher and the
+/// slice stub; mapped only when a cache loads.
+pub const CACHE_CODE_VA: u64 = MONITOR_VA - 0x780_0000;
+pub const CACHE_CODE_SIZE: u64 = 0x780_0000;
+/// Its table, page bitmap and page index (B'), read by absolute address, below the code.
+pub const CACHE_DATA_VA: u64 = CACHE_CODE_VA - 0x400_0000;
+pub const CACHE_DATA_SIZE: u64 = 0x400_0000;
+/// A `B` or `BL`'s reach either way, ±128 MiB (`a64_encoder::b`: an offset in `-(1 << 27)..(1 << 27)`).
+pub const BRANCH_REACH: u64 = 1 << 27;
 pub const RUNTIME_STACK: u64 = CODE_CACHE + CODE_CACHE_SIZE + 0x100000;
 pub const RUNTIME_STACK_SIZE: u64 = 0x10000;
 pub const RUNTIME_IMAGE: u64 = RUNTIME_STACK + RUNTIME_STACK_SIZE;
