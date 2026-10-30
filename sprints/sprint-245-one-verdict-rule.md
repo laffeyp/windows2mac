@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 245
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -90,3 +90,25 @@ One function decides a class's verdict from its tally, and both judges call it.
 - [x] One concept: the verdict rule in one place.
 
 ## result
+
+- **The rule:** `cases::class_verdict(differences, unjudged) -> events::Verdict`, beside `Tally`, with
+  `a_class_is_a_discrepancy_then_inconclusive_then_conforming` holding its four cases.
+- **The judges:** `class_judge`'s `Class::verdict` is one call to it. `case_runs`' `Unit` keeps `unjudged`, filled from
+  `t.unjudged_by_class` with `class_judge`'s line ("{class}: {n} cases not judged; run {run}: case {first}"); its
+  verdict is the rule's; an inconclusive unit gets COMPARISON_COMPLETED, its first divergence the first unjudged line,
+  and no acceptance, report or resolution; the summary line counts inconclusive units. Its module comment says so.
+- **Records:** none rewritten. Every case is compiled since Sprint 238, so no unit has unjudged cases and no verdict
+  moves; the gates' planted `case_runs` session, all classes with differences or accepted, runs through the new code.
+- **A helper written and taken out:** a `Tally::unjudged_of` was added, then removed before any build, since both
+  judges read `unjudged_by_class` directly.
+- **Deferred (Sprint 222):** resolved.
+- **The gates:** `scripts/gates.sh` exit 0 in 474 s on e033e5774, "rust=crates python=0 samples=0", 109 tests, the
+  case runner, the class gate and the planted `case_runs` session among them.
+- **Plant 1** (`class_verdict` conforming with cases unjudged, `&& false` on its second branch): "a case refused leaves
+  nothing compared", "left: Conforms right: Inconclusive".
+- **Plant 2** (`class_verdict` ignoring the differences, `&& false` on its first branch): "left: Conforms right:
+  Discrepancy".
+- **Plant 3** (inconclusive before a discrepancy, `&& unjudged == 0` on its first branch): "a difference outweighs a
+  refusal", "left: Inconclusive right: Discrepancy".
+- Each plant's `git diff --stat` showed its one line first; each was restored by `cp`, and `cmp` found the file equal
+  to its copy.
