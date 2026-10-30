@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 248
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -110,3 +110,28 @@ Decision is annotated with them.
 - [x] One concept: how the compiles bunch.
 
 ## result
+
+- **The probe:** `compile_probe` in `monitor_code.rs`, behind `Timing::compile` as before; `a64_encoder::CNTFRQ_EL0`
+  (clang's `d53be000`); `CompileTicks::read` folds the open frame into the most at the stop; `record::CompileMs` and
+  the variants "vm longest compile" and "vm most in a 60 Hz frame" beside "vm".
+- **A departure, the frame's bound:** the card held the most in a frame to 1000/60 ms plus the longest. The code gives
+  a tighter bound: the compiles run one at a time under the runtime lock, and a frame holds only compiles that start
+  after it opens and end within 1/60 s of it, save the one that opens it, so the most is at most the larger of 1000/60
+  ms and the longest. `batch_record.rs` holds that.
+- **The records:** from 653c1f857, nothing else of the session running, load at start 1.96 to 2.53, no busy process:
+  `store/runs/w2m-vm-game-1793386986000000000`, `-1793387080000000000`, `-1793387174000000000`; each conforms,
+  `check_records` 0 violations. The VM compiled 274,834 blocks in 1,362, 1,351 and 1,355 ms; the longest compile
+  0.186, 0.179 and 0.159 ms; the most in a 60 Hz frame 11.5, 12.0 and 10.9 ms, 65% to 72% of a frame's 16.7 ms;
+  compiling 5.17% to 5.19% of the run's seconds, against Sprint 247's 5.33% to 5.49% at load 5.07 to 5.95.
+- **A slip:** the first try passed `.` as `scripts/batch-run-record.sh`'s record directory; run 1 wrote its record into
+  the repository root and run 2 appended to it and failed, "seq gap: expected 60, got 0". The two files were read and
+  removed, and the runs made again, each into its own `store/runs/w2m-vm-game-<seconds>000000000`.
+- **The gates:** `scripts/gates.sh` exit 0 in 557 s on c62d9ac5e, copied from `store/gates/passes.tsv`; the timing stage 676 ns an exit at load 3.10.
+- **Plants,** run on c62d9ac5e, each restored by `cp` and checked by `cmp`, a planted record removed after it was read.
+- **Plant 1,** `batch_record.rs` failed, "the most in a frame is 1366.537 ms, above one frame's 16.666666666666668 ms
+  and the longest compile's 0.17220833333333332 ms": the frame test's `b.lo` at `monitor_code.rs` 300 made `b.al`, a
+  timed run.
+- **Plant 2,** `batch_record.rs` failed, "the longest compile 0 ms, the most in a frame 10.999875 ms and the total
+  1379.5922916666666 ms are not 0 < longest ≤ most in a frame ≤ total": the longest's store at 288 a `nop`, a timed run.
+- **Plant 3,** `a_timed_run_writes_its_compile_time` failed, "left: [vm, vm longest compile] right: [vm, vm longest
+  compile, vm most in a 60 Hz frame]" (abridged): the frame row's `rows.push` at `record.rs` 282 made `let _ =`.
