@@ -95,6 +95,10 @@ pub const EMPTY_SHA256: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e46
 pub const COMPILED_IN: &str = "compiled in ";
 pub const COMPILED_OUTSIDE: &str = "compiled outside any image";
 
+/// The `vm_compile_blocks` variant of the blocks the host installed from the translation cache (Sprint 257), on a run
+/// with one alone: not compiles, and not in "compiled".
+pub const INSTALLED: &str = "installed from the translation cache";
+
 /// The compiles whose block starts are `starts`, counted by the image whose range, `[base, base + size)`, holds each,
 /// as (`COMPILED_IN` and the image's name, count) in the images' order, those with none left out, and then
 /// (`COMPILED_OUTSIDE`, count) for the starts in no image. Two images whose ranges overlap are refused: no image is
@@ -168,6 +172,8 @@ pub struct Execution<'a> {
     /// the in-VM compiles by the image whose range holds the block's start, as `compiles_by_image` counts them
     /// (Sprint 249), adding up to "compiled"
     pub compiles_by_image: Vec<(String, u64)>,
+    /// the blocks the host installed from the translation cache (Sprint 257), `INSTALLED`; None on a run without one
+    pub installs: Option<u64>,
     /// the in-VM compiler's time on the critical path (Sprint 247: `w2m_vm_compile` bracketed by the virtual counter),
     /// with the longest compile and the most in a frame (Sprint 248); None on an untimed run
     pub compile_ms: Option<CompileMs>,
@@ -323,6 +329,10 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     // the compiles by where their code lies, step 5's share (Sprint 249)
     for (variant, n) in &e.compiles_by_image {
         rows.push((Metric::VmCompileBlocks, variant.clone(), *n as f64, "blocks"));
+    }
+    // the blocks installed from the translation cache instead (Sprint 257)
+    if let Some(n) = e.installs {
+        rows.push((Metric::VmCompileBlocks, INSTALLED.to_string(), n as f64, "blocks"));
     }
     // compilation on the critical path (v0.2 456; Sprint 247), the VM's part; the host's is `run_seconds` "host hvc 1";
     // how it bunches beside it (Sprint 248)
@@ -601,6 +611,7 @@ mod tests {
                 host_by_kind: vec![("hvc 8".into(), 0.75)],
                 compile_counts: vec![("compiled", 40), ("not a code page", 2)],
                 compiles_by_image: vec![],
+                installs: None,
                 compile_ms: None,
                 exits: vec![(8, 779)],
                 end,
@@ -715,6 +726,7 @@ mod tests {
                 host_by_kind: vec![("hvc 1".into(), 0.75)],
                 compile_counts: vec![("compiled", 40)],
                 compiles_by_image: vec![],
+                installs: None,
                 compile_ms,
                 exits: vec![(1, 40)],
                 end: RunEnd::Exited(0),

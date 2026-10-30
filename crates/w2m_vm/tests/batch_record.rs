@@ -573,10 +573,17 @@ fn compile_problems(ours: &[Value], reference: &[Value], by_image_due: bool) -> 
     };
     // the compiles by image (Sprint 249), the Rust record's alone: present where due, and adding up to "compiled"
     let by_image = |v: &String| v.starts_with(w2m_vm::record::COMPILED_IN) || v == w2m_vm::record::COMPILED_OUTSIDE;
-    let (images, have): (BTreeMap<String, f64>, BTreeMap<String, f64>) =
+    let (images, mut have): (BTreeMap<String, f64>, BTreeMap<String, f64>) =
         variants(ours).into_iter().partition(|(v, _)| by_image(v));
     let want = variants(reference);
     let mut found = Vec::new();
+    // the installs from the translation cache (Sprint 257), on a run with one alone: a cache that installs nothing
+    // was not in use
+    if let Some(n) = have.remove(w2m_vm::record::INSTALLED)
+        && n <= 0.0
+    {
+        found.push(format!("vm_compile_blocks {:?} is {n}", w2m_vm::record::INSTALLED));
+    }
     if by_image_due && !images.contains_key(w2m_vm::record::COMPILED_OUTSIDE) {
         found.push(format!(
             "no vm_compile_blocks {:?}: the compiles by image are due on a record after Sprint 248's",
@@ -693,6 +700,16 @@ fn a_missing_extra_or_empty_compile_count_is_named() {
     assert_eq!(
         compile_problems(&by_image[..1], &reference, false),
         Vec::<String>::new()
+    );
+    // the installs from the translation cache (Sprint 257): allowed beside the reference's, and above zero
+    let installed = |n: f64| vec![m("compiled", 300.0), m(w2m_vm::record::INSTALLED, n)];
+    assert_eq!(
+        compile_problems(&installed(9.0), &reference, false),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        compile_problems(&installed(0.0), &reference, false),
+        ["vm_compile_blocks \"installed from the translation cache\" is 0"]
     );
 }
 

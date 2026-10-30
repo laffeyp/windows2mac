@@ -59,6 +59,8 @@ mod run {
     /// states, `KILL_GRACE_SECONDS` (run_frontier.py 73)
     const GAME_SECONDS: u64 = 10_800;
     const KILL_GRACE_SECONDS: u64 = 60;
+    /// the image the translation cache holds (Sprint 254): 149,308 of the batch run's 274,837 compiles (Sprint 249)
+    const CACHED_IMAGE: &str = "UnityPlayer.dll";
 
     fn root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -238,6 +240,13 @@ mod run {
             Some(_) => return Err("--make-cache <directory>".into()),
             None => None,
         };
+        // the translation cache in use (Sprint 257): the file with the game's key read from the directory, the run
+        // refused without one
+        let cache = match args.iter().position(|a| a == "--cache") {
+            Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
+            Some(_) => return Err("--cache <directory>".into()),
+            None => None,
+        };
         // the whole-block judge (Sprint 252): each in-VM compile against the Rust translator's, written to the path
         let judge = match args.iter().position(|a| a == "--judge-blocks") {
             Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
@@ -301,6 +310,7 @@ mod run {
                     time_compile,
                     judge: judge.as_deref(),
                     make_cache: make_cache.as_deref(),
+                    cache: cache.as_deref(),
                 },
             );
         }
@@ -357,7 +367,13 @@ mod run {
         let mut guest = guest_of(&root, &loaded, &start)?;
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
         guest.limited = true;
-        let out = on_one_vcpu(&mut guest, &loaded, Some(GUEST_SECONDS), max_steps.unwrap_or(MAX_STEPS));
+        let out = on_one_vcpu(
+            &mut guest,
+            &loaded,
+            Some(GUEST_SECONDS),
+            max_steps.unwrap_or(MAX_STEPS),
+            &mut HostCompiler::default(),
+        );
         drop(guest.files.take());
         // a family's rows from the file its probe writes in the program's directory, empty if it wrote none
         // (`run_in_vm`, family_run.py 2949-2952 at the tag), read before the directory goes; a file not written is
@@ -456,12 +472,12 @@ mod run {
         loaded: &pe_loader::Loaded,
         seconds: Option<u64>,
         max_steps: u64,
+        host: &mut HostCompiler,
     ) -> Result<Outcome, String> {
         let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
         vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
             .map_err(|e| format!("{e:?}"))?;
         let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
-        let mut host = HostCompiler::default();
         // a guest's run stops at GUEST_SECONDS, as family_run.py's `run_in_vm` stops a probe at 60 s (`timeout_ms`), so
         // a guest that spins fails by name rather than hanging the gates (Sprint 197); the batch run at GAME_SECONDS,
         // the bound its record states (Sprint 210)
@@ -472,7 +488,7 @@ mod run {
                 let _ = handle.stop();
             });
         }
-        run_compiling(guest, loaded, &vcpu, max_steps, &mut host).map_err(|e| format!("{e:?}"))
+        run_compiling(guest, loaded, &vcpu, max_steps, host).map_err(|e| format!("{e:?}"))
     }
 
     /// A stop by its kind and reason, without host addresses, which move when the runtime image is rebuilt (Sprint
@@ -602,7 +618,7 @@ mod run {
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
             guest.limited = s["limited"].as_bool().unwrap_or(true);
             let seconds = guest.limited.then_some(GUEST_SECONDS);
-            on_one_vcpu(&mut guest, &loaded, seconds, MAX_STEPS)
+            on_one_vcpu(&mut guest, &loaded, seconds, MAX_STEPS, &mut HostCompiler::default())
         };
         match run() {
             Ok(out) => match out.stop {
@@ -620,22 +636,9 @@ mod run {
     /// flags miss a successor's read, and, when the gates' exit ledger's blocks are at hand, the run's starts the
     /// walk reaches inside a block, by what ends the block before them.
     fn make_cache_file(root: &Path, directory: &Path, guest: &Guest, dir: &str) -> Result<(), String> {
-        use guest_runtime::layout::{
-            BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_DATA_SIZE, PAGE, PROCESS_VA, STATE_OFF,
-        };
+        use guest_runtime::layout::{BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_DATA_SIZE, PAGE};
         use w2m_vm::cache_file;
-        let image = guest
-            .images
-            .iter()
-            .find(|i| i.name == "UnityPlayer.dll")
-            .ok_or("the game loads no UnityPlayer.dll")?;
-        let data = fs::read(directory.join(&image.name)).map_err(|e| format!("{}: {e}", image.name))?;
-        let exits = cache_file::Exits {
-            exit_va: guest.code.dispatch_va,
-            slice_va: guest.slice_va,
-            state_va: PROCESS_VA + STATE_OFF,
-            runtime: translator::lower::RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied()),
-        };
+        let (image, data, exits, key) = cached_image(root, directory, guest)?;
         for (name, target) in [("the dispatcher", exits.exit_va), ("the slice stub", exits.slice_va)] {
             if target - CACHE_CODE_VA >= BRANCH_REACH {
                 return Err(format!(
@@ -643,8 +646,6 @@ mod run {
                 ));
             }
         }
-        let tree = w2m_vm::built_from::crates_tree(root)?;
-        let key = cache_file::key(&data, image.base, &tree, &exits);
         let started = Instant::now();
         let (cache, refused) = cache_file::make(&image.pe, &data, image.base, &exits, key);
         let made_in = started.elapsed().as_secs_f64();
@@ -710,6 +711,50 @@ mod run {
         Ok(())
     }
 
+    /// The image the translation cache holds, UnityPlayer.dll: the loaded image, its file's bytes, the addresses its
+    /// words embed under `guest`'s setup, and the key that names its file (Sprint 254; Sprint 257 shares it with the
+    /// load).
+    fn cached_image<'g>(
+        root: &Path,
+        directory: &Path,
+        guest: &'g Guest,
+    ) -> Result<(&'g pe_loader::Image, Vec<u8>, w2m_vm::cache_file::Exits, String), String> {
+        use guest_runtime::layout::{PROCESS_VA, STATE_OFF};
+        let image = guest
+            .images
+            .iter()
+            .find(|i| i.name == CACHED_IMAGE)
+            .ok_or("the game loads no UnityPlayer.dll")?;
+        let data = fs::read(directory.join(&image.name)).map_err(|e| format!("{}: {e}", image.name))?;
+        let exits = w2m_vm::cache_file::Exits {
+            exit_va: guest.code.dispatch_va,
+            slice_va: guest.slice_va,
+            state_va: PROCESS_VA + STATE_OFF,
+            runtime: translator::lower::RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied()),
+        };
+        let tree = w2m_vm::built_from::crates_tree(root)?;
+        let key = w2m_vm::cache_file::key(&data, image.base, &tree, &exits);
+        Ok((image, data, exits, key))
+    }
+
+    /// The translation cache's file for `guest`, `<dir>/<key>.w2mcache` (Sprint 257): Err when none has the key, so a
+    /// file made under another tree or setup is never used.
+    fn load_cache_file(
+        root: &Path,
+        directory: &Path,
+        guest: &Guest,
+        dir: &str,
+    ) -> Result<w2m_vm::cache_file::CacheFile, String> {
+        let (_, _, _, key) = cached_image(root, directory, guest)?;
+        let path = root.join(dir).join(format!("{key}.w2mcache"));
+        let bytes = fs::read(&path).map_err(|e| format!("--cache: {}: {e}", path.display()))?;
+        let file = w2m_vm::cache_file::from_bytes(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        if file.key != key {
+            return Err(format!("{}: its key is {}", path.display(), file.key));
+        }
+        Ok(file)
+    }
+
     /// How a game run is watched beside its record: the exit ledger (Sprint 206), the batch run's end (Sprint 219),
     /// the in-VM compiler timed (Sprint 247), the whole-block judge (Sprint 252).
     struct GameOptions<'a> {
@@ -718,6 +763,7 @@ mod run {
         time_compile: bool,
         judge: Option<&'a str>,
         make_cache: Option<&'a str>,
+        cache: Option<&'a str>,
     }
 
     fn game(
@@ -733,6 +779,7 @@ mod run {
             time_compile,
             judge,
             make_cache,
+            cache,
         } = options;
         let root = root();
         let started = Instant::now();
@@ -753,6 +800,15 @@ mod run {
         start.app_root = Some(directory.to_path_buf());
         start.program_path = Some(directory.join(program));
         start.time_compile = time_compile;
+        // the translation cache (Sprint 257): a miss in its image's range goes to the host, which installs from it
+        if cache.is_some() {
+            let image = loaded
+                .images
+                .iter()
+                .find(|i| i.name == CACHED_IMAGE)
+                .ok_or("--cache: the game loads no UnityPlayer.dll")?;
+            start.host_range = Some((image.base, image.base + u64::from(image.pe.size_of_image)));
+        }
         // the Producer's input, one JSON line, read so the pipe closes, as a guest run reads it
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
@@ -775,7 +831,12 @@ mod run {
             let calls = w2m_vm::batch_stop::read_calls(&text(&root.join(file))?)?;
             guest.batch_stop = Some(w2m_vm::batch_stop::BatchStop::new(log.clone(), *lines, calls));
         }
-        let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS)?;
+        let mut host = HostCompiler::default();
+        if let Some(dir) = cache {
+            let file = load_cache_file(&root, directory, &guest, dir)?;
+            host.use_cache(&mut guest, file)?;
+        }
+        let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS, &mut host)?;
         // the log beside the stop file, which `batch_run.rs` holds to the reference's, line for line (Sprint 219)
         if let Some(log) = &log {
             let beside = format!("{}.unity.log", stop_file.trim_end_matches(".tsv"));
@@ -829,6 +890,12 @@ mod run {
             tsv += &format!("{name}\t{n}\n");
         }
         tsv += &format!("blocks the host compiled\t{}\n", out.translations.len());
+        if let Some(c) = &host.cache {
+            tsv += &format!("blocks the host installed\t{}\n", c.installs);
+            if let Some(address) = c.stopped_at {
+                tsv += &format!("the cache stopped by a write at\t0x{address:x}\n");
+            }
+        }
         // the call stream at the stop, in `scripts/call_compare.py` `write_tsv`'s form, beside the stop file (Sprint 191)
         let w2m_vm::guest::Traced {
             calls,
@@ -944,6 +1011,7 @@ mod run {
                 .map(|n| (*n, out.counts.get(n).copied().unwrap_or(0)))
                 .collect(),
             compiles_by_image,
+            installs: host.cache.as_ref().map(|c| c.installs),
             compile_ms,
             exits: out.exits.iter().map(|(k, n)| (*k, *n)).collect(),
             end,

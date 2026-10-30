@@ -798,7 +798,14 @@ impl Guest {
             runtime_word: timed,
             compile: start.time_compile,
         };
-        let code = monitor_code::write(mem, &image.symbols, timing);
+        let code = monitor_code::write(
+            mem,
+            &image.symbols,
+            monitor_code::Options {
+                timing,
+                host_range: start.host_range,
+            },
+        );
         let switch = image.symbols["w2m_switch"];
         let mut cache = CodeCache { mem };
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;

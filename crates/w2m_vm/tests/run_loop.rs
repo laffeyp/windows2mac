@@ -16,9 +16,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cpu_cases::sha256;
-use guest_runtime::layout::{IPA_BASE, RUNTIME_IMAGE_VA, runtime_defines};
+use guest_runtime::layout::{
+    AP_READ_ONLY, IPA_BASE, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE, RUNTIME_IMAGE_VA, STATE_OFF,
+    runtime_defines,
+};
 use hypervisor::{Vcpu, Vm, memory};
 use pe_loader::{Loaded, load};
+use translator::lower::RuntimeCalls;
+use w2m_vm::cache_file::{self, Exits};
 use w2m_vm::compile::HostCompiler;
 use w2m_vm::guest::{Guest, vm_compiler_symbols};
 use w2m_vm::process::Start;
@@ -65,6 +70,12 @@ fn fixture(root: &Path, name: &str) -> Option<serde_json::Value> {
 fn guest_for(root: &Path, name: &str) -> (Loaded, Guest) {
     let data = fs::read(root.join(format!("tests/data/timed_waits/{name}.exe"))).unwrap();
     let loaded = load(&data, None, "probe.exe").unwrap();
+    let guest = guest_with(root, &loaded, &Start::console("probe.exe"));
+    (loaded, guest)
+}
+
+/// The guest of `loaded` as `start` asks.
+fn guest_with(root: &Path, loaded: &Loaded, start: &Start) -> Guest {
     let (_, image) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
     let services = guest_runtime::services::services(&guest_runtime::texts(root).unwrap()).unwrap();
     let exports: serde_json::Value =
@@ -72,16 +83,39 @@ fn guest_for(root: &Path, name: &str) -> (Loaded, Guest) {
     let modules: BTreeSet<String> = exports["modules"].as_object().unwrap().keys().cloned().collect();
     let symbols =
         vm_compiler_symbols(&fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap()).unwrap();
-    let guest = Guest::new(
-        &loaded,
-        &image,
-        &services,
-        &Start::console("probe.exe"),
-        &modules,
-        &symbols,
-    )
-    .unwrap();
-    (loaded, guest)
+    Guest::new(loaded, &image, &services, start, &modules, &symbols).unwrap()
+}
+
+/// `tests/data/timed_waits/<name>.exe` with the translation cache of its own image in use (Sprint 257): the miss stub
+/// sends the image's range to the host, and the cache is made from the image's bytes under the guest's setup, as
+/// `w2m-vm --make-cache` makes UnityPlayer.dll's.
+fn cached_guest(root: &Path, name: &str) -> (Loaded, Guest, HostCompiler) {
+    let data = fs::read(root.join(format!("tests/data/timed_waits/{name}.exe"))).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let program = &loaded.images[0];
+    let mut start = Start::console("probe.exe");
+    start.host_range = Some((program.base, program.base + u64::from(program.pe.size_of_image)));
+    let mut guest = guest_with(root, &loaded, &start);
+    let exits = Exits {
+        exit_va: guest.code.dispatch_va,
+        slice_va: guest.slice_va,
+        state_va: PROCESS_VA + STATE_OFF,
+        runtime: RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied()),
+    };
+    let (file, _) = cache_file::make(&program.pe, &data, program.base, &exits, name.to_string());
+    assert!(!file.blocks.is_empty(), "{name}'s cache holds no block");
+    let mut host = HostCompiler::default();
+    host.use_cache(&mut guest, file).unwrap();
+    (loaded, guest, host)
+}
+
+/// The reconstruction table's marks, (host, x86), as the C runtime reads them.
+fn recon_marks(guest: &Guest) -> Vec<(u64, u64)> {
+    let mem = guest.memory.as_slice();
+    let word = |at: u64| u64::from_le_bytes(mem[at as usize..at as usize + 8].try_into().unwrap());
+    (0..word(RUN_TABLE + RECON_COUNT))
+        .map(|i| (word(RECON_TABLE + 16 * i), word(RECON_TABLE + 16 * i + 8)))
+        .collect()
 }
 
 /// The run, in a VM of its own, with the host compiling.
@@ -204,6 +238,109 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
             .collect();
         assert_eq!(ours, hex, "block 0x{start:x}'s words differ from the Python host's");
     }
+}
+
+/// Sprint 257: `qpc.exe` with the cache of its own image runs to the same stop and output as without, the host
+/// installing its blocks; each installed block's marks open with its code and its start and lie within its words, so the
+/// C runtime's lookups find the block where it was installed.
+#[test]
+fn qpc_runs_with_its_blocks_installed_from_the_cache() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc");
+    let before = monotonic_count();
+    let out = run(&mut guest, &loaded, &mut host);
+    let after = monotonic_count();
+    assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
+    let counter = u64::from_str_radix(String::from_utf8(guest.stdout.clone()).unwrap().trim_end(), 16).unwrap();
+    assert!(
+        before <= counter && counter <= after,
+        "{before} <= {counter} <= {after}"
+    );
+    let cache = host.cache.as_ref().unwrap();
+    assert!(cache.installs > 0, "the host installed nothing");
+    assert_eq!(cache.stopped_at, None, "qpc writes no code");
+    let compiled: BTreeSet<u64> = host.translations.iter().map(|(s, _)| *s).collect();
+    let marks = recon_marks(&guest);
+    let mut installed = 0;
+    for (&start, &va) in host.blocks.iter().filter(|(s, _)| !compiled.contains(s)) {
+        let b = cache
+            .file
+            .blocks
+            .iter()
+            .find(|b| cache.file.base + u64::from(b.start) == start)
+            .unwrap();
+        let first = marks
+            .iter()
+            .position(|&m| m == (va, start))
+            .unwrap_or_else(|| panic!("no mark (0x{va:x}, 0x{start:x}): block 0x{start:x}'s marks are not rebased"));
+        let end = va + 4 * u64::from(b.nwords);
+        for &(h, x) in &marks[first..first + b.nmarks as usize] {
+            assert!(
+                (va..=end).contains(&h),
+                "block 0x{start:x}'s mark (0x{h:x}, 0x{x:x}) lies outside its words"
+            );
+        }
+        installed += 1;
+    }
+    assert_eq!(installed, cache.installs, "the installs counted");
+}
+
+/// Sprint 257, the write rule: a write into the image's code stops the cache for the rest of the run, drops every block
+/// installed from it, makes the image's pages no block is behind writable again, and installs nothing after.
+#[test]
+fn a_write_to_the_image_code_stops_the_cache() {
+    let root = root();
+    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc");
+    let entry = loaded.image_entry;
+    let va = host
+        .install(&mut guest, entry)
+        .expect("the cache holds the entry's block")
+        .unwrap();
+    assert_eq!(host.blocks.get(&entry), Some(&va));
+    let other = {
+        let file = &host.cache.as_ref().unwrap().file;
+        file.blocks
+            .iter()
+            .map(|b| file.base + u64::from(b.start))
+            .find(|&s| s != entry)
+            .unwrap()
+    };
+    // a write to the image's first code page with no block behind it: not one of the entry block's pages
+    let entry_pages: BTreeSet<u64> = host.code_pages.keys().copied().collect();
+    let program = &loaded.images[0];
+    let text = program
+        .pe
+        .sections
+        .iter()
+        .find(|s| s.characteristics & pe_image::SCN_MEM_EXECUTE != 0)
+        .unwrap();
+    let written = (0..u64::from(text.virtual_size))
+        .step_by(PAGE as usize)
+        .map(|o| (program.base + u64::from(text.virtual_address) + o) & !(PAGE - 1))
+        .find(|p| !entry_pages.contains(p));
+    let written = written.unwrap_or_else(|| *entry_pages.iter().next().unwrap()) + 8;
+    assert!(
+        host.code_written(&mut guest, written).unwrap(),
+        "the write to 0x{written:x} was not taken"
+    );
+    let cache = host.cache.as_ref().unwrap();
+    assert_eq!(cache.stopped_at, Some(written), "the cache did not stop");
+    assert!(!host.blocks.contains_key(&entry), "the installed block was not dropped");
+    assert!(
+        host.install(&mut guest, other).is_none(),
+        "the cache installed after the write"
+    );
+    let at = page_descriptor(guest.memory.as_slice(), written & !(PAGE - 1)).unwrap();
+    let desc = u64::from_le_bytes(
+        guest.memory.as_slice()[at as usize..at as usize + 8]
+            .try_into()
+            .unwrap(),
+    );
+    assert!(
+        entry_pages.contains(&(written & !(PAGE - 1))) || desc & AP_READ_ONLY == 0,
+        "the written page 0x{written:x} is still read-only"
+    );
 }
 
 /// Sprint 181: `model_steps.exe` reaches the model, ADDSS by hvc #10 and RCR (with its STC) by hvc #11, and the run loop

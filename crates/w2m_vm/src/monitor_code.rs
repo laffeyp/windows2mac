@@ -265,6 +265,15 @@ pub struct Timing {
     pub compile: bool,
 }
 
+/// How the monitor code is written: what it times, and the targets its miss stub sends to the host before the in-VM
+/// compiler (Sprint 257: the translation cache's image, `[base, base + size)`, which the host installs from the cache).
+/// The default writes the Python's words.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Options {
+    pub timing: Timing,
+    pub host_range: Option<(u64, u64)>,
+}
+
 /// After the call of `w2m_vm_compile`, x26 holding the counter at the call: the compile's ticks added to the sum
 /// (Sprint 247), kept if the longest, and added to the open frame's (Sprint 248). A frame opens at a compile's start and
 /// holds every compile that ends within 1/`FRAMES_A_SECOND` s of it; the first to end past it folds the frame's sum
@@ -311,8 +320,9 @@ fn compile_probe(d: &mut Assembler) {
     ]);
 }
 
-/// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address, timed as `timing` asks.
-pub fn dispatcher(symbols: &BTreeMap<String, u64>, timing: Timing) -> (Vec<u32>, u64) {
+/// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address, written as `options` asks.
+pub fn dispatcher(symbols: &BTreeMap<String, u64>, options: Options) -> (Vec<u32>, u64) {
+    let timing = options.timing;
     let timed = timing.runtime_word;
     let mut d = Assembler::new(MONITOR_VA + DISPATCHER);
     let (top, miss) = (d.label(), d.label());
@@ -337,6 +347,18 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>, timing: Timing) -> (Vec<u32>,
     d.bind(miss);
     // the compiler inside the VM first (Sprint 083; VMC_ENABLED)
     let host = d.label();
+    // a target in the host's range goes to the host first, which installs it from the translation cache (Sprint 257);
+    // x16 is free here
+    if let Some((lo, hi)) = options.host_range {
+        let outside = d.label();
+        d.emit(&a64::mov_imm(16, lo));
+        d.emit(&[a64::cmp(17, 16)]);
+        d.branch(|off| a64::bcond("lo", off), outside);
+        d.emit(&a64::mov_imm(16, hi));
+        d.emit(&[a64::cmp(17, 16)]);
+        d.branch(|off| a64::bcond("lo", off), host);
+        d.bind(outside);
+    }
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER));
     d.emit(&[a64::ldr(8, 16, 16, VMC_ENABLED as u32)]);
     d.branch(|off| a64::cbz(16, off), host);
@@ -483,15 +505,15 @@ pub struct MonitorCode {
 /// Writes the monitor code into the monitor area (`mem` starts at `MONITOR_VA`): `_write_monitor`, vCPU 0's monitor
 /// data header (count 0, limit 0, the dispatch table's address), the vectors, the dispatcher, the empty table and the
 /// exception entry, timed as `timing` asks (the default writes the Python's words).
-pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, timing: Timing) -> MonitorCode {
-    let timed = timing.runtime_word;
+pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, options: Options) -> MonitorCode {
+    let timed = options.timing.runtime_word;
     let header: Vec<u8> = [0u64, 0, MONITOR_VA + DISPATCH_TABLE]
         .iter()
         .flat_map(|q| q.to_le_bytes())
         .collect();
     mem[MONITOR_DATA as usize..MONITOR_DATA as usize + 24].copy_from_slice(&header);
     write_words(mem, VECTORS, &vectors());
-    let (d, miss_va) = dispatcher(symbols, timing);
+    let (d, miss_va) = dispatcher(symbols, options);
     write_words(mem, DISPATCHER, &d);
     let mut empty = [0u8; 16];
     empty[..8].copy_from_slice(&EMPTY_TARGET.to_le_bytes());
@@ -519,7 +541,7 @@ pub fn insert(mem: &mut [u8], target: u64, code: u64, second: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{MONITOR_VA, Timing, VM_COMPILER, VMC_COMPILE_TICKS, dispatcher};
+    use super::{MONITOR_VA, Options, Timing, VM_COMPILER, VMC_COMPILE_TICKS, dispatcher};
     use a64_encoder as a64;
     use std::collections::BTreeMap;
 
@@ -550,12 +572,15 @@ mod tests {
     #[test]
     fn the_compile_probe_is_off_by_default_and_its_size_known() {
         let symbols: BTreeMap<String, u64> = [("w2m_vm_compile".to_string(), 0x7f00_0418_0000)].into();
-        let (plain, plain_miss) = dispatcher(&symbols, Timing::default());
+        let (plain, plain_miss) = dispatcher(&symbols, Options::default());
         let (timed, timed_miss) = dispatcher(
             &symbols,
-            Timing {
-                compile: true,
-                ..Timing::default()
+            Options {
+                timing: Timing {
+                    compile: true,
+                    ..Timing::default()
+                },
+                ..Options::default()
             },
         );
         for read in [a64::mrs(26, a64::CNTVCT_EL0), a64::mrs(12, a64::CNTFRQ_EL0)] {
@@ -576,6 +601,33 @@ mod tests {
             timed_miss - plain_miss,
             4 * probe as u64,
             "the miss stub moves by the probe"
+        );
+    }
+
+    /// The host range (Sprint 257): absent, the dispatcher is the Python's; present, the miss stub compares the target
+    /// with both ends and branches to the host path before the in-VM compiler; the host path moves by the test.
+    #[test]
+    fn the_host_range_is_off_by_default_and_sent_before_the_compiler() {
+        let symbols: BTreeMap<String, u64> = [("w2m_vm_compile".to_string(), 0x7f00_0418_0000)].into();
+        let (plain, plain_miss) = dispatcher(&symbols, Options::default());
+        let range = (0x1_8000_0000, 0x1_819d_b000);
+        let (ranged, ranged_miss) = dispatcher(
+            &symbols,
+            Options {
+                host_range: Some(range),
+                ..Options::default()
+            },
+        );
+        let test = a64::mov_imm(16, range.0).len() + 2 + a64::mov_imm(16, range.1).len() + 2; // cmp, b.lo; cmp, b.lo
+        assert_eq!(ranged.len() - plain.len(), test, "the range test's words");
+        assert_eq!(
+            ranged_miss - plain_miss,
+            4 * test as u64,
+            "the host path moves by the test"
+        );
+        assert!(
+            !plain.contains(&a64::cmp(17, 16)),
+            "the default dispatcher compares x17 with x16"
         );
     }
 }

@@ -80,6 +80,9 @@ pub struct Start {
     /// the miss stub's call of the in-VM compiler timed in the monitor code (Sprint 247); false writes the Python's
     /// words
     pub time_compile: bool,
+    /// `[lo, hi)`: the miss stub sends a target in it to the host before the in-VM compiler, which installs it from the
+    /// cache (Sprint 257); None writes the Python's words
+    pub host_range: Option<(u64, u64)>,
     /// the host directory that is C:\w2m\app, the Python's file bridge root (`host_file`, `in_app_directory`;
     /// Sprint 196): the batch run's depot; None for a probe run, whose directory holds only the program (family_run.py
     /// `run_in_vm` writes probe.exe alone)
@@ -112,6 +115,7 @@ impl Start {
             call_trace_from: None,
             time_runtime_word: false,
             time_compile: false,
+            host_range: None,
             app_root: None,
             memory_fd: None,
             program_path: None,

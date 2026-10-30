@@ -979,13 +979,18 @@ fn run(
             ) {
                 (Some(va), _) => va,
                 (None, None) => break Stop::Declined { target },
-                (None, Some(h)) => match h.compile(guest, target) {
-                    Ok(va) => {
-                        let (start, end) = *h.translations.last().unwrap();
-                        out.translations.push(Translation { start, end, code: va });
-                        va
-                    }
-                    Err(why) => break Stop::Untranslated { target, why },
+                (None, Some(h)) => match h.install(guest, target) {
+                    // a cached block installed (Sprint 257): counted apart, not one of the compiles
+                    Some(Ok(va)) => va,
+                    Some(Err(why)) => break Stop::Untranslated { target, why },
+                    None => match h.compile(guest, target) {
+                        Ok(va) => {
+                            let (start, end) = *h.translations.last().unwrap();
+                            out.translations.push(Translation { start, end, code: va });
+                            va
+                        }
+                        Err(why) => break Stop::Untranslated { target, why },
+                    },
                 },
             },
         };
