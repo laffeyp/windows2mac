@@ -33,6 +33,9 @@ pub const U_PF: u32 = 16;
 pub const U_AF: u32 = 32;
 /// vm_backend 851.
 pub const ALL_FLAGS: u32 = U_CF | U_ZF | U_SF | U_OF | U_PF | U_AF;
+/// vm_backend 372: a block's instructions at most, for the host's compile and the translation cache alike (moved from
+/// `w2m_vm::compile`, Sprint 254).
+pub const MAX_BLOCK_INSNS: usize = 64;
 /// MONITOR_DATA + these, reached through x28 (vm_backend 89, 93, 94).
 const AF_OPERANDS: u32 = 0x20;
 const PF_RESULT: u32 = AF_OPERANDS + 16;

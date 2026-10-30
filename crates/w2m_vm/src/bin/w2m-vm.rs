@@ -231,6 +231,13 @@ mod run {
             Some(_) => return Err("--exit-ledger <tsv>".into()),
             None => None,
         };
+        // the translation cache's file (Sprint 254): UnityPlayer.dll's walked blocks made under the game's setup, into the
+        // directory, and the run not started
+        let make_cache = match args.iter().position(|a| a == "--make-cache") {
+            Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
+            Some(_) => return Err("--make-cache <directory>".into()),
+            None => None,
+        };
         // the whole-block judge (Sprint 252): each in-VM compile against the Rust translator's, written to the path
         let judge = match args.iter().position(|a| a == "--judge-blocks") {
             Some(i) if args.len() >= i + 2 => Some(args.drain(i..i + 2).nth(1).unwrap()),
@@ -293,6 +300,7 @@ mod run {
                     end,
                     time_compile,
                     judge: judge.as_deref(),
+                    make_cache: make_cache.as_deref(),
                 },
             );
         }
@@ -606,6 +614,96 @@ mod run {
         Ok(())
     }
 
+    /// `--make-cache <directory>` (Sprint 254; the translation cache's design, card 3): UnityPlayer.dll's cache file
+    /// made with the addresses `guest`'s setup fixed, as `<directory>/<key>.w2mcache`, and its figures printed: the
+    /// blocks, the refusals, the code region's and the data region's use (the design's B'), the blocks whose live
+    /// flags miss a successor's read, and, when the gates' exit ledger's blocks are at hand, the run's starts the
+    /// walk reaches inside a block, by what ends the block before them.
+    fn make_cache_file(root: &Path, directory: &Path, guest: &Guest, dir: &str) -> Result<(), String> {
+        use guest_runtime::layout::{
+            BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_DATA_SIZE, PAGE, PROCESS_VA, STATE_OFF,
+        };
+        use w2m_vm::cache_file;
+        let image = guest
+            .images
+            .iter()
+            .find(|i| i.name == "UnityPlayer.dll")
+            .ok_or("the game loads no UnityPlayer.dll")?;
+        let data = fs::read(directory.join(&image.name)).map_err(|e| format!("{}: {e}", image.name))?;
+        let exits = cache_file::Exits {
+            exit_va: guest.code.dispatch_va,
+            slice_va: guest.slice_va,
+            state_va: PROCESS_VA + STATE_OFF,
+            runtime: translator::lower::RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied()),
+        };
+        for (name, target) in [("the dispatcher", exits.exit_va), ("the slice stub", exits.slice_va)] {
+            if target - CACHE_CODE_VA >= BRANCH_REACH {
+                return Err(format!(
+                    "{name} at 0x{target:x} is past a branch's reach of the cache's code"
+                ));
+            }
+        }
+        let tree = w2m_vm::built_from::crates_tree(root)?;
+        let key = cache_file::key(&data, image.base, &tree, &exits);
+        let started = Instant::now();
+        let cache = cache_file::make(&image.pe, &data, image.base, &exits, key);
+        let made_in = started.elapsed().as_secs_f64();
+        let uncovered = cache_file::uncovered_reads(&image.pe, &data, &cache);
+        let bytes = cache_file::to_bytes(&cache);
+        let out = root.join(dir);
+        fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+        let path = out.join(format!("{}.w2mcache", cache.key));
+        fs::write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        // the data region: the lookup table held half full, 16 bytes a slot; the page bitmap; the page index
+        let slots = (2 * cache.blocks.len()).next_power_of_two() as u64;
+        let index: u64 = cache.pages.values().map(|l| 8 + 4 * l.len() as u64).sum();
+        let bitmap = u64::from(image.pe.size_of_image).div_ceil(PAGE).div_ceil(8);
+        let data_bytes = 16 * slots + bitmap + index;
+        let code_bytes = 4 * cache.words.len() as u64;
+        let mut figures = serde_json::json!({
+            "key": cache.key,
+            "base": format!("0x{:x}", image.base),
+            "blocks": cache.blocks.len(),
+            "refused": cache.refused,
+            "code_bytes": code_bytes,
+            "code_region": CACHE_CODE_SIZE,
+            "data_bytes": data_bytes,
+            "data_region": CACHE_DATA_SIZE,
+            "file_bytes": bytes.len(),
+            "uncovered_reads": uncovered.len(),
+            "seconds": (made_in * 10.0).round() / 10.0,
+        });
+        // the run's starts the walk reaches inside a block (Deferred, Sprint 253), by what ends the block before them
+        if let Ok(text) = fs::read_to_string(root.join("build/exit_ledger/rust.tsv.blocks")) {
+            let size = u64::from(image.pe.size_of_image);
+            let starts: BTreeSet<u32> = text
+                .lines()
+                .filter_map(|l| l.split('\t').next())
+                .filter_map(|s| u64::from_str_radix(s, 16).ok())
+                .filter(|s| (image.base..image.base + size).contains(s))
+                .map(|s| (s - image.base) as u32)
+                .collect();
+            let made: BTreeSet<u32> = cache.blocks.iter().map(|b| b.start).collect();
+            let ends: std::collections::BTreeMap<u32, u32> = cache.blocks.iter().map(|b| (b.end, b.insns)).collect();
+            let inside = |rva: u32| cache.blocks.iter().any(|b| b.start < rva && rva < b.end);
+            let mut causes = std::collections::BTreeMap::<&str, u32>::new();
+            for s in starts.iter().filter(|s| !made.contains(s) && inside(**s)) {
+                let cause = match ends.get(s) {
+                    Some(&n) if n as usize == translator::lower::MAX_BLOCK_INSNS => {
+                        "after a block at the 64-instruction cap"
+                    }
+                    Some(_) => "after a block that ends before a refused instruction",
+                    None => "inside a cached block, at no block's end",
+                };
+                *causes.entry(cause).or_default() += 1;
+            }
+            figures["run_starts_inside_blocks"] = serde_json::json!(causes);
+        }
+        eprintln!("{}", serde_json::to_string_pretty(&figures).map_err(|e| e.to_string())?);
+        println!("{}", path.display());
+        Ok(())
+    }
+
     /// How a game run is watched beside its record: the exit ledger (Sprint 206), the batch run's end (Sprint 219),
     /// the in-VM compiler timed (Sprint 247), the whole-block judge (Sprint 252).
     struct GameOptions<'a> {
@@ -613,6 +711,7 @@ mod run {
         end: Option<(usize, String)>,
         time_compile: bool,
         judge: Option<&'a str>,
+        make_cache: Option<&'a str>,
     }
 
     fn game(
@@ -627,6 +726,7 @@ mod run {
             end,
             time_compile,
             judge,
+            make_cache,
         } = options;
         let root = root();
         let started = Instant::now();
@@ -651,6 +751,9 @@ mod run {
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
         let mut guest = guest_of(&root, &loaded, &start)?;
+        if let Some(dir) = make_cache {
+            return make_cache_file(&root, directory, &guest, dir);
+        }
         // the depot mounted read-only, as `run_frontier.py` 268 makes it (Sprint 204)
         guest.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
         if let Some(path) = ledger {

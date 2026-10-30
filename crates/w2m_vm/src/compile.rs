@@ -19,8 +19,7 @@ use crate::guest::{Guest, VMC_CURSOR};
 use crate::monitor_code::{EMPTY_TARGET, dispatch_slot};
 use crate::run::Tails;
 
-/// vm_backend 372: a block's instructions at most.
-pub const MAX_BLOCK_INSNS: usize = 64;
+pub use translator::lower::MAX_BLOCK_INSNS;
 
 fn read_u64(mem: &[u8], off: u64) -> u64 {
     u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())

@@ -265,6 +265,7 @@ dependencies = [
  "events",
  "guest_runtime",
  "hypervisor",
+ "image_walk",
  "num-bigint",
  "num-integer",
  "num-rational",

@@ -13,6 +13,7 @@ pub mod batch_stop;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod block_judge;
 pub mod built_from;
+pub mod cache_file;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod case_inputs;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

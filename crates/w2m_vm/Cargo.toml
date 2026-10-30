@@ -15,6 +15,7 @@ events = { path = "../events" }
 translator = { path = "../translator" }
 serde_json.workspace = true
 pe_loader = { path = "../pe_loader" }
+image_walk = { path = "../image_walk" }
 # a DLL loaded after the start is parsed by the host (`modules::load_dll`, Sprint 205)
 pe_image = { path = "../pe_image" }
 virtual_memory = { path = "../virtual_memory" }

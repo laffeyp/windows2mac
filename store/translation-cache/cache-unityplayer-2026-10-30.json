@@ -1,0 +1,19 @@
+{
+  "base": "0x180000000",
+  "blocks": 998222,
+  "code_bytes": 112565508,
+  "code_region": 125829120,
+  "data_bytes": 37611068,
+  "data_region": 67108864,
+  "file_bytes": 211190784,
+  "key": "10625aa1bc2d486bb15b9acfd82c9262f231fab1880284dad8c5f08eea2c4549",
+  "refused": {
+    "the first instruction does not lift": 6339
+  },
+  "run_starts_inside_blocks": {
+    "after a block at the 64-instruction cap": 101,
+    "inside a cached block, at no block's end": 250
+  },
+  "seconds": 16.7,
+  "uncovered_reads": 0
+}
