@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 255
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -80,3 +80,18 @@ pushed history is not rewritten, so every CI run fails until the record names it
 - [x] One concept: a design change in a close.
 
 ## result
+
+- **The fix:** `CLOSE_DESIGN_CHANGES` and `named_design_change` (dc878ce88): 8d18ece8a's one path passes, with why;
+  `a_named_design_change_passes_that_path_in_that_commit_alone` holds a second design path in that commit, and that path
+  in another commit, refused. `signal_report 254 --check` passes on the tree.
+- **The rule:** WORKING_AGREEMENT, the record check runs on the close commit before the push, and a rule is read in the
+  function that applies it.
+- **A finding beside the card:** the research read for the probe (card 4 of the translation cache's design) found the
+  design cannot be built as it stands; the Decision "The translation cache's shape" records it, and card 256 revises the
+  design first.
+- **The gates:** `scripts/gates.sh` exit 0 in 236 s on dc878ce88, copied from `store/gates/passes.tsv`; the timing stage 695 ns an exit at load 8.13, its cause not read.
+- **Plants,** run on dc878ce88, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `signal_report 254 --check` named "sprint 254: its close commit 8d18ece8a changes
+  docs/design-translation-cache-2026-10-30.md, outside the bookkeeping paths": the exception keyed by `8d18ece8b`.
+- **Plant 2,** `a_named_design_change_passes_that_path_in_that_commit_alone` failed, "assertion failed:
+  !named_design_change(commit, "docs/design-rust-host-2026-10-24.md")": every path of the commit passed.

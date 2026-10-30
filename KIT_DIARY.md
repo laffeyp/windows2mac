@@ -992,3 +992,13 @@ touched, and its `hvc 1` read that map first, so a block over a written page got
 in Mono's run-time code. Found by a design's lookup, not by a judge: the run conformed, the stale code doing no
 visible harm that time. A search for each removal of the frozen structure, matched against the port's, finds it.
 
+### 2026-10-30 — Sprint 255: a design checked for its form and its neighbours, not for its readers
+
+**Finding (#108):** a design that puts something where the system has never had it lists every reader of that kind
+of thing before it is approved, not after. The translation cache's design put translated code outside the 64 MiB
+code area. It passed `design_check` and two reviews, which checked its figures, its sources, its address against
+the judged areas and the reach of its branches; none listed who maps a code address back to a guest address. The
+C runtime does, and only inside the code area (`runtime.c` 245, `threads.c` 258); so did the host's give-backs. A
+research read for the fourth building card found it, three cards after the design was approved. The question for a
+design that adds a kind of thing in a new place is: who reads that kind of thing, and do they all look there.
+
