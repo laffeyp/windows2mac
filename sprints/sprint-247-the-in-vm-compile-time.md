@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 247
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -97,3 +97,49 @@ The record carries the in-VM compile time, and the Decision's revisit clause is 
 - [x] One concept: the in-VM compile time.
 
 ## result
+
+- **Departure, the design:** the card planned the bracket in `block_compiler.c`. Built so (c000817d3), it grew the
+  runtime image by 80 bytes and moved every runtime address linked after it. The gates found it: `python_image.rs`
+  had no frozen image under the new key, and, once its oracle was given a held row, a full no-fail-fast run found
+  `batch_run.rs`' call stream differing at row 2535, 0x7f000418d31c for 0x7f000418d2cc. The review of 2026-10-27,
+  item 15, had foreseen the first ("the first sprint that edits the C runtime replaces the test's oracle first"); the
+  card's search of Deferred did not reach the Surfaced archive, where it stood. The C change was reverted, the held
+  row with it, and the timing put where Sprint 164's is: in the monitor code Rust writes, off by default, so the gates'
+  run is the frozen host's word for word.
+- **The probe:** `monitor_code::Timing { runtime_word, compile }`; with `compile`, the miss stub reads `cntvct_el0`
+  into x26 before the `blr` to `w2m_vm_compile` and, after it, adds the difference to `VM_COMPILER +
+  VMC_COMPILE_TICKS` (0x1B8, before the save area at 0x200), 11 words (`the_compile_probe_is_off_by_default_and_its_
+  size_known`). `w2m-vm --time-compile` asks it, refusing a timed run that compiled and summed no tick; the frequency
+  is `host_state::counter_frequency`, the one reader `run_measurements` now shares;
+  `scripts/batch-run-record.sh <root> --time-compile` passes it and writes `compile_timing` in the baseline, and
+  `batch_record.rs` holds a timed record to one positive `compile_critical_path_ms` and any other to none.
+- **A first figure that was no figure:** the C bracket's first run gave 762 trillion ms. A print of the raw sum,
+  then a count of backward reads (1,091, the hvc 1 count), showed the counter never read: the asm said `"isb; mrs
+  ..."`, and `;` begins a comment in Apple's assembler, as `process.c` 27 says beside its own read. The tree held the
+  answer; it was not read before the asm was written.
+- **The records:** three timed records from 4f6a736c2, each conforming, `check_records` 0 violations:
+  `store/runs/w2m-vm-game-1793381341000000000`, `-1793381446000000000`, `-1793381554000000000`; the VM compiled
+  274,834 blocks in 1,725, 1,800 and 1,626 ms, the host 62.8, 62.8 and 60.2 ms on hvc 1; compiling 5.33% to 5.49% of
+  the run's seconds, at one-minute load 5.07 to 5.95, raised in part by this session's own builds and tests run
+  beside them. The three C-bracket records (5.13% to 5.18% at quieter load) are in `store/superseded/`.
+- **The census:** row 15d met from the timed records; `census.rs` now fails a cited record withdrawn to
+  `store/superseded/` (reviewer-3's Low 2 of its review of the rework), and named row 15d's old citation before it
+  was rewritten.
+- **The order:** the Decision "Sequence for step 5" ruled before the timed records were read: the revisit clause's
+  rate test withdrawn as a bar on the plan, step 5 next, the share and the hitch measured on the record. Deferred
+  holds the shared counters for step 6.
+- **The gates:** `scripts/gates.sh` exit 0 in 605 s on 2577a0557, copied from `store/gates/passes.tsv`; the timing stage
+  677 ns an exit at load 3.27. Earlier runs, each row in `store/gates/`: on 3400f1e46 the commit walk named c2fe0bbc8
+  (now in `signal_report`'s `BETWEEN_SPRINTS`); on ae0662289 one failed on the tail entry headed closed too soon and
+  one passed in 493 s; on 35687d79b one failed on the card marked done too soon, one was stopped for reviewer-3's
+  review at the close, and one failed in `family_runs.rs` on a drive name a killed process had left, fixed in
+  2577a0557 (the tail entry's Observation 7).
+- **Plants,** run on ae0662289, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `a_timed_run_writes_its_compile_time` failed, "left: [] right: [vm, 1725.5, ms]" (abridged): the
+  compile time left off the record, `record.rs` 266 reading `e.compile_ms` as `None`. A departure: the card named
+  `batch_record.rs`, which reads only records already written; the unit test (ae0662289) holds the writer.
+- **Plant 2,** `w2m-vm` exited 1, "--time-compile: 274834 blocks compiled in the VM and no tick summed": the probe's
+  store a `nop` (`monitor_code.rs` 289, the probe still 11 words), a timed run of the game. A departure: the card's
+  plant was the C design's frequency slot, which the rework removed; the frequency is now read on the host.
+- **Plant 3,** `batch_record.rs` failed, "a measurement of frame_time_ms, which the reference does not measure": a
+  second metric the reference lacks, the gates' record's first `load_average` row renamed `frame_time_ms`.

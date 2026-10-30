@@ -970,3 +970,16 @@ first figure was 762 trillion ms: `"isb; mrs …"` lost its `mrs` to Apple's ass
 `process.c` 27 says beside its own counter read. An experiment found it, a print of the raw sum and a count of backward
 reads matching the hvc 1 exits; a search for the tree's other counter reads would have found it before the code.
 
+**Finding (#105):** a close's record is copied from what the run wrote, never written ahead of it. Sprint 247's close
+did it twice: the tail entry was headed closed while its gates ran, and a pass of 493 s was typed in from memory after
+`git checkout` had dropped its line from `store/gates/passes.tsv`, with the timing rows of three runs. reviewer-3 found
+the second. The check that would have caught it already existed in `signal_report`, but applied only to an entry
+headed closed, so the order of the close is now the rule: GATES-LINE, the card active and the heading "gates
+running" while the gates run, `signal_report --check` on that state first, the line copied from `passes.tsv`, and no
+gate row dropped.
+
+**Finding (#106):** a temporary name that a killed process can leave must be retried, not trusted. `w2m-vm` named its
+C: drive by process id and a counter, and failed on "File exists" when a process killed hours earlier had left the
+name and a later one got the same id; the gates met it in one family run of 273. Of the five paths outside tests named
+by process id, the two made with `create_new` and no removal first had the fault; both now take the next number.
+
