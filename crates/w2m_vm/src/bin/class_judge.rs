@@ -140,14 +140,9 @@ mod run {
     }
 
     impl Class {
+        /// `cases::class_verdict`, the rule `case_runs` takes too (Sprint 245).
         fn verdict(&self) -> Verdict {
-            if !self.differences.is_empty() {
-                Verdict::Discrepancy
-            } else if !self.unjudged.is_empty() {
-                Verdict::Inconclusive
-            } else {
-                Verdict::Conforms
-            }
+            w2m_vm::cases::class_verdict(self.differences.len(), self.unjudged.iter().map(|u| u.0).sum())
         }
     }
 

@@ -152,6 +152,20 @@ impl Tally {
     }
 }
 
+/// A class's verdict from its tally over a session's runs, the one rule both judges take (Sprint 245; Deferred, Sprint
+/// 222: `case_runs` and `class_judge` each had their own, and a class with cases refused conformed in one and was
+/// inconclusive in the other): a difference makes a discrepancy; else a case read and sent to no verdict makes the
+/// class inconclusive, nothing compared for it; else it conforms.
+pub fn class_verdict(differences: usize, unjudged: usize) -> events::Verdict {
+    if differences > 0 {
+        events::Verdict::Discrepancy
+    } else if unjudged > 0 {
+        events::Verdict::Inconclusive
+    } else {
+        events::Verdict::Conforms
+    }
+}
+
 /// `assemble_block` (vm_backend 922-970) for one instruction, at `base`: the budget's SUBS and its branch, the
 /// instruction's words (compiled for their own address, `base + 8`), the fall-through exit to `exit_va` with x17 the next
 /// address, and the budget's stop. Returns the words and the marks (host VA, x86 address).
@@ -739,4 +753,27 @@ pub fn run_cases(
     write_u64(mem, RUN_TABLE + RECON_COUNT, found.1);
     tally.seconds = started.elapsed().as_secs_f64();
     Ok(tally)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::class_verdict;
+    use events::Verdict;
+
+    /// The one rule: a difference before anything else, then a case sent to no verdict, then conformance.
+    #[test]
+    fn a_class_is_a_discrepancy_then_inconclusive_then_conforming() {
+        assert_eq!(class_verdict(0, 0), Verdict::Conforms);
+        assert_eq!(
+            class_verdict(0, 3),
+            Verdict::Inconclusive,
+            "a case refused leaves nothing compared"
+        );
+        assert_eq!(class_verdict(2, 0), Verdict::Discrepancy);
+        assert_eq!(
+            class_verdict(2, 3),
+            Verdict::Discrepancy,
+            "a difference outweighs a refusal"
+        );
+    }
 }

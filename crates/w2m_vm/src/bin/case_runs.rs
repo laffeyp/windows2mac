@@ -12,7 +12,9 @@
 //! COMPARISON_COMPLETED, then CANDIDATE_ACCEPTED, or CANDIDATE_REJECTED, REDUCTION_COMPLETED (steps 0: one instruction,
 //! nothing to cut; Sprint 167), DISCREPANCY_REPORTED naming the first failing case's program and initial state, and
 //! DISCREPANCY_ROUTED;
-//! DISCREPANCY_RESOLVED for each discrepancy the judges' ledger (`w2m_vm::ledger`) holds open on an accepted class;
+//! DISCREPANCY_RESOLVED for each discrepancy the judges' ledger (`w2m_vm::ledger`) holds open on an accepted class; a
+//! class with cases sent to no verdict and no difference, inconclusive by `cases::class_verdict` (Sprint 245), gets
+//! COMPARISON_COMPLETED alone, as `class_judge` writes one;
 //! SESSION_COMPLETED. As in the Python, no execution or trace event: the runs are judged by state, and no guest trace is
 //! made. The Python started each step from the event before it with predicate triggers; a run file's triggers take no
 //! predicate, so one Producer writes the sequence in order.
@@ -110,6 +112,8 @@ mod run {
     struct Unit {
         judged: usize,
         differences: Vec<(usize, String, (String, String))>,
+        /// the cases read and sent to no verdict, by run, as `class_judge` keeps them (Sprint 245)
+        unjudged: Vec<(usize, String)>,
     }
 
     pub fn main() -> Result<(), String> {
@@ -235,6 +239,10 @@ mod run {
                     let hashes = case_hashes(&cases[t.first_case[key]]);
                     units.entry(class).or_default().differences.push((*n, line, hashes));
                 }
+                for (class, (n, first)) in &t.unjudged_by_class {
+                    let line = format!("{class}: {n} cases not judged; run {}: case {first}", run.id);
+                    units.entry(class.clone()).or_default().unjudged.push((*n, line));
+                }
             }
             Ok(())
         })?;
@@ -245,7 +253,7 @@ mod run {
         let contract = ContractId::new(CONTRACT_ID).expect("a dotted id");
         let version = Version::new(CONTRACT_VERSION).unwrap();
         let reference = runs.iter().map(|r| r.id.as_str()).collect::<Vec<_>>().join("+");
-        let (mut accepted, mut reported) = (0, 0);
+        let (mut accepted, mut reported, mut inconclusive) = (0, 0, 0);
         for (unit, v) in units.iter_mut() {
             v.differences.sort_by_key(|a| std::cmp::Reverse(a.0));
             // the candidate is the Rust translator, which compiled every case (Sprint 238)
@@ -275,20 +283,22 @@ mod run {
                 v.judged,
                 runs.len()
             );
-            let first = v.differences.first().map(|(_, l, _)| {
-                let more = v.differences.len() - 1;
-                let s = if more > 0 {
-                    format!("{unit}: {l} (+{more} more)")
-                } else {
-                    format!("{unit}: {l}")
-                };
-                s.chars().take(500).collect::<String>()
-            });
-            let verdict = if v.differences.is_empty() {
-                Verdict::Conforms
-            } else {
-                Verdict::Discrepancy
-            };
+            let first = v
+                .differences
+                .first()
+                .map(|(_, l, _)| {
+                    let more = v.differences.len() - 1;
+                    if more > 0 {
+                        format!("{unit}: {l} (+{more} more)")
+                    } else {
+                        format!("{unit}: {l}")
+                    }
+                })
+                .or_else(|| v.unjudged.first().map(|(_, l)| l.clone()))
+                .map(|s| s.chars().take(500).collect::<String>());
+            // the one rule (Sprint 245): before it, a unit with cases refused and no difference was accepted here and
+            // inconclusive in `class_judge`
+            let verdict = w2m_vm::cases::class_verdict(v.differences.len(), v.unjudged.iter().map(|u| u.0).sum());
             emit(
                 &mut out,
                 &ComparisonCompleted {
@@ -304,7 +314,12 @@ mod run {
                 },
             )
             .map_err(w)?;
-            if v.differences.is_empty() {
+            if verdict == Verdict::Inconclusive {
+                // nothing compared: no acceptance, no discrepancy and no resolution, as `class_judge` writes one
+                inconclusive += 1;
+                continue;
+            }
+            if verdict == Verdict::Conforms {
                 accepted += 1;
                 emit(
                     &mut out,
@@ -390,7 +405,7 @@ mod run {
             }
         }
         eprintln!(
-            "case_runs: {} classes, {accepted} accepted, {reported} with discrepancies",
+            "case_runs: {} classes, {accepted} accepted, {reported} with discrepancies, {inconclusive} inconclusive",
             units.len()
         );
         emit(
