@@ -21,6 +21,19 @@ pub fn load_average() -> Option<[f64; 3]> {
     (n == 3).then_some(load)
 }
 
+/// The virtual counter's frequency, the guest's CNTVCT_EL0's, from `sysctl -n hw.tbfrequency` (24,000,000 on Apple
+/// silicon, 2026-10-27; Sprint 164's reading, moved here in Sprint 247 so both readers share it).
+pub fn counter_frequency() -> Result<u64, String> {
+    let out = std::process::Command::new("sysctl")
+        .args(["-n", "hw.tbfrequency"])
+        .output()
+        .map_err(|e| format!("sysctl: {e}"))?;
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse()
+        .map_err(|e| format!("hw.tbfrequency: {e}"))
+}
+
 /// The calling thread's QoS class by its `sys/qos.h` name (130-143), or its number when the header names none.
 pub fn qos_class() -> String {
     // SAFETY: no arguments, no memory

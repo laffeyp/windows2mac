@@ -198,6 +198,15 @@ mod run {
             }
             None => false,
         };
+        // the in-VM compiler's calls timed by the monitor code (Sprint 247), for a measurement run; the gates' run
+        // leaves it off, so its monitor code is the Python's word for word
+        let time_compile = match args.iter().position(|a| a == "--time-compile") {
+            Some(i) => {
+                args.remove(i);
+                true
+            }
+            None => false,
+        };
         // a family's start (Sprint 231): the JSON object `family_known` prints in the lookup's column 7
         let family_start = match args.iter().position(|a| a == "--start") {
             Some(i) if args.len() >= i + 2 => {
@@ -256,7 +265,7 @@ mod run {
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | --stop \
                      <tsv>] [--beside <name> <file>] [--exit-ledger <tsv>] [--instruction-clock] \
                      | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> [--log-lines <count> \
-                     --main-thread-calls <tsv>] | w2m-vm --wfe-probe";
+                     --main-thread-calls <tsv>] [--time-compile] | w2m-vm --wfe-probe";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
         {
@@ -268,7 +277,15 @@ mod run {
             && out_flag == "--output"
             && stop_flag == "--stop"
         {
-            return game(Path::new(directory), program, output, stop_file, ledger.as_deref(), end);
+            return game(
+                Path::new(directory),
+                program,
+                output,
+                stop_file,
+                ledger.as_deref(),
+                end,
+                time_compile,
+            );
         }
         // (guest, output, the measure asked for and its file); every path relative to the repository root
         let (guest_path, output, measure) = match args.as_slice() {
@@ -587,6 +604,7 @@ mod run {
         stop_file: &str,
         ledger: Option<&str>,
         end: Option<(usize, String)>,
+        time_compile: bool,
     ) -> Result<(), String> {
         let root = root();
         let started = Instant::now();
@@ -606,6 +624,7 @@ mod run {
         // the depot is C:\w2m\app, the Python's file bridge root (`host_file`, `in_app_directory`; Sprint 196)
         start.app_root = Some(directory.to_path_buf());
         start.program_path = Some(directory.join(program));
+        start.time_compile = time_compile;
         // the Producer's input, one JSON line, read so the pipe closes, as a guest run reads it
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
@@ -730,16 +749,19 @@ mod run {
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
         let stop = stop_name(&out.stop);
-        // the in-VM compiler's time (Sprint 247): ticks over the frequency the guest read; ticks with no frequency is a
-        // compiler that counted and never wrote it, named rather than divided by
-        let compile_ms = match out.compile_ticks {
-            (0, _) => None,
-            (ticks, 0) => {
+        // the in-VM compiler's time (Sprint 247), when the monitor code timed its calls: ticks over the counter's
+        // frequency; a timed run that compiled blocks and summed no tick is named, not recorded as no time
+        let compile_ms = if time_compile {
+            let compiled = out.counts.get("compiled").copied().unwrap_or(0);
+            if out.compile_ticks == 0 && compiled > 0 {
                 return Err(format!(
-                    "the in-VM compiler counted {ticks} ticks with a counter frequency of 0"
+                    "--time-compile: {compiled} blocks compiled in the VM and no tick summed"
                 ));
             }
-            (ticks, frequency) => Some(ticks as f64 * 1000.0 / frequency as f64),
+            let frequency = w2m_vm::host_state::counter_frequency()?;
+            Some(out.compile_ticks as f64 * 1000.0 / frequency as f64)
+        } else {
+            None
         };
         let record = w2m_vm::record::execution_lines(&w2m_vm::record::Execution {
             id: &id,

@@ -36,19 +36,6 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-/// The virtual counter's frequency on this Mac, from `sysctl -n hw.tbfrequency` (24,000,000 on Apple silicon,
-/// 2026-10-27): the guest's CNTVCT_EL0 counts at it.
-fn tick_frequency() -> Result<u64, String> {
-    let out = Command::new("sysctl")
-        .args(["-n", "hw.tbfrequency"])
-        .output()
-        .map_err(|e| format!("sysctl: {e}"))?;
-    String::from_utf8_lossy(&out.stdout)
-        .trim()
-        .parse()
-        .map_err(|e| format!("hw.tbfrequency: {e}"))
-}
-
 /// One `w2m-vm` child, signed with the Hypervisor entitlement; its standard output.
 fn child(root: &Path, args: &[&str]) -> Result<String, String> {
     let mut c = Command::new(root.join("scripts/sign_and_run.sh"))
@@ -175,7 +162,7 @@ fn run() -> Result<(), String> {
         if backward != 0 {
             return Err(format!("{guest}: {counted} takings, {backward} backward"));
         }
-        let ns_per_tick = 1e9 / tick_frequency()? as f64;
+        let ns_per_tick = 1e9 / w2m_vm::host_state::counter_frequency()? as f64;
         for site in Site::ALL {
             let at: Vec<&[u64; 7]> = takings.iter().filter(|t| t[0] == site as u64).collect();
             // a hold or a wait within one run of the vCPU, apart from one an exit interrupted, which holds the host's

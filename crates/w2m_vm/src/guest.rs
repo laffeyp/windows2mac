@@ -73,10 +73,10 @@ pub const VMC_COUNT_NAMES: [&str; 23] = [
     "pages protected",
     "pause",
 ];
-/// VM_COMPILER + these, past the counts (Sprint 247; `block_compiler.c`'s C_TICKS and C_FREQUENCY): the virtual
-/// counter's ticks spent in `w2m_vm_compile`, and the counter's frequency the guest read.
+/// VM_COMPILER + this, past the counts (Sprint 247): the virtual counter's ticks spent in the miss stub's call of
+/// `w2m_vm_compile`, summed by the monitor code when `Start::time_compile` asks (`monitor_code::dispatcher`); the C
+/// runtime is not changed, so the runtime image and every address in it stay the frozen host's.
 pub const VMC_COMPILE_TICKS: u64 = VMC_COUNTS + 8 * VMC_COUNT_NAMES.len() as u64;
-pub const VMC_COUNTER_FREQUENCY: u64 = VMC_COMPILE_TICKS + 8;
 
 const DXGI_OBJECT: [&str; 7] = [
     "QueryInterface",
@@ -788,7 +788,11 @@ impl Guest {
         let (ttbr, _) = write_translation_tables(mem, &layout.maps).map_err(GuestError::Tables)?;
         write_u64(mem, VM_COMPILER + VMC_CURSOR, CODE_CACHE);
         let timed = start.time_runtime_word;
-        let code = monitor_code::write(mem, &image.symbols, timed);
+        let timing = monitor_code::Timing {
+            runtime_word: timed,
+            compile: start.time_compile,
+        };
+        let code = monitor_code::write(mem, &image.symbols, timing);
         let switch = image.symbols["w2m_switch"];
         let mut cache = CodeCache { mem };
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;

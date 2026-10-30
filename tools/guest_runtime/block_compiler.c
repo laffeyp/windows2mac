@@ -24,10 +24,7 @@ enum { VMC_ENABLED, VMC_CURSOR, VMC_LOG_COUNT, VMC_EXIT, VMC_SLICE, VMC_HOST_ONL
 
 /* the counts (vm_backend.VMC_COUNT_NAMES) */
 enum { C_COMPILED, C_NOT_CODE, C_HOST_ONLY, C_STATUS, C_SCAN_PAGES = C_STATUS + 7, C_LOG_FULL, C_CODE_FULL,
-       C_RECON_FULL, C_CUT, C_NEEDS_SPLIT = C_CUT + 6, C_PROTECTED, C_PAUSE,
-       /* past the frozen host's 23 (Sprint 247): the virtual counter's ticks spent in w2m_vm_compile, and the
-        * counter's frequency, so the host reads the compile time on the critical path */
-       C_TICKS, C_FREQUENCY };
+       C_RECON_FULL, C_CUT, C_NEEDS_SPLIT = C_CUT + 6, C_PROTECTED, C_PAUSE };
 static const u8 CUT_INDEX[8] = {0, C_CUT + 0, C_CUT + 1, C_CUT + 2, C_CUT + 3, 0, C_CUT + 4, C_CUT + 5};
 
 /* one log entry; the host reads it at W2M_VMC_VA + VMC_LOG_OFF + VMC_LOG_ENTRY * i */
@@ -221,7 +218,7 @@ static int extent(u64 start, const u8 *mem, u64 base, u64 size, struct vmc_insn 
     return n;
 }
 
-static u64 compile_block(u64 target) {
+u64 w2m_vm_compile(u64 target) {
     volatile u64 *v = vmc();
     if (target == v[VMC_HOST_ONLY]) {
         count(C_HOST_ONLY);
@@ -317,24 +314,5 @@ static u64 compile_block(u64 target) {
     v[VMC_LOG_COUNT] = n_log + 1;
     count(C_COMPILED);
     dispatch_insert(target, code);
-    return code;
-}
-
-static u64 counter(void) {
-    u64 t;
-    __asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(t)); /* newline: ";" starts a comment in Apple's assembler */
-    return t;
-}
-
-/* The miss stub's call: compile_block bracketed by the virtual counter, its ticks summed and the counter's frequency
- * kept beside them (Sprint 247), every return of compile_block's counted alike. */
-u64 w2m_vm_compile(u64 target) {
-    u64 start = counter();
-    u64 code = compile_block(target);
-    volatile u64 *counts = (volatile u64 *)(W2M_VMC_VA + VMC_COUNTS_OFF);
-    counts[C_TICKS] += counter() - start;
-    u64 frequency;
-    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frequency));
-    counts[C_FREQUENCY] = frequency;
     return code;
 }

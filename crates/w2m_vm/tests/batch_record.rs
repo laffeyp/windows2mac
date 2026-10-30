@@ -419,7 +419,7 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     found.extend(rate_problems(&measurements(&ours)));
     found.extend(condition_problems(&record));
     found.extend(compile_problems(&measurements(&ours), &measurements(&reference)));
-    found.extend(compile_time_problems(&measurements(&ours)));
+    found.extend(compile_time_problems(&measurements(&ours), timed(&record)));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
 }
 
@@ -427,16 +427,7 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
 /// Medium 1 of its review at 240): `load_at_start`, run_frontier.py's three parts as one string ("load averages 5.10
 /// 3.65 3.39; busy: …; other w2m: …"), the QoS class and the cores.
 fn condition_problems(record: &Path) -> Vec<String> {
-    let first = fs::read_dir(record)
-        .unwrap()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.file_name().unwrap().to_string_lossy().starts_with("events-"))
-        .min()
-        .and_then(|p| fs::read_to_string(p).ok())
-        .and_then(|t| t.lines().next().map(str::to_string))
-        .unwrap_or_default();
-    let first: Value = serde_json::from_str(&first).unwrap_or(Value::Null);
+    let first = first_line(record);
     let b = &first["payload"]["baseline"];
     let mut found = Vec::new();
     let load = b["load_at_start"].as_str().unwrap_or("");
@@ -468,27 +459,42 @@ fn condition_problems(record: &Path) -> Vec<String> {
 /// on the critical path (Sprint 247), which the frozen host never timed.
 const RUST_ONLY: [(&str, &str); 1] = [("compile_critical_path_ms", "ms")];
 
-/// The records written before the in-VM compile time reached the record (Sprints 240 and 246), which hold none.
-const BEFORE_COMPILE_TIME: [&str; 6] = [
-    "w2m-vm-game-1793364171000000000",
-    "w2m-vm-game-1793364267000000000",
-    "w2m-vm-game-1793364362000000000",
-    "w2m-vm-game-1793369487000000000",
-    "w2m-vm-game-1793369623000000000",
-    "w2m-vm-game-1793369737000000000",
-];
+/// The record's first line, its RunStarted with the baseline.
+fn first_line(record: &Path) -> Value {
+    let text = fs::read_dir(record)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().unwrap().to_string_lossy().starts_with("events-"))
+        .min()
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|t| t.lines().next().map(str::to_string))
+        .unwrap_or_default();
+    serde_json::from_str(&text).unwrap_or(Value::Null)
+}
 
-/// The in-VM compiler's time on the critical path (Sprint 247): one `compile_critical_path_ms` "vm", above zero.
-fn compile_time_problems(ours: &[Value]) -> Vec<String> {
+/// Whether the record's run timed the in-VM compiler: its baseline's `compile_timing`, which
+/// `scripts/batch-run-record.sh --time-compile` writes (Sprint 247).
+fn timed(record: &Path) -> bool {
+    first_line(record)["payload"]["baseline"]["compile_timing"].is_string()
+}
+
+/// The in-VM compiler's time on the critical path (Sprint 247): on a timed run one `compile_critical_path_ms` "vm",
+/// above zero; on any other, none.
+fn compile_time_problems(ours: &[Value], timed: bool) -> Vec<String> {
     let times: Vec<f64> = ours
         .iter()
-        .filter(|m| m["metric"] == "compile_critical_path_ms" && m["variant"] == "vm")
+        .filter(|m| m["metric"] == "compile_critical_path_ms")
         .filter_map(|m| m["value"].as_f64())
         .collect();
-    match times.as_slice() {
-        [ms] if *ms > 0.0 => Vec::new(),
-        _ => vec![format!(
-            "compile_critical_path_ms \"vm\" is {times:?}, where one time above zero is due"
+    match (timed, times.as_slice()) {
+        (true, [ms]) if *ms > 0.0 => Vec::new(),
+        (false, []) => Vec::new(),
+        (true, _) => vec![format!(
+            "compile_critical_path_ms is {times:?} on a timed run, where one time above zero is due"
+        )],
+        (false, _) => vec![format!(
+            "compile_critical_path_ms is {times:?} on a run whose baseline names no compile_timing"
         )],
     }
 }
@@ -558,9 +564,7 @@ fn every_stored_rust_batch_record_holds_its_rate() {
             let reference = measurements(&w2m_events(&root.join(REFERENCE)));
             found.extend(compile_problems(&measurements(&ours), &reference));
         }
-        if !BEFORE_COMPILE_TIME.contains(&name.as_str()) {
-            found.extend(compile_time_problems(&measurements(&ours)));
-        }
+        found.extend(compile_time_problems(&measurements(&ours), timed(&dir)));
         for (k, p) in &ours {
             if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {
                 found.push(format!("COMPARISON_COMPLETED verdict {}", p["verdict"]));

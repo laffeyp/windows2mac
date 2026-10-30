@@ -277,9 +277,9 @@ pub struct Outcome {
     pub blocks: BTreeMap<u64, u64>,
     /// `VMC_COUNTS` at the stop, by name
     pub counts: BTreeMap<&'static str, u64>,
-    /// the in-VM compiler's time at the stop: its counter ticks and the counter's frequency (Sprint 247); the
-    /// frequency 0 when the guest compiled nothing
-    pub compile_ticks: (u64, u64),
+    /// the virtual counter's ticks the miss stub spent calling the in-VM compiler, at the stop (Sprint 247); 0 unless
+    /// `Start::time_compile` asked the monitor code to sum them
+    pub compile_ticks: u64,
     /// each served exit's host time, from the vCPU's exit to its next run, in ns
     pub serve_ns: Vec<u64>,
     /// the same times by the exit's kind (`hvc <k>`, `vtimer`, or `ec 0x<class>`), for step 3's measure (Sprint 163)
@@ -540,7 +540,7 @@ fn run(
         bridged: BTreeMap::new(),
         blocks: BTreeMap::new(),
         counts: BTreeMap::new(),
-        compile_ticks: (0, 0),
+        compile_ticks: 0,
         serve_ns: Vec::new(),
         serve_by_kind: BTreeMap::new(),
         runtime_word: RuntimeWordTimes::default(),
@@ -982,10 +982,7 @@ fn run(
         out.counts
             .insert(name, read_u64(mem, VM_COMPILER + VMC_COUNTS + 8 * i as u64));
     }
-    out.compile_ticks = (
-        read_u64(mem, VM_COMPILER + crate::guest::VMC_COMPILE_TICKS),
-        read_u64(mem, VM_COMPILER + crate::guest::VMC_COUNTER_FREQUENCY),
-    );
+    out.compile_ticks = read_u64(mem, VM_COMPILER + crate::guest::VMC_COMPILE_TICKS);
     out.executed = read_u64(mem, md);
     out.stop = stop;
     if guest.time_runtime_word {

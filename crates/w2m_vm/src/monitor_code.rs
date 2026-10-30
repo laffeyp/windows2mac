@@ -15,6 +15,7 @@ use guest_runtime::layout::{
 };
 
 use crate::assembler::{Assembler, Target};
+use crate::guest::VMC_COMPILE_TICKS;
 use crate::{CPSR_EL1H, DISPATCHER, VECTORS};
 
 /// The exception entry's area (vm_backend 129-130).
@@ -222,9 +223,18 @@ pub fn vectors() -> Vec<u32> {
     vec.finish()
 }
 
-/// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address. `timed`: the runtime word's takings
-/// timed (Sprint 164).
-pub fn dispatcher(symbols: &BTreeMap<String, u64>, timed: bool) -> (Vec<u32>, u64) {
+/// What the monitor code times; the default times nothing and writes the Python's words.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Timing {
+    /// the runtime word's takings (Sprint 164)
+    pub runtime_word: bool,
+    /// the miss stub's call of `w2m_vm_compile`, its ticks summed at `VM_COMPILER + VMC_COMPILE_TICKS` (Sprint 247)
+    pub compile: bool,
+}
+
+/// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address, timed as `timing` asks.
+pub fn dispatcher(symbols: &BTreeMap<String, u64>, timing: Timing) -> (Vec<u32>, u64) {
+    let timed = timing.runtime_word;
     let mut d = Assembler::new(MONITOR_VA + DISPATCHER);
     let (top, miss) = (d.label(), d.label());
     d.bind(top);
@@ -259,8 +269,22 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>, timed: bool) -> (Vec<u32>, u6
     d.emit(&[a64::stp(17, 30, 16, 128)]);
     d.emit(&a64::mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE));
     d.emit(&[a64::addi(31, 16, 0), a64::mov(0, 17)]);
+    if timing.compile {
+        // x26, dead between blocks and kept by the C call (AAPCS64), holds the counter at the call (Sprint 247)
+        d.emit(&[a64::ISB, a64::mrs(26, a64::CNTVCT_EL0)]);
+    }
     d.emit(&a64::mov_imm(16, symbols["w2m_vm_compile"]));
     d.emit(&[a64::blr(16), a64::mov(25, 0)]);
+    if timing.compile {
+        // the ticks since the call added to the sum; x16, x18 and x26 are free here as after the restore below
+        d.emit(&[a64::ISB, a64::mrs(18, a64::CNTVCT_EL0), a64::sub(18, 18, 26)]);
+        d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_COMPILE_TICKS));
+        d.emit(&[
+            a64::ldr(8, 26, 16, 0),
+            a64::add(26, 26, 18, 0, 0),
+            a64::str(8, 26, 16, 0),
+        ]);
+    }
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
     for r in (0..16).step_by(2) {
         d.emit(&[a64::ldp(r, r + 1, 16, 8 * i64::from(r))]);
@@ -386,15 +410,16 @@ pub struct MonitorCode {
 
 /// Writes the monitor code into the monitor area (`mem` starts at `MONITOR_VA`): `_write_monitor`, vCPU 0's monitor
 /// data header (count 0, limit 0, the dispatch table's address), the vectors, the dispatcher, the empty table and the
-/// exception entry. `timed`: the runtime word's takings timed (Sprint 164; false writes the Python's words).
-pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, timed: bool) -> MonitorCode {
+/// exception entry, timed as `timing` asks (the default writes the Python's words).
+pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, timing: Timing) -> MonitorCode {
+    let timed = timing.runtime_word;
     let header: Vec<u8> = [0u64, 0, MONITOR_VA + DISPATCH_TABLE]
         .iter()
         .flat_map(|q| q.to_le_bytes())
         .collect();
     mem[MONITOR_DATA as usize..MONITOR_DATA as usize + 24].copy_from_slice(&header);
     write_words(mem, VECTORS, &vectors());
-    let (d, miss_va) = dispatcher(symbols, timed);
+    let (d, miss_va) = dispatcher(symbols, timing);
     write_words(mem, DISPATCHER, &d);
     let mut empty = [0u8; 16];
     empty[..8].copy_from_slice(&EMPTY_TARGET.to_le_bytes());
