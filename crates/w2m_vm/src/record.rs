@@ -90,6 +90,18 @@ pub fn translation_lines(image_sha256: &str, entry: u64, blocks: &[(u64, u64, u6
 /// `EMPTY` (run_frontier.py 63): the sha256 of no bytes, a run's initial state and injected inputs.
 pub const EMPTY_SHA256: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
+/// The variants of `compile_critical_path_ms` beside "vm" (Sprint 248), which `batch_record.rs` reads by these names.
+pub const LONGEST: &str = "vm longest compile";
+pub const MOST_IN_A_FRAME: &str = "vm most in a 60 Hz frame";
+
+/// A timed run's compile figures in ms (Sprint 248): the total, the longest compile, the most in a frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CompileMs {
+    pub total: f64,
+    pub longest: f64,
+    pub most_in_a_frame: f64,
+}
+
 /// One run's facts for its execution record.
 pub struct Execution<'a> {
     /// `frontier-<the subject's first 12 hex digits>-<ns>`, as `run_frontier.py` names a run
@@ -110,9 +122,9 @@ pub struct Execution<'a> {
     /// the in-VM compiler's counts at the stop, `VMC_COUNT_NAMES` in order (`block_compiler.c` 25-27), as
     /// `vm_compile_counts` read them (vm_backend 2604-2607; Sprint 246)
     pub compile_counts: Vec<(&'a str, u64)>,
-    /// the in-VM compiler's time on the critical path, ms (Sprint 247: `w2m_vm_compile` bracketed by the virtual
-    /// counter); None when it compiled nothing
-    pub compile_ms: Option<f64>,
+    /// the in-VM compiler's time on the critical path (Sprint 247: `w2m_vm_compile` bracketed by the virtual counter),
+    /// with the longest compile and the most in a frame (Sprint 248); None on an untimed run
+    pub compile_ms: Option<CompileMs>,
     /// the exits by hvc number (0: an exit other than an hvc)
     pub exits: Vec<(u16, u64)>,
     pub end: RunEnd,
@@ -262,9 +274,17 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     for (cause, n) in &e.compile_counts {
         rows.push((Metric::VmCompileBlocks, cause.to_string(), *n as f64, "blocks"));
     }
-    // compilation on the critical path (v0.2 456; Sprint 247), the VM's part; the host's is `run_seconds` "host hvc 1"
+    // compilation on the critical path (v0.2 456; Sprint 247), the VM's part; the host's is `run_seconds` "host hvc 1";
+    // how it bunches beside it (Sprint 248)
     if let Some(ms) = e.compile_ms {
-        rows.push((Metric::CompileCriticalPathMs, "vm".to_string(), ms, "ms"));
+        rows.push((Metric::CompileCriticalPathMs, "vm".to_string(), ms.total, "ms"));
+        rows.push((Metric::CompileCriticalPathMs, LONGEST.to_string(), ms.longest, "ms"));
+        rows.push((
+            Metric::CompileCriticalPathMs,
+            MOST_IN_A_FRAME.to_string(),
+            ms.most_in_a_frame,
+            "ms",
+        ));
     }
     for (k, n) in &e.exits {
         rows.push((Metric::VmExits, format!("hvc {k}"), *n as f64, "exits"));
@@ -586,11 +606,13 @@ mod tests {
         assert_eq!(killed[12].1["guest_address"], 0x11_8002_72bfu64);
     }
 
-    /// The in-VM compile time (Sprint 247): a timed run writes one `compile_critical_path_ms` "vm" in ms, an untimed
-    /// run none; the gates' run is untimed, so this test is what holds the writer.
+    /// The in-VM compile time (Sprint 247): a timed run writes `compile_critical_path_ms` "vm" in ms, with the longest
+    /// compile and the most in a frame (Sprint 248), an untimed run none; the gates' run is untimed, so this test is
+    /// what holds the writer. The frame's variant names the monitor code's frames a second.
     #[test]
     fn a_timed_run_writes_its_compile_time() {
-        let times = |compile_ms: Option<f64>| {
+        assert!(MOST_IN_A_FRAME.contains(&format!(" {} Hz ", crate::monitor_code::FRAMES_A_SECOND)));
+        let times = |compile_ms: Option<CompileMs>| {
             events(&execution_lines(&Execution {
                 id: "frontier-643a6283510c-1",
                 subject_sha256: "643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974",
@@ -615,7 +637,19 @@ mod tests {
             .map(|(_, p)| (p["variant"].clone(), p["value"].clone(), p["unit"].clone()))
             .collect::<Vec<_>>()
         };
-        assert_eq!(times(Some(1725.5)), vec![("vm".into(), 1725.5.into(), "ms".into())]);
+        let ms = CompileMs {
+            total: 1725.5,
+            longest: 2.25,
+            most_in_a_frame: 9.5,
+        };
+        assert_eq!(
+            times(Some(ms)),
+            vec![
+                ("vm".into(), 1725.5.into(), "ms".into()),
+                (LONGEST.into(), 2.25.into(), "ms".into()),
+                (MOST_IN_A_FRAME.into(), 9.5.into(), "ms".into()),
+            ]
+        );
         assert_eq!(times(None), vec![]);
     }
 

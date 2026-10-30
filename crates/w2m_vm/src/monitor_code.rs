@@ -21,6 +21,34 @@ use crate::{CPSR_EL1H, DISPATCHER, VECTORS};
 /// when `Timing::compile` asks; past the C compiler's 23 counts at 0x100 (`guest::VMC_COUNTS`, which `guest.rs` asserts
 /// at compile time) and before `VMC_SAVE`. Here, not in `guest`, since every target builds the monitor code.
 pub const VMC_COMPILE_TICKS: u64 = 0x1B8;
+/// VM_COMPILER + these, after the sum (Sprint 248), in counter ticks: the longest one compile; the open frame's start
+/// and its compile ticks; the most compile ticks any closed frame held. A frame is 1/`FRAMES_A_SECOND` s.
+pub const VMC_COMPILE_LONGEST: u64 = 0x1C0;
+pub const VMC_FRAME_START: u64 = 0x1C8;
+pub const VMC_FRAME_TICKS: u64 = 0x1D0;
+pub const VMC_FRAME_MOST: u64 = 0x1D8;
+/// A 60 Hz display's frames (Sprint 248): the span whose compiling the probe's frames sum.
+pub const FRAMES_A_SECOND: u64 = 60;
+
+/// The compile probe's figures at a stop, in counter ticks; all 0 unless `Timing::compile` asked for them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CompileTicks {
+    pub total: u64,
+    pub longest: u64,
+    pub most_in_a_frame: u64,
+}
+
+impl CompileTicks {
+    /// The figures from the slots past `VM_COMPILER`, read by `slot`; the frame still open at the stop is closed, its
+    /// sum folded into the most.
+    pub fn read(slot: impl Fn(u64) -> u64) -> CompileTicks {
+        CompileTicks {
+            total: slot(VMC_COMPILE_TICKS),
+            longest: slot(VMC_COMPILE_LONGEST),
+            most_in_a_frame: slot(VMC_FRAME_MOST).max(slot(VMC_FRAME_TICKS)),
+        }
+    }
+}
 
 /// The exception entry's area (vm_backend 129-130).
 pub const EXCEPTION_ENTRY: u64 = 0x01C00;
@@ -232,8 +260,55 @@ pub fn vectors() -> Vec<u32> {
 pub struct Timing {
     /// the runtime word's takings (Sprint 164)
     pub runtime_word: bool,
-    /// the miss stub's call of `w2m_vm_compile`, its ticks summed at `VM_COMPILER + VMC_COMPILE_TICKS` (Sprint 247)
+    /// the miss stub's call of `w2m_vm_compile`, its ticks summed at `VM_COMPILER + VMC_COMPILE_TICKS` (Sprint 247),
+    /// the longest and the most in a frame beside them (Sprint 248)
     pub compile: bool,
+}
+
+/// After the call of `w2m_vm_compile`, x26 holding the counter at the call: the compile's ticks added to the sum
+/// (Sprint 247), kept if the longest, and added to the open frame's (Sprint 248). A frame opens at a compile's start and
+/// holds every compile that ends within 1/`FRAMES_A_SECOND` s of it; the first to end past it folds the frame's sum
+/// into the most and opens the next at its own start. x16, x18 and x26 are free here, as after the restore, and x9 to
+/// x13, saved at `VMC_SAVE` before the call, until the restore.
+fn compile_probe(d: &mut Assembler) {
+    const LONGEST: u32 = (VMC_COMPILE_LONGEST - VMC_COMPILE_TICKS) as u32;
+    const START: u32 = (VMC_FRAME_START - VMC_COMPILE_TICKS) as u32;
+    const FRAME: u32 = (VMC_FRAME_TICKS - VMC_COMPILE_TICKS) as u32;
+    const MOST: u32 = (VMC_FRAME_MOST - VMC_COMPILE_TICKS) as u32;
+    d.emit(&[a64::ISB, a64::mrs(9, a64::CNTVCT_EL0), a64::sub(18, 9, 26)]);
+    d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_COMPILE_TICKS));
+    d.emit(&[
+        a64::ldr(8, 10, 16, 0),
+        a64::add(10, 10, 18, 0, 0),
+        a64::str(8, 10, 16, 0),
+    ]);
+    let shorter = d.label();
+    d.emit(&[a64::ldr(8, 10, 16, LONGEST), a64::cmp(18, 10)]);
+    d.branch(|off| a64::bcond("ls", off), shorter);
+    d.emit(&[a64::str(8, 18, 16, LONGEST)]);
+    d.bind(shorter);
+    // past the frame when (end - start) * frames a second reaches the frequency
+    let within = d.label();
+    let fewer = d.label();
+    d.emit(&[
+        a64::ldr(8, 11, 16, START),
+        a64::sub(11, 9, 11),
+        a64::mrs(12, a64::CNTFRQ_EL0),
+    ]);
+    d.emit(&a64::mov_imm(13, FRAMES_A_SECOND));
+    d.emit(&[a64::mul(11, 11, 13), a64::cmp(11, 12)]);
+    d.branch(|off| a64::bcond("lo", off), within);
+    d.emit(&[a64::ldr(8, 11, 16, FRAME), a64::ldr(8, 12, 16, MOST), a64::cmp(11, 12)]);
+    d.branch(|off| a64::bcond("ls", off), fewer);
+    d.emit(&[a64::str(8, 11, 16, MOST)]);
+    d.bind(fewer);
+    d.emit(&[a64::str(8, 26, 16, START), a64::str(8, 31, 16, FRAME)]);
+    d.bind(within);
+    d.emit(&[
+        a64::ldr(8, 11, 16, FRAME),
+        a64::add(11, 11, 18, 0, 0),
+        a64::str(8, 11, 16, FRAME),
+    ]);
 }
 
 /// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address, timed as `timing` asks.
@@ -280,14 +355,7 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>, timing: Timing) -> (Vec<u32>,
     d.emit(&a64::mov_imm(16, symbols["w2m_vm_compile"]));
     d.emit(&[a64::blr(16), a64::mov(25, 0)]);
     if timing.compile {
-        // the ticks since the call added to the sum; x16, x18 and x26 are free here as after the restore below
-        d.emit(&[a64::ISB, a64::mrs(18, a64::CNTVCT_EL0), a64::sub(18, 18, 26)]);
-        d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_COMPILE_TICKS));
-        d.emit(&[
-            a64::ldr(8, 26, 16, 0),
-            a64::add(26, 26, 18, 0, 0),
-            a64::str(8, 26, 16, 0),
-        ]);
+        compile_probe(&mut d);
     }
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
     for r in (0..16).step_by(2) {
@@ -455,10 +523,30 @@ mod tests {
     use a64_encoder as a64;
     use std::collections::BTreeMap;
 
+    /// The figures at a stop (Sprint 248): the frame still open is folded into the most, whichever holds more.
+    #[test]
+    fn the_open_frame_is_folded_into_the_most() {
+        let slots = |open: u64| {
+            move |slot: u64| match slot {
+                super::VMC_COMPILE_TICKS => 900,
+                super::VMC_COMPILE_LONGEST => 30,
+                super::VMC_FRAME_TICKS => open,
+                super::VMC_FRAME_MOST => 200,
+                _ => panic!("slot {slot:x}"),
+            }
+        };
+        let ticks = |longest, most_in_a_frame| super::CompileTicks {
+            total: 900,
+            longest,
+            most_in_a_frame,
+        };
+        assert_eq!(super::CompileTicks::read(slots(150)), ticks(30, 200));
+        assert_eq!(super::CompileTicks::read(slots(250)), ticks(30, 250));
+    }
+
     /// The compile probe (Sprint 247; reviewer-3's Low 1 of its review of the rework): the default dispatcher reads no
     /// counter, so it is the words the gates' runs judge against the frozen host; the timed one adds the probe alone,
-    /// two counter reads, a subtraction and the sum's load, add, store and address, and its miss stub stays where it
-    /// was, the probe falling after it.
+    /// and the miss stub moves by it. Sprint 248's longest and frame words are counted part by part.
     #[test]
     fn the_compile_probe_is_off_by_default_and_its_size_known() {
         let symbols: BTreeMap<String, u64> = [("w2m_vm_compile".to_string(), 0x7f00_0418_0000)].into();
@@ -470,14 +558,19 @@ mod tests {
                 ..Timing::default()
             },
         );
-        let counter = a64::mrs(26, a64::CNTVCT_EL0);
-        assert!(!plain.contains(&counter), "the default dispatcher reads the counter");
-        assert!(
-            timed.contains(&counter),
-            "the timed dispatcher does not read the counter"
-        );
+        for read in [a64::mrs(26, a64::CNTVCT_EL0), a64::mrs(12, a64::CNTFRQ_EL0)] {
+            assert!(!plain.contains(&read), "the default dispatcher reads {read:08x}");
+            assert!(timed.contains(&read), "the timed dispatcher does not read {read:08x}");
+        }
         let address = a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_COMPILE_TICKS).len();
-        let probe = 2 + 3 + 3 + address;
+        let frames = a64::mov_imm(13, super::FRAMES_A_SECOND).len();
+        let before_call = 2; // isb, mrs
+        let sum = 3 + address + 3; // isb, mrs, sub; the address; ldr, add, str
+        let longest = 2 + 1 + 1; // ldr, cmp; b.ls; str
+        let past_the_frame = 3 + frames + 2 + 1; // ldr, sub, mrs; 60; mul, cmp; b.lo
+        let fold = 3 + 1 + 1 + 2; // ldr, ldr, cmp; b.ls; str; str, str
+        let frame_sum = 3; // ldr, add, str
+        let probe = before_call + sum + longest + past_the_frame + fold + frame_sum;
         assert_eq!(timed.len() - plain.len(), probe, "the probe's words");
         assert_eq!(
             timed_miss - plain_miss,

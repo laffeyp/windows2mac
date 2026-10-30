@@ -749,17 +749,23 @@ mod run {
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
         let stop = stop_name(&out.stop);
-        // the in-VM compiler's time (Sprint 247), when the monitor code timed its calls: ticks over the counter's
-        // frequency; a timed run that compiled blocks and summed no tick is named, not recorded as no time
+        // the in-VM compiler's time (Sprint 247) and how it bunches (Sprint 248), when the monitor code timed its calls:
+        // ticks over the counter's frequency; a timed run that compiled blocks and summed no tick is named, not
+        // recorded as no time
         let compile_ms = if time_compile {
             let compiled = out.counts.get("compiled").copied().unwrap_or(0);
-            if out.compile_ticks == 0 && compiled > 0 {
+            if out.compile_ticks.total == 0 && compiled > 0 {
                 return Err(format!(
                     "--time-compile: {compiled} blocks compiled in the VM and no tick summed"
                 ));
             }
             let frequency = w2m_vm::host_state::counter_frequency()?;
-            Some(out.compile_ticks as f64 * 1000.0 / frequency as f64)
+            let ms = |ticks: u64| ticks as f64 * 1000.0 / frequency as f64;
+            Some(w2m_vm::record::CompileMs {
+                total: ms(out.compile_ticks.total),
+                longest: ms(out.compile_ticks.longest),
+                most_in_a_frame: ms(out.compile_ticks.most_in_a_frame),
+            })
         } else {
             None
         };

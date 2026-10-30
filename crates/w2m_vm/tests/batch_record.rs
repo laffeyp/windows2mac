@@ -419,7 +419,7 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     found.extend(rate_problems(&measurements(&ours)));
     found.extend(condition_problems(&record));
     found.extend(compile_problems(&measurements(&ours), &measurements(&reference)));
-    found.extend(compile_time_problems(&measurements(&ours), timed(&record)));
+    found.extend(compile_time_problems(&measurements(&ours), timed(&record), true));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
 }
 
@@ -479,24 +479,71 @@ fn timed(record: &Path) -> bool {
     first_line(record)["payload"]["baseline"]["compile_timing"].is_string()
 }
 
-/// The in-VM compiler's time on the critical path (Sprint 247): on a timed run one `compile_critical_path_ms` "vm",
-/// above zero; on any other, none.
-fn compile_time_problems(ours: &[Value], timed: bool) -> Vec<String> {
-    let times: Vec<f64> = ours
+/// The timed records made before the probe's frames (Sprint 247's three), which hold the total alone.
+const BEFORE_FRAMES: [&str; 3] = [
+    "w2m-vm-game-1793381341000000000",
+    "w2m-vm-game-1793381446000000000",
+    "w2m-vm-game-1793381554000000000",
+];
+
+/// The in-VM compiler's time on the critical path (Sprint 247): on a timed run `compile_critical_path_ms` "vm" above
+/// zero, and from Sprint 248 the longest compile and the most in a 60 Hz frame beside it, in their order of size,
+/// 0 < longest ≤ most in a frame ≤ total; and the most in a frame at most one frame's span or the longest, whichever is
+/// more: the compiles run one at a time (the runtime lock), and a frame holds only compiles that start after it opens
+/// and end within it, save the one that opens it. On an untimed run, none.
+fn compile_time_problems(ours: &[Value], timed: bool, framed: bool) -> Vec<String> {
+    let times: BTreeMap<String, f64> = ours
         .iter()
         .filter(|m| m["metric"] == "compile_critical_path_ms")
-        .filter_map(|m| m["value"].as_f64())
+        .map(|m| {
+            (
+                m["variant"].as_str().unwrap_or("").to_string(),
+                m["value"].as_f64().unwrap_or(f64::NAN),
+            )
+        })
         .collect();
-    match (timed, times.as_slice()) {
-        (true, [ms]) if *ms > 0.0 => Vec::new(),
-        (false, []) => Vec::new(),
-        (true, _) => vec![format!(
-            "compile_critical_path_ms is {times:?} on a timed run, where one time above zero is due"
-        )],
-        (false, _) => vec![format!(
-            "compile_critical_path_ms is {times:?} on a run whose baseline names no compile_timing"
-        )],
+    let named: Vec<&str> = times.keys().map(String::as_str).collect();
+    let due: Vec<&str> = match (timed, framed) {
+        (false, _) => vec![],
+        (true, false) => vec!["vm"],
+        (true, true) => {
+            let mut v = vec!["vm", w2m_vm::record::LONGEST, w2m_vm::record::MOST_IN_A_FRAME];
+            v.sort_unstable();
+            v
+        }
+    };
+    if named != due {
+        return vec![format!(
+            "compile_critical_path_ms names {named:?} where {due:?} is due (timed {timed}, framed {framed})"
+        )];
     }
+    let mut found = Vec::new();
+    if let Some(total) = times.get("vm")
+        && total.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
+    {
+        found.push(format!(
+            "compile_critical_path_ms \"vm\" is {total}, where a time above zero is due"
+        ));
+    }
+    if let (Some(&total), Some(&longest), Some(&most)) = (
+        times.get("vm"),
+        times.get(w2m_vm::record::LONGEST),
+        times.get(w2m_vm::record::MOST_IN_A_FRAME),
+    ) {
+        if !(0.0 < longest && longest <= most && most <= total) {
+            found.push(format!(
+                "the longest compile {longest} ms, the most in a frame {most} ms and the total {total} ms are not \
+                 0 < longest ≤ most in a frame ≤ total"
+            ));
+        }
+        let frame = 1000.0 / w2m_vm::monitor_code::FRAMES_A_SECOND as f64;
+        if most > frame.max(longest) + 1e-6 {
+            found.push(format!(
+                "the most in a frame is {most} ms, above one frame's {frame} ms and the longest compile's {longest} ms"
+            ));
+        }
+    }
+    found
 }
 
 /// The records written before the compile counts reached the record (Sprint 240's three), which hold none.
@@ -564,7 +611,11 @@ fn every_stored_rust_batch_record_holds_its_rate() {
             let reference = measurements(&w2m_events(&root.join(REFERENCE)));
             found.extend(compile_problems(&measurements(&ours), &reference));
         }
-        found.extend(compile_time_problems(&measurements(&ours), timed(&dir)));
+        found.extend(compile_time_problems(
+            &measurements(&ours),
+            timed(&dir),
+            !BEFORE_FRAMES.contains(&name.as_str()),
+        ));
         for (k, p) in &ours {
             if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {
                 found.push(format!("COMPARISON_COMPLETED verdict {}", p["verdict"]));
@@ -594,6 +645,30 @@ fn a_missing_extra_or_empty_compile_count_is_named() {
             "vm_compile_blocks \"compiled\" is Some(0.0)",
         ]
     );
+}
+
+/// The compile-time check (Sprint 248) names a missing figure, figures out of their order, and a frame holding more
+/// than a frame's span when no one compile is that long.
+#[test]
+fn a_compile_burst_out_of_order_or_past_its_frame_is_named() {
+    let m = |variant: &str, value: f64| serde_json::json!({"metric": "compile_critical_path_ms", "variant": variant, "value": value});
+    let (longest, frame) = (w2m_vm::record::LONGEST, w2m_vm::record::MOST_IN_A_FRAME);
+    let good = vec![m("vm", 1700.0), m(longest, 2.5), m(frame, 12.0)];
+    assert_eq!(compile_time_problems(&good, true, true), Vec::<String>::new());
+    assert_eq!(compile_time_problems(&good[..1], true, false), Vec::<String>::new());
+    assert_eq!(compile_time_problems(&[], false, true), Vec::<String>::new());
+    assert!(compile_time_problems(&good[..1], true, true)[0].starts_with("compile_critical_path_ms names [\"vm\"]"));
+    assert!(compile_time_problems(&good, false, true)[0].contains("where [] is due"));
+    let unstored = vec![m("vm", 1700.0), m(longest, 0.0), m(frame, 12.0)];
+    assert!(compile_time_problems(&unstored, true, true)[0].starts_with("the longest compile 0 ms"));
+    let unclosed = vec![m("vm", 1700.0), m(longest, 2.5), m(frame, 1700.0)];
+    assert_eq!(
+        compile_time_problems(&unclosed, true, true),
+        ["the most in a frame is 1700 ms, above one frame's 16.666666666666668 ms and the longest compile's 2.5 ms"]
+    );
+    // one compile longer than a frame opens a frame holding it alone
+    let long = vec![m("vm", 1700.0), m(longest, 40.0), m(frame, 40.0)];
+    assert_eq!(compile_time_problems(&long, true, true), Vec::<String>::new());
 }
 
 /// The rate check names a rate that is not the instructions over the seconds, and a warm measurement.
