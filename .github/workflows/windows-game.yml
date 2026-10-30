@@ -67,8 +67,10 @@ jobs:
           set -euo pipefail
           meta="games/${{ inputs.game }}"
           # jq, sha256sum and df, no Python (BLACKBOARD Decision 2026-10-29, "No Python runs"; Sprint 227): the runner
-          # images list jq 1.8.2 and zstd 1.5.7 (actions/runner-images, Windows2025-Readme.md)
-          tag=$(jq -r .tag "$meta/release.json")
+          # images list jq 1.8.2 and zstd 1.5.7 (actions/runner-images, Windows2025-Readme.md); `-b` keeps jq.exe's
+          # lines LF under Git Bash, where it otherwise writes CRLF (jq's manual, --binary) and a part name ends in \r
+          # (run 41018970831: "no assets match the file pattern")
+          tag=$(jq -br .tag "$meta/release.json")
           base=/c/w2m; [ -d /d ] && base=/d/w2m                      # the drive with room, when present
           # GitHub documents 14 GB for this runner; run 37979176570 measured 118 GB free on D:.
           # Parts and the unpacked tree need about 24 GB at the peak: stop early if that is gone.
@@ -79,20 +81,20 @@ jobs:
           mkdir -p $base/parts $base/game
           echo "GAME_DIR=$(cygpath -w $base/game)" >> "$GITHUB_ENV"
           # only the parts release.json names: the release also holds other assets (Sprint 033's capture)
-          for part in $(jq -r '.parts[].name' "$meta/release.json"); do
+          for part in $(jq -br '.parts[].name' "$meta/release.json"); do
             gh release download "$tag" --repo "${{ github.repository }}" --dir $base/parts --pattern "$part"
           done
           # each part's sha256 against release.json
-          jq -r '.parts[] | "\(.sha256)  \(.name)"' "$meta/release.json" | (cd $base/parts && sha256sum -c --quiet -)
+          jq -br '.parts[] | "\(.sha256)  \(.name)"' "$meta/release.json" | (cd $base/parts && sha256sum -c --quiet -)
           echo "parts verified"
           zstd --version || choco install zstandard -y --no-progress
-          for part in $(jq -r '.parts[].name' "$meta/release.json"); do
+          for part in $(jq -br '.parts[].name' "$meta/release.json"); do
             cat "$base/parts/$part"; rm "$base/parts/$part"
           done | zstd -d -c | tar -xf - -C $base/game
           # each file's sha256 against files.json, and no file present that it does not list
-          jq -r '.listing[] | "\(.sha256)  \(.path)"' "$meta/files.json" > "$RUNNER_TEMP/files.sha256"
+          jq -br '.listing[] | "\(.sha256)  \(.path)"' "$meta/files.json" > "$RUNNER_TEMP/files.sha256"
           (cd $base/game && sha256sum -c --quiet "$RUNNER_TEMP/files.sha256")
-          jq -r '.listing[].path' "$meta/files.json" | sort > "$RUNNER_TEMP/listed"
+          jq -br '.listing[].path' "$meta/files.json" | sort > "$RUNNER_TEMP/listed"
           (cd $base/game && find . -type f | sed 's|^\./||' | sort) > "$RUNNER_TEMP/present"
           extra=$(comm -13 "$RUNNER_TEMP/listed" "$RUNNER_TEMP/present" | head -5)
           [ -z "$extra" ] || { echo "unlisted: $extra"; exit 1; }
