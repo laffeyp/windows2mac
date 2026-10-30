@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 246
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -97,3 +97,36 @@ baseline.
 - [x] One concept: the compile counts on the record.
 
 ## result
+
+- **The record:** `Execution` takes `host_by_kind` and `compile_counts`; `w2m-vm` fills them from `serve_by_kind` and
+  `Outcome::counts` in `VMC_COUNT_NAMES` order; the record writes `run_seconds` "host <kind>" per kind, summing to the
+  seconds the rate divides by, and `vm_compile_blocks` per count, the frozen variant names. The measurement ids follow
+  the Rust record's one form, "<id>-vm_compile_blocks-<cause>", where the frozen host wrote "<id>-vm-compile-<cause>".
+- **The judge:** `compile_problems` holds the record's variants to the reference's 23 and "compiled" above zero, on the
+  gates' record and every stored record but Sprint 240's three, which `BEFORE_COMPILE_COUNTS` names;
+  `a_missing_extra_or_empty_compile_count_is_named` holds it. `record.rs`' unit test counts the new rows.
+- **The baseline:** three records from 92f4b4cb8, each conforming, `check_records` 0 violations:
+
+  | record | load at start | busy | compiled | hvc 1 exits | host on hvc 1 | instructions a second |
+  |---|---|---|---|---|---|---|
+  | `store/runs/w2m-vm-game-1793369487000000000` | 4.31 2.88 3.03 | llama-server 227% | 274,834 | 1,091 | 80.7 ms | 1,778,638,492 |
+  | `store/runs/w2m-vm-game-1793369623000000000` | 5.22 3.96 3.45 | llama-server 218%, chrome-headless-shell 109% | 274,834 | 1,091 | 72.5 ms | 2,291,156,288 |
+  | `store/runs/w2m-vm-game-1793369737000000000` | 4.42 3.94 3.49 | none | 274,834 | 1,091 | 53.2 ms | 2,538,851,228 |
+
+  The compile counts are the same in all three and every refusal and cut equals the reference's; the reference
+  compiled 275,303 warm. The rates moved with a busy machine, 1.78 to 2.54 billion; row 10's figure stands from
+  Sprint 240's three runs at lower load.
+- **Departure, row 15d:** the card planned it met and its Deferred line resolved. The VM's own compile time is inside
+  its run seconds and not separated, so the row reads partial and the Deferred line is annotated, `census.rs` holding
+  it there.
+- **A trial run:** one run into `build/batch_run/` before the commit showed the 23 counts and 0 violations, never
+  committed.
+- **The gates:** `scripts/gates.sh` exit 0 in 525 s on 41b83a5de, "rust=crates python=0 samples=0", 110 tests, the
+  three records replayed and checked.
+- **Plant 1** (the "decode" count's line deleted from `store/runs/w2m-vm-game-1793369737000000000`): "no
+  vm_compile_blocks \"decode\", which the reference counts".
+- **Plant 2** (that record's "compiled" 274,834 to 0): "vm_compile_blocks \"compiled\" is Some(0.0)".
+- **Plant 3** (that record's "host hvc 8" seconds deleted): "instructions_per_second 2538851227.637233 over
+  28.637697762000002 s is 72706854119.75774 instructions, where 80306813574 retired".
+- Each plant's `git diff --stat` showed its one line first; the record was restored by `cp` each time, and `cmp`
+  found it equal to its copy.
