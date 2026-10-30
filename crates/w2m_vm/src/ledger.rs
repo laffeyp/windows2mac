@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The Rust judges' discrepancy ledger (Sprint 152), carried from `src/w2m/differential.py` `rebuild_ledger` and
-//! `open_on` (105-139) for records whose baseline names a `judge` (the case runner's, Sprint 150). The Python's ledger,
-//! `store/runs/discrepancy-ledger.json`, holds the records whose baseline names a `differential`, and
-//! `tests/test_differential.py` holds it to the Python rebuild; this one is `store/case_runner/discrepancy-ledger.json`.
+//! The discrepancy ledgers (Sprint 152), carried from `src/w2m/differential.py` `rebuild_ledger` and `open_on`
+//! (105-139). One scan of the records' first frames (`started`) gives both keys: the Rust judges' ledger,
+//! `store/case_runner/discrepancy-ledger.json`, over the records whose baseline names a `judge` (the case runner's,
+//! Sprint 150), and, from Sprint 241, the Python's, `store/runs/discrepancy-ledger.json`, over those naming a
+//! `differential`, derived here in its own form (`rebuild_differential`) since the Python that wrote it left the tree;
+//! `case_runs --check-ledger` holds both files to their derivations.
 //! The ledger is a function of the records, read in run-start order so a resolution follows its report. An entry is a
 //! defect, not a report (Sprint 223; reviewer-3's Medium 1 of its review at Sprint 222's close: 20 entries stood for
 //! FCOS and FSIN): its key is the unit and the difference's field ("FCOS st0"), not which judge saw it first or on which
@@ -84,10 +86,18 @@ pub fn defect(first_divergence: &str) -> String {
         .map_or_else(|| first_divergence.to_string(), str::to_string)
 }
 
-/// `rebuild_ledger` (105-134) over the records under `runs` whose baseline names a `judge`: each defect a judge
-/// reported, keyed by `defect`, with its reports and the record that resolved it (or null).
-pub fn rebuild(runs: &Path) -> Map<String, Value> {
-    let mut started: Vec<(f64, PathBuf, String)> = Vec::new();
+/// One record a ledger reads: its start time, its root, and the judge or differential its baseline names.
+pub struct Started {
+    pub t: f64,
+    pub root: PathBuf,
+    pub judge: Option<String>,
+    pub differential: Option<String>,
+}
+
+/// The records under `runs` whose first frame's baseline names a `judge` or a `differential`, in run-start order (then
+/// by root), read once for both ledgers (Sprint 241).
+pub fn started(runs: &Path) -> Vec<Started> {
+    let mut out: Vec<Started> = Vec::new();
     for entry in fs::read_dir(runs).into_iter().flatten().flatten() {
         let root = entry.path();
         if !root.is_dir() {
@@ -96,18 +106,46 @@ pub fn rebuild(runs: &Path) -> Map<String, Value> {
         let Some(first) = first_frame(&root) else {
             continue;
         };
-        if let Some(judge) = first.pointer("/payload/baseline/judge").and_then(Value::as_str) {
+        let named = |key: &str| {
+            first
+                .pointer(&format!("/payload/baseline/{key}"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
+        let (judge, differential) = (named("judge"), named("differential"));
+        if judge.is_some() || differential.is_some() {
             let t = first.get("t").and_then(Value::as_f64).unwrap_or(0.0);
-            started.push((t, root, judge.to_string()));
+            out.push(Started {
+                t,
+                root,
+                judge,
+                differential,
+            });
         }
     }
-    started.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    out.sort_by(|a, b| a.t.total_cmp(&b.t).then_with(|| a.root.cmp(&b.root)));
+    out
+}
+
+/// `rebuild_ledger` (105-134) over the records under `runs` whose baseline names a `judge`: each defect a judge
+/// reported, keyed by `defect`, with its reports and the record that resolved it (or null).
+pub fn rebuild(runs: &Path) -> Map<String, Value> {
+    rebuild_judged(&started(runs))
+}
+
+/// `rebuild` over records already read.
+pub fn rebuild_judged(started: &[Started]) -> Map<String, Value> {
+    let started: Vec<(&PathBuf, &String)> = started
+        .iter()
+        .filter_map(|s| s.judge.as_ref().map(|j| (&s.root, j)))
+        .collect();
     let mut ledger = Map::new();
     // a discrepancy id -> its defect's key
     let mut of: std::collections::HashMap<String, String> = Default::default();
-    for (_, root, judge) in started {
+    for (root, judge) in started {
         let name = root.file_name().unwrap().to_string_lossy().to_string();
-        for e in frames(&root) {
+        for e in frames(root) {
             let p = &e["payload"];
             let id = p["discrepancy_id"].as_str().unwrap_or_default().to_string();
             match e["kind"].as_str() {
@@ -158,6 +196,55 @@ pub fn rebuild(runs: &Path) -> Map<String, Value> {
                             entry["resolved_in"] = json!(name);
                             entry["resolving_ref"] = p["resolving_ref"].clone();
                         }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    ledger
+}
+
+/// `rebuild_ledger` (105-134) as the frozen Python wrote `store/runs/discrepancy-ledger.json` (282), over the records
+/// whose baseline names a `differential`: every discrepancy reported, keyed by its id, with its differential, unit (the
+/// first divergence before its first colon), contract, record, route and the record that resolved it (or null); a
+/// route or a resolution of an id no earlier record reported is not read (Sprint 241: the ledgers' join).
+pub fn rebuild_differential(started: &[Started]) -> Map<String, Value> {
+    let mut ledger = Map::new();
+    for s in started {
+        let Some(differential) = &s.differential else {
+            continue;
+        };
+        let name = s.root.file_name().unwrap().to_string_lossy().to_string();
+        for e in frames(&s.root) {
+            let p = &e["payload"];
+            let id = p["discrepancy_id"].as_str().unwrap_or_default().to_string();
+            match e["kind"].as_str() {
+                Some("DISCREPANCY_REPORTED") => {
+                    let first = p["first_divergence"].as_str().unwrap_or_default();
+                    ledger.insert(
+                        id,
+                        json!({
+                            "differential": differential,
+                            "unit": first.split(':').next().unwrap_or_default(),
+                            "contract_id": p["contract_id"],
+                            "reported_in": name,
+                            "first_divergence": first,
+                            "repair_path": null,
+                            "resolved_in": null,
+                            "resolving_ref": null,
+                        }),
+                    );
+                }
+                Some("DISCREPANCY_ROUTED") => {
+                    if let Some(entry) = ledger.get_mut(&id) {
+                        entry["repair_path"] = p["repair_path"].clone();
+                    }
+                }
+                Some("DISCREPANCY_RESOLVED") => {
+                    if let Some(entry) = ledger.get_mut(&id) {
+                        entry["resolved_in"] = json!(name);
+                        entry["resolving_ref"] = p["resolving_ref"].clone();
                     }
                 }
                 _ => {}
@@ -373,6 +460,76 @@ mod tests {
             "the last open report's resolution closes the defect"
         );
         assert!(text(&ledger).starts_with("{\n \"ADD CF\": {\n  \"reports\""));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The frozen Python's ledger (Sprint 241): a differential's report keyed by its id, routed, then resolved by a later
+    /// record; a judge's record not read; written in the file's form.
+    #[test]
+    fn a_differentials_report_is_resolved_as_the_frozen_ledger_resolves_it() {
+        let dir = std::env::temp_dir().join(format!("w2m-ledger-differential-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        record(
+            &dir,
+            "decoder-xed-1",
+            1.0,
+            None,
+            &[
+                event(
+                    "DISCREPANCY_REPORTED",
+                    json!({"discrepancy_id": "decoder-xed-1-ours_gap", "contract_id": "x86.decode",
+                           "first_divergence": "ours_gap: xed=ADD ours=-; 2 positions"}),
+                ),
+                event(
+                    "DISCREPANCY_ROUTED",
+                    json!({"discrepancy_id": "decoder-xed-1-ours_gap", "repair_path": "contract_revision"}),
+                ),
+            ],
+        );
+        record(
+            &dir,
+            "case-runner-1",
+            1.5,
+            Some("case-runner"),
+            &[event(
+                "DISCREPANCY_REPORTED",
+                json!({"discrepancy_id": "d1", "contract_id": "w2m.guest_state.fault_context",
+                       "first_divergence": "ADD: ADD CF: 3 cases"}),
+            )],
+        );
+        record(
+            &dir,
+            "decoder-xed-2",
+            2.0,
+            None,
+            &[event(
+                "DISCREPANCY_RESOLVED",
+                json!({"discrepancy_id": "decoder-xed-1-ours_gap", "resolving_ref": "decoder-xed:ours_gap@abc"}),
+            )],
+        );
+        let ledger = rebuild_differential(&started(&dir));
+        assert_eq!(ledger.keys().collect::<Vec<_>>(), ["decoder-xed-1-ours_gap"]);
+        let entry = &ledger["decoder-xed-1-ours_gap"];
+        assert_eq!(
+            (
+                &entry["differential"],
+                &entry["unit"],
+                &entry["reported_in"],
+                &entry["repair_path"]
+            ),
+            (
+                &json!("decoder-xed"),
+                &json!("ours_gap"),
+                &json!("decoder-xed-1"),
+                &json!("contract_revision")
+            )
+        );
+        assert_eq!(
+            (&entry["resolved_in"], &entry["resolving_ref"]),
+            (&json!("decoder-xed-2"), &json!("decoder-xed:ours_gap@abc")),
+            "the later record's resolution closes the report"
+        );
+        assert!(text(&ledger).starts_with("{\n \"decoder-xed-1-ours_gap\": {\n  \"contract_id\": \"x86.decode\",\n"));
         fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -124,22 +124,41 @@ mod run {
             |_| root.join("store/case_runner/discrepancy-ledger.json"),
             PathBuf::from,
         );
+        // the frozen Python's ledger beside the records it was derived from, `differential.LEDGER` (44, 282), derived here
+        // from Sprint 241 (the ledgers' join)
+        let differential_file = runs_dir.join("discrepancy-ledger.json");
         if flag("--write-ledger") {
-            // differential.run 281-282: the ledger rebuilt from every record, written after a run
-            let ledger = ledger::rebuild(&runs_dir);
-            fs::write(&ledger_file, ledger::text(&ledger)).map_err(|e| e.to_string())?;
-            eprintln!("case_runs: {} discrepancies in the judges' ledger", ledger.len());
+            // differential.run 281-282: the ledgers rebuilt from every record, written after a run
+            let started = ledger::started(&runs_dir);
+            let judged = ledger::rebuild_judged(&started);
+            fs::write(&ledger_file, ledger::text(&judged)).map_err(|e| e.to_string())?;
+            let differential = ledger::rebuild_differential(&started);
+            fs::write(&differential_file, ledger::text(&differential)).map_err(|e| e.to_string())?;
+            eprintln!(
+                "case_runs: {} discrepancies in the judges' ledger, {} in the differentials'",
+                judged.len(),
+                differential.len()
+            );
             return Ok(());
         }
         if flag("--check-ledger") {
-            // the gate (Sprint 154, review of Sprints 151-152): the committed ledger is what the records say
-            let want = ledger::text(&ledger::rebuild(&runs_dir));
-            let have = fs::read_to_string(&ledger_file).map_err(|e| format!("{}: {e}", ledger_file.display()))?;
-            if have != want {
-                return Err(format!(
-                    "{} is not the ledger the records give; `case_runs --write-ledger` rebuilds it",
-                    ledger_file.display()
-                ));
+            // the gate (Sprint 154, review of Sprints 151-152; both files from Sprint 241): each committed ledger is
+            // what the records say
+            let started = ledger::started(&runs_dir);
+            for (file, want) in [
+                (&ledger_file, ledger::text(&ledger::rebuild_judged(&started))),
+                (
+                    &differential_file,
+                    ledger::text(&ledger::rebuild_differential(&started)),
+                ),
+            ] {
+                let have = fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+                if have != want {
+                    return Err(format!(
+                        "{} is not the ledger the records give; `case_runs --write-ledger` rebuilds it",
+                        file.display()
+                    ));
+                }
             }
             return Ok(());
         }
