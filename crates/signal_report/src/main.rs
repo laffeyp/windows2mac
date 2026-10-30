@@ -917,12 +917,15 @@ fn close_moved(root: &Path, n: u32) -> Result<Option<String>, String> {
         return Ok(None);
     };
     let changed = git(root, &["diff-tree", "--no-commit-id", "--name-only", "-r", &commit])?;
-    Ok(changed.lines().find(|p| !is_bookkeeping(p, n)).map(|p| {
-        format!(
-            "sprint {n:03}: its close commit {} changes {p}, outside the bookkeeping paths",
-            &commit[..9]
-        )
-    }))
+    Ok(changed
+        .lines()
+        .find(|p| !is_bookkeeping(p, n) && !named_design_change(&commit, p))
+        .map(|p| {
+            format!(
+                "sprint {n:03}: its close commit {} changes {p}, outside the bookkeeping paths",
+                &commit[..9]
+            )
+        }))
 }
 
 /// A closed entry that says the multi-vCPU tests passed, held to the stage's last three lines for its sprint.
@@ -1163,6 +1166,22 @@ fn multi_vcpu_staged(root: &Path, n: u32, body: &str, pass: &str) -> Option<Stri
         )),
         Some(_) => None,
     }
+}
+
+/// The close commits that changed a design under `docs/`, each by its hash and the one path, with why, which
+/// `close_moved` lets pass; pushed history is not rewritten. From Sprint 255 `signal_report --check` runs after the
+/// close commit and before the push (WORKING_AGREEMENT), so a close is judged before CI judges it.
+const CLOSE_DESIGN_CHANGES: [(&str, &str, &str); 1] = [(
+    "8d18ece8a",
+    "docs/design-translation-cache-2026-10-30.md",
+    "Sprint 254's close amended choice D to the key as built; a design changes in a work commit from Sprint 195 (Sprint 255)",
+)];
+
+/// Whether `path` in the close commit `commit` is a named design change.
+fn named_design_change(commit: &str, path: &str) -> bool {
+    CLOSE_DESIGN_CHANGES
+        .iter()
+        .any(|(h, p, _)| commit.starts_with(h) && path == *p)
 }
 
 /// The commits made between one sprint's close and the next card, each named with why, which `commits_walked` lets
@@ -1597,6 +1616,18 @@ mod tests {
         assert!(is_close("Sprint 204 closed: its Signal Report; BLACKBOARD", 204));
         assert!(!is_close("Sprint 205 closed partial: its Signal Report", 205));
         assert!(!is_close("Sprint 2050 closed: x", 205));
+    }
+
+    /// Sprint 255: the one design change a close made stands by its commit and its path; another design path in that
+    /// commit, or that path in another commit, is still outside the bookkeeping paths.
+    #[test]
+    fn a_named_design_change_passes_that_path_in_that_commit_alone() {
+        let commit = "8d18ece8aae5d283afb2be52739017c8d5d6a357";
+        let design = "docs/design-translation-cache-2026-10-30.md";
+        assert!(named_design_change(commit, design));
+        assert!(!named_design_change(commit, "docs/design-rust-host-2026-10-24.md"));
+        assert!(!named_design_change("223ae62f0eb749c339b867fbfba8387886f982f1", design));
+        assert!(!is_bookkeeping(design, 254), "a design is not bookkeeping for a close");
     }
 
     #[test]
