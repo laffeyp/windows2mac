@@ -51,6 +51,15 @@ walk's blocks in order of their reach from the image's entries up to the region'
 compilers keep the 64 MiB area to themselves. The frozen host relocated each entry instead (`vm_backend.py` at
 `python-final` 4662-4752); a fixed place needs no relocation code to judge.
 
+**B'. The cache's data in a region of its own** (reviewer-3's Medium 1 at 253). The walk gives 1,004,561 blocks; at
+the run's 108.5 code bytes a block they take about 109 MB of B's 120 MiB, so nothing else may share that region. The
+table of C (held half full, at least 2,009,122 slots of 16 bytes, about 32 MB), E's page bitmap and the page-to-starts
+index are read by absolute address (`mov_imm` and a load), not branched to, so the ±128 MiB bound does not reach them;
+they live in a second region directly below the first, `[MONITOR_VA − 0x780_0000 − 0x400_0000, MONITOR_VA −
+0x780_0000)`, 64 MiB, mapped only when a cache loads and held by the same layout test. The code's true size is
+measured from the cache file at card 3 (108.5 bytes a block is the batch run's mix, not the cold code's), and both
+regions' use is on its record.
+
 **C. The lookup: a second level the miss stub reads before the compiler.** The dispatch table stays the first level.
 On a miss whose target lies in UnityPlayer.dll's range, the miss stub probes the cache's own table, open-addressed,
 held to half full, written once at load; a hit is inserted into the dispatch table as a compile's result is, and the
@@ -102,7 +111,10 @@ first level); the C runtime holding the probe (it changes the judged image); the
 4. **The probe.** The second-level lookup and the write bitmap in the monitor code, the cache loaded at start, its
    pages made read-only (E). Gate: the plan's, the batch run conforming with the cache and "compiled in
    UnityPlayer.dll" falling from 149,308 by the blocks the cache holds, "compiled" by as many; E's plant; the
-   frozen-word tests unchanged with no cache. The fall has a ceiling: 82,022 compiles a run lie outside any image,
+   frozen-word tests unchanged with no cache. Its expected fall is stated before it runs (reviewer-3's Low 1 at 253):
+   of the batch run's 132,359 distinct starts in UnityPlayer.dll, 3,081 are not walked and 755 fall inside a walk
+   block, so at most 128,523 distinct starts are served, and the repeats of those starts with them. The fall has a
+   ceiling: 82,022 compiles a run lie outside any image,
    Mono's run-time code, so "compiled" can fall by at most 192,815 of 274,837 with every image cached, and by
    149,308 with UnityPlayer.dll alone.
 
