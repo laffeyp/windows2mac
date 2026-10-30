@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 230
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -104,3 +104,34 @@ by a rule's name.
 - [x] One concept: the families' row rules.
 
 ## result
+
+- **The rules:** `family_runs.rs`' `derive` carries the 23 rules and the two it carried before, each ported from
+  `scripts/family_run.py` at the tag with its lines cited. A rule is chosen by its name in the lookup's column 8, less
+  " excluded <n>". `time_rows.derive` keeps only `error_mode.child_inherited` for `time_and_error_mode_child`. A name
+  with no rule is an error: "row rule <name> is not ported".
+- **The judge:** an ended run is compared with its contract version's rows after its rule. The first row that differs
+  holds it as "ended; row <s> differs from <contract>@<version>". The test gathers every difference and reports them
+  together, where it stopped at the first before.
+- **The 80 ended runs:** 74 conform. Six were not started as their family starts them:
+  - The lookup's column 7 names each family's start options, and the gates' family loop passed none.
+  - `local_free` starts with the argument `safe`. Without it the probe ran as its own parent and printed only its two
+    `exit.*` rows, and the first contract row, `null`, was missing.
+  - `console` and `time_and_error_mode_child` need arguments, a GUI start and an output file.
+  - `w2m-vm` takes none of these. The test holds each such run as "ended; start options <options> not applied" and
+    does not judge it. Deferred names the card that gives `w2m-vm` the frozen start (`vm_inputs`, 2889-2902).
+- **The instruction clock:** `processes` starts on it. The gates' loop now passes `--instruction-clock` when column 7
+  names it.
+  - My first rerun of the two runs left the flag ahead of `--max-steps`. `w2m-vm` read the flag only as its last
+    argument, so the run stopped at the usage message, and an older stop file from the gates still read
+    "ExitProcess { code: 0 }".
+  - `w2m-vm` now takes the flag wherever it stands. Rerun so, both runs end at ExitProcess and conform.
+  - Departures: `crates/w2m_vm/src/bin/w2m-vm.rs` and `scripts/gates.sh`, outside the card's file list.
+- **The counts:** 217 of 273 runs conform, from 143; 54 of 68 families in every run, from 32. The held file has 56
+  rows: the 50 stops, unchanged, and the 6 runs whose start options are not applied. The card's "51 stops" counted
+  the held file's header line, which holds the word "stop:".
+- **The rules' unit test,** `the_row_rules_derive_as_the_frozen_code_does`, gives seven rules rows the runs do not
+  print, with expected rows worked from the frozen lines, and checks an unknown name's error.
+- **Plant 1** (`loader_rows`' test for apphelp.dll made `if true`, so no row is changed): the unit test failed, "left: Array [Object {"bases_equal_module_handles": Number(3), "count": Number(3), "names": Array [String("probe.exe"), String("apphelp.dll"), String("ntdll.dll")]". The family runs still passed, since none prints apphelp.dll.
+- **Plant 2** (`code_page_rows`' rename disabled, `&& false`): the judge failed, "code_pages 38044061149 ended; row bestfit.0100 differs from windows.code_pages.ansi_1252@0.2.0".
+- **Plant 3** (line 2 of the lookup given the rule `code_page_rowz`): "code_pages run 38044061149: row rule code_page_rowz is not ported".
+- Each plant was restored by `cp`, and `cmp` found both files equal to their copies.
