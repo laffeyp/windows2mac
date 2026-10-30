@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 252
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -96,3 +96,22 @@ named class, or there is none.
 - [x] One concept: the whole-block judge.
 
 ## result
+
+- **The judge:** `block_judge.rs` (0a5033ffc), called by the run loop before each drain; `w2m-vm --judge-blocks`. The
+  game's run options became `GameOptions`, clippy refusing `game` with eight arguments.
+- **The judgement:** one batch run from f4d0b5582, alone: 274,837 judged, 274,837 equal, 0 differing, in 27 s;
+  `store/translation-cache/whole-blocks-2026-10-30.tsv`. No class of difference exists, so `block_judge.rs`' test
+  holds an empty list. A departure from the card: the judge runs in every gates run (`harness/w2m-vm-game.toml`,
+  `build/batch_run/whole-blocks.tsv`), not once, since it costs the run no more than its own seconds.
+- **Two faults on the way:** the first judged run waited 10 minutes at 0% CPU on standard input, which a game run
+  reads one JSON line from; it was stopped and run again with `echo '{}' |`, as the gates give it. And the temporary
+  directory held 1,024 empty directories that Sprint 247's plant left when `a_drive_left_behind_is_passed_over`
+  panicked before its cleanup; they were removed by `rmdir`, and f4d0b5582 moved the cleanup into a guard's `Drop`.
+- **The gates:** `scripts/gates.sh` exit 0 in 708 s on d1df97078, every gate run, copied from `store/gates/passes.tsv`; the timing stage 663 ns an exit at load 2.98; the gates' own judgement, `build/batch_run/whole-blocks.tsv`, 274,837 judged and equal.
+- **Plants,** run on d1df97078, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** the judge named "274837 judged, 184987 equal, 89850 differing", every one of class `words`, the first
+  "1813e9624	1813e964a	1	540003c4	54000484	0x1813e9624	words": the Rust words assembled with every flag live.
+- **Plant 2,** `the_stored_judgement_holds` failed, "1 differing lines, where the totals say 0" and "a block of class
+  "words", which no reason names": the stored file's header made a differing row.
+- **Plant 3,** `the_stored_judgement_holds` failed, "274838 judged, where 274837 equal and 0 differing": the total one
+  block off.
