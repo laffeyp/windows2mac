@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 228
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -77,3 +77,21 @@ The Python words fixture has a source other than this Mac, fetched and checked b
 - [x] One concept: the fixture's source.
 
 ## result
+
+- **The release:** `python-words-2026-10-29`, a pre-release, created after `shasum -a 256` of this Mac's copy equalled
+  the pin. Its one asset, `python-words.txt`, is 3,107,809 bytes, and GitHub's own digest for it is
+  `sha256:a20dc6efe84b176d3b4215837013e506361315e539b76d6276a01f4512e5ac1b`, the pin.
+- **`scripts/fetch-python-words.sh`:** downloads the asset with `gh release download` into a temporary directory under
+  `build/case_runner/`, checks it with `shasum -a 256 -c` against `store/case_runner/python-words.sha256`, and only
+  then moves it over `build/case_runner/python-words.txt`; a trap removes the temporary directory either way.
+- **The fixture's absence:** `case_inputs::FIXTURE_ABSENT` says where the fixture is read and that the script fetches
+  it. The four callers that wrote their own copy of the message read it: `case_runner.rs` twice, `class_judge.rs`
+  and `case_runs.rs`. Departure: those three files and WORKING_AGREEMENT's case-runner entry, which now names the
+  release and the script, are outside the card's file list.
+- **The fetch, run with the fixture moved into the scratchpad:** "build/case_runner/fetch.gTbltO/python-words.txt:
+  OK", exit 0, and `cmp` found the fetched file identical to the moved one.
+- The plants were each a scratch copy of the script run from the repository root; each exited 1 and left the fixture
+  unchanged (`cmp`).
+- **Plant 1** (the pin read from a file of 64 zeros): "python-words.txt: FAILED", then "shasum: WARNING: 1 computed checksum did NOT match".
+- **Plant 2** (the download replaced by the fixture's first 1,000,000 bytes): "python-words.txt: FAILED", the same warning.
+- **Plant 3** (the pattern `python-word.txt`): `gh` printed "no assets match the file pattern".
