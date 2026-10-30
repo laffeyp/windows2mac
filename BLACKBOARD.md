@@ -873,7 +873,7 @@
 
 ## Sprint tail
 
-### Sprint 225 (2026-10-29, gates running)
+### Sprint 225 (2026-10-29, closed)
 - **Scope:** the Decision "No Python runs" as annotated in Sprint 224 (the user, "the 22% of python into 0") and reviewer-3's Medium 1 of its review at 224: the 8 case sets the Python built, fetched from their releases and checked by hash, so CI judges what reads them with no Python run
 - **Dual contract:** signal — none, a CI input; artifact pass (`scripts/gates.sh` exit 0 in 210 s, kept in `store/gates/passes.tsv` as sprint 225 at 0a1c4003d with root=c7be227e7 and "rust=crates python=0 samples=0"; multi-vCPU: not run (Python gates not run)); observation pass (8 assets uploaded, each hash equal to its run's record; CI's step left 21 case files in a scratch tree; plant 1, "probes/semantics_041/cases.bin: FAILED"; plant 2, the step exited 1 with 20 files; plant 3, "t.bin: FAILED")
 - **CI does not run:** nothing beyond the step; this sprint's CI run is the step's real test, its conclusion read before the close.
