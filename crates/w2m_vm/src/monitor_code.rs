@@ -15,8 +15,12 @@ use guest_runtime::layout::{
 };
 
 use crate::assembler::{Assembler, Target};
-use crate::guest::VMC_COMPILE_TICKS;
 use crate::{CPSR_EL1H, DISPATCHER, VECTORS};
+
+/// VM_COMPILER + this (Sprint 247): the virtual counter's ticks the miss stub spent calling `w2m_vm_compile`, summed
+/// when `Timing::compile` asks; past the C compiler's 23 counts at 0x100 (`guest::VMC_COUNTS`, which `guest.rs` asserts
+/// at compile time) and before `VMC_SAVE`. Here, not in `guest`, since every target builds the monitor code.
+pub const VMC_COMPILE_TICKS: u64 = 0x1B8;
 
 /// The exception entry's area (vm_backend 129-130).
 pub const EXCEPTION_ENTRY: u64 = 0x01C00;

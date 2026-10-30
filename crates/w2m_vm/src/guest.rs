@@ -76,7 +76,11 @@ pub const VMC_COUNT_NAMES: [&str; 23] = [
 /// VM_COMPILER + this, past the counts (Sprint 247): the virtual counter's ticks spent in the miss stub's call of
 /// `w2m_vm_compile`, summed by the monitor code when `Start::time_compile` asks (`monitor_code::dispatcher`); the C
 /// runtime is not changed, so the runtime image and every address in it stay the frozen host's.
-pub const VMC_COMPILE_TICKS: u64 = VMC_COUNTS + 8 * VMC_COUNT_NAMES.len() as u64;
+pub use crate::monitor_code::VMC_COMPILE_TICKS;
+const _: () = assert!(
+    VMC_COMPILE_TICKS == VMC_COUNTS + 8 * VMC_COUNT_NAMES.len() as u64,
+    "the compile ticks' slot is just past the C compiler's counts"
+);
 
 const DXGI_OBJECT: [&str; 7] = [
     "QueryInterface",

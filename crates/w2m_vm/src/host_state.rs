@@ -7,9 +7,13 @@
 //! steers a thread toward performance or efficiency cores.
 
 unsafe extern "C" {
-    /// `_stdlib.h` 328
+    /// `_stdlib.h` 328 (glibc's `stdlib.h` declares it too)
     fn getloadavg(loadavg: *mut f64, nelem: i32) -> i32;
-    /// `sys/qos.h` 172
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    /// `sys/qos.h` 172, macOS's alone
     fn qos_class_self() -> u32;
 }
 
@@ -35,6 +39,7 @@ pub fn counter_frequency() -> Result<u64, String> {
 }
 
 /// The calling thread's QoS class by its `sys/qos.h` name (130-143), or its number when the header names none.
+#[cfg(target_os = "macos")]
 pub fn qos_class() -> String {
     // SAFETY: no arguments, no memory
     let class = unsafe { qos_class_self() };
@@ -49,7 +54,7 @@ pub fn qos_class() -> String {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     /// The kernel gives three finite, non-negative load averages, and the QoS class is one `sys/qos.h` names.
     #[test]
