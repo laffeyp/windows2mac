@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 233
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -18,7 +18,7 @@ conforming runs counted in Sprints 230 and 231 were judged by a weaker rule.
 - **Where it stands, by lookup (2026-10-30):**
   - The frozen judge, `family_run.py` 3141-3153 at the tag frozen-python-2026-10-29:
     - It compares `derived_output(f, out)`, the rows after the family's rule with its excluded rows dropped
-      (`Family.rows`, 116-118), by `compare_exact_rows` (`src/w2m/compare.py` 168-206 at the tag).
+      (`Family.rows`, 116-118), by `compare_exact_rows` (`src/w2m/compare.py` 168-203 at the tag).
     - `compare_exact_rows` takes the rows in the contract's order. The first missing row, wrong name in its place,
       unequal field (either side's keys) or extra row is the divergence.
     - A run that stops on its family's `expected_stop` (a prefix of the stop) is judged on its rows. Any other stop
@@ -97,3 +97,31 @@ The Rust family judge is the frozen judge, and every count of step 4's family it
 - [x] One concept: the family judge.
 
 ## result
+
+- **The comparison:** `exact_rows` is `compare_exact_rows` (`compare.py` 168-203; the card first cited 168-210, then
+  168-206, before the function's last line, 203, was read). It takes the contract's rows in order. The first missing
+  row, wrong name in a row's place, field unequal on either side's keys, or extra row is the divergence, in its
+  words. Values are compared by `py_eq`, Python's `==` (`True == 1`, `1 == 1.0`), where `serde_json` holds them
+  apart.
+- **The exclusions and the expected stops:**
+  - The extract's eleven family rows gained two columns, held to the tag by `the_extracts_family_rows_are_the_tags`
+    (renamed from `the_extract_start_options_are_the_tags`, which it widens). The new table `EXCLUDED` gives each
+    family's `name=` line, its `excluded={` line and each name on its line. `SHOWN` gains the four expected stops.
+  - `family_known` prints them as columns 9 and 10 and counts the exclusions from them. The contract-text count had
+    been wrong for 8 families, 25 runs; `file_attributes`' 2 rows, for one, had been counted 4.
+  - The judge drops excluded rows after the rule. A run whose stop, named as the frozen host names it (`frozen_stop`:
+    "HostRequest op 4: X" is "Unimplemented: X", "import D!F" is "Unimplemented: import D!F"), begins with its
+    family's expected stop is judged on its rows.
+- **Two rules ported:** `numbered_exceptions` (77-81) and `known_folders_rows` (1683).
+- **The counts under the frozen judge:**
+  - All 249 runs that conformed under the weaker judge still conform.
+  - The 14 that stop on their family's expected stop (thread_storage 8, output_debug_string 4, known_folders 2)
+    conform.
+  - So 263 of 273 runs conform, from 249, and 63 of 68 families in every run, from 60. The 10 held all stop on the
+    warp to a deadline.
+- **The unit test,** `the_comparison_is_the_frozen_comparison`, holds the four divergences, Python's equality and the
+  two stop names.
+- **Plant 1** (a row `{"s":"extra"}` appended to code_pages 38044061149's rows): "code_pages 38044061149 ended; 1 rows past the reference's 3827 (windows.code_pages.ansi_1252@0.2.0)".
+- **Plant 2** (that run's first two rows swapped): "ended; row \"acp\": target printed \"oemcp\" in its place (windows.code_pages.ansi_1252@0.2.0)".
+- **Plant 3** (`limit.warm.1` removed from heap_in_place's row in the extract): "heap_in_place excluded: store/frozen_python/family-run-2026-10-29.tsv has [\"limit.fresh.800\",\"limit.fresh.1000\"], frozen-python-2026-10-29 [\"limit.fresh.800\",\"limit.fresh.1000\",\"limit.warm.1\"]".
+- Each plant was restored by `cp`, and `cmp` found the files equal to their copies.

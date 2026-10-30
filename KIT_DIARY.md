@@ -891,3 +891,22 @@ searching string literals (`case_inputs.rs`' `git log -- src/w2m`), CI's own cou
 after its run had failed, and, in reviewer-3's review at 226, the Python a YAML `run:` line executes and the generator
 21 `probe.json` strings name. Before a component leaves, every consumer is listed whole: code that opens its files,
 scripts and workflows that run it, configuration that names it, and tests that count what it produced.
+
+### 2026-10-30 — Sprints 230-233: a judge weaker than its name, a run not started as its family starts
+
+**Finding (#95):** a ported judge is ported whole before a count is taken by it. The Rust family judge from Sprint 196
+keyed rows by name, ignored extra rows and dropped no excluded row, where the frozen `compare_exact_rows` it stood for
+takes rows in order and refuses extras. Sprints 230 and 231 counted 249 conforming runs by it. Sprint 233 found the gap
+by reading the frozen judge for another reason. Under the frozen rule all 249 still conformed, so no number was wrong,
+but none had been shown. A judge's port needs its own plants that the weaker form passes, an extra row and a swapped
+pair, before the first count.
+
+**Finding (#96):** a run is the family's run only when started as the family starts it. 26 runs held since Sprint 221
+as host stops, CreateProcessW's argument form and a temporary file, were runs given no start options: a probe run as its
+own parent, a probe with no TEMP. Started as their families start, all 26 conformed. The lookup had listed the options
+as a column, and no run used them. A column that names an input is a claim the runner reads it; a test should fail
+when a runner ignores one.
+
+**Finding (#97):** a count is read from structure, not from prose. `family_known` counted a contract's excluded rows by
+splitting its reasons at "; ", and the reasons hold "; " too: 8 of 10 families were miscounted, `windows.file.attributes`
+at 4 for 2. The names stood in the frozen source's dictionaries all along. Prose written for a reader is not a format.
