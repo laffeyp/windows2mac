@@ -17,7 +17,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cpu_cases::{read_cases, read_results};
-use w2m_vm::case_inputs::{Counts, Fixture, Hybrid, case_runtime_calls, expected, registry, runs, with_case_vm};
+use w2m_vm::case_inputs::{
+    Counts, FIXTURE_ABSENT, Fixture, Hybrid, case_runtime_calls, expected, registry, runs, with_case_vm,
+};
 use w2m_vm::cases::run_cases;
 
 /// `OPEN` (tests/test_class_runs.py 33): the open discrepancies' differences, by class and judged part (Sprint 175).
@@ -89,7 +91,7 @@ fn every_judged_case_agrees_with_windows_with_the_rust_translator() {
 fn the_rust_words_equal_the_python_words_on_every_case_code() {
     let root = root();
     let Some(fixture) = Fixture::load(&root) else {
-        return missing("no Python words fixture (build/case_runner/python-words.txt)");
+        return missing(FIXTURE_ABSENT);
     };
     let fixture = fixture.unwrap();
     let hybrid = Hybrid::new(&fixture, case_runtime_calls(&root).unwrap());
@@ -132,7 +134,7 @@ fn judge(use_rust: bool) {
         return missing("no downloaded Intel results in build/probe-runs");
     }
     let Some(fixture) = Fixture::load(&root) else {
-        return missing("no Python words fixture (build/case_runner/python-words.txt)");
+        return missing(FIXTURE_ABSENT);
     };
     let fixture = fixture.unwrap();
     println!(

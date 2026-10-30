@@ -55,7 +55,9 @@ mod run {
         ReductionCompleted, Relation, RepairPath, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose,
         Sha256, VOCAB_VERSION, Verdict, Version, harness_line,
     };
-    use w2m_vm::case_inputs::{Fixture, Hybrid, case_runtime_calls, runs, translator_sha, with_case_vm};
+    use w2m_vm::case_inputs::{
+        FIXTURE_ABSENT, Fixture, Hybrid, case_runtime_calls, runs, translator_sha, with_case_vm,
+    };
     use w2m_vm::cases::run_cases;
     use w2m_vm::ledger;
 
@@ -171,7 +173,7 @@ mod run {
         if runs.is_empty() {
             return Err(format!("no downloaded Intel result of a run on {profile}"));
         }
-        let fixture = Fixture::load(&root).ok_or("no Python words fixture (build/case_runner/python-words.txt)")??;
+        let fixture = Fixture::load(&root).ok_or(FIXTURE_ABSENT)??;
         let hybrid = Hybrid::new(&fixture, case_runtime_calls(&root)?);
         let compile = |code: &[u8], a: u64, base: u64, exit: u64| {
             if use_rust {

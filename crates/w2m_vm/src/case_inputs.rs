@@ -114,8 +114,13 @@ pub struct Header {
     pub src: String,
 }
 
+/// What a caller says when the fixture is absent: where it is read and the script that fetches it (Sprint 228).
+pub const FIXTURE_ABSENT: &str =
+    "no Python words fixture (build/case_runner/python-words.txt); scripts/fetch-python-words.sh fetches it";
+
 /// The frozen Python lowering's words for every case instruction (`build/case_runner/python-words.txt`; its generator
-/// is named in WORKING_AGREEMENT): code -> (ends, words), or None where the Python refused.
+/// is named in WORKING_AGREEMENT, and the file is the asset of release python-words-2026-10-29): code -> (ends, words),
+/// or None where the Python refused.
 pub struct Fixture {
     pub header: Header,
     pub sha256: String,
@@ -123,7 +128,8 @@ pub struct Fixture {
 }
 
 impl Fixture {
-    /// Reads the fixture and checks it is the one `store/case_runner/python-words.sha256` pins. None when it is absent.
+    /// Reads the fixture and checks it is the one `store/case_runner/python-words.sha256` pins. None when it is absent
+    /// (`FIXTURE_ABSENT`).
     pub fn load(root: &Path) -> Option<Result<Fixture, String>> {
         let text = fs::read_to_string(root.join("build/case_runner/python-words.txt")).ok()?;
         Some(Fixture::parse(root, &text))
