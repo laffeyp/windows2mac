@@ -14,7 +14,8 @@
 #   scripts/batch-run-record.sh <root> [--time-compile] [--cache <directory>]
 # With --time-compile (Sprint 247), a measurement run: `w2m-vm` is given the flag, its monitor code times the miss
 # stub's calls of the in-VM compiler, the record carries compile_critical_path_ms, and the baseline says so; the gates
-# run without it, so the monitor code they judge is the frozen host's word for word. With --cache (Sprint 257), the
+# run without it, so the monitor code they judge is the frozen host's word for word; a timed run also leaves out
+# --judge-blocks, whose host time would enter the rate (reviewer-3's Medium 1 at 257). With --cache (Sprint 257), the
 # host installs UnityPlayer.dll's blocks from the translation cache in the directory (relative to the root), whose file
 # `w2m-vm --make-cache` made under the same tree, and the baseline says so.
 set -eu
@@ -58,6 +59,7 @@ flags=${flags# }
 awk -v load="$load" -v busy="$busy" -v other="$other" -v qos="$qos" -v timed="$timed" -v cache="$cache" -v flags="$flags" '
   flags != "" && /^command = \["sh", "-c", "exec \.\.\/scripts\/sign_and_run\.sh \.\.\/target\/release\/w2m-vm --game / {
     sub(/"\]$/, " " flags "\"]")
+    if (timed != "") sub(/ --judge-blocks [^ "]*/, "")
   }
   { print }
   /^\[baseline\]$/ {
@@ -65,10 +67,15 @@ awk -v load="$load" -v busy="$busy" -v other="$other" -v qos="$qos" -v timed="$t
     printf "qos = \"%s, inherited from the shell, not set by w2m\"\n", qos
     print "cores = \"not pinned: Apple silicon refuses THREAD_AFFINITY_POLICY (KERN_NOT_SUPPORTED)\""
     if (timed != "") print "compile_timing = \"the miss stub'"'"'s calls of the in-VM compiler timed by the monitor code (--time-compile)\""
+    if (timed != "") print "block_judge = \"off: a timed run does not judge the in-VM blocks, whose host time would enter its rate\""
     if (cache != "") print "translation_cache = \"UnityPlayer.dll'"'"'s blocks installed by the host from " cache " (--cache)\""
   }' harness/w2m-vm-game.toml > "$file"
 if [ -n "$flags" ] && ! grep -q -- " $flags\"]\$" "$file"; then
   echo "batch-run-record.sh: the run file's w2m-vm command did not take $flags" >&2
+  exit 2
+fi
+if [ -n "$timed" ] && grep -q -- '--judge-blocks' "$file"; then
+  echo "batch-run-record.sh: the timed run's command still judges the blocks" >&2
   exit 2
 fi
 uv run substrate run --file "$file" --root "$root" --strict

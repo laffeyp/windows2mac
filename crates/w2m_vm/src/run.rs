@@ -267,6 +267,10 @@ pub fn read_runtime_word(mem: &[u8]) -> RuntimeWordTimes {
     RuntimeWordTimes { counted, takings }
 }
 
+/// The kind the whole-block judge's host time is counted under, apart from the exit it follows (Sprint 257): the
+/// record's `run_seconds` "host judge".
+pub const JUDGE_KIND: &str = "judge";
+
 /// What a run did.
 #[derive(Debug, Clone)]
 pub struct Outcome {
@@ -282,7 +286,8 @@ pub struct Outcome {
     pub compile_ticks: crate::monitor_code::CompileTicks,
     /// each served exit's host time, from the vCPU's exit to its next run, in ns
     pub serve_ns: Vec<u64>,
-    /// the same times by the exit's kind (`hvc <k>`, `vtimer`, or `ec 0x<class>`), for step 3's measure (Sprint 163)
+    /// the same times by the exit's kind (`hvc <k>`, `vtimer`, or `ec 0x<class>`), for step 3's measure (Sprint 163),
+    /// the whole-block judge's part as `JUDGE_KIND` (Sprint 257)
     pub serve_by_kind: BTreeMap<String, Vec<u64>>,
     /// the runtime word's takings when the guest times them (Sprint 164)
     pub runtime_word: RuntimeWordTimes,
@@ -604,6 +609,7 @@ fn run(
     let runtime = MONITOR_VA + RUNTIME_IMAGE..MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE;
     let mut marked = None::<Instant>;
     let mut kind = String::new(); // the last exit's kind, whose service `marked` times
+    let mut judge_ns = 0u64; // the whole-block judge's part of that service
     let stop = loop {
         // `_before_run` (5129-5141): one vCPU, no other process: the slice's end (`_slice_until`), the VM may switch
         // threads itself; x23 the budget left, outside the runtime's C
@@ -628,7 +634,14 @@ fn run(
         if let Some(t) = marked {
             let ns = t.elapsed().as_nanos() as u64;
             out.serve_ns.push(ns);
-            out.serve_by_kind.entry(kind.clone()).or_default().push(ns);
+            // the whole-block judge's share its own kind, not the exit's (reviewer-3's Medium 1 at 257)
+            out.serve_by_kind.entry(kind.clone()).or_default().push(ns - judge_ns);
+            if judge_ns > 0 {
+                out.serve_by_kind
+                    .entry(JUDGE_KIND.to_string())
+                    .or_default()
+                    .push(judge_ns);
+            }
         }
         let started = Instant::now();
         let exit = vcpu.run()?;
@@ -664,8 +677,11 @@ fn run(
         };
         marked = Some(Instant::now());
         // the in-VM compiles judged against the Rust translator's, before the drain empties the log (Sprint 252)
+        judge_ns = 0;
         if let Some(mut judge) = guest.block_judge.take() {
+            let started = Instant::now();
             let judged = judge.judge(guest);
+            judge_ns = started.elapsed().as_nanos() as u64;
             guest.block_judge = Some(judge);
             if let Err(why) = judged {
                 break Stop::Exit(format!("the block judge: {why}"));

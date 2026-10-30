@@ -27,7 +27,7 @@ use w2m_vm::cache_file::{self, Exits};
 use w2m_vm::compile::HostCompiler;
 use w2m_vm::guest::{Guest, vm_compiler_symbols};
 use w2m_vm::process::Start;
-use w2m_vm::run::{Outcome, Stop, run_compiling};
+use w2m_vm::run::{JUDGE_KIND, Outcome, Stop, run_compiling};
 use w2m_vm::tables::page_descriptor;
 
 /// One VM per process (Hypervisor.framework): the tests here each make one, in turn.
@@ -284,6 +284,34 @@ fn qpc_runs_with_its_blocks_installed_from_the_cache() {
         installed += 1;
     }
     assert_eq!(installed, cache.installs, "the installs counted");
+}
+
+/// Sprint 257 (reviewer-3's Medium 1 at 257): the whole-block judge's host time is its own kind, not the exit's it
+/// follows; the kinds still add up to the run's host time, and an exit's kind holds only its service.
+#[test]
+fn the_judges_time_is_counted_apart_from_the_exits() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (loaded, mut guest) = guest_for(&root, "qpc");
+    let file = std::env::temp_dir().join(format!("w2m-judge-time-{}.tsv", std::process::id()));
+    guest.block_judge = Some(w2m_vm::block_judge::BlockJudge::create(&file).unwrap());
+    let mut host = HostCompiler::default();
+    let out = run(&mut guest, &loaded, &mut host);
+    let _ = fs::remove_file(&file);
+    assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
+    let judged = guest.block_judge.as_ref().unwrap().judged;
+    assert!(judged > 0, "the judge judged nothing");
+    let judge: u64 = out.serve_by_kind.get(JUDGE_KIND).map_or(0, |v| v.iter().sum());
+    assert!(
+        judge > 0,
+        "{judged} blocks judged and no host time counted as the judge's"
+    );
+    let by_kind: u64 = out.serve_by_kind.values().flatten().sum();
+    assert_eq!(
+        by_kind,
+        out.serve_ns.iter().sum::<u64>(),
+        "the kinds add up to the host's time"
+    );
 }
 
 /// Sprint 257, the write rule: a write into the image's code stops the cache for the rest of the run, drops every block
