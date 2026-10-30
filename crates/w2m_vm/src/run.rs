@@ -302,6 +302,9 @@ pub struct Outcome {
     /// every block translated, the C's and the host's, in the order the Python's `vm.translations` keeps (Sprint 158):
     /// the C's log at each exit (`_vm_compiled` 2577), the host's at its compile (`_compile` 4638)
     pub translations: Vec<Translation>,
+    /// the start of each block the in-VM compiler compiled, in its log's order, the host's compiles not among them
+    /// (Sprint 249: the compiles by image)
+    pub vm_compile_starts: Vec<u64>,
 }
 
 /// A translated block: its guest range [start, end) and its code address.
@@ -400,6 +403,7 @@ fn vm_compiled(
     mem: &mut [u8],
     blocks: &mut BTreeMap<u64, u64>,
     translations: &mut Vec<Translation>,
+    vm_compile_starts: &mut Vec<u64>,
     mut host: Option<&mut HostCompiler>,
 ) {
     use guest_runtime::layout::{PAGE, RECON_TABLE};
@@ -409,6 +413,7 @@ fn vm_compiled(
         let (start, end, code) = (read_u64(mem, at), read_u64(mem, at + 8), read_u64(mem, at + 16));
         blocks.insert(start, code);
         translations.push(Translation { start, end, code });
+        vm_compile_starts.push(start);
         let Some(h) = host.as_deref_mut() else {
             continue;
         };
@@ -551,6 +556,7 @@ fn run(
         thread_requests: Vec::new(),
         handovers: Vec::new(),
         translations: Vec::new(),
+        vm_compile_starts: Vec::new(),
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -649,7 +655,13 @@ fn run(
         };
         marked = Some(Instant::now());
         let mem = guest.memory.as_mut_slice();
-        vm_compiled(mem, &mut out.blocks, &mut out.translations, host.as_deref_mut());
+        vm_compiled(
+            mem,
+            &mut out.blocks,
+            &mut out.translations,
+            &mut out.vm_compile_starts,
+            host.as_deref_mut(),
+        );
         let pc = vcpu.reg(Reg::Pc)?;
         if !runtime.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not

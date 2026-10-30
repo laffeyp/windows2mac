@@ -418,7 +418,7 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     let mut found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
     found.extend(rate_problems(&measurements(&ours)));
     found.extend(condition_problems(&record));
-    found.extend(compile_problems(&measurements(&ours), &measurements(&reference)));
+    found.extend(compile_problems(&measurements(&ours), &measurements(&reference), true));
     found.extend(compile_time_problems(&measurements(&ours), timed(&record), true));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
 }
@@ -478,6 +478,10 @@ fn first_line(record: &Path) -> Value {
 fn timed(record: &Path) -> bool {
     first_line(record)["payload"]["baseline"]["compile_timing"].is_string()
 }
+
+/// The last record made before the compiles by image reached the record (Sprint 248's last); every record named after
+/// it holds them (Sprint 249). The names are a run's start in ns, so their order is their age.
+const LAST_BEFORE_IMAGES: &str = "w2m-vm-game-1793387174000000000";
 
 /// The timed records made before the probe's frames (Sprint 247's three), which hold the total alone.
 const BEFORE_FRAMES: [&str; 3] = [
@@ -555,7 +559,7 @@ const BEFORE_COMPILE_COUNTS: [&str; 3] = [
 
 /// The compiles at run time, step 5's baseline (Sprint 246): a `vm_compile_blocks` row for each of the reference's
 /// variants and none other, and the "compiled" count above zero.
-fn compile_problems(ours: &[Value], reference: &[Value]) -> Vec<String> {
+fn compile_problems(ours: &[Value], reference: &[Value], by_image_due: bool) -> Vec<String> {
     let variants = |ms: &[Value]| -> BTreeMap<String, f64> {
         ms.iter()
             .filter(|m| m["metric"] == "vm_compile_blocks")
@@ -567,8 +571,27 @@ fn compile_problems(ours: &[Value], reference: &[Value]) -> Vec<String> {
             })
             .collect()
     };
-    let (have, want) = (variants(ours), variants(reference));
+    // the compiles by image (Sprint 249), the Rust record's alone: present where due, and adding up to "compiled"
+    let by_image = |v: &String| v.starts_with(w2m_vm::record::COMPILED_IN) || v == w2m_vm::record::COMPILED_OUTSIDE;
+    let (images, have): (BTreeMap<String, f64>, BTreeMap<String, f64>) =
+        variants(ours).into_iter().partition(|(v, _)| by_image(v));
+    let want = variants(reference);
     let mut found = Vec::new();
+    if by_image_due && !images.contains_key(w2m_vm::record::COMPILED_OUTSIDE) {
+        found.push(format!(
+            "no vm_compile_blocks {:?}: the compiles by image are due on a record after Sprint 248's",
+            w2m_vm::record::COMPILED_OUTSIDE
+        ));
+    }
+    if !images.is_empty() {
+        let sum: f64 = images.values().sum();
+        let compiled = have.get("compiled").copied().unwrap_or(0.0);
+        if sum != compiled {
+            found.push(format!(
+                "the compiles by image add up to {sum}, where vm_compile_blocks \"compiled\" is {compiled}"
+            ));
+        }
+    }
     let (h, w): (BTreeSet<&String>, BTreeSet<&String>) = (have.keys().collect(), want.keys().collect());
     for missing in w.difference(&h) {
         found.push(format!("no vm_compile_blocks {missing:?}, which the reference counts"));
@@ -609,7 +632,11 @@ fn every_stored_rust_batch_record_holds_its_rate() {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
         if !BEFORE_COMPILE_COUNTS.contains(&name.as_str()) {
             let reference = measurements(&w2m_events(&root.join(REFERENCE)));
-            found.extend(compile_problems(&measurements(&ours), &reference));
+            found.extend(compile_problems(
+                &measurements(&ours),
+                &reference,
+                name.as_str() > LAST_BEFORE_IMAGES,
+            ));
         }
         found.extend(compile_time_problems(
             &measurements(&ours),
@@ -635,15 +662,37 @@ fn every_stored_rust_batch_record_holds_its_rate() {
 fn a_missing_extra_or_empty_compile_count_is_named() {
     let m = |variant: &str, value: f64| serde_json::json!({"metric": "vm_compile_blocks", "variant": variant, "value": value});
     let reference = vec![m("compiled", 275303.0), m("decode", 304.0)];
-    assert_eq!(compile_problems(&reference, &reference), Vec::<String>::new());
+    assert_eq!(compile_problems(&reference, &reference, false), Vec::<String>::new());
     let ours = vec![m("compiled", 0.0), m("pause", 2.0)];
     assert_eq!(
-        compile_problems(&ours, &reference),
+        compile_problems(&ours, &reference, false),
         [
             "no vm_compile_blocks \"decode\", which the reference counts",
             "vm_compile_blocks \"pause\", which the reference does not count",
             "vm_compile_blocks \"compiled\" is Some(0.0)",
         ]
+    );
+    // the compiles by image (Sprint 249): allowed beside the reference's, held to "compiled", required where due
+    let reference = vec![m("compiled", 300.0)];
+    let by_image = vec![
+        m("compiled", 300.0),
+        m("compiled in UnityPlayer.dll", 200.0),
+        m("compiled outside any image", 100.0),
+    ];
+    assert_eq!(compile_problems(&by_image, &reference, true), Vec::<String>::new());
+    assert_eq!(
+        compile_problems(&by_image[..2], &reference, false),
+        ["the compiles by image add up to 200, where vm_compile_blocks \"compiled\" is 300"]
+    );
+    assert_eq!(
+        compile_problems(&by_image[..1], &reference, true),
+        [
+            "no vm_compile_blocks \"compiled outside any image\": the compiles by image are due on a record after Sprint 248's"
+        ]
+    );
+    assert_eq!(
+        compile_problems(&by_image[..1], &reference, false),
+        Vec::<String>::new()
     );
 }
 

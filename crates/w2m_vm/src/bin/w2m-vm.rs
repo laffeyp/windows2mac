@@ -769,6 +769,20 @@ mod run {
         } else {
             None
         };
+        // the compiles by where their code lies (Sprint 249); a count that misses a compile is named, not recorded
+        let images: Vec<(&str, u64, u64)> = guest
+            .images
+            .iter()
+            .map(|i| (i.name.as_str(), i.base, u64::from(i.pe.size_of_image)))
+            .collect();
+        let compiles_by_image = w2m_vm::record::compiles_by_image(&images, out.vm_compile_starts.iter().copied());
+        let by_image: u64 = compiles_by_image.iter().map(|(_, n)| n).sum();
+        let compiled = out.counts.get("compiled").copied().unwrap_or(0);
+        if by_image != compiled {
+            return Err(format!(
+                "the compiles by image add up to {by_image}, where the in-VM compiler counted {compiled}"
+            ));
+        }
         let record = w2m_vm::record::execution_lines(&w2m_vm::record::Execution {
             id: &id,
             subject_sha256: &subject,
@@ -787,6 +801,7 @@ mod run {
                 .iter()
                 .map(|n| (*n, out.counts.get(n).copied().unwrap_or(0)))
                 .collect(),
+            compiles_by_image,
             compile_ms,
             exits: out.exits.iter().map(|(k, n)| (*k, *n)).collect(),
             end,

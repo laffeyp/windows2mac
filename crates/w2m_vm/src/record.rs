@@ -90,6 +90,35 @@ pub fn translation_lines(image_sha256: &str, entry: u64, blocks: &[(u64, u64, u6
 /// `EMPTY` (run_frontier.py 63): the sha256 of no bytes, a run's initial state and injected inputs.
 pub const EMPTY_SHA256: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
+/// The `vm_compile_blocks` variants of the compiles by where their code lies (Sprint 249): "compiled in <image>", and
+/// those in no image, Mono's run-time code among them.
+pub const COMPILED_IN: &str = "compiled in ";
+pub const COMPILED_OUTSIDE: &str = "compiled outside any image";
+
+/// The compiles whose block starts are `starts`, counted by the image whose range, `[base, base + size)`, holds each,
+/// as (`COMPILED_IN` and the image's name, count) in the images' order, those with none left out, and then
+/// (`COMPILED_OUTSIDE`, count) for the starts in no image.
+pub fn compiles_by_image(images: &[(&str, u64, u64)], starts: impl IntoIterator<Item = u64>) -> Vec<(String, u64)> {
+    let mut counts = vec![0u64; images.len()];
+    let mut outside = 0;
+    for start in starts {
+        match images
+            .iter()
+            .position(|(_, base, size)| (*base..base + size).contains(&start))
+        {
+            Some(i) => counts[i] += 1,
+            None => outside += 1,
+        }
+    }
+    images
+        .iter()
+        .zip(counts)
+        .filter(|(_, n)| *n > 0)
+        .map(|((name, ..), n)| (format!("{COMPILED_IN}{name}"), n))
+        .chain([(COMPILED_OUTSIDE.to_string(), outside)])
+        .collect()
+}
+
 /// The variants of `compile_critical_path_ms` beside "vm" (Sprint 248), which `batch_record.rs` reads by these names.
 pub const LONGEST: &str = "vm longest compile";
 pub const MOST_IN_A_FRAME: &str = "vm most in a 60 Hz frame";
@@ -122,6 +151,9 @@ pub struct Execution<'a> {
     /// the in-VM compiler's counts at the stop, `VMC_COUNT_NAMES` in order (`block_compiler.c` 25-27), as
     /// `vm_compile_counts` read them (vm_backend 2604-2607; Sprint 246)
     pub compile_counts: Vec<(&'a str, u64)>,
+    /// the in-VM compiles by the image whose range holds the block's start, as `compiles_by_image` counts them
+    /// (Sprint 249), adding up to "compiled"
+    pub compiles_by_image: Vec<(String, u64)>,
     /// the in-VM compiler's time on the critical path (Sprint 247: `w2m_vm_compile` bracketed by the virtual counter),
     /// with the longest compile and the most in a frame (Sprint 248); None on an untimed run
     pub compile_ms: Option<CompileMs>,
@@ -273,6 +305,10 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     // the compiles at run time, step 5's baseline (Sprint 246; `run_frontier.py` 385-390)
     for (cause, n) in &e.compile_counts {
         rows.push((Metric::VmCompileBlocks, cause.to_string(), *n as f64, "blocks"));
+    }
+    // the compiles by where their code lies, step 5's share (Sprint 249)
+    for (variant, n) in &e.compiles_by_image {
+        rows.push((Metric::VmCompileBlocks, variant.clone(), *n as f64, "blocks"));
     }
     // compilation on the critical path (v0.2 456; Sprint 247), the VM's part; the host's is `run_seconds` "host hvc 1";
     // how it bunches beside it (Sprint 248)
@@ -453,6 +489,34 @@ mod tests {
 
     const IMAGE: &str = "6863d5ecd3a14fb5df0f1b194135fecd9e59a153aa2564ddfc2db034181d37de";
 
+    /// The compiles by image (Sprint 249): a start counts in the image whose `[base, base + size)` holds it, its end
+    /// outside; an image with none is left out; the rest are outside any image, and the counts add up to the starts.
+    #[test]
+    fn a_compile_counts_in_the_image_that_holds_its_start() {
+        let images = [
+            ("Game.exe", 0x1_4000_0000, 0x1000),
+            ("UnityPlayer.dll", 0x1_8000_0000, 0x2000),
+            ("none.dll", 0x2_0000_0000, 0x1000),
+        ];
+        let starts = [
+            0x1_4000_0000,
+            0x1_4000_0fff,
+            0x1_4000_1000,
+            0x1_8000_0010,
+            0x1_8000_1ff0,
+            0x10_0000_0000,
+        ];
+        assert_eq!(
+            compiles_by_image(&images, starts),
+            [
+                ("compiled in Game.exe".to_string(), 2),
+                ("compiled in UnityPlayer.dll".to_string(), 2),
+                (COMPILED_OUTSIDE.to_string(), 2),
+            ]
+        );
+        assert_eq!(compiles_by_image(&images, []), [(COMPILED_OUTSIDE.to_string(), 0)]);
+    }
+
     /// Nearest rank: of four, the median is the second, not the third an index of n·q would take.
     #[test]
     fn the_quantile_is_the_nearest_rank() {
@@ -511,6 +575,7 @@ mod tests {
                 host_seconds: 0.75,
                 host_by_kind: vec![("hvc 8".into(), 0.75)],
                 compile_counts: vec![("compiled", 40), ("not a code page", 2)],
+                compiles_by_image: vec![],
                 compile_ms: None,
                 exits: vec![(8, 779)],
                 end,
@@ -624,6 +689,7 @@ mod tests {
                 host_seconds: 0.75,
                 host_by_kind: vec![("hvc 1".into(), 0.75)],
                 compile_counts: vec![("compiled", 40)],
+                compiles_by_image: vec![],
                 compile_ms,
                 exits: vec![(1, 40)],
                 end: RunEnd::Exited(0),
