@@ -292,9 +292,10 @@ pub struct GuestMemory {
 }
 
 // SAFETY: the pointer is to a mapping this value owns alone, made by `mmap` and unmapped in its `Drop`, with no state
-// tied to the thread that made it; moving it to another thread moves that ownership, as a `Vec`'s does. Several
-// threads reach it only through a lock that holds the value (Sprint 274: the litmus tests' vCPU threads compile under
-// one `Mutex` around the guest), while the VM's vCPUs reach the memory itself through the mapping, as before.
+// tied to the thread that made it; moving it to another thread moves that ownership, as a `Vec`'s does. `Send` says
+// nothing of the vCPUs, which write the mapping outside any host lock: `as_slice` and `as_mut_slice` are sound only
+// while every vCPU that may write the memory is stopped, and memory other vCPUs write while the host reaches it goes
+// through `w2m_vm::concurrent_memory::ConcurrentGuestMemory`, which makes no reference into it (Sprint 276).
 unsafe impl Send for GuestMemory {}
 
 impl GuestMemory {

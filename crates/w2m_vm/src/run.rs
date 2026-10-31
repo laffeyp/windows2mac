@@ -18,6 +18,7 @@ use pe_loader::Loaded;
 
 use crate::CPSR_EL1H;
 use crate::compile::HostCompiler;
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::guest::{Guest, HVC_SCHEDULE, RT_IN_VM, STATE_SCHEDULE, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
 use crate::host_request::{HOST_THREAD, THREAD_END, THREAD_EXIT_CODE, THREAD_EXIT_STUB};
 use crate::monitor::set_system_registers;
@@ -174,12 +175,12 @@ impl Stop {
 /// (the entry with the largest host address at or below `pc`, as `bisect_right` over the sorted marks finds it); 0
 /// when none is (Sprint 181). The count is the guest's to write, so a count past the table's `RECON_ENTRIES` or the
 /// memory is an error, not a slice past the end (Sprint 188; reviewer-2's Low 4 of its review of 182-184).
-pub fn x86_address_at(mem: &[u8], pc: u64) -> Result<u64, String> {
+pub fn x86_address_at(mem: ConcurrentGuestMemory<'_>, pc: u64) -> Result<u64, String> {
     use guest_runtime::layout::{RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE};
     recon_lookup(
         mem,
         RECON_TABLE,
-        read_u64(mem, RUN_TABLE + RECON_COUNT),
+        mem.read_u64(RUN_TABLE + RECON_COUNT),
         RECON_ENTRIES,
         pc,
     )
@@ -188,25 +189,30 @@ pub fn x86_address_at(mem: &[u8], pc: u64) -> Result<u64, String> {
 /// `bisect_right(pc_map, (pc, M64)) - 1` over the first `n` (host, x86) entries at `table`, kept sorted as the code
 /// cache grows (vm_backend 4626-4628): the x86 address of the last entry whose host address is at or below `pc`, 0
 /// below the first (Sprint 184).
-fn recon_lookup(mem: &[u8], table: u64, n: u64, capacity: u64, pc: u64) -> Result<u64, String> {
+/// Read through the view (Sprint 276): on several vCPUs the host looks an address up while others run.
+fn recon_lookup(mem: ConcurrentGuestMemory<'_>, table: u64, n: u64, capacity: u64, pc: u64) -> Result<u64, String> {
     let end = table
         .checked_add(n.saturating_mul(16))
         .filter(|e| *e <= mem.len() as u64);
-    let (Some(end), true) = (end, n <= capacity) else {
+    let (Some(_), true) = (end, n <= capacity) else {
         return Err(format!(
             "the reconstruction table's count {n} is past its {capacity} entries or the memory"
         ));
     };
-    let (entries, _) = mem[table as usize..end as usize].as_chunks::<16>();
-    let entry = |e: &[u8; 16]| {
-        (
-            u64::from_le_bytes(e[..8].try_into().unwrap()),
-            u64::from_le_bytes(e[8..].try_into().unwrap()),
-        )
-    };
-    Ok(match entries.partition_point(|e| entry(e) <= (pc, u64::MAX)) {
+    let entry = |i: u64| (mem.read_u64(table + 16 * i), mem.read_u64(table + 16 * i + 8));
+    // the first entry whose host address is past `pc`, by bisection
+    let (mut low, mut high) = (0, n);
+    while low < high {
+        let mid = low + (high - low) / 2;
+        if entry(mid) <= (pc, u64::MAX) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    Ok(match low {
         0 => 0,
-        i => entry(&entries[i - 1]).1,
+        i => entry(i - 1).1,
     })
 }
 
@@ -384,14 +390,14 @@ fn write_u64(mem: &mut [u8], off: u64, v: u64) {
 }
 
 /// `_dispatch_insert` (vm_backend 4827-4849): (target, va) in its pair, in a slot that is empty or holds it, else
-/// first, the first slot's entry moved to the second. One vCPU: no other reader, so no barriers.
-pub fn dispatch_insert(mem: &mut [u8], target: u64, va: u64) {
+/// first, the first slot's entry moved to the second. Each pair is stored whole after a release fence (Sprint 276):
+/// the dispatcher reads a pair by one `LDP` with no lock, so on several vCPUs two stores would let it match a new
+/// target with an old block, or the old target with a new one when a filled slot is rewritten. Only the host writes
+/// the table, under its compile lock, so its own reads are plain.
+pub fn dispatch_insert(mem: ConcurrentGuestMemory<'_>, target: u64, va: u64) {
     let at = DISPATCH_TABLE + 16 * dispatch_slot(target);
-    let (t0, v0, t1) = (read_u64(mem, at), read_u64(mem, at + 8), read_u64(mem, at + 16));
-    let mut publish = |slot: u64, t: u64, v: u64| {
-        write_u64(mem, slot + 8, v);
-        write_u64(mem, slot, t);
-    };
+    let (t0, v0, t1) = (mem.read_u64(at), mem.read_u64(at + 8), mem.read_u64(at + 16));
+    let publish = |slot: u64, t: u64, v: u64| mem.store_pair_release(slot, t, v);
     if t0 == EMPTY_TARGET || t0 == target {
         publish(at, target, va);
     } else if t1 == EMPTY_TARGET || t1 == target {
@@ -429,13 +435,37 @@ fn vm_compiled(
     translations: &mut Vec<Translation>,
     vm_compile_starts: &mut Vec<u64>,
     instructions_at: &mut InstructionsAt,
-    mut host: Option<&mut HostCompiler>,
+    host: Option<&mut HostCompiler>,
 ) {
+    let mut spin = |_: &std::sync::atomic::AtomicU32| std::hint::spin_loop();
+    vm_compiled_waiting(
+        mem,
+        blocks,
+        translations,
+        vm_compile_starts,
+        instructions_at,
+        host,
+        &mut spin,
+    );
+}
+
+/// `vm_compiled`, its take of the runtime word calling `wait` while another holds it (Sprint 276: the drain's test).
+/// The run loop's one vCPU is stopped at its exit, so `mem` may be a slice (census D7).
+fn vm_compiled_waiting(
+    mem: &mut [u8],
+    blocks: &mut BTreeMap<u64, u64>,
+    translations: &mut Vec<Translation>,
+    vm_compile_starts: &mut Vec<u64>,
+    instructions_at: &mut InstructionsAt,
+    mut host: Option<&mut HostCompiler>,
+    wait: &mut dyn FnMut(&std::sync::atomic::AtomicU32),
+) {
+    use crate::monitor_code::{host_release_runtime_word, host_take_runtime_word_waiting};
     use guest_runtime::layout::{LOCK_OWNER, PAGE, RECON_TABLE};
     // the log is read and reset under the runtime word, which every in-VM compile and install appends under (Sprint
     // 275, census D6): on several vCPUs another's append between the read and the reset would be lost
     let own = u32::try_from(read_u64(mem, MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
-    let took = crate::monitor_code::host_take_runtime_word(mem, own);
+    let took = host_take_runtime_word_waiting(ConcurrentGuestMemory::new(mem), own, wait);
     let n = read_u64(mem, VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
@@ -487,7 +517,7 @@ fn vm_compiled(
     }
     write_u64(mem, VM_COMPILER + VMC_LOG_COUNT, 0);
     if took {
-        crate::monitor_code::host_release_runtime_word(mem);
+        host_release_runtime_word(ConcurrentGuestMemory::new(mem));
     }
 }
 
@@ -747,7 +777,7 @@ fn run(
             // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
             let site = match exit.hvc_immediate() {
                 Some(1) => vcpu.reg(Reg::X(17))?,
-                Some(_) => x86_address_at(mem, pc.wrapping_sub(4)).unwrap_or(0),
+                Some(_) => x86_address_at(ConcurrentGuestMemory::new(mem), pc.wrapping_sub(4)).unwrap_or(0),
                 None => pc,
             };
             let request = (exit.hvc_immediate() == Some(8)).then(|| {
@@ -909,7 +939,7 @@ fn run(
         if number == crate::cases::HVC_SLOW_SSE || number == crate::cases::HVC_SLOW_STEP {
             // `serve_exit` (5232, 5270-5271; Sprint 181): the instruction at the hvc's site, one step of the model,
             // on at the dispatcher or the runtime's exception call as the step leaves the PC
-            let rip = match x86_address_at(guest.memory.as_slice(), pc - 4) {
+            let rip = match x86_address_at(ConcurrentGuestMemory::new(guest.memory.as_mut_slice()), pc - 4) {
                 Ok(rip) => rip,
                 Err(why) => break Stop::Exit(why),
             };
@@ -955,7 +985,7 @@ fn run(
             if !others && guest.threads.len() < 2 {
                 continue;
             }
-            let at = match x86_address_at(guest.memory.as_slice(), pc - 4) {
+            let at = match x86_address_at(ConcurrentGuestMemory::new(guest.memory.as_mut_slice()), pc - 4) {
                 Ok(at) => at,
                 Err(why) => break Stop::Exit(why),
             };
@@ -1045,8 +1075,7 @@ fn run(
                 },
             },
         };
-        let mem = guest.memory.as_mut_slice();
-        dispatch_insert(mem, target, va);
+        dispatch_insert(ConcurrentGuestMemory::new(guest.memory.as_mut_slice()), target, va);
         vcpu.set_reg(Reg::Pc, guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
     // the stop's own row, then the file whole (Sprint 206)
@@ -1078,7 +1107,19 @@ fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::{known_block, recon_lookup};
+    use super::known_block;
+
+    /// `super::recon_lookup` over a copy of `table`'s bytes, through the view.
+    fn recon_lookup(table: &[u8], at: u64, n: u64, capacity: u64, pc: u64) -> Result<u64, String> {
+        let mut bytes = table.to_vec();
+        super::recon_lookup(
+            crate::concurrent_memory::ConcurrentGuestMemory::new(&mut bytes),
+            at,
+            n,
+            capacity,
+            pc,
+        )
+    }
     use std::collections::BTreeMap;
 
     /// Sprint 250: with the host's compiler present, a block a write dropped from its map is unknown though the
@@ -1141,78 +1182,40 @@ mod tests {
 
     /// The guest memory's monitor area, as large as the compiler's area reaches, its runtime word held by `holder`
     /// and this vCPU's `LOCK_OWNER` `own`.
-    fn monitor_area(holder: u32, own: u64) -> Vec<u8> {
+    fn monitor_area(holder: u32, own: u64) -> Vec<u64> {
         use guest_runtime::layout::{LOCK_OWNER, MONITOR_DATA, RUN_TABLE, VM_COMPILER, VM_COMPILER_SIZE};
-        let mut mem = vec![0u8; (VM_COMPILER + VM_COMPILER_SIZE) as usize];
-        let at = (RUN_TABLE + crate::monitor_code::RUNTIME_LOCK) as usize;
-        mem[at..at + 4].copy_from_slice(&holder.to_le_bytes());
-        super::write_u64(&mut mem, MONITOR_DATA + LOCK_OWNER, own);
-        mem
+        // 8-byte words, so the runtime word is aligned for its atomic
+        let mut area = vec![0u64; ((VM_COMPILER + VM_COMPILER_SIZE) / 8) as usize];
+        area[((RUN_TABLE + crate::monitor_code::RUNTIME_LOCK) / 8) as usize] = u64::from(holder);
+        area[((MONITOR_DATA + LOCK_OWNER) / 8) as usize] = own;
+        area
     }
 
-    /// Runs `f` on `mem` on another thread and says whether it returned within 50 ms while the word is held by
-    /// another, then frees the word and waits for `f`. Every access to the word on both threads is atomic.
-    fn waits_for_the_word(mem: &mut [u8], f: fn(&mut [u8])) -> bool {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        let (p, len) = (mem.as_mut_ptr() as usize, mem.len());
-        let returned = AtomicBool::new(false);
-        let waited = std::thread::scope(|s| {
-            let returned = &returned;
-            let t = s.spawn(move || {
-                // SAFETY: the buffer outlives the scope; the two threads share only the runtime word, atomically
-                f(unsafe { std::slice::from_raw_parts_mut(p as *mut u8, len) });
-                returned.store(true, Ordering::Release);
-            });
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let waited = !returned.load(Ordering::Acquire);
-            crate::monitor_code::host_release_runtime_word(unsafe {
-                std::slice::from_raw_parts_mut(p as *mut u8, len)
-            });
-            t.join().unwrap();
-            waited
-        });
-        waited && returned.load(Ordering::Acquire)
-    }
-
-    /// Sprint 275 (census D6): the host's take of the runtime word waits while a vCPU holds it and goes on when it is
-    /// freed; it does not wait for the vCPU whose exit it serves, which holds the word across a host request; a free
-    /// word it takes, and releases.
-    #[test]
-    fn the_hosts_take_waits_for_another_vcpus_hold_of_the_runtime_word() {
-        use crate::monitor_code::{HOST_OWNER, RUNTIME_LOCK, host_release_runtime_word, host_take_runtime_word};
-        use guest_runtime::layout::RUN_TABLE;
-        let word = |mem: &[u8]| {
-            let at = (RUN_TABLE + RUNTIME_LOCK) as usize;
-            u32::from_le_bytes(mem[at..at + 4].try_into().unwrap())
-        };
-        let mut held = monitor_area(1, 2);
-        assert!(waits_for_the_word(&mut held, |mem| {
-            assert!(host_take_runtime_word(mem, 2));
-        }));
-        let mut own = monitor_area(2, 2);
-        assert!(!host_take_runtime_word(&mut own, 2), "its own vCPU's hold");
-        assert_eq!(word(&own), 2);
-        let mut free = monitor_area(0, 2);
-        assert!(host_take_runtime_word(&mut free, 2));
-        assert_eq!(word(&free), HOST_OWNER);
-        host_release_runtime_word(&mut free);
-        assert_eq!(word(&free), 0);
-    }
-
-    /// Sprint 275: the drain of the compile log waits while another vCPU holds the runtime word, as an append would
-    /// (plant 2 drains without it).
+    /// Sprints 275 and 276: the drain of the compile log waits while another vCPU holds the runtime word, as an append
+    /// would; the wait frees the word as that vCPU would, so no second thread and no time (plant 2 drains without it).
     #[test]
     fn the_logs_drain_waits_for_another_vcpus_hold_of_the_runtime_word() {
-        let mut held = monitor_area(1, 2);
-        assert!(waits_for_the_word(&mut held, |mem| {
-            super::vm_compiled(
-                mem,
-                &mut BTreeMap::new(),
-                &mut Vec::new(),
-                &mut Vec::new(),
-                &mut super::InstructionsAt::default(),
-                None,
-            );
-        }));
+        use crate::monitor_code::RUNTIME_LOCK;
+        use guest_runtime::layout::RUN_TABLE;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        let mut area = monitor_area(1, 2);
+        let len = area.len() * 8;
+        let mem = unsafe { std::slice::from_raw_parts_mut(area.as_mut_ptr().cast::<u8>(), len) };
+        let mut waited_for = Vec::new();
+        super::vm_compiled_waiting(
+            mem,
+            &mut BTreeMap::new(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut super::InstructionsAt::default(),
+            None,
+            &mut |word: &AtomicU32| waited_for.push(word.swap(0, Ordering::AcqRel)),
+        );
+        assert_eq!(waited_for, [1], "the drain did not wait for the other vCPU's hold");
+        assert_eq!(
+            super::read_u64(mem, RUN_TABLE + RUNTIME_LOCK) & 0xFFFF_FFFF,
+            0,
+            "the drain left the word held"
+        );
     }
 }

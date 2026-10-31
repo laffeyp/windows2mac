@@ -503,7 +503,11 @@ pub fn run_cases(
                 write_u64(mem, slot + 8, *x86);
             }
             write_u64(mem, RUN_TABLE + RECON_COUNT, recon0 + marks.len() as u64);
-            dispatch_insert(mem, CODE_VA, MONITOR_VA + cursor0);
+            dispatch_insert(
+                crate::concurrent_memory::ConcurrentGuestMemory::new(mem),
+                CODE_VA,
+                MONITOR_VA + cursor0,
+            );
             // `flush_translations` dropped the tails; `_note_tails` (4630) the block's one instruction mark
             tails.clear();
             tails.note(&[marks[1].0]);

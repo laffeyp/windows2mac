@@ -24,6 +24,7 @@ use hypervisor::{Reg, Vcpu, Vm, memory, sys_reg};
 use pe_loader::{Loaded, Memory};
 use w2m_vm::CPSR_EL1H;
 use w2m_vm::compile::HostCompiler;
+use w2m_vm::concurrent_memory::ConcurrentGuestMemory;
 use w2m_vm::guest::{Guest, VMC_ENABLED, vm_compiler_symbols};
 use w2m_vm::model_step::{ModelStep, model_step};
 use w2m_vm::monitor::set_system_registers;
@@ -221,6 +222,13 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
     vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
         .unwrap();
     let (ttbr, dispatch_va, miss_va) = (guest.ttbr, guest.code.dispatch_va, guest.code.miss_va);
+    // what the host reads and writes while other vCPUs run goes through the view, which makes no reference into the
+    // memory (Sprint 276); the compile and the model's step still take slices under the lock (census D7)
+    let concurrent = {
+        let m = guest.memory.as_mut_slice();
+        // SAFETY: the mapping is `guest.memory`'s, which outlives the threads; it does not move with `guest`
+        unsafe { ConcurrentGuestMemory::from_raw_parts(m.as_mut_ptr(), m.len()) }
+    };
     let shared = Mutex::new((guest, HostCompiler::default()));
     // thread k to its DONE: misses compiled under the lock, slice ends renewed
     let run_thread = |k: usize, n: u64, wait_for: u64| {
@@ -259,7 +267,7 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
                             .compile(guest, target)
                             .unwrap_or_else(|e| panic!("thread {k} of {test}: {e}")),
                     };
-                    dispatch_insert(guest.memory.as_mut_slice(), target, va);
+                    dispatch_insert(concurrent, target, va);
                     drop(held);
                     vcpu.set_reg(Reg::Pc, miss_va + 4).unwrap();
                 }
@@ -270,9 +278,9 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
                     let pc = vcpu.reg(Reg::Pc).unwrap();
                     let mut held = shared.lock().unwrap();
                     let (guest, _) = &mut *held;
-                    let rip = x86_address_at(guest.memory.as_slice(), pc - 4).unwrap();
-                    let at = guest.layout.offset(rip).unwrap() as usize;
-                    let code = guest.memory.as_slice()[at..at + 15].to_vec();
+                    let rip = x86_address_at(concurrent, pc - 4).unwrap();
+                    let mut code = vec![0u8; 15];
+                    concurrent.read(guest.layout.offset(rip).unwrap(), &mut code);
                     let stepped = model_step(guest, &vcpu, &code, rip).unwrap();
                     assert!(
                         matches!(stepped, ModelStep::Resumed),

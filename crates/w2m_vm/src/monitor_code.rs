@@ -16,6 +16,7 @@ use guest_runtime::layout::{
 };
 
 use crate::assembler::{Assembler, Target};
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::{CPSR_EL1H, DISPATCHER, VECTORS};
 
 /// VM_COMPILER + this (Sprint 247): the virtual counter's ticks the miss stub spent calling `w2m_vm_compile`, summed
@@ -130,32 +131,39 @@ pub fn lock_runtime(a: &mut Assembler) {
 /// The owner the host writes in the runtime word while it holds it (Sprint 275): no vCPU's `LOCK_OWNER`.
 pub const HOST_OWNER: u32 = u32::MAX;
 
-/// The runtime word in the guest's memory `mem` (offset `RUN_TABLE + RUNTIME_LOCK`), as an atomic for one access: the
-/// guest takes it by `CASA` and releases it by `STLR` on the same physical word, so a host atomic is the guest's word.
-fn runtime_word(mem: &mut [u8]) -> &std::sync::atomic::AtomicU32 {
-    let off = (RUN_TABLE + RUNTIME_LOCK) as usize;
-    let p = mem[off..off + 4].as_mut_ptr().cast::<u32>();
-    // SAFETY: the word is 4-byte aligned (`RUNTIME_LOCK` 0x80 in the page-aligned run table) and lives as long as `mem`;
-    // every access to it, the guest's and the host's, is atomic
-    unsafe { std::sync::atomic::AtomicU32::from_ptr(p) }
+/// The runtime word in the guest's memory (offset `RUN_TABLE + RUNTIME_LOCK`): the guest takes it by `CASA` and
+/// releases it by `STLR` on the same physical word, so a host atomic is the guest's word.
+fn runtime_word<'a>(mem: ConcurrentGuestMemory<'a>) -> &'a std::sync::atomic::AtomicU32 {
+    mem.atomic_u32(RUN_TABLE + RUNTIME_LOCK)
 }
 
 /// The host takes the runtime word (Sprint 275, census D6), waiting while a vCPU holds it, unless the vCPU whose exit
 /// the host serves holds it already (`own`, its `LOCK_OWNER`: the frozen host holds the word across a host request):
 /// whether the host took it, and so must release it.
-pub fn host_take_runtime_word(mem: &mut [u8], own: u32) -> bool {
+pub fn host_take_runtime_word(mem: ConcurrentGuestMemory<'_>, own: u32) -> bool {
+    host_take_runtime_word_waiting(mem, own, &mut |_| std::hint::spin_loop())
+}
+
+/// `host_take_runtime_word`, calling `wait` with the word each time another holds it (Sprint 276: a test sees the take
+/// wait, and frees the word as the holder would, with no time read).
+pub fn host_take_runtime_word_waiting(
+    mem: ConcurrentGuestMemory<'_>,
+    own: u32,
+    wait: &mut dyn FnMut(&std::sync::atomic::AtomicU32),
+) -> bool {
     use std::sync::atomic::Ordering;
+    let word = runtime_word(mem);
     loop {
-        match runtime_word(mem).compare_exchange(0, HOST_OWNER, Ordering::Acquire, Ordering::Relaxed) {
+        match word.compare_exchange(0, HOST_OWNER, Ordering::Acquire, Ordering::Relaxed) {
             Ok(_) => return true,
             Err(holder) if holder == own => return false,
-            Err(_) => std::hint::spin_loop(),
+            Err(_) => wait(word),
         }
     }
 }
 
 /// The host releases the runtime word it took.
-pub fn host_release_runtime_word(mem: &mut [u8]) {
+pub fn host_release_runtime_word(mem: ConcurrentGuestMemory<'_>) {
     runtime_word(mem).store(0, std::sync::atomic::Ordering::Release);
 }
 
@@ -1044,5 +1052,69 @@ mod tests {
             !plain.contains(&a64::cmp(17, 16)),
             "the default dispatcher compares x17 with x16"
         );
+    }
+
+    /// The runtime word's page, held by owner `holder`, as 8-byte words so the word is aligned.
+    fn word_page(holder: u32) -> Vec<u64> {
+        let mut page = vec![0u64; ((guest_runtime::layout::RUN_TABLE + super::RUNTIME_LOCK) / 8 + 1) as usize];
+        let at = ((guest_runtime::layout::RUN_TABLE + super::RUNTIME_LOCK) / 8) as usize;
+        page[at] = u64::from(holder);
+        page
+    }
+
+    fn view(page: &mut [u64]) -> super::ConcurrentGuestMemory<'_> {
+        let len = page.len() * 8;
+        super::ConcurrentGuestMemory::new(unsafe {
+            std::slice::from_raw_parts_mut(page.as_mut_ptr().cast::<u8>(), len)
+        })
+    }
+
+    /// Sprints 275 and 276 (census D6, reviewer-3's Low 1 at 275): the host's take waits while another vCPU holds the
+    /// runtime word, on another thread, and goes on once that vCPU frees it; the holder frees it only after the take
+    /// has found it held, so no time is read (plant 1 makes the take a plain store, which never waits).
+    #[test]
+    fn the_hosts_take_waits_for_another_vcpus_hold_of_the_runtime_word() {
+        use super::{RUN_TABLE, RUNTIME_LOCK, host_release_runtime_word, host_take_runtime_word_waiting};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let mut page = word_page(1);
+        let mem = view(&mut page);
+        let (waited, took) = (AtomicBool::new(false), AtomicBool::new(false));
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                let taken = host_take_runtime_word_waiting(mem, 2, &mut |_| {
+                    waited.store(true, Ordering::Release);
+                    std::hint::spin_loop();
+                });
+                took.store(taken, Ordering::Release);
+            });
+            // the other vCPU: frees the word once the take has found it held, or sees the take finish without waiting
+            while !waited.load(Ordering::Acquire) && !took.load(Ordering::Acquire) {
+                std::hint::spin_loop();
+            }
+            mem.atomic_u32(RUN_TABLE + RUNTIME_LOCK)
+                .compare_exchange(1, 0, Ordering::Release, Ordering::Relaxed)
+                .ok();
+        });
+        assert!(
+            waited.load(Ordering::Acquire),
+            "the take did not wait for the other vCPU's hold"
+        );
+        assert!(took.load(Ordering::Acquire), "the take did not take the freed word");
+        assert_eq!(mem.read_u32(RUN_TABLE + RUNTIME_LOCK), super::HOST_OWNER);
+        host_release_runtime_word(mem);
+        assert_eq!(mem.read_u32(RUN_TABLE + RUNTIME_LOCK), 0);
+    }
+
+    /// Sprint 275: the take does not wait for the vCPU whose exit it serves, which holds the word across a host
+    /// request, and takes a free word.
+    #[test]
+    fn the_hosts_take_passes_its_own_vcpus_hold_and_takes_a_free_word() {
+        use super::{HOST_OWNER, RUN_TABLE, RUNTIME_LOCK, host_take_runtime_word};
+        let mut own = word_page(2);
+        assert!(!host_take_runtime_word(view(&mut own), 2), "its own vCPU's hold");
+        assert_eq!(view(&mut own).read_u32(RUN_TABLE + RUNTIME_LOCK), 2);
+        let mut free = word_page(0);
+        assert!(host_take_runtime_word(view(&mut free), 2));
+        assert_eq!(view(&mut free).read_u32(RUN_TABLE + RUNTIME_LOCK), HOST_OWNER);
     }
 }
