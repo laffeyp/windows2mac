@@ -7,7 +7,9 @@
 //! `store/exit_ledger/python.sha256`; WORKING_AGREEMENT gives its generator); `scripts/gates.sh` writes the Rust host's
 //! (`w2m-vm --exit-ledger build/exit_ledger/rust.tsv`). Every differing (process, row, column) is held to
 //! `store/exit_ledger/differences-2026-10-29.tsv` (Sprint 209), so a change in where the hosts part fails by name until
-//! the file is rewritten with the card that moved it.
+//! the file is rewritten with the card that moved it. From Sprint 272 the rows are aligned first: a Rust host compile
+//! (`hvc 1`) the frozen host did not take, its next row meeting the frozen row, is held as an extra by its site, the C
+//! compiler declining a memory XCHG to the host, and the rows after it compare from where they meet again.
 //!
 //! The last row is the stop, the game's first MAP_VIEW request, which the fixture records as it arrives, before the
 //! request's answer exists: it is compared without its site and answer columns. From Sprint 211 the Rust host serves
@@ -29,6 +31,9 @@ const UNKNOWN_AT_STOP: [usize; 4] = [2, 10, 11, 12];
 /// process area's sha256. The fixture's stop row reads them at its stop; a Rust run that goes past that stop (Sprint
 /// 211, MAP_VIEW served) reads them at its next exit, so they too are unknown there.
 const READ_AT_RESUME: [usize; 3] = [3, 4, 13];
+/// The most host compiles in a row the alignment takes for extras (Sprint 272): a declined XCHG and the block cut before
+/// it, with room; a longer run is a parting, named cell by cell.
+const EXTRA_RUN: usize = 8;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -52,21 +57,66 @@ fn differences(process: &str, python: &[Vec<String>], rust: &[Vec<String>]) -> V
     // the ledger stays at the first MAP_VIEW until the fixture runs further), nor the stop row's resume columns
     let past = rust.len() > python.len();
     let cell = |row: &Vec<String>, c: usize| row.get(c).map_or("-", |s| s).to_string();
+    // the differing cells of the frozen host's row i against a Rust row `r`; a column read at resume (the executed count,
+    // the warp, the process area) matches `r`'s or that of any extra compile after it, `also`, since where an extra
+    // exit falls moves which row carries the reading (`count` is the count the next exit finds, Sprint 258); `at_exit`
+    // alone compares only the columns written at the exit itself
+    let differing = |i: usize, p: &Vec<String>, r: &Vec<String>, also: &[Vec<String>], at_exit: bool| -> Vec<String> {
+        COLUMNS
+            .iter()
+            .enumerate()
+            .skip(1)
+            .filter(|(c, _)| !(at_exit && READ_AT_RESUME.contains(c)))
+            .filter_map(|(c, column)| {
+                let unknown = i == last && (UNKNOWN_AT_STOP.contains(&c) || (past && READ_AT_RESUME.contains(&c)));
+                let candidates = if READ_AT_RESUME.contains(&c) { also } else { &[][..] };
+                let equal = p.get(c) == r.get(c) || candidates.iter().any(|x| p.get(c) == x.get(c));
+                (!unknown && p.get(c).is_none_or(|v| v != "*") && !equal).then(|| {
+                    format!(
+                        "{process}\t{i}\t{column}\t{}\t{}\t{}",
+                        cell(p, c),
+                        cell(r, c),
+                        cell(p, 1)
+                    )
+                })
+            })
+            .collect()
+    };
+    // the alignment (Sprint 272): a Rust `hvc 1` whose next row meets the frozen host's row at the exit, where the
+    // `hvc 1` itself does not, is an extra compile, held by its site; the C compiler declines a memory XCHG to the host,
+    // which the frozen host's C compiled itself
+    let mut matched: Vec<(usize, usize, usize)> = Vec::new();
     let mut out = Vec::new();
-    for (i, (p, r)) in python.iter().zip(rust).enumerate() {
-        for (c, column) in COLUMNS.iter().enumerate().skip(1) {
-            let unknown = i == last && (UNKNOWN_AT_STOP.contains(&c) || (past && READ_AT_RESUME.contains(&c)));
-            if !unknown && p.get(c).is_none_or(|v| v != "*") && p.get(c) != r.get(c) {
-                out.push(format!(
-                    "{process}\t{i}\t{column}\t{}\t{}\t{}",
-                    cell(p, c),
-                    cell(r, c),
-                    cell(p, 1)
-                ));
+    let (mut i, mut j) = (0, 0);
+    while i < python.len() && j < rust.len() {
+        let p = &python[i];
+        let meets = |n: &Vec<String>| differing(i, p, n, &[], true).is_empty();
+        // a run of at most `EXTRA_RUN` Rust `hvc 1` rows, the row after it meeting the frozen row: each an extra (a block
+        // cut before a declined XCHG compiles at the host as well as the XCHG's own)
+        let run = rust[j..]
+            .iter()
+            .take(EXTRA_RUN)
+            .take_while(|n| cell(n, 1) == "hvc 1" && !meets(n))
+            .count();
+        if run > 0 && rust.get(j + run).is_some_and(meets) {
+            for extra in &rust[j..j + run] {
+                out.push(format!("{process}\t{i}\textra\thvc 1\t{}", cell(extra, 2)));
             }
+            j += run;
+            if let Some(m) = matched.last_mut() {
+                m.2 = j; // the extras after the matched row, rust[m.1 + 1..m.2]
+            }
+            continue;
         }
+        matched.push((i, j, j + 1));
+        i += 1;
+        j += 1;
     }
-    for (i, p) in python.iter().enumerate().skip(rust.len()) {
+    for (i, j, extras_end) in matched {
+        out.extend(differing(i, &python[i], &rust[j], &rust[j + 1..extras_end], false));
+    }
+    out.sort_by_key(|l| l.split('\t').nth(1).and_then(|n| n.parse::<usize>().ok()).unwrap_or(0));
+    for (i, p) in python.iter().enumerate().skip(i) {
         out.push(format!("{process}\t{i}\tmissing\t{}", cell(p, 1)));
     }
     // rows past the fixture's end are not held for any process: the fixture's run stops every process when the game
@@ -206,4 +256,47 @@ fn a_difference_is_named_by_its_row_and_column() {
     assert!(differences("4100", &python, &child).is_empty());
     child[0][2] = "12".into();
     assert_eq!(differences("4100", &python, &child), ["4100\t0\tsite\t10\t12\thvc 1"]);
+}
+
+/// Sprint 272: a Rust `hvc 1` the frozen host did not take is an extra compile, held by its site, alone or in a run,
+/// and the rows after it compare from where they meet again; a frozen row's resume reading may fall on an extra after
+/// its match. An `hvc 1` whose next row does not meet the frozen row is a parting, named cell by cell.
+#[test]
+fn an_extra_compile_is_held_by_its_site_and_the_rows_meet_again() {
+    let row = |s: &str| s.split('\t').map(str::to_string).collect::<Vec<_>>();
+    let python = vec![
+        row("0\thvc 1\t10\t27\t0\t-\t-\t-\t-\t-\t-\t-\t-\taa"),
+        row("1\thvc 8\t20\t30\t0\tf\t1\t2\t3\t4\t0\t0\t-\tbb"),
+        row("2\thvc 1\t30\t40\t0\t-\t-\t-\t-\t-\t-\t-\t-\tcc"),
+        // the stop, whose site the fixture cannot know; the extras below come before row 2, not at the stop
+        row("3\thvc 8\t70\t41\t0\tf\t1\t2\t3\t4\t0\t0\t-\tdd"),
+    ];
+    let one = vec![
+        python[0].clone(),
+        row("1\thvc 1\t50\t28\t0\t-\t-\t-\t-\t-\t-\t-\t-\taa"),
+        python[1].clone(),
+        python[2].clone(),
+        python[3].clone(),
+    ];
+    assert_eq!(differences("main", &python, &one), ["main\t1\textra\thvc 1\t50"]);
+    // two in a run, and the frozen row 1's executed count read on the extra after its match
+    let mut two = vec![python[0].clone(), python[1].clone()];
+    two[1][3] = "29".into();
+    two.push(row("2\thvc 1\t60\t30\t0\t-\t-\t-\t-\t-\t-\t-\t-\tbb"));
+    two.push(row("3\thvc 1\t61\t30\t0\t-\t-\t-\t-\t-\t-\t-\t-\tbb"));
+    two.push(python[2].clone());
+    two.push(python[3].clone());
+    assert_eq!(
+        differences("main", &python, &two),
+        ["main\t2\textra\thvc 1\t60", "main\t2\textra\thvc 1\t61"]
+    );
+    // an hvc 1 whose next row does not meet the frozen row: a parting, named cell by cell from its row, not an extra
+    let mut parting = one.clone();
+    parting[2][2] = "21".into();
+    let found = differences("main", &python, &parting);
+    assert_eq!(
+        found.first().map(String::as_str),
+        Some("main\t1\tkind\thvc 8\thvc 1\thvc 8"),
+        "{found:?}"
+    );
 }

@@ -1,2 +1,32 @@
 # every cell where the Rust host's exit ledger departs from the frozen Python host's, the batch run to the game's first MAP_VIEW 29, outside the varying cells (Sprint 209; each column's first difference in Sprint 206-208's first-difference-2026-10-28.tsv): process, row, column, the frozen host's value, the Rust host's, the row's kind; or process, row, "missing" or "extra", the row's kind. Written by crates/w2m_vm/tests/exit_ledger.rs and held by it. The child's row 190 is the pending row the fixture writes when it stops the run; the Rust child is stopped before writing its own.
 # Sprint 213: no difference. The Rust run goes past the first MAP_VIEW, so the child writes its row 190, and it equals the fixture's stop row in every held column; until then the one line here was "4100	190	missing	hvc 12".
+# Sprint 272: the C compiler inside the VM declines a memory XCHG to the host's atomic lowering, so the Rust host takes a host compile (`hvc 1`) the frozen host did not, at the XCHG or at the block cut before it; each is held as an extra by the frozen row it comes before and its site, and every other cell of both processes' ledgers equals the frozen host's.
+main	7	extra	hvc 1	1814150d0
+main	9	extra	hvc 1	181415136
+main	16	extra	hvc 1	18143cbd8
+main	17	extra	hvc 1	18143cc3e
+main	114	extra	hvc 1	18081db02
+main	141	extra	hvc 1	140002218
+main	143	extra	hvc 1	14000227e
+main	147	extra	hvc 1	140006cc4
+main	148	extra	hvc 1	140006d2a
+main	170	extra	hvc 1	14000358d
+main	170	extra	hvc 1	140003595
+main	178	extra	hvc 1	1400036fa
+main	196	extra	hvc 1	18140b569
+main	236	extra	hvc 1	18059a534
+main	252	extra	hvc 1	1805950c6
+main	308	extra	hvc 1	18143e914
+main	366	extra	hvc 1	118032b3d3
+main	368	extra	hvc 1	118032b448
+main	372	extra	hvc 1	118037a38a
+main	373	extra	hvc 1	118037a3f0
+main	1001	extra	hvc 1	1180032a87
+main	1002	extra	hvc 1	1180032b3f
+4100	7	extra	hvc 1	140041f78
+4100	9	extra	hvc 1	140041fde
+4100	16	extra	hvc 1	140051214
+4100	17	extra	hvc 1	14005127a
+4100	42	extra	hvc 1	14004c795
+4100	42	extra	hvc 1	14004c79d
+4100	99	extra	hvc 1	14004dbfe
