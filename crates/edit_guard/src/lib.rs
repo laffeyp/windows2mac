@@ -4,7 +4,9 @@
 //! file before it lands (WORKING_AGREEMENT; the Drift watchlist). Sprints 189, 191 and 194 each made one with the
 //! shell instead, a third within three sprints, so the rule became this check (Sprint 195): `refusal` names a Bash
 //! command that writes a multi-line change to a file outside the temporary directories, by a heredoc redirected or
-//! piped to `tee`, or by `sed -i` with `a\`, `i\` or `c\`, an address range, or a newline in its script. Sprint 267
+//! piped to `tee`, or by `sed -i` with any command that changes the line count or writes another file (Sprint 277:
+//! `a`, `i`, `c`, `r`, `R`, `G`, `N`, `D`, `p`, `P`, `=`, `l`, `F`, `q`, `Q`, `w`, `W`, `e`, `!`, an `s` flag `p`,
+//! `w` or `e`, an address range), a newline in its script, `-n` or `-f`. Sprint 267
 //! (reviewer-3's Medium 1 at 266: Python started in Sprints 238, 240, 250 and 266, shell edits in 262, 263 and 266)
 //! adds an in-place `perl` or `awk` edit, and any start of a Python interpreter or installer, the user's Decision "No
 //! Python runs", by a command's program and not by a word that only names it.
@@ -134,9 +136,10 @@ fn free(path: &str) -> bool {
         .any(|f| path.starts_with(f) || path == f.trim_end_matches('/'))
 }
 
-/// A `sed` script that changes more than one line: `a\`, `i\` or `c\`, an address range, a newline, or a `\n` escape,
-/// which macOS's sed writes as a newline in a replacement (Sprint 212: Sprint 211's substitution made two lines one
-/// each by `\n`, and the classifier passed it).
+/// A `sed -i` script that changes more than one line: a newline, or a `\n` escape, which macOS's sed writes as a
+/// newline in a replacement (Sprint 212: Sprint 211's substitution made two lines one each by `\n`, and the classifier
+/// passed it); an address range; or a command that adds, joins, prints, reads or cuts lines, or writes another file
+/// (Sprint 277).
 fn multi_line_script(script: &str) -> Option<&'static str> {
     if script.contains('\n') {
         return Some("a newline in its script");
@@ -153,40 +156,109 @@ fn multi_line_script(script: &str) -> Option<&'static str> {
         }
         i += 1;
     }
-    for command in script.split(';') {
-        let command = command.trim_start();
-        // the address: a line number, `$`, or a /regex/, then an optional ",address"
-        let mut rest = command;
-        let mut range = false;
-        for part in 0..2 {
-            let skipped = if let Some(regex) = rest.strip_prefix('/') {
-                regex.find('/').map(|i| i + 2)
-            } else {
-                Some(
-                    rest.find(|c: char| !(c.is_ascii_digit() || c == '$'))
-                        .unwrap_or(rest.len()),
-                )
-            };
-            let Some(n) = skipped else { break };
-            if n == 0 {
-                break;
-            }
-            rest = rest[n..].trim_start();
-            if part == 0 && rest.starts_with(',') {
-                range = true;
-                rest = &rest[1..];
-            } else {
-                break;
-            }
+    // each command, inside braces too: [address[,address]][!]command[arguments], as `man sed` (BSD) and GNU sed's
+    // manual set them (Sprint 277: `343r file` passed the split on `;`, and so did a command inside braces)
+    let s: Vec<char> = script.chars().collect();
+    let mut i = 0;
+    while i < s.len() {
+        if s[i].is_whitespace() || matches!(s[i], ';' | '{' | '}') {
+            i += 1;
+            continue;
         }
-        if range && !rest.starts_with('p') {
+        let mut addresses = 0;
+        loop {
+            let start = i;
+            if s[i] == '/' || s[i] == '\\' {
+                // a /regex/, or \cregexc
+                let delimiter = if s[i] == '\\' {
+                    i += 1;
+                    *s.get(i)?
+                } else {
+                    '/'
+                };
+                i += 1;
+                while i < s.len() && s[i] != delimiter {
+                    i += if s[i] == '\\' { 2 } else { 1 };
+                }
+                i += 1;
+                while i < s.len() && matches!(s[i], 'I' | 'M') {
+                    i += 1;
+                }
+            } else {
+                while i < s.len() && (s[i].is_ascii_digit() || matches!(s[i], '$' | '~' | '+')) {
+                    i += 1;
+                }
+            }
+            if i == start {
+                break;
+            }
+            addresses += 1;
+            while i < s.len() && s[i].is_whitespace() {
+                i += 1;
+            }
+            if addresses == 1 && s.get(i) == Some(&',') {
+                i += 1;
+                continue;
+            }
+            break;
+        }
+        while i < s.len() && s[i].is_whitespace() {
+            i += 1;
+        }
+        let Some(&c) = s.get(i) else { break };
+        if c == '!' {
+            return Some("a ! command, which acts on every line but its address's");
+        }
+        if c == '{' {
+            if addresses == 2 {
+                return Some("an address range");
+            }
+            i += 1;
+            continue;
+        }
+        if addresses == 2 && c != 'p' {
             return Some("an address range");
         }
-        let mut cs = rest.chars();
-        if let (Some(c), Some('\\')) = (cs.next(), cs.next())
-            && matches!(c, 'a' | 'i' | 'c')
-        {
-            return Some("an a\\, i\\ or c\\ command");
+        match c {
+            'a' | 'i' | 'c' => return Some("an a, i or c command"),
+            'r' | 'R' => return Some("an r or R command, which reads another file's lines in"),
+            'G' | 'N' | 'D' => return Some("a G, N or D command, which adds or joins lines"),
+            'p' | 'P' | '=' | 'l' | 'F' => return Some("a p, P, =, l or F command, which prints a line into the file"),
+            'q' | 'Q' => return Some("a q or Q command, which cuts the file"),
+            'w' | 'W' | 'e' => return Some("a w, W or e command, which writes another file or runs one"),
+            's' | 'y' => {
+                // three delimiters, then for `s` its flags
+                let delimiter = *s.get(i + 1)?;
+                i += 2;
+                let mut seen = 1;
+                while i < s.len() && seen < 3 {
+                    if s[i] == '\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if s[i] == delimiter {
+                        seen += 1;
+                    }
+                    i += 1;
+                }
+                let flags_start = i;
+                while i < s.len() && !matches!(s[i], ';' | '}' | '\n') {
+                    i += 1;
+                }
+                let flags: String = s[flags_start..i].iter().collect();
+                if c == 's' && flags.chars().any(|f| matches!(f, 'p' | 'w' | 'e')) {
+                    return Some("an s command with a p, w or e flag");
+                }
+            }
+            _ => {
+                // b, t and : take a label; d, g, h, H, n, x, z and the rest are one character
+                i += 1;
+                if matches!(c, 'b' | 't' | 'T' | ':') {
+                    while i < s.len() && !matches!(s[i], ';' | '}') {
+                        i += 1;
+                    }
+                }
+            }
         }
     }
     None
@@ -320,6 +392,18 @@ pub fn refusal(command: &str) -> Option<String> {
             if !args.iter().any(|a| a.starts_with("-i") || *a == "--in-place") {
                 continue;
             }
+            // `-n` keeps only the printed lines; `-f` reads a script the guard cannot see (Sprint 277). An `-i` word
+            // carries its backup suffix, any letters, so it is not read for flags.
+            let flag = |a: &str, short: char, long: &[&str]| {
+                long.iter().any(|l| a.starts_with(l))
+                    || (a.starts_with('-') && !a.starts_with("--") && !a.starts_with("-i") && a[1..].contains(short))
+            };
+            if args.iter().any(|a| flag(a, 'n', &["--quiet", "--silent"])) {
+                return Some("sed -i with -n, which keeps only the printed lines".into());
+            }
+            if args.iter().any(|a| flag(a, 'f', &["--file"])) {
+                return Some("sed -i with -f, a script the guard cannot read".into());
+            }
             let mut scripts = Vec::new();
             let mut i = 0;
             while i < args.len() {
@@ -392,7 +476,7 @@ mod tests {
         assert!(
             refusal("sed -i '$a\\ last line' f.rs")
                 .unwrap()
-                .contains("a\\, i\\ or c\\")
+                .contains("an a, i or c command")
         );
         assert!(refusal("sed -i '' '5i\\ text' f.rs").is_some());
         assert!(refusal("sed -i '' '/^x/c\\ y' f.rs").is_some());
@@ -413,8 +497,43 @@ mod tests {
         assert!(refusal("sed -i '' 's/a/b\\\\n/' f.rs").is_none());
     }
 
+    /// Sprint 277: every `sed -i` command that changes the line count or writes another file is refused, each with
+    /// its reason; Sprint 276's tail roll inserted a file's lines by `343r` (plant 1), and a command inside braces
+    /// passed the split on `;` (plant 2).
+    #[test]
+    fn every_line_changing_sed_command_is_refused() {
+        let refused = [
+            ("sed -i '' '343r /tmp/entry.txt' docs/a.md", "an r or R command"),
+            ("sed -i '/^x/R f' a.md", "an r or R command"),
+            ("sed -i '$a last line' f.rs", "an a, i or c command"),
+            ("sed -i '' '5i text' f.rs", "an a, i or c command"),
+            ("sed -i '' '/^x/c y' f.rs", "an a, i or c command"),
+            ("sed -i '' '5G' f.rs", "a G, N or D command"),
+            ("sed -i '' '/x/{N;s/a/b/}' f.rs", "a G, N or D command"),
+            ("sed -i '' '$!N;P;D' f.rs", "a ! command"),
+            ("sed -i '' '/x/!d' f.rs", "a ! command"),
+            ("sed -i '' '5p' f.rs", "a p, P, =, l or F command"),
+            ("sed -i '' '=' f.rs", "a p, P, =, l or F command"),
+            ("sed -i '' 's/a;b/c/p' f.rs", "an s command with a p, w or e flag"),
+            ("sed -i '' 's/a/b/w out.txt' f.rs", "an s command with a p, w or e flag"),
+            ("sed -i '' '10q' f.rs", "a q or Q command"),
+            ("sed -i '' '/x/w out.txt' f.rs", "a w, W or e command"),
+            ("sed -i '' '/a/,/b/{s/x/y/}' f.rs", "an address range"),
+            ("sed -i -n '5p' f.rs", "-n, which keeps only the printed lines"),
+            ("sed -i '' -f edits.sed f.rs", "-f, a script the guard cannot read"),
+        ];
+        for (command, why) in refused {
+            let r = refusal(command).unwrap_or_else(|| panic!("allowed: {command}"));
+            assert!(r.contains(why), "{command}: {r}");
+        }
+    }
+
     #[test]
     fn one_line_seds_and_reading_seds_are_allowed() {
+        assert!(refusal("sed -i '' 's/a;b/c;d/' f.rs").is_none());
+        assert!(refusal("sed -i '' '/^x/{s/a/b/;s/c/d/}' f.rs").is_none());
+        assert!(refusal("sed -i '' 'y/abc/xyz/' f.rs").is_none());
+        assert!(refusal("sed -i.new 's/a/b/' f.rs").is_none());
         assert!(refusal("sed -i '' 's/^status: active$/status: done/' sprints/x.md").is_none());
         assert!(refusal("sed -i '' '623s/gates running)/closed)/' BLACKBOARD.md").is_none());
         assert!(refusal("sed -i '' '/^pub const A: u64 = 1;$/d; /^pub const B: u64 = 2;$/d' p.rs").is_none());
