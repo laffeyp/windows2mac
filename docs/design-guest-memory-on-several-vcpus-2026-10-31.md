@@ -53,6 +53,13 @@ running vCPU may write.
 5. **Waiting tests read no time.** The take of the runtime word calls a hook each time it finds the word held
    (`host_take_runtime_word_waiting`); a test frees the word from the hook, or from the holder's thread once the hook
    has run, and so tells a take that waited from one that did not (reviewer-3's Low 1 at 275).
+6. **The runtime word is the outermost lock** (Sprint 287's close, reviewer-3's Medium 1 at 287). A host thread waits
+   for the word holding no host lock, and takes a host structure's own lock (`HostCompiler`, the arena, the file
+   bridge) only inside it; no lock covers `Guest` whole, and each thread reaches guest memory through the view. A guest
+   holds the word across `hvc #8`, and `host_take_runtime_word` spins while another vCPU holds it, so a host lock held
+   over that spin would wait on the request's service while the service waits on the lock. The second vCPU's race
+   test holds the word across a host request on one vCPU while the other misses, a bound on the run's steps failing a
+   hang, and plants a lock over `Guest` held across the take.
 
 ## The structures the host reaches (Sprint 279, reviewer-3's Low 3 at 278)
 
