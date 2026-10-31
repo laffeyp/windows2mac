@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 281
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -102,3 +102,25 @@ as such.
 - [x] One concept: one module's exit-time access moved.
 
 ## result
+
+- **The access** (45382e739): 15 calls at exits through `Guest::memory_view`, not the card's 16:
+  `place_cache_file` runs at load, before the run loop (`w2m-vm.rs` 853-856). The five at load (`Guest::new`,
+  `with_trace` twice, `com_vtables`, `place_cache_file`) keep their slices, each commented as running before any
+  vCPU. `called_service` checks its six bytes against the memory's end, as `mem.get(..)` did.
+- **The translation tables:** `map_pages` changes a descriptor by one atomic load and a Release store;
+  `page_descriptor` writes a split table's 512 descriptors, then stores the entry naming the table with Release.
+- **The TLB question:** settled by lookup. The runtime broadcasts `TLBI VMALLE1IS; DSB ISH; ISB` after the requests
+  that map or unmap pages (`runtime.h` 331-335, at `threads.c` 318 and `runtime.h` 342); a page made valid needs
+  none, as a translation fault is never served from the TLB (the Armv8-A relaxed virtual memory test CoTfRpte). A
+  fourth precondition of the second vCPU found instead: a block split changes the block size, which needs
+  break-before-make while another vCPU runs (Will Deacon on LKML, quoted in the design's new row); this Mac's
+  `sysctl` lists no FEAT_BBM. The design's table and the step 6 Decision say so.
+- **Low 2:** the XMM capture is a `[u8; 256]` filled 16 bytes a register.
+- **A commit whose lint failed:** the pre-commit run's lint refused `chunks_exact_mut` with a constant size in the
+  capture; only the run's tail, the tests' line, was read before 45382e739 was committed and pushed and the gates
+  started. The gates were stopped before they wrote a row, the capture fills its registers by `as_chunks_mut::<16>`
+  (6972ba75c), and the lint, the Linux check, the module's and the run-loop tests ran again on it.
+- **The count:** 91 slice calls in `crates/w2m_vm/src/`, from 106; `guest.rs` 5, all at load.
+- **The gates:** `scripts/gates.sh` exit 0 in 674 s, kept in `store/gates/passes.tsv` as sprint 281 at 6972ba75c with root=147f6ba5e and "rust=crates python=0 samples=0", rdeps(w2m_vm), 156 tests, base=9ea9d40ee, Sprint 280's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`, `w2m-vm` rebuilt: `trace_count` reading its count one word off. The card named "a call-trace test"; `the_batch_runs_calls_are_the_python_runs_up_to_the_stop` passed under it in 0.08 s, as it compares the stored records and runs no guest, so the plant ran on the live game instead (`w2m-vm --game` as the gates run it, the stop in the scratchpad): the run reached the same `ReferenceEnd` and its stop file read "calls in flight 30557" where the held one reads "calls in flight 0", the line `the_batch_run_and_the_guests_stop_where_held` compares.
+- **Plant 2,** restored by `cp` and checked by `cmp`: an `as_slice()` added to `clear_exception`'s doc; the count test failed, "guest.rs: 6 slice calls, census D7 allows 5".
