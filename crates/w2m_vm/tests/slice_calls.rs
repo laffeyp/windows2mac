@@ -11,7 +11,7 @@ use std::fs;
 use std::path::Path;
 
 /// Each file's slice calls, as census row D7 states them; a file not named holds none.
-const SLICES: [(&str, usize); 18] = [
+const SLICES: [(&str, usize); 17] = [
     ("batch_stop.rs", 1),
     ("bin/class_judge.rs", 1),
     ("bin/ledger_parting.rs", 1),
@@ -19,21 +19,20 @@ const SLICES: [(&str, usize); 18] = [
     ("block_judge.rs", 1),
     ("cache_file.rs", 1),
     ("cases.rs", 12),
-    ("compile.rs", 12),
     ("guest.rs", 5),
     ("host_request.rs", 2),
     ("kernel.rs", 1),
     ("model_step.rs", 4),
     ("modules.rs", 5),
     ("monitor.rs", 6),
-    ("run.rs", 3),
+    ("run.rs", 2),
     ("shared.rs", 1),
     ("threads.rs", 6),
     ("turns.rs", 2),
 ];
 
 /// Each file's views built from a slice, as census row D7 states them; the view's module is not counted.
-const SLICE_BUILT_VIEWS: [(&str, usize); 4] = [("cases.rs", 1), ("guest.rs", 1), ("monitor_code.rs", 1), ("run.rs", 3)];
+const SLICE_BUILT_VIEWS: [(&str, usize); 4] = [("cases.rs", 1), ("guest.rs", 1), ("monitor_code.rs", 1), ("run.rs", 2)];
 
 /// Each `.rs` file under `dir` holding any of `patterns`, by its path from `root`, with the count.
 fn counts(dir: &Path, root: &Path, patterns: &[&str], out: &mut BTreeMap<String, usize>) {

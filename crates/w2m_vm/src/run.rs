@@ -387,14 +387,6 @@ fn swap_vectors(vcpu: &Vcpu<'_>, mem: ConcurrentGuestMemory<'_>, save: u64, load
     vcpu.set_reg(Reg::Fpsr, mem.read_u64(load + 264))
 }
 
-fn read_u64(mem: &[u8], off: u64) -> u64 {
-    u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
-}
-
-fn write_u64(mem: &mut [u8], off: u64, v: u64) {
-    mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
-}
-
 /// `_dispatch_insert` (vm_backend 4827-4849): (target, va) in its pair, in a slot that is empty or holds it, else
 /// first, the first slot's entry moved to the second. Each pair is stored whole after a release fence (Sprint 276):
 /// the dispatcher reads a pair by one `LDP` with no lock, so on several vCPUs two stores would let it match a new
@@ -436,7 +428,7 @@ fn known_block(vm_blocks: &BTreeMap<u64, u64>, host_blocks: Option<&BTreeMap<u64
 }
 
 fn vm_compiled(
-    mem: &mut [u8],
+    mem: ConcurrentGuestMemory<'_>,
     blocks: &mut BTreeMap<u64, u64>,
     translations: &mut Vec<Translation>,
     vm_compile_starts: &mut Vec<u64>,
@@ -456,9 +448,9 @@ fn vm_compiled(
 }
 
 /// `vm_compiled`, its take of the runtime word calling `wait` while another holds it (Sprint 276: the drain's test).
-/// The run loop's one vCPU is stopped at its exit, so `mem` may be a slice (census D7).
+/// Through the view (Sprint 283).
 fn vm_compiled_waiting(
-    mem: &mut [u8],
+    mem: ConcurrentGuestMemory<'_>,
     blocks: &mut BTreeMap<u64, u64>,
     translations: &mut Vec<Translation>,
     vm_compile_starts: &mut Vec<u64>,
@@ -470,32 +462,28 @@ fn vm_compiled_waiting(
     use guest_runtime::layout::{LOCK_OWNER, PAGE, RECON_TABLE};
     // the log is read and reset under the runtime word, which every in-VM compile and install appends under (Sprint
     // 275, census D6): on several vCPUs another's append between the read and the reset would be lost
-    let own = u32::try_from(read_u64(mem, MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
-    let took = host_take_runtime_word_waiting(ConcurrentGuestMemory::new(mem), own, wait);
-    let n = read_u64(mem, VM_COMPILER + VMC_LOG_COUNT);
+    let own = u32::try_from(mem.read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
+    let took = host_take_runtime_word_waiting(mem, own, wait);
+    let n = mem.read_u64(VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
-        let (start, end, code) = (read_u64(mem, at), read_u64(mem, at + 8), read_u64(mem, at + 16));
+        let (start, end, code) = (mem.read_u64(at), mem.read_u64(at + 8), mem.read_u64(at + 16));
         blocks.insert(start, code);
-        let u32_at = |off: u64| {
-            u64::from(u32::from_le_bytes(
-                mem[(at + off) as usize..(at + off + 4) as usize].try_into().unwrap(),
-            ))
-        };
+        let u32_at = |off: u64| u64::from(mem.read_u32(at + off));
         let (first, count, npages, installed) = (u32_at(24), u32_at(32), u32_at(48), u32_at(52) == 1);
-        let executed = read_u64(mem, at + VMC_LOG_EXECUTED);
+        let executed = mem.read_u64(at + VMC_LOG_EXECUTED);
         if installed {
             instructions_at.installs.push(executed);
         } else {
             instructions_at.compiles.push(executed);
         }
         let hosts: Vec<u64> = (1..=count)
-            .map(|k| read_u64(mem, RECON_TABLE + 16 * (first + k)))
+            .map(|k| mem.read_u64(RECON_TABLE + 16 * (first + k)))
             .collect();
         if installed {
             // an install by the installer inside the VM (Sprint 263; card 5's V), not a compile; `pad` cleared, the C
             // leaving it unwritten in a slot it reuses
-            mem[(at + 52) as usize..(at + 56) as usize].fill(0);
+            mem.write_u32(at + 52, 0);
             if let Some(h) = host.as_deref_mut() {
                 h.installed_in_vm(mem, start, end, code, &hosts);
             }
@@ -515,15 +503,15 @@ fn vm_compiled_waiting(
         }
         for k in 0..npages {
             h.code_pages
-                .entry(read_u64(mem, at + 56 + 8 * k))
+                .entry(mem.read_u64(at + 56 + 8 * k))
                 .or_default()
                 .insert(start);
         }
         h.translations.push((start, end));
     }
-    write_u64(mem, VM_COMPILER + VMC_LOG_COUNT, 0);
+    mem.write_u64(VM_COMPILER + VMC_LOG_COUNT, 0);
     if took {
-        host_release_runtime_word(ConcurrentGuestMemory::new(mem));
+        host_release_runtime_word(mem);
     }
 }
 
@@ -756,10 +744,8 @@ fn run(
                 break Stop::Exit(format!("the block judge: {why}"));
             }
         }
-        // `vm_compiled` hands a slice to `HostCompiler::installed_in_vm` (`compile.rs`, census D7); the one vCPU is
-        // stopped at its exit
         vm_compiled(
-            guest.memory.as_mut_slice(),
+            crate::guest::memory_view(&guest.memory),
             &mut out.blocks,
             &mut out.translations,
             &mut out.vm_compile_starts,
@@ -1219,7 +1205,7 @@ mod tests {
         let mem = unsafe { std::slice::from_raw_parts_mut(area.as_mut_ptr().cast::<u8>(), len) };
         let mut waited_for = Vec::new();
         super::vm_compiled_waiting(
-            mem,
+            crate::concurrent_memory::ConcurrentGuestMemory::new(mem),
             &mut BTreeMap::new(),
             &mut Vec::new(),
             &mut Vec::new(),
@@ -1229,7 +1215,7 @@ mod tests {
         );
         assert_eq!(waited_for, [1], "the drain did not wait for the other vCPU's hold");
         assert_eq!(
-            super::read_u64(mem, RUN_TABLE + RUNTIME_LOCK) & 0xFFFF_FFFF,
+            area[((RUN_TABLE + RUNTIME_LOCK) / 8) as usize] & 0xFFFF_FFFF,
             0,
             "the drain left the word held"
         );

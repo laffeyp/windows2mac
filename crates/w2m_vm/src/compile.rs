@@ -17,18 +17,28 @@ use translator::lift::{LiftError, Lifted, Op, lift};
 use translator::lower::assemble_block;
 
 use crate::cache_file::{CacheFile, CachedBlock, relocate};
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::guest::{Guest, VMC_CURSOR};
 use crate::monitor_code::{EMPTY_TARGET, dispatch_slot};
 use crate::run::Tails;
 
 pub use translator::lower::MAX_BLOCK_INSNS;
 
-fn read_u64(mem: &[u8], off: u64) -> u64 {
-    u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
+// Guest memory through the view (Sprint 283, census D7): the host compiler makes no reference into it.
+fn read_u64(mem: ConcurrentGuestMemory<'_>, off: u64) -> u64 {
+    mem.read_u64(off)
 }
 
-fn write_u64(mem: &mut [u8], off: u64, v: u64) {
-    mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
+fn write_u64(mem: ConcurrentGuestMemory<'_>, off: u64, v: u64) {
+    mem.write_u64(off, v);
+}
+
+/// A stage-1 descriptor at `at` changed by `change`, one atomic load and one Release store, as `Guest::map_pages`
+/// changes one (Sprint 281): a vCPU's table walk reads the whole descriptor, old or new (the design's table).
+fn change_descriptor(mem: ConcurrentGuestMemory<'_>, at: u64, change: impl FnOnce(u64) -> u64) {
+    use std::sync::atomic::Ordering;
+    let word = mem.atomic_u64(at);
+    word.store(change(word.load(Ordering::Relaxed)), Ordering::Release);
 }
 
 /// The host's compiles and the state they keep (vm_backend 2425, 2444-2467): the blocks, the pages behind them, the
@@ -66,9 +76,10 @@ pub struct CacheUse {
 /// Up to 15 bytes of guest code at `va`, as far as its mapping reaches (`Memory.code_at`): None when unmapped.
 fn code_at(guest: &Guest, va: u64) -> Option<Vec<u8>> {
     let (v, ipa, size) = guest.layout.maps.iter().find(|(v, _, n)| (*v..v + n).contains(&va))?;
-    let off = (ipa - IPA_BASE + (va - v)) as usize;
-    let n = 15.min((v + size - va) as usize);
-    Some(guest.memory.as_slice()[off..off + n].to_vec())
+    let off = ipa - IPA_BASE + (va - v);
+    let mut code = vec![0; 15.min((v + size - va) as usize)];
+    guest.memory_view().read(off, &mut code);
+    Some(code)
 }
 
 /// `_lift`: the instruction at `addr`.
@@ -81,8 +92,8 @@ pub(crate) fn lift_at(guest: &Guest, addr: u64) -> Result<Lifted, LiftError> {
 /// left this block to the host.
 fn open_trace(guest: &mut Guest, start: u64) {
     if start == guest.trace_from && guest.trace_from != 0 {
-        let at = (guest_runtime::layout::MONITOR_SIZE + guest_runtime::layout::TRACE_OFF) as usize;
-        guest.memory.as_mut_slice()[at..at + 8].copy_from_slice(&1u64.to_le_bytes());
+        let at = guest_runtime::layout::MONITOR_SIZE + guest_runtime::layout::TRACE_OFF;
+        guest.memory_view().write_u64(at, 1);
     }
 }
 
@@ -117,7 +128,7 @@ impl HostCompiler {
         let exit_va = guest.code.dispatch_va;
         self.protect_code(guest, start, addr, None)?; // before the successor scan, which reads the pages it covers
         let live = self.flags_live_out(guest, start, insns.last().unwrap(), addr)?;
-        let base = MONITOR_VA + read_u64(guest.memory.as_slice(), VM_COMPILER + VMC_CURSOR);
+        let base = MONITOR_VA + read_u64(crate::guest::memory_view(&guest.memory), VM_COMPILER + VMC_CURSOR);
         // the runtime's functions the words call (`_compile` passes the runtime's symbols, 4618-4619)
         if !guest.symbols.contains_key("w2m_cpuid") {
             return Err("the guest runtime defines no w2m_cpuid".into());
@@ -149,13 +160,13 @@ impl HostCompiler {
         marks: &[(u64, u64)],
         insns: usize,
     ) -> Result<(), String> {
-        let mem = guest.memory.as_mut_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         let cursor = read_u64(mem, VM_COMPILER + VMC_CURSOR);
         if cursor + 4 * words.len() as u64 > CODE_CACHE + CODE_CACHE_SIZE {
             return Err("code cache full".into());
         }
         let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        mem[cursor as usize..cursor as usize + bytes.len()].copy_from_slice(&bytes);
+        mem.write(cursor, &bytes);
         write_u64(mem, VM_COMPILER + VMC_CURSOR, cursor + bytes.len() as u64);
         let n = read_u64(mem, RUN_TABLE + RECON_COUNT);
         if n + marks.len() as u64 > RECON_ENTRIES {
@@ -166,7 +177,10 @@ impl HostCompiler {
             write_u64(mem, at, *host);
             write_u64(mem, at + 8, *x86);
         }
-        write_u64(mem, RUN_TABLE + RECON_COUNT, n + marks.len() as u64);
+        // the count Release after its entries, the writer's half of `x86_address_at`'s Acquire (Sprint 283; the
+        // design's table): a reader on another vCPU that sees the count sees the entries below it
+        mem.atomic_u64(RUN_TABLE + RECON_COUNT)
+            .store(n + marks.len() as u64, std::sync::atomic::Ordering::Release);
         let hosts: Vec<u64> = marks[1..1 + insns].iter().map(|(h, _)| *h).collect();
         self.tails.note(&hosts);
         self.blocks.insert(start, MONITOR_VA + cursor);
@@ -198,9 +212,8 @@ impl HostCompiler {
             if at == 0 {
                 continue;
             }
-            let mem = guest.memory.as_mut_slice();
-            let desc = read_u64(mem, at);
-            write_u64(mem, at, desc | AP_READ_ONLY);
+            let mem = crate::guest::memory_view(&guest.memory);
+            change_descriptor(mem, at, |desc| desc | AP_READ_ONLY);
             guarded.insert(page);
         }
         let by_start = file.blocks.iter().map(|b| (b.start, *b)).collect();
@@ -231,7 +244,7 @@ impl HostCompiler {
         self.protect_code(guest, start, base + u64::from(b.end), None)?;
         let file = &self.cache.as_ref().unwrap().file;
         let from = CACHE_CODE_VA + 4 * u64::from(b.word);
-        let to = MONITOR_VA + read_u64(guest.memory.as_slice(), VM_COMPILER + VMC_CURSOR);
+        let to = MONITOR_VA + read_u64(crate::guest::memory_view(&guest.memory), VM_COMPILER + VMC_CURSOR);
         let words = relocate(&file.words[b.word as usize..(b.word + b.nwords) as usize], from, to)
             .map_err(|u| format!("the cached block 0x{start:x}: its word {} is {}", u.word, u.kind))?;
         let marks: Vec<(u64, u64)> = file.marks[b.mark as usize..(b.mark + b.nmarks) as usize]
@@ -289,9 +302,8 @@ impl HostCompiler {
                     page += PAGE;
                     continue;
                 }
-                let mem = guest.memory.as_mut_slice();
-                let desc = read_u64(mem, at);
-                write_u64(mem, at, desc | AP_READ_ONLY);
+                let mem = crate::guest::memory_view(&guest.memory);
+                change_descriptor(mem, at, |desc| desc | AP_READ_ONLY);
                 self.page_set_add(mem, page);
             }
             self.code_pages.entry(page).or_default().insert(owner);
@@ -301,7 +313,7 @@ impl HostCompiler {
     }
 
     /// `_page_set_add` (2527-2539): the page in the VM's open-addressed code page set (1 marks a removed slot).
-    fn page_set_add(&mut self, mem: &mut [u8], page: u64) {
+    fn page_set_add(&mut self, mem: ConcurrentGuestMemory<'_>, page: u64) {
         let (mut i, mut free) = (page_set_slot(page), None);
         loop {
             let v = read_u64(mem, CODE_PAGE_SET + 8 * i);
@@ -323,7 +335,7 @@ impl HostCompiler {
     }
 
     /// `_page_set_remove` (2541-2556).
-    fn page_set_remove(&mut self, mem: &mut [u8], page: u64) {
+    fn page_set_remove(&mut self, mem: ConcurrentGuestMemory<'_>, page: u64) {
         let mut i = page_set_slot(page);
         loop {
             let v = read_u64(mem, CODE_PAGE_SET + 8 * i);
@@ -339,7 +351,7 @@ impl HostCompiler {
         }
         if self.page_set_removed > CODE_PAGE_SLOTS / 8 {
             // probes grow with removed slots: rebuild
-            mem[CODE_PAGE_SET as usize..(CODE_PAGE_SET + 8 * CODE_PAGE_SLOTS) as usize].fill(0);
+            mem.write(CODE_PAGE_SET, &vec![0; (8 * CODE_PAGE_SLOTS) as usize]);
             self.page_set_removed = 0;
             let pages: Vec<u64> = self.code_pages.keys().copied().collect();
             for p in pages {
@@ -351,7 +363,7 @@ impl HostCompiler {
     /// A block the installer inside the VM placed (Sprint 263; card 5's IV and V), from the compile log's replay: its
     /// tails noted, its start recorded, its pages joined to the code-page set and their owners as a host install's are
     /// (`protect_code`; card 4 made them read-only at load), and counted among the cache's installs.
-    pub fn installed_in_vm(&mut self, mem: &mut [u8], start: u64, end: u64, code: u64, hosts: &[u64]) {
+    pub fn installed_in_vm(&mut self, mem: ConcurrentGuestMemory<'_>, start: u64, end: u64, code: u64, hosts: &[u64]) {
         self.tails.note(hosts);
         self.blocks.insert(start, code);
         let mut page = start & !(PAGE - 1);
@@ -377,14 +389,13 @@ impl HostCompiler {
         let Some(blocks) = self.code_pages.remove(&page) else {
             return Ok(stopped);
         };
-        self.page_set_remove(guest.memory.as_mut_slice(), page);
+        self.page_set_remove(crate::guest::memory_view(&guest.memory), page);
         for start in blocks {
             self.drop_block(guest, start);
         }
         let at = guest.page_descriptor(page)?;
-        let mem = guest.memory.as_mut_slice();
-        let desc = read_u64(mem, at);
-        write_u64(mem, at, desc & !AP_READ_ONLY);
+        let mem = crate::guest::memory_view(&guest.memory);
+        change_descriptor(mem, at, |desc| desc & !AP_READ_ONLY);
         Ok(true)
     }
 
@@ -394,7 +405,7 @@ impl HostCompiler {
             return;
         }
         let miss_va = guest.code.miss_va;
-        let mem = guest.memory.as_mut_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         let slot = DISPATCH_TABLE + 16 * dispatch_slot(start);
         for s in [slot, slot + 16] {
             if read_u64(mem, s) == start {
@@ -416,7 +427,7 @@ impl HostCompiler {
         cache.stopped_at = Some(address);
         // the installer inside the VM reads it first and installs no more (Sprint 263; card 5's VI)
         write_u64(
-            guest.memory.as_mut_slice(),
+            crate::guest::memory_view(&guest.memory),
             VM_COMPILER + crate::monitor_code::VMC_INSTALL_STOP,
             1,
         );
@@ -427,9 +438,8 @@ impl HostCompiler {
         }
         for p in guarded.into_iter().filter(|p| !self.code_pages.contains_key(p)) {
             let at = guest.page_descriptor(p)?;
-            let mem = guest.memory.as_mut_slice();
-            let desc = read_u64(mem, at);
-            write_u64(mem, at, desc & !AP_READ_ONLY);
+            let mem = crate::guest::memory_view(&guest.memory);
+            change_descriptor(mem, at, |desc| desc & !AP_READ_ONLY);
         }
         Ok(true)
     }
