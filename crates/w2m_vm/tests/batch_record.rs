@@ -479,6 +479,23 @@ fn timed(record: &Path) -> bool {
     first_line(record)["payload"]["baseline"]["compile_timing"].is_string()
 }
 
+/// The start of Sprint 262: every timed record named after it runs with neither the whole-block judge nor the exit
+/// ledger, its baseline saying so (reviewer-3's Medium 1 at 261: the ledger's hashing at each exit weighed on the run
+/// with more exits, and every timed record before it wrote the ledger).
+const LAST_BEFORE_UNLEDGERED: &str = "w2m-vm-game-1793415127000000000";
+
+/// A timed record's baseline that does not say its judge and its ledger were off, when the rule is due.
+fn unmeasured_problems(baseline: &Value, timed: bool, due: bool) -> Vec<String> {
+    if !timed || !due {
+        return Vec::new();
+    }
+    ["block_judge", "exit_ledger"]
+        .iter()
+        .filter(|k| !baseline[**k].as_str().is_some_and(|v| v.starts_with("off")))
+        .map(|k| format!("a timed record whose baseline's {k} is {}, not off", baseline[*k]))
+        .collect()
+}
+
 /// The last record made before the compiles by image reached the record (Sprint 248's last); every record named after
 /// it holds them (Sprint 249). The names are a run's start in ns, so their order is their age.
 const LAST_BEFORE_IMAGES: &str = "w2m-vm-game-1793387174000000000";
@@ -658,6 +675,11 @@ fn every_stored_rust_batch_record_holds_its_rate() {
             timed(&dir),
             !BEFORE_FRAMES.contains(&name.as_str()),
         ));
+        found.extend(unmeasured_problems(
+            &first_line(&dir)["payload"]["baseline"],
+            timed(&dir),
+            name.as_str() > LAST_BEFORE_UNLEDGERED,
+        ));
         for (k, p) in &ours {
             if k == "COMPARISON_COMPLETED" && p["verdict"] != "conforms" {
                 found.push(format!("COMPARISON_COMPLETED verdict {}", p["verdict"]));
@@ -670,6 +692,21 @@ fn every_stored_rust_batch_record_holds_its_rate() {
         held >= 3,
         "{held} records store/runs/w2m-vm-game-<ns>, where Sprint 240 committed three"
     );
+}
+
+/// The timed-record check (Sprint 262) names a judge or a ledger a due timed record's baseline does not say is off, and
+/// lets an untimed record or one made before the rule pass.
+#[test]
+fn a_timed_record_with_its_judge_or_ledger_on_is_named() {
+    let off = serde_json::json!({"block_judge": "off: …", "exit_ledger": "off: …"});
+    assert_eq!(unmeasured_problems(&off, true, true), Vec::<String>::new());
+    let ledgered = serde_json::json!({"block_judge": "off: …"});
+    assert_eq!(
+        unmeasured_problems(&ledgered, true, true),
+        ["a timed record whose baseline's exit_ledger is null, not off"]
+    );
+    assert_eq!(unmeasured_problems(&ledgered, false, true), Vec::<String>::new());
+    assert_eq!(unmeasured_problems(&ledgered, true, false), Vec::<String>::new());
 }
 
 /// The compile check names a count the reference has and the record lacks, one it does not count, and a "compiled" of 0.
