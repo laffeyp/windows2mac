@@ -172,7 +172,15 @@ words in the real run; the VM's follows once the host's conforms.
    80,307,872,496 instructions with the cache against 80,306,813,574 without, each deterministic, and both reach the
    reference's end. An install inside the VM installs the same blocks, so card 5's runs retire card 4's cached count
    exactly, and `ledger_parting` against a card 4 ledger finds no parting; its rate and times are read against card
-   4's cached records and the uncached ones alike.
+   4's cached records and the uncached ones alike. *(Amended 2026-10-30, Sprint 259.)* Run without the exit ledger
+   and the whole-block judge, the VM's run seconds fall with the host's install: 23.06 to 23.67 against 23.90 to 24.34
+   without the cache, the compile time 606 to 613 ms against 1,278 to 1,329, at load 2.5 to 3.8; the cached words cost
+   no VM time against the host's own compiles of the same starts (23.23 to 23.63). The miss stub's global invalidation
+   after each `hvc 1` (`IC IALLUIS; TLBI VMALLE1IS`) costs about 0.7 µs of VM time a use, measured by adding it after
+   each in-VM compile (+0.19 s over 274,837), so about 0.1 s over the cached run's 150,065. Card 5's install makes its
+   words visible by range and invalidates by page, as the in-VM compiler does (`block_compiler.c` 113-118, 166-176);
+   a change to the miss stub's words is an option off by default, as `Timing` is, so the gates' frozen-word tests hold
+   the default stub (reviewer-3's Low 2 at 259).
 
 Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
 where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.
