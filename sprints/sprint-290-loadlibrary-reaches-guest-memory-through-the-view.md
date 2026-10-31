@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 290
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -90,4 +90,35 @@ LoadLibrary at run time writes guest memory only through the view, and the runs 
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The plants' judge, found by lookup before they run** (the card left it to running, against WORKING_AGREEMENT's
+  rule of 2026-10-31): the `late_tls` family (`store/family_runs/known-2026-10-29.tsv`, contract
+  `windows.loader.late_tls@0.1.0`) loads its beside DLL, `late_tls_dll.dll`, by LoadLibrary after the start, `load_dll`
+  writing its image, its import slots and PEB.Ldr; `family_runs.rs`' `every_family_run_conforms_or_is_held_by_what_it_waits_on`
+  holds its rows to the contract's. No unit test reaches `synthetic_image` or `write_loader_data`.
+- **Two statements of the card that did not hold,** found in the check before the close: its scope cites the
+  design's table for "the process area (the synthetic pages, the loader data and PEB's `Ldr`)", and the table has no
+  such row (its rows end at the translation tables); its expected values name "`process.rs`' tests unchanged and
+  passing", and `process.rs` has none (`#[test]` 0). The row lands with card 291, which settles the loader data's
+  publish order on reviewer-3's Low 1 at 290; the process area's writers are held by the game's and the family runs
+  alone, as the plants' judge says.
+- **A bound kept:** the slice the process area's writers had at a run's LoadLibrary ended at `PROCESS_SIZE` and
+  panicked past it; `ProcessView::put` asserts the same bound, found in the check before the commit. Its first form
+  named `PROCESS_SIZE` from `guest.rs`, which builds on macOS alone, and the pre-commit run stopped at lint, "cannot
+  find value `PROCESS_SIZE`", the lookup that took the constant for `process.rs`' having read `guest.rs`' line; the
+  constant moved to `process.rs`, beside `TRACE_SIZE` it is made from, and `guest.rs` re-exports it, one definition.
+- **The access** (d0e2fa622): `process::ProcessBytes`, implemented by `[u8]`, `Vec<u8>` (the parameters block) and
+  `ProcessView`; the process area's helpers, `synthetic_image` and `write_loader_data` generic over it; `modules.rs`'
+  four writes through the view. 36 slice calls in `src/`, 27 on guest memory; `modules.rs` 1, its `Vec`.
+- **Expected values:** 172 tests in the pre-commit run, the batch-run step first, the game's and the family runs as
+  held.
+- **The gates:** `scripts/gates.sh` exit 0 in 824 s, kept in `store/gates/passes.tsv` as sprint 290 at d0e2fa622 with root=0d5d3950d and "rust=crates python=0 samples=0", rdeps(w2m_vm), 172 tests, base=6a2767ce2, Sprint 289's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `ProcessView::put` writing one byte past its offset; the game
+  diverged, `batch_run.rs` 315 failing, "the batch run's unity.log lines left: 12 right: 168"; the planted game then
+  handed its record a value outside JSON's safe integers ("int 18446603344900008000 outside JCS-safe range"),
+  `batch-run-record.sh` exited 1 and the guests and families were not run again, so their readers refused the earlier
+  build's outputs by their stamps, "made from the sources 99ca208a3… and the work tree's are 02860ad62…", Sprint
+  288's check, not the plant's own effect on `late_tls`.
+- **Plant 2,** restored by `cp` and checked by `cmp`: the import slots written 8 bytes past their offset; the batch-run
+  step ran whole; `family_runs.rs` 1358 failed, "late_tls 38229484497 stop: Untranslated { target: 95512, why: \"no
+  guest memory at 0x17518\" }", the DLL calling through a slot left unwritten; the game's stop moved to `import
+  KERNEL32.dll!GetSystemTimes` (`batch_run.rs` 139) and its log to 0 lines.
